@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Player Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            color-scheme: light;
+            color: #111827;
+            background: #eef2ff;
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 35%),
+                        radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.08), transparent 30%),
+                        #f8fafc;
+            color: #111827;
+        }
+
+        .page-shell {
+            max-width: 1380px;
+            margin: 0 auto;
+            padding: 28px 24px 48px;
+        }
+
+        header {
+            margin-bottom: 24px;
+        }
+
+        .brand-band {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.12);
+            color: #1d4ed8;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            margin-bottom: 14px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(2rem, 2.6vw, 3rem);
+            line-height: 1.05;
+        }
+
+        .hero-copy {
+            max-width: 760px;
+            margin-top: 12px;
+            color: #475569;
+            font-size: 1rem;
+            line-height: 1.8;
+        }
+
+        .top-row { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 24px; }
+
+        .panel {
+            background: rgba(255,255,255,0.92);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            border-radius: 18px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+            padding: 22px;
+            flex: 1 1 320px;
+        }
+
+        .panel.muted {
+            background: #f8fafc;
+        }
+
+        .filter-box { display: grid; gap: 14px; }
+
+        .filter-box label {
+            display: block;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .filter-box input,
+        .filter-box select {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            font-size: 0.98rem;
+            color: #111827;
+            background: #ffffff;
+        }
+
+        .filter-box input:focus,
+        .filter-box select:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 18px;
+            border-radius: 12px;
+            border: none;
+            color: white;
+            background: #2563eb;
+            text-decoration: none;
+            cursor: pointer;
+            font-weight: 700;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #475569;
+        }
+
+        .btn-secondary:hover {
+            background: #334155;
+        }
+
+        .btn.inactive {
+            opacity: 0.75;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            margin-top: 18px;
+            border-radius: 18px;
+            padding: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: white;
+            min-width: 900px;
+        }
+
+        th, td {
+            padding: 14px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f8fafc;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #334155;
+        }
+
+        tr:hover {
+            background: #f8fafc;
+        }
+
+        tr:nth-child(even) td {
+            background: #ffffff;
+        }
+
+        .code-style {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            background: #eef2ff;
+            padding: 5px 8px;
+            border-radius: 8px;
+            display: inline-block;
+            font-size: 0.84rem;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            padding: 7px 12px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .status-yes { background: #d1fae5; color: #065f46; }
+        .status-no { background: #fee2e2; color: #991b1b; }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 16px;
+            margin-top: 18px;
+        }
+
+        .summary-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+        }
+
+        .summary-card strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #475569;
+        }
+
+        .summary-card .value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .section {
+            margin-top: 32px;
+        }
+
+        .section-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .section-title small {
+            color: #64748b;
+            font-size: 0.96rem;
+        }
+
+        .clickable-row { cursor: pointer; }
+
+        .expand-icon {
+            font-size: 14px;
+            margin-right: 8px;
+            color: #2563eb;
+            transition: transform 0.2s ease;
+        }
+
+        .clickable-row:hover .expand-icon {
+            transform: translateX(2px);
+        }
+
+        .nested-table-wrapper { margin-top: 14px; }
+
+        .nested-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        .nested-table th, .nested-table td {
+            padding: 12px 14px;
+            border: 1px solid #e5e7eb;
+            font-size: 0.84rem;
+        }
+
+        .nested-table th {
+            background: #f8fafc;
+        }
+
+        .nested-detail {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 18px;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+        }
+
+        .nested-title {
+            font-weight: 800;
+            margin-bottom: 14px;
+            color: #0f172a;
+        }
+
+        .nested-note {
+            color: #64748b;
+            font-size: 0.94rem;
+            margin-top: 6px;
+            margin-bottom: 16px;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 760px;
+            margin: 20px 0;
+            background: #ffffff;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+        }
+
+        td { font-size: 0.92rem; }
+
+        @media (max-width: 920px) {
+            .page-shell { padding: 20px 16px 32px; }
+            .top-row { flex-direction: column; }
+            .section-title { flex-direction: column; align-items: flex-start; }
+            table { min-width: 720px; }
+        }
+
+        @media (max-width: 640px) {
+            .page-shell { padding: 16px 12px 28px; }
+            table { min-width: 100%; }
+            th, td { padding: 10px 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-shell">
+        <header>
+            <div class="brand-band">Dashboard</div>
+            <h1>Player Dashboard</h1>
+            <p class="hero-copy">Eine übersichtliche Ansicht für Spieler-, Ranked- und BattleLog-Daten. Suche schnell nach Spielern, untersuche aktuelle Einträge und behalte die Uptime-Statistik im Blick.</p>
+        </header>
+
+    <div class="top-row">
+        <div class="panel filter-box">
+            <form method="GET" action="/">
+                <label for="player_tag"><strong>Spieler-Tag oder Name suchen</strong></label>
+                <input type="text" id="player_tag" name="player_tag" value="{{ current_tag }}" placeholder="#GCR08GUPC oder Spielername">
+
+                <label for="sort"><strong>Sortierung</strong></label>
+                <select id="sort" name="sort">
+                    <option value="tag" {% if current_sort == 'tag' %}selected{% endif %}>Tag (A-Z)</option>
+                    <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Spielername (A-Z)</option>
+                    <option value="last_updated" {% if current_sort == 'last_updated' %}selected{% endif %}>Zuletzt aktualisiert</option>
+                </select>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
+                    <button type="submit" class="btn">Suchen</button>
+                    <a href="/" class="btn btn-secondary">Reset</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="panel muted">
+            <h2>Übersicht</h2>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <strong>Gefundene Spieler</strong>
+                    <div class="value">{{ players|length }}</div>
+                </div>
+                <div class="summary-card">
+                    <strong>Selektierter Spieler</strong>
+                    <div class="value">{{ selected_player.name if selected_player else 'Keiner' }}</div>
+                </div>
+                <div class="summary-card">
+                    <strong>BattleLog Einträge</strong>
+                    <div class="value">{{ battle_logs|length }}</div>
+                </div>
+                <div class="summary-card">
+                    <strong>RankedWeek Einträge</strong>
+                    <div class="value">{{ ranked_weeks|length }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">
+            <h2>Spielerliste</h2>
+            <small>Nutze den Filter oben, um Spieler schnell zu finden.</small>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Tag</th>
+                        <th>Name</th>
+                        <th>Town Hall</th>
+                        <th>League</th>
+                        <th>In Clan</th>
+                        <th>Zuletzt aktualisiert</th>
+                        <th>BattleLogs</th>
+                        <th>RankedWeeks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for player in players %}
+                    {% set player_id = player.tag|replace('#','') %}
+                    <tr class="clickable-row" onclick="togglePlayerRow('{{ player_id }}')">
+                        <td class="expand-icon">▶</td>
+                        <td class="code-style">{{ player.tag }}</td>
+                        <td>{{ player.name or '–' }}</td>
+                        <td>{{ player.current_th or '–' }}</td>
+                        <td>{{ player.league_tier or '–' }}</td>
+                        <td>
+                            {% if player.in_clan %}
+                                <span class="status-pill status-yes">Ja</span>
+                            {% else %}
+                                <span class="status-pill status-no">Nein</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ player.last_updated.strftime('%Y-%m-%d %H:%M:%S') if player.last_updated else '–' }}</td>
+                        <td>{{ player.battle_logs|length }}</td>
+                        <td>{{ player.ranked_weeks|length }}</td>
+                    </tr>
+                    <tr class="player-detail-row" id="player-detail-{{ player_id }}" style="display:none;">
+                        <td colspan="9">
+                            <div class="nested-detail">
+                                <div class="nested-title">Alle Daten für {{ player.name or player.tag }}</div>
+                                <div style="margin-bottom: 20px;">
+                                    <h3 style="margin-bottom: 10px;">Player Informationen</h3>
+                                    <div class="nested-table-wrapper">
+                                        <table class="nested-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Tag</th>
+                                                    <th>Name</th>
+                                                    <th>Town Hall</th>
+                                                    <th>In Clan</th>
+                                                    <th>League Tier</th>
+                                                    <th>Last Updated</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td class="code-style">{{ player.tag }}</td>
+                                                    <td>{{ player.name or '–' }}</td>
+                                                    <td>{{ player.current_th or '–' }}</td>
+                                                    <td>{{ 'Ja' if player.in_clan else 'Nein' }}</td>
+                                                    <td>{{ player.league_tier or '–' }}</td>
+                                                    <td>{{ player.last_updated.strftime('%Y-%m-%d %H:%M:%S') if player.last_updated else '–' }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 20px;">
+                                    <h3 style="margin-bottom: 10px;">RankedWeek-Daten</h3>
+                                    <div class="nested-note">Klicke einen RankedWeek-Eintrag, um die passenden RankedBattleLog-Einträge zu sehen.</div>
+                                    <div class="nested-table-wrapper">
+                                        <table class="nested-table">
+                                            <thead>
+                                                <tr>
+                                                    <th></th>
+                                                    <th>ID</th>
+                                                    <th>Start</th>
+                                                    <th>Ende</th>
+                                                    <th>League Group</th>
+                                                    <th>Trophäen</th>
+                                                    <th>Rank</th>
+                                                    <th>Max Attacks</th>
+                                                    <th>Townhall</th>
+                                                    <th>Attack Wins</th>
+                                                    <th>Attack Losses</th>
+                                                    <th>Defense Wins</th>
+                                                    <th>Defense Losses</th>
+                                                    <th>League Tier</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% if player.ranked_weeks %}
+                                                    {% for week in player.ranked_weeks %}
+                                                    {% set week_id = (week.league_group_tag|replace('#','') ~ '_' ~ week.league_season_id|replace('#','') ~ '_' ~ week.player_tag|replace('#','')) %}
+                                                    <tr class="clickable-row" onclick="toggleWeekRow('{{ week_id }}')">
+                                                        <td class="expand-icon">▶</td>
+                                                        <td class="code-style">{{ week.id or '–' }}</td>
+                                                        <td>{{ week.start_day.strftime('%Y-%m-%d') if week.start_day else '–' }}</td>
+                                                        <td>{{ week.end_day.strftime('%Y-%m-%d') if week.end_day else '–' }}</td>
+                                                        <td>{{ week.league_group_tag or '–' }}</td>
+                                                        <td>{{ week.trophies or 0 }}</td>
+                                                        <td>{{ week.rank or '–' }}</td>
+                                                        <td>{{ week.max_attacks or '–' }}</td>
+                                                        <td>{{ week.townhall or '–' }}</td>
+                                                        <td>{{ week.attack_wins or 0 }}</td>
+                                                        <td>{{ week.attack_losses or 0 }}</td>
+                                                        <td>{{ week.defense_wins or 0 }}</td>
+                                                        <td>{{ week.defense_losses or 0 }}</td>
+                                                        <td>{{ week.league_tier or '–' }}</td>
+                                                    </tr>
+                                                    <tr class="week-detail-row" id="week-detail-{{ week_id }}" style="display:none;">
+                                                        <td colspan="14">
+                                                            <div class="nested-table-wrapper">
+                                                                <h4 style="margin: 10px 0;">RankedBattleLog Einträge für diese Woche</h4>
+                                                                <table class="nested-table">
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th>ID</th>
+                                                                            <th>Zeit</th>
+                                                                            <th>Angriff</th>
+                                                                            <th>Gegner-Tag</th>
+                                                                            <th>Gegner-Name</th>
+                                                                            <th>Gegner TH</th>
+                                                                            <th>Sterne</th>
+                                                                            <th>Zerstörung %</th>
+                                                                            <th>Trophäen</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {% for battle in week.battle_logs %}
+                                                                        <tr>
+                                                                            <td class="code-style">{{ battle.id }}</td>
+                                                                            <td>{{ battle.time.strftime('%Y-%m-%d %H:%M:%S') if battle.time else '–' }}</td>
+                                                                            <td>{{ 'Angriff' if battle.attack else 'Verteidigung' }}</td>
+                                                                            <td class="code-style">{{ battle.opponent_tag or '–' }}</td>
+                                                                            <td>{{ battle.opponent_name or '–' }}</td>
+                                                                            <td>{{ battle.opponent_th or '–' }}</td>
+                                                                            <td>{{ battle.stars or 0 }}</td>
+                                                                            <td>{{ battle.percentage or 0 }}%</td>
+                                                                            <td>{{ battle.trophies or 0 }}</td>
+                                                                        </tr>
+                                                                        {% else %}
+                                                                        <tr>
+                                                                            <td colspan="9" style="text-align:center; padding:14px; color:#6b7280;">Keine RankedBattleLog-Einträge für diese Woche verfügbar.</td>
+                                                                        </tr>
+                                                                        {% endfor %}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <tr>
+                                                        <td colspan="14" style="text-align:center; padding:14px; color:#6b7280;">Keine RankedWeek-Einträge vorhanden.</td>
+                                                    </tr>
+                                                {% endif %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 20px;">
+                                    <h3 style="margin-bottom: 10px;">BattleLog-Daten</h3>
+                                    <div class="nested-note">Alle BattleLog-Einträge für diesen Spieler (maximal 100 neueste).</div>
+                                    <div class="nested-table-wrapper">
+                                        <table class="nested-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>ID</th>
+                                                    <th>Zeit</th>
+                                                    <th>Angriff</th>
+                                                    <th>Type</th>
+                                                    <th>Gegner-Tag</th>
+                                                    <th>Gegner-Name</th>
+                                                    <th>Sterne</th>
+                                                    <th>Zerstörung %</th>
+                                                    <th>Beute Gold</th>
+                                                    <th>Beute Elixir</th>
+                                                    <th>Beute Dark Elixir</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% if player.battle_logs %}
+                                                    {% for battle in player.battle_logs %}
+                                                    <tr>
+                                                        <td class="code-style">{{ battle.id }}</td>
+                                                        <td>{{ battle.time.strftime('%Y-%m-%d %H:%M:%S') if battle.time else '–' }}</td>
+                                                        <td>{{ 'Angriff' if battle.attack else 'Verteidigung' }}</td>
+                                                        <td>{{ battle.type or '–' }}</td>
+                                                        <td class="code-style">{{ battle.opponent_tag or '–' }}</td>
+                                                        <td>{{ battle.opponent_name or '–' }}</td>
+                                                        <td>{{ battle.stars or 0 }}</td>
+                                                        <td>{{ battle.percentage or 0 }}%</td>
+                                                        <td>{{ battle.loot_gold or 0 }}</td>
+                                                        <td>{{ battle.loot_elixir or 0 }}</td>
+                                                        <td>{{ battle.loot_dark_elixir or 0 }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <tr>
+                                                        <td colspan="11" style="text-align:center; padding:14px; color:#6b7280;">Keine BattleLog-Einträge für diesen Spieler vorhanden.</td>
+                                                    </tr>
+                                                {% endif %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 24px; color: #6b7280;">Keine Spieler gefunden. Bitte ändere die Suche oder entferne den Filter.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if selected_player %}
+    <div class="section">
+        <div class="section-title">
+            <h2>Ausgewählter Spieler</h2>
+            <small>Detailansicht für {{ selected_player.name }} ({{ selected_player.tag }})</small>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-card">
+                <strong>Name</strong>
+                <div class="value">{{ selected_player.name or '–' }}</div>
+            </div>
+            <div class="summary-card">
+                <strong>Town Hall</strong>
+                <div class="value">{{ selected_player.current_th or '–' }}</div>
+            </div>
+            <div class="summary-card">
+                <strong>League</strong>
+                <div class="value">{{ selected_player.league_tier or '–' }}</div>
+            </div>
+            <div class="summary-card">
+                <strong>In Clan</strong>
+                <div class="value">{{ 'Ja' if selected_player.in_clan else 'Nein' }}</div>
+            </div>
+            <div class="summary-card">
+                <strong>Zuletzt aktualisiert</strong>
+                <div class="value">{{ selected_player.last_updated.strftime('%Y-%m-%d %H:%M:%S') if selected_player.last_updated else '–' }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">
+            <h2>BattleLog Übersicht</h2>
+            <small>Aktuelle BattleLog-Einträge für diesen Spieler</small>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Zeit</th>
+                        <th>Spieler-Tag</th>
+                        <th>Angriff</th>
+                        <th>Battle Type</th>
+                        <th>Gegner-Tag</th>
+                        <th>Gegner-Name</th>
+                        <th>Sterne</th>
+                        <th>Zerstörung %</th>
+                        <th>Beute Gold</th>
+                        <th>Beute Elixir</th>
+                        <th>Beute Dark Elixir</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for battle in battle_logs %}
+                    <tr>
+                        <td class="code-style">{{ battle.id }}</td>
+                        <td>{{ battle.time.strftime('%Y-%m-%d %H:%M:%S') if battle.time else '–' }}</td>
+                        <td class="code-style">{{ battle.player_tag }}</td>
+                        <td>{{ 'Angriff' if battle.attack else 'Verteidigung' }}</td>
+                        <td>{{ battle.type or '–' }}</td>
+                        <td class="code-style">{{ battle.opponent_tag or '–' }}</td>
+                        <td>{{ battle.opponent_name or '–' }}</td>
+                        <td>{{ battle.stars or 0 }} ⭐</td>
+                        <td>{{ battle.percentage or 0 }}%</td>
+                        <td>{{ battle.loot_gold or 0 }}</td>
+                        <td>{{ battle.loot_elixir or 0 }}</td>
+                        <td>{{ battle.loot_dark_elixir or 0 }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="12" style="text-align: center; padding: 24px; color: #6b7280;">Keine BattleLog-Einträge für diesen Spieler gefunden.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">
+            <h2>RankedWeek Einträge</h2>
+            <small>Aktuelle RankedWeek-Datensätze für diesen Spieler</small>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Start</th>
+                        <th>Ende</th>
+                        <th>League Group</th>
+                        <th>Trophäen</th>
+                        <th>Rank</th>
+                        <th>Spieler-Tag</th>
+                        <th>Max Attacks</th>
+                        <th>Townhall</th>
+                        <th>Attack Wins</th>
+                        <th>Attack Losses</th>
+                        <th>Defense Wins</th>
+                        <th>Defense Losses</th>
+                        <th>League Tier</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for week in ranked_weeks %}
+                    <tr>
+                        <td class="code-style">{{ week.id }}</td>
+                        <td>{{ week.start_day.strftime('%Y-%m-%d') if week.start_day else '–' }}</td>
+                        <td>{{ week.end_day.strftime('%Y-%m-%d') if week.end_day else '–' }}</td>
+                        <td>{{ week.league_group_tag or '–' }}</td>
+                        <td>{{ week.trophies or 0 }}</td>
+                        <td>{{ week.rank or '–' }}</td>
+                        <td class="code-style">{{ week.player_tag }}</td>
+                        <td>{{ week.max_attacks or '–' }}</td>
+                        <td>{{ week.townhall or '–' }}</td>
+                        <td>{{ week.attack_wins or 0 }}</td>
+                        <td>{{ week.attack_losses or 0 }}</td>
+                        <td>{{ week.defense_wins or 0 }}</td>
+                        <td>{{ week.defense_losses or 0 }}</td>
+                        <td>{{ week.league_tier or '–' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="14" style="text-align: center; padding: 24px; color: #6b7280;">Keine RankedWeek-Einträge für diesen Spieler gefunden.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <div class="section-title">
+            <h2>Uptime Tracker</h2>
+            <small>Funktionsaufrufe und deren Zeitstempel</small>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Funktion</th>
+                        <th>Zeit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tracker in uptime_trackers %}
+                    <tr>
+                        <td class="code-style">{{ tracker.id }}</td>
+                        <td>{{ tracker.function or '–' }}</td>
+                        <td>{{ tracker.time.strftime('%Y-%m-%d %H:%M:%S') if tracker.time else '–' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; padding: 24px; color: #6b7280;">Keine Uptime Tracker Einträge vorhanden.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h3 style="margin-top: 24px; margin-bottom: 12px;">Uptime Tracker Diagramm</h3>
+        {% if uptime_trackers %}
+        <div class="chart-container">
+            <canvas id="uptimeChart"></canvas>
+        </div>
+        <script>
+            const uptimeTrackers = {{ uptime_trackers_json|tojson }};
+            
+            // Prepare data for the chart
+            const functionCounts = {};
+            const timelineData = [];
+            
+            uptimeTrackers.forEach(tracker => {
+                const func = tracker.function || 'Unknown';
+                functionCounts[func] = (functionCounts[func] || 0) + 1;
+                timelineData.push({
+                    function: func,
+                    time: new Date(tracker.time)
+                });
+            });
+            
+            // Create bar chart
+            const ctx = document.getElementById('uptimeChart').getContext('2d');
+            const chartConfig = {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(functionCounts),
+                    datasets: [{
+                        label: 'Anzahl Aufrufe',
+                        data: Object.values(functionCounts),
+                        backgroundColor: [
+                            '#2563eb',
+                            '#7c3aed',
+                            '#db2777',
+                            '#ea580c',
+                            '#ca8a04',
+                            '#16a34a',
+                            '#0891b2',
+                            '#6366f1'
+                        ],
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        title: {
+                            display: true,
+                            text: 'Funktionsaufrufe nach Typ'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            };
+            new Chart(ctx, chartConfig);
+        </script>
+        {% else %}
+        <p style="color: #6b7280; font-size: 14px;">Keine Daten für Diagramm verfügbar.</p>
+        {% endif %}
+    </div>
+    </div>
+
+    <script>
+        function togglePlayerRow(playerId) {
+            const row = document.getElementById(`player-detail-${playerId}`);
+            if (!row) return;
+            const isExpanded = row.style.display === 'table-row';
+            row.style.display = isExpanded ? 'none' : 'table-row';
+            const icon = document.querySelector(`tr[onclick="togglePlayerRow('${playerId}')"] .expand-icon`);
+            if (icon) icon.textContent = isExpanded ? '▶' : '▼';
+        }
+
+        function toggleWeekRow(weekId) {
+            const row = document.getElementById(`week-detail-${weekId}`);
+            if (!row) return;
+            const isExpanded = row.style.display === 'table-row';
+            row.style.display = isExpanded ? 'none' : 'table-row';
+            const icon = document.querySelector(`tr[onclick="toggleWeekRow('${weekId}')"] .expand-icon`);
+            if (icon) icon.textContent = isExpanded ? '▶' : '▼';
+        }
+    </script>
+</body>
+</html>
