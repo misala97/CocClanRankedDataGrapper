@@ -231,7 +231,7 @@
         let currentChartMode = 'top'; let mainChart = null; let showInactive = true; let currentPeriodString = ""; let currentSearchTerm = ""; let currentRankFilter = "all"; 
         window.playerCharts = {};
 
-        const username = 'misala97'; const repo = 'CocClanRankedDataGrapper'; const folderPath = ''; 
+        const username = 'misala97'; const repo = 'CocClanRankedDataGrapper'; const folderPath = 'CSVFiles'; 
         
         // NEUE URTEILE FÜR DEN CHART & HISTORY
         const raidJudgeOrder = ['Inaktiv', 'Fauler Ballast', 'Ballast', 'Angriffe vergessen', 'Normal', 'Gut', 'Raid Gott'];
@@ -241,7 +241,7 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             if(localStorage.getItem('darkMode') === 'true') toggleTheme(true);
-            const apiUrl = `https://api.github.com/repos/${username}/${repo}/contents/CSVFiles/${folderPath}`;
+            const apiUrl = `https://api.github.com/repos/${username}/${repo}/contents/${folderPath}`;
             try {
                 const response = await fetch(apiUrl);
                 if (response.ok) {

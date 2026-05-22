@@ -259,7 +259,7 @@
         let currentChartMode = 'top'; let mainChart = null; let showInactive = true; let currentPeriodString = ""; let currentSearchTerm = ""; let currentRankFilter = "all"; 
         window.playerCharts = {};
 
-        const username = 'misala97'; const repo = 'CocClanRankedDataGrapper'; const folderPath = ''; 
+        const username = 'misala97'; const repo = 'CocClanRankedDataGrapper'; const folderPath = 'CSVFiles'; 
         const leagueOrder = ["skeleton 1", "skeleton 2", "skeleton 3", "barbarian 4", "barbarian 5", "barbarian 6", "archer 7", "archer 8", "archer 9", "wizard 10", "wizard 11", "wizard 12", "valkyrie 13", "valkyrie 14", "valkyrie 15", "witch 16", "witch 17", "witch 18", "golem 19", "golem 20", "golem 21", "pekka 22", "pekka 23", "pekka 24", "titan 25", "titan 26", "titan 27", "dragon 28", "dragon 29", "dragon 30", "electro 31", "electro 32", "electro 33", "legend iii", "legend ii"];
         const judgeOrder = ['Inaktiv', 'Katastrophe', 'Schlecht', 'Gut', 'Sehr Gut', 'Perfekt'];
 
@@ -275,7 +275,7 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             if(localStorage.getItem('darkMode') === 'true') toggleTheme(true);
-            const apiUrl = `https://api.github.com/repos/${username}/${repo}/contents/CSVFiles/${folderPath}`;
+            const apiUrl = `https://api.github.com/repos/${username}/${repo}/contents/${folderPath}`;
             try {
                 const response = await fetch(apiUrl, { cache: 'no-store' });
                 if (response.ok) {
