@@ -78,7 +78,7 @@ class JSON_RANKED_GROUP_DATA:
     MEMBERS_TROPHIES = JSONPath("leagueTrophies")
     MEMBERS_ATTACK_WIN_COUNT = JSONPath("attackWinCount")
     MEMBERS_ATTACK_LOSE_COUNT = JSONPath("attackLoseCount")
-    MEMBERS_DEFENSE_WIN_COUN = JSONPath("defenseWinCount")
+    MEMBERS_DEFENSE_WIN_COUNT = JSONPath("defenseWinCount")
     MEMBERS_DEFENSE_LOSE_COUNT = JSONPath("defenseLoseCount")
     
     ATTACK_LOGS = JSONPath("attackLogs")
@@ -98,6 +98,17 @@ class JSON_RANKED_GROUP_DATA:
     DEFENSE_LOGS_CREATION_TIME = JSONPath("creationTime")
 
 
+def get_resource_amount(looted_resources, resource_name):
+    """
+    Searches a list of resource dictionaries for a specific name 
+    and returns its amount.
+    """
+    for resource in looted_resources:
+        if json_get(resource, JSON_BATTLE_LOG_DATA.ITEMS_LOOTED_RESOURCES_NAME) == resource_name:
+            return json_get(resource, JSON_BATTLE_LOG_DATA.ITEMS_LOOTED_RESOURCES_AMOUNT)
+            
+    # Returns 0 if the resource name isn't found in the list
+    return 0
 
 def get_last_monday(ref_date=None):
     if ref_date is None:

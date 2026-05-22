@@ -1,8 +1,8 @@
-"""Init
+"""empty message
 
-Revision ID: 59a371e0c374
+Revision ID: b38a44b2bb38
 Revises: 
-Create Date: 2026-05-22 14:55:52.025797
+Create Date: 2026-05-22 23:12:44.026873
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '59a371e0c374'
+revision = 'b38a44b2bb38'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -32,7 +32,7 @@ def upgrade():
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('function', sa.String(length=50), nullable=True),
     sa.Column('time', sa.DateTime(), nullable=True),
-    sa.Column('duration', sa.Time(), nullable=True),
+    sa.Column('duration', sa.String(length=50), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('battle_log',
@@ -83,7 +83,7 @@ def upgrade():
     sa.Column('opponent_th', sa.String(length=100), nullable=True),
     sa.Column('time', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['league_group_tag', 'league_season_id', 'player_tag'], ['ranked_week.league_group_tag', 'ranked_week.league_season_id', 'ranked_week.player_tag'], ),
-    sa.PrimaryKeyConstraint('id', 'opponent_tag')
+    sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
 

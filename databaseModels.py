@@ -19,8 +19,8 @@ class Player(db.Model):
     last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Beziehungen zu anderen Tabellen
-    ranked_weeks = db.relationship('RankedWeek', backref='player', lazy=True, cascade="all, delete-orphan")
-    battle_logs = db.relationship('BattleLog', backref='player', lazy=True, cascade="all, delete-orphan")
+    ranked_weeks = db.relationship('RankedWeek', back_populates='player', lazy=True, cascade="all, delete-orphan")
+    battle_logs = db.relationship('BattleLog', back_populates='player', lazy=True, cascade="all, delete-orphan")
 
 
 class RankedWeek(db.Model):
@@ -46,15 +46,15 @@ class RankedWeek(db.Model):
     last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Beziehung zu den Ranked Logs
-    battle_logs = db.relationship('RankedBattleLog', backref='ranked_week', lazy=True, cascade="all, delete-orphan")
-
+    player = db.relationship('Player', back_populates='ranked_weeks')
+    battle_logs = db.relationship('RankedBattleLog', back_populates='ranked_week', lazy=True, cascade="all, delete-orphan")
 
 class RankedBattleLog(db.Model):
     __tablename__ = 'ranked_battle_log'
     
     # MySQL braucht ein festes Limit. 255 reicht für generierte IDs.
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    opponent_tag = db.Column(db.String(50), primary_key=True)
+    opponent_tag = db.Column(db.String(50), nullable=False)
     
     
     # Composite foreign key to RankedWeek
@@ -72,6 +72,15 @@ class RankedBattleLog(db.Model):
     opponent_th = db.Column(db.String(100))
     
     time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    ranked_week = db.relationship('RankedWeek', back_populates='battle_logs')
+    
+    player = db.relationship(
+        'Player',
+        primaryjoin='foreign(RankedBattleLog.player_tag) == Player.tag',
+        viewonly=True,
+        uselist=False
+    )
     
     __table_args__ = (
         db.ForeignKeyConstraint(
@@ -98,6 +107,8 @@ class BattleLog(db.Model):
     type = db.Column(db.String(50)) 
     
     time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    player = db.relationship('Player', back_populates='battle_logs')
 
 
 class UptimeTracker(db.Model):
