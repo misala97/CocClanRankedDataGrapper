@@ -242,7 +242,7 @@ def json_get(json_object: dict, key, default=None, raise_on_missing: bool = True
         current = current.get(segment)
 
     # Warn if the retrieved value is falsy (empty) — keep previous behavior
-    if None == current:
-        logging.warning(f"Key path [{key}] empty or falsy in object.")
+    #if None == current:
+        #logging.warning(f"Key path [{key}] empty or falsy in object.")
 
     return current

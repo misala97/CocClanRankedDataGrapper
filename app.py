@@ -13,6 +13,9 @@ from extensions import db
 from help_functions import *
 from api_functions import * 
 from database_functions import *
+import datetime
+from logging.handlers import RotatingFileHandler
+
 
 # ==========================================
 # 1. LOGGING CONFIGURATION
@@ -32,7 +35,7 @@ class ConsoleColorFormatter(logging.Formatter):
 
 # --- Root Logger (Console Output) ---
 root_logger = logging.getLogger()
-root_logger.setLevel(logging.WARNING)
+root_logger.setLevel(logging.INFO)
 root_logger.handlers.clear()
 
 console_handler = logging.StreamHandler()
@@ -60,9 +63,10 @@ file_formatter = logging.Formatter(
 def setup_task_logger(name, log_file):
     """Creates a logger that writes to a file AND propagates to the console."""
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG) # Ensure we capture INFO and above for the tasks
+    logger.setLevel(logging.INFO) # Ensure we capture INFO and above for the tasks
     
-    file_handler = logging.FileHandler(log_file)
+    file_handler = RotatingFileHandler(log_file, maxBytes=1024*1024, backupCount=5)
+    #file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(file_formatter)
     logger.addHandler(file_handler)
     
@@ -111,6 +115,7 @@ db.configure_mappers()
         
 def task_update_battle_logs():
     t0 = time.time()
+    battle_logger.info(f"Running task at {datetime.now()}  ")
     with app.app_context():
         db_players_in_clan = db_player_get_all()
         for db_player in db_players_in_clan:
@@ -126,7 +131,7 @@ def task_update_battle_logs():
                 try:
                     tmp_battle_log = create_db_battle_log(db_player, battle_api)
                     if tmp_battle_log.opponent_tag == None or tmp_battle_log.opponent_tag == "":
-                        battle_logger.warning(f"Opponent player tag empty")
+                        battle_logger.debug(f"Opponent player tag empty")
                         continue    
                     if not db_battle_log_get(db_player, battle_api):
                         db_battle_log_create_new(tmp_battle_log)
@@ -142,6 +147,7 @@ def task_update_battle_logs():
         
 def task_update_ranked_weeks():
     t0 = time.time()
+    ranked_logger.info(f"Running task at {datetime.now()}  ")
     with app.app_context():
         db_players_in_clan = db_player_get_all()
         for db_player in db_players_in_clan:
@@ -159,7 +165,7 @@ def task_update_ranked_weeks():
                 if season_id != 0:
                     group_tag = json_get(player_api, JSON_PLAYER_DATA.CURRENT_LEAGUE_GROUP_TAG)
                 else:
-                    ranked_logger.warning(f"Ranked week not found for {db_player.name}")
+                    ranked_logger.debug(f"Ranked week not found for {db_player.name}")
                     continue    
             except Exception as e:
                 ranked_logger.warning(f"Could not get season id or group tag for {db_player.name}. Error: {e}")
@@ -237,7 +243,7 @@ def task_update_ranked_weeks():
         
 def task_update_clan_members():
     t0 = time.time()
-    
+    clan_logger.info(f"Running task at {datetime.now()}  ")
     #Fetch Api Data
     try:
         clan_api = api_fetch_clan_data(CLAN_TAG)
@@ -355,9 +361,9 @@ def dashboard():
 
 
 if __name__ == '__main__':
-    #task_update_clan_members()
-    #task_update_ranked_weeks()
-    #task_update_battle_logs()
+    task_update_clan_members()
+    task_update_ranked_weeks()
+    task_update_battle_logs()
     
     #print(JSON_PLAYER_DATA.TAG)
     
