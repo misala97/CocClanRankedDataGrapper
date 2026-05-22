@@ -1,0 +1,1 @@
+./update_coc.shGit on pc:git add .git commit -m "Added new troop stats"git pushgit checkout maingit merge devgit push origin maingit checkout devsystemctl status coc_schedulersystemctl status coc_web

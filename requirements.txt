@@ -1,0 +1,9 @@
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
+SQLAlchemy
+requests
+python-dotenv
+APScheduler
+PyMySQL
+gunicorn
