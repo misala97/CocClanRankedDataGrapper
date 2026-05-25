@@ -747,7 +747,7 @@ def battle_history_page():
         else:
             attacks.extend(
                 b for b in valid
-                if b.time and b.time >= week_start_dt and b.time < next_monday_dt
+                if b.time and b.time >= week_start_dt.replace(tzinfo=None) and b.time < next_monday_dt.replace(tzinfo=None)
             )
 
     total_attacks = len(attacks)
