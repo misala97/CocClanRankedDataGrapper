@@ -344,7 +344,7 @@
     const topByAttacks = {{ top_by_attacks|tojson|safe }};
     window.playerData  = {{ player_data|tojson|safe }};
 
-    let currentSort = { column: 'att_count', direction: 'desc' };
+    let currentSort = { column: null, direction: null };
     let resourceChart = null;
 
     function fmt(n) { return Number(n).toLocaleString(); }
@@ -464,7 +464,7 @@
             }
         } else {
             currentSort.column = col;
-            currentSort.direction = col === 'player' ? 'asc' : 'desc';
+            currentSort.direction = 'asc';
         }
         buildTable();
     }

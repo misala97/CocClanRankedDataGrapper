@@ -726,29 +726,18 @@ def battle_history_page():
         available_weeks.reverse()
         available_weeks.insert(0, {'start': 'all', 'label': all_time_label})
 
-    # Always fetch the full history per player (type filter only, no date window) so
-    # the initial API dump is identified from the complete timeline, not the already-
-    # narrowed week slice (which would wrongly drop real current-week attacks).
-    all_q = BattleLog.query.filter(BattleLog.attack == True)
+    if is_all_time:
+        base_q = BattleLog.query.filter(BattleLog.attack == True)
+    else:
+        base_q = BattleLog.query.filter(
+            BattleLog.attack == True,
+            BattleLog.time >= week_start_dt,
+            BattleLog.time < next_monday_dt,
+        )
     if selected_type != 'all':
-        all_q = all_q.filter(BattleLog.type == selected_type)
-    all_attacks_raw = all_q.options(selectinload(BattleLog.player)).all()
+        base_q = base_q.filter(BattleLog.type == selected_type)
 
-    _by_player: dict = {}
-    for b in all_attacks_raw:
-        _by_player.setdefault(b.player_tag, []).append(b)
-
-    attacks = []
-    for logs in _by_player.values():
-        logs.sort(key=lambda b: b.time or dt.datetime.min)
-        valid = logs[25:]  # drop the one-time initial API dump
-        if is_all_time:
-            attacks.extend(valid)
-        else:
-            attacks.extend(
-                b for b in valid
-                if b.time and b.time >= week_start_dt.replace(tzinfo=None) and b.time < next_monday_dt.replace(tzinfo=None)
-            )
+    attacks = base_q.options(selectinload(BattleLog.player)).all()
 
     total_attacks = len(attacks)
     total_gold    = sum(b.loot_gold or 0 for b in attacks)
