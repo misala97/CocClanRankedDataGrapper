@@ -14,7 +14,8 @@ def create_db_player_from_api(api_player: dict, in_clan: bool = True) -> Player:
         name = json_get(api_player, JSON_PLAYER_DATA.NAME),
         current_th = json_get(api_player, JSON_PLAYER_DATA.TOWN_HALL_LEVEL),
         in_clan = in_clan,
-        league_tier = json_get(api_player, JSON_PLAYER_DATA.LEAGUE_TIER.name, "Unranked")                       
+        league_tier = json_get(api_player, JSON_PLAYER_DATA.LEAGUE_TIER.name, "Unranked"),     
+        league_icon = json_get(api_player, JSON_PLAYER_DATA.LEAGUE_TIER.ICON_URLS.LARGE, "Unranked")     
     )
 
     
@@ -32,6 +33,7 @@ def create_db_ranked_week(league_group_tag:str, league_season_id: int, player_da
         raise ValueError(f"Invalid rank {rank} for player {player_tag}")
     player_group_data = league_members[rank-1]
     league_tier_name = json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.NAME)
+    league_icon = json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ICON_URLS.LARGE, "Unranked")  
     
     return RankedWeek(
             league_group_tag=league_group_tag,
@@ -47,7 +49,8 @@ def create_db_ranked_week(league_group_tag:str, league_season_id: int, player_da
             attack_losses=json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT),
             defense_wins=json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_WIN_COUNT),
             defense_losses=json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_LOSE_COUNT),
-            league_tier=league_tier_name
+            league_tier=league_tier_name,
+            league_icon = league_icon
     )
     
 def create_db_ranked_battle_log(opponent_db:Player, attack_api : dict, player_data_api: dict , is_attack : bool):
@@ -196,6 +199,7 @@ def db_player_update(player : Player, updated_player : Player) -> Player:
         player.name = updated_player.name
         player.in_clan = updated_player.in_clan
         player.league_tier = updated_player.league_tier
+        player.league_icon = updated_player.league_icon
         
         logging.debug(f"Updating player: {player.name}")
     return player

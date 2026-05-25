@@ -57,10 +57,13 @@ class JSON_PLAYER_DATA:
     CURRENT_LEAGUE_SEASON_ID = JSONPath("currentLeagueSeasonId")
     LEAGUE_TIER = JSONPath("leagueTier")
     LEAGUE_TIER.NAME = JSONPath("name")
+    LEAGUE_TIER.ICON_URLS = JSONPath("iconUrls")
+    LEAGUE_TIER.ICON_URLS.LARGE = JSONPath("large")
     
     
 class JSON_CLAN_DATA:
     MEMBER_LIST = JSONPath("memberList")
+    NAME = JSONPath("name")
     
 class JSON_BATTLE_LOG_DATA:
     ITEMS = JSONPath("items")
@@ -131,8 +134,9 @@ def get_next_monday(ref_date=None):
     else:
         d = ref_date
 
-    # Monday == 0; compute days until next Monday (0 if today is Monday)
-    days_until_monday = (-d.weekday()) % 7
+    # Monday == 0
+    # 7 - d.weekday() will return 7 if today is Monday, 6 if Tuesday, ..., 1 if Sunday.
+    days_until_monday = 7 - d.weekday()
     return d + timedelta(days=days_until_monday)
 
 def get_weekly_attacks(league_string: str):

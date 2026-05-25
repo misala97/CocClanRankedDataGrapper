@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle History - CoC Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gradient-hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .stat-box {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-3">
+                    <a href="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center font-bold text-lg">⚔️</div>
+                        <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">CoC Analytics</h1>
+                    </a>
+                </div>
+                <div class="flex items-center gap-4">
+                    <a href="/" class="text-sm text-slate-300 hover:text-white transition-colors">← Home</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <section class="border-b border-slate-700 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-4xl font-bold mb-2">Battle History</h2>
+            <p class="text-slate-400">Detailed logs of all attacks and defenses</p>
+        </div>
+    </section>
+
+    <!-- Content -->
+    <section class="py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {% if battle_logs %}
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-slate-700">
+                            <th class="text-left px-4 py-3 text-slate-400 font-semibold text-sm">Date/Time</th>
+                            <th class="text-left px-4 py-3 text-slate-400 font-semibold text-sm">Attacker</th>
+                            <th class="text-left px-4 py-3 text-slate-400 font-semibold text-sm">Defender</th>
+                            <th class="text-center px-4 py-3 text-slate-400 font-semibold text-sm">Type</th>
+                            <th class="text-center px-4 py-3 text-slate-400 font-semibold text-sm">Result</th>
+                            <th class="text-center px-4 py-3 text-slate-400 font-semibold text-sm">Damage</th>
+                            <th class="text-right px-4 py-3 text-slate-400 font-semibold text-sm">Loot</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for battle in battle_logs %}
+                        {% set is_attack = battle.attack %}
+                        <tr class="border-b border-slate-700 hover:bg-slate-800/50 transition-colors">
+                            <td class="px-4 py-3 text-slate-400 font-mono text-sm">
+                                {{ battle.time.strftime('%d.%m.%y %H:%M') if battle.time else '–' }}
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="font-semibold">{{ battle.player.name if battle.player else battle.player_tag }}</span>
+                                <span class="text-slate-400 text-sm ml-2">({{ battle.player_tag }})</span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="font-semibold">{{ battle.opponent_name or battle.opponent_tag or '–' }}</span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                {% if is_attack %}
+                                    <span class="bg-green-500/20 text-green-300 px-3 py-1 rounded text-sm font-semibold">Attack</span>
+                                {% else %}
+                                    <span class="bg-red-500/20 text-red-300 px-3 py-1 rounded text-sm font-semibold">Defense</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <div class="flex justify-center gap-1">
+                                    {% for i in range(battle.stars or 0) %}
+                                    <span class="text-yellow-400">★</span>
+                                    {% endfor %}
+                                    {% for i in range(3 - (battle.stars or 0)) %}
+                                    <span class="text-slate-600">☆</span>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-center font-mono">
+                                {{ (battle.percentage or 0)|int }}%
+                            </td>
+                            <td class="px-4 py-3 text-right text-sm">
+                                {% if battle.loot_gold or battle.loot_elixir or battle.loot_dark_elixir %}
+                                <div class="flex flex-col gap-1">
+                                    {% if battle.loot_gold %}
+                                    <span class="text-yellow-400">💰 {{ '{:,}'.format(battle.loot_gold) }}</span>
+                                    {% endif %}
+                                    {% if battle.loot_elixir %}
+                                    <span class="text-purple-400">⚗️ {{ '{:,}'.format(battle.loot_elixir) }}</span>
+                                    {% endif %}
+                                    {% if battle.loot_dark_elixir %}
+                                    <span class="text-red-400">🔴 {{ '{:,}'.format(battle.loot_dark_elixir) }}</span>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-slate-400">–</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if pages > 1 %}
+            <div class="flex justify-center gap-2 mt-8">
+                {% if page > 1 %}
+                <a href="/battles?page=1" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">First</a>
+                <a href="/battles?page={{ page - 1 }}" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">← Previous</a>
+                {% endif %}
+                
+                {% set start_page = 1 if page - 2 < 1 else page - 2 %}
+                {% set end_page = pages + 1 if page + 3 > pages + 1 else page + 3 %}
+                {% for p in range(start_page, end_page) %}
+                    {% if p == page %}
+                    <span class="px-3 py-2 bg-blue-600 rounded text-sm">{{ p }}</span>
+                    {% else %}
+                    <a href="/battles?page={{ p }}" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if page < pages %}
+                <a href="/battles?page={{ page + 1 }}" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">Next →</a>
+                <a href="/battles?page={{ pages }}" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">Last</a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="mt-8 p-4 bg-slate-800/50 rounded border border-slate-700 text-slate-400 text-sm">
+                Showing {{ battle_logs|length }} of {{ total_battles }} battles
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <p class="text-slate-400 text-lg">No battle history data available yet.</p>
+                <a href="/" class="inline-block mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">
+                    Back to Home
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 border-t border-slate-700 py-8 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center text-sm text-slate-400">
+                <p>&copy; 2026 CoC Analytics</p>
+                <a href="/" class="hover:text-white transition-colors">Back to Home</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

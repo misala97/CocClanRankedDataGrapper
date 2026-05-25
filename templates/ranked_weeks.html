@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ranked Week Performance - CoC Analytics</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .navbar {
+            background: white;
+            border-bottom: 1px solid #e0e6ed;
+            padding: 16px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .navbar a {
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .navbar a:hover {
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px;
+        }
+
+        .header {
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+
+        .header p {
+            color: #999;
+            font-size: 14px;
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            border: 1px solid #e0e6ed;
+        }
+
+        .controls label {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .week-selector {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+            min-width: 280px;
+        }
+
+        .week-selector:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .table-wrapper {
+            background: white;
+            border: 1px solid #e0e6ed;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead {
+            background: #f9fafb;
+            border-bottom: 2px solid #e0e6ed;
+        }
+
+        thead th {
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #999;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #e0e6ed;
+            transition: background 0.15s ease;
+        }
+
+        tbody tr:hover {
+            background: #fafbfc;
+        }
+
+        tbody td {
+            padding: 14px 16px;
+            vertical-align: middle;
+        }
+
+        .league-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .league-badge {
+            padding: 4px 12px;
+            background: #f0f4ff;
+            color: #2c3e9f;
+            border: 1px solid #d6e4ff;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .league-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 3px;
+            object-fit: cover;
+            cursor: help;
+        }
+
+        .rank-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #f0f4ff;
+            color: #2c3e9f;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .player-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .player-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .player-name {
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .player-trophy {
+            font-size: 12px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .attacks-cell, .defenses-cell {
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .star-dist {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .star-dist-item {
+            padding: 2px 6px;
+            background: #f5f7fa;
+            border-radius: 3px;
+            color: #666;
+        }
+
+        .avg-stars {
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: #f39c12;
+        }
+
+        .avg-stars.defense {
+            color: #e74c3c;
+        }
+
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .sortable:hover {
+            color: #333;
+        }
+
+        .sort-active.asc::after {
+            content: ' ↑';
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        .sort-active.desc::after {
+            content: ' ↓';
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        .rank-up {
+            background: #e8f8f5;
+            color: #27ae60;
+            border-color: #a9dfbf;
+        }
+
+        .rank-down {
+            background: #fadbd8;
+            color: #e74c3c;
+            border-color: #f5b7b1;
+        }
+
+        .rank-neutral,
+        .rank-inactive {
+            background: #ecf0f1;
+            color: #7f8c8d;
+            border-color: #d5dbdb;
+        }
+
+        .judgment {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid;
+            white-space: nowrap;
+        }
+
+        .badge-perfect {
+            background: #fff8e1;
+            color: #f39c12;
+            border-color: #f9e79f;
+        }
+
+        .badge-wow {
+            background: #e8f8f5;
+            color: #27ae60;
+            border-color: #a9dfbf;
+        }
+
+        .badge-good {
+            background: #ebf5fb;
+            color: #2980b9;
+            border-color: #aed6f1;
+        }
+
+        .badge-warning {
+            background: #fef5e7;
+            color: #e67e22;
+            border-color: #fad7a0;
+        }
+
+        .badge-suck {
+            background: #fadbd8;
+            color: #e74c3c;
+            border-color: #f5b7b1;
+        }
+
+        .badge-inactive {
+            background: #ecf0f1;
+            color: #7f8c8d;
+            border-color: #d5dbdb;
+        }
+
+        .action-btn {
+            padding: 6px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 24px;
+            color: #999;
+            font-size: 13px;
+            margin-top: 32px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 24px;
+            color: #999;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state a {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .empty-state a:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <div class="navbar">
+        <div class="navbar-left">
+            <div class="logo">⚔️</div>
+            <span style="font-weight: 600; color: #333;">CoC Analytics</span>
+        </div>
+        <a href="/">← Zurück zur Startseite</a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Ranked Week Performance</h1>
+            <p>Detaillierte Battle-Übersicht nach Woche</p>
+        </div>
+
+        <!-- Week Selector -->
+        <div class="controls">
+            <label for="week-select">Woche wählen:</label>
+            <form method="GET" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <select name="week_id" id="week-select" class="week-selector" onchange="this.form.submit()">
+                    {% if distinct_weeks %}
+                        {% for week in distinct_weeks %}
+                        <option value="{{ week.league_season_id }}" {% if week.league_season_id == selected_week_id %}selected{% endif %}>
+                            {{ week.start_day.strftime('%d.%m.%Y') }} - {{ week.end_day.strftime('%d.%m.%Y') }}
+                        </option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="">Keine Wochen verfügbar</option>
+                    {% endif %}
+                </select>
+            </form>
+            <div style="margin-left:auto; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <input id="searchInput" class="week-selector" type="search" placeholder="🔍 Suche Spieler, Liga, Rang..." oninput="updateTable()">
+                <select id="rankFilter" class="week-selector" onchange="updateTable()">
+                    <option value="all">🌍 Alle anzeigen</option>
+                    <option value="up">⬆️ Nur Aufsteiger</option>
+                    <option value="neutral">➖ Nur Klassenerhalt</option>
+                    <option value="down">⬇️ Nur Absteiger</option>
+                </select>
+                <button type="button" class="action-btn" id="inactiveToggle" onclick="toggleInactive()">👁️ Inaktive ausblenden</button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        {% if week_data %}
+        <div class="table-wrapper">
+            <table id="statsTable">
+                <thead>
+                    <tr>
+                        <th class="sortable" onclick="sortTable('league')">Liga</th>
+                        <th class="sortable" onclick="sortTable('rank')">Rang</th>
+                        <th class="sortable" onclick="sortTable('player')">Spieler</th>
+                        <th class="sortable" onclick="sortTable('att_count')">Angriffe</th>
+                        <th>Offensive (0/1/2/3)</th>
+                        <th class="sortable" onclick="sortTable('att_avg')" style="text-align: center;">Ø Angriff</th>
+                        <th class="sortable" onclick="sortTable('def_count')">Defensiven</th>
+                        <th>Defensive (0/1/2/3)</th>
+                        <th class="sortable" onclick="sortTable('def_avg')" style="text-align: center;">Ø Def</th>
+                        <th class="sortable" onclick="sortTable('judge')">Urteil</th>
+                        <th>Aktion</th>
+                    </tr>
+                </thead>
+                <tbody id="statsBody"></tbody>
+            </table>
+        </div>
+
+        <div class="footer" id="playerCount"></div>
+
+        {% else %}
+        <div class="table-wrapper">
+            <div class="empty-state">
+                <p>Keine Ranked-Week-Daten verfügbar.</p>
+                <a href="/">Zur Startseite</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if week_data %}
+    <script>
+        window.weekData = {{ week_data|tojson|safe }};
+        let showInactive = true;
+        let currentRankFilter = 'all';
+        let currentSearchTerm = '';
+        let currentSort = { column: 'rank', direction: 'asc' };
+
+        const judgeColors = {
+            'badge-perfect': '#f39c12',
+            'badge-wow': '#27ae60',
+            'badge-good': '#2980b9',
+            'badge-warning': '#e67e22',
+            'badge-suck': '#e74c3c',
+            'badge-inactive': '#95a5a6'
+        };
+
+        function updateTable() {
+            currentSearchTerm = document.getElementById('searchInput').value.toLowerCase();
+            currentRankFilter = document.getElementById('rankFilter').value;
+            buildTable();
+        }
+
+        function toggleInactive() {
+            showInactive = !showInactive;
+            document.getElementById('inactiveToggle').textContent = showInactive ? '👁️ Inaktive ausblenden' : '👁️‍🗨️ Inaktive einblenden';
+            buildTable();
+        }
+
+        function sortTable(column) {
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.direction = 'asc';
+            }
+            buildTable();
+        }
+
+        function getJudgeColor(badgeClass) {
+            return judgeColors[badgeClass] || '#333';
+        }
+
+        function buildTable() {
+            const rows = window.weekData.filter(item => {
+                if (!showInactive && !item.is_active) {
+                    return false;
+                }
+
+                if (currentRankFilter !== 'all' && item.rank_status !== currentRankFilter) {
+                    return false;
+                }
+
+                if (currentSearchTerm) {
+                    const haystack = [
+                        item.player_name,
+                        item.player_tag,
+                        item.league_tier,
+                        item.judge_label,
+                        item.rank || '',
+                        item.att_count || '',
+                        item.def_count || '',
+                        item.att_avg || '',
+                        item.def_avg || ''
+                    ].join(' ').toLowerCase();
+                    if (!haystack.includes(currentSearchTerm)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            rows.sort((a, b) => {
+                const columnKey = currentSort.column === 'league'
+                    ? 'league_tier'
+                    : currentSort.column === 'player'
+                        ? 'player_name'
+                        : currentSort.column === 'judge'
+                            ? 'judge_label'
+                            : currentSort.column;
+
+                let aValue = a[columnKey];
+                let bValue = b[columnKey];
+
+                if (columnKey === 'rank') {
+                    aValue = aValue == null ? 9999 : aValue;
+                    bValue = bValue == null ? 9999 : bValue;
+                }
+
+                if (columnKey === 'player_name' || columnKey === 'league_tier' || columnKey === 'judge_label') {
+                    aValue = (aValue || '').toString().toLowerCase();
+                    bValue = (bValue || '').toString().toLowerCase();
+                } else {
+                    aValue = aValue == null ? 0 : aValue;
+                    bValue = bValue == null ? 0 : bValue;
+                }
+
+                if (aValue < bValue) return currentSort.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return currentSort.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            const tbody = document.getElementById('statsBody');
+            tbody.innerHTML = '';
+
+            rows.forEach(item => {
+                const row = document.createElement('tr');
+                const leagueCell = item.league_icon
+                    ? `<div class="league-cell"><img src="${item.league_icon}" alt="${item.league_tier || ''}" title="${item.league_tier || ''}" class="league-icon"></div>`
+                    : `<div class="league-cell"><span class="league-badge">${item.league_tier || '–'}</span></div>`;
+                const rankIcon = item.rank_status === 'up' ? '⬆️' : item.rank_status === 'down' ? '⬇️' : item.rank_status === 'inactive' ? '💤' : '➖';
+                const rankText = item.rank ? `#${item.rank}` : '-';
+                const rankTitle = item.rank_status === 'up' ? 'Aufsteiger' : item.rank_status === 'down' ? 'Absteiger' : item.rank_status === 'inactive' ? 'Inaktiv' : 'Klassenerhalt';
+                const badgeColor = getJudgeColor(item.badge_class);
+
+                row.innerHTML = `
+                    <td data-label="Liga">${leagueCell}</td>
+                    <td data-label="Rang"><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span></td>
+                    <td data-label="Spieler">
+                        <div class="player-cell">
+                            <div class="player-info">
+                                <div class="player-name">${item.player_name}</div>
+                                <div class="player-trophy">🏆 ${item.trophies}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td data-label="Angriffe"><div class="attacks-cell">${item.att_count} / ${item.att_max}</div></td>
+                    <td data-label="Offensive"><div class="star-dist"><span class="star-dist-item">${item.att_0star}</span><span>|</span><span class="star-dist-item">${item.att_1star}</span><span>|</span><span class="star-dist-item">${item.att_2star}</span><span>|</span><span class="star-dist-item">${item.att_3star}</span></div></td>
+                    <td data-label="Ø Angriff" style="text-align:center; color:${badgeColor};"><strong>${item.att_avg.toFixed(2)}</strong></td>
+                    <td data-label="Defensiven"><div class="defenses-cell">${item.def_count} / ${item.def_max}</div></td>
+                    <td data-label="Defensive"><div class="star-dist"><span class="star-dist-item">${item.def_0star}</span><span>|</span><span class="star-dist-item">${item.def_1star}</span><span>|</span><span class="star-dist-item">${item.def_2star}</span><span>|</span><span class="star-dist-item">${item.def_3star}</span></div></td>
+                    <td data-label="Ø Def" style="text-align:center; color:${badgeColor};"><strong>${item.def_avg.toFixed(2)}</strong></td>
+                    <td data-label="Urteil"><span class="judgment ${item.badge_class}">${item.judge_label.split('(')[0].trim()}</span></td>
+                    <td data-label="Aktion"><button class="action-btn">Details & KI</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('playerCount').textContent = `${rows.length} Spieler angezeigt`;
+            updateSortHeaders();
+        }
+
+        function updateSortHeaders() {
+            document.querySelectorAll('#statsTable th').forEach(th => {
+                th.classList.remove('sort-active', 'asc', 'desc');
+                if (th.getAttribute('onclick') && th.getAttribute('onclick').includes(currentSort.column)) {
+                    th.classList.add('sort-active', currentSort.direction);
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            buildTable();
+        });
+    </script>
+    {% endif %}
+    </body>
+</html>

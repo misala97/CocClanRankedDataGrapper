@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 clan_url = "https://clashspot.net/en/clan/2QRC8998U/view"
 
 # Das Datum für die ClashSpot URL (Format: YYYY-MM-DD)
-url_date = "2026-05-25"
+url_date = "2026-06-01"
 
 # --- Automatische Dateinamen-Generierung ---
 parsed_date = datetime.strptime(url_date, "%Y-%m-%d")

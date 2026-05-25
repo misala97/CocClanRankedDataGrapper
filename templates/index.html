@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ clan_name }} - Clash of Clans Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --accent: #3b82f6;
+            --accent-dark: #1e40af;
+        }
+
+        .gradient-hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .gradient-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+        }
+
+        .badge-warrior {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .badge-crown {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        }
+
+        .badge-sword {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+            font-size: 24px;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .float-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center font-bold text-lg">⚔️</div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">CoC Analytics</h1>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="hidden md:flex items-center gap-6">
+                        <a href="#features" class="text-sm text-slate-300 hover:text-white transition-colors">Features</a>
+                        <a href="#members" class="text-sm text-slate-300 hover:text-white transition-colors">Members</a>
+                    </div>
+                    <a href="/debug" class="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 rounded text-slate-100 transition-colors">Admin</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-br from-purple-600/20 to-blue-600/20 pointer-events-none"></div>
+        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+            <div class="grid md:grid-cols-2 gap-12 items-center">
+                <div>
+                    <h2 class="text-5xl md:text-6xl font-bold mb-6 leading-tight">
+                        Welcome to <br><span class="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">{{ clan_name }}</span>
+                    </h2>
+                    <p class="text-lg text-slate-300 mb-8 leading-relaxed">
+                        Discover your clan's performance metrics, track battle statistics, and analyze seasonal rankings in real-time.
+                    </p>
+                    <div class="flex gap-4">
+                        <a href="#members" class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg font-semibold hover:shadow-lg hover:shadow-blue-500/50 transition-all">
+                            Explore Members
+                        </a>
+                        <a href="#features" class="px-6 py-3 border border-slate-400 rounded-lg font-semibold hover:bg-slate-800 transition-colors">
+                            Learn More
+                        </a>
+                    </div>
+                </div>
+                <div class="hidden md:flex justify-center">
+                    <div class="relative w-64 h-64 float-animation">
+                        <div class="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl blur-3xl opacity-20"></div>
+                        <div class="relative w-full h-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 backdrop-blur-xl rounded-2xl border border-slate-500/50 flex items-center justify-center text-6xl">
+                            ⚔️
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Overview -->
+    <section class="py-16 border-y border-slate-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="stat-box rounded-xl p-8 text-center">
+                    <div class="text-4xl font-bold text-blue-400 mb-2">{{ total_members }}</div>
+                    <div class="text-slate-400">Active Members</div>
+                </div>
+                <div class="stat-box rounded-xl p-8 text-center">
+                    <div class="text-4xl font-bold text-purple-400 mb-2">∞</div>
+                    <div class="text-slate-400">Battles Tracked</div>
+                </div>
+                <div class="stat-box rounded-xl p-8 text-center">
+                    <div class="text-4xl font-bold text-pink-400 mb-2">Live</div>
+                    <div class="text-slate-400">Real-Time Updates</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h3 class="text-4xl font-bold mb-4">Analytics Features</h3>
+                <p class="text-xl text-slate-400">Real-time performance tracking and detailed statistics</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Feature 1: Ranked Week Performance (ENABLED) -->
+                <a href="/ranked" class="group bg-slate-800/50 backdrop-blur rounded-xl p-8 border border-slate-700 hover:border-blue-500 transition-all hover:shadow-lg hover:shadow-blue-500/10 cursor-pointer">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="feature-icon group-hover:scale-110 transition-transform">📊</div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-xs font-semibold">Active</span>
+                    </div>
+                    <h4 class="text-xl font-bold mb-3 group-hover:text-blue-400 transition-colors">Ranked Week Performance</h4>
+                    <p class="text-slate-400">Track your seasonal rankings, trophies, and performance metrics across ranked leagues.</p>
+                </a>
+
+                <!-- Feature 2: Battle History (ENABLED) -->
+                <a href="/battles" class="group bg-slate-800/50 backdrop-blur rounded-xl p-8 border border-slate-700 hover:border-purple-500 transition-all hover:shadow-lg hover:shadow-purple-500/10 cursor-pointer">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="feature-icon group-hover:scale-110 transition-transform">⚔️</div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-xs font-semibold">Active</span>
+                    </div>
+                    <h4 class="text-xl font-bold mb-3 group-hover:text-purple-400 transition-colors">Battle History</h4>
+                    <p class="text-slate-400">Detailed logs of all attacks and defenses with stars, damage percentages, and loot information.</p>
+                </a>
+
+                <!-- Feature 3: Raid Weekend Performance (DISABLED) -->
+                <div class="group bg-slate-800/30 backdrop-blur rounded-xl p-8 border border-slate-700 opacity-60 cursor-not-allowed">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="feature-icon opacity-50">🏆</div>
+                        <span class="px-3 py-1 bg-slate-600/50 text-slate-400 rounded-full text-xs font-semibold">Coming Soon</span>
+                    </div>
+                    <h4 class="text-xl font-bold mb-3 text-slate-500">Raid Weekend Performance</h4>
+                    <p class="text-slate-500">Track clan raid weekends, capital loot, and raid performance metrics.</p>
+                </div>
+
+                <!-- Feature 4: Leaderboard -->
+                <div class="group bg-slate-800/50 backdrop-blur rounded-xl p-8 border border-slate-700 hover:border-pink-500 transition-all hover:shadow-lg hover:shadow-pink-500/10">
+                    <div class="feature-icon mb-4 group-hover:scale-110 transition-transform">🥇</div>
+                    <h4 class="text-xl font-bold mb-3">Leaderboard</h4>
+                    <p class="text-slate-400">Track clan member rankings and performance metrics in one place.</p>
+                </div>
+
+                <!-- Feature 5: War Analytics -->
+                <div class="group bg-slate-800/50 backdrop-blur rounded-xl p-8 border border-slate-700 hover:border-blue-500 transition-all hover:shadow-lg hover:shadow-blue-500/10">
+                    <div class="feature-icon mb-4 group-hover:scale-110 transition-transform">🎯</div>
+                    <h4 class="text-xl font-bold mb-3">War Analytics</h4>
+                    <p class="text-slate-400">Analyze clan war performance and strategies.</p>
+                </div>
+
+                <!-- Feature 6: Player Profiles -->
+                <div class="group bg-slate-800/50 backdrop-blur rounded-xl p-8 border border-slate-700 hover:border-purple-500 transition-all hover:shadow-lg hover:shadow-purple-500/10">
+                    <div class="feature-icon mb-4 group-hover:scale-110 transition-transform">👤</div>
+                    <h4 class="text-xl font-bold mb-3">Player Profiles</h4>
+                    <p class="text-slate-400">Detailed stats for each clan member including achievements and history.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Members Preview -->
+    <section id="members" class="py-20 bg-slate-800/30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-12">
+                <h3 class="text-4xl font-bold mb-4">Clan Members</h3>
+                <p class="text-xl text-slate-400">{{ total_members }} members currently tracking their progress</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Placeholder member cards - will be replaced with actual data -->
+                {% for i in range(3) %}
+                <div class="bg-slate-800/50 backdrop-blur rounded-lg p-6 border border-slate-700 hover:border-blue-500 transition-colors">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full flex items-center justify-center text-lg">👤</div>
+                        <span class="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm font-semibold">Active</span>
+                    </div>
+                    <h4 class="font-bold text-lg mb-2">Member {{ i + 1 }}</h4>
+                    <div class="space-y-2 text-sm text-slate-400">
+                        <p>Townhall: TH{{ 10 + i }}</p>
+                        <p>Battles: {{ 50 + (i * 10) }}</p>
+                        <p>Last Updated: Today</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="text-center mt-12">
+                <a href="#" class="inline-flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                    View All Members
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-20 border-t border-slate-700">
+        <div class="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
+            <h3 class="text-4xl font-bold mb-6">Get Started</h3>
+            <p class="text-xl text-slate-400 mb-8">
+                Explore your clan's performance data and analytics with our comprehensive tracking tools.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="/ranked" class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg font-semibold hover:shadow-lg hover:shadow-blue-500/50 transition-all">
+                    View Ranked Performance
+                </a>
+                <a href="/battles" class="px-6 py-3 border border-slate-400 rounded-lg font-semibold hover:bg-slate-800 transition-colors">
+                    Battle History
+                </a>
+                <a href="/debug" class="px-6 py-3 border border-slate-400 rounded-lg font-semibold hover:bg-slate-800 transition-colors">
+                    Admin Dashboard
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 border-t border-slate-700 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-4 gap-8 mb-8">
+                <div>
+                    <h4 class="font-bold mb-4">CoC Analytics</h4>
+                    <p class="text-slate-400 text-sm">Real-time Clash of Clans analytics and insights for your clan.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold mb-4">Features</h4>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li><a href="/ranked" class="hover:text-white transition-colors">Ranked Weeks</a></li>
+                        <li><a href="/battles" class="hover:text-white transition-colors">Battle History</a></li>
+                        <li><span class="text-slate-500">Raid Weekends (soon)</span></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold mb-4">Upcoming</h4>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li><span class="text-slate-500">Leaderboard</span></li>
+                        <li><span class="text-slate-500">War Analytics</span></li>
+                        <li><span class="text-slate-500">Player Profiles</span></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold mb-4">Admin</h4>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li><a href="/debug" class="hover:text-white transition-colors">Dashboard</a></li>
+                        <li class="flex items-center gap-2"><span class="w-2 h-2 bg-green-500 rounded-full"></span>System Online</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-slate-700 pt-8 flex justify-between items-center text-sm text-slate-400">
+                <p>&copy; 2026 CoC Analytics. All rights reserved.</p>
+                <div class="flex gap-4">
+                    <a href="#" class="hover:text-white transition-colors">Privacy</a>
+                    <a href="#" class="hover:text-white transition-colors">Terms</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

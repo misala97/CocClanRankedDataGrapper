@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sys
 import time
 
@@ -15,6 +16,57 @@ from api_functions import *
 from database_functions import *
 import datetime
 from logging.handlers import RotatingFileHandler
+
+
+def normalize_league_name(league_name):
+    if not league_name:
+        return None
+    cleaned = re.sub(r'\s+', ' ', re.sub(r'\.', '', re.sub(r'league', '', league_name, flags=re.I))).strip()
+    return cleaned.lower()
+
+
+def get_league_thresholds(league_name):
+    if not league_name:
+        return None
+    name = normalize_league_name(league_name)
+    thresholds = {
+        "skeleton 1": {"pro": 50, "dem": 0},
+        "skeleton 2": {"pro": 50, "dem": 5},
+        "skeleton 3": {"pro": 50, "dem": 5},
+        "barbarian 4": {"pro": 50, "dem": 5},
+        "barbarian 5": {"pro": 50, "dem": 5},
+        "barbarian 6": {"pro": 50, "dem": 5},
+        "archer 7": {"pro": 50, "dem": 5},
+        "archer 8": {"pro": 50, "dem": 5},
+        "archer 9": {"pro": 40, "dem": 10},
+        "wizard 10": {"pro": 35, "dem": 10},
+        "wizard 11": {"pro": 50, "dem": 10},
+        "wizard 12": {"pro": 40, "dem": 10},
+        "valkyrie 13": {"pro": 35, "dem": 10},
+        "valkyrie 14": {"pro": 50, "dem": 10},
+        "valkyrie 15": {"pro": 40, "dem": 10},
+        "witch 16": {"pro": 35, "dem": 10},
+        "witch 17": {"pro": 50, "dem": 10},
+        "witch 18": {"pro": 40, "dem": 10},
+        "golem 19": {"pro": 35, "dem": 10},
+        "golem 20": {"pro": 50, "dem": 10},
+        "golem 21": {"pro": 40, "dem": 10},
+        "pekka 22": {"pro": 30, "dem": 10},
+        "pekka 23": {"pro": 50, "dem": 10},
+        "pekka 24": {"pro": 40, "dem": 10},
+        "titan 25": {"pro": 30, "dem": 15},
+        "titan 26": {"pro": 50, "dem": 15},
+        "titan 27": {"pro": 40, "dem": 15},
+        "dragon 28": {"pro": 30, "dem": 15},
+        "dragon 29": {"pro": 25, "dem": 15},
+        "dragon 30": {"pro": 25, "dem": 15},
+        "electro 31": {"pro": 20, "dem": 15},
+        "electro 32": {"pro": 20, "dem": 15},
+        "electro 33": {"pro": 15, "dem": 15},
+        "legend iii": {"pro": 5, "dem": 15},
+        "legend ii": {"pro": 3, "dem": 15}
+    }
+    return thresholds.get(name)
 
 
 # ==========================================
@@ -35,7 +87,7 @@ class ConsoleColorFormatter(logging.Formatter):
 
 # --- Root Logger (Console Output) ---
 root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
+root_logger.setLevel(logging.DEBUG)
 root_logger.handlers.clear()
 
 console_handler = logging.StreamHandler()
@@ -278,9 +330,36 @@ def task_update_clan_members():
         db_uptime_tracker_create_new(create_db_uptime_tracker(task_update_clan_members.__name__, duration))
         db.session.commit()
 
-# 4. Das Web-Frontend (Dashboard)
+# 4. Das Web-Frontend
+
+# ==========================================
+# PUBLIC WEBSITE (End-User Facing)
+# ==========================================
 @app.route('/')
-def dashboard():
+def index():
+    """Public homepage"""
+    try:
+        clan_data = api_fetch_clan_data(CLAN_TAG)
+        clan_name = json_get(clan_data, JSON_CLAN_DATA.NAME, "Clan")
+    except Exception as e:
+        root_logger.warning(f"Could not fetch clan data for homepage: {e}")
+        clan_name = "Our Clan"
+    
+    total_members = Player.query.count()
+    
+    return render_template(
+        'index.html',
+        clan_name=clan_name,
+        total_members=total_members
+    )
+
+
+# ==========================================
+# DEBUG DASHBOARD (Admin-only)
+# ==========================================
+@app.route('/debug')
+def debug_dashboard():
+    """Debug dashboard - moved to /debug route"""
     # 1. URL-Parameter auslesen (falls nicht vorhanden, gibt es Standardwerte)
     filter_tag = request.args.get('player_tag', default='').strip()
     sort_by = request.args.get('sort', default='tag')
@@ -341,7 +420,7 @@ def dashboard():
     ]
 
     return render_template(
-        'dashboard.html',
+        'debug_dashboard.html',
         players=players,
         selected_player=selected_player,
         battle_logs=battle_logs,
@@ -350,6 +429,176 @@ def dashboard():
         uptime_trackers_json=uptime_trackers,
         current_tag=filter_tag,
         current_sort=sort_by,
+    )
+
+
+# ==========================================
+# FEATURE PAGES (Public Features)
+# ==========================================
+@app.route('/ranked')
+def ranked_weeks_page():
+    """Ranked Week Performance page with detailed battle breakdown"""
+    # Get all unique ranked weeks
+    distinct_weeks = db.session.query(
+        RankedWeek.start_day,
+        RankedWeek.end_day,
+        RankedWeek.league_season_id
+    ).distinct().order_by(RankedWeek.start_day.desc()).all()
+    
+    # Get selected week (default to most recent)
+    selected_week_id = request.args.get('week_id', default=None)
+    
+    if not selected_week_id and distinct_weeks:
+        # Default to most recent week
+        selected_week_id = distinct_weeks[0].league_season_id
+    
+    # Build a full player list and include ranked week data for the selected week if present
+    week_data = []
+    all_players = Player.query.options(
+        selectinload(Player.ranked_weeks).selectinload(RankedWeek.battle_logs)
+    ).all()
+
+    for player in all_players:
+        ranked_week = None
+        if selected_week_id:
+            ranked_week = next(
+                (rw for rw in player.ranked_weeks if rw.league_season_id == selected_week_id),
+                None
+            )
+
+        league_tier = player.league_tier
+        league_icon = player.league_icon
+        rank = None
+        trophies = None
+        max_attacks = 0
+        attack_logs = []
+        defense_logs = []
+
+        if ranked_week:
+            league_tier = ranked_week.league_tier or league_tier
+            league_icon = ranked_week.league_icon or league_icon
+            rank = ranked_week.rank
+            trophies = ranked_week.trophies
+            max_attacks = ranked_week.max_attacks or 0
+
+            for log in ranked_week.battle_logs:
+                if log.attack is True or log.attack == 1:
+                    attack_logs.append(log.stars or 0)
+                else:
+                    defense_logs.append(log.stars or 0)
+
+        att_count = len(attack_logs)
+        def_count = len(defense_logs)
+
+        att_avg = round(sum(attack_logs) / att_count, 2) if att_count else 0
+        def_avg = round(sum(defense_logs) / def_count, 2) if def_count else 0
+
+        att_0star = sum(1 for s in attack_logs if s == 0)
+        att_1star = sum(1 for s in attack_logs if s == 1)
+        att_2star = sum(1 for s in attack_logs if s == 2)
+        att_3star = sum(1 for s in attack_logs if s == 3)
+
+        def_0star = sum(1 for s in defense_logs if s == 0)
+        def_1star = sum(1 for s in defense_logs if s == 1)
+        def_2star = sum(1 for s in defense_logs if s == 2)
+        def_3star = sum(1 for s in defense_logs if s == 3)
+
+        is_active = ranked_week is not None
+        missing_attacks = max(0, max_attacks - att_count)
+        missing_text = f" ({missing_attacks} fehlen)" if missing_attacks > 0 else ""
+
+        if not is_active:
+            badge_class = 'badge-inactive'
+            judge_label = 'Inaktiv'
+            rank_status = 'inactive'
+        elif att_avg >= 3.0 and att_count > 0:
+            badge_class = 'badge-perfect'
+            judge_label = 'Perfekt' + missing_text
+            rank_status = 'neutral'
+        elif att_avg >= 2.5:
+            badge_class = 'badge-wow'
+            judge_label = 'Sehr Gut' + missing_text
+            rank_status = 'neutral'
+        elif att_avg >= 2.0:
+            badge_class = 'badge-good'
+            judge_label = 'Gut' + missing_text
+            rank_status = 'neutral'
+        elif att_avg >= 1.5:
+            badge_class = 'badge-warning'
+            judge_label = 'Schlecht' + missing_text
+            rank_status = 'neutral'
+        else:
+            badge_class = 'badge-suck'
+            judge_label = 'Katastrophe' + missing_text
+            rank_status = 'neutral'
+
+        thresholds = get_league_thresholds(league_tier)
+        if is_active and thresholds and rank and rank > 0:
+            if rank <= thresholds['pro']:
+                rank_status = 'up'
+            elif rank > (100 - thresholds['dem']):
+                rank_status = 'down'
+            else:
+                rank_status = 'neutral'
+
+        week_data.append({
+            'player_name': player.name or player.tag,
+            'player_tag': player.tag,
+            'rank': rank,
+            'trophies': trophies or 0,
+            'league_tier': league_tier,
+            'league_icon': league_icon,
+            'att_count': att_count,
+            'att_max': max_attacks,
+            'att_0star': att_0star,
+            'att_1star': att_1star,
+            'att_2star': att_2star,
+            'att_3star': att_3star,
+            'att_avg': att_avg,
+            'def_count': def_count,
+            'def_max': max_attacks,
+            'def_0star': def_0star,
+            'def_1star': def_1star,
+            'def_2star': def_2star,
+            'def_3star': def_3star,
+            'def_avg': def_avg,
+            'badge_class': badge_class,
+            'judge_label': judge_label,
+            'is_active': is_active,
+            'rank_status': rank_status
+        })
+
+    week_data.sort(key=lambda item: (item['rank'] or 9999, item['player_name'] or ''))
+    
+    # Get selected week info for display
+    selected_week_info = None
+    if selected_week_id:
+        selected_week_info = next((w for w in distinct_weeks if w.league_season_id == selected_week_id), None)
+    
+    return render_template(
+        'ranked_weeks.html',
+        distinct_weeks=distinct_weeks,
+        selected_week_id=selected_week_id,
+        selected_week_info=selected_week_info,
+        week_data=week_data
+    )
+
+
+@app.route('/battles')
+def battle_history_page():
+    """Battle History page"""
+    page = request.args.get('page', 1, type=int)
+    per_page = 100
+    
+    # Get all battle logs with pagination, sorted by most recent first
+    battle_logs_query = BattleLog.query.order_by(BattleLog.time.desc()).paginate(page=page, per_page=per_page)
+    
+    return render_template(
+        'battle_history.html',
+        battle_logs=battle_logs_query.items,
+        total_battles=battle_logs_query.total,
+        page=page,
+        pages=battle_logs_query.pages
     )
 
 #Scheduler einrichten und starten
@@ -365,13 +614,5 @@ if __name__ == '__main__':
     #task_update_ranked_weeks()
     #task_update_battle_logs()
     
-    #print(JSON_PLAYER_DATA.TAG)
-    
-    #print(JSON_PLAYER_DATA.LEAGUE_TIER)
-    #print(JSON_PLAYER_DATA.LEAGUE_TIER.NAME)
-    
-    #player, error= api_fetch_player_data("2JUQY0JP")
-    #print(json_get(player, "tag"))
-
     # Webserver starten (use_reloader=False verhindert, dass der Scheduler beim Speichern doppelt startet)
     app.run(debug=True, use_reloader=False)

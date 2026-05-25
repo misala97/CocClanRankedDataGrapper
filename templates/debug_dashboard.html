@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoC Analytics Dashboard</title>
+    <title>CoC Analytics Debug Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -189,9 +189,9 @@
     </header>
 
     <div class="page-header fade-up d-1">
-        <div class="page-eyebrow">// Intelligence Hub</div>
-        <h1 class="page-title">Spieler<em>daten</em> Dashboard</h1>
-        <p class="page-sub">Analysiere Ranked Weeks, Battle Logs und Performance-Metriken deines Clans in Echtzeit.</p>
+        <div class="page-eyebrow">// Debug Intelligence Hub</div>
+        <h1 class="page-title">Spieler<em>daten</em> Debug Dashboard</h1>
+        <p class="page-sub">Analysiere Ranked Weeks, Battle Logs und Performance-Metriken deines Clans in Echtzeit. <a href="/" style="color: var(--accent); text-decoration: none;">← Zur öffentlichen Website</a></p>
     </div>
 
     {% set total_players = players|length %}
@@ -477,7 +477,7 @@
     </div>
 
     <footer>
-        <div>CoC Analytics Dashboard &copy; {{ "now" }}</div>
+        <div>CoC Analytics Debug Dashboard &copy; {{ "now" }}</div>
         <div>Engineered with Flask & Chart.js</div>
     </footer>
 </div>
@@ -511,10 +511,6 @@
         
         const isOpen = detail.classList.contains('open');
         
-        // Optional: Close all other rows first for a cleaner accordion effect
-        // document.querySelectorAll('.detail-row').forEach(el => el.classList.remove('open'));
-        // document.querySelectorAll('.main-row').forEach(el => el.classList.remove('is-open'));
-
         if (!isOpen) {
             detail.classList.add('open');
             row.classList.add('is-open');
@@ -540,16 +536,12 @@
     }
 
     function switchTab(pid, target) {
-        // Find the container for this specific player to scope the tab switching
         const container = document.getElementById(`detail-${pid}`);
         if(!container) return;
 
-        // Reset Buttons
         container.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        // Reset Panes
         container.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
 
-        // Activate specific button and pane based on target ('ranked' or 'battles')
         event.currentTarget.classList.add('active');
         document.getElementById(`pane-${pid}-${target}`).classList.add('active');
     }
@@ -562,7 +554,6 @@
         const uCtx = document.getElementById('uptimeChart');
         if (!uCtx) return;
 
-        // Helper to parse dates securely
         function parseTs(v) {
             if (!v) return null;
             if (typeof v === 'number') return v < 1e12 ? v * 1000 : v;
