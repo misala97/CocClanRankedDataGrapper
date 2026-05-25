@@ -14,7 +14,7 @@ from extensions import db
 from help_functions import *
 from api_functions import * 
 from database_functions import *
-import datetime
+import datetime as dt
 from logging.handlers import RotatingFileHandler
 
 
@@ -167,7 +167,7 @@ db.configure_mappers()
         
 def task_update_battle_logs():
     t0 = time.time()
-    battle_logger.info(f"Running task at {datetime.now()}  ")
+    battle_logger.info(f"Running task at {dt.now()}  ")
     with app.app_context():
         db_players_in_clan = db_player_get_all()
         for db_player in db_players_in_clan:
@@ -199,7 +199,7 @@ def task_update_battle_logs():
         
 def task_update_ranked_weeks():
     t0 = time.time()
-    ranked_logger.info(f"Running task at {datetime.now()}  ")
+    ranked_logger.info(f"Running task at {dt.now()}  ")
     with app.app_context():
         db_players_in_clan = db_player_get_all()
         for db_player in db_players_in_clan:
@@ -295,7 +295,7 @@ def task_update_ranked_weeks():
         
 def task_update_clan_members():
     t0 = time.time()
-    clan_logger.info(f"Running task at {datetime.now()}  ")
+    clan_logger.info(f"Running task at {dt.now()}  ")
     #Fetch Api Data
     try:
         clan_api = api_fetch_clan_data(CLAN_TAG)
@@ -346,11 +346,27 @@ def index():
         clan_name = "Our Clan"
     
     total_members = Player.query.count()
-    
+    now = dt.datetime.now(dt.timezone.utc)
+    week_start_date = (now - dt.timedelta(days=now.weekday())).date()
+    week_start = dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day, tzinfo=dt.timezone.utc)
+
+    battle_logs_this_week = BattleLog.query.filter(
+        BattleLog.time >= week_start,
+        BattleLog.attack == True
+    ).count()
+    ranked_battles_this_week = RankedBattleLog.query.filter(
+        RankedBattleLog.ranked_week.has(RankedWeek.start_day >= week_start_date),
+        RankedBattleLog.attack == True
+    ).count()
+    week_start_name = week_start.strftime('%A')
+
     return render_template(
         'index.html',
         clan_name=clan_name,
-        total_members=total_members
+        total_members=total_members,
+        battle_logs_this_week=battle_logs_this_week,
+        ranked_battles_this_week=ranked_battles_this_week,
+        week_start_name=week_start_name
     )
 
 
@@ -473,6 +489,8 @@ def ranked_weeks_page():
         max_attacks = 0
         attack_logs = []
         defense_logs = []
+        attack_details = []
+        defense_details = []
 
         if ranked_week:
             league_tier = ranked_week.league_tier or league_tier
@@ -482,10 +500,19 @@ def ranked_weeks_page():
             max_attacks = ranked_week.max_attacks or 0
 
             for log in ranked_week.battle_logs:
+                detail_entry = {
+                    'opponent_name': log.opponent_name or log.opponent_tag or 'Unbekannt',
+                    'opponent_th': log.opponent_th or '',
+                    'stars': log.stars or 0,
+                    'percentage': log.percentage or 0,
+                }
+
                 if log.attack is True or log.attack == 1:
                     attack_logs.append(log.stars or 0)
+                    attack_details.append(detail_entry)
                 else:
                     defense_logs.append(log.stars or 0)
+                    defense_details.append(detail_entry)
 
         att_count = len(attack_logs)
         def_count = len(defense_logs)
@@ -562,6 +589,8 @@ def ranked_weeks_page():
             'def_2star': def_2star,
             'def_3star': def_3star,
             'def_avg': def_avg,
+            'attack_details': attack_details,
+            'defense_details': defense_details,
             'badge_class': badge_class,
             'judge_label': judge_label,
             'is_active': is_active,

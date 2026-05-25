@@ -4,165 +4,501 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Battle History - CoC Analytics</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        .gradient-hero {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        :root {
+            --bg:       #0d1117;
+            --surface:  #161b22;
+            --surface2: #1c2330;
+            --border:   #30363d;
+            --border2:  #21262d;
+            --text:     #e6edf3;
+            --muted:    #8b949e;
+            --accent:   #f0a500;
+            --accent2:  #e8863a;
+            --green:    #3fb950;
+            --blue:     #58a6ff;
+            --red:      #f85149;
+            --yellow:   #e3b341;
+            --purple:   #bc8cff;
         }
-        
-        .stat-box {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
         }
+
+        a { text-decoration: none; color: inherit; }
+
+        /* ── NAV ── */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(13,17,23,0.85);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 32px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: opacity 0.15s;
+        }
+
+        .nav-logo:hover { opacity: 0.8; }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 0 14px rgba(240,165,0,0.35);
+        }
+
+        .nav-logo span {
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 19px;
+            letter-spacing: 0.5px;
+        }
+
+        .back-link {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--muted);
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
+        }
+
+        .back-link:hover {
+            color: var(--text);
+            border-color: var(--accent);
+            background: var(--surface2);
+        }
+
+        /* ── PAGE HEADER ── */
+        .page-header {
+            border-bottom: 1px solid var(--border);
+            padding: 44px 32px 40px;
+        }
+
+        .page-header-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .page-header h2 {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 38px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .page-header h2 span { color: var(--accent); }
+
+        .page-header p {
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        /* ── MAIN CONTENT ── */
+        .content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px;
+        }
+
+        /* ── TABLE WRAPPER ── */
+        .table-wrapper {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead {
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border);
+        }
+
+        thead th {
+            padding: 11px 16px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.7px;
+            text-transform: uppercase;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        thead th.center { text-align: center; }
+        thead th.right  { text-align: right; }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border2);
+            transition: background 0.12s;
+        }
+
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(255,255,255,0.03); }
+
+        tbody td {
+            padding: 13px 16px;
+            vertical-align: middle;
+        }
+
+        tbody td.center { text-align: center; }
+        tbody td.right  { text-align: right; }
+
+        /* ── DATETIME ── */
+        .datetime {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        /* ── PLAYER NAME ── */
+        .player-name {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .player-tag {
+            font-size: 11px;
+            color: var(--muted);
+            margin-left: 6px;
+        }
+
+        /* ── TYPE BADGES ── */
+        .type-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            border: 1px solid;
+        }
+
+        .type-attack {
+            background: rgba(63,185,80,0.12);
+            color: var(--green);
+            border-color: rgba(63,185,80,0.3);
+        }
+
+        .type-defense {
+            background: rgba(248,81,73,0.12);
+            color: var(--red);
+            border-color: rgba(248,81,73,0.3);
+        }
+
+        /* ── STARS ── */
+        .stars {
+            display: inline-flex;
+            gap: 2px;
+            font-size: 14px;
+        }
+
+        .star-filled { color: var(--yellow); }
+        .star-empty  { color: var(--border); }
+
+        /* ── DAMAGE % ── */
+        .damage {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--muted);
+        }
+
+        /* ── LOOT ── */
+        .loot-col {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            align-items: flex-end;
+        }
+
+        .loot-item {
+            font-size: 12px;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .loot-gold   { color: var(--yellow); }
+        .loot-elixir { color: var(--purple); }
+        .loot-dark   { color: var(--red); }
+
+        /* ── PAGINATION ── */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            margin-top: 24px;
+            flex-wrap: wrap;
+        }
+
+        .page-btn {
+            padding: 6px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            transition: border-color 0.15s, color 0.15s, background 0.15s;
+        }
+
+        .page-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--surface2);
+        }
+
+        .page-btn.active {
+            background: rgba(240,165,0,0.15);
+            border-color: rgba(240,165,0,0.5);
+            color: var(--accent);
+        }
+
+        /* ── COUNT BAR ── */
+        .count-bar {
+            margin-top: 16px;
+            padding: 10px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--muted);
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        /* ── EMPTY STATE ── */
+        .empty-state {
+            text-align: center;
+            padding: 80px 24px;
+            color: var(--muted);
+        }
+
+        .empty-state p { font-size: 16px; margin-bottom: 20px; }
+
+        .empty-state a {
+            display: inline-block;
+            padding: 10px 24px;
+            background: var(--accent);
+            color: #000;
+            border-radius: 6px;
+            font-weight: 700;
+            font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.5px;
+            transition: opacity 0.15s;
+        }
+
+        .empty-state a:hover { opacity: 0.85; }
+
+        /* ── FOOTER ── */
+        footer {
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            padding: 20px 32px;
+            margin-top: 48px;
+        }
+
+        .footer-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .footer-inner p,
+        .footer-inner a {
+            font-size: 12px;
+            color: var(--muted);
+            transition: color 0.15s;
+        }
+
+        .footer-inner a:hover { color: var(--text); }
     </style>
 </head>
-<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+<body>
     <!-- Navigation -->
-    <nav class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-700">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center gap-3">
-                    <a href="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center font-bold text-lg">⚔️</div>
-                        <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">CoC Analytics</h1>
-                    </a>
-                </div>
-                <div class="flex items-center gap-4">
-                    <a href="/" class="text-sm text-slate-300 hover:text-white transition-colors">← Home</a>
-                </div>
-            </div>
+    <nav>
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">
+                <div class="logo-icon">⚔️</div>
+                <span>CoC Analytics</span>
+            </a>
+            <a href="/" class="back-link">← Home</a>
         </div>
     </nav>
 
-    <!-- Header -->
-    <section class="border-b border-slate-700 py-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-4xl font-bold mb-2">Battle History</h2>
-            <p class="text-slate-400">Detailed logs of all attacks and defenses</p>
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="page-header-inner">
+            <h2>Battle <span>History</span></h2>
+            <p>Detailed logs of all attacks and defenses</p>
         </div>
-    </section>
+    </div>
 
     <!-- Content -->
-    <section class="py-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            {% if battle_logs %}
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="border-b border-slate-700">
-                            <th class="text-left px-4 py-3 text-slate-400 font-semibold text-sm">Date/Time</th>
-                            <th class="text-left px-4 py-3 text-slate-400 font-semibold text-sm">Attacker</th>
-                            <th class="text-left px-4 py-3 text-slate-400 font-semibold text-sm">Defender</th>
-                            <th class="text-center px-4 py-3 text-slate-400 font-semibold text-sm">Type</th>
-                            <th class="text-center px-4 py-3 text-slate-400 font-semibold text-sm">Result</th>
-                            <th class="text-center px-4 py-3 text-slate-400 font-semibold text-sm">Damage</th>
-                            <th class="text-right px-4 py-3 text-slate-400 font-semibold text-sm">Loot</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for battle in battle_logs %}
-                        {% set is_attack = battle.attack %}
-                        <tr class="border-b border-slate-700 hover:bg-slate-800/50 transition-colors">
-                            <td class="px-4 py-3 text-slate-400 font-mono text-sm">
-                                {{ battle.time.strftime('%d.%m.%y %H:%M') if battle.time else '–' }}
-                            </td>
-                            <td class="px-4 py-3">
-                                <span class="font-semibold">{{ battle.player.name if battle.player else battle.player_tag }}</span>
-                                <span class="text-slate-400 text-sm ml-2">({{ battle.player_tag }})</span>
-                            </td>
-                            <td class="px-4 py-3">
-                                <span class="font-semibold">{{ battle.opponent_name or battle.opponent_tag or '–' }}</span>
-                            </td>
-                            <td class="px-4 py-3 text-center">
-                                {% if is_attack %}
-                                    <span class="bg-green-500/20 text-green-300 px-3 py-1 rounded text-sm font-semibold">Attack</span>
-                                {% else %}
-                                    <span class="bg-red-500/20 text-red-300 px-3 py-1 rounded text-sm font-semibold">Defense</span>
+    <div class="content">
+        {% if battle_logs %}
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date / Time</th>
+                        <th>Attacker</th>
+                        <th>Defender</th>
+                        <th class="center">Type</th>
+                        <th class="center">Result</th>
+                        <th class="center">Damage</th>
+                        <th class="right">Loot</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for battle in battle_logs %}
+                    {% set is_attack = battle.attack %}
+                    <tr>
+                        <td>
+                            <span class="datetime">{{ battle.time.strftime('%d.%m.%y %H:%M') if battle.time else '–' }}</span>
+                        </td>
+                        <td>
+                            <span class="player-name">{{ battle.player.name if battle.player else battle.player_tag }}</span>
+                            <span class="player-tag">{{ battle.player_tag }}</span>
+                        </td>
+                        <td>
+                            <span class="player-name">{{ battle.opponent_name or battle.opponent_tag or '–' }}</span>
+                        </td>
+                        <td class="center">
+                            {% if is_attack %}
+                                <span class="type-badge type-attack">Attack</span>
+                            {% else %}
+                                <span class="type-badge type-defense">Defense</span>
+                            {% endif %}
+                        </td>
+                        <td class="center">
+                            <div class="stars">
+                                {% for i in range(battle.stars or 0) %}
+                                <span class="star-filled">★</span>
+                                {% endfor %}
+                                {% for i in range(3 - (battle.stars or 0)) %}
+                                <span class="star-empty">★</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="center">
+                            <span class="damage">{{ (battle.percentage or 0)|int }}%</span>
+                        </td>
+                        <td class="right">
+                            {% if battle.loot_gold or battle.loot_elixir or battle.loot_dark_elixir %}
+                            <div class="loot-col">
+                                {% if battle.loot_gold %}
+                                <span class="loot-item loot-gold">💰 {{ '{:,}'.format(battle.loot_gold) }}</span>
                                 {% endif %}
-                            </td>
-                            <td class="px-4 py-3 text-center">
-                                <div class="flex justify-center gap-1">
-                                    {% for i in range(battle.stars or 0) %}
-                                    <span class="text-yellow-400">★</span>
-                                    {% endfor %}
-                                    {% for i in range(3 - (battle.stars or 0)) %}
-                                    <span class="text-slate-600">☆</span>
-                                    {% endfor %}
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 text-center font-mono">
-                                {{ (battle.percentage or 0)|int }}%
-                            </td>
-                            <td class="px-4 py-3 text-right text-sm">
-                                {% if battle.loot_gold or battle.loot_elixir or battle.loot_dark_elixir %}
-                                <div class="flex flex-col gap-1">
-                                    {% if battle.loot_gold %}
-                                    <span class="text-yellow-400">💰 {{ '{:,}'.format(battle.loot_gold) }}</span>
-                                    {% endif %}
-                                    {% if battle.loot_elixir %}
-                                    <span class="text-purple-400">⚗️ {{ '{:,}'.format(battle.loot_elixir) }}</span>
-                                    {% endif %}
-                                    {% if battle.loot_dark_elixir %}
-                                    <span class="text-red-400">🔴 {{ '{:,}'.format(battle.loot_dark_elixir) }}</span>
-                                    {% endif %}
-                                </div>
-                                {% else %}
-                                <span class="text-slate-400">–</span>
+                                {% if battle.loot_elixir %}
+                                <span class="loot-item loot-elixir">⚗️ {{ '{:,}'.format(battle.loot_elixir) }}</span>
                                 {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                                {% if battle.loot_dark_elixir %}
+                                <span class="loot-item loot-dark">🔴 {{ '{:,}'.format(battle.loot_dark_elixir) }}</span>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span style="color:var(--muted)">–</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
-            <!-- Pagination -->
-            {% if pages > 1 %}
-            <div class="flex justify-center gap-2 mt-8">
-                {% if page > 1 %}
-                <a href="/battles?page=1" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">First</a>
-                <a href="/battles?page={{ page - 1 }}" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">← Previous</a>
-                {% endif %}
-                
-                {% set start_page = 1 if page - 2 < 1 else page - 2 %}
-                {% set end_page = pages + 1 if page + 3 > pages + 1 else page + 3 %}
-                {% for p in range(start_page, end_page) %}
-                    {% if p == page %}
-                    <span class="px-3 py-2 bg-blue-600 rounded text-sm">{{ p }}</span>
-                    {% else %}
-                    <a href="/battles?page={{ p }}" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">{{ p }}</a>
-                    {% endif %}
-                {% endfor %}
-                
-                {% if page < pages %}
-                <a href="/battles?page={{ page + 1 }}" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">Next →</a>
-                <a href="/battles?page={{ pages }}" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">Last</a>
-                {% endif %}
-            </div>
+        <!-- Pagination -->
+        {% if pages > 1 %}
+        <div class="pagination">
+            {% if page > 1 %}
+            <a href="/battles?page=1" class="page-btn">« First</a>
+            <a href="/battles?page={{ page - 1 }}" class="page-btn">← Prev</a>
             {% endif %}
 
-            <div class="mt-8 p-4 bg-slate-800/50 rounded border border-slate-700 text-slate-400 text-sm">
-                Showing {{ battle_logs|length }} of {{ total_battles }} battles
-            </div>
-            {% else %}
-            <div class="text-center py-12">
-                <p class="text-slate-400 text-lg">No battle history data available yet.</p>
-                <a href="/" class="inline-block mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">
-                    Back to Home
-                </a>
-            </div>
+            {% set start_page = 1 if page - 2 < 1 else page - 2 %}
+            {% set end_page = pages + 1 if page + 3 > pages + 1 else page + 3 %}
+            {% for p in range(start_page, end_page) %}
+                {% if p == page %}
+                <span class="page-btn active">{{ p }}</span>
+                {% else %}
+                <a href="/battles?page={{ p }}" class="page-btn">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+
+            {% if page < pages %}
+            <a href="/battles?page={{ page + 1 }}" class="page-btn">Next →</a>
+            <a href="/battles?page={{ pages }}" class="page-btn">Last »</a>
             {% endif %}
         </div>
-    </section>
+        {% endif %}
+
+        <div class="count-bar">
+            Showing {{ battle_logs|length }} of {{ total_battles }} battles
+        </div>
+
+        {% else %}
+        <div class="table-wrapper">
+            <div class="empty-state">
+                <p>No battle history data available yet.</p>
+                <a href="/">Back to Home</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
 
     <!-- Footer -->
-    <footer class="bg-slate-900 border-t border-slate-700 py-8 mt-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center text-sm text-slate-400">
-                <p>&copy; 2026 CoC Analytics</p>
-                <a href="/" class="hover:text-white transition-colors">Back to Home</a>
-            </div>
+    <footer>
+        <div class="footer-inner">
+            <p>&copy; 2026 CoC Analytics</p>
+            <a href="/">← Back to Home</a>
         </div>
     </footer>
 </body>

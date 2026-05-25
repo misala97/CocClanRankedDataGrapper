@@ -41,7 +41,8 @@ class RankedWeek(db.Model):
     defense_wins = db.Column(db.Integer)
     defense_losses = db.Column(db.Integer)
     league_tier = db.Column(db.String(50))
-    league_icon = db.Column(db.String(150)) 
+    league_icon = db.Column(db.String(150))
+    is_done = db.Column(db.Boolean, default=False) 
     
     last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
