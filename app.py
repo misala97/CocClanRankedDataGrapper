@@ -571,31 +571,31 @@ def ranked_weeks_page():
 
         is_active = ranked_week is not None
         missing_attacks = max(0, max_attacks - att_count)
-        missing_text = f" ({missing_attacks} fehlen)" if missing_attacks > 0 else ""
+        missing_text = f" ({missing_attacks} missing)" if missing_attacks > 0 else ""
 
         if not is_active:
             badge_class = 'badge-inactive'
-            judge_label = 'Inaktiv'
+            judge_label = 'Inactive'
             rank_status = 'inactive'
         elif att_avg >= 3.0 and att_count > 0:
             badge_class = 'badge-perfect'
-            judge_label = 'Perfekt' + missing_text
+            judge_label = 'Perfect' + missing_text
             rank_status = 'neutral'
         elif att_avg >= 2.5:
             badge_class = 'badge-wow'
-            judge_label = 'Sehr Gut' + missing_text
+            judge_label = 'Very Good' + missing_text
             rank_status = 'neutral'
         elif att_avg >= 2.0:
             badge_class = 'badge-good'
-            judge_label = 'Gut' + missing_text
+            judge_label = 'Good' + missing_text
             rank_status = 'neutral'
         elif att_avg >= 1.5:
             badge_class = 'badge-warning'
-            judge_label = 'Schlecht' + missing_text
+            judge_label = 'Bad' + missing_text
             rank_status = 'neutral'
         else:
             badge_class = 'badge-suck'
-            judge_label = 'Katastrophe' + missing_text
+            judge_label = 'Disaster' + missing_text
             rank_status = 'neutral'
 
         thresholds = get_league_thresholds(league_tier)
@@ -637,43 +637,177 @@ def ranked_weeks_page():
         })
 
     week_data.sort(key=lambda item: (item['rank'] or 9999, item['player_name'] or ''))
-    
+
+    # Build per-player history for the last 10 ranked weeks (oldest first for charts)
+    last_10_seasons = [dw.league_season_id for dw in distinct_weeks[:10]]
+    player_history = {}
+    for player in all_players:
+        history = []
+        for season_id in reversed(last_10_seasons):
+            dw = next((d for d in distinct_weeks if d.league_season_id == season_id), None)
+            rw = next((r for r in player.ranked_weeks if r.league_season_id == season_id), None)
+            if rw and dw:
+                a_stars = [log.stars or 0 for log in rw.battle_logs if log.attack is True or log.attack == 1]
+                d_stars = [log.stars or 0 for log in rw.battle_logs if not (log.attack is True or log.attack == 1)]
+                att_c = len(a_stars)
+                def_c = len(d_stars)
+                history.append({
+                    'label': dw.start_day.strftime('%d.%m.%y'),
+                    'att_count': att_c,
+                    'att_max': rw.max_attacks or 0,
+                    'att_avg': round(sum(a_stars) / att_c, 2) if att_c else 0,
+                    'def_count': def_c,
+                    'def_avg': round(sum(d_stars) / def_c, 2) if def_c else 0,
+                    'trophies': rw.trophies or 0,
+                    'rank': rw.rank,
+                })
+        if history:
+            player_history[player.tag] = history
+
     # Get selected week info for display
     selected_week_info = None
     if selected_week_id:
         selected_week_info = next((w for w in distinct_weeks if w.league_season_id == selected_week_id), None)
-    
+
     return render_template(
         'ranked_weeks.html',
         distinct_weeks=distinct_weeks,
         selected_week_id=selected_week_id,
         selected_week_info=selected_week_info,
-        week_data=week_data
+        week_data=week_data,
+        player_history=player_history,
     )
 
 
 @app.route('/battles')
 def battle_history_page():
     """Battle History page"""
-    page = request.args.get('page', 1, type=int)
-    per_page = 100
-    
-    # Get all battle logs with pagination, sorted by most recent first
-    battle_logs_query = BattleLog.query.order_by(BattleLog.time.desc()).paginate(page=page, per_page=per_page)
-    
+    selected_type = request.args.get('type', 'homeVillage')
+    selected_week_str = request.args.get('week', None)
+
+    now = dt.datetime.now(dt.timezone.utc)
+    current_week_start = (now - dt.timedelta(days=now.weekday())).date()
+
+    is_all_time = (selected_week_str == 'all')
+
+    if not is_all_time:
+        if selected_week_str:
+            try:
+                week_start = dt.date.fromisoformat(selected_week_str)
+                week_start = week_start - dt.timedelta(days=week_start.weekday())
+            except ValueError:
+                week_start = current_week_start
+        else:
+            week_start = current_week_start
+        week_end = week_start + dt.timedelta(days=6)
+        week_start_dt = dt.datetime(week_start.year, week_start.month, week_start.day, tzinfo=dt.timezone.utc)
+        next_monday_dt = week_start_dt + dt.timedelta(days=7)
+
+    oldest = (
+        BattleLog.query
+        .filter(BattleLog.attack == True)
+        .order_by(BattleLog.time.asc())
+        .first()
+    )
+    available_weeks = []
+    all_time_label = 'All Time'
+    if oldest and oldest.time:
+        min_date = oldest.time.date()
+        min_monday = min_date - dt.timedelta(days=min_date.weekday())
+        all_time_label = f"All Time – since {min_monday.strftime('%d.%m.%Y')}"
+        w = min_monday
+        while w <= current_week_start:
+            wend = w + dt.timedelta(days=6)
+            available_weeks.append({
+                'start': w.isoformat(),
+                'label': f"{w.strftime('%d.%m.%Y')} – {wend.strftime('%d.%m.%Y')}"
+            })
+            w += dt.timedelta(days=7)
+        available_weeks.reverse()
+        available_weeks.insert(0, {'start': 'all', 'label': all_time_label})
+
+    if is_all_time:
+        base_q = BattleLog.query.filter(BattleLog.attack == True)
+    else:
+        base_q = BattleLog.query.filter(
+            BattleLog.attack == True,
+            BattleLog.time >= week_start_dt,
+            BattleLog.time < next_monday_dt,
+        )
+    if selected_type != 'all':
+        base_q = base_q.filter(BattleLog.type == selected_type)
+
+    attacks = base_q.options(selectinload(BattleLog.player)).all()
+
+    total_attacks = len(attacks)
+    total_gold    = sum(b.loot_gold or 0 for b in attacks)
+    total_elixir  = sum(b.loot_elixir or 0 for b in attacks)
+    total_dark    = sum(b.loot_dark_elixir or 0 for b in attacks)
+
+    player_map = {}
+    for b in attacks:
+        tag = b.player_tag
+        if tag not in player_map:
+            player_map[tag] = {
+                'player_name': b.player.name if b.player else b.player_tag,
+                'player_tag': tag,
+                'att_count': 0,
+                'total_gold': 0, 'total_elixir': 0, 'total_dark': 0,
+                'attack_logs': [],
+            }
+        s = player_map[tag]
+        if b.player:
+            s['player_name'] = b.player.name
+        stars = min(b.stars or 0, 3)
+        s['att_count'] += 1
+        s['total_gold'] += b.loot_gold or 0
+        s['total_elixir'] += b.loot_elixir or 0
+        s['total_dark'] += b.loot_dark_elixir or 0
+        s['attack_logs'].append({
+            'time': b.time.strftime('%d.%m.%y %H:%M') if b.time else '–',
+            'opponent_tag': b.opponent_tag or '–',
+            'stars': stars,
+            'percentage': b.percentage or 0,
+            'gold': b.loot_gold or 0,
+            'elixir': b.loot_elixir or 0,
+            'dark': b.loot_dark_elixir or 0,
+        })
+
+    player_data = []
+    for s in player_map.values():
+        player_data.append({
+            'player_name': s['player_name'],
+            'player_tag': s['player_tag'],
+            'att_count': s['att_count'],
+            'total_gold': s['total_gold'],
+            'total_elixir': s['total_elixir'],
+            'total_dark': s['total_dark'],
+            'attack_logs': s['attack_logs'],
+        })
+
+    player_data.sort(key=lambda x: x['att_count'], reverse=True)
+    top_by_attacks = sorted(player_data, key=lambda x: x['att_count'], reverse=True)[:10]
+
     return render_template(
         'battle_history.html',
-        battle_logs=battle_logs_query.items,
-        total_battles=battle_logs_query.total,
-        page=page,
-        pages=battle_logs_query.pages
+        available_weeks=available_weeks,
+        selected_week_start='all' if is_all_time else week_start.isoformat(),
+        current_week_start=current_week_start.isoformat(),
+        selected_type=selected_type,
+        week_label=all_time_label if is_all_time else f"{week_start.strftime('%d.%m.%Y')} – {week_end.strftime('%d.%m.%Y')}",
+        total_attacks=total_attacks,
+        total_gold=total_gold,
+        total_elixir=total_elixir,
+        total_dark=total_dark,
+        top_by_attacks=top_by_attacks,
+        player_data=player_data,
     )
 
 if __name__ == '__main__':
     #task_update_clan_members()
     #task_update_ranked_weeks()
     #task_update_battle_logs()
-    task_update_done_ranked_weeks()
+    #task_update_done_ranked_weeks()
     
     # Webserver starten (use_reloader=False verhindert, dass der Scheduler beim Speichern doppelt startet)
     app.run(debug=True, use_reloader=False)

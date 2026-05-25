@@ -3,642 +3,406 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ clan_name }} - Clash of Clans Analytics</title>
+    <title>{{ clan_name }} – Clash of Clans Analytics</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg:       #0d1117;
-            --surface:  #161b22;
-            --surface2: #1c2330;
-            --border:   #30363d;
-            --border2:  #21262d;
-            --text:     #e6edf3;
-            --muted:    #8b949e;
-            --accent:   #f0a500;
-            --accent2:  #e8863a;
-            --green:    #3fb950;
-            --blue:     #58a6ff;
-            --purple:   #bc8cff;
-            --red:      #f85149;
+            --bg:      #0d1117;
+            --surface: #161b22;
+            --surf2:   #1c2330;
+            --border:  #30363d;
+            --bord2:   #21262d;
+            --text:    #e6edf3;
+            --muted:   #8b949e;
+            --accent:  #f0a500;
+            --acc2:    #e8863a;
+            --green:   #3fb950;
+            --blue:    #58a6ff;
+            --red:     #f85149;
+            --purple:  #bc8cff;
         }
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
         html { scroll-behavior: smooth; }
-
-        body {
-            font-family: 'DM Sans', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-        }
-
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
         a { text-decoration: none; color: inherit; }
 
         /* ── NAV ── */
         nav {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: rgba(13,17,23,0.85);
-            backdrop-filter: blur(16px);
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(13,17,23,0.92);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border);
         }
-
         .nav-inner {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 32px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            max-width: 1400px; margin: 0 auto; padding: 0 32px;
+            height: 62px; display: flex; align-items: center; justify-content: space-between;
         }
-
-        .nav-logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
+        .nav-logo { display: flex; align-items: center; gap: 10px; }
         .logo-icon {
-            width: 36px;
-            height: 36px;
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            box-shadow: 0 0 14px rgba(240,165,0,0.35);
-            flex-shrink: 0;
+            width: 36px; height: 36px; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            font-size: 18px; box-shadow: 0 0 16px rgba(240,165,0,0.3);
         }
-
-        .nav-logo span {
-            font-family: 'Rajdhani', sans-serif;
-            font-weight: 700;
-            font-size: 19px;
-            letter-spacing: 0.5px;
-            color: var(--text);
-        }
-
-        .nav-links {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
+        .nav-logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: 0.5px; }
+        .nav-links { display: flex; align-items: center; gap: 6px; }
         .nav-links a {
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--muted);
-            padding: 6px 14px;
-            border-radius: 6px;
-            transition: color 0.15s, background 0.15s;
+            font-size: 13px; font-weight: 500; color: var(--muted);
+            padding: 6px 14px; border-radius: 6px; transition: color 0.15s, background 0.15s;
         }
-
-        .nav-links a:hover { color: var(--text); background: var(--surface2); }
-
-        .nav-links .admin-btn {
+        .nav-links a:hover { color: var(--text); background: var(--surf2); }
+        .nav-links .nav-admin {
             border: 1px solid var(--border);
-            color: var(--muted);
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
         }
-
-        .nav-links .admin-btn:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-        }
+        .nav-links .nav-admin:hover { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,0.06); }
 
         /* ── HERO ── */
         .hero {
-            position: relative;
-            overflow: hidden;
+            position: relative; overflow: hidden;
             padding: 72px 32px 80px;
         }
-
         .hero::before {
             content: '';
-            position: absolute;
-            inset: 0;
+            position: absolute; inset: 0;
             background:
                 radial-gradient(ellipse 60% 50% at 70% 40%, rgba(240,165,0,0.07) 0%, transparent 70%),
-                radial-gradient(ellipse 40% 40% at 20% 60%, rgba(88,166,255,0.06) 0%, transparent 70%);
+                radial-gradient(ellipse 40% 40% at 20% 60%, rgba(88,166,255,0.05) 0%, transparent 70%);
             pointer-events: none;
         }
-
         .hero-inner {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 48px;
-            align-items: center;
+            max-width: 1400px; margin: 0 auto;
+            display: grid; grid-template-columns: 1fr auto; gap: 48px; align-items: center;
         }
-
         .hero-eyebrow {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: var(--accent);
-            margin-bottom: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
+            letter-spacing: 2px; text-transform: uppercase; color: var(--accent);
+            margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
         }
-
         .hero-eyebrow::before {
-            content: '';
-            display: inline-block;
-            width: 24px;
-            height: 2px;
-            background: var(--accent);
-            border-radius: 2px;
+            content: ''; display: inline-block; width: 24px; height: 2px;
+            background: var(--accent); border-radius: 2px;
         }
-
         .hero h2 {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 52px;
-            font-weight: 700;
-            line-height: 1.05;
-            letter-spacing: 0.5px;
-            margin-bottom: 18px;
+            font-family: 'Rajdhani', sans-serif; font-size: 52px; font-weight: 700;
+            line-height: 1.05; letter-spacing: 0.5px; margin-bottom: 18px;
         }
-
         .hero h2 .clan-name { color: var(--accent); }
-
-        .hero p {
-            font-size: 15px;
-            color: var(--muted);
-            line-height: 1.7;
-            max-width: 440px;
-            margin-bottom: 40px;
+        .hero > .hero-inner > div > p {
+            font-size: 15px; color: var(--muted); line-height: 1.7; max-width: 440px; margin-bottom: 40px;
         }
 
         /* ── STAT BOXES ── */
-        .stat-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-        }
-
+        .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
         .stat-box {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 20px 16px;
-            text-align: center;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            padding: 20px 16px; text-align: center;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-
-        .stat-box:hover {
-            border-color: rgba(240,165,0,0.4);
-            box-shadow: 0 0 20px rgba(240,165,0,0.08);
-        }
-
-        .stat-value {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 32px;
-            font-weight: 700;
-            line-height: 1;
-            margin-bottom: 6px;
-        }
-
+        .stat-box:hover { border-color: rgba(240,165,0,0.35); box-shadow: 0 0 24px rgba(240,165,0,0.08); }
+        .stat-value { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
         .stat-value.blue  { color: var(--blue); }
         .stat-value.gold  { color: var(--accent); }
         .stat-value.green { color: var(--green); }
+        .stat-label { font-size: 11px; color: var(--muted); line-height: 1.4; }
 
-        .stat-label {
-            font-size: 11px;
-            color: var(--muted);
-            line-height: 1.4;
-        }
-
-        /* ── FLOATING EMBLEM ── */
-        .hero-emblem {
-            width: 220px;
-            height: 220px;
-            position: relative;
-            flex-shrink: 0;
-        }
-
+        /* ── HERO EMBLEM ── */
+        .hero-emblem { width: 220px; height: 220px; position: relative; flex-shrink: 0; }
         .hero-emblem::before {
-            content: '';
-            position: absolute;
-            inset: 0;
+            content: ''; position: absolute; inset: 0;
             background: radial-gradient(ellipse at center, rgba(240,165,0,0.2) 0%, transparent 70%);
-            border-radius: 50%;
-            animation: pulse-glow 3s ease-in-out infinite;
+            border-radius: 50%; animation: pulse-glow 3s ease-in-out infinite;
         }
-
         .emblem-inner {
-            width: 100%;
-            height: 100%;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 80px;
-            animation: float 6s ease-in-out infinite;
-            position: relative;
-            z-index: 1;
+            width: 100%; height: 100%; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 24px; display: flex; align-items: center; justify-content: center;
+            font-size: 80px; animation: float 6s ease-in-out infinite; position: relative; z-index: 1;
         }
+        @keyframes float      { 0%, 100% { transform: translateY(0); }    50% { transform: translateY(-16px); } }
+        @keyframes pulse-glow { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50%       { transform: translateY(-16px); }
-        }
-
-        @keyframes pulse-glow {
-            0%, 100% { opacity: 0.6; transform: scale(1); }
-            50%       { opacity: 1;   transform: scale(1.1); }
-        }
-
-        /* ── FEATURES ── */
+        /* ── FEATURES SECTION ── */
         .features {
             padding: 80px 32px;
+            border-top: 1px solid var(--border);
             position: relative;
         }
-
         .features::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
             background: linear-gradient(90deg, transparent, var(--border), transparent);
         }
-
-        .section-header {
-            text-align: center;
-            margin-bottom: 52px;
-        }
-
+        .section-header { text-align: center; margin-bottom: 52px; }
         .section-header h3 {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 36px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            margin-bottom: 10px;
+            font-family: 'Rajdhani', sans-serif; font-size: 36px; font-weight: 700;
+            letter-spacing: 0.5px; margin-bottom: 10px;
         }
-
         .section-header h3 span { color: var(--accent); }
-
-        .section-header p {
-            font-size: 14px;
-            color: var(--muted);
-        }
+        .section-header p { font-size: 14px; color: var(--muted); }
 
         .features-grid {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
+            max-width: 1400px; margin: 0 auto;
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
         }
 
         /* ── FEATURE CARD ── */
         .feature-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 28px;
-            display: block;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            padding: 28px; display: block; position: relative; overflow: hidden;
             transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-            position: relative;
-            overflow: hidden;
         }
-
         .feature-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, var(--accent), var(--accent2));
-            opacity: 0;
-            transition: opacity 0.2s;
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--acc2));
+            opacity: 0; transition: opacity 0.2s;
         }
-
         .feature-card.active:hover {
             border-color: rgba(240,165,0,0.45);
             box-shadow: 0 8px 32px rgba(240,165,0,0.1);
             transform: translateY(-3px);
         }
-
         .feature-card.active:hover::before { opacity: 1; }
+        .feature-card.disabled { opacity: 0.42; cursor: not-allowed; }
 
-        .feature-card.disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
-
-        .card-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 18px;
-        }
-
+        .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
         .feature-icon {
-            width: 46px;
-            height: 46px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 10px;
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            font-size: 22px;
-            transition: transform 0.2s;
+            width: 46px; height: 46px; display: flex; align-items: center; justify-content: center;
+            border-radius: 10px; background: var(--surf2); border: 1px solid var(--border);
+            font-size: 22px; transition: transform 0.2s;
         }
-
         .feature-card.active:hover .feature-icon { transform: scale(1.1); }
 
         .badge {
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 700;
-            font-family: 'Rajdhani', sans-serif;
-            letter-spacing: 0.4px;
-            text-transform: uppercase;
+            padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.4px; text-transform: uppercase;
         }
-
-        .badge-active {
-            background: rgba(63,185,80,0.15);
-            color: var(--green);
-            border: 1px solid rgba(63,185,80,0.3);
-        }
-
-        .badge-soon {
-            background: rgba(139,148,158,0.1);
-            color: var(--muted);
-            border: 1px solid rgba(139,148,158,0.2);
-        }
+        .badge-active { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+        .badge-soon   { background: rgba(139,148,158,0.1); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
 
         .feature-card h4 {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: 0.3px;
-            margin-bottom: 8px;
-            color: var(--text);
-            transition: color 0.15s;
+            font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700;
+            letter-spacing: 0.3px; margin-bottom: 8px; color: var(--text); transition: color 0.15s;
         }
-
         .feature-card.active:hover h4 { color: var(--accent); }
-
-        .feature-card p {
-            font-size: 13px;
-            color: var(--muted);
-            line-height: 1.6;
-        }
+        .feature-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
 
         /* ── FOOTER ── */
-        footer {
-            background: var(--surface);
-            border-top: 1px solid var(--border);
-            padding: 48px 32px 28px;
-        }
-
-        .footer-inner {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr;
-            gap: 32px;
-            margin-bottom: 36px;
-        }
-
+        footer { background: var(--surface); border-top: 1px solid var(--border); padding: 48px 32px 28px; }
+        .footer-inner { max-width: 1400px; margin: 0 auto; }
+        .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 32px; margin-bottom: 36px; }
         footer h4 {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            color: var(--muted);
-            margin-bottom: 16px;
+            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+            letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
         }
-
-        footer p {
-            font-size: 13px;
-            color: var(--muted);
-            line-height: 1.6;
-        }
-
-        .footer-links {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .footer-links a {
-            font-size: 13px;
-            color: var(--muted);
-            transition: color 0.15s;
-        }
-
+        footer p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+        .footer-links { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+        .footer-links a { font-size: 13px; color: var(--muted); transition: color 0.15s; }
         .footer-links a:hover { color: var(--text); }
-
-        .footer-links .dimmed { color: #4a5568; }
-
+        .footer-links .dimmed { color: #404756; }
+        .footer-links .live-link { display: flex; align-items: center; gap: 7px; }
+        .footer-links .live-link::before {
+            content: ''; display: inline-block; width: 6px; height: 6px;
+            background: var(--green); border-radius: 50%; flex-shrink: 0;
+            box-shadow: 0 0 5px rgba(63,185,80,0.5);
+        }
+        .footer-links .soon-link { display: flex; align-items: center; gap: 7px; color: #404756; }
+        .footer-links .soon-link::before {
+            content: ''; display: inline-block; width: 6px; height: 6px;
+            background: #30363d; border-radius: 50%; flex-shrink: 0;
+        }
         .footer-bottom {
-            border-top: 1px solid var(--border2);
-            padding-top: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            border-top: 1px solid var(--bord2); padding-top: 20px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
         }
-
-        .footer-bottom p,
-        .footer-bottom a {
-            font-size: 12px;
-            color: var(--muted);
-        }
-
+        .footer-bottom p, .footer-bottom a { font-size: 12px; color: var(--muted); }
         .footer-bottom a:hover { color: var(--text); }
-
         .footer-bottom .links { display: flex; gap: 16px; }
-
         .status-dot {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 13px;
-            color: var(--muted);
+            display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted);
         }
-
         .status-dot::before {
-            content: '';
-            display: inline-block;
-            width: 7px;
-            height: 7px;
-            background: var(--green);
-            border-radius: 50%;
-            box-shadow: 0 0 6px rgba(63,185,80,0.6);
+            content: ''; display: inline-block; width: 7px; height: 7px;
+            background: var(--green); border-radius: 50%; box-shadow: 0 0 6px rgba(63,185,80,0.6);
         }
 
-        @media (max-width: 768px) {
-            .hero-inner    { grid-template-columns: 1fr; }
-            .hero-emblem   { display: none; }
-            .hero h2       { font-size: 36px; }
-            .stat-grid     { grid-template-columns: 1fr; }
-            .features-grid { grid-template-columns: 1fr; }
+        /* ── RESPONSIVE ── */
+        @media (max-width: 1100px) {
+            .features-grid { grid-template-columns: repeat(2, 1fr); }
             .footer-grid   { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 900px) {
+            .hero-inner { grid-template-columns: 1fr; }
+            .hero-emblem { display: none; }
+            .hero h2 { font-size: 38px; }
+            .nav-inner, .hero, .features, .footer-inner { padding-left: 20px; padding-right: 20px; }
+            .hero { padding-top: 52px; padding-bottom: 60px; }
+            .features { padding-top: 60px; padding-bottom: 60px; }
+        }
+        @media (max-width: 640px) {
+            .hero h2 { font-size: 30px; }
+            .stat-grid { grid-template-columns: 1fr; }
+            .features-grid { grid-template-columns: 1fr; }
+            .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+            footer { padding: 36px 20px 24px; }
         }
     </style>
 </head>
 <body>
-    <!-- Navigation -->
-    <nav>
-        <div class="nav-inner">
-            <div class="nav-logo">
-                <div class="logo-icon">⚔️</div>
-                <span>CoC Analytics</span>
-            </div>
-            <div class="nav-links">
-                <a href="#features">Features</a>
-                <a href="/debug" class="admin-btn">Admin</a>
+
+<nav>
+    <div class="nav-inner">
+        <div class="nav-logo">
+            <div class="logo-icon">⚔️</div>
+            <span>CoC Analytics</span>
+        </div>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="/debug" class="nav-admin">Admin</a>
+        </div>
+    </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="hero-inner">
+        <div>
+            <div class="hero-eyebrow">Clan Dashboard</div>
+            <h2><span class="clan-name">{{ clan_name }}</span><br>Analytics</h2>
+            <p>Discover your clan's performance metrics, track battle statistics, and analyze seasonal rankings in real-time.</p>
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="stat-value blue">{{ total_members }}</div>
+                    <div class="stat-label">Active Members</div>
+                </div>
+                <a href="/battles" class="stat-box">
+                    <div class="stat-value gold">{{ battle_logs_this_week }}</div>
+                    <div class="stat-label">Attacks tracked<br>since {{ week_start_name }}</div>
+                </a>
+                <a href="/ranked" class="stat-box">
+                    <div class="stat-value green">{{ ranked_battles_this_week }}</div>
+                    <div class="stat-label">Ranked attacks<br>this week</div>
+                </a>
             </div>
         </div>
-    </nav>
+        <div class="hero-emblem">
+            <div class="emblem-inner">⚔️</div>
+        </div>
+    </div>
+</section>
 
-    <!-- Hero -->
-    <section class="hero">
-        <div class="hero-inner">
+<!-- Features -->
+<section id="features" class="features">
+    <div class="section-header">
+        <h3>Analytics <span>Features</span></h3>
+        <p>Real-time performance tracking and detailed statistics</p>
+    </div>
+    <div class="features-grid">
+
+        <a href="/ranked" class="feature-card active">
+            <div class="card-top">
+                <div class="feature-icon">📊</div>
+                <span class="badge badge-active">Active</span>
+            </div>
+            <h4>Ranked Week Performance</h4>
+            <p>Track your seasonal rankings, trophies, and performance metrics across ranked leagues.</p>
+        </a>
+
+        <a href="/battles" class="feature-card active">
+            <div class="card-top">
+                <div class="feature-icon">⚔️</div>
+                <span class="badge badge-active">Active</span>
+            </div>
+            <h4>Battle History</h4>
+            <p>Detailed logs of all attacks and defenses with stars, damage percentages, and loot information.</p>
+        </a>
+
+        <div class="feature-card disabled">
+            <div class="card-top">
+                <div class="feature-icon">🏆</div>
+                <span class="badge badge-soon">Soon</span>
+            </div>
+            <h4>Raid Weekend Performance</h4>
+            <p>Track clan raid weekends, capital loot, and raid performance metrics.</p>
+        </div>
+
+        <div class="feature-card disabled">
+            <div class="card-top">
+                <div class="feature-icon">🛡️</div>
+                <span class="badge badge-soon">Soon</span>
+            </div>
+            <h4>Clan War</h4>
+            <p>Clan war performance metrics and detailed battle results.</p>
+        </div>
+
+        <div class="feature-card disabled">
+            <div class="card-top">
+                <div class="feature-icon">🏅</div>
+                <span class="badge badge-soon">Soon</span>
+            </div>
+            <h4>Clan War League</h4>
+            <p>League standings and clan war league insights and analytics.</p>
+        </div>
+
+        <div class="feature-card disabled">
+            <div class="card-top">
+                <div class="feature-icon">⚙️</div>
+                <span class="badge badge-soon">Soon</span>
+            </div>
+            <h4>Admin Hub</h4>
+            <p>Centralized control panel for managing clan members, data sync, and system configuration.</p>
+        </div>
+
+    </div>
+</section>
+
+<!-- Footer -->
+<footer>
+    <div class="footer-inner">
+        <div class="footer-grid">
             <div>
-                <div class="hero-eyebrow">Clan Dashboard</div>
-                <h2><span class="clan-name">{{ clan_name }}</span><br>Analytics</h2>
-                <p>Discover your clan's performance metrics, track battle statistics, and analyze seasonal rankings in real-time.</p>
-                <div class="stat-grid">
-                    <div class="stat-box">
-                        <div class="stat-value blue">{{ total_members }}</div>
-                        <div class="stat-label">Active Members</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value gold">{{ battle_logs_this_week }}</div>
-                        <div class="stat-label">Attacks tracked<br>since {{ week_start_name }}</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value green">{{ ranked_battles_this_week }}</div>
-                        <div class="stat-label">Ranked attacks<br>this week</div>
-                    </div>
+                <h4>CoC Analytics</h4>
+                <p>Real-time Clash of Clans analytics and performance insights for <strong style="color:var(--text)">{{ clan_name }}</strong>. Tracking ranked battles, attack history, and member progress automatically.</p>
+                <div style="margin-top:18px">
+                    <span class="status-dot">All systems operational</span>
                 </div>
             </div>
-            <div class="hero-emblem">
-                <div class="emblem-inner">⚔️</div>
+            <div>
+                <h4>Live Features</h4>
+                <ul class="footer-links">
+                    <li><a href="/ranked" class="live-link">Ranked Week Performance</a></li>
+                    <li><a href="/battles" class="live-link">Battle History</a></li>
+                </ul>
             </div>
-        </div>
-    </section>
-
-    <!-- Features -->
-    <section id="features" class="features">
-        <div class="section-header">
-            <h3>Analytics <span>Features</span></h3>
-            <p>Real-time performance tracking and detailed statistics</p>
-        </div>
-        <div class="features-grid">
-            <!-- Active: Ranked Week -->
-            <a href="/ranked" class="feature-card active">
-                <div class="card-top">
-                    <div class="feature-icon">📊</div>
-                    <span class="badge badge-active">Active</span>
-                </div>
-                <h4>Ranked Week Performance</h4>
-                <p>Track your seasonal rankings, trophies, and performance metrics across ranked leagues.</p>
-            </a>
-
-            <!-- Active: Battle History -->
-            <a href="/battles" class="feature-card active">
-                <div class="card-top">
-                    <div class="feature-icon">⚔️</div>
-                    <span class="badge badge-active">Active</span>
-                </div>
-                <h4>Battle History</h4>
-                <p>Detailed logs of all attacks and defenses with stars, damage percentages, and loot information.</p>
-            </a>
-
-            <!-- Disabled: Raid Weekend -->
-            <div class="feature-card disabled">
-                <div class="card-top">
-                    <div class="feature-icon">🏆</div>
-                    <span class="badge badge-soon">Soon</span>
-                </div>
-                <h4>Raid Weekend Performance</h4>
-                <p>Track clan raid weekends, capital loot, and raid performance metrics.</p>
+            <div>
+                <h4>Coming Soon</h4>
+                <ul class="footer-links">
+                    <li><span class="soon-link">Raid Weekend Performance</span></li>
+                    <li><span class="soon-link">Clan War</span></li>
+                    <li><span class="soon-link">Clan War League</span></li>
+                    <li><span class="soon-link">Admin Hub</span></li>
+                </ul>
             </div>
-
-            <!-- Disabled: Clan War -->
-            <div class="feature-card disabled">
-                <div class="card-top">
-                    <div class="feature-icon">🛡️</div>
-                    <span class="badge badge-soon">Soon</span>
-                </div>
-                <h4>Clan War</h4>
-                <p>Clan war performance metrics and detailed battle results.</p>
-            </div>
-
-            <!-- Disabled: Clan War League -->
-            <div class="feature-card disabled">
-                <div class="card-top">
-                    <div class="feature-icon">🏅</div>
-                    <span class="badge badge-soon">Soon</span>
-                </div>
-                <h4>Clan War League</h4>
-                <p>League standings and clan war league insights and analytics.</p>
-            </div>
-        </div>
-    </section>
-
-    <!-- Footer -->
-    <footer>
-        <div class="footer-inner">
-            <div class="footer-grid">
-                <div>
-                    <h4>CoC Analytics</h4>
-                    <p>Real-time Clash of Clans analytics and insights for your clan.</p>
-                </div>
-                <div>
-                    <h4>Features</h4>
-                    <ul class="footer-links">
-                        <li><a href="/ranked">Ranked Weeks</a></li>
-                        <li><a href="/battles">Battle History</a></li>
-                        <li><span class="dimmed">Raid Weekends (soon)</span></li>
-                    </ul>
-                </div>
-                <div>
-                    <h4>Upcoming</h4>
-                    <ul class="footer-links">
-                        <li><span class="dimmed">Leaderboard</span></li>
-                        <li><span class="dimmed">War Analytics</span></li>
-                        <li><span class="dimmed">Player Profiles</span></li>
-                    </ul>
-                </div>
-                <div>
-                    <h4>Admin</h4>
-                    <ul class="footer-links">
-                        <li><a href="/debug">Dashboard</a></li>
-                        <li><span class="status-dot">System Online</span></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 CoC Analytics. All rights reserved.</p>
-                <div class="links">
-                    <a href="#">Privacy</a>
-                    <a href="#">Terms</a>
+            <div>
+                <h4>System</h4>
+                <ul class="footer-links">
+                    <li><a href="/debug">Debug Dashboard</a></li>
+                </ul>
+                <div style="margin-top:16px; font-size:12px; color:var(--muted); line-height:1.7">
+                    <div>{{ total_members }} members tracked</div>
+                    <div>{{ battle_logs_this_week }} attacks this week</div>
+                    <div>{{ ranked_battles_this_week }} ranked battles</div>
                 </div>
             </div>
         </div>
-    </footer>
+        <div class="footer-bottom">
+            <p>&copy; 2026 CoC Analytics &mdash; Unofficial fan project, not affiliated with Supercell.</p>
+            <div class="links">
+                <span style="color:var(--muted);font-size:12px">2 features live &middot; 4 in development</span>
+            </div>
+        </div>
+    </div>
+</footer>
+
 </body>
 </html>
