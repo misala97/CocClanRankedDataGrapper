@@ -127,6 +127,7 @@ def setup_task_logger(name, log_file):
 # Create the 3 specific loggers
 battle_logger = setup_task_logger('battle_logs', 'logs/task_battle_logs.log')
 ranked_logger = setup_task_logger('ranked_weeks', 'logs/task_ranked_weeks.log')
+ranked_done_logger = setup_task_logger('ranked_done', 'logs/task_ranked_done.log')
 clan_logger = setup_task_logger('clan_members', 'logs/task_clan_members.log')
 
 
@@ -164,10 +165,48 @@ db.configure_mappers()
 # ==========================================
 # 3. BACKGROUND TASKS
 # ==========================================
+
+
+
+def task_update_done_ranked_weeks():
+    t0 = time.time()
+    ranked_done_logger.info(f"Running task at {dt.datetime.now()}  ")
+    with app.app_context():
+        ranked_weeks_done = db_ranked_week_get_all_done()
+        for week in ranked_weeks_done:
+            #League Group
+            try:
+                group_data_api = api_fetch_league_group(week.league_group_tag, week.league_season_id, week.player_tag)    
+            except Exception as e:
+                ranked_logger.warning(f"Could not fetch player group {week.player.name}. Error: {e}")
+                continue
+            
+            #PLayer data
+            try:
+                player_api = api_fetch_player_data(week.player.tag)
+            except Exception as e:
+                ranked_logger.warning(f"Could not fetch player {week.player.name}. Error: {e}")
+                continue
+            
+            
+            #Ranked Woche anlegen
+            try:      
+                tmp_ranked_week = create_db_ranked_week(week.league_group_tag, week.league_season_id, player_api, group_data_api)
+                db_ranked_week_update(week, tmp_ranked_week, True)
+            except Exception as e:
+                ranked_logger.error(f"Failed to update ranked week for {week.player.name}: {e}")
+                db.session.rollback() 
+                continue
+            db.session.commit()
+        duration = round(time.time() - t0, 2)
+        db_uptime_tracker_create_new(create_db_uptime_tracker(task_update_battle_logs.__name__, duration))
+        db.session.commit()    
+            
+
         
 def task_update_battle_logs():
     t0 = time.time()
-    battle_logger.info(f"Running task at {dt.now()}  ")
+    battle_logger.info(f"Running task at {dt.datetime.now()}  ")
     with app.app_context():
         db_players_in_clan = db_player_get_all()
         for db_player in db_players_in_clan:
@@ -199,7 +238,7 @@ def task_update_battle_logs():
         
 def task_update_ranked_weeks():
     t0 = time.time()
-    ranked_logger.info(f"Running task at {dt.now()}  ")
+    ranked_logger.info(f"Running task at {dt.datetime.now()}  ")
     with app.app_context():
         db_players_in_clan = db_player_get_all()
         for db_player in db_players_in_clan:
@@ -295,7 +334,7 @@ def task_update_ranked_weeks():
         
 def task_update_clan_members():
     t0 = time.time()
-    clan_logger.info(f"Running task at {dt.now()}  ")
+    clan_logger.info(f"Running task at {dt.datetime.now()}  ")
     #Fetch Api Data
     try:
         clan_api = api_fetch_clan_data(CLAN_TAG)
@@ -630,18 +669,11 @@ def battle_history_page():
         pages=battle_logs_query.pages
     )
 
-#Scheduler einrichten und starten
-#scheduler = BackgroundScheduler()
-#scheduler.add_job(func=clan_members_update, trigger="interval", minutes=1)
-#scheduler.add_job(func=ranked_week_update, trigger="interval", minutes=2)
-#scheduler.add_job(func=battle_log_update, trigger="interval", minutes=2)
-#scheduler.start()
-
-
 if __name__ == '__main__':
     #task_update_clan_members()
     #task_update_ranked_weeks()
     #task_update_battle_logs()
+    task_update_done_ranked_weeks()
     
     # Webserver starten (use_reloader=False verhindert, dass der Scheduler beim Speichern doppelt startet)
     app.run(debug=True, use_reloader=False)

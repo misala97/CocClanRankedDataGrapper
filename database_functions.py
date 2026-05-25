@@ -3,6 +3,7 @@ from help_functions import json_get, JSON_BATTLE_LOG_DATA, JSON_PLAYER_DATA, JSO
 import logging
 from typing import List
 from help_functions import get_resource_amount,parse_iso_datetime,get_weekly_attacks,get_member_rank_by_tag, get_next_monday, get_last_monday
+from sqlalchemy import or_
 
 # Create Funktionen für DB Objekte
 def create_db_player_from_api(api_player: dict, in_clan: bool = True) -> Player:
@@ -96,6 +97,13 @@ def db_player_get_all(in_clan:bool = True) -> List[Player]:
 
 def db_ranked_week_get(group_tag: str, season_id : str, player_tag: str) ->List[RankedWeek]:
     return db.session.get(RankedWeek, (group_tag, season_id, player_tag))
+
+def db_ranked_week_get_all_done() ->List[RankedWeek]:
+    return RankedWeek.query.filter(
+        RankedWeek.is_done == False,
+        RankedWeek.start_day != get_last_monday(),
+        RankedWeek.end_day != get_next_monday()
+    ).all()
 
 def db_ranked_battle_log_get(ranked_week: RankedWeek, opponent_tag: str, is_attack: bool) -> RankedBattleLog:
     return RankedBattleLog.query.filter(
@@ -205,7 +213,7 @@ def db_player_update(player : Player, updated_player : Player) -> Player:
     return player
 
 
-def db_ranked_week_update(ranked_week: RankedWeek, updated_ranked_week: RankedWeek) -> RankedWeek:
+def db_ranked_week_update(ranked_week: RankedWeek, updated_ranked_week: RankedWeek, is_done:bool = False) -> RankedWeek:
 
         if(ranked_week.trophies != updated_ranked_week.trophies or
             ranked_week.rank != updated_ranked_week.rank or
@@ -223,4 +231,5 @@ def db_ranked_week_update(ranked_week: RankedWeek, updated_ranked_week: RankedWe
             ranked_week.defense_losses=updated_ranked_week.defense_losses
     
             logging.debug(f"Updated for {ranked_week.player.name}")
+        ranked_week.is_done = is_done
         return ranked_week
