@@ -726,28 +726,29 @@ def battle_history_page():
         available_weeks.reverse()
         available_weeks.insert(0, {'start': 'all', 'label': all_time_label})
 
-    if is_all_time:
-        base_q = BattleLog.query.filter(BattleLog.attack == True)
-    else:
-        base_q = BattleLog.query.filter(
-            BattleLog.attack == True,
-            BattleLog.time >= week_start_dt,
-            BattleLog.time < next_monday_dt,
-        )
+    # Always fetch the full history per player (type filter only, no date window) so
+    # the initial API dump is identified from the complete timeline, not the already-
+    # narrowed week slice (which would wrongly drop real current-week attacks).
+    all_q = BattleLog.query.filter(BattleLog.attack == True)
     if selected_type != 'all':
-        base_q = base_q.filter(BattleLog.type == selected_type)
+        all_q = all_q.filter(BattleLog.type == selected_type)
+    all_attacks_raw = all_q.options(selectinload(BattleLog.player)).all()
 
-    attacks_raw = base_q.options(selectinload(BattleLog.player)).all()
-
-    # The CoC API returns 25 stale historical entries on the very first fetch per player.
-    # Those are always the oldest 25 rows in the DB, so we drop them unconditionally.
     _by_player: dict = {}
-    for b in attacks_raw:
+    for b in all_attacks_raw:
         _by_player.setdefault(b.player_tag, []).append(b)
+
     attacks = []
     for logs in _by_player.values():
         logs.sort(key=lambda b: b.time or dt.datetime.min)
-        attacks.extend(logs[25:])
+        valid = logs[25:]  # drop the one-time initial API dump
+        if is_all_time:
+            attacks.extend(valid)
+        else:
+            attacks.extend(
+                b for b in valid
+                if b.time and b.time >= week_start_dt and b.time < next_monday_dt
+            )
 
     total_attacks = len(attacks)
     total_gold    = sum(b.loot_gold or 0 for b in attacks)
