@@ -737,7 +737,17 @@ def battle_history_page():
     if selected_type != 'all':
         base_q = base_q.filter(BattleLog.type == selected_type)
 
-    attacks = base_q.options(selectinload(BattleLog.player)).all()
+    attacks_raw = base_q.options(selectinload(BattleLog.player)).all()
+
+    # The CoC API returns 25 stale historical entries on the very first fetch per player.
+    # Those are always the oldest 25 rows in the DB, so we drop them unconditionally.
+    _by_player: dict = {}
+    for b in attacks_raw:
+        _by_player.setdefault(b.player_tag, []).append(b)
+    attacks = []
+    for logs in _by_player.values():
+        logs.sort(key=lambda b: b.time or dt.datetime.min)
+        attacks.extend(logs[25:])
 
     total_attacks = len(attacks)
     total_gold    = sum(b.loot_gold or 0 for b in attacks)
