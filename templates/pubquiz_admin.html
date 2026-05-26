@@ -264,12 +264,20 @@
             <div class="card">
                 <div class="card-header"><h2>Teams</h2></div>
                 <div class="form-body" style="border-bottom:1px solid var(--border)">
-                    <form method="post" action="{{ url_for('pubquiz_add_team') }}">
+                    {% set dup_error = request.args.get('error') == 'duplicate' %}
+                    {% set dup_name = request.args.get('error_name', '') %}
+                    <form method="post" action="{{ url_for('pubquiz_add_team') }}" id="add-team-form">
                         <input type="hidden" name="round_id" value="{{ selected_round.id }}">
                         <div class="form-row">
                             <div class="form-group grow">
                                 <label>Teamname</label>
-                                <input type="text" name="name" placeholder="z.B. Die Quiztaler" required>
+                                <input type="text" name="name" id="team-name-input"
+                                       placeholder="z.B. Die Quiztaler" required autofocus
+                                       value="{{ dup_name }}"
+                                       style="{% if dup_error %}border-color:var(--red){% endif %}">
+                                {% if dup_error %}
+                                <span style="font-size:12px;color:var(--red);margin-top:4px;display:block">„{{ dup_name }}" existiert bereits.</span>
+                                {% endif %}
                             </div>
                             <button type="submit" class="btn btn-primary">Hinzufügen</button>
                         </div>
@@ -381,8 +389,8 @@ function togglePanel(rnum) {
     body.classList.toggle('open', !isOpen);
 }
 
-// Auto-open the first round that isn't fully filled yet
 document.addEventListener('DOMContentLoaded', () => {
+    // Auto-open the first round that isn't fully filled yet
     const dots = document.querySelectorAll('.status-dot');
     dots.forEach((dot, i) => {
         if (!dot.classList.contains('dot-done')) {
@@ -390,6 +398,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
     });
+
+    // Client-side duplicate guard for add-team form
+    const form = document.getElementById('add-team-form');
+    const nameInput = document.getElementById('team-name-input');
+    if (form && nameInput) {
+        const existingNames = [
+            {% if selected_round %}
+            {% for t in selected_round.teams %}"{{ t.name | e }}"{% if not loop.last %},{% endif %}{% endfor %}
+            {% endif %}
+        ];
+        form.addEventListener('submit', (e) => {
+            const val = nameInput.value.trim().toLowerCase();
+            if (existingNames.some(n => n.toLowerCase() === val)) {
+                e.preventDefault();
+                nameInput.style.borderColor = 'var(--red)';
+                let msg = nameInput.parentElement.querySelector('.client-err');
+                if (!msg) {
+                    msg = document.createElement('span');
+                    msg.className = 'client-err';
+                    msg.style.cssText = 'font-size:12px;color:var(--red);margin-top:4px;display:block';
+                    nameInput.parentElement.appendChild(msg);
+                }
+                msg.textContent = `„${nameInput.value.trim()}" existiert bereits.`;
+                nameInput.focus();
+            }
+        });
+        nameInput.addEventListener('input', () => {
+            nameInput.style.borderColor = '';
+            const msg = nameInput.parentElement.querySelector('.client-err');
+            if (msg) msg.remove();
+        });
+    }
 });
 </script>
 

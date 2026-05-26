@@ -1410,6 +1410,8 @@ def pubquiz_add_team():
     name = request.form.get('name', '').strip()
     if not round_id or not name:
         return redirect(url_for('pubquiz_admin', round_id=round_id))
+    if PubQuizTeams.query.filter(PubQuizTeams.round_id == round_id, db.func.lower(PubQuizTeams.name) == name.lower()).first():
+        return redirect(url_for('pubquiz_admin', round_id=round_id, error='duplicate', error_name=name))
     team = PubQuizTeams(name=name, round_id=round_id)
     db.session.add(team)
     db.session.commit()
