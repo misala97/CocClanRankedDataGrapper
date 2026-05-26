@@ -144,8 +144,9 @@
         .pts-total { color: var(--accent); }
         .pts-sub { color: var(--muted); font-size: 14px; }
 
-        /* Hide round detail columns on mobile, show on larger screens */
+        /* Hide on mobile */
         .col-round { display: none; }
+        .hide-mobile { display: none; }
         @media (min-width: 560px) {
             .col-round { display: table-cell; }
         }
@@ -170,6 +171,7 @@
 
         /* ── DESKTOP REFINEMENTS ── */
         @media (min-width: 640px) {
+            .hide-mobile { display: flex; }
             .nav-inner { padding: 0 32px; height: 62px; }
             .logo-icon { width: 36px; height: 36px; font-size: 18px; }
             .nav-logo span { font-size: 19px; }
@@ -228,7 +230,7 @@
     {% if selected_round %}
 
     <div class="info-bar">
-        <div class="info-chip">
+        <div class="info-chip hide-mobile">
             <span class="label">📅</span>
             <span class="value">{{ selected_round.datum.strftime('%d.%m.%Y') if selected_round.datum else '—' }}</span>
         </div>
@@ -249,7 +251,7 @@
         </div>
         {% endif %}
         {% if overall_avg is not none %}
-        <div class="info-chip">
+        <div class="info-chip hide-mobile">
             <span class="label">Ø</span>
             <span class="value" style="color:var(--green)">{{ overall_avg }}</span>
         </div>
