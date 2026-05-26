@@ -537,7 +537,7 @@
                 <td>${leagueCell}</td>
                 <td><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span></td>
                 <td><div class="player-cell"><div class="player-info">
-                    <div class="player-name">${escapeHTML(item.player_name)}</div>
+                    <div class="player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" style="color:inherit;">${escapeHTML(item.player_name)}</a></div>
                     <div class="player-trophy">🏆 ${item.trophies}</div>
                 </div></div></td>
                 <td><div class="attacks-cell">${item.att_count} / ${item.att_max}</div></td>

@@ -495,7 +495,7 @@
         rows.forEach(p => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td><div class="player-name">${escapeHTML(p.player_name)}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></td>
+                <td><div class="player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" style="color:inherit;">${escapeHTML(p.player_name)}</a></div><div class="player-tag">${escapeHTML(p.player_tag)}</div></td>
                 <td style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${p.att_count}</td>
                 <td><span class="res-gold">${fmt(p.total_gold)}</span></td>
                 <td><span class="res-elixir">${fmt(p.total_elixir)}</span></td>

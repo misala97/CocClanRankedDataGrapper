@@ -5,6 +5,7 @@ import secrets
 import sys
 import time
 from functools import wraps
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, session, redirect, url_for
@@ -138,6 +139,13 @@ raid_weekend_logger = setup_task_logger('raid_weekend', 'logs/raid_weekend.log')
 # 2. APP & DB SETUP
 # ==========================================
 load_dotenv(override=True)
+
+LOCAL_TZ = ZoneInfo(os.getenv("TIMEZONE", "Europe/Berlin"))
+
+def to_local(naive_utc):
+    if naive_utc is None:
+        return None
+    return naive_utc.replace(tzinfo=dt.timezone.utc).astimezone(LOCAL_TZ)
 
 app = Flask(__name__)
 
@@ -775,6 +783,7 @@ def raid_weekend_page():
     player_data = []
     total_log_attacks = 0
     cleanup_count = 0
+    top_finisher = None
 
     if selected_raid:
         logs = (
@@ -795,16 +804,20 @@ def raid_weekend_page():
                     'cleanup_count': 0,
                     'total_loot': 0,
                     'avg_loot': 0,
+                    'finishes': 0,
                     'attack_logs': [],
                 }
             p = player_map[tag]
             p['att_count'] += 1
             if log.isCleanUp:
                 p['cleanup_count'] += 1
+            if log.percentageTotal == 100:
+                p['finishes'] += 1
             p['attack_logs'].append({
                 'district_name': log.districtName or '—',
                 'stars': log.stars or 0,
                 'percentage': log.percentage or 0,
+                'percentage_total': log.percentageTotal or 0,
                 'loot': 0,
                 'is_clean_up': bool(log.isCleanUp),
                 'defender_name': log.defenderName or '—',
@@ -815,9 +828,36 @@ def raid_weekend_page():
             non_cleanup = [l['percentage'] for l in p['attack_logs'] if not l['is_clean_up']]
             p['avg_pct'] = round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0
 
+        # Build career stats across all raid weekends in one pass
+        total_raids_count = len(all_raids)
+        all_career_logs = RaidWeekendLog.query.all()
+        career_raw = {}
+        for log in all_career_logs:
+            tag = log.playerTag
+            if tag not in career_raw:
+                career_raw[tag] = {'raid_ids': set(), 'non_cleanup_pcts': [], 'career_finishes': 0}
+            career_raw[tag]['raid_ids'].add(log.raid_weekend_id)
+            if log.percentageTotal == 100:
+                career_raw[tag]['career_finishes'] += 1
+            if not log.isCleanUp:
+                career_raw[tag]['non_cleanup_pcts'].append(log.percentage or 0)
+
+        for p in player_map.values():
+            tag = p['player_tag']
+            c = career_raw.get(tag, {})
+            raid_ids = c.get('raid_ids', set())
+            non_cleanup = c.get('non_cleanup_pcts', [])
+            p['participation'] = f"{len(raid_ids)}/{total_raids_count}"
+            p['career_avg_pct'] = round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0
+            p['career_finishes'] = c.get('career_finishes', 0)
+
         player_data = sorted(player_map.values(), key=lambda x: x['att_count'], reverse=True)
         total_log_attacks = sum(p['att_count'] for p in player_data)
         cleanup_count = sum(p['cleanup_count'] for p in player_data)
+
+        if player_data:
+            best = max(player_data, key=lambda x: x['finishes'])
+            top_finisher = best if best['finishes'] > 0 else None
 
     raid_options = []
     for r in all_raids:
@@ -833,6 +873,7 @@ def raid_weekend_page():
         player_data=player_data,
         total_log_attacks=total_log_attacks,
         cleanup_count=cleanup_count,
+        top_finisher=top_finisher,
     )
 
 
@@ -920,9 +961,10 @@ def battle_history_page():
         s['total_gold'] += b.loot_gold or 0
         s['total_elixir'] += b.loot_elixir or 0
         s['total_dark'] += b.loot_dark_elixir or 0
+        local_time = to_local(b.time)
         s['attack_logs'].append({
-            'time': b.time.strftime('%d.%m.%y %H:%M') if b.time else '–',
-            'time_sort': b.time.isoformat() if b.time else '',
+            'time': local_time.strftime('%d.%m.%y %H:%M') if local_time else '–',
+            'time_sort': local_time.isoformat() if local_time else '',
             'opponent_tag': b.opponent_tag or '–',
             'stars': stars,
             'percentage': b.percentage or 0,
@@ -960,6 +1002,148 @@ def battle_history_page():
         top_by_attacks=top_by_attacks,
         player_data=player_data,
     )
+
+def calculate_activity_score(player_tag):
+    now = dt.datetime.now(dt.timezone.utc)
+
+    # Ranked: active in last 4 distinct seasons
+    last_4 = (db.session.query(RankedWeek.league_season_id)
+              .distinct().order_by(RankedWeek.league_season_id.desc()).limit(4).all())
+    last_4_ids = [r.league_season_id for r in last_4]
+    active_seasons = (RankedWeek.query
+                      .filter(RankedWeek.player_tag == player_tag,
+                              RankedWeek.league_season_id.in_(last_4_ids))
+                      .count()) if last_4_ids else 0
+    total_seasons = len(last_4_ids)
+    ranked_score = round(40 * active_seasons / total_seasons) if total_seasons else 0
+
+    # Battle: attacks in last 7 days
+    week_ago = now - dt.timedelta(days=7)
+    battles_7d = (BattleLog.query
+                  .filter(BattleLog.player_tag == player_tag,
+                          BattleLog.attack == True,
+                          BattleLog.time >= week_ago)
+                  .count())
+    battle_score = min(30, battles_7d * 6)
+
+    # Raid: participated in last 3 raid weekends
+    last_3_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).limit(3).all()
+    last_3_ids = [r.id for r in last_3_raids]
+    raids_participated = (RaidWeekendLog.query
+                          .filter(RaidWeekendLog.playerTag == player_tag,
+                                  RaidWeekendLog.raid_weekend_id.in_(last_3_ids))
+                          .with_entities(RaidWeekendLog.raid_weekend_id)
+                          .distinct().count()) if last_3_ids else 0
+    total_raid_windows = len(last_3_ids)
+    raid_score = round(30 * raids_participated / total_raid_windows) if total_raid_windows else 0
+
+    total = ranked_score + battle_score + raid_score
+    if total >= 80:
+        label, color = 'Active', 'green'
+    elif total >= 50:
+        label, color = 'Regular', 'blue'
+    elif total >= 20:
+        label, color = 'Casual', 'accent'
+    else:
+        label, color = 'Inactive', 'red'
+
+    return {
+        'score': total,
+        'label': label,
+        'label_color': color,
+        'ranked_score': ranked_score, 'ranked_max': 40,
+        'ranked_detail': f'{active_seasons} of last {total_seasons} ranked seasons active',
+        'battle_score': battle_score, 'battle_max': 30,
+        'battle_detail': f'{battles_7d} attacks in last 7 days (6 pts each, capped at 5)',
+        'raid_score': raid_score, 'raid_max': 30,
+        'raid_detail': f'{raids_participated} of last {total_raid_windows} raid weekends participated',
+    }
+
+
+@app.route('/player/<tag>')
+def player_profile(tag):
+    actual_tag = '#' + tag
+    player = db_player_get(actual_tag)
+    if not player:
+        return render_template('player_profile.html', player=None, player_tag=actual_tag), 404
+
+    activity = calculate_activity_score(actual_tag)
+
+    # Ranked history (last 10 weeks)
+    ranked_weeks_q = (RankedWeek.query
+                      .filter(RankedWeek.player_tag == actual_tag)
+                      .order_by(RankedWeek.start_day.desc())
+                      .limit(10)
+                      .options(selectinload(RankedWeek.battle_logs))
+                      .all())
+    ranked_history = []
+    for rw in ranked_weeks_q:
+        a_logs = [l for l in rw.battle_logs if l.attack is True or l.attack == 1]
+        d_logs = [l for l in rw.battle_logs if not (l.attack is True or l.attack == 1)]
+        a_stars = [l.stars or 0 for l in a_logs]
+        d_stars = [l.stars or 0 for l in d_logs]
+        ranked_history.append({
+            'start_day': rw.start_day.strftime('%d.%m.%y') if rw.start_day else '—',
+            'end_day': rw.end_day.strftime('%d.%m.%y') if rw.end_day else '—',
+            'league_tier': rw.league_tier or '—',
+            'rank': rw.rank,
+            'trophies': rw.trophies or 0,
+            'att_count': len(a_logs), 'att_max': rw.max_attacks or 0,
+            'att_avg': round(sum(a_stars) / len(a_stars), 2) if a_stars else 0,
+            'def_count': len(d_logs),
+            'def_avg': round(sum(d_stars) / len(d_stars), 2) if d_stars else 0,
+            'is_done': bool(rw.is_done),
+        })
+
+    # Recent battles (last 20)
+    recent_battles_q = (BattleLog.query
+                        .filter(BattleLog.player_tag == actual_tag)
+                        .order_by(BattleLog.time.desc())
+                        .limit(20)
+                        .all())
+    battle_history = []
+    for b in recent_battles_q:
+        local_time = to_local(b.time)
+        battle_history.append({
+            'time': local_time.strftime('%d.%m.%y %H:%M') if local_time else '—',
+            'opponent_tag': b.opponent_tag or '—',
+            'stars': min(b.stars or 0, 3),
+            'percentage': b.percentage or 0,
+            'gold': b.loot_gold or 0,
+            'elixir': b.loot_elixir or 0,
+            'dark': b.loot_dark_elixir or 0,
+            'type': b.type or '—',
+            'attack': bool(b.attack),
+        })
+
+    # Raid history (all raids, queried efficiently)
+    player_raid_logs = RaidWeekendLog.query.filter(RaidWeekendLog.playerTag == actual_tag).all()
+    raid_logs_by_id = {}
+    for l in player_raid_logs:
+        raid_logs_by_id.setdefault(l.raid_weekend_id, []).append(l)
+
+    all_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).all()
+    raid_history = []
+    for r in all_raids:
+        logs = raid_logs_by_id.get(r.id, [])
+        non_cleanup = [l.percentage for l in logs if not l.isCleanUp and l.percentage is not None]
+        raid_history.append({
+            'start': r.startTime.strftime('%d.%m.%Y') if r.startTime else '—',
+            'end': r.endTime.strftime('%d.%m.%Y') if r.endTime else '—',
+            'participated': len(logs) > 0,
+            'att_count': len(logs),
+            'avg_pct': round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0,
+            'finishes': sum(1 for l in logs if l.percentageTotal == 100),
+            'cleanups': sum(1 for l in logs if l.isCleanUp),
+        })
+
+    return render_template('player_profile.html',
+                           player=player,
+                           activity=activity,
+                           ranked_history=ranked_history,
+                           battle_history=battle_history,
+                           raid_history=raid_history)
+
 
 def require_admin_login(f):
     @wraps(f)

@@ -103,7 +103,7 @@
         .badge-cleanup     { background: rgba(63,185,80,0.12);  color: var(--green);  border: 1px solid rgba(63,185,80,0.25); }
 
         /* ── STATS GRID ── */
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 20px; }
         .stat-card {
             background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
             padding: 20px 22px; display: flex; flex-direction: column; gap: 5px;
@@ -266,6 +266,13 @@
             <div class="stat-value" style="color:var(--purple);">{{ (selected_raid.defensiveReward or 0) + (selected_raid.offensiveReward or 0) * 6 }}</div>
             <div class="stat-label">Raid Medals</div>
         </div>
+        {% if top_finisher %}
+        <div class="stat-card">
+            <div class="stat-icon">🎯</div>
+            <div class="stat-value" style="color:var(--green);font-size:22px;line-height:1.2;">{{ top_finisher.player_name }}</div>
+            <div class="stat-label">Top Finisher · {{ top_finisher.finishes }} district{{ 's' if top_finisher.finishes != 1 else '' }}</div>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -279,9 +286,11 @@
                         <th class="sortable" onclick="sortTable('player')">Player</th>
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
                         <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
-                        <th class="sortable" onclick="sortTable('total_loot')">Loot</th>
-                        <th class="sortable" onclick="sortTable('avg_loot')">Avg Loot</th>
+                        <th class="sortable" onclick="sortTable('finishes')">Finishes</th>
                         <th class="sortable" onclick="sortTable('cleanup_count')">Cleanups</th>
+                        <th class="sortable" onclick="sortTable('career_avg_pct')">Career Avg %</th>
+                        <th class="sortable" onclick="sortTable('career_finishes')">Career Finishes</th>
+                        <th class="sortable" onclick="sortTable('participation')">Participation</th>
                         <th>Details</th>
                     </tr>
                 </thead>
@@ -370,24 +379,27 @@ function buildTable() {
     tbody.innerHTML = '';
 
     rows.forEach(p => {
+        const profileUrl = '/player/' + encodeURIComponent((p.player_tag || '').replace('#', ''));
         const row = document.createElement('tr');
         row.style.cursor = 'pointer';
         row.innerHTML = `
             <td>
-                <div class="player-name">${escapeHTML(p.player_name)}</div>
+                <div class="player-name"><a href="${profileUrl}" style="color:inherit;" onclick="event.stopPropagation();">${escapeHTML(p.player_name)}</a></div>
                 <div class="player-tag">${escapeHTML(p.player_tag)}</div>
             </td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${p.att_count}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--blue);">${p.avg_pct}%</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--accent);">${p.total_loot.toLocaleString()}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--acc2);">${p.avg_loot.toLocaleString()}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--green);">${p.cleanup_count}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--green);">${p.finishes}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--muted);">${p.cleanup_count}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--purple);">${p.career_avg_pct}%</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--accent);">${p.career_finishes}</td>
+            <td style="font-size:12px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(p.participation)}</td>
             <td><button type="button" class="action-btn details-toggle">Details</button></td>
         `;
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'detail-row';
-        detailRow.innerHTML = `<td class="detail-cell" colspan="7"><div class="detail-inner">${buildDetailTable(p.attack_logs)}</div></td>`;
+        detailRow.innerHTML = `<td class="detail-cell" colspan="9"><div class="detail-inner">${buildDetailTable(p.attack_logs)}</div></td>`;
 
         const toggle = () => {
             const expanded = detailRow.classList.toggle('expanded');
@@ -399,7 +411,7 @@ function buildTable() {
         tbody.appendChild(detailRow);
     });
 
-    document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown`;
+    document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown · ${rows.reduce((s,p)=>s+p.finishes,0)} districts finished`;
     updateSortHeaders();
 }
 
