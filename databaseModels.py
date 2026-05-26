@@ -111,6 +111,47 @@ class BattleLog(db.Model):
     
     player = db.relationship('Player', back_populates='battle_logs')
 
+class RaidWeekend(db.Model):
+    __tablename__ = 'raid_weekend'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    startTime = db.Column(db.DateTime, primary_key=True)
+    endTime = db.Column(db.DateTime, primary_key=True)
+    
+    state = db.Column(db.String(20))
+    capitalTotalLoot = db.Column(db.Integer)
+    raidsCompleted = db.Column(db.Integer)
+    totalAttacks = db.Column(db.Integer)
+    enemyDistrictsDestroyed = db.Column(db.Integer)
+    offensiveReward = db.Column(db.Integer)
+    defensiveReward = db.Column(db.Integer)
+
+    logs = db.relationship('RaidWeekendLog', back_populates='raid_weekend', lazy=True, cascade="all, delete-orphan")
+
+
+class RaidWeekendLog(db.Model):
+    __tablename__ = 'raid_weekend_log'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    raid_weekend_id = db.Column(db.Integer, db.ForeignKey('raid_weekend.id'))
+
+    defenderName = db.Column(db.String(30))
+    defenderTag = db.Column(db.String(30))
+    
+    districtName = db.Column(db.String(30))
+
+    percentage = db.Column(db.Integer)
+    percentageTotal = db.Column(db.Integer)
+    stars = db.Column(db.Integer)
+    isCleanUp = db.Column(db.Boolean)
+
+    playerTag = db.Column(db.String(50), db.ForeignKey('player.tag'))
+
+    raid_weekend = db.relationship('RaidWeekend', back_populates='logs')
+    player = db.relationship('Player', foreign_keys=[playerTag])
+    
+
+
 
 class UptimeTracker(db.Model):
     __tablename__ = 'uptime_tracker'

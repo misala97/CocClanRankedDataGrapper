@@ -173,6 +173,27 @@
         }
         .detail-table td { color: var(--text); }
 
+        /* ── RECENT ATTACKS ── */
+        .recent-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+        }
+        .recent-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 20px; cursor: pointer; user-select: none;
+            transition: background 0.15s;
+        }
+        .recent-header:hover { background: var(--surf2); }
+        .recent-header-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+        }
+        .recent-chevron {
+            font-size: 11px; color: var(--muted); transition: transform 0.2s;
+        }
+        .recent-chevron.open { transform: rotate(180deg); }
+        .recent-body { border-top: 1px solid var(--border); }
+
         /* ── FOOTER ── */
         .page-footer {
             text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
@@ -303,6 +324,17 @@
     </div>
     {% endif %}
 
+    <!-- Recent Attacks -->
+    {% if player_data %}
+    <div class="recent-card" id="recentCard">
+        <div class="recent-header" onclick="toggleRecent()">
+            <span class="recent-header-title">⚡ 5 Most Recent Attacks</span>
+            <span class="recent-chevron" id="recentChevron">▼</span>
+        </div>
+        <div class="recent-body" id="recentBody" style="display:none;"></div>
+    </div>
+    {% endif %}
+
     <!-- Player Table -->
     {% if player_data %}
     <div class="table-scroll">
@@ -386,12 +418,41 @@
         resourceChart = makeDonut('chartResources', getTop10ByResource(key), 'player_name', key);
     }
 
+    function attackLogRow(l) {
+        return `<tr>
+            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(l.time)}</td>
+            <td>${escapeHTML(l.opponent_tag)}</td>
+            <td>${'★'.repeat(l.stars)}${'☆'.repeat(3-l.stars)}</td>
+            <td>${l.percentage}%</td>
+            <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.gold)}</td>
+            <td style="color:var(--purple);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.elixir)}</td>
+            <td style="color:var(--red);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.dark)}</td>
+        </tr>`;
+    }
+
     function buildDetailTable(logs) {
         if (!logs || !logs.length) return '<div style="color:var(--muted);padding:8px 0;font-size:13px;">No attacks recorded.</div>';
+        const sorted = [...logs].sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
         return `<table class="detail-table">
             <thead><tr><th>Time</th><th>Opponent Tag</th><th>Stars</th><th>Damage %</th><th>💰 Gold</th><th>⚗️ Elixir</th><th>🔴 Dark</th></tr></thead>
-            <tbody>${logs.map(l => `<tr>
+            <tbody>${sorted.map(attackLogRow).join('')}</tbody>
+        </table>`;
+    }
+
+    function buildRecentAttacks() {
+        const all = [];
+        window.playerData.forEach(p => {
+            (p.attack_logs || []).forEach(l => all.push({ ...l, player_name: p.player_name }));
+        });
+        all.sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
+        const top5 = all.slice(0, 5);
+        const body = document.getElementById('recentBody');
+        if (!top5.length) { body.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded.</div>'; return; }
+        body.innerHTML = `<table class="detail-table">
+            <thead><tr><th>Time</th><th>Player</th><th>Opponent Tag</th><th>Stars</th><th>Damage %</th><th>💰 Gold</th><th>⚗️ Elixir</th><th>🔴 Dark</th></tr></thead>
+            <tbody>${top5.map(l => `<tr>
                 <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(l.time)}</td>
+                <td style="font-weight:600;">${escapeHTML(l.player_name)}</td>
                 <td>${escapeHTML(l.opponent_tag)}</td>
                 <td>${'★'.repeat(l.stars)}${'☆'.repeat(3-l.stars)}</td>
                 <td>${l.percentage}%</td>
@@ -400,6 +461,14 @@
                 <td style="color:var(--red);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.dark)}</td>
             </tr>`).join('')}</tbody>
         </table>`;
+    }
+
+    function toggleRecent() {
+        const body = document.getElementById('recentBody');
+        const chevron = document.getElementById('recentChevron');
+        const open = body.style.display === 'none';
+        body.style.display = open ? '' : 'none';
+        chevron.classList.toggle('open', open);
     }
 
     function buildTable() {
@@ -483,6 +552,7 @@
         makeDonut('chartAttacks', topByAttacks, 'player_name', 'att_count');
         resourceChart = makeDonut('chartResources', getTop10ByResource('total_gold'), 'player_name', 'total_gold');
         buildTable();
+        buildRecentAttacks();
     });
 </script>
 {% endif %}

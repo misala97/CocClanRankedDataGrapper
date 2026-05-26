@@ -52,6 +52,13 @@ def api_fetch_player_data(player_tag: str):
     
     return player_data
 
+def api_fetch_raid_weekend(tag: str) -> str:
+    raid_url = f"https://api.clashofclans.com/v1/clans/%23{clean_tag(tag)}/capitalraidseasons?limit=1"
+    
+    raid_data = api_call(raid_url)
+    
+    return raid_data
+
 
 def api_fetch_battlelog(player_tag: str):
     battle_log_url = f"https://api.clashofclans.com/v1/players/%23{clean_tag(player_tag)}/battlelog"

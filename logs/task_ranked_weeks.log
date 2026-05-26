@@ -94,3 +94,6 @@
 2026-05-25 21:33:51 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Löwenkralle 
 2026-05-25 21:38:20 - INFO - [task_update_ranked_weeks] - Running task at 2026-05-25 21:38:20.286264  
 2026-05-25 23:24:18 - WARNING - [task_update_done_ranked_weeks] - Could not fetch player group Germinator. Error: 'RankedWeek' object has no attribute 'group_tag'
+2026-05-26 11:58:23 - ERROR - [task_update_raid_weekend] - Failed to update raid weekend: Incorrect number of values in identifier to formulate primary key for session.get(); primary key columns are 'raid_weekend.id','raid_weekend.startTime','raid_weekend.endTime'
+2026-05-26 11:59:46 - ERROR - [task_update_raid_weekend] - Failed to update raid weekend: Incorrect number of values in identifier to formulate primary key for session.get(); primary key columns are 'raid_weekend.id','raid_weekend.startTime','raid_weekend.endTime'
+2026-05-26 12:07:08 - ERROR - [task_update_raid_weekend] - Failed to update raid weekend: Expected RaidWeekend object, got NoneType

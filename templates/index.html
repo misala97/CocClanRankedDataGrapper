@@ -259,7 +259,6 @@
         <div class="nav-links">
             <a href="#features">Features</a>
             <a href="/admin">Admin Hub</a>
-            <a href="/debug" class="nav-admin">Debug</a>
         </div>
     </div>
 </nav>
@@ -318,14 +317,14 @@
             <p>Detailed logs of all attacks and defenses with stars, damage percentages, and loot information.</p>
         </a>
 
-        <div class="feature-card disabled">
+        <a href="/raid" class="feature-card active">
             <div class="card-top">
                 <div class="feature-icon">🏆</div>
-                <span class="badge badge-soon">Soon</span>
+                <span class="badge badge-active">Active</span>
             </div>
             <h4>Raid Weekend Performance</h4>
             <p>Track clan raid weekends, capital loot, and raid performance metrics.</p>
-        </div>
+        </a>
 
         <div class="feature-card disabled">
             <div class="card-top">
@@ -373,13 +372,13 @@
                 <ul class="footer-links">
                     <li><a href="/ranked" class="live-link">Ranked Week Performance</a></li>
                     <li><a href="/battles" class="live-link">Battle History</a></li>
+                    <li><a href="/raid" class="live-link">Raid Weekend</a></li>
                     <li><a href="/admin" class="live-link">Admin Hub</a></li>
                 </ul>
             </div>
             <div>
                 <h4>Coming Soon</h4>
                 <ul class="footer-links">
-                    <li><span class="soon-link">Raid Weekend Performance</span></li>
                     <li><span class="soon-link">Clan War</span></li>
                     <li><span class="soon-link">Clan War League</span></li>
                 </ul>
@@ -387,7 +386,7 @@
             <div>
                 <h4>System</h4>
                 <ul class="footer-links">
-                    <li><a href="/debug">Debug Dashboard</a></li>
+                    <li><a href="/admin">Admin Hub</a></li>
                 </ul>
                 <div style="margin-top:16px; font-size:12px; color:var(--muted); line-height:1.7">
                     <div>{{ total_members }} members tracked</div>
@@ -399,7 +398,7 @@
         <div class="footer-bottom">
             <p>&copy; 2026 CoC Analytics &mdash; Unofficial fan project, not affiliated with Supercell.</p>
             <div class="links">
-                <span style="color:var(--muted);font-size:12px">3 features live &middot; 3 in development</span>
+                <span style="color:var(--muted);font-size:12px">4 features live &middot; 2 in development</span>
             </div>
         </div>
     </div>

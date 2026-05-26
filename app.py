@@ -89,7 +89,7 @@ class ConsoleColorFormatter(logging.Formatter):
 
 # --- Root Logger (Console Output) ---
 root_logger = logging.getLogger()
-root_logger.setLevel(logging.DEBUG)
+root_logger.setLevel(logging.INFO)
 root_logger.handlers.clear()
 
 console_handler = logging.StreamHandler()
@@ -131,6 +131,7 @@ battle_logger = setup_task_logger('battle_logs', 'logs/task_battle_logs.log')
 ranked_logger = setup_task_logger('ranked_weeks', 'logs/task_ranked_weeks.log')
 ranked_done_logger = setup_task_logger('ranked_done', 'logs/task_ranked_done.log')
 clan_logger = setup_task_logger('clan_members', 'logs/task_clan_members.log')
+raid_weekend_logger = setup_task_logger('raid_weekend', 'logs/raid_weekend.log')
 
 
 # ==========================================
@@ -186,25 +187,25 @@ def task_update_done_ranked_weeks():
         for week in ranked_weeks_done:
             #League Group
             try:
-                group_data_api = api_fetch_league_group(week.league_group_tag, week.league_season_id, week.player_tag)    
+                group_data_api = api_fetch_league_group(week.league_group_tag, week.league_season_id, week.player_tag)
             except Exception as e:
-                ranked_logger.warning(f"Could not fetch player group {week.player.name}. Error: {e}")
+                ranked_done_logger.warning(f"Could not fetch player group {week.player.name}. Error: {e}")
                 continue
-            
+
             #PLayer data
             try:
                 player_api = api_fetch_player_data(week.player.tag)
             except Exception as e:
-                ranked_logger.warning(f"Could not fetch player {week.player.name}. Error: {e}")
+                ranked_done_logger.warning(f"Could not fetch player {week.player.name}. Error: {e}")
                 continue
-            
-            
+
+
             #Ranked Woche anlegen
-            try:      
+            try:
                 tmp_ranked_week = create_db_ranked_week(week.league_group_tag, week.league_season_id, player_api, group_data_api)
                 db_ranked_week_update(week, tmp_ranked_week, True)
             except Exception as e:
-                ranked_logger.error(f"Failed to update ranked week for {week.player.name}: {e}")
+                ranked_done_logger.error(f"Failed to update ranked week for {week.player.name}: {e}")
                 db.session.rollback() 
                 continue
             db.session.commit()
@@ -244,6 +245,78 @@ def task_update_battle_logs():
         duration = round(time.time() - t0, 2)
         db_uptime_tracker_create_new(create_db_uptime_tracker(task_update_battle_logs.__name__, duration))
         db.session.commit()            
+
+
+def task_update_raid_weekend():
+    t0 = time.time()
+    raid_weekend_logger.info(f"Running task at {dt.datetime.now()}  ")
+    with app.app_context():  
+        #Raid Weekend data fetch
+        try:
+            raid_weekend_all_api = api_fetch_raid_weekend(CLAN_TAG)
+            current_raid_weekend = json_get(raid_weekend_all_api, JSON_RAID_WEEKEND_DATA.ITEMS)[0]
+        except Exception as e:
+            raid_weekend_logger.warning(f"Could not fetch raid weekend. Error: {e}")
+            return
+
+        #Raid Weekend db
+        try:
+            tmp_raid_weekend = create_db_raid_weekend_from_api(current_raid_weekend)
+            raid_weekend = db_raid_weekend_get(tmp_raid_weekend.startTime, tmp_raid_weekend.endTime)
+            if not raid_weekend:
+                    raid_weekend = db_raid_weekend_create_new(tmp_raid_weekend)
+            else:
+                db_raid_weekend_update(raid_weekend, tmp_raid_weekend)
+        except Exception as e:
+            raid_weekend_logger.error(f"Failed to update raid weekend: {e}")
+            db.session.rollback() 
+            return
+        db.session.commit()
+        
+        #Attack Log
+        try:
+            attack_logs_api = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG)
+        except Exception as e:
+            raid_weekend_logger.warning(f"Could not get attack_log for Raid Weekend. Error: {e}")
+            return  
+        
+        try:
+            for attack_log_api in attack_logs_api:
+                districts_api = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS)
+                for district_api in districts_api:
+                    attacks_api = json_get(district_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_ATTACKS, raise_on_missing=False)
+                    if attacks_api is None:
+                        continue
+                    
+                    sorted_attacks_api = sorted(attacks_api, key=lambda x: x['destructionPercent'])
+                    previous_percent = 0
+                    for attack_api in sorted_attacks_api:
+                        current_percent = json_get(attack_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_ATTACKS_DESTRUCTION_PERCENT)
+                        # The percentage done in this specific attack
+                        percentage_done = current_percent - previous_percent
+                        player_tag = json_get(attack_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_ATTACKS_ATTACKER.TAG)
+                        district_name = json_get(district_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_NAME)
+                        stars = json_get(attack_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_ATTACKS_DESTRUCTION_STARS)
+                        defender_name = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DEFENDER.NAME)
+                        defender_tag = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DEFENDER.TAG)
+                        if current_percent == 100 and percentage_done < 15:
+                            is_cleanup = True
+                        else:
+                            is_cleanup = False
+                        previous_percent = current_percent
+                        tmp_raid_weekend_log = create_db_raid_weekend_log(raid_weekend,player_tag,district_name,0,percentage_done,current_percent,stars,is_cleanup, defender_tag,defender_name)
+                        raid_weekend_log = db_raid_weekend_log_get(raid_weekend, defender_tag, district_name,percentage_done,current_percent)
+                        if not raid_weekend_log:
+                                raid_weekend_log = db_raid_weekend_log_create_new(tmp_raid_weekend_log)
+        except Exception as e:
+            raid_weekend_logger.error(f"Failed to create raid weekend logs: {e}")
+            db.session.rollback() 
+            return
+        db.session.commit()
+        duration = round(time.time() - t0, 2)
+        db_uptime_tracker_create_new(create_db_uptime_tracker(task_update_raid_weekend.__name__, duration))
+        db.session.commit()                     
+        
         
         
 def task_update_ranked_weeks():
@@ -689,6 +762,80 @@ def ranked_weeks_page():
     )
 
 
+@app.route('/raid')
+def raid_weekend_page():
+    all_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).all()
+
+    selected_id = request.args.get('raid_id', type=int)
+    if not selected_id and all_raids:
+        selected_id = all_raids[0].id
+
+    selected_raid = RaidWeekend.query.filter_by(id=selected_id).first() if selected_id else None
+
+    player_data = []
+    total_log_attacks = 0
+    cleanup_count = 0
+
+    if selected_raid:
+        logs = (
+            RaidWeekendLog.query
+            .filter(RaidWeekendLog.raid_weekend_id == selected_raid.id)
+            .options(selectinload(RaidWeekendLog.player))
+            .all()
+        )
+
+        player_map = {}
+        for log in logs:
+            tag = log.playerTag
+            if tag not in player_map:
+                player_map[tag] = {
+                    'player_name': log.player.name if log.player else tag,
+                    'player_tag': tag,
+                    'att_count': 0,
+                    'cleanup_count': 0,
+                    'total_loot': 0,
+                    'avg_loot': 0,
+                    'attack_logs': [],
+                }
+            p = player_map[tag]
+            p['att_count'] += 1
+            if log.isCleanUp:
+                p['cleanup_count'] += 1
+            p['attack_logs'].append({
+                'district_name': log.districtName or '—',
+                'stars': log.stars or 0,
+                'percentage': log.percentage or 0,
+                'loot': 0,
+                'is_clean_up': bool(log.isCleanUp),
+                'defender_name': log.defenderName or '—',
+                'defender_tag': log.defenderTag or '—',
+            })
+
+        for p in player_map.values():
+            non_cleanup = [l['percentage'] for l in p['attack_logs'] if not l['is_clean_up']]
+            p['avg_pct'] = round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0
+
+        player_data = sorted(player_map.values(), key=lambda x: x['att_count'], reverse=True)
+        total_log_attacks = sum(p['att_count'] for p in player_data)
+        cleanup_count = sum(p['cleanup_count'] for p in player_data)
+
+    raid_options = []
+    for r in all_raids:
+        start = r.startTime.strftime('%d.%m.%Y') if r.startTime else '?'
+        end = r.endTime.strftime('%d.%m.%Y') if r.endTime else '?'
+        raid_options.append({'id': r.id, 'label': f"{start} – {end}"})
+
+    return render_template(
+        'raid_weekend.html',
+        raid_options=raid_options,
+        selected_raid=selected_raid,
+        selected_id=selected_id,
+        player_data=player_data,
+        total_log_attacks=total_log_attacks,
+        cleanup_count=cleanup_count,
+    )
+
+
 @app.route('/battles')
 def battle_history_page():
     """Battle History page"""
@@ -775,6 +922,7 @@ def battle_history_page():
         s['total_dark'] += b.loot_dark_elixir or 0
         s['attack_logs'].append({
             'time': b.time.strftime('%d.%m.%y %H:%M') if b.time else '–',
+            'time_sort': b.time.isoformat() if b.time else '',
             'opponent_tag': b.opponent_tag or '–',
             'stars': stars,
             'percentage': b.percentage or 0,
@@ -940,10 +1088,11 @@ def admin_hub():
 
 
 if __name__ == '__main__':
-    task_update_clan_members()
+    #task_update_clan_members()
     #task_update_ranked_weeks()
     #task_update_battle_logs()
     #task_update_done_ranked_weeks()
+    task_update_raid_weekend()
     
     # Webserver starten (use_reloader=False verhindert, dass der Scheduler beim Speichern doppelt startet)
     app.run(debug=True, use_reloader=False)

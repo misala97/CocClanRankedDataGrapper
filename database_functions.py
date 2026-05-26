@@ -1,5 +1,5 @@
 from databaseModels import * 
-from help_functions import json_get, JSON_BATTLE_LOG_DATA, JSON_PLAYER_DATA, JSON_RANKED_GROUP_DATA
+from help_functions import json_get, JSON_BATTLE_LOG_DATA, JSON_PLAYER_DATA, JSON_RANKED_GROUP_DATA, JSON_RAID_WEEKEND_DATA
 import logging
 from typing import List
 from help_functions import get_name_to_id, get_resource_amount,parse_iso_datetime,get_weekly_attacks,get_member_rank_by_tag, get_next_monday, get_last_monday
@@ -8,7 +8,7 @@ from sqlalchemy import or_
 # Create Funktionen für DB Objekte
 def create_db_player_from_api(player_data_api: dict, in_clan: bool = True) -> Player:
     if not isinstance(player_data_api, dict):
-        raise TypeError(f"Expected Player dict, got {type(player).__name__}")
+        raise TypeError(f"Expected Player dict, got {type(player_data_api).__name__}")
         
     return Player(
         tag = json_get(player_data_api, JSON_PLAYER_DATA.TAG),
@@ -19,6 +19,40 @@ def create_db_player_from_api(player_data_api: dict, in_clan: bool = True) -> Pl
         league_icon = json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ICON_URLS.LARGE, "Unranked")     
     )
 
+def create_db_raid_weekend_from_api(current_raid_weekend: dict):
+    if not isinstance(current_raid_weekend, dict):
+        raise TypeError(f"Expected Raid dict, got {type(raid_api).__name__}")
+    
+    
+        
+    return RaidWeekend(
+        startTime = parse_iso_datetime(json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_STARTTIME)),
+        endTime = parse_iso_datetime(json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_ENDTIME)),
+        state = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_STATE),
+        capitalTotalLoot = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_CAPITALTOTALLOOT),
+        raidsCompleted = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_RAIDSCOMPLETED),
+        totalAttacks = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_TOTALATTACKS),
+        enemyDistrictsDestroyed = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_ENEMYDISTRICTSDESTROYED),
+        offensiveReward = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_OFFENSIVEREWARD),
+        defensiveReward = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_DEFENSIVEREWARD) 
+    )
+    
+def create_db_raid_weekend_log(raid_weekend: RaidWeekend, player_tag: str, district_name: str, loot: int, percentage: int, percentage_total: int,stars: int, is_clean_up: bool, defender_tag: str, defender_name: str) -> RaidWeekendLog:
+    if not isinstance(raid_weekend, RaidWeekend):
+        raise TypeError(f"Expected RaidWeekend object, got {type(raid_weekend).__name__}")
+    
+
+    return RaidWeekendLog(
+        raid_weekend_id=raid_weekend.id,
+        playerTag=player_tag,
+        defenderName = defender_name,
+        defenderTag = defender_tag,
+        districtName=district_name,
+        percentage=percentage,
+        percentageTotal=percentage_total,
+        stars=stars,
+        isCleanUp=is_clean_up
+    )
     
 def create_db_uptime_tracker(func_name: str, duration: str) -> UptimeTracker:    
     return UptimeTracker(
@@ -98,6 +132,9 @@ def db_player_get_all(in_clan:bool = True) -> List[Player]:
 def db_ranked_week_get(group_tag: str, season_id : str, player_tag: str) ->List[RankedWeek]:
     return db.session.get(RankedWeek, (group_tag, season_id, player_tag))
 
+def db_raid_weekend_get(start_time, end_time) -> RaidWeekend:
+    return RaidWeekend.query.filter(RaidWeekend.startTime == start_time, RaidWeekend.endTime == end_time).first()
+
 def db_ranked_week_get_all_done() ->List[RankedWeek]:
     return RankedWeek.query.filter(
         RankedWeek.is_done == False,
@@ -132,6 +169,16 @@ def db_battle_log_get(player: Player, battle_api : dict):
         BattleLog.loot_dark_elixir == loot_dark_elixir
     ).first()
     
+    
+def db_raid_weekend_log_get(raid_weekend: RaidWeekend, defender_tag, district_name, percentage: int, percentage_total: int) -> RaidWeekendLog:
+    return RaidWeekendLog.query.filter(
+        RaidWeekendLog.raid_weekend_id == raid_weekend.id,
+        RaidWeekendLog.defenderTag == defender_tag,
+        RaidWeekendLog.districtName == district_name,
+        RaidWeekendLog.percentage == percentage,
+        RaidWeekendLog.percentageTotal == percentage_total,
+
+    ).first()
 
 
 
@@ -155,6 +202,24 @@ def db_ranked_week_create_new(ranked_week: RankedWeek) -> RankedWeek:
     db.session.add(ranked_week)
     
     return ranked_week
+
+def db_raid_weekend_create_new(raid_weekend: RaidWeekend) -> RaidWeekend:
+    if not isinstance(raid_weekend, RaidWeekend):
+        raise TypeError(f"Expected RaidWeekend object, got {type(raid_weekend).__name__}")
+    
+    logging.debug(f"Adding raid weekend for endtime: {raid_weekend.endTime}")
+    db.session.add(raid_weekend)
+    
+    return raid_weekend
+
+def db_raid_weekend_log_create_new(raid_weekend_log: RaidWeekendLog) -> RaidWeekend:
+    if not isinstance(raid_weekend_log, RaidWeekendLog):
+        raise TypeError(f"Expected RaidWeekendLog object, got {type(raid_weekend_log).__name__}")
+    
+    logging.debug(f"Adding raid weekend log for defender: {raid_weekend_log.defenderName}")
+    db.session.add(raid_weekend_log)
+    
+    return raid_weekend_log
 
 
 def db_uptime_tracker_create_new(uptime: UptimeTracker):
@@ -233,3 +298,26 @@ def db_ranked_week_update(ranked_week: RankedWeek, updated_ranked_week: RankedWe
             logging.debug(f"Updated for {ranked_week.player.name}")
         ranked_week.is_done = is_done
         return ranked_week
+    
+    
+    
+def db_raid_weekend_update(raid_weekend: RaidWeekend, updated_raid_weekend: RaidWeekend, is_done:bool = False) -> RaidWeekend:
+
+    if(raid_weekend.state != updated_raid_weekend.state or
+        raid_weekend.capitalTotalLoot != updated_raid_weekend.capitalTotalLoot or
+        raid_weekend.raidsCompleted != updated_raid_weekend.raidsCompleted or
+        raid_weekend.totalAttacks != updated_raid_weekend.totalAttacks or
+        raid_weekend.enemyDistrictsDestroyed != updated_raid_weekend.enemyDistrictsDestroyed or
+        raid_weekend.offensiveReward != updated_raid_weekend.offensiveReward or
+        raid_weekend.defensiveReward != updated_raid_weekend.defensiveReward):
+
+        raid_weekend.state = updated_raid_weekend.state
+        raid_weekend.capitalTotalLoot = updated_raid_weekend.capitalTotalLoot
+        raid_weekend.raidsCompleted = updated_raid_weekend.raidsCompleted
+        raid_weekend.totalAttacks = updated_raid_weekend.totalAttacks
+        raid_weekend.enemyDistrictsDestroyed = updated_raid_weekend.enemyDistrictsDestroyed
+        raid_weekend.offensiveReward = updated_raid_weekend.offensiveReward
+        raid_weekend.defensiveReward = updated_raid_weekend.defensiveReward
+
+        logging.debug(f"Updated raid weekend {raid_weekend.startTime}")
+    return raid_weekend

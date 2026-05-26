@@ -213,6 +213,7 @@
             <a href="/">Home</a>
             <a href="/battles">Battles</a>
             <a href="/ranked">Ranked</a>
+            <a href="/raid">Raids</a>
             <a href="/admin" class="nav-active">Admin</a>
             <a href="/admin/logout" style="color:var(--muted);margin-left:4px">Sign out</a>
         </div>
@@ -240,6 +241,7 @@
         ['task_update_ranked_weeks',      '📊', 'Ranked Weeks Sync'],
         ['task_update_clan_members',      '👥', 'Clan Members Sync'],
         ['task_update_done_ranked_weeks', '✅', 'Done Weeks Update'],
+        ['task_update_raid_weekend',      '🏰', 'Raid Weekend Sync'],
     ] %}
 
     <!-- Status Cards – always show all 4 known functions -->
@@ -303,6 +305,7 @@
         'task_update_ranked_weeks':      ['📊', 'Ranked Weeks Sync'],
         'task_update_clan_members':      ['👥', 'Clan Members Sync'],
         'task_update_done_ranked_weeks': ['✅', 'Done Weeks Update'],
+        'task_update_raid_weekend':      ['🏰', 'Raid Weekend Sync'],
     } %}
     <div class="section-title">Function Details</div>
     <div class="fn-grid">
@@ -359,12 +362,14 @@ const FN_NAMES = {
     'task_update_ranked_weeks':      'Ranked Weeks Sync',
     'task_update_clan_members':      'Clan Members Sync',
     'task_update_done_ranked_weeks': 'Done Weeks Update',
+    'task_update_raid_weekend':      'Raid Weekend Sync',
 };
 const FN_COLORS = {
     'task_update_battle_logs':       '#58a6ff',
     'task_update_ranked_weeks':      '#3fb950',
     'task_update_clan_members':      '#f0a500',
     'task_update_done_ranked_weeks': '#bc8cff',
+    'task_update_raid_weekend':      '#f85149',
 };
 
 Chart.defaults.color = '#8b949e';
