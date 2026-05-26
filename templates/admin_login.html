@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login – CoC Analytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      #0d1117;
+            --surface: #161b22;
+            --surf2:   #1c2330;
+            --border:  #30363d;
+            --text:    #e6edf3;
+            --muted:   #8b949e;
+            --accent:  #f0a500;
+            --acc2:    #e8863a;
+            --red:     #f85149;
+            --green:   #3fb950;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg); color: var(--text);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+        }
+        body::before {
+            content: '';
+            position: fixed; inset: 0; pointer-events: none;
+            background:
+                radial-gradient(ellipse 50% 50% at 30% 40%, rgba(240,165,0,0.05) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 40% at 70% 60%, rgba(88,166,255,0.04) 0%, transparent 70%);
+        }
+        a { text-decoration: none; color: inherit; }
+
+        .login-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; padding: 48px 40px;
+            width: 100%; max-width: 400px;
+            position: relative; z-index: 1;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+        }
+
+        .login-logo {
+            display: flex; align-items: center; gap: 10px;
+            justify-content: center; margin-bottom: 36px;
+        }
+        .logo-icon {
+            width: 38px; height: 38px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 9px; display: flex; align-items: center; justify-content: center;
+            font-size: 18px; box-shadow: 0 0 20px rgba(240,165,0,0.3);
+        }
+        .login-logo span {
+            font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        .login-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 700;
+            text-align: center; margin-bottom: 6px;
+        }
+        .login-subtitle {
+            font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 32px;
+        }
+
+        .form-group { margin-bottom: 18px; }
+        label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: var(--muted); margin-bottom: 7px; letter-spacing: 0.4px;
+            text-transform: uppercase;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%; padding: 11px 14px;
+            background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 14px;
+            font-family: 'DM Sans', sans-serif;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            outline: none;
+        }
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(240,165,0,0.12);
+        }
+
+        .error-msg {
+            background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.25);
+            border-radius: 8px; padding: 10px 14px;
+            font-size: 13px; color: var(--red); margin-bottom: 20px;
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .btn-login {
+            width: 100%; padding: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border: none; border-radius: 8px;
+            font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700;
+            letter-spacing: 0.5px; color: #0d1117; cursor: pointer;
+            transition: opacity 0.15s, box-shadow 0.15s;
+            margin-top: 8px;
+        }
+        .btn-login:hover {
+            opacity: 0.9; box-shadow: 0 4px 20px rgba(240,165,0,0.25);
+        }
+        .btn-login:active { opacity: 0.8; }
+
+        .back-link {
+            display: block; text-align: center; margin-top: 24px;
+            font-size: 13px; color: var(--muted); transition: color 0.15s;
+        }
+        .back-link:hover { color: var(--text); }
+    </style>
+</head>
+<body>
+
+<div class="login-card">
+    <div class="login-logo">
+        <div class="logo-icon">⚔️</div>
+        <span>CoC Analytics</span>
+    </div>
+    <div class="login-title">Admin Access</div>
+    <div class="login-subtitle">Sign in to access the Admin Hub</div>
+
+    {% if error %}
+    <div class="error-msg">⚠ {{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/admin/login">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" autocomplete="username" autofocus>
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-login">Sign In</button>
+    </form>
+
+    <a href="/" class="back-link">← Back to home</a>
+</div>
+
+</body>
+</html>

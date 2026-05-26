@@ -2,21 +2,21 @@ from databaseModels import *
 from help_functions import json_get, JSON_BATTLE_LOG_DATA, JSON_PLAYER_DATA, JSON_RANKED_GROUP_DATA
 import logging
 from typing import List
-from help_functions import get_resource_amount,parse_iso_datetime,get_weekly_attacks,get_member_rank_by_tag, get_next_monday, get_last_monday
+from help_functions import get_name_to_id, get_resource_amount,parse_iso_datetime,get_weekly_attacks,get_member_rank_by_tag, get_next_monday, get_last_monday
 from sqlalchemy import or_
 
 # Create Funktionen für DB Objekte
-def create_db_player_from_api(api_player: dict, in_clan: bool = True) -> Player:
-    if not isinstance(api_player, dict):
+def create_db_player_from_api(player_data_api: dict, in_clan: bool = True) -> Player:
+    if not isinstance(player_data_api, dict):
         raise TypeError(f"Expected Player dict, got {type(player).__name__}")
         
     return Player(
-        tag = json_get(api_player, JSON_PLAYER_DATA.TAG),
-        name = json_get(api_player, JSON_PLAYER_DATA.NAME),
-        current_th = json_get(api_player, JSON_PLAYER_DATA.TOWN_HALL_LEVEL),
+        tag = json_get(player_data_api, JSON_PLAYER_DATA.TAG),
+        name = json_get(player_data_api, JSON_PLAYER_DATA.NAME),
+        current_th = json_get(player_data_api, JSON_PLAYER_DATA.TOWN_HALL_LEVEL),
         in_clan = in_clan,
-        league_tier = json_get(api_player, JSON_PLAYER_DATA.LEAGUE_TIER.name, "Unranked"),     
-        league_icon = json_get(api_player, JSON_PLAYER_DATA.LEAGUE_TIER.ICON_URLS.LARGE, "Unranked")     
+        league_tier = get_name_to_id(json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ID)),     
+        league_icon = json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ICON_URLS.LARGE, "Unranked")     
     )
 
     
@@ -33,7 +33,7 @@ def create_db_ranked_week(league_group_tag:str, league_season_id: int, player_da
     if rank <= 0 or rank > len(league_members):
         raise ValueError(f"Invalid rank {rank} for player {player_tag}")
     player_group_data = league_members[rank-1]
-    league_tier_name = json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.NAME)
+    league_tier_name = get_name_to_id(json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ID))
     league_icon = json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ICON_URLS.LARGE, "Unranked")  
     
     return RankedWeek(

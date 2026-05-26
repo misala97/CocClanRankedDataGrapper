@@ -8,3 +8,6 @@
 2026-05-25 21:13:44 - INFO - [task_update_clan_members] - Running task at 2026-05-25 21:13:44.865441  
 2026-05-25 21:32:39 - INFO - [task_update_clan_members] - Running task at 2026-05-25 21:32:39.151099  
 2026-05-25 21:38:19 - INFO - [task_update_clan_members] - Running task at 2026-05-25 21:38:19.418089  
+2026-05-26 03:08:28 - INFO - [task_update_clan_members] - Running task at 2026-05-26 03:08:28.259089  
+2026-05-26 03:08:29 - ERROR - [task_update_clan_members] - Failed to update player data: name 'api_player' is not defined
+2026-05-26 03:08:56 - INFO - [task_update_clan_members] - Running task at 2026-05-26 03:08:56.419227  

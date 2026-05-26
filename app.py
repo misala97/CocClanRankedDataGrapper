@@ -1,18 +1,20 @@
 import logging
 import os
 import re
+import secrets
 import sys
 import time
+from functools import wraps
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, session, redirect, url_for
 from flask_migrate import Migrate
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
 from help_functions import *
-from api_functions import * 
+from api_functions import *
 from database_functions import *
 import datetime as dt
 from logging.handlers import RotatingFileHandler
@@ -144,12 +146,20 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("DB_NAME", "coc_stats")
 CLAN_TAG = os.getenv("CLAN_TAG", "#2QRC8998U")
 API_TOKEN = os.getenv("API_TOKEN")
+ADMIN_USER = os.getenv("ADMIN_USER", "")
+ADMIN_PASS = os.getenv("ADMIN_PASS", "")
 
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key:
+    root_logger.warning("SECRET_KEY not set in .env — using random key, sessions reset on restart.")
+    _secret_key = secrets.token_hex(32)
+
+app.config['SECRET_KEY'] = _secret_key
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:3306/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    "pool_pre_ping": True, 
-    "pool_recycle": 3600,   
+    "pool_pre_ping": True,
+    "pool_recycle": 3600,
 }
 
 if not API_TOKEN:
@@ -803,7 +813,42 @@ def battle_history_page():
         player_data=player_data,
     )
 
+def require_admin_login(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('admin_logged_in'):
+            return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    if session.get('admin_logged_in'):
+        return redirect(url_for('admin_hub'))
+
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '')
+        password = request.form.get('password', '')
+        user_ok = ADMIN_USER and secrets.compare_digest(username.encode(), ADMIN_USER.encode())
+        pass_ok = ADMIN_PASS and secrets.compare_digest(password.encode(), ADMIN_PASS.encode())
+        if user_ok and pass_ok:
+            session['admin_logged_in'] = True
+            return redirect(url_for('admin_hub'))
+        error = 'Invalid username or password.'
+
+    return render_template('admin_login.html', error=error)
+
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('admin_logged_in', None)
+    return redirect(url_for('index'))
+
+
 @app.route('/admin')
+@require_admin_login
 def admin_hub():
     from collections import defaultdict
 
@@ -895,7 +940,7 @@ def admin_hub():
 
 
 if __name__ == '__main__':
-    #task_update_clan_members()
+    task_update_clan_members()
     #task_update_ranked_weeks()
     #task_update_battle_logs()
     #task_update_done_ranked_weeks()

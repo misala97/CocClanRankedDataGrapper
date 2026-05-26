@@ -57,6 +57,7 @@ class JSON_PLAYER_DATA:
     CURRENT_LEAGUE_SEASON_ID = JSONPath("currentLeagueSeasonId")
     LEAGUE_TIER = JSONPath("leagueTier")
     LEAGUE_TIER.NAME = JSONPath("name")
+    LEAGUE_TIER.ID = JSONPath("id")
     LEAGUE_TIER.ICON_URLS = JSONPath("iconUrls")
     LEAGUE_TIER.ICON_URLS.LARGE = JSONPath("large")
     
@@ -155,6 +156,51 @@ def get_weekly_attacks(league_string: str):
     for league, limit in attack_limits.items():
         if league in league_name: return limit
     return 0
+
+def get_name_to_id(league_id: int) -> str:
+    # A dictionary mapping all the IDs to their respective league names
+    league_map = {
+        105000000: "Unranked",
+        105000001: "Skeleton League 1",
+        105000002: "Skeleton League 2",
+        105000003: "Skeleton League 3",
+        105000004: "Barbarian League 4",
+        105000005: "Barbarian League 5",
+        105000006: "Barbarian League 6",
+        105000007: "Archer League 7",
+        105000008: "Archer League 8",
+        105000009: "Archer League 9",
+        105000010: "Wizard League 10",
+        105000011: "Wizard League 11",
+        105000012: "Wizard League 12",
+        105000013: "Valkyrie League 13",
+        105000014: "Valkyrie League 14",
+        105000015: "Valkyrie League 15",
+        105000016: "Witch League 16",
+        105000017: "Witch League 17",
+        105000018: "Witch League 18",
+        105000019: "Golem League 19",
+        105000020: "Golem League 20",
+        105000021: "Golem League 21",
+        105000022: "P.E.K.K.A League 22",
+        105000023: "P.E.K.K.A League 23",
+        105000024: "P.E.K.K.A League 24",
+        105000025: "Titan League 25",
+        105000026: "Titan League 26",
+        105000027: "Titan League 27",
+        105000028: "Dragon League 28",
+        105000029: "Dragon League 29",
+        105000030: "Dragon League 30",
+        105000031: "Electro League 31",
+        105000032: "Electro League 32",
+        105000033: "Electro League 33",
+        105000034: "Legend League III",
+        105000035: "Legend League II",
+        105000036: "Legend League I"
+    }
+    
+    # Return the corresponding name, or a fallback string if the ID isn't found
+    return league_map.get(league_id, "Unknown League")
 
 
 def get_member_rank_by_tag(members, player_name):
