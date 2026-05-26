@@ -199,7 +199,7 @@ def task_update_done_ranked_weeks():
                 continue
             db.session.commit()
         duration = round(time.time() - t0, 2)
-        db_uptime_tracker_create_new(create_db_uptime_tracker(task_update_battle_logs.__name__, duration))
+        db_uptime_tracker_create_new(create_db_uptime_tracker(task_update_done_ranked_weeks.__name__, duration))
         db.session.commit()    
             
 
@@ -802,6 +802,97 @@ def battle_history_page():
         top_by_attacks=top_by_attacks,
         player_data=player_data,
     )
+
+@app.route('/admin')
+def admin_hub():
+    from collections import defaultdict
+
+    days = request.args.get('days', 7, type=int)
+    if days not in [1, 7, 14, 30]:
+        days = 7
+
+    cutoff = dt.datetime.utcnow() - dt.timedelta(days=days)
+    trackers = UptimeTracker.query.filter(
+        UptimeTracker.time >= cutoff
+    ).order_by(UptimeTracker.time.asc()).all()
+
+    by_function = defaultdict(list)
+    for t in trackers:
+        try:
+            dur = float(t.duration) if t.duration else 0.0
+        except (ValueError, TypeError):
+            dur = 0.0
+        by_function[t.function].append({
+            'time': t.time.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+            'duration': dur,
+        })
+
+    function_stats = {}
+    now_naive = dt.datetime.utcnow()
+
+    for fn, runs in by_function.items():
+        durations = [r['duration'] for r in runs]
+        avg_dur = round(sum(durations) / len(durations), 2) if durations else 0
+        max_dur = round(max(durations), 2) if durations else 0
+
+        gaps_minutes = []
+        for i in range(1, len(runs)):
+            t1 = dt.datetime.strptime(runs[i - 1]['time'], '%Y-%m-%dT%H:%M:%SZ')
+            t2 = dt.datetime.strptime(runs[i]['time'], '%Y-%m-%dT%H:%M:%SZ')
+            gaps_minutes.append((t2 - t1).total_seconds() / 60)
+
+        sorted_gaps = sorted(gaps_minutes)
+        median_gap = sorted_gaps[len(sorted_gaps) // 2] if sorted_gaps else None
+        max_gap = max(gaps_minutes) if gaps_minutes else None
+
+        gap_events = []
+        if median_gap and len(runs) > 1:
+            for i in range(1, len(runs)):
+                t1 = dt.datetime.strptime(runs[i - 1]['time'], '%Y-%m-%dT%H:%M:%SZ')
+                t2 = dt.datetime.strptime(runs[i]['time'], '%Y-%m-%dT%H:%M:%SZ')
+                gap_min = (t2 - t1).total_seconds() / 60
+                if gap_min > median_gap * 2.5:
+                    gap_events.append({
+                        'start': runs[i - 1]['time'],
+                        'end': runs[i]['time'],
+                        'duration_min': round(gap_min, 1),
+                    })
+
+        last_run_str = runs[-1]['time'] if runs else None
+        status = 'unknown'
+        minutes_since = None
+        if last_run_str:
+            last_run_dt = dt.datetime.strptime(last_run_str, '%Y-%m-%dT%H:%M:%SZ')
+            minutes_since = round((now_naive - last_run_dt).total_seconds() / 60, 1)
+            if median_gap:
+                if minutes_since > median_gap * 2.5:
+                    status = 'down'
+                elif minutes_since > median_gap * 1.5:
+                    status = 'warning'
+                else:
+                    status = 'up'
+            else:
+                status = 'up' if minutes_since < 120 else 'warning'
+
+        function_stats[fn] = {
+            'count': len(runs),
+            'avg_duration': avg_dur,
+            'max_duration': max_dur,
+            'median_gap': round(median_gap, 1) if median_gap else None,
+            'max_gap': round(max_gap, 1) if max_gap else None,
+            'last_run': last_run_str,
+            'minutes_since': minutes_since,
+            'status': status,
+            'gap_events': gap_events,
+        }
+
+    return render_template(
+        'admin_hub.html',
+        by_function=dict(by_function),
+        function_stats=function_stats,
+        selected_days=days,
+    )
+
 
 if __name__ == '__main__':
     #task_update_clan_members()
