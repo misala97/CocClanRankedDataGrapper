@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pub Quiz – Ergebnisse</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      #0d1117;
+            --surface: #161b22;
+            --surf2:   #1c2330;
+            --border:  #30363d;
+            --bord2:   #21262d;
+            --text:    #e6edf3;
+            --muted:   #8b949e;
+            --accent:  #f0a500;
+            --acc2:    #e8863a;
+            --green:   #3fb950;
+            --blue:    #58a6ff;
+            --red:     #f85149;
+            --purple:  #bc8cff;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        a { text-decoration: none; color: inherit; }
+
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(13,17,23,0.92);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-inner {
+            max-width: 1200px; margin: 0 auto; padding: 0 32px;
+            height: 62px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .nav-logo { display: flex; align-items: center; gap: 10px; }
+        .logo-icon {
+            width: 36px; height: 36px; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            font-size: 18px; box-shadow: 0 0 16px rgba(240,165,0,0.3);
+        }
+        .nav-logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: 0.5px; }
+        .nav-links { display: flex; align-items: center; gap: 6px; }
+        .nav-links a {
+            font-size: 13px; font-weight: 500; color: var(--muted);
+            padding: 6px 14px; border-radius: 6px; transition: color 0.15s, background 0.15s;
+        }
+        .nav-links a:hover { color: var(--text); background: var(--surf2); }
+        .nav-links .nav-active { color: var(--accent); }
+
+        .page-wrap { max-width: 1200px; margin: 0 auto; padding: 40px 32px; }
+
+        .page-header { margin-bottom: 32px; }
+        .page-header h1 { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; }
+        .page-header p { color: var(--muted); margin-top: 6px; }
+
+        /* Round selector */
+        .round-select-wrap { margin-bottom: 32px; }
+        .round-select-wrap label {
+            display: block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.6px; color: var(--muted); margin-bottom: 8px;
+        }
+        .round-select {
+            width: 100%; padding: 14px 18px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 500;
+            cursor: pointer; appearance: none; -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 16px center;
+            padding-right: 44px; transition: border-color 0.15s;
+        }
+        .round-select:focus { outline: none; border-color: var(--accent); }
+        .round-select:hover { border-color: var(--accent); }
+        .round-select option { background: var(--surface); color: var(--text); }
+
+        /* Info bar */
+        .info-bar {
+            display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; align-items: center;
+        }
+        .info-chip {
+            background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; padding: 8px 16px; font-size: 13px;
+        }
+        .info-chip .label { color: var(--muted); margin-right: 6px; }
+        .info-chip .value { font-weight: 600; }
+
+        /* Leaderboard table */
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; overflow: hidden;
+        }
+        .card-header {
+            padding: 16px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .card-header h2 { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            padding: 11px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.6px; color: var(--muted); text-align: left;
+            border-bottom: 1px solid var(--border); white-space: nowrap;
+        }
+        th.right, td.right { text-align: right; }
+        td {
+            padding: 13px 16px; font-size: 14px;
+            border-bottom: 1px solid var(--bord2); vertical-align: middle;
+        }
+        tr:last-child td { border-bottom: none; }
+        tbody tr { transition: background 0.12s; }
+        tbody tr:hover { background: var(--surf2); }
+
+        .rank-cell { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; color: var(--muted); width: 48px; }
+        .rank-1 { color: #FFD700; }
+        .rank-2 { color: #C0C0C0; }
+        .rank-3 { color: #CD7F32; }
+
+        .team-name { font-weight: 600; font-size: 15px; }
+
+        .pts { font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; }
+        .pts-total { color: var(--accent); }
+        .pts-sub { color: var(--muted); font-size: 13px; }
+
+        .empty-state {
+            text-align: center; padding: 60px 20px; color: var(--muted);
+        }
+        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+
+        .admin-link {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 13px; color: var(--muted); border: 1px solid var(--border);
+            padding: 6px 14px; border-radius: 6px; transition: all 0.15s;
+        }
+        .admin-link:hover { color: var(--accent); border-color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-inner">
+        <div class="nav-logo">
+            <div class="logo-icon">🍺</div>
+            <span>Pub Quiz</span>
+        </div>
+        <div class="nav-links">
+            <a href="/pubquiz" class="nav-active">Ergebnisse</a>
+            <a href="/pubquiz/admin" class="admin-link">Admin</a>
+        </div>
+    </div>
+</nav>
+
+<div class="page-wrap">
+    <div class="page-header">
+        <h1>Pub Quiz Ergebnisse</h1>
+        <p>Wähle einen Abend um die Ergebnisse zu sehen</p>
+    </div>
+
+    {% if rounds %}
+    <div class="round-select-wrap">
+        <label>Quiz-Abend auswählen</label>
+        <select class="round-select" onchange="window.location.href=this.value">
+            {% for r in rounds %}
+            <option value="{{ url_for('pubquiz', round_id=r.id) }}"
+                    {% if r.id == selected_id %}selected{% endif %}>
+                {{ r.datum.strftime('%d.%m.%Y') if r.datum else 'Abend #' ~ r.id }}
+                {%- if r.quizmaster %} · QM: {{ r.quizmaster }}{% endif %}
+                {%- if r.bilderrunde %} · Bilderrunde: {{ r.bilderrunde }}{% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+
+    {% if selected_round %}
+
+    <div class="info-bar">
+        <div class="info-chip">
+            <span class="label">Datum</span>
+            <span class="value">{{ selected_round.datum.strftime('%d.%m.%Y') if selected_round.datum else '—' }}</span>
+        </div>
+        <div class="info-chip">
+            <span class="label">Teams</span>
+            <span class="value">{{ team_data|length }}</span>
+        </div>
+        {% if selected_round.quizmaster %}
+        <div class="info-chip">
+            <span class="label">🎤 Quizmaster</span>
+            <span class="value">{{ selected_round.quizmaster }}</span>
+        </div>
+        {% endif %}
+        {% if selected_round.bilderrunde %}
+        <div class="info-chip">
+            <span class="label">🖼 Bilderrunde</span>
+            <span class="value">{{ selected_round.bilderrunde }}</span>
+        </div>
+        {% endif %}
+        {% if overall_avg is not none %}
+        <div class="info-chip">
+            <span class="label">Ø Punkte</span>
+            <span class="value" style="color:var(--green)">{{ overall_avg }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Overall leaderboard -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Gesamtrangliste</h2>
+            {% if overall_avg is not none %}
+            <span style="font-size:13px;color:var(--muted)">Ø <span style="color:var(--green);font-weight:700">{{ overall_avg }}</span></span>
+            {% endif %}
+        </div>
+        {% if team_data %}
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Team</th>
+                    <th class="right">Runde 1</th>
+                    <th class="right">Runde 2</th>
+                    <th class="right">Runde 3</th>
+                    <th class="right">Runde 4</th>
+                    <th class="right">Gesamt</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in team_data %}
+                <tr>
+                    <td class="rank-cell rank-{{ loop.index if loop.index <= 3 else '' }}">{{ loop.index }}</td>
+                    <td class="team-name">{{ t.name }}</td>
+                    <td class="right"><span class="pts pts-sub">{{ t.round1_points if t.round1_points is not none else '—' }}</span></td>
+                    <td class="right"><span class="pts pts-sub">{{ t.round2_points if t.round2_points is not none else '—' }}</span></td>
+                    <td class="right"><span class="pts pts-sub">{{ t.round3_points if t.round3_points is not none else '—' }}</span></td>
+                    <td class="right"><span class="pts pts-sub">{{ t.round4_points if t.round4_points is not none else '—' }}</span></td>
+                    <td class="right"><span class="pts pts-total">{{ t.total }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">📋</div>
+            <p>Noch keine Teams für diesen Abend eingetragen.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Per-round leaderboards -->
+    {% if team_data %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:20px">
+        {% for rnum in [1, 2, 3, 4] %}
+        {% set ranking = round_rankings[rnum] %}
+        {% set pts_key = 'round' ~ rnum ~ '_points' %}
+        {% set size_key = 'round' ~ rnum ~ '_size' %}
+        <div class="card">
+            <div class="card-header">
+                <h2>Runde {{ rnum }}</h2>
+                {% if round_avgs[rnum] is not none %}
+                <span style="font-size:13px;color:var(--muted)">Ø <span style="color:var(--green);font-weight:700">{{ round_avgs[rnum] }}</span></span>
+                {% endif %}
+            </div>
+            {% if ranking | selectattr(pts_key, 'ne', none) | list %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Team</th>
+                        <th class="right">Punkte</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set ns = namespace(rank=0) %}
+                    {% for t in ranking %}
+                    {% if t[pts_key] is not none %}{% set ns.rank = ns.rank + 1 %}{% endif %}
+                    <tr>
+                        <td class="rank-cell rank-{{ ns.rank if t[pts_key] is not none and ns.rank <= 3 else '' }}">
+                            {{ ns.rank if t[pts_key] is not none else '—' }}
+                        </td>
+                        <td class="team-name">
+                            {{ t.name }}
+                            {% if t[size_key] is not none %}<div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">{{ t[size_key] }} Personen</div>{% endif %}
+                        </td>
+                        <td class="right">
+                            <span class="pts {% if t[pts_key] is not none %}pts-total{% else %}pts-sub{% endif %}">
+                                {{ t[pts_key] if t[pts_key] is not none else '—' }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state" style="padding:30px 20px">
+                <p style="font-size:13px">Noch keine Punkte.</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state" style="padding: 80px 20px;">
+        <div class="icon">🍺</div>
+        <p>Noch keine Pub Quiz Abende eingetragen.</p>
+        <p style="margin-top:8px"><a href="/pubquiz/admin" style="color:var(--accent)">Im Admin-Bereich anlegen →</a></p>
+    </div>
+    {% endif %}
+</div>
+
+</body>
+</html>
