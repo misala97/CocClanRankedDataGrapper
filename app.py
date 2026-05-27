@@ -652,7 +652,7 @@ def ranked_weeks_page():
                     except (TypeError, ValueError):
                         opp_th = player_th
                     diff = opp_th - player_th
-                    adj = min((log.stars or 0) * _th_multiplier(diff), 3.0)
+                    adj = (log.stars or 0) * _th_multiplier(diff)
                     adj_attack_scores.append(adj)
                 else:
                     defense_logs.append(log.stars or 0)
@@ -686,6 +686,10 @@ def ranked_weeks_page():
             badge_class = 'badge-inactive'
             judge_label = 'Inactive'
             rank_status = 'inactive'
+        elif th_adj_score > 3.0:
+            badge_class = 'badge-legendary'
+            judge_label = 'Legendary' + missing_text
+            rank_status = 'neutral'
         elif th_adj_score >= 3.0:
             badge_class = 'badge-perfect'
             judge_label = 'Perfect' + missing_text
