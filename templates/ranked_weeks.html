@@ -259,26 +259,91 @@
             .ctrl-divider { display: none; }
             .selector { font-size: 12px; padding: 6px 10px; }
             .container { padding-top: 20px; padding-bottom: 20px; }
-            .table-wrapper { min-width: 580px; }
-            table { font-size: 12px; }
-            thead th { padding: 8px 5px; font-size: 9px; }
-            tbody td  { padding: 8px 5px; }
-            col.col-league   { width: 38px; }
-            col.col-rank     { width: 58px; }
-            col.col-player   { width: 130px; }
-            col.col-attacks  { width: 64px; }
-            col.col-avgatt   { width: 64px; }
-            col.col-defenses { width: 64px; }
-            col.col-avgdef   { width: 64px; }
-            col.col-verdict  { width: 100px; }
-            col.col-action   { width: 46px; }
-            .league-icon { width: 26px; height: 26px; }
-            .judgment { font-size: 10px; padding: 3px 7px; }
-            .avg-stars { font-size: 13px; }
-            .attacks-cell, .defenses-cell { font-size: 13px; }
-            .player-name { font-size: 12.5px; }
-            .action-btn { padding: 5px 8px; font-size: 10px; }
+            .table-scroll { display: none !important; }
+            #mobileList { display: flex; }
         }
+
+        /* ── MOBILE CARDS ── */
+        #mobileList {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .mc {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .mc-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+        }
+        .mc-player {
+            flex: 1;
+            min-width: 0;
+        }
+        .mc-player-name {
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mc-player-sub {
+            font-size: 12px;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 2px;
+        }
+        .mc-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+        .mc-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border-top: 1px solid var(--bord2);
+        }
+        .mc-stat {
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .mc-stat:first-child { border-right: 1px solid var(--bord2); }
+        .mc-stat-label {
+            font-size: 9px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+        .mc-stat-count {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 12px;
+            color: var(--muted);
+            font-weight: 600;
+        }
+        .mc-stat-avg {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 17px;
+            font-weight: 700;
+        }
+        .mc-detail {
+            display: none;
+            border-top: 1px solid var(--border);
+        }
+        .mc-detail.expanded { display: block; }
     </style>
 </head>
 <body>
@@ -373,6 +438,7 @@
             </table>
         </div>
     </div>
+    <div id="mobileList"></div>
     <div class="page-footer" id="playerCount"></div>
 
     {% else %}
@@ -741,6 +807,84 @@
             tbody.appendChild(row);
             tbody.appendChild(detailRow);
         });
+
+        // ── Mobile cards ──
+        const mobileList = document.getElementById('mobileList');
+        if (mobileList) {
+            mobileList.innerHTML = '';
+            rows.forEach(item => {
+                const leagueImg = item.league_icon
+                    ? `<img src="${escapeHTML(item.league_icon)}" class="league-icon" style="width:36px;height:36px;" title="${escapeHTML(item.league_tier||'')}">`
+                    : `<span class="league-badge" style="font-size:10px;">${escapeHTML(item.league_tier||'–')}</span>`;
+                const rankIcon = item.rank_status === 'up' ? '⬆️' : item.rank_status === 'down' ? '⬇️' : item.rank_status === 'inactive' ? '💤' : '➖';
+                const rankText = item.rank ? `#${item.rank}` : '-';
+                const verdictLabel = item.judge_label.split('(')[0].trim();
+                const verdictScore = item.is_active && item.score_100 > 0 ? ` · ${item.score_100}` : '';
+
+                const attStar = item.att_count > 0
+                    ? `<div class="star-dist" style="margin-bottom:2px;"><span class="star-dist-item">${item.att_0star}</span><span class="star-dist-item">${item.att_1star}</span><span class="star-dist-item">${item.att_2star}</span><span class="star-dist-item">${item.att_3star}</span></div>` : '';
+                const attAvg = item.att_count > 0
+                    ? `<div class="mc-stat-avg" style="color:var(--accent);">${item.att_avg.toFixed(2)}</div><div style="margin-top:1px;">${formatTHDiff(item.att_avg_th, item.player_th)}</div>`
+                    : `<div class="mc-stat-avg" style="color:var(--muted);">–</div>`;
+
+                const defStar = item.def_count > 0
+                    ? `<div class="star-dist" style="margin-bottom:2px;"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div>` : '';
+                const defAvg = item.def_count > 0
+                    ? `<div class="mc-stat-avg" style="color:var(--red);">${item.def_avg.toFixed(2)}</div><div style="margin-top:1px;">${formatTHDiff(item.def_avg_th, item.player_th, true)}</div>`
+                    : `<div class="mc-stat-avg" style="color:var(--muted);">–</div>`;
+
+                const card = document.createElement('div');
+                card.className = 'mc';
+                card.innerHTML = `
+                    <div class="mc-header">
+                        ${leagueImg}
+                        <div class="mc-player">
+                            <div class="mc-player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" style="color:inherit;" onclick="event.stopPropagation();">${escapeHTML(item.player_name)}</a></div>
+                            <div class="mc-player-sub">
+                                ${item.player_th ? `<span style="color:var(--blue);font-weight:700;">TH${item.player_th}</span> ·` : ''}
+                                🏆 ${item.trophies}
+                            </div>
+                        </div>
+                        <div class="mc-right">
+                            <span class="rank-badge rank-${item.rank_status}">${rankIcon} ${rankText}</span>
+                            <span class="judgment ${item.badge_class}">${escapeHTML(verdictLabel)}${verdictScore}</span>
+                        </div>
+                    </div>
+                    <div class="mc-stats">
+                        <div class="mc-stat">
+                            <div class="mc-stat-label">Attacks</div>
+                            ${attStar}
+                            <div class="mc-stat-count">${item.att_count} / ${item.att_max}</div>
+                            ${attAvg}
+                        </div>
+                        <div class="mc-stat">
+                            <div class="mc-stat-label">Defenses</div>
+                            ${defStar}
+                            <div class="mc-stat-count">${item.def_count} / ${item.def_max}</div>
+                            ${defAvg}
+                        </div>
+                    </div>
+                    <div class="mc-detail"></div>
+                `;
+
+                card.addEventListener('click', () => {
+                    const det = card.querySelector('.mc-detail');
+                    const open = det.classList.toggle('expanded');
+                    if (open && !det.dataset.built) {
+                        det.dataset.built = '1';
+                        det.innerHTML = `
+                            <div class="detail-grid" style="padding:12px;gap:10px;">
+                                <div class="detail-section"><h4>Attacks</h4>${buildDetailTable(item.attack_details)}</div>
+                                <div class="detail-section"><h4>Defenses</h4>${buildDetailTable(item.defense_details)}</div>
+                            </div>
+                            ${buildVerdictDetails(item)}
+                        `;
+                    }
+                });
+
+                mobileList.appendChild(card);
+            });
+        }
 
         document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown`;
         updateSortHeaders();
