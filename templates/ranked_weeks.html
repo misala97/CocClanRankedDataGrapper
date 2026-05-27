@@ -317,9 +317,11 @@
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
                         <th>Offense (0/1/2/3)</th>
                         <th class="sortable" onclick="sortTable('att_avg')" style="text-align:center;">Avg Att.</th>
+                        <th class="sortable" onclick="sortTable('att_avg_th')" style="text-align:center;">Avg Att. TH</th>
                         <th class="sortable" onclick="sortTable('def_count')">Defenses</th>
                         <th>Defense (0/1/2/3)</th>
                         <th class="sortable" onclick="sortTable('def_avg')" style="text-align:center;">Avg Def.</th>
+                        <th class="sortable" onclick="sortTable('def_avg_th')" style="text-align:center;">Avg Def. TH</th>
                         <th class="sortable" onclick="sortTable('judge')">Verdict</th>
                         <th>Action</th>
                     </tr>
@@ -352,6 +354,20 @@
         '#f0a500','#58a6ff','#3fb950','#bc8cff','#f85149',
         '#e3b341','#39d353','#a371f7','#ff7b72','#ffa657'
     ];
+
+    function calcAvgTH(details) {
+        if (!details || !details.length) return null;
+        const valid = details.filter(e => e.opponent_th != null && e.opponent_th !== '' && !isNaN(Number(e.opponent_th)));
+        if (!valid.length) return null;
+        return valid.reduce((sum, e) => sum + Number(e.opponent_th), 0) / valid.length;
+    }
+
+    function processWeekData() {
+        window.weekData.forEach(item => {
+            item.att_avg_th = calcAvgTH(item.attack_details);
+            item.def_avg_th = calcAvgTH(item.defense_details);
+        });
+    }
 
     let showInactive = true;
     let currentRankFilter = 'all';
@@ -543,9 +559,11 @@
                 <td><div class="attacks-cell">${item.att_count} / ${item.att_max}</div></td>
                 <td><div class="star-dist"><span class="star-dist-item">${item.att_0star}</span><span>|</span><span class="star-dist-item">${item.att_1star}</span><span>|</span><span class="star-dist-item">${item.att_2star}</span><span>|</span><span class="star-dist-item">${item.att_3star}</span></div></td>
                 <td style="text-align:center;color:${badgeColor};"><strong>${item.att_avg.toFixed(2)}</strong></td>
+                <td style="text-align:center;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${item.att_avg_th != null ? item.att_avg_th.toFixed(1) : '–'}</td>
                 <td><div class="defenses-cell">${item.def_count} / ${item.def_max}</div></td>
                 <td><div class="star-dist"><span class="star-dist-item">${item.def_0star}</span><span>|</span><span class="star-dist-item">${item.def_1star}</span><span>|</span><span class="star-dist-item">${item.def_2star}</span><span>|</span><span class="star-dist-item">${item.def_3star}</span></div></td>
                 <td style="text-align:center;color:${badgeColor};"><strong>${item.def_avg.toFixed(2)}</strong></td>
+                <td style="text-align:center;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${item.def_avg_th != null ? item.def_avg_th.toFixed(1) : '–'}</td>
                 <td><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}</span></td>
                 <td><button type="button" class="action-btn details-toggle">Details</button></td>
             `;
@@ -553,7 +571,7 @@
             const detailRow = document.createElement('tr');
             detailRow.className = 'detail-row';
             detailRow.innerHTML = `
-                <td class="detail-cell" colspan="11">
+                <td class="detail-cell" colspan="13">
                     ${buildHistorySection(item.player_tag)}
                     <div class="detail-grid">
                         <div class="detail-section"><h4>Attacks</h4>${buildDetailTable(item.attack_details)}</div>
@@ -640,6 +658,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        processWeekData();
         buildTable();
         buildTopChart();
     });
