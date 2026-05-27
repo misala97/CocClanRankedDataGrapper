@@ -681,28 +681,31 @@ def ranked_weeks_page():
         # TH-adjusted score: each attack weighted ±10% per TH level vs opponent,
         # divided by att_max so missing attacks directly tank the score.
         th_adj_score = round(sum(adj_attack_scores) / max_attacks, 3) if max_attacks > 0 else 0.0
+        # Convert to 0-100 scale (max possible = 3.9: all 3-star vs TH+3) and use this
+        # single value for both the verdict and the displayed number so they always match.
+        score_100 = min(round(th_adj_score * 100 / 3.9), 100)
 
         if not is_active:
             badge_class = 'badge-inactive'
             judge_label = 'Inactive'
             rank_status = 'inactive'
-        elif th_adj_score > 3.3:
+        elif score_100 >= 85:
             badge_class = 'badge-legendary'
             judge_label = 'Legendary' + missing_text
             rank_status = 'neutral'
-        elif th_adj_score >= 2.9:
+        elif score_100 >= 74:
             badge_class = 'badge-perfect'
             judge_label = 'Perfect' + missing_text
             rank_status = 'neutral'
-        elif th_adj_score >= 2.5:
+        elif score_100 >= 64:
             badge_class = 'badge-wow'
             judge_label = 'Very Good' + missing_text
             rank_status = 'neutral'
-        elif th_adj_score >= 2.0:
+        elif score_100 >= 51:
             badge_class = 'badge-good'
             judge_label = 'Good' + missing_text
             rank_status = 'neutral'
-        elif th_adj_score >= 1.25:
+        elif score_100 >= 32:
             badge_class = 'badge-warning'
             judge_label = 'Bad' + missing_text
             rank_status = 'neutral'
@@ -735,6 +738,7 @@ def ranked_weeks_page():
             'att_3star': att_3star,
             'att_avg': att_avg,
             'th_adj_score': th_adj_score,
+            'score_100': score_100,
             'player_th': player_th or player.current_th or 0,
             'def_count': def_count,
             'def_max': max_attacks,

@@ -629,7 +629,7 @@
                 <td><div class="defenses-cell">${item.def_count} / ${item.def_max}</div></td>
                 <td><div class="star-dist"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div></td>
                 <td style="text-align:center;"><strong style="color:var(--red);">${item.def_avg.toFixed(2)}</strong><br><span style="font-size:10px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${item.def_avg_th != null ? 'TH ' + item.def_avg_th.toFixed(1) : ''}</span></td>
-                <td><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}${item.is_active ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${Math.min(Math.round(item.th_adj_score * 100 / 3.9), 100)}` : ''}</span></td>
+                <td><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}${item.is_active ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${item.score_100}` : ''}</span></td>
                 <td><button type="button" class="action-btn details-toggle">Details</button></td>
             `;
 
