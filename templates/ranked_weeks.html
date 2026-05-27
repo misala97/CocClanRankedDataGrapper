@@ -523,7 +523,7 @@
             const oppTH = parseInt(a.opponent_th) || playerTH;
             const diff = oppTH - playerTH;
             const mult = thMultiplier(diff);
-            const adj = Math.min((a.stars || 0) * mult, 3.0);
+            const adj = (a.stars || 0) * mult;
             totalAdj += adj;
             const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
             const diffColor = diff > 0 ? 'var(--green)' : diff < 0 ? 'var(--red)' : 'var(--muted)';
@@ -579,7 +579,7 @@
             rows.sort((a, b) => {
                 const columnKey = currentSort.column === 'league' ? 'league_tier'
                     : currentSort.column === 'player' ? 'player_name'
-                    : currentSort.column === 'judge' ? 'judge_label'
+                    : currentSort.column === 'judge' ? 'th_adj_score'
                     : currentSort.column;
                 let aValue = a[columnKey];
                 let bValue = b[columnKey];
