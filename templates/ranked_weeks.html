@@ -424,12 +424,14 @@
         return m ? parseInt(m[1], 10) : 0;
     }
 
-    function formatTHDiff(avgTH, playerTH) {
+    function formatTHDiff(avgTH, playerTH, higherIsBad = false) {
         if (avgTH == null || !playerTH) return '';
         const diff = avgTH - playerTH;
         const sign = diff > 0 ? '+' : '';
         const arrow = diff > 0.05 ? ' ↑' : diff < -0.05 ? ' ↓' : ' →';
-        const color = diff > 0.05 ? 'var(--green)' : diff < -0.05 ? 'var(--red)' : 'var(--muted)';
+        let color = 'var(--muted)';
+        if (diff > 0.05)  color = higherIsBad ? 'var(--red)'   : 'var(--green)';
+        if (diff < -0.05) color = higherIsBad ? 'var(--green)' : 'var(--red)';
         return `<span style="color:${color};font-family:'Rajdhani',sans-serif;font-weight:700;">TH${sign}${diff.toFixed(1)}${arrow}</span>`;
     }
 
@@ -655,7 +657,7 @@
                 <td style="text-align:center;"><strong style="color:var(--accent);">${item.att_avg.toFixed(2)}</strong><br>${formatTHDiff(item.att_avg_th, item.player_th)}</td>
                 <td><div class="defenses-cell">${item.def_count} / ${item.def_max}</div></td>
                 <td><div class="star-dist"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div></td>
-                <td style="text-align:center;"><strong style="color:var(--red);">${item.def_avg.toFixed(2)}</strong><br>${formatTHDiff(item.def_avg_th, item.player_th)}</td>
+                <td style="text-align:center;"><strong style="color:var(--red);">${item.def_avg.toFixed(2)}</strong><br>${formatTHDiff(item.def_avg_th, item.player_th, true)}</td>
                 <td><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}${item.is_active ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${item.score_100}` : ''}</span></td>
                 <td><button type="button" class="action-btn details-toggle">Details</button></td>
             `;
