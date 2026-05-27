@@ -621,6 +621,8 @@ def ranked_weeks_page():
         defense_logs = []
         attack_details = []
         defense_details = []
+        adj_attack_scores = []
+        player_th = 0
 
         if ranked_week:
             league_tier = ranked_week.league_tier or league_tier
@@ -628,6 +630,11 @@ def ranked_weeks_page():
             rank = ranked_week.rank
             trophies = ranked_week.trophies
             max_attacks = ranked_week.max_attacks or 0
+            player_th = ranked_week.townhall or 0
+
+            def _th_multiplier(diff):
+                clamped = max(-3, min(3, diff))
+                return 1.0 + clamped * 0.10
 
             for log in ranked_week.battle_logs:
                 detail_entry = {
@@ -640,6 +647,13 @@ def ranked_weeks_page():
                 if log.attack is True or log.attack == 1:
                     attack_logs.append(log.stars or 0)
                     attack_details.append(detail_entry)
+                    try:
+                        opp_th = int(log.opponent_th)
+                    except (TypeError, ValueError):
+                        opp_th = player_th
+                    diff = opp_th - player_th
+                    adj = min((log.stars or 0) * _th_multiplier(diff), 3.0)
+                    adj_attack_scores.append(adj)
                 else:
                     defense_logs.append(log.stars or 0)
                     defense_details.append(detail_entry)
@@ -664,23 +678,27 @@ def ranked_weeks_page():
         missing_attacks = max(0, max_attacks - att_count)
         missing_text = f" ({missing_attacks} missing)" if missing_attacks > 0 else ""
 
+        # TH-adjusted score: each attack weighted ±10% per TH level vs opponent,
+        # divided by att_max so missing attacks directly tank the score.
+        th_adj_score = round(sum(adj_attack_scores) / max_attacks, 3) if max_attacks > 0 else 0.0
+
         if not is_active:
             badge_class = 'badge-inactive'
             judge_label = 'Inactive'
             rank_status = 'inactive'
-        elif att_avg >= 3.0 and att_count > 0:
+        elif th_adj_score >= 3.0:
             badge_class = 'badge-perfect'
             judge_label = 'Perfect' + missing_text
             rank_status = 'neutral'
-        elif att_avg >= 2.5:
+        elif th_adj_score >= 2.5:
             badge_class = 'badge-wow'
             judge_label = 'Very Good' + missing_text
             rank_status = 'neutral'
-        elif att_avg >= 2.0:
+        elif th_adj_score >= 2.0:
             badge_class = 'badge-good'
             judge_label = 'Good' + missing_text
             rank_status = 'neutral'
-        elif att_avg >= 1.5:
+        elif th_adj_score >= 1.5:
             badge_class = 'badge-warning'
             judge_label = 'Bad' + missing_text
             rank_status = 'neutral'
@@ -712,6 +730,8 @@ def ranked_weeks_page():
             'att_2star': att_2star,
             'att_3star': att_3star,
             'att_avg': att_avg,
+            'th_adj_score': th_adj_score,
+            'player_th': player_th,
             'def_count': def_count,
             'def_max': max_attacks,
             'def_0star': def_0star,
