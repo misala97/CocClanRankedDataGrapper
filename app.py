@@ -630,7 +630,7 @@ def ranked_weeks_page():
             rank = ranked_week.rank
             trophies = ranked_week.trophies
             max_attacks = ranked_week.max_attacks or 0
-            player_th = ranked_week.townhall or 0
+            player_th = ranked_week.townhall or player.current_th or 0
 
             def _th_multiplier(diff):
                 clamped = max(-3, min(3, diff))
@@ -689,7 +689,7 @@ def ranked_weeks_page():
             badge_class = 'badge-inactive'
             judge_label = 'Inactive'
             rank_status = 'inactive'
-        elif score_100 >= 85:
+        elif score_100 >= 80:
             badge_class = 'badge-legendary'
             judge_label = 'Legendary' + missing_text
             rank_status = 'neutral'
