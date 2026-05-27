@@ -686,11 +686,11 @@ def ranked_weeks_page():
             badge_class = 'badge-inactive'
             judge_label = 'Inactive'
             rank_status = 'inactive'
-        elif th_adj_score > 3.0:
+        elif th_adj_score > 3.3:
             badge_class = 'badge-legendary'
             judge_label = 'Legendary' + missing_text
             rank_status = 'neutral'
-        elif th_adj_score >= 3.0:
+        elif th_adj_score >= 2.9:
             badge_class = 'badge-perfect'
             judge_label = 'Perfect' + missing_text
             rank_status = 'neutral'
@@ -702,7 +702,7 @@ def ranked_weeks_page():
             badge_class = 'badge-good'
             judge_label = 'Good' + missing_text
             rank_status = 'neutral'
-        elif th_adj_score >= 1.5:
+        elif th_adj_score >= 1.25:
             badge_class = 'badge-warning'
             judge_label = 'Bad' + missing_text
             rank_status = 'neutral'
@@ -735,7 +735,7 @@ def ranked_weeks_page():
             'att_3star': att_3star,
             'att_avg': att_avg,
             'th_adj_score': th_adj_score,
-            'player_th': player_th,
+            'player_th': player_th or player.current_th or 0,
             'def_count': def_count,
             'def_max': max_attacks,
             'def_0star': def_0star,
