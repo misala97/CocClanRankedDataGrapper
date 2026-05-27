@@ -105,34 +105,50 @@
 
         /* ── TABLE ── */
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--border); }
-        .table-wrapper { background: var(--surface); min-width: 900px; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .table-wrapper { background: var(--surface); min-width: 700px; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+        col.col-league   { width: 52px; }
+        col.col-rank     { width: 78px; }
+        col.col-player   { width: 150px; }
+        col.col-attacks  { width: 80px; }
+        col.col-avgatt   { width: 80px; }
+        col.col-defenses { width: 80px; }
+        col.col-avgdef   { width: 80px; }
+        col.col-verdict  { width: 130px; }
+        col.col-action   { width: 68px; }
         thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
         thead th {
-            padding: 11px 16px; text-align: left; font-weight: 600; color: var(--muted);
-            font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
+            padding: 11px 8px; text-align: left; font-weight: 600; color: var(--muted);
+            font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; white-space: nowrap; overflow: hidden;
         }
         tbody tr { border-bottom: 1px solid var(--bord2); transition: background 0.12s; }
         tbody tr:last-child { border-bottom: none; }
         tbody tr:hover { background: rgba(255,255,255,0.03); }
-        tbody td { padding: 12px 16px; vertical-align: middle; }
+        tbody td { padding: 12px 8px; vertical-align: middle; overflow: hidden; }
+
+        /* ── GROUP SEPARATORS: after Player(3), Avg Att(5), Avg Def(7) ── */
+        thead th:nth-child(3), tbody td:nth-child(3),
+        thead th:nth-child(5), tbody td:nth-child(5),
+        thead th:nth-child(7), tbody td:nth-child(7) {
+            border-right: 3px solid var(--border);
+        }
 
         /* ── LEAGUE ── */
-        .league-cell { display: flex; align-items: center; gap: 10px; }
+        .league-cell { display: flex; align-items: center; justify-content: center; gap: 10px; }
         .league-badge {
             padding: 3px 10px; background: rgba(88,166,255,0.12); color: var(--blue);
             border: 1px solid rgba(88,166,255,0.25); border-radius: 4px;
             font-size: 11px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap; font-family: 'Rajdhani', sans-serif;
         }
         .league-icon {
-            width: 34px; height: 34px; border-radius: 6px; object-fit: cover;
+            width: 39px; height: 39px; border-radius: 6px; object-fit: cover;
             cursor: help; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
         }
 
         /* ── RANK BADGE ── */
         .rank-badge {
             display: inline-flex; align-items: center; gap: 5px;
-            padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;
+            padding: 5px 11px; border-radius: 6px; font-size: 13px; font-weight: 700;
             border: 1px solid; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.3px; white-space: nowrap;
         }
         .rank-up       { background: rgba(63,185,80,0.12);   color: var(--green);  border-color: rgba(63,185,80,0.3); }
@@ -143,23 +159,23 @@
         /* ── PLAYER CELL ── */
         .player-cell  { display: flex; align-items: center; gap: 10px; }
         .player-info  { display: flex; flex-direction: column; gap: 2px; }
-        .player-name  { font-weight: 600; color: var(--text); font-size: 13.5px; }
-        .player-trophy { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 3px; }
+        .player-name  { font-weight: 600; color: var(--text); font-size: 14.5px; }
+        .player-trophy { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 3px; }
 
         /* ── ATTACKS / DEFENSES ── */
-        .attacks-cell, .defenses-cell { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 600; color: var(--muted); }
+        .attacks-cell, .defenses-cell { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 600; color: var(--muted); }
 
         /* ── STAR DISTRIBUTION ── */
         .star-dist { display: flex; gap: 2px; align-items: center; }
         .star-dist-item {
-            padding: 1px 5px; background: var(--surf2); border: 1px solid var(--bord2);
-            border-radius: 4px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 600;
+            padding: 2px 6px; background: var(--surf2); border: 1px solid var(--bord2);
+            border-radius: 4px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600;
         }
 
         /* ── JUDGMENT BADGES ── */
         .judgment {
-            display: inline-block; padding: 4px 11px; border-radius: 20px;
-            font-size: 11px; font-weight: 700; border: 1px solid; white-space: nowrap;
+            display: inline-block; padding: 5px 12px; border-radius: 20px;
+            font-size: 12px; font-weight: 700; border: 1px solid; white-space: nowrap;
             letter-spacing: 0.4px; font-family: 'Rajdhani', sans-serif; text-transform: uppercase;
         }
         .badge-godlike  { background: rgba(188,140,255,0.15); color: var(--purple); border-color: rgba(188,140,255,0.4); }
@@ -179,7 +195,7 @@
         .sort-active.desc::after { content: ' ↓'; font-size: 0.85em; }
 
         /* ── AVG STARS ── */
-        .avg-stars { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; color: var(--accent); }
+        .avg-stars { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; color: var(--accent); }
         .avg-stars.defense { color: var(--red); }
 
         /* ── DETAIL ROW ── */
@@ -243,6 +259,25 @@
             .ctrl-divider { display: none; }
             .selector { font-size: 12px; padding: 6px 10px; }
             .container { padding-top: 20px; padding-bottom: 20px; }
+            .table-wrapper { min-width: 580px; }
+            table { font-size: 12px; }
+            thead th { padding: 8px 5px; font-size: 9px; }
+            tbody td  { padding: 8px 5px; }
+            col.col-league   { width: 38px; }
+            col.col-rank     { width: 58px; }
+            col.col-player   { width: 130px; }
+            col.col-attacks  { width: 64px; }
+            col.col-avgatt   { width: 64px; }
+            col.col-defenses { width: 64px; }
+            col.col-avgdef   { width: 64px; }
+            col.col-verdict  { width: 100px; }
+            col.col-action   { width: 46px; }
+            .league-icon { width: 26px; height: 26px; }
+            .judgment { font-size: 10px; padding: 3px 7px; }
+            .avg-stars { font-size: 13px; }
+            .attacks-cell, .defenses-cell { font-size: 13px; }
+            .player-name { font-size: 12.5px; }
+            .action-btn { padding: 5px 8px; font-size: 10px; }
         }
     </style>
 </head>
@@ -310,19 +345,28 @@
     <div class="table-scroll">
         <div class="table-wrapper">
             <table id="statsTable">
+                <colgroup>
+                    <col class="col-league">
+                    <col class="col-rank">
+                    <col class="col-player">
+                    <col class="col-attacks">
+                    <col class="col-avgatt">
+                    <col class="col-defenses">
+                    <col class="col-avgdef">
+                    <col class="col-verdict">
+                    <col class="col-action">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th class="sortable" onclick="sortTable('league')">League</th>
-                        <th class="sortable" onclick="sortTable('rank')">Rank</th>
+                        <th class="sortable" onclick="sortTable('league')" style="text-align:center;">League</th>
+                        <th class="sortable" onclick="sortTable('rank')" style="text-align:center;">Rank</th>
                         <th class="sortable" onclick="sortTable('player')">Player</th>
-                        <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
-                        <th>Stars</th>
+                        <th class="sortable" onclick="sortTable('att_count')" style="text-align:center;">Attacks</th>
                         <th class="sortable" onclick="sortTable('att_avg')" style="text-align:center;">Avg Att.</th>
-                        <th class="sortable" onclick="sortTable('def_count')">Defenses</th>
-                        <th>Stars</th>
+                        <th class="sortable" onclick="sortTable('def_count')" style="text-align:center;">Defenses</th>
                         <th class="sortable" onclick="sortTable('def_avg')" style="text-align:center;">Avg Def.</th>
-                        <th class="sortable" onclick="sortTable('judge')">Verdict</th>
-                        <th>Action</th>
+                        <th class="sortable" onclick="sortTable('judge')" style="text-align:center;">Verdict</th>
+                        <th style="text-align:center;">Action</th>
                     </tr>
                 </thead>
                 <tbody id="statsBody"></tbody>
@@ -646,26 +690,24 @@
             const badgeColor = getJudgeColor(item.badge_class);
 
             row.innerHTML = `
-                <td>${leagueCell}</td>
-                <td><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span></td>
+                <td style="text-align:center;">${leagueCell}</td>
+                <td style="text-align:center;"><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span></td>
                 <td><div class="player-cell"><div class="player-info">
                     <div class="player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" style="color:inherit;">${escapeHTML(item.player_name)}</a></div>
                     <div class="player-trophy" style="gap:6px;">${item.player_th ? `<span style="color:var(--blue);font-weight:700;">TH${item.player_th}</span> ·` : ''} 🏆 ${item.trophies}</div>
                 </div></div></td>
-                <td><div class="attacks-cell">${item.att_count} / ${item.att_max}</div></td>
-                <td><div class="star-dist"><span class="star-dist-item">${item.att_0star}</span><span class="star-dist-item">${item.att_1star}</span><span class="star-dist-item">${item.att_2star}</span><span class="star-dist-item">${item.att_3star}</span></div></td>
-                <td style="text-align:center;"><strong style="color:var(--accent);">${item.att_avg.toFixed(2)}</strong><br>${formatTHDiff(item.att_avg_th, item.player_th)}</td>
-                <td><div class="defenses-cell">${item.def_count} / ${item.def_max}</div></td>
-                <td><div class="star-dist"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div></td>
-                <td style="text-align:center;"><strong style="color:var(--red);">${item.def_avg.toFixed(2)}</strong><br>${formatTHDiff(item.def_avg_th, item.player_th, true)}</td>
-                <td><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}${item.is_active ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${item.score_100}` : ''}</span></td>
-                <td><button type="button" class="action-btn details-toggle">Details</button></td>
+                <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.att_count > 0 ? `<div class="star-dist"><span class="star-dist-item">${item.att_0star}</span><span class="star-dist-item">${item.att_1star}</span><span class="star-dist-item">${item.att_2star}</span><span class="star-dist-item">${item.att_3star}</span></div>` : ''}<div class="attacks-cell" style="font-size:12px;">${item.att_count} / ${item.att_max}</div></div></td>
+                <td style="text-align:center;">${item.att_count > 0 ? `<strong style="color:var(--accent);">${item.att_avg.toFixed(2)}</strong><br>${formatTHDiff(item.att_avg_th, item.player_th)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.def_count > 0 ? `<div class="star-dist"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div>` : ''}<div class="defenses-cell" style="font-size:12px;">${item.def_count} / ${item.def_max}</div></div></td>
+                <td style="text-align:center;">${item.def_count > 0 ? `<strong style="color:var(--red);">${item.def_avg.toFixed(2)}</strong><br>${formatTHDiff(item.def_avg_th, item.player_th, true)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td style="text-align:center;"><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}${item.is_active && item.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${item.score_100}` : ''}</span></td>
+                <td style="text-align:center;"><button type="button" class="action-btn details-toggle">Details</button></td>
             `;
 
             const detailRow = document.createElement('tr');
             detailRow.className = 'detail-row';
             detailRow.innerHTML = `
-                <td class="detail-cell" colspan="11">
+                <td class="detail-cell" colspan="9">
                     ${buildHistorySection(item.player_tag)}
                     <div class="detail-grid">
                         <div class="detail-section"><h4>Attacks</h4>${buildDetailTable(item.attack_details)}</div>
