@@ -247,6 +247,13 @@
         .history-section h4 { margin-bottom: 12px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
         .history-chart-wrap { position: relative; height: 180px; margin-bottom: 4px; }
 
+        /* ── MOBILE CARDS (base — hidden on desktop) ── */
+        #mobileList {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+
         /* ── RESPONSIVE ── */
         @media (max-width: 900px) {
             .nav-inner, .page-header, .container { padding-left: 20px; padding-right: 20px; }
@@ -261,13 +268,6 @@
             .container { padding-top: 20px; padding-bottom: 20px; }
             .table-scroll { display: none !important; }
             #mobileList { display: flex; }
-        }
-
-        /* ── MOBILE CARDS ── */
-        #mobileList {
-            display: none;
-            flex-direction: column;
-            gap: 8px;
         }
         .mc {
             background: var(--surface);
