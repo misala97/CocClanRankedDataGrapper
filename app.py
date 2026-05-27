@@ -703,29 +703,33 @@ def ranked_weeks_page():
             badge_class = 'badge-inactive'
             judge_label = 'Inactive'
             rank_status = 'inactive'
-        elif score_100 >= 80:
-            badge_class = 'badge-legendary'
-            judge_label = 'Legendary' + missing_text
+        elif score_100 >= 83:
+            badge_class = 'badge-godlike'
+            judge_label = 'Godlike' + missing_text
             rank_status = 'neutral'
-        elif score_100 >= 74:
-            badge_class = 'badge-perfect'
-            judge_label = 'Perfect' + missing_text
+        elif score_100 >= 76:
+            badge_class = 'badge-dominant'
+            judge_label = 'Dominant' + missing_text
             rank_status = 'neutral'
-        elif score_100 >= 64:
+        elif score_100 >= 62:
             badge_class = 'badge-wow'
             judge_label = 'Very Good' + missing_text
             rank_status = 'neutral'
-        elif score_100 >= 51:
+        elif score_100 >= 55:
             badge_class = 'badge-good'
             judge_label = 'Good' + missing_text
             rank_status = 'neutral'
-        elif score_100 >= 32:
+        elif score_100 >= 41:
             badge_class = 'badge-warning'
             judge_label = 'Bad' + missing_text
             rank_status = 'neutral'
-        else:
+        elif score_100 >= 28:
             badge_class = 'badge-suck'
             judge_label = 'Disaster' + missing_text
+            rank_status = 'neutral'
+        else:
+            badge_class = 'badge-useless'
+            judge_label = 'Useless' + missing_text
             rank_status = 'neutral'
 
         thresholds = get_league_thresholds(league_tier)
