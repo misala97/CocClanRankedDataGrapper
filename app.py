@@ -623,6 +623,7 @@ def ranked_weeks_page():
         defense_details = []
         adj_attack_scores = []
         player_th = 0
+        th_offset = 0
 
         if ranked_week:
             league_tier = ranked_week.league_tier or league_tier
