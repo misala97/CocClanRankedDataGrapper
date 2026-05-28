@@ -1031,6 +1031,7 @@ def battle_history_page():
             'time': local_time.strftime('%d.%m.%y %H:%M') if local_time else '–',
             'time_sort': local_time.isoformat() if local_time else '',
             'opponent_tag': b.opponent_tag or '–',
+            'type': b.type or '–',
             'stars': stars,
             'percentage': b.percentage or 0,
             'gold': b.loot_gold or 0,
