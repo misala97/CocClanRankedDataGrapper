@@ -199,28 +199,10 @@
         .empty-state .icon { font-size: 36px; margin-bottom: 10px; }
         .empty-round { text-align: center; padding: 24px 12px; color: var(--muted); font-size: 13px; }
 
-        /* ── DESKTOP (≥ 640px) ── */
+        /* ── TABLET+ spacing (≥ 640px) — tabs still active ── */
         @media (min-width: 640px) {
-            /* Hide mobile-only elements */
-            .tab-bar { display: none; }
-            .hide-mobile { display: flex; }
-            .round-pts-inline { display: none; }
-
-            /* Show all panels regardless of active state */
-            .panel { display: block !important; }
-
-            /* Round grid layout */
-            .round-panels-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 12px;
-                margin-top: 16px;
-            }
-
-            /* Show round columns in overall table */
-            .col-round { display: table-cell; }
-
             .nav-inner { padding: 0 32px; height: 62px; }
+            .tab-bar { top: 62px; }
             .logo-icon { width: 36px; height: 36px; font-size: 18px; }
             .nav-logo span { font-size: 19px; }
             .page-wrap { padding: 40px 32px; }
@@ -238,8 +220,23 @@
             .pts { font-size: 18px; }
         }
 
-        @media (min-width: 800px) {
-            .round-panels-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        /* ── DESKTOP (≥ 1024px) — hide tabs, show grid ── */
+        @media (min-width: 1024px) {
+            .tab-bar { display: none; }
+            .hide-mobile { display: flex; }
+            .round-pts-inline { display: none; }
+            .panel { display: block !important; }
+            .col-round { display: table-cell; }
+            .round-panels-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 16px;
+                margin-top: 16px;
+            }
+        }
+
+        @media (min-width: 1300px) {
+            .round-panels-grid { grid-template-columns: repeat(4, 1fr); }
         }
     </style>
 </head>
