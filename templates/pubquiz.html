@@ -180,9 +180,6 @@
         .round-pts-inline span {
             font-size: 11px; color: var(--muted); font-weight: 400;
         }
-        .round-pts-inline span b {
-            color: var(--text); font-weight: 600;
-        }
 
         .pts { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; }
         .pts-total { color: var(--accent); }
@@ -357,10 +354,10 @@
                         <td class="team-name">
                             {{ t.name }}
                             <div class="round-pts-inline">
-                                <span>R1 <b>{{ t.round1_points if t.round1_points is not none else '—' }}</b></span>
-                                <span>R2 <b>{{ t.round2_points if t.round2_points is not none else '—' }}</b></span>
-                                <span>R3 <b>{{ t.round3_points if t.round3_points is not none else '—' }}</b></span>
-                                <span>R4 <b>{{ t.round4_points if t.round4_points is not none else '—' }}</b></span>
+                                <span>R1 {{ t.round1_points if t.round1_points is not none else '—' }}</span>
+                                <span>R2 {{ t.round2_points if t.round2_points is not none else '—' }}</span>
+                                <span>R3 {{ t.round3_points if t.round3_points is not none else '—' }}</span>
+                                <span>R4 {{ t.round4_points if t.round4_points is not none else '—' }}</span>
                             </div>
                         </td>
                         <td class="right col-round"><span class="pts pts-sub">{{ t.round1_points if t.round1_points is not none else '—' }}</span></td>
