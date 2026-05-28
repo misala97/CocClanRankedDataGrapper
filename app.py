@@ -696,13 +696,7 @@ def ranked_weeks_page():
         # TH-adjusted score: each attack weighted ±10% per TH level vs opponent,
         # divided by att_max so missing attacks directly tank the score.
         th_adj_score = round(sum(adj_attack_scores) / max_attacks, 3) if max_attacks > 0 else 0.0
-        if player_th >= 18:
-            max_possible = 3.00  # 3 * 1.00
-        elif player_th == 17:
-            max_possible = 3.15  # 3 * 1.05
-        else:
-            max_possible = 3.45  # 3 * 1.15
-        score_100 = min(round(th_adj_score * 100 / max_possible), 100)
+        score_100 = min(round(th_adj_score * 100 / 3.45), 100)
 
         if not is_active:
             badge_class = 'badge-inactive'
