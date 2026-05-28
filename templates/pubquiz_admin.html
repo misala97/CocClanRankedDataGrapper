@@ -350,7 +350,7 @@
                                 <tr>
                                     <td class="team-col">{{ t.name }}</td>
                                     <td>
-                                        <input type="number" name="team_{{ t.id }}_points" min="0"
+                                        <input type="number" name="team_{{ t.id }}_points" min="0" step="0.01"
                                                value="{{ t[pts_attr] if t[pts_attr] is not none else '' }}"
                                                placeholder="—">
                                     </td>

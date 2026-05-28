@@ -69,3 +69,6 @@ WHERE raid_weekend_log.raid_weekend_id = %(raid_weekend_id_1)s AND raid_weekend_
 2026-05-28 15:20:30 - INFO - [task_update_raid_weekend] - Skipping task because not weekend
 2026-05-28 15:20:39 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:20:39.252497  
 2026-05-28 15:22:14 - INFO - [task_update_raid_weekend] - Skipping task because not weekend
+2026-05-28 15:53:32 - INFO - [task_update_raid_weekend] - Skipping task because not weekend
+2026-05-28 15:56:28 - INFO - [task_update_raid_weekend] - Skipping task because not weekend
+2026-05-28 15:57:09 - INFO - [task_update_raid_weekend] - Skipping task because not weekend

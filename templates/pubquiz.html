@@ -280,9 +280,13 @@
                 </tr>
             </thead>
             <tbody>
+                {% set ns = namespace(rank=0, pos=0, prev_total=none) %}
                 {% for t in team_data %}
+                {% set ns.pos = ns.pos + 1 %}
+                {% if t.total != ns.prev_total %}{% set ns.rank = ns.pos %}{% endif %}
+                {% set ns.prev_total = t.total %}
                 <tr>
-                    <td class="rank-cell rank-{{ loop.index if loop.index <= 3 else '' }}">{{ loop.index }}</td>
+                    <td class="rank-cell rank-{{ ns.rank if ns.rank <= 3 else '' }}">{{ ns.rank }}</td>
                     <td class="team-name">{{ t.name }}</td>
                     <td class="right col-round"><span class="pts pts-sub">{{ t.round1_points if t.round1_points is not none else '—' }}</span></td>
                     <td class="right col-round"><span class="pts pts-sub">{{ t.round2_points if t.round2_points is not none else '—' }}</span></td>
@@ -325,9 +329,13 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% set ns = namespace(rank=0) %}
+                    {% set ns = namespace(rank=0, pos=0, prev_pts=none) %}
                     {% for t in ranking %}
-                    {% if t[pts_key] is not none %}{% set ns.rank = ns.rank + 1 %}{% endif %}
+                    {% if t[pts_key] is not none %}
+                    {% set ns.pos = ns.pos + 1 %}
+                    {% if t[pts_key] != ns.prev_pts %}{% set ns.rank = ns.pos %}{% endif %}
+                    {% set ns.prev_pts = t[pts_key] %}
+                    {% endif %}
                     <tr>
                         <td class="rank-cell rank-{{ ns.rank if t[pts_key] is not none and ns.rank <= 3 else '' }}">
                             {{ ns.rank if t[pts_key] is not none else '—' }}

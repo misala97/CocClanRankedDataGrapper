@@ -486,15 +486,27 @@ def index():
         root_logger.warning(f"Could not fetch clan data for homepage: {e}")
         clan_name = "Our Clan"
     
-    total_members = Player.query.count()
+    total_members = Player.query.filter_by(in_clan=True).count()
     now = dt.datetime.now(dt.timezone.utc)
     week_start_date = (now - dt.timedelta(days=now.weekday())).date()
     week_start = dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day, tzinfo=dt.timezone.utc)
 
-    battle_logs_this_week = BattleLog.query.filter(
+    from sqlalchemy import func as sa_func
+    week_logs = BattleLog.query.filter(
         BattleLog.time >= week_start,
         BattleLog.attack == True
-    ).count()
+    ).all()
+    first_log_time_idx = dict(
+        db.session.query(BattleLog.player_tag, sa_func.min(BattleLog.time))
+        .group_by(BattleLog.player_tag)
+        .all()
+    )
+    import_window = dt.timedelta(minutes=2)
+    battle_logs_this_week = sum(
+        1 for b in week_logs
+        if not (b.time and first_log_time_idx.get(b.player_tag) and
+                b.time <= first_log_time_idx[b.player_tag] + import_window)
+    )
     ranked_battles_this_week = RankedBattleLog.query.filter(
         RankedBattleLog.ranked_week.has(RankedWeek.start_day >= week_start_date),
         RankedBattleLog.attack == True
@@ -1506,7 +1518,10 @@ def pubquiz_save_round_scores(round_id, round_num):
     for team in teams:
         pts_str = request.form.get(f'team_{team.id}_points', '').strip()
         size_str = request.form.get(f'team_{team.id}_size', '').strip()
-        pts = int(pts_str) if pts_str.lstrip('-').isdigit() else None
+        try:
+            pts = float(pts_str)
+        except ValueError:
+            pts = None
         size = int(size_str) if size_str.isdigit() and int(size_str) > 0 else None
         if round_num == 1:
             team.round1_points, team.round1_size = pts, size
@@ -1526,13 +1541,20 @@ def pubquiz_update_team(team_id):
     team = PubQuizTeams.query.get_or_404(team_id)
     team.name = request.form.get('name', team.name).strip()
 
+    def _float_pts(key, fallback):
+        v = request.form.get(key, '').strip()
+        try:
+            return float(v)
+        except ValueError:
+            return fallback
+
     def _int(key, fallback):
         v = request.form.get(key, '').strip()
         return int(v) if v.isdigit() else fallback
 
-    team.round1_points = _int('round1_points', team.round1_points)
-    team.round2_points = _int('round2_points', team.round2_points)
-    team.round3_points = _int('round3_points', team.round3_points)
+    team.round1_points = _float_pts('round1_points', team.round1_points)
+    team.round2_points = _float_pts('round2_points', team.round2_points)
+    team.round3_points = _float_pts('round3_points', team.round3_points)
     team.round1_size   = _int('round1_size',   team.round1_size)
     team.round2_size   = _int('round2_size',   team.round2_size)
     team.round3_size   = _int('round3_size',   team.round3_size)
