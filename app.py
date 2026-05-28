@@ -925,7 +925,7 @@ def raid_weekend_page():
 @app.route('/battles')
 def battle_history_page():
     """Battle History page"""
-    selected_type = request.args.get('type', 'homeVillage')
+    selected_type = request.args.get('type', 'all')
     selected_week_str = request.args.get('week', None)
 
     now = dt.datetime.now(dt.timezone.utc)
@@ -981,6 +981,26 @@ def battle_history_page():
         base_q = base_q.filter(BattleLog.type == selected_type)
 
     attacks = base_q.options(selectinload(BattleLog.player)).all()
+
+    # For each player find the date of their very first ever battle log.
+    # On that date the server bulk-imported historical logs when they joined,
+    # so all attacks on that date are noise and must be excluded.
+    from sqlalchemy import func as sa_func
+    first_log_date = dict(
+        db.session.query(BattleLog.player_tag, sa_func.min(BattleLog.time))
+        .group_by(BattleLog.player_tag)
+        .all()
+    )
+    first_log_date = {
+        tag: ts.date() if ts else None
+        for tag, ts in first_log_date.items()
+    }
+
+    attacks = [
+        b for b in attacks
+        if not (b.time and first_log_date.get(b.player_tag) and
+                b.time.date() == first_log_date[b.player_tag])
+    ]
 
     total_attacks = len(attacks)
     total_gold    = sum(b.loot_gold or 0 for b in attacks)

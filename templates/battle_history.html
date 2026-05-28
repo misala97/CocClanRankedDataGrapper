@@ -268,8 +268,9 @@
             <div class="ctrl-divider"></div>
             <label>Type</label>
             <select name="type" class="selector" onchange="this.form.submit()">
-                <option value="homeVillage" {% if selected_type == 'homeVillage' %}selected{% endif %}>🏘️ Home Village</option>
                 <option value="all" {% if selected_type == 'all' %}selected{% endif %}>🌍 All Types</option>
+                <option value="ranked" {% if selected_type == 'ranked' %}selected{% endif %}>🏆 Ranked</option>
+                <option value="homeVillage" {% if selected_type == 'homeVillage' %}selected{% endif %}>🏘️ Home Battle</option>
             </select>
 
             <div style="margin-left:auto;">
