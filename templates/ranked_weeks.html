@@ -403,7 +403,7 @@
     <div class="charts-row">
         <div class="chart-card">
             <div class="chart-card-hdr">
-                <h3>Top 10 – Best Attackers This Week (Avg Stars)</h3>
+                <h3>Top 10 – Best Performers This Week (Score)</h3>
             </div>
             <div class="chart-wrap"><canvas id="chartTopAttackers"></canvas></div>
         </div>
@@ -923,9 +923,9 @@
     };
 
     function buildTopChart() {
-        const active = window.weekData.filter(p => p.is_active && p.att_count > 0);
+        const active = window.weekData.filter(p => p.is_active && p.score_100 > 0);
         if (!active.length) return;
-        const top10 = [...active].sort((a, b) => b.att_avg - a.att_avg).slice(0, 10);
+        const top10 = [...active].sort((a, b) => b.score_100 - a.score_100).slice(0, 10);
         const canvas = document.getElementById('chartTopAttackers');
         if (!canvas) return;
         new Chart(canvas, {
@@ -933,8 +933,8 @@
             data: {
                 labels: top10.map(p => p.player_name),
                 datasets: [{
-                    label: 'Avg Att. ★',
-                    data: top10.map(p => p.att_avg),
+                    label: 'Score',
+                    data: top10.map(p => p.score_100),
                     backgroundColor: top10.map(p => VERDICT_COLORS[p.badge_class] || '#8b949e'),
                     borderRadius: 5, borderSkipped: false,
                 }]
@@ -943,8 +943,8 @@
                 responsive: true, maintainAspectRatio: false,
                 scales: {
                     y: {
-                        min: 1, max: 3,
-                        ticks: { color: '#8b949e', stepSize: 0.5 },
+                        min: 0, max: 100,
+                        ticks: { color: '#8b949e', stepSize: 20 },
                         grid: { color: 'rgba(48,54,61,0.6)' }
                     },
                     x: {
@@ -954,7 +954,7 @@
                 },
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(2)} ★ avg` } }
+                    tooltip: { callbacks: { label: ctx => ` Score: ${ctx.parsed.y}` } }
                 }
             }
         });
