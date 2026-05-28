@@ -1039,6 +1039,7 @@ def battle_history_page():
             player_map[tag] = {
                 'player_name': b.player.name if b.player else b.player_tag,
                 'player_tag': tag,
+                'in_clan': b.player.in_clan if b.player else True,
                 'att_count': 0,
                 'total_gold': 0, 'total_elixir': 0, 'total_dark': 0,
                 'attack_logs': [],
@@ -1046,6 +1047,7 @@ def battle_history_page():
         s = player_map[tag]
         if b.player:
             s['player_name'] = b.player.name
+            s['in_clan'] = b.player.in_clan
         stars = min(b.stars or 0, 3)
         s['att_count'] += 1
         s['total_gold'] += b.loot_gold or 0
@@ -1069,6 +1071,7 @@ def battle_history_page():
         player_data.append({
             'player_name': s['player_name'],
             'player_tag': s['player_tag'],
+            'in_clan': s['in_clan'],
             'att_count': s['att_count'],
             'total_gold': s['total_gold'],
             'total_elixir': s['total_elixir'],

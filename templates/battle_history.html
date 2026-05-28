@@ -541,7 +541,7 @@
             const row = document.createElement('tr');
             row.style.cursor = 'pointer';
             row.innerHTML = `
-                <td><div class="player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a></div><div class="player-tag">${escapeHTML(p.player_tag)}</div></td>
+                <td><div class="player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${(p.in_clan === false || p.in_clan === 0) ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>' : ''}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></td>
                 <td style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${p.att_count}</td>
                 <td><span class="res-gold">${fmt(p.total_gold)}</span></td>
                 <td><span class="res-elixir">${fmt(p.total_elixir)}</span></td>
