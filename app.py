@@ -982,24 +982,24 @@ def battle_history_page():
 
     attacks = base_q.options(selectinload(BattleLog.player)).all()
 
-    # For each player find the date of their very first ever battle log.
-    # On that date the server bulk-imported historical logs when they joined,
-    # so all attacks on that date are noise and must be excluded.
+    # When a player first joins, the poller bulk-imports their entire recent
+    # battle history in a single run (all within seconds of each other).
+    # Those logs are noise and should be excluded. The poller runs every 5 min,
+    # so anything within a 2-minute window of the player's very first log
+    # is part of that initial import. New legitimate battles arrive no earlier
+    # than the next poll cycle (5+ min later) and are kept.
     from sqlalchemy import func as sa_func
-    first_log_date = dict(
+    first_log_time = dict(
         db.session.query(BattleLog.player_tag, sa_func.min(BattleLog.time))
         .group_by(BattleLog.player_tag)
         .all()
     )
-    first_log_date = {
-        tag: ts.date() if ts else None
-        for tag, ts in first_log_date.items()
-    }
+    import_window = dt.timedelta(minutes=2)
 
     attacks = [
         b for b in attacks
-        if not (b.time and first_log_date.get(b.player_tag) and
-                b.time.date() == first_log_date[b.player_tag])
+        if not (b.time and first_log_time.get(b.player_tag) and
+                b.time <= first_log_time[b.player_tag] + import_window)
     ]
 
     total_attacks = len(attacks)
