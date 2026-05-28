@@ -47,3 +47,25 @@
 2026-05-26 14:37:43 - INFO - [task_update_raid_weekend] - Running task at 2026-05-26 14:37:43.294013  
 2026-05-26 14:39:13 - INFO - [task_update_raid_weekend] - Running task at 2026-05-26 14:39:13.521683  
 2026-05-26 15:46:32 - INFO - [task_update_raid_weekend] - Running task at 2026-05-26 15:46:32.482320  
+2026-05-28 15:03:35 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:03:35.632002  
+2026-05-28 15:03:52 - ERROR - [task_update_raid_weekend] - Failed to create raid weekend logs: JSONPath('members')
+2026-05-28 15:05:04 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:05:04.050151  
+2026-05-28 15:05:09 - ERROR - [task_update_raid_weekend] - Failed to create raid weekend logs: 'Key: [members] could not be found'
+2026-05-28 15:06:56 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:06:56.519572  
+2026-05-28 15:07:50 - ERROR - [task_update_raid_weekend] - Failed to create raid weekend logs: (pymysql.err.OperationalError) (1054, "Unknown column 'raid_weekend_log.districLevel' in 'field list'")
+[SQL: SELECT raid_weekend_log.id AS raid_weekend_log_id, raid_weekend_log.raid_weekend_id AS raid_weekend_log_raid_weekend_id, raid_weekend_log.`defenderName` AS `raid_weekend_log_defenderName`, raid_weekend_log.`defenderTag` AS `raid_weekend_log_defenderTag`, raid_weekend_log.`districtName` AS `raid_weekend_log_districtName`, raid_weekend_log.`districLevel` AS `raid_weekend_log_districLevel`, raid_weekend_log.`totalLootAllAttacks` AS `raid_weekend_log_totalLootAllAttacks`, raid_weekend_log.percentage AS raid_weekend_log_percentage, raid_weekend_log.`percentageTotal` AS `raid_weekend_log_percentageTotal`, raid_weekend_log.stars AS raid_weekend_log_stars, raid_weekend_log.`isCleanUp` AS `raid_weekend_log_isCleanUp`, raid_weekend_log.`playerTag` AS `raid_weekend_log_playerTag` 
+FROM raid_weekend_log 
+WHERE raid_weekend_log.raid_weekend_id = %(raid_weekend_id_1)s AND raid_weekend_log.`defenderTag` = %(defenderTag_1)s AND raid_weekend_log.`districtName` = %(districtName_1)s AND raid_weekend_log.percentage = %(percentage_1)s AND raid_weekend_log.`percentageTotal` = %(percentageTotal_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'raid_weekend_id_1': 3, 'defenderTag_1': '#202RRR9JJ', 'districtName_1': 'Capital Peak', 'percentage_1': 17, 'percentageTotal_1': 17, 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-05-28 15:08:37 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:08:37.830278  
+2026-05-28 15:10:27 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:10:27.105446  
+2026-05-28 15:13:42 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:13:42.101729  
+2026-05-28 15:19:01 - INFO - [task_update_raid_weekend] - Skipping task because not weekend
+2026-05-28 15:19:13 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:19:13.365157  
+2026-05-28 15:19:21 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:19:21.850217  
+2026-05-28 15:19:30 - INFO - [task_update_raid_weekend] - Skipping task because not weekend
+2026-05-28 15:20:30 - INFO - [task_update_raid_weekend] - Skipping task because not weekend
+2026-05-28 15:20:39 - INFO - [task_update_raid_weekend] - Running task at 2026-05-28 15:20:39.252497  
+2026-05-28 15:22:14 - INFO - [task_update_raid_weekend] - Skipping task because not weekend

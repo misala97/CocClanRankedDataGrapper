@@ -37,7 +37,7 @@ def create_db_raid_weekend_from_api(current_raid_weekend: dict):
         defensiveReward = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_DEFENSIVEREWARD) 
     )
     
-def create_db_raid_weekend_log(raid_weekend: RaidWeekend, player_tag: str, district_name: str, loot: int, percentage: int, percentage_total: int,stars: int, is_clean_up: bool, defender_tag: str, defender_name: str) -> RaidWeekendLog:
+def create_db_raid_weekend_log(raid_weekend: RaidWeekend, player_tag: str, district_name: str, loot: int, percentage: int, percentage_total: int,stars: int, is_clean_up: bool, defender_tag: str, defender_name: str, district_level: int, total_loot_all_atacks) -> RaidWeekendLog:
     if not isinstance(raid_weekend, RaidWeekend):
         raise TypeError(f"Expected RaidWeekend object, got {type(raid_weekend).__name__}")
     
@@ -47,6 +47,8 @@ def create_db_raid_weekend_log(raid_weekend: RaidWeekend, player_tag: str, distr
         playerTag=player_tag,
         defenderName = defender_name,
         defenderTag = defender_tag,
+        districLevel = district_level,
+        totalLootAllAttacks = total_loot_all_atacks,
         districtName=district_name,
         percentage=percentage,
         percentageTotal=percentage_total,
@@ -212,7 +214,7 @@ def db_raid_weekend_create_new(raid_weekend: RaidWeekend) -> RaidWeekend:
     
     return raid_weekend
 
-def db_raid_weekend_log_create_new(raid_weekend_log: RaidWeekendLog) -> RaidWeekend:
+def db_raid_weekend_log_create_new(raid_weekend_log: RaidWeekendLog) -> RaidWeekendLog:
     if not isinstance(raid_weekend_log, RaidWeekendLog):
         raise TypeError(f"Expected RaidWeekendLog object, got {type(raid_weekend_log).__name__}")
     

@@ -255,7 +255,11 @@ def task_update_battle_logs():
         db.session.commit()            
 
 
-def task_update_raid_weekend():
+def task_update_raid_weekend(run_always: bool = False):
+    # Raid weekends run Fri–Mon only (weekday 4=Fri, 5=Sat, 6=Sun, 0=Mon)
+    if dt.datetime.now().weekday() not in (4, 5, 6, 0) and not run_always:
+        raid_weekend_logger.info(f"Skipping task because not weekend")
+        return
     t0 = time.time()
     raid_weekend_logger.info(f"Running task at {dt.datetime.now()}  ")
     with app.app_context():  
@@ -307,12 +311,19 @@ def task_update_raid_weekend():
                         stars = json_get(attack_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_ATTACKS_DESTRUCTION_STARS)
                         defender_name = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DEFENDER.NAME)
                         defender_tag = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DEFENDER.TAG)
+                        distric_level = json_get(district_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_HALLLEVEL)
+                        
+                        
+                        member = next((m for m in json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS) if json_get(m, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS_TAG) == player_tag), None)
+                        total_loot_all_attacks = member["capitalResourcesLooted"] if member else None
+                        
+
                         if current_percent == 100 and percentage_done < 15:
                             is_cleanup = True
                         else:
                             is_cleanup = False
                         previous_percent = current_percent
-                        tmp_raid_weekend_log = create_db_raid_weekend_log(raid_weekend,player_tag,district_name,0,percentage_done,current_percent,stars,is_cleanup, defender_tag,defender_name)
+                        tmp_raid_weekend_log = create_db_raid_weekend_log(raid_weekend,player_tag,district_name,0,percentage_done,current_percent,stars,is_cleanup, defender_tag,defender_name,distric_level,total_loot_all_attacks)
                         raid_weekend_log = db_raid_weekend_log_get(raid_weekend, defender_tag, district_name,percentage_done,current_percent)
                         if not raid_weekend_log:
                                 raid_weekend_log = db_raid_weekend_log_create_new(tmp_raid_weekend_log)
@@ -847,8 +858,7 @@ def raid_weekend_page():
                     'player_tag': tag,
                     'att_count': 0,
                     'cleanup_count': 0,
-                    'total_loot': 0,
-                    'avg_loot': 0,
+                    'capital_loot': 0,
                     'finishes': 0,
                     'attack_logs': [],
                 }
@@ -858,8 +868,11 @@ def raid_weekend_page():
                 p['cleanup_count'] += 1
             if log.percentageTotal == 100:
                 p['finishes'] += 1
+            if log.totalLootAllAttacks:
+                p['capital_loot'] = log.totalLootAllAttacks
             p['attack_logs'].append({
                 'district_name': log.districtName or '—',
+                'district_level': log.districLevel or '—',
                 'stars': log.stars or 0,
                 'percentage': log.percentage or 0,
                 'percentage_total': log.percentageTotal or 0,
@@ -1542,7 +1555,7 @@ if __name__ == '__main__':
     #task_update_ranked_weeks()
     #task_update_battle_logs()
     #task_update_done_ranked_weeks()
-    #task_update_raid_weekend()
+    task_update_raid_weekend()
     
     # Webserver starten (use_reloader=False verhindert, dass der Scheduler beim Speichern doppelt startet)
     app.run(debug=True, use_reloader=False)

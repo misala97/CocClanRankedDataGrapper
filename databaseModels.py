@@ -139,6 +139,9 @@ class RaidWeekendLog(db.Model):
     defenderTag = db.Column(db.String(30))
     
     districtName = db.Column(db.String(30))
+    
+    districLevel = db.Column(db.Integer)
+    totalLootAllAttacks = db.Column(db.Integer)
 
     percentage = db.Column(db.Integer)
     percentageTotal = db.Column(db.Integer)
