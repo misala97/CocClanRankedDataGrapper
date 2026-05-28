@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ranked Week Performance – CoC Analytics</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -545,6 +546,17 @@
         return m ? parseInt(m[1], 10) : 0;
     }
 
+    function attAvgColor(avg) {
+        if (avg >= 2.5) return 'var(--green)';
+        if (avg >= 2.0) return 'var(--accent)';
+        return 'var(--red)';
+    }
+    function defAvgColor(avg) {
+        if (avg <= 1.5) return 'var(--green)';
+        if (avg <= 2.0) return 'var(--accent)';
+        return 'var(--red)';
+    }
+
     function formatTHDiff(avgTH, playerTH, higherIsBad = false) {
         if (avgTH == null || !playerTH) return '';
         const diff = avgTH - playerTH;
@@ -556,7 +568,21 @@
         return `<span style="color:${color};font-family:'Rajdhani',sans-serif;font-weight:700;">TH${sign}${diff.toFixed(1)}${arrow}</span>`;
     }
 
-    function thMultiplier(diff) {
+    function thMultiplier(diff, playerTH) {
+        playerTH = playerTH || 0;
+        if (playerTH >= 18) {
+            if (diff >= 0)   return 1.00;
+            if (diff === -1) return 0.90;
+            if (diff <= -2)  return 0.75;
+            return 0.01;
+        }
+        if (playerTH === 17) {
+            if (diff >= 1)   return 1.05;
+            if (diff === 0)  return 0.95;
+            if (diff === -1) return 0.85;
+            if (diff <= -2)  return 0.75;
+            return 0.01;
+        }
         if (diff >= 2)  return 1.15;
         if (diff === 1) return 1.05;
         if (diff === 0) return 0.95;
@@ -654,7 +680,6 @@
     function buildVerdictDetails(item) {
         if (!item.is_active) return '';
         const playerTH = item.player_th || 0;
-        const thOffset = item.th_offset || 0;
         const attacks = item.attack_details || [];
         const attMax = item.att_max || 0;
         const verdictLabels = {
@@ -671,7 +696,7 @@
         let rows = attacks.map(a => {
             const oppTH = parseInt(a.opponent_th) || playerTH;
             const diff = oppTH - playerTH;
-            const mult = thMultiplier(diff + thOffset);
+            const mult = thMultiplier(diff, playerTH);
             const adj = (a.stars || 0) * mult;
             totalAdj += adj;
             const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
@@ -699,7 +724,7 @@
                 <div style="margin-bottom:10px;font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;">
                     <span>Your TH: <strong style="color:var(--text);">TH${playerTH}</strong></span>
                     <span>Score: <strong style="color:var(--accent);">${score.toFixed(3)}</strong> = Σ adj. stars / ${attMax} attacks</span>
-                    <span>Same-TH avg: <strong style="color:var(--muted);">${(score / thMultiplier(thOffset)).toFixed(2)} ★</strong></span>
+                    <span>Same-TH avg: <strong style="color:var(--muted);">${(score / thMultiplier(0, playerTH)).toFixed(2)} ★</strong></span>
                     <span>Verdict: <span class="judgment ${item.badge_class}" style="font-size:10px;padding:2px 8px;">${verdictName}</span></span>
                 </div>
                 <table class="detail-table">
@@ -774,9 +799,9 @@
                     <div class="player-trophy" style="gap:6px;">${item.player_th ? `<span style="color:var(--blue);font-weight:700;">TH${item.player_th}</span> ·` : ''} 🏆 ${item.trophies}</div>
                 </div></div></td>
                 <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.att_count > 0 ? `<div class="star-dist"><span class="star-dist-item">${item.att_0star}</span><span class="star-dist-item">${item.att_1star}</span><span class="star-dist-item">${item.att_2star}</span><span class="star-dist-item">${item.att_3star}</span></div>` : ''}<div class="attacks-cell" style="font-size:12px;">${item.att_count} / ${item.att_max}</div></div></td>
-                <td style="text-align:center;">${item.att_count > 0 ? `<strong style="color:var(--accent);">Ø ${item.att_avg.toFixed(2)}</strong><br>${formatTHDiff(item.att_avg_th, item.player_th)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td style="text-align:center;">${item.att_count > 0 ? `<strong style="color:${attAvgColor(item.att_avg)};">Ø ${item.att_avg.toFixed(2)}</strong><br>${formatTHDiff(item.att_avg_th, item.player_th)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
                 <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.def_count > 0 ? `<div class="star-dist"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div>` : ''}<div class="defenses-cell" style="font-size:12px;">${item.def_count} / ${item.def_max}</div></div></td>
-                <td style="text-align:center;">${item.def_count > 0 ? `<strong style="color:var(--red);">Ø ${item.def_avg.toFixed(2)}</strong><br>${formatTHDiff(item.def_avg_th, item.player_th, true)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td style="text-align:center;">${item.def_count > 0 ? `<strong style="color:${defAvgColor(item.def_avg)};">Ø ${item.def_avg.toFixed(2)}</strong><br>${formatTHDiff(item.def_avg_th, item.player_th, true)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
                 <td style="text-align:center;"><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}${item.is_active && item.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${item.score_100}` : ''}</span></td>
                 <td style="text-align:center;"><button type="button" class="action-btn details-toggle">Details</button></td>
             `;
@@ -835,13 +860,13 @@
                 const attStar = item.att_count > 0
                     ? `<div class="star-dist" style="margin-bottom:2px;"><span class="star-dist-item">${item.att_0star}</span><span class="star-dist-item">${item.att_1star}</span><span class="star-dist-item">${item.att_2star}</span><span class="star-dist-item">${item.att_3star}</span></div>` : '';
                 const attAvg = item.att_count > 0
-                    ? `<div class="mc-stat-avg" style="color:var(--accent);">${item.att_avg.toFixed(2)}</div><div style="margin-top:1px;">${formatTHDiff(item.att_avg_th, item.player_th)}</div>`
+                    ? `<div class="mc-stat-avg" style="color:${attAvgColor(item.att_avg)};">${item.att_avg.toFixed(2)}</div><div style="margin-top:1px;">${formatTHDiff(item.att_avg_th, item.player_th)}</div>`
                     : `<div class="mc-stat-avg" style="color:var(--muted);">–</div>`;
 
                 const defStar = item.def_count > 0
                     ? `<div class="star-dist" style="margin-bottom:2px;"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div>` : '';
                 const defAvg = item.def_count > 0
-                    ? `<div class="mc-stat-avg" style="color:var(--red);">${item.def_avg.toFixed(2)}</div><div style="margin-top:1px;">${formatTHDiff(item.def_avg_th, item.player_th, true)}</div>`
+                    ? `<div class="mc-stat-avg" style="color:${defAvgColor(item.def_avg)};">${item.def_avg.toFixed(2)}</div><div style="margin-top:1px;">${formatTHDiff(item.def_avg_th, item.player_th, true)}</div>`
                     : `<div class="mc-stat-avg" style="color:var(--muted);">–</div>`;
 
                 const card = document.createElement('div');

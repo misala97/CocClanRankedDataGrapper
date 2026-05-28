@@ -623,7 +623,6 @@ def ranked_weeks_page():
         defense_details = []
         adj_attack_scores = []
         player_th = 0
-        th_offset = 0
 
         if ranked_week:
             league_tier = ranked_week.league_tier or league_tier
@@ -633,22 +632,24 @@ def ranked_weeks_page():
             max_attacks = ranked_week.max_attacks or 0
             player_th = ranked_week.townhall or player.current_th or 0
 
-            # TH18 can only fight same TH (+0 max), TH17 can only go +1 max.
-            # Offset normalises so "best achievable attack" always scores as +2.
-            if player_th >= 18:
-                th_offset = 2
-            elif player_th == 17:
-                th_offset = 1
-            else:
-                th_offset = 0
-
             def _th_multiplier(diff):
+                if player_th >= 18:
+                    if diff >= 0:   return 1.00
+                    if diff == -1:  return 0.90
+                    if diff <= -2:  return 0.75
+                    return 0.01
+                if player_th == 17:
+                    if diff >= 1:   return 1.05
+                    if diff == 0:   return 0.95
+                    if diff == -1:  return 0.85
+                    if diff <= -2:  return 0.75
+                    return 0.01
                 if diff >= 2:  return 1.15
                 if diff == 1:  return 1.05
                 if diff == 0:  return 0.95
                 if diff == -1: return 0.85
                 if diff == -2: return 0.75
-                return 0.01  # TH-3 or worse: attacking way down is worthless
+                return 0.01
 
             for log in ranked_week.battle_logs:
                 detail_entry = {
@@ -666,7 +667,7 @@ def ranked_weeks_page():
                     except (TypeError, ValueError):
                         opp_th = player_th
                     diff = opp_th - player_th
-                    adj = (log.stars or 0) * _th_multiplier(diff + th_offset)
+                    adj = (log.stars or 0) * _th_multiplier(diff)
                     adj_attack_scores.append(adj)
                 else:
                     defense_logs.append(log.stars or 0)
@@ -695,9 +696,13 @@ def ranked_weeks_page():
         # TH-adjusted score: each attack weighted ±10% per TH level vs opponent,
         # divided by att_max so missing attacks directly tank the score.
         th_adj_score = round(sum(adj_attack_scores) / max_attacks, 3) if max_attacks > 0 else 0.0
-        # Convert to 0-100 scale (max possible = 3.9: all 3-star vs TH+3) and use this
-        # single value for both the verdict and the displayed number so they always match.
-        score_100 = min(round(th_adj_score * 100 / 3.45), 100)
+        if player_th >= 18:
+            max_possible = 3.00  # 3 * 1.00
+        elif player_th == 17:
+            max_possible = 3.15  # 3 * 1.05
+        else:
+            max_possible = 3.45  # 3 * 1.15
+        score_100 = min(round(th_adj_score * 100 / max_possible), 100)
 
         if not is_active:
             badge_class = 'badge-inactive'
@@ -758,7 +763,6 @@ def ranked_weeks_page():
             'th_adj_score': th_adj_score,
             'score_100': score_100,
             'player_th': player_th or player.current_th or 0,
-            'th_offset': th_offset,
             'def_count': def_count,
             'def_max': max_attacks,
             'def_0star': def_0star,
