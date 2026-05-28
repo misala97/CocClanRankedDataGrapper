@@ -237,10 +237,13 @@
         .empty-state a:hover { opacity: 0.85; }
 
         /* ── CHART CARD ── */
-        .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 20px; }
+        .charts-row { display: flex; gap: 16px; margin-bottom: 20px; }
+        .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; flex: 1; min-width: 0; }
         .chart-card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
         .chart-card h3 { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
-        .chart-wrap { position: relative; height: 300px; }
+        .chart-wrap { position: relative; height: 200px; }
+        .chart-wrap-donut { position: relative; height: 200px; display: flex; align-items: center; justify-content: center; }
+        @media (max-width: 640px) { .charts-row { flex-direction: column; } }
 
         /* ── HISTORY SECTION ── */
         .history-section { padding: 16px; border-top: 1px solid var(--border); background: rgba(13,17,23,0.4); }
@@ -395,13 +398,21 @@
         <button type="button" class="action-btn" id="inactiveToggle" onclick="toggleInactive()" style="margin-left:auto;">👁️ Hide inactive</button>
     </div>
 
-    <!-- Top 10 Attackers Chart -->
+    <!-- Charts Row -->
     {% if week_data %}
-    <div class="chart-card">
-        <div class="chart-card-hdr">
-            <h3>Top 10 – Best Attackers This Week (Avg Stars)</h3>
+    <div class="charts-row">
+        <div class="chart-card">
+            <div class="chart-card-hdr">
+                <h3>Top 10 – Best Attackers This Week (Avg Stars)</h3>
+            </div>
+            <div class="chart-wrap"><canvas id="chartTopAttackers"></canvas></div>
         </div>
-        <div class="chart-wrap"><canvas id="chartTopAttackers"></canvas></div>
+        <div class="chart-card">
+            <div class="chart-card-hdr">
+                <h3>Verdict Distribution</h3>
+            </div>
+            <div class="chart-wrap-donut"><canvas id="chartVerdictDist"></canvas></div>
+        </div>
     </div>
     {% endif %}
 
@@ -900,6 +911,17 @@
         });
     }
 
+    const VERDICT_COLORS = {
+        'badge-godlike':  '#bc8cff',
+        'badge-dominant': '#f0a500',
+        'badge-wow':      '#3fb950',
+        'badge-good':     '#58a6ff',
+        'badge-warning':  '#d29922',
+        'badge-suck':     '#f85149',
+        'badge-useless':  '#8b949e',
+        'badge-inactive': '#8b949e',
+    };
+
     function buildTopChart() {
         const active = window.weekData.filter(p => p.is_active && p.att_count > 0);
         if (!active.length) return;
@@ -913,7 +935,7 @@
                 datasets: [{
                     label: 'Avg Att. ★',
                     data: top10.map(p => p.att_avg),
-                    backgroundColor: CHART_COLORS.slice(0, top10.length),
+                    backgroundColor: top10.map(p => VERDICT_COLORS[p.badge_class] || '#8b949e'),
                     borderRadius: 5, borderSkipped: false,
                 }]
             },
@@ -921,7 +943,7 @@
                 responsive: true, maintainAspectRatio: false,
                 scales: {
                     y: {
-                        min: 0, max: 3,
+                        min: 1, max: 3,
                         ticks: { color: '#8b949e', stepSize: 0.5 },
                         grid: { color: 'rgba(48,54,61,0.6)' }
                     },
@@ -938,10 +960,54 @@
         });
     }
 
+    function buildVerdictChart() {
+        const canvas = document.getElementById('chartVerdictDist');
+        if (!canvas) return;
+        const tiers = [
+            { key: 'badge-godlike',  label: 'Godlike' },
+            { key: 'badge-dominant', label: 'Dominant' },
+            { key: 'badge-wow',      label: 'Very Good' },
+            { key: 'badge-good',     label: 'Good' },
+            { key: 'badge-warning',  label: 'Bad' },
+            { key: 'badge-suck',     label: 'Disaster' },
+            { key: 'badge-useless',  label: 'Useless' },
+            { key: 'badge-inactive', label: 'Inactive' },
+        ];
+        const counts = tiers.map(t => window.weekData.filter(p => p.badge_class === t.key).length);
+        const nonZero = tiers.filter((_, i) => counts[i] > 0);
+        const nonZeroCounts = counts.filter(c => c > 0);
+        if (!nonZero.length) return;
+        new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: nonZero.map(t => t.label),
+                datasets: [{
+                    data: nonZeroCounts,
+                    backgroundColor: nonZero.map(t => VERDICT_COLORS[t.key]),
+                    borderColor: '#161b22',
+                    borderWidth: 3,
+                    hoverOffset: 6,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '62%',
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: { color: '#8b949e', font: { size: 11 }, padding: 10, boxWidth: 12 }
+                    },
+                    tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} player${ctx.parsed !== 1 ? 's' : ''}` } }
+                }
+            }
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         processWeekData();
         buildTable();
         buildTopChart();
+        buildVerdictChart();
     });
 </script>
 {% endif %}
