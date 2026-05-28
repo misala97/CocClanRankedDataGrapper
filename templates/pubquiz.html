@@ -21,6 +21,7 @@
             --blue:    #58a6ff;
             --red:     #f85149;
             --purple:  #bc8cff;
+            --nav-h:   54px;
         }
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -37,7 +38,7 @@
         }
         .nav-inner {
             max-width: 1200px; margin: 0 auto; padding: 0 20px;
-            height: 54px; display: flex; align-items: center; justify-content: space-between;
+            height: var(--nav-h); display: flex; align-items: center; justify-content: space-between;
         }
         .nav-logo { display: flex; align-items: center; gap: 10px; }
         .logo-icon {
@@ -54,7 +55,6 @@
             white-space: nowrap;
         }
         .nav-links a:hover, .nav-links a:active { color: var(--text); background: var(--surf2); }
-        .nav-links .nav-active { color: var(--accent); }
         .admin-link { border: 1px solid var(--border); }
         .admin-link:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
 
@@ -66,7 +66,7 @@
         .page-header p { color: var(--muted); margin-top: 4px; font-size: 14px; }
 
         /* ── SELECTOR ── */
-        .round-select-wrap { margin-bottom: 20px; }
+        .round-select-wrap { margin-bottom: 16px; }
         .round-select-wrap label {
             display: block; font-size: 11px; font-weight: 600; text-transform: uppercase;
             letter-spacing: 0.6px; color: var(--muted); margin-bottom: 8px;
@@ -85,7 +85,7 @@
 
         /* ── INFO BAR ── */
         .info-bar {
-            display: flex; gap: 10px; margin-bottom: 20px;
+            display: flex; gap: 10px; margin-bottom: 16px;
             overflow-x: auto; -webkit-overflow-scrolling: touch;
             padding-bottom: 4px; scrollbar-width: none;
         }
@@ -97,6 +97,43 @@
         }
         .info-chip .label { color: var(--muted); margin-right: 5px; }
         .info-chip .value { font-weight: 600; }
+
+        /* ── TAB BAR (mobile only) ── */
+        .tab-bar {
+            position: sticky;
+            top: var(--nav-h);
+            z-index: 50;
+            background: var(--bg);
+            display: flex;
+            gap: 6px;
+            padding: 10px 0 12px;
+            margin-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 9px 2px;
+            border-radius: 8px;
+            background: var(--surf2);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .tab-btn:active { opacity: 0.8; }
+        .tab-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #0d1117;
+        }
+
+        /* ── PANELS (mobile: show only active) ── */
+        .panel { display: none; }
+        .panel.active { display: block; }
 
         /* ── CARDS ── */
         .card {
@@ -122,8 +159,6 @@
         td {
             padding: 13px 12px; font-size: 14px;
             border-bottom: 1px solid var(--bord2); vertical-align: middle;
-            /* Ensure decent touch target height */
-            min-height: 48px;
         }
         tr:last-child td { border-bottom: none; }
         tbody tr { transition: background 0.12s; }
@@ -144,23 +179,12 @@
         .pts-total { color: var(--accent); }
         .pts-sub { color: var(--muted); font-size: 14px; }
 
-        /* Hide on mobile */
+        /* Round columns hidden on mobile, shown on desktop */
         .col-round { display: none; }
         .hide-mobile { display: none; }
-        @media (min-width: 560px) {
-            .col-round { display: table-cell; }
-        }
 
-        /* ── ROUND GRID ── */
-        .round-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 16px;
-        }
-        @media (min-width: 800px) {
-            .round-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; }
-        }
+        /* ── ROUND GRID (desktop only) ── */
+        .round-panels-grid { display: block; }
 
         /* ── EMPTY STATES ── */
         .empty-state {
@@ -169,16 +193,33 @@
         .empty-state .icon { font-size: 36px; margin-bottom: 10px; }
         .empty-round { text-align: center; padding: 24px 12px; color: var(--muted); font-size: 13px; }
 
-        /* ── DESKTOP REFINEMENTS ── */
+        /* ── DESKTOP (≥ 640px) ── */
         @media (min-width: 640px) {
+            /* Hide mobile-only elements */
+            .tab-bar { display: none; }
             .hide-mobile { display: flex; }
+
+            /* Show all panels regardless of active state */
+            .panel { display: block !important; }
+
+            /* Round grid layout */
+            .round-panels-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+                margin-top: 16px;
+            }
+
+            /* Show round columns in overall table */
+            .col-round { display: table-cell; }
+
             .nav-inner { padding: 0 32px; height: 62px; }
             .logo-icon { width: 36px; height: 36px; font-size: 18px; }
             .nav-logo span { font-size: 19px; }
             .page-wrap { padding: 40px 32px; }
             .page-header { margin-bottom: 28px; }
             .page-header h1 { font-size: 32px; }
-            .round-select-wrap { margin-bottom: 28px; }
+            .round-select-wrap { margin-bottom: 20px; }
             .info-bar { gap: 14px; margin-bottom: 24px; flex-wrap: wrap; overflow-x: visible; }
             .info-chip { font-size: 13px; padding: 8px 16px; }
             .card-header { padding: 15px 20px; }
@@ -188,6 +229,10 @@
             .rank-cell { font-size: 22px; width: 48px; }
             .team-name { font-size: 15px; }
             .pts { font-size: 18px; }
+        }
+
+        @media (min-width: 800px) {
+            .round-panels-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; }
         }
     </style>
 </head>
@@ -258,61 +303,74 @@
         {% endif %}
     </div>
 
+    {% if team_data %}
+    <!-- Tab bar (mobile only) -->
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="gesamt" onclick="switchTab('gesamt')">Gesamt</button>
+        <button class="tab-btn" data-tab="r1" onclick="switchTab('r1')">R1</button>
+        <button class="tab-btn" data-tab="r2" onclick="switchTab('r2')">R2</button>
+        <button class="tab-btn" data-tab="r3" onclick="switchTab('r3')">R3</button>
+        <button class="tab-btn" data-tab="r4" onclick="switchTab('r4')">R4</button>
+    </div>
+    {% endif %}
+
     <!-- Overall leaderboard -->
-    <div class="card">
-        <div class="card-header">
-            <h2>Gesamtrangliste</h2>
-            {% if overall_avg is not none %}
-            <span class="card-avg">Ø <strong>{{ overall_avg }}</strong></span>
+    <div class="panel active" id="panel-gesamt">
+        <div class="card">
+            <div class="card-header">
+                <h2>Gesamtrangliste</h2>
+                {% if overall_avg is not none %}
+                <span class="card-avg">Ø <strong>{{ overall_avg }}</strong></span>
+                {% endif %}
+            </div>
+            {% if team_data %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Team</th>
+                        <th class="right col-round">R1</th>
+                        <th class="right col-round">R2</th>
+                        <th class="right col-round">R3</th>
+                        <th class="right col-round">R4</th>
+                        <th class="right">Gesamt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set ns = namespace(rank=0, pos=0, prev_total=none) %}
+                    {% for t in team_data %}
+                    {% set ns.pos = ns.pos + 1 %}
+                    {% if t.total != ns.prev_total %}{% set ns.rank = ns.pos %}{% endif %}
+                    {% set ns.prev_total = t.total %}
+                    <tr>
+                        <td class="rank-cell rank-{{ ns.rank if ns.rank <= 3 else '' }}">{{ ns.rank }}</td>
+                        <td class="team-name">{{ t.name }}</td>
+                        <td class="right col-round"><span class="pts pts-sub">{{ t.round1_points if t.round1_points is not none else '—' }}</span></td>
+                        <td class="right col-round"><span class="pts pts-sub">{{ t.round2_points if t.round2_points is not none else '—' }}</span></td>
+                        <td class="right col-round"><span class="pts pts-sub">{{ t.round3_points if t.round3_points is not none else '—' }}</span></td>
+                        <td class="right col-round"><span class="pts pts-sub">{{ t.round4_points if t.round4_points is not none else '—' }}</span></td>
+                        <td class="right"><span class="pts pts-total">{{ t.total }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <div class="icon">📋</div>
+                <p>Noch keine Teams für diesen Abend eingetragen.</p>
+            </div>
             {% endif %}
         </div>
-        {% if team_data %}
-        <table>
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Team</th>
-                    <th class="right col-round">R1</th>
-                    <th class="right col-round">R2</th>
-                    <th class="right col-round">R3</th>
-                    <th class="right col-round">R4</th>
-                    <th class="right">Gesamt</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% set ns = namespace(rank=0, pos=0, prev_total=none) %}
-                {% for t in team_data %}
-                {% set ns.pos = ns.pos + 1 %}
-                {% if t.total != ns.prev_total %}{% set ns.rank = ns.pos %}{% endif %}
-                {% set ns.prev_total = t.total %}
-                <tr>
-                    <td class="rank-cell rank-{{ ns.rank if ns.rank <= 3 else '' }}">{{ ns.rank }}</td>
-                    <td class="team-name">{{ t.name }}</td>
-                    <td class="right col-round"><span class="pts pts-sub">{{ t.round1_points if t.round1_points is not none else '—' }}</span></td>
-                    <td class="right col-round"><span class="pts pts-sub">{{ t.round2_points if t.round2_points is not none else '—' }}</span></td>
-                    <td class="right col-round"><span class="pts pts-sub">{{ t.round3_points if t.round3_points is not none else '—' }}</span></td>
-                    <td class="right col-round"><span class="pts pts-sub">{{ t.round4_points if t.round4_points is not none else '—' }}</span></td>
-                    <td class="right"><span class="pts pts-total">{{ t.total }}</span></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="empty-state">
-            <div class="icon">📋</div>
-            <p>Noch keine Teams für diesen Abend eingetragen.</p>
-        </div>
-        {% endif %}
     </div>
 
-    <!-- Per-round leaderboards -->
+    <!-- Per-round panels -->
     {% if team_data %}
-    <div class="round-grid">
+    <div class="round-panels-grid">
         {% for rnum in [1, 2, 3, 4] %}
         {% set ranking = round_rankings[rnum] %}
         {% set pts_key = 'round' ~ rnum ~ '_points' %}
         {% set size_key = 'round' ~ rnum ~ '_size' %}
-        <div class="card">
+        <div class="panel card" id="panel-r{{ rnum }}">
             <div class="card-header">
                 <h2>Runde {{ rnum }}</h2>
                 {% if round_avgs[rnum] is not none %}
@@ -369,6 +427,15 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById('panel-' + tab).classList.add('active');
+}
+</script>
 
 </body>
 </html>
