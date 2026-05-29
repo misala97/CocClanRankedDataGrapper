@@ -409,7 +409,10 @@ function buildVerdictDetails(p) {
         <div class="detail-section">
             <h4>Verdict Breakdown – Level-Adjusted Score</h4>
             <div style="margin-bottom:10px;font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;">
-                <span>Score: <strong style="color:var(--accent);">${p.adj_per_attack.toFixed(2)}</strong> = Σ adj. % / ${effectiveMax} attacks</span>
+                ${p.finishes > 0
+                    ? `<span>Score: <strong style="color:var(--accent);">${p.adj_per_attack.toFixed(2)}</strong> = Σ adj. % / ${effectiveMax} attacks × <span style="color:var(--green);font-weight:700;">1.05<sup>${p.finishes}</sup></span> <span style="color:var(--green);">(finish bonus)</span></span>`
+                    : `<span>Score: <strong style="color:var(--accent);">${p.adj_per_attack.toFixed(2)}</strong> = Σ adj. % / ${effectiveMax} attacks</span>`
+                }
                 <span>Verdict: <span class="judgment ${p.badge_class}" style="font-size:10px;padding:2px 8px;">${verdictName}${p.score_100 > 0 ? ` · ${p.score_100}` : ''}</span></span>
             </div>
             <table class="detail-table">

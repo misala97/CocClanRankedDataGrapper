@@ -119,6 +119,8 @@ def _raid_verdict(logs):
         level_mult = 1.0 + (level - 5) * 0.05
         total_adj += (l.percentage or 0) * level_mult
     adj_per_attack = total_adj / effective_max
+    finish_count = sum(1 for l in logs if l.percentageTotal == 100 and not l.isCleanUp)
+    adj_per_attack = adj_per_attack * (1.05 ** finish_count)
     score_100 = min(round(adj_per_attack * 100 / 60), 100)
     if not logs:       return 'badge-inactive', 'Skipped',  score_100
     if score_100 >= 87: return 'badge-godlike',  'Godlike',  score_100
@@ -944,7 +946,7 @@ def raid_weekend_page():
             p['att_count'] += 1
             if log.isCleanUp:
                 p['cleanup_count'] += 1
-            if log.percentageTotal == 100:
+            if log.percentageTotal == 100 and not log.isCleanUp:
                 p['finishes'] += 1
             if log.totalLootAllAttacks:
                 p['capital_loot'] = log.totalLootAllAttacks
@@ -978,6 +980,7 @@ def raid_weekend_page():
             effective_max  = max(1, MAX_ATTACKS - p['cleanup_count'])
             total_adj      = sum(l['adj_score'] for l in p['attack_logs'])
             adj_per_attack = total_adj / effective_max
+            adj_per_attack = adj_per_attack * (1.05 ** p['finishes'])
             score_100      = min(round(adj_per_attack * 100 / 60), 100)
             p['score_100']       = score_100
             p['adj_per_attack']  = round(adj_per_attack, 2)
