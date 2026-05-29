@@ -226,6 +226,25 @@
         .detail-table td { color: var(--text); }
         .detail-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
 
+        /* ── RECENT ATTACKS ── */
+        .recent-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+        }
+        .recent-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 20px; cursor: pointer; user-select: none;
+            transition: background 0.15s;
+        }
+        .recent-header:hover { background: var(--surf2); }
+        .recent-header-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+        }
+        .recent-chevron { font-size: 11px; color: var(--muted); transition: transform 0.2s; }
+        .recent-chevron.open { transform: rotate(180deg); }
+        .recent-body { border-top: 1px solid var(--border); }
+
         /* ── FOOTER ── */
         .page-footer {
             text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
@@ -422,6 +441,15 @@
     </div>
     {% endif %}
 
+    <!-- Recent Ranked Attacks -->
+    <div class="recent-card" id="recentCard">
+        <div class="recent-header" onclick="toggleRecent()">
+            <span class="recent-header-title">⚡ 20 Most Recent Ranked Attacks</span>
+            <span class="recent-chevron" id="recentChevron">▼</span>
+        </div>
+        <div class="recent-body" id="recentBody" style="display:none;"></div>
+    </div>
+
     <!-- Table -->
     {% if week_data %}
     <div class="table-scroll">
@@ -606,7 +634,9 @@
 
     function renderStars(n) {
         n = parseInt(n) || 0;
-        return `<span style="font-size:1.18em;letter-spacing:1px;">${'★'.repeat(n)}${'☆'.repeat(3 - n)}</span>`;
+        const filled = `<span style="color:var(--yellow);">${'★'.repeat(n)}</span>`;
+        const empty  = `<span style="color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
+        return `<span style="font-size:1.18em;letter-spacing:1px;">${filled}${empty}</span>`;
     }
 
     function buildDetailTable(entries) {
@@ -805,7 +835,7 @@
                 <td style="text-align:center;">${leagueCell}</td>
                 <td style="text-align:center;"><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span></td>
                 <td><div class="player-cell"><div class="player-info">
-                    <div class="player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" class="player-link">${escapeHTML(item.player_name)} <span class="player-link-arrow">↗</span></a></div>
+                    <div class="player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" class="player-link">${escapeHTML(item.player_name)} <span class="player-link-arrow">↗</span></a>${(item.in_clan === false || item.in_clan === 0) ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>' : ''}</div>
                     <div class="player-trophy" style="gap:6px;">${item.player_th ? `<span style="color:var(--blue);font-weight:700;">TH${item.player_th}</span> ·` : ''} 🏆 ${item.trophies}</div>
                 </div></div></td>
                 <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.att_count > 0 ? `<div class="star-dist"><span class="star-dist-item">${item.att_0star}</span><span class="star-dist-item">${item.att_1star}</span><span class="star-dist-item">${item.att_2star}</span><span class="star-dist-item">${item.att_3star}</span></div>` : ''}<div class="attacks-cell" style="font-size:12px;">${item.att_count} / ${item.att_max}</div></div></td>
@@ -902,7 +932,7 @@
                     <div class="mc-header">
                         ${leagueImg}
                         <div class="mc-player">
-                            <div class="mc-player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(item.player_name)} <span class="player-link-arrow">↗</span></a></div>
+                            <div class="mc-player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(item.player_name)} <span class="player-link-arrow">↗</span></a>${(item.in_clan === false || item.in_clan === 0) ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>' : ''}</div>
                             <div class="mc-player-sub">
                                 ${item.player_th ? `<span style="color:var(--blue);font-weight:700;">TH${item.player_th}</span> ·` : ''}
                                 🏆 ${item.trophies}
@@ -1052,6 +1082,53 @@
                 }
             }
         });
+    }
+
+    function buildRecentAttacks() {
+        const all = [];
+        window.weekData.forEach(item => {
+            (item.attack_details || []).forEach(a => all.push({
+                ...a,
+                player_name: item.player_name,
+                player_tag:  item.player_tag,
+                player_th:   item.player_th,
+            }));
+        });
+        all.sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
+        const top20 = all.slice(0, 20);
+        const body = document.getElementById('recentBody');
+        if (!top20.length) {
+            body.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded.</div>';
+            return;
+        }
+        body.innerHTML = `<table class="detail-table">
+            <thead><tr>
+                <th>Time</th><th>Player</th><th>Opponent</th><th>Their TH</th><th>Stars</th><th>%</th>
+            </tr></thead>
+            <tbody>${top20.map(a => {
+                const oppTH = parseInt(a.opponent_th) || 0;
+                const diff = oppTH - (a.player_th || 0);
+                const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
+                const diffColor = diff > 0 ? 'var(--green)' : diff < 0 ? 'var(--red)' : 'var(--muted)';
+                return `<tr>
+                    <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(a.time)}</td>
+                    <td style="font-weight:600;">${escapeHTML(a.player_name)}</td>
+                    <td>${escapeHTML(a.opponent_name)}</td>
+                    <td style="font-family:'Rajdhani',sans-serif;font-weight:600;">TH${oppTH} <span style="color:${diffColor};font-size:11px;">(${diffStr})</span></td>
+                    <td>${renderStars(a.stars)}</td>
+                    <td style="font-family:'Rajdhani',sans-serif;font-weight:600;">${a.percentage}%</td>
+                </tr>`;
+            }).join('')}</tbody>
+        </table>`;
+    }
+
+    function toggleRecent() {
+        const body = document.getElementById('recentBody');
+        const chevron = document.getElementById('recentChevron');
+        const open = body.style.display === 'none';
+        if (open) buildRecentAttacks();
+        body.style.display = open ? '' : 'none';
+        chevron.classList.toggle('open', open);
     }
 
     document.addEventListener('DOMContentLoaded', () => {

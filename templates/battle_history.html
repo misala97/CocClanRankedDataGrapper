@@ -458,7 +458,7 @@
 
     function renderStars(n) {
         n = parseInt(n) || 0;
-        return `<span style="font-size:1.18em;letter-spacing:1px;">${'★'.repeat(n)}${'☆'.repeat(3 - n)}</span>`;
+        return `<span style="font-size:1.18em;letter-spacing:1px;color:var(--yellow);">${'★'.repeat(n)}</span><span style="font-size:1.18em;letter-spacing:1px;color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
     }
 
     function attackLogRow(l) {

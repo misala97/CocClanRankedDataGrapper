@@ -272,10 +272,10 @@
             <h2><span class="clan-name">{{ clan_name }}</span><br>Analytics</h2>
             <p>Discover your clan's performance metrics, track battle statistics, and analyze seasonal rankings in real-time.</p>
             <div class="stat-grid">
-                <div class="stat-box">
+                <a href="/clan" class="stat-box">
                     <div class="stat-value blue">{{ total_members }}</div>
                     <div class="stat-label">Active Members</div>
-                </div>
+                </a>
                 <a href="/battles" class="stat-box">
                     <div class="stat-value gold">{{ battle_logs_this_week }}</div>
                     <div class="stat-label">Attacks tracked<br>since {{ week_start_name }}</div>
@@ -345,6 +345,15 @@
             <p>League standings and clan war league insights and analytics.</p>
         </div>
 
+        <a href="/clan" class="feature-card active">
+            <div class="card-top">
+                <div class="feature-icon">👥</div>
+                <span class="badge badge-active">Active</span>
+            </div>
+            <h4>Clan Overview</h4>
+            <p>See every clan member's Activity and Skill score side by side — quickly spot who's active and who's performing.</p>
+        </a>
+
         <a href="/admin" class="feature-card active">
             <div class="card-top">
                 <div class="feature-icon">⚙️</div>
@@ -374,6 +383,7 @@
                     <li><a href="/ranked" class="live-link">Ranked Week Performance</a></li>
                     <li><a href="/battles" class="live-link">Battle History</a></li>
                     <li><a href="/raid" class="live-link">Raid Weekend</a></li>
+                    <li><a href="/clan" class="live-link">Clan Overview</a></li>
                     <li><a href="/admin" class="live-link">Admin Hub</a></li>
                 </ul>
             </div>
@@ -399,7 +409,7 @@
         <div class="footer-bottom">
             <p>&copy; 2026 CoC Analytics &mdash; Unofficial fan project, not affiliated with Supercell.</p>
             <div class="links">
-                <span style="color:var(--muted);font-size:12px">4 features live &middot; 2 in development</span>
+                <span style="color:var(--muted);font-size:12px">5 features live &middot; 2 in development</span>
             </div>
         </div>
     </div>

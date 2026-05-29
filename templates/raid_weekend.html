@@ -21,6 +21,7 @@
             --green:   #3fb950;
             --blue:    #58a6ff;
             --red:     #f85149;
+            --yellow:  #e3b341;
             --purple:  #bc8cff;
         }
 
@@ -132,6 +133,26 @@
         .player-name { font-weight: 600; color: var(--text); font-size: 13.5px; }
         .player-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
+        /* ── JUDGMENT BADGES ── */
+        .judgment {
+            display: inline-block; padding: 5px 12px; border-radius: 20px;
+            font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.5px; text-transform: uppercase; border: 1px solid transparent;
+        }
+        .badge-godlike  { background: rgba(188,140,255,0.15); color: var(--purple); border-color: rgba(188,140,255,0.4); }
+        .badge-dominant { background: rgba(240,165,0,0.15);   color: var(--accent); border-color: rgba(240,165,0,0.35); }
+        .badge-wow      { background: rgba(63,185,80,0.12);   color: var(--green);  border-color: rgba(63,185,80,0.3); }
+        .badge-good     { background: rgba(88,166,255,0.12);  color: var(--blue);   border-color: rgba(88,166,255,0.25); }
+        .badge-warning  { background: rgba(210,153,34,0.12);  color: var(--yellow); border-color: rgba(210,153,34,0.3); }
+        .badge-suck     { background: rgba(248,81,73,0.12);   color: var(--red);    border-color: rgba(248,81,73,0.3); }
+        .badge-useless  { background: rgba(139,148,158,0.08); color: var(--muted);  border-color: rgba(139,148,158,0.2); }
+        .badge-inactive { background: rgba(139,148,158,0.08); color: var(--muted);  border-color: rgba(139,148,158,0.2); }
+
+        .player-link { color: inherit; text-decoration: none; transition: color 0.15s; }
+        .player-link:hover { color: var(--accent); }
+        .player-link-arrow { font-size: 10px; color: var(--muted); opacity: 0.4; transition: opacity 0.15s, color 0.15s; vertical-align: super; }
+        .player-link:hover .player-link-arrow { opacity: 1; color: var(--accent); }
+
         .action-btn {
             padding: 6px 14px; background: transparent; color: var(--accent);
             border: 1px solid rgba(240,165,0,0.35); border-radius: 6px;
@@ -147,12 +168,21 @@
         .sort-active.desc::after { content: ' ↓'; font-size: 0.85em; }
 
         /* ── DETAIL ROW ── */
+        .detail-section {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px;
+        }
+        .detail-section h4 {
+            margin-bottom: 12px; font-family: 'Rajdhani', sans-serif; font-size: 13px;
+            font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px;
+        }
         .detail-row { display: none; }
         .detail-row.expanded { display: table-row; }
         .detail-cell { padding: 0; border: none; background: var(--bg); border-bottom: 1px solid var(--border) !important; }
         .detail-inner { padding: 16px; }
         .detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-        .detail-table th, .detail-table td { padding: 7px 10px; border-bottom: 1px solid var(--bord2); text-align: left; }
+        .detail-table th, .detail-table td { padding: 7px 10px; border-bottom: 1px solid var(--bord2); text-align: center; }
+        .detail-table th:first-child, .detail-table td:first-child,
+        .detail-table th:nth-child(2), .detail-table td:nth-child(2) { text-align: left; }
         .detail-table tbody tr:last-child td { border-bottom: none; }
         .detail-table th {
             font-size: 11px; font-weight: 700; color: var(--muted);
@@ -267,13 +297,6 @@
             <div class="stat-value" style="color:var(--purple);">{{ (selected_raid.defensiveReward or 0) + (selected_raid.offensiveReward or 0) * 6 }}</div>
             <div class="stat-label">Raid Medals</div>
         </div>
-        {% if top_finisher %}
-        <div class="stat-card">
-            <div class="stat-icon">🎯</div>
-            <div class="stat-value" style="color:var(--green);font-size:22px;line-height:1.2;">{{ top_finisher.player_name }}</div>
-            <div class="stat-label">Top Finisher · {{ top_finisher.finishes }} district{{ 's' if top_finisher.finishes != 1 else '' }}</div>
-        </div>
-        {% endif %}
     </div>
     {% endif %}
 
@@ -290,9 +313,7 @@
                         <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
                         <th class="sortable" onclick="sortTable('finishes')">Finishes</th>
                         <th class="sortable" onclick="sortTable('cleanup_count')">Cleanups</th>
-                        <th class="sortable" onclick="sortTable('career_avg_pct')">Career Avg %</th>
-                        <th class="sortable" onclick="sortTable('career_finishes')">Career Finishes</th>
-                        <th class="sortable" onclick="sortTable('participation')">Participation</th>
+                        <th class="sortable" onclick="sortTable('score_100')">Verdict</th>
                         <th>Details</th>
                     </tr>
                 </thead>
@@ -323,7 +344,7 @@
 <script>
 const playerData = {{ player_data | tojson | safe }};
 
-let currentSort = { column: 'att_count', direction: 'desc' };
+let currentSort = { column: 'score_100', direction: 'desc' };
 
 function escapeHTML(s) {
     return String(s || '').replace(/[&<>"']/g, c =>
@@ -331,34 +352,74 @@ function escapeHTML(s) {
     );
 }
 
-function stars(n) {
-    n = Math.min(Math.max(n || 0, 0), 3);
-    return '★'.repeat(n) + '☆'.repeat(3 - n);
+function renderStars(n) {
+    n = parseInt(n) || 0;
+    const filled = `<span style="color:var(--yellow);">${'★'.repeat(n)}</span>`;
+    const empty  = `<span style="color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
+    return `<span style="font-size:1.18em;letter-spacing:1px;">${filled}${empty}</span>`;
 }
 
-function buildDetailTable(logs) {
-    if (!logs || !logs.length) return '<div style="color:var(--muted);padding:8px 0;font-size:13px;">No attacks recorded.</div>';
-    return `<table class="detail-table">
-        <thead><tr>
-            <th>District</th>
-            <th>Level</th>
-            <th>Defender</th>
-            <th>Damage %</th>
-            <th>Loot</th>
-            <th>Cleanup</th>
-        </tr></thead>
-        <tbody>${logs.map(l => `<tr>
+const MAX_ATTACKS = 6;
+const verdictLabels = {
+    'badge-godlike':  'Godlike',
+    'badge-dominant': 'Dominant',
+    'badge-wow':      'Very Good',
+    'badge-good':     'Good',
+    'badge-warning':  'Bad',
+    'badge-suck':     'Disaster',
+    'badge-useless':  'Useless',
+    'badge-inactive': 'Inactive'
+};
+
+function buildVerdictDetails(p) {
+    const logs = p.attack_logs || [];
+    const verdictName = verdictLabels[p.badge_class] || '–';
+    const effectiveMax = p.effective_max ?? MAX_ATTACKS;
+    const nonCleanupCount = logs.filter(l => !l.is_clean_up).length;
+    const missing = effectiveMax - nonCleanupCount;
+
+    let rows = logs.map(l => {
+        const cleanupCell = l.is_clean_up
+            ? `<span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>`
+            : `<span style="color:var(--muted);font-size:12px;">—</span>`;
+        const adjColor = l.is_clean_up ? 'var(--muted)' : 'var(--accent)';
+        const rowStyle = l.is_clean_up ? ' style="opacity:0.5;"' : '';
+        return `<tr${rowStyle}>
             <td style="font-weight:600;">${escapeHTML(l.district_name)}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--muted);">Lvl ${escapeHTML(String(l.district_level))}</td>
             <td>
                 <div style="font-weight:600;">${escapeHTML(l.defender_name)}</div>
                 <div style="font-size:11px;color:var(--muted);">${escapeHTML(l.defender_tag)}</div>
             </td>
+            <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);">Lvl ${l.district_level}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);">${l.level_mult.toFixed(2)}×</td>
+            <td>${renderStars(l.stars)}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--blue);">${l.percentage}%</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--accent);">${l.loot.toLocaleString()}</td>
-            <td>${l.is_clean_up ? '<span class="badge badge-cleanup">✓ Cleanup</span>' : '<span style="color:var(--muted);font-size:12px;">—</span>'}</td>
-        </tr>`).join('')}</tbody>
-    </table>`;
+            <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${adjColor};">${l.adj_score.toFixed(2)}</td>
+            <td>${cleanupCell}</td>
+        </tr>`;
+    }).join('');
+
+    for (let i = 0; i < missing; i++) {
+        rows += `<tr style="opacity:0.4;">
+            <td style="color:var(--red);">— missing —</td><td>—</td><td>—</td><td>—</td><td>${renderStars(0)}</td><td>—</td><td style="font-family:'Rajdhani',sans-serif;font-weight:700;">0.00</td><td style="color:var(--muted);font-size:12px;">—</td>
+        </tr>`;
+    }
+
+    return `<div style="padding:0 16px 16px;">
+        <div class="detail-section">
+            <h4>Verdict Breakdown – Level-Adjusted Score</h4>
+            <div style="margin-bottom:10px;font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;">
+                <span>Score: <strong style="color:var(--accent);">${p.adj_per_attack.toFixed(2)}</strong> = Σ adj. % / ${effectiveMax} attacks</span>
+                <span>Verdict: <span class="judgment ${p.badge_class}" style="font-size:10px;padding:2px 8px;">${verdictName}${p.score_100 > 0 ? ` · ${p.score_100}` : ''}</span></span>
+            </div>
+            <table class="detail-table">
+                <thead><tr>
+                    <th>District</th><th>Defender</th><th>Level</th><th>Lvl Mult</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Cleanup</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    </div>`;
 }
 
 function buildTable() {
@@ -384,11 +445,14 @@ function buildTable() {
 
     rows.forEach(p => {
         const profileUrl = '/player/' + encodeURIComponent((p.player_tag || '').replace('#', ''));
+        const leftBadge = (p.in_clan === false || p.in_clan === 0)
+            ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>'
+            : '';
         const row = document.createElement('tr');
         row.style.cursor = 'pointer';
         row.innerHTML = `
             <td>
-                <div class="player-name"><a href="${profileUrl}" style="color:inherit;" onclick="event.stopPropagation();">${escapeHTML(p.player_name)}</a></div>
+                <div class="player-name"><a href="${profileUrl}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftBadge}</div>
                 <div class="player-tag">${escapeHTML(p.player_tag)}</div>
             </td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${p.att_count}</td>
@@ -396,15 +460,13 @@ function buildTable() {
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--blue);">${p.avg_pct}%</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--green);">${p.finishes}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--muted);">${p.cleanup_count}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--purple);">${p.career_avg_pct}%</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--accent);">${p.career_finishes}</td>
-            <td style="font-size:12px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(p.participation)}</td>
+            <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
             <td><button type="button" class="action-btn details-toggle">Details</button></td>
         `;
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'detail-row';
-        detailRow.innerHTML = `<td class="detail-cell" colspan="10"><div class="detail-inner">${buildDetailTable(p.attack_logs)}</div></td>`;
+        detailRow.innerHTML = `<td class="detail-cell" colspan="8"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
 
         const toggle = () => {
             const expanded = detailRow.classList.toggle('expanded');
