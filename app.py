@@ -1208,7 +1208,7 @@ def calculate_activity_score(player_tag, period='week'):
         total_done = 0
     player_total_max = sum(w.max_attacks or 0 for w in player_weeks if w.player_tag == player_tag)
     total_seasons = len(season_ids)
-    ranked_score = min(40, round(40 * total_done / player_total_max)) if player_total_max else 0
+    ranked_score = min(100, round(100 * total_done / player_total_max)) if player_total_max else 0
 
     # Battle: player vs clan average weekly attack rate
     cutoff = now - dt.timedelta(days=battle_days)
@@ -1229,7 +1229,7 @@ def calculate_activity_score(player_tag, period='week'):
     clan_member_count = len(in_clan_tags)
     clan_weekly_avg = clan_total / clan_member_count / weeks if clan_member_count else 0
     player_weekly_avg = battles_in_window / weeks
-    battle_score = min(30, round(30 * player_weekly_avg / clan_weekly_avg)) if clan_weekly_avg > 0 else 0
+    battle_score = min(100, round(100 * player_weekly_avg / clan_weekly_avg)) if clan_weekly_avg > 0 else 0
 
     # Raid: attacks done vs max possible (6 per weekend) across last N weekends
     last_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).limit(raid_limit).all()
@@ -1240,9 +1240,9 @@ def calculate_activity_score(player_tag, period='week'):
                             RaidWeekendLog.raid_weekend_id.in_(raid_ids))
                     .count()) if raid_ids else 0
     raid_max_possible = total_raids * 6
-    raid_score = min(30, round(30 * raid_attacks / raid_max_possible)) if raid_max_possible else 0
+    raid_score = min(100, round(100 * raid_attacks / raid_max_possible)) if raid_max_possible else 0
 
-    total = ranked_score + battle_score + raid_score
+    total = round((ranked_score + battle_score + raid_score) / 3)
     if total >= 80:
         label, color = 'Active', 'green'
     elif total >= 50:
@@ -1261,11 +1261,11 @@ def calculate_activity_score(player_tag, period='week'):
         'score': total,
         'label': label,
         'label_color': color,
-        'ranked_score': ranked_score, 'ranked_max': 40,
+        'ranked_score': ranked_score, 'ranked_max': 100,
         'ranked_detail': f'{total_done}/{player_total_max} attacks across last {total_seasons} seasons',
-        'battle_score': battle_score, 'battle_max': 30,
+        'battle_score': battle_score, 'battle_max': 100,
         'battle_detail': battle_detail,
-        'raid_score': raid_score, 'raid_max': 30,
+        'raid_score': raid_score, 'raid_max': 100,
         'raid_detail': f'{raid_attacks}/{raid_max_possible} attacks across last {total_raids} raid weekends',
         'has_data': has_data,
     }
@@ -1317,7 +1317,7 @@ def calculate_skill_score(player_tag, period='month'):
         ranked_scores.append(score_100)
     ranked_scores.extend([0] * (total_seasons - len(ranked_scores)))
     avg_ranked = sum(ranked_scores) / len(ranked_scores) if ranked_scores else 0
-    ranked_skill = round(avg_ranked * 40 / 100)
+    ranked_skill = round(avg_ranked)
 
     # Raid skill: avg raid score_100 across last N weekends (0 for skipped)
     last_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).limit(raid_limit).all()
@@ -1334,7 +1334,7 @@ def calculate_skill_score(player_tag, period='month'):
 
     raid_scores = [_raid_verdict(logs_by_raid.get(rid, []))[2] for rid in raid_ids]
     avg_raid = sum(raid_scores) / len(raid_scores) if raid_scores else 0
-    raid_skill = round(avg_raid * 30 / 100)
+    raid_skill = round(avg_raid)
 
     # Battle skill: player total loot vs clan average loot
     cutoff = now - dt.timedelta(days=battle_days)
@@ -1357,9 +1357,9 @@ def calculate_skill_score(player_tag, period='month'):
                                BattleLog.time >= cutoff)
                        .scalar() or 0) if in_clan_tags else 0
     clan_avg_loot = clan_loot_total / len(in_clan_tags) if in_clan_tags else 0
-    battle_skill = min(30, round(30 * player_loot / clan_avg_loot)) if clan_avg_loot > 0 else 0
+    battle_skill = min(100, round(100 * player_loot / clan_avg_loot)) if clan_avg_loot > 0 else 0
 
-    total = ranked_skill + raid_skill + battle_skill
+    total = round((ranked_skill + raid_skill + battle_skill) / 3)
     if total >= 80:   label, color = 'Elite',   'purple'
     elif total >= 60: label, color = 'Strong',  'green'
     elif total >= 40: label, color = 'Average', 'blue'
@@ -1372,11 +1372,11 @@ def calculate_skill_score(player_tag, period='month'):
         'score': total,
         'label': label,
         'label_color': color,
-        'ranked_skill': ranked_skill, 'ranked_max': 40,
+        'ranked_skill': ranked_skill, 'ranked_max': 100,
         'ranked_detail': f'Avg verdict {avg_ranked:.0f}/100 · {len(player_weeks)}/{total_seasons} seasons played',
-        'raid_skill': raid_skill, 'raid_max': 30,
+        'raid_skill': raid_skill, 'raid_max': 100,
         'raid_detail': f'Avg verdict {avg_raid:.0f}/100 · {total_raids} raids',
-        'battle_skill': battle_skill, 'battle_max': 30,
+        'battle_skill': battle_skill, 'battle_max': 100,
         'battle_detail': f'{_fmt_loot(player_loot)} loot · Clan avg: {_fmt_loot(clan_avg_loot)}',
         'has_data': has_data,
     }
