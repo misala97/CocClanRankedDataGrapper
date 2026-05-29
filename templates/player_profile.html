@@ -135,6 +135,7 @@
             letter-spacing: 1px; text-transform: uppercase;
         }
         .score-out-of { font-size: 12px; color: var(--muted); margin-top: 4px; }
+        .score-sub { margin-top: 10px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 2px; }
         .score-right-title {
             font-size: 11px; font-weight: 700; color: var(--muted);
             text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 16px;
@@ -274,7 +275,7 @@
     const sharedAvailable = periodOrder.filter(p => activityPeriods[p] || skillPeriods[p]);
     let   sharedPeriod    = sharedAvailable.includes('month') ? 'month' : (sharedAvailable[0] || 'month');
 
-    function renderCard(periodsData, scoreId, labelId, componentsId, componentDefs) {
+    function renderCard(periodsData, scoreId, labelId, subId, componentsId, componentDefs) {
         const d = periodsData[sharedPeriod];
         if (!d) return;
         const col = `var(--${d.label_color})`;
@@ -282,7 +283,11 @@
         document.getElementById(scoreId).style.color = col;
         document.getElementById(labelId).textContent = d.label;
         document.getElementById(labelId).style.color = col;
-        document.getElementById(componentsId).innerHTML = componentDefs(d).map(c => `
+        const comps = componentDefs(d);
+        document.getElementById(subId).innerHTML = comps.map(c =>
+            `<span style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${c.color};">${c.score}</span>`
+        ).join('<span style="color:var(--border);margin:0 5px;">·</span>');
+        document.getElementById(componentsId).innerHTML = comps.map(c => `
             <div class="score-component">
                 <div class="score-component-header">
                     <span class="score-component-name">${c.name}</span>
@@ -304,15 +309,15 @@
     function renderAll() {
         renderToggle('act-toggle');
         renderToggle('sk-toggle');
-        renderCard(activityPeriods, 'act-score', 'act-label', 'act-components', d => [
-            { name: 'Ranked Participation', score: d.ranked_score, max: d.ranked_max, detail: d.ranked_detail, color: 'var(--blue)',   pts: 'text-blue' },
-            { name: 'Battle Activity',      score: d.battle_score, max: d.battle_max, detail: d.battle_detail, color: 'var(--green)',  pts: 'text-green' },
-            { name: 'Raid Weekend',         score: d.raid_score,   max: d.raid_max,   detail: d.raid_detail,   color: 'var(--accent)', pts: 'text-accent' },
+        renderCard(activityPeriods, 'act-score', 'act-label', 'act-sub', 'act-components', d => [
+            { name: 'Ranked',       score: d.ranked_score, max: d.ranked_max, detail: d.ranked_detail, color: 'var(--blue)',   pts: 'text-blue' },
+            { name: 'Raid',         score: d.raid_score,   max: d.raid_max,   detail: d.raid_detail,   color: 'var(--accent)', pts: 'text-accent' },
+            { name: 'Farm Attacks', score: d.battle_score, max: d.battle_max, detail: d.battle_detail, color: 'var(--green)',  pts: 'text-green' },
         ]);
-        renderCard(skillPeriods, 'sk-score', 'sk-label', 'sk-components', d => [
-            { name: 'Ranked', score: d.ranked_skill, max: d.ranked_max, detail: d.ranked_detail, color: 'var(--blue)',   pts: 'text-blue' },
-            { name: 'Loot',   score: d.battle_skill, max: d.battle_max, detail: d.battle_detail, color: 'var(--green)',  pts: 'text-green' },
-            { name: 'Raid',   score: d.raid_skill,   max: d.raid_max,   detail: d.raid_detail,   color: 'var(--accent)', pts: 'text-accent' },
+        renderCard(skillPeriods, 'sk-score', 'sk-label', 'sk-sub', 'sk-components', d => [
+            { name: 'Ranked',       score: d.ranked_skill, max: d.ranked_max, detail: d.ranked_detail, color: 'var(--blue)',   pts: 'text-blue' },
+            { name: 'Raid',         score: d.raid_skill,   max: d.raid_max,   detail: d.raid_detail,   color: 'var(--accent)', pts: 'text-accent' },
+            { name: 'Farm Attacks', score: d.battle_skill, max: d.battle_max, detail: d.battle_detail, color: 'var(--green)',  pts: 'text-green' },
         ]);
     }
 
@@ -332,9 +337,9 @@
                     <div id="act-score" class="score-number"></div>
                     <div id="act-label" class="score-label-text"></div>
                     <div class="score-out-of">out of 100</div>
+                    <div id="act-sub" class="score-sub"></div>
                 </div>
                 <div class="score-right">
-                    <div class="score-right-title">How this score is calculated</div>
                     <div id="act-components"></div>
                 </div>
             </div>
@@ -351,9 +356,9 @@
                     <div id="sk-score" class="score-number"></div>
                     <div id="sk-label" class="score-label-text"></div>
                     <div class="score-out-of">out of 100</div>
+                    <div id="sk-sub" class="score-sub"></div>
                 </div>
                 <div class="score-right">
-                    <div class="score-right-title">How this score is calculated</div>
                     <div id="sk-components"></div>
                 </div>
             </div>

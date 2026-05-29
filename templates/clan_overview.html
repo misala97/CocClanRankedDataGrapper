@@ -82,10 +82,38 @@
             transition: all 0.15s; display: inline-block;
         }
         .period-btn:hover { color: var(--text); border-color: var(--muted); }
-        .period-btn.active {
-            background: rgba(240,165,0,0.12); color: var(--accent);
-            border-color: rgba(240,165,0,0.4);
+        .period-btn.active { background: rgba(240,165,0,0.12); color: var(--accent); border-color: rgba(240,165,0,0.4); }
+
+        /* ── CONTROLS BAR ── */
+        .controls-bar {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            margin-bottom: 20px;
         }
+        .search-input {
+            padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface); color: var(--text); font-size: 13px;
+            font-family: 'DM Sans', sans-serif; outline: none;
+            transition: border-color 0.15s, box-shadow 0.15s; min-width: 200px;
+        }
+        .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(240,165,0,0.1); }
+        .search-input::placeholder { color: var(--muted); }
+
+        .sort-group { display: flex; gap: 4px; margin-left: auto; }
+        .sort-label {
+            font-size: 11px; font-weight: 700; color: var(--muted);
+            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.8px; text-transform: uppercase;
+            align-self: center; margin-right: 4px;
+        }
+        .sort-btn {
+            padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border);
+            background: transparent; color: var(--muted); font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; text-transform: uppercase;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .sort-btn:hover { color: var(--text); border-color: var(--muted); }
+        .sort-btn.active { background: rgba(240,165,0,0.12); color: var(--accent); border-color: rgba(240,165,0,0.4); }
+
+        .result-count { font-size: 12px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
 
         /* ── CONTAINER ── */
         .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
@@ -107,91 +135,62 @@
             transition: border-color 0.2s, box-shadow 0.2s, transform 0.18s;
             position: relative;
         }
-        .player-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-            background: linear-gradient(90deg, var(--accent), var(--acc2));
-            opacity: 0; transition: opacity 0.2s;
-        }
         .player-card:hover {
             border-color: rgba(240,165,0,0.45);
             box-shadow: 0 6px 24px rgba(240,165,0,0.09);
             transform: translateY(-2px);
         }
-        .player-card:hover::before { opacity: 1; }
+
+        /* ── CARD TOP ACCENT LINE ── */
+        .card-accent-line {
+            height: 3px; width: 100%;
+        }
 
         /* ── CARD HEADER ── */
         .player-card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 14px;
-            background: var(--surf2);
-            border-bottom: 1px solid var(--bord2);
-            min-height: 42px;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 14px; background: var(--surf2);
+            border-bottom: 1px solid var(--bord2); min-height: 40px;
         }
-        .player-name-row {
-            display: flex; align-items: center; gap: 7px; min-width: 0;
+        .player-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .rank-badge {
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            color: var(--muted); background: var(--bord2);
+            padding: 1px 6px; border-radius: 4px; flex-shrink: 0;
         }
-        .league-icon { width: 18px; height: 18px; flex-shrink: 0; }
+        .league-icon { width: 16px; height: 16px; flex-shrink: 0; }
         .player-name {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 14px; font-weight: 700;
-            letter-spacing: 0.2px; white-space: nowrap;
-            overflow: hidden; text-overflow: ellipsis;
+            font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700;
+            letter-spacing: 0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .th-badge {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 11px; font-weight: 700;
-            letter-spacing: 0.3px; color: var(--muted);
-            background: var(--bord2); padding: 2px 7px;
-            border-radius: 4px; flex-shrink: 0;
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            letter-spacing: 0.3px; color: var(--muted); background: var(--bord2);
+            padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
         }
 
         /* ── SCORES DUO ── */
-        .scores-duo {
-            display: flex;
-            padding: 14px 16px;
-        }
+        .scores-duo { display: flex; padding: 14px 16px; }
         .mini-score {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            padding: 0 10px;
+            flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 10px;
         }
         .mini-score:first-child { padding-left: 0; }
         .mini-score:last-child { padding-right: 0; border-left: 1px solid var(--bord2); }
-
         .mini-section-label {
-            font-size: 9px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif;
-            letter-spacing: 1.2px; text-transform: uppercase;
-            color: var(--muted); margin-bottom: 4px;
+            font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
         }
         .mini-num {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 44px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; font-size: 44px; font-weight: 700;
             line-height: 1; margin-bottom: 1px;
         }
         .mini-tag {
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 11px; font-weight: 700;
-            letter-spacing: 0.8px; text-transform: uppercase;
-            margin-bottom: 10px;
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 10px;
         }
-        .mini-bars {
-            width: 100%;
-            display: flex; flex-direction: column; gap: 4px;
-        }
-        .mini-bar-track {
-            height: 5px; border-radius: 3px;
-            background: var(--bord2); overflow: hidden;
-        }
-        .mini-bar-fill {
-            height: 100%; border-radius: 3px;
-            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+        .mini-bars { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+        .mini-bar-track { height: 5px; border-radius: 3px; background: var(--bord2); overflow: hidden; }
+        .mini-bar-fill { height: 100%; border-radius: 3px; }
 
         /* ── FOOTER ── */
         .page-footer {
@@ -201,14 +200,8 @@
         }
 
         /* ── EMPTY STATE ── */
-        .empty-state {
-            text-align: center; padding: 80px 32px;
-            color: var(--muted); font-size: 15px;
-        }
-        .empty-state h3 {
-            font-family: 'Rajdhani', sans-serif; font-size: 24px;
-            font-weight: 700; color: var(--text); margin-bottom: 8px;
-        }
+        .empty-state { text-align: center; padding: 80px 32px; color: var(--muted); font-size: 15px; }
+        .empty-state h3 { font-family: 'Rajdhani', sans-serif; font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
 
         /* ── RESPONSIVE ── */
         @media (max-width: 1200px) { .players-grid { grid-template-columns: repeat(3, 1fr); } }
@@ -217,6 +210,7 @@
             .players-grid { grid-template-columns: 1fr; }
             .nav-inner, .page-header, .container { padding-left: 16px; padding-right: 16px; }
             .page-header h1 { font-size: 30px; }
+            .sort-group { margin-left: 0; }
         }
     </style>
 </head>
@@ -236,7 +230,7 @@
     <div class="page-header-inner">
         <h1>Clan <span>Overview</span></h1>
         <div class="header-meta">
-            <p>{{ player_cards|length }} members · Sorted by combined score</p>
+            <p id="memberCount">{{ player_cards|length }} members</p>
             <div class="period-toggle">
                 <a href="?period=week"    class="period-btn{% if period == 'week' %} active{% endif %}">1 Week</a>
                 <a href="?period=month"   class="period-btn{% if period == 'month' %} active{% endif %}">1 Month</a>
@@ -249,62 +243,21 @@
 <div class="container">
 
     {% if player_cards %}
-    <div class="players-grid">
-        {% for p in player_cards %}
-        <a href="/player/{{ p.tag_url }}" class="player-card">
 
-            <div class="player-card-header">
-                <div class="player-name-row">
-                    {% if p.league_icon %}
-                    <img src="{{ p.league_icon }}" class="league-icon" alt="">
-                    {% endif %}
-                    <span class="player-name">{{ p.name | e }}</span>
-                </div>
-                <span class="th-badge">TH{{ p.th or '?' }}</span>
-            </div>
-
-            <div class="scores-duo">
-
-                <!-- Activity Score -->
-                <div class="mini-score">
-                    <div class="mini-section-label">Activity</div>
-                    <div class="mini-num" style="color:var(--{{ p.activity.label_color }})">{{ p.activity.score }}</div>
-                    <div class="mini-tag" style="color:var(--{{ p.activity.label_color }})">{{ p.activity.label }}</div>
-                    <div class="mini-bars">
-                        <div class="mini-bar-track">
-                            <div class="mini-bar-fill" style="width:{{ ((p.activity.ranked_score / p.activity.ranked_max * 100) if p.activity.ranked_max > 0 else 0) | round }}%;background:var(--blue)"></div>
-                        </div>
-                        <div class="mini-bar-track">
-                            <div class="mini-bar-fill" style="width:{{ ((p.activity.battle_score / p.activity.battle_max * 100) if p.activity.battle_max > 0 else 0) | round }}%;background:var(--green)"></div>
-                        </div>
-                        <div class="mini-bar-track">
-                            <div class="mini-bar-fill" style="width:{{ ((p.activity.raid_score / p.activity.raid_max * 100) if p.activity.raid_max > 0 else 0) | round }}%;background:var(--accent)"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Skill Score -->
-                <div class="mini-score">
-                    <div class="mini-section-label">Skill</div>
-                    <div class="mini-num" style="color:var(--{{ p.skill.label_color }})">{{ p.skill.score }}</div>
-                    <div class="mini-tag" style="color:var(--{{ p.skill.label_color }})">{{ p.skill.label }}</div>
-                    <div class="mini-bars">
-                        <div class="mini-bar-track">
-                            <div class="mini-bar-fill" style="width:{{ ((p.skill.ranked_skill / p.skill.ranked_max * 100) if p.skill.ranked_max > 0 else 0) | round }}%;background:var(--blue)"></div>
-                        </div>
-                        <div class="mini-bar-track">
-                            <div class="mini-bar-fill" style="width:{{ ((p.skill.battle_skill / p.skill.battle_max * 100) if p.skill.battle_max > 0 else 0) | round }}%;background:var(--green)"></div>
-                        </div>
-                        <div class="mini-bar-track">
-                            <div class="mini-bar-fill" style="width:{{ ((p.skill.raid_skill / p.skill.raid_max * 100) if p.skill.raid_max > 0 else 0) | round }}%;background:var(--accent)"></div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </a>
-        {% endfor %}
+    <div class="controls-bar">
+        <input id="searchInput" class="search-input" type="search" placeholder="🔍 Search player…" oninput="applyFilters()">
+        <span id="resultCount" class="result-count"></span>
+        <div class="sort-group">
+            <span class="sort-label">Sort</span>
+            <button class="sort-btn" id="sort-combined" onclick="setSort('combined')">Combined</button>
+            <button class="sort-btn" id="sort-activity" onclick="setSort('activity')">Activity</button>
+            <button class="sort-btn" id="sort-skill"    onclick="setSort('skill')">Skill</button>
+            <button class="sort-btn" id="sort-name"     onclick="setSort('name')">Name</button>
+        </div>
     </div>
+
+    <div id="playersGrid" class="players-grid"></div>
+
     {% else %}
     <div class="empty-state">
         <h3>No Members Found</h3>
@@ -315,6 +268,101 @@
 </div>
 
 <div class="page-footer">CoC Analytics · Clan Overview</div>
+
+{% if player_cards %}
+<script>
+    const COLOR_MAP = {
+        green:  '#3fb950', blue: '#58a6ff', accent: '#f0a500',
+        red:    '#f85149', purple: '#bc8cff', muted: '#8b949e',
+    };
+
+    const allPlayers = {{ player_cards | tojson | safe }};
+    let currentSort = 'combined';
+    let filtered = [...allPlayers];
+
+    function escapeHTML(s) {
+        return String(s || '').replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+        );
+    }
+
+    function bar(pct, color) {
+        return `<div class="mini-bar-track"><div class="mini-bar-fill" style="width:${Math.round(pct)}%;background:${color};"></div></div>`;
+    }
+
+    function renderCard(p, rank) {
+        const actColor  = COLOR_MAP[p.activity.label_color] || COLOR_MAP.muted;
+        const skColor   = COLOR_MAP[p.skill.label_color]    || COLOR_MAP.muted;
+        const actPct    = s => Math.round(s / 100 * 100);
+
+        return `<a href="/player/${escapeHTML(p.tag_url)}" class="player-card">
+            <div class="card-accent-line" style="background:${actColor};"></div>
+            <div class="player-card-header">
+                <div class="player-name-row">
+                    <span class="rank-badge">${rank}</span>
+                    ${p.league_icon ? `<img src="${escapeHTML(p.league_icon)}" class="league-icon" alt="">` : ''}
+                    <span class="player-name">${escapeHTML(p.name)}</span>
+                </div>
+                <span class="th-badge">TH${p.th || '?'}</span>
+            </div>
+            <div class="scores-duo">
+                <div class="mini-score">
+                    <div class="mini-section-label">Activity</div>
+                    <div class="mini-num" style="color:${actColor};">${p.activity.score}</div>
+                    <div class="mini-tag" style="color:${actColor};">${escapeHTML(p.activity.label)}</div>
+                    <div class="mini-bars">
+                        ${bar(p.activity.ranked_score, 'var(--blue)')}
+                        ${bar(p.activity.raid_score,   'var(--accent)')}
+                        ${bar(p.activity.battle_score, 'var(--green)')}
+                    </div>
+                </div>
+                <div class="mini-score">
+                    <div class="mini-section-label">Skill</div>
+                    <div class="mini-num" style="color:${skColor};">${p.skill.score}</div>
+                    <div class="mini-tag" style="color:${skColor};">${escapeHTML(p.skill.label)}</div>
+                    <div class="mini-bars">
+                        ${bar(p.skill.ranked_skill, 'var(--blue)')}
+                        ${bar(p.skill.raid_skill,   'var(--accent)')}
+                        ${bar(p.skill.battle_skill, 'var(--green)')}
+                    </div>
+                </div>
+            </div>
+        </a>`;
+    }
+
+    function setSort(key) {
+        currentSort = key;
+        document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('sort-' + key).classList.add('active');
+        applyFilters();
+    }
+
+    function applyFilters() {
+        const q = (document.getElementById('searchInput').value || '').toLowerCase();
+        filtered = allPlayers.filter(p => !q || p.name.toLowerCase().includes(q));
+
+        filtered.sort((a, b) => {
+            if (currentSort === 'activity') return b.activity.score - a.activity.score;
+            if (currentSort === 'skill')    return b.skill.score    - a.skill.score;
+            if (currentSort === 'name')     return a.name.localeCompare(b.name);
+            return b.combined - a.combined;
+        });
+
+        const grid = document.getElementById('playersGrid');
+        grid.innerHTML = filtered.map((p, i) => renderCard(p, i + 1)).join('');
+
+        const total = allPlayers.length;
+        document.getElementById('resultCount').textContent =
+            filtered.length < total ? `${filtered.length} of ${total} shown` : '';
+        document.getElementById('memberCount').textContent =
+            `${total} members`;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setSort('combined');
+    });
+</script>
+{% endif %}
 
 </body>
 </html>
