@@ -293,10 +293,10 @@
                             <div class="mini-bar-fill" style="width:{{ ((p.skill.ranked_skill / p.skill.ranked_max * 100) if p.skill.ranked_max > 0 else 0) | round }}%;background:var(--blue)"></div>
                         </div>
                         <div class="mini-bar-track">
-                            <div class="mini-bar-fill" style="width:{{ ((p.skill.raid_skill / p.skill.raid_max * 100) if p.skill.raid_max > 0 else 0) | round }}%;background:var(--accent)"></div>
+                            <div class="mini-bar-fill" style="width:{{ ((p.skill.battle_skill / p.skill.battle_max * 100) if p.skill.battle_max > 0 else 0) | round }}%;background:var(--green)"></div>
                         </div>
                         <div class="mini-bar-track">
-                            <div class="mini-bar-fill" style="width:{{ ((p.skill.battle_skill / p.skill.battle_max * 100) if p.skill.battle_max > 0 else 0) | round }}%;background:var(--green)"></div>
+                            <div class="mini-bar-fill" style="width:{{ ((p.skill.raid_skill / p.skill.raid_max * 100) if p.skill.raid_max > 0 else 0) | round }}%;background:var(--accent)"></div>
                         </div>
                     </div>
                 </div>
