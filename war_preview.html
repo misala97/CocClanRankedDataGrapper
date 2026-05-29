@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>War – Insi Modus vs HAPPY FAMILY♥</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      #0d1117;
+            --surface: #161b22;
+            --surf2:   #1c2330;
+            --border:  #30363d;
+            --bord2:   #21262d;
+            --text:    #e6edf3;
+            --muted:   #8b949e;
+            --accent:  #f0a500;
+            --green:   #3fb950;
+            --blue:    #58a6ff;
+            --red:     #f85149;
+            --yellow:  #e3b341;
+            --purple:  #bc8cff;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px 20px; }
+
+        .page-title {
+            text-align: center; margin-bottom: 28px;
+        }
+        .page-title h1 {
+            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;
+        }
+        .page-title .state-badge {
+            display: inline-block; padding: 3px 12px; border-radius: 20px;
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            background: rgba(240,165,0,0.15); color: var(--accent); border: 1px solid rgba(240,165,0,0.3);
+        }
+
+        /* ── WAR HEADER ── */
+        .war-header {
+            display: grid; grid-template-columns: 1fr auto 1fr;
+            gap: 16px; align-items: center; max-width: 900px; margin: 0 auto 28px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+            padding: 24px 28px;
+        }
+        .clan-side { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .clan-side.us { align-items: flex-start; }
+        .clan-side.them { align-items: flex-end; }
+        .clan-badge { width: 56px; height: 56px; border-radius: 10px; object-fit: contain; }
+        .clan-name {
+            font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;
+        }
+        .clan-level { font-size: 12px; color: var(--muted); }
+        .clan-stars {
+            font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 700; color: var(--yellow);
+            display: flex; align-items: center; gap: 6px;
+        }
+        .clan-stars span { font-size: 13px; color: var(--muted); font-weight: 600; }
+        .clan-destr { font-size: 13px; color: var(--muted); }
+        .clan-attacks { font-size: 12px; color: var(--blue); }
+
+        .vs-block { text-align: center; }
+        .vs-text {
+            font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700;
+            color: var(--muted); letter-spacing: 2px;
+        }
+        .vs-info { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+        /* ── LAYOUT ── */
+        .war-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 20px; max-width: 1100px; margin: 0 auto;
+        }
+
+        .side-header {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+        }
+        .side-header img { width: 28px; height: 28px; border-radius: 6px; }
+        .side-header-name { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; }
+
+        /* ── MEMBER CARD ── */
+        .member-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            margin-bottom: 8px; overflow: hidden; transition: border-color 0.15s;
+        }
+        .member-card.has-attacks { border-color: rgba(63,185,80,0.3); }
+        .member-card.got-attacked { border-left: 3px solid var(--red); }
+        .member-card.has-attacks.got-attacked { border-color: rgba(248,81,73,0.35); border-left: 3px solid var(--red); }
+
+        .member-main {
+            display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+        }
+        .member-pos {
+            font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
+            color: var(--muted); min-width: 26px; text-align: center;
+        }
+        .th-badge {
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 5px;
+            padding: 2px 6px; color: var(--blue); white-space: nowrap;
+        }
+        .member-info { flex: 1; min-width: 0; }
+        .member-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .member-tag { font-size: 11px; color: var(--muted); margin-top: 1px; }
+        .member-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+        .attacks-used {
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            padding: 2px 7px; border-radius: 10px;
+        }
+        .attacks-used.done { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.25); }
+        .attacks-used.partial { background: rgba(240,165,0,0.12); color: var(--accent); border: 1px solid rgba(240,165,0,0.25); }
+        .attacks-used.none { background: rgba(139,148,158,0.08); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
+
+        /* ── ATTACKS ── */
+        .attack-list { border-top: 1px solid var(--bord2); }
+        .attack-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 7px 14px; border-bottom: 1px solid var(--bord2); font-size: 12px;
+        }
+        .attack-row:last-child { border-bottom: none; }
+        .attack-arrow { font-size: 11px; color: var(--muted); }
+        .attack-target { flex: 1; color: var(--muted); }
+        .attack-stars { font-size: 14px; letter-spacing: 1px; }
+        .attack-pct {
+            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--blue);
+        }
+        .attack-order { font-size: 10px; color: var(--muted); min-width: 26px; text-align: right; }
+
+        /* ── RECEIVED ── */
+        .defense-section { border-top: 1px solid var(--bord2); padding: 7px 14px; font-size: 12px; }
+        .defense-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+        .defense-row { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+        .defense-row .def-stars { font-size: 13px; }
+        .defense-row .def-pct { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight:600; color: var(--red); }
+
+        @media (max-width: 700px) { .war-grid { grid-template-columns: 1fr; } .war-header { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="page-title">
+    <h1>Clan War</h1>
+    <span class="state-badge">⚔️ In War</span>
+</div>
+
+<div class="war-header">
+    <div class="clan-side us">
+        <img class="clan-badge" src="https://api-assets.clashofclans.com/badges/200/ALFkbCc_x-Nqy_D12KoayjbAxxJSc1WgvMsK4JsYi_Q.png" alt="">
+        <div class="clan-name">Insi Modus</div>
+        <div class="clan-level">Clan Level 18 · #2QRC8998U</div>
+        <div class="clan-stars">⭐ 3 <span>stars</span></div>
+        <div class="clan-destr">5.0% destruction</div>
+        <div class="clan-attacks">1 / 40 attacks used</div>
+    </div>
+    <div class="vs-block">
+        <div class="vs-text">VS</div>
+        <div class="vs-info">20v20 · 2 attacks/member</div>
+    </div>
+    <div class="clan-side them">
+        <img class="clan-badge" src="https://api-assets.clashofclans.com/badges/200/53gCGsY9DPxFVfkNP9Hs4f46G9WuKpHD0xSS71rGtGI.png" alt="">
+        <div class="clan-name">HAPPY FAMILY♥</div>
+        <div class="clan-level">Clan Level 16 · #2Y88JU0PV</div>
+        <div class="clan-stars" style="justify-content:flex-end;">⭐ 25 <span>stars</span></div>
+        <div class="clan-destr">41.6% destruction</div>
+        <div class="clan-attacks" style="text-align:right;">10 / 40 attacks used</div>
+    </div>
+</div>
+
+<div class="war-grid" id="warGrid"></div>
+
+<script>
+const warData = {"state":"inWar","teamSize":20,"attacksPerMember":2,"clan":{"tag":"#2QRC8998U","name":"Insi Modus","badgeUrls":{"medium":"https://api-assets.clashofclans.com/badges/200/ALFkbCc_x-Nqy_D12KoayjbAxxJSc1WgvMsK4JsYi_Q.png"},"clanLevel":18,"attacks":1,"stars":3,"destructionPercentage":5,"members":[{"tag":"#GPLRVJ889","name":"Volker Racho","townhallLevel":16,"mapPosition":7,"opponentAttacks":0},{"tag":"#GRR8RPCU9","name":"Hadith","townhallLevel":9,"mapPosition":20,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#GRG9JQGYL","defenderTag":"#GRR8RPCU9","stars":3,"destructionPercentage":100,"order":2,"duration":103}},{"tag":"#LV0C8VGYV","name":"Turbo_Thorsten","townhallLevel":15,"mapPosition":14,"opponentAttacks":0},{"tag":"#RR2JJPJY","name":"finn_2502","townhallLevel":13,"mapPosition":16,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#QVQ9L8PY0","defenderTag":"#RR2JJPJY","stars":3,"destructionPercentage":100,"order":6,"duration":91}},{"tag":"#GCR08GUPC","name":"Misala","townhallLevel":14,"mapPosition":15,"opponentAttacks":2,"bestOpponentAttack":{"attackerTag":"#QVQ9L8PY0","defenderTag":"#GCR08GUPC","stars":3,"destructionPercentage":100,"order":5,"duration":121}},{"tag":"#GCV8RVQQ","name":"blu3prOud.","townhallLevel":17,"mapPosition":5,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#2QRQRJ88L","defenderTag":"#GCV8RVQQ","stars":2,"destructionPercentage":60,"order":4,"duration":86}},{"tag":"#2PGYUL28","name":"11Nic011","townhallLevel":18,"mapPosition":1,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#829UUYV92","defenderTag":"#2PGYUL28","stars":3,"destructionPercentage":100,"order":11,"duration":124}},{"tag":"#2JUQY0JP","name":"Fremdwort","townhallLevel":17,"mapPosition":4,"opponentAttacks":0},{"tag":"#JRLYU9LG","name":"Reaper","townhallLevel":17,"mapPosition":6,"opponentAttacks":0},{"tag":"#QYP2009","name":"ruwell","townhallLevel":18,"mapPosition":2,"opponentAttacks":0},{"tag":"#GJ9YCG80P","name":"MopsMaus","townhallLevel":15,"mapPosition":12,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#QQULRUCUC","defenderTag":"#GJ9YCG80P","stars":3,"destructionPercentage":100,"order":8,"duration":139}},{"tag":"#QCQYUVQ0U","name":"Fogetek","townhallLevel":12,"mapPosition":17,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#GVYQQP2P9","defenderTag":"#QCQYUVQ0U","stars":2,"destructionPercentage":72,"order":9,"duration":86}},{"tag":"#PLYPPCRL8","name":"The Lord","townhallLevel":15,"mapPosition":13,"opponentAttacks":0},{"tag":"#8V99UVRY","name":"FraizHD","townhallLevel":15,"mapPosition":10,"opponentAttacks":0},{"tag":"#Q82RQQ80Q","name":"Santahunter","townhallLevel":18,"mapPosition":3,"opponentAttacks":0},{"tag":"#YYJR02GGY","name":"Löwenkralle","townhallLevel":16,"mapPosition":8,"attacks":[{"attackerTag":"#YYJR02GGY","defenderTag":"#8Y2G8CGPV","stars":3,"destructionPercentage":100,"order":3,"duration":140}],"opponentAttacks":0},{"tag":"#L0Q9UYVJ0","name":"AS Koma","townhallLevel":15,"mapPosition":11,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#2QRQRJ88L","defenderTag":"#L0Q9UYVJ0","stars":3,"destructionPercentage":100,"order":7,"duration":135}},{"tag":"#R90LY0JJ9","name":"LightOfFlame","townhallLevel":9,"mapPosition":19,"opponentAttacks":0},{"tag":"#QRCQ09QQJ","name":"369alex","townhallLevel":15,"mapPosition":9,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#QQULRUCUC","defenderTag":"#QRCQ09QQJ","stars":3,"destructionPercentage":100,"order":10,"duration":145}},{"tag":"#LQ2J90RVG","name":"jjj","townhallLevel":10,"mapPosition":18,"opponentAttacks":0}]},"opponent":{"tag":"#2Y88JU0PV","name":"HAPPY FAMILY♥","badgeUrls":{"medium":"https://api-assets.clashofclans.com/badges/200/53gCGsY9DPxFVfkNP9Hs4f46G9WuKpHD0xSS71rGtGI.png"},"clanLevel":16,"attacks":10,"stars":25,"destructionPercentage":41.6,"members":[{"tag":"#QVQ9L8PY0","name":"MYHERO","townhallLevel":14,"mapPosition":16,"attacks":[{"attackerTag":"#QVQ9L8PY0","defenderTag":"#GCR08GUPC","stars":3,"destructionPercentage":100,"order":5,"duration":121},{"attackerTag":"#QVQ9L8PY0","defenderTag":"#RR2JJPJY","stars":3,"destructionPercentage":100,"order":6,"duration":91}],"opponentAttacks":0},{"tag":"#QQULRUCUC","name":"My hero","townhallLevel":15,"mapPosition":12,"attacks":[{"attackerTag":"#QQULRUCUC","defenderTag":"#GJ9YCG80P","stars":3,"destructionPercentage":100,"order":8,"duration":139},{"attackerTag":"#QQULRUCUC","defenderTag":"#QRCQ09QQJ","stars":3,"destructionPercentage":100,"order":10,"duration":145}],"opponentAttacks":0},{"tag":"#QQ89LCLJL","name":"SAYAN...","townhallLevel":12,"mapPosition":18,"opponentAttacks":0},{"tag":"#PUJLQ09JV","name":"AIR FIGHTER","townhallLevel":15,"mapPosition":11,"opponentAttacks":0},{"tag":"#Q8G2RY8RR","name":"MARION","townhallLevel":12,"mapPosition":19,"opponentAttacks":0},{"tag":"#88CL2L8P0","name":"POSEIDON","townhallLevel":17,"mapPosition":7,"opponentAttacks":0},{"tag":"#8Y2G8CGPV","name":"ZERO","townhallLevel":16,"mapPosition":10,"opponentAttacks":1,"bestOpponentAttack":{"attackerTag":"#YYJR02GGY","defenderTag":"#8Y2G8CGPV","stars":3,"destructionPercentage":100,"order":3,"duration":140}},{"tag":"#GVYQQP2P9","name":"Zayyar Myi t","townhallLevel":13,"mapPosition":17,"attacks":[{"attackerTag":"#GVYQQP2P9","defenderTag":"#QCQYUVQ0U","stars":2,"destructionPercentage":72,"order":9,"duration":86}],"opponentAttacks":0},{"tag":"#QVC9YVUGR","name":"Gabbi.Garcia3","townhallLevel":17,"mapPosition":6,"opponentAttacks":0},{"tag":"#R22QGR2JC","name":"CMM","townhallLevel":9,"mapPosition":20,"opponentAttacks":0},{"tag":"#GRG9JQGYL","name":"NoMercy","townhallLevel":14,"mapPosition":15,"attacks":[{"attackerTag":"#GRG9JQGYL","defenderTag":"#GCR08GUPC","stars":0,"destructionPercentage":45,"order":1,"duration":168},{"attackerTag":"#GRG9JQGYL","defenderTag":"#GRR8RPCU9","stars":3,"destructionPercentage":100,"order":2,"duration":103}],"opponentAttacks":0},{"tag":"#829UUYV92","name":"HyperZed","townhallLevel":18,"mapPosition":1,"attacks":[{"attackerTag":"#829UUYV92","defenderTag":"#2PGYUL28","stars":3,"destructionPercentage":100,"order":11,"duration":124}],"opponentAttacks":0},{"tag":"#90VPUY08Q","name":"OCEAN","townhallLevel":18,"mapPosition":2,"opponentAttacks":0},{"tag":"#92LPC20YV","name":"Hlaingminsan","townhallLevel":18,"mapPosition":3,"opponentAttacks":0},{"tag":"#9QYVLVRC","name":"King Cobra","townhallLevel":15,"mapPosition":14,"opponentAttacks":0},{"tag":"#2CVPPCGUV","name":"My Hero","townhallLevel":16,"mapPosition":9,"opponentAttacks":0},{"tag":"#2P9QYV9QG","name":"JJ MARION","townhallLevel":15,"mapPosition":13,"opponentAttacks":0},{"tag":"#2QRQRJ88L","name":"Hein Thu Aung","townhallLevel":17,"mapPosition":5,"attacks":[{"attackerTag":"#2QRQRJ88L","defenderTag":"#GCV8RVQQ","stars":2,"destructionPercentage":60,"order":4,"duration":86},{"attackerTag":"#2QRQRJ88L","defenderTag":"#L0Q9UYVJ0","stars":3,"destructionPercentage":100,"order":7,"duration":135}],"opponentAttacks":0},{"tag":"#Q0P2PYUQL","name":"LOVE PUBG","townhallLevel":17,"mapPosition":4,"opponentAttacks":0},{"tag":"#QV9L90QU","name":"ko ko aung","townhallLevel":16,"mapPosition":8,"opponentAttacks":0}]}};
+
+function escapeHTML(s) {
+    return String(s || '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+    );
+}
+
+function renderStars(n, max = 3) {
+    n = parseInt(n) || 0;
+    const filled = `<span style="color:var(--yellow);">${'★'.repeat(n)}</span>`;
+    const empty  = `<span style="color:var(--muted);opacity:0.35;">${'☆'.repeat(max - n)}</span>`;
+    return filled + empty;
+}
+
+function attacksBadge(used, max) {
+    if (used === 0) return `<span class="attacks-used none">0 / ${max}</span>`;
+    if (used === max) return `<span class="attacks-used done">${used} / ${max} ✓</span>`;
+    return `<span class="attacks-used partial">${used} / ${max}</span>`;
+}
+
+function buildTagMap(members) {
+    const map = {};
+    members.forEach(m => { map[m.tag] = m; });
+    return map;
+}
+
+function renderSide(clan, opponentMembers, label) {
+    const sorted = [...clan.members].sort((a, b) => a.mapPosition - b.mapPosition);
+    const oppMap = buildTagMap(opponentMembers);
+
+    const col = document.createElement('div');
+
+    const hdr = document.createElement('div');
+    hdr.className = 'side-header';
+    hdr.innerHTML = `
+        <img src="${escapeHTML(clan.badgeUrls.medium)}" alt="">
+        <span class="side-header-name">${escapeHTML(clan.name)}</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:auto;">${label}</span>
+    `;
+    col.appendChild(hdr);
+
+    sorted.forEach(m => {
+        const attacks = m.attacks || [];
+        const usedCount = attacks.length;
+        const gotAttacked = m.opponentAttacks > 0;
+        const hasAttacks = usedCount > 0;
+
+        const card = document.createElement('div');
+        card.className = 'member-card' + (hasAttacks ? ' has-attacks' : '') + (gotAttacked ? ' got-attacked' : '');
+
+        let attacksHtml = '';
+        if (attacks.length > 0) {
+            const rows = attacks.map(a => {
+                const target = oppMap[a.defenderTag];
+                const targetName = target ? target.name : a.defenderTag;
+                const targetTH = target ? `TH${target.townhallLevel}` : '';
+                return `<div class="attack-row">
+                    <span class="attack-arrow">⚔</span>
+                    <span class="attack-target">${escapeHTML(targetName)} <span style="color:var(--muted);font-size:11px;">${targetTH}</span></span>
+                    <span class="attack-stars">${renderStars(a.stars)}</span>
+                    <span class="attack-pct">${a.destructionPercentage}%</span>
+                    <span class="attack-order">#${a.order}</span>
+                </div>`;
+            }).join('');
+            attacksHtml = `<div class="attack-list">${rows}</div>`;
+        }
+
+        let defenseHtml = '';
+        if (gotAttacked && m.bestOpponentAttack) {
+            const ba = m.bestOpponentAttack;
+            const attacker = oppMap[ba.attackerTag];
+            const attackerName = attacker ? attacker.name : ba.attackerTag;
+            defenseHtml = `<div class="defense-section">
+                <div class="defense-label">Best hit received (${m.opponentAttacks} attack${m.opponentAttacks !== 1 ? 's' : ''})</div>
+                <div class="defense-row">
+                    <span style="color:var(--red);">🛡</span>
+                    <span style="flex:1;">${escapeHTML(attackerName)}</span>
+                    <span class="def-stars">${renderStars(ba.stars)}</span>
+                    <span class="def-pct">${ba.destructionPercentage}%</span>
+                    <span style="font-size:10px;color:var(--muted);min-width:26px;text-align:right;">#${ba.order}</span>
+                </div>
+            </div>`;
+        }
+
+        card.innerHTML = `
+            <div class="member-main">
+                <div class="member-pos">#${m.mapPosition}</div>
+                <div class="th-badge">TH${m.townhallLevel}</div>
+                <div class="member-info">
+                    <div class="member-name">${escapeHTML(m.name)}</div>
+                    <div class="member-tag">${escapeHTML(m.tag)}</div>
+                </div>
+                <div class="member-right">
+                    ${attacksBadge(usedCount, warData.attacksPerMember)}
+                </div>
+            </div>
+            ${attacksHtml}
+            ${defenseHtml}
+        `;
+        col.appendChild(card);
+    });
+
+    return col;
+}
+
+const grid = document.getElementById('warGrid');
+grid.appendChild(renderSide(warData.clan, warData.opponent.members, 'Our Clan'));
+grid.appendChild(renderSide(warData.opponent, warData.clan.members, 'Opponent'));
+</script>
+
+</body>
+</html>

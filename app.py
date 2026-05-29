@@ -20,6 +20,7 @@ from database_functions import *
 import datetime as dt
 from logging.handlers import RotatingFileHandler
 
+CLEANUP_THRESHOLD = 35  # an attack is a cleanup if it did < this % and was the player's only hit on that district
 
 def normalize_league_name(league_name):
     if not league_name:
@@ -105,12 +106,40 @@ def _ranked_verdict(score_100, att_count, max_attacks):
     return 'badge-useless', 'Useless' + missing_text, score_100
 
 
+
+
+def _district_stats(logs):
+    """
+    Groups ORM logs by district and returns (cleanup_ids, solo_wipe_count).
+    Cleanup: player's only attack on that district, < CLEANUP_THRESHOLD%, district ended at 100%.
+    Finish:  player's attacks on that district sum to 100% (solo'd it entirely).
+    """
+    district_hits = {}
+    for l in logs:
+        key = (l.districtName, l.defenderTag)
+        district_hits.setdefault(key, []).append(l)
+    cleanup_ids = set()
+    solo_wipe_count = 0
+    for hits in district_hits.values():
+        district_done = any((l.percentageTotal or 0) == 100 for l in hits)
+        player_total  = sum(l.percentage or 0 for l in hits)
+        if len(hits) == 1 and district_done and (hits[0].percentage or 0) < CLEANUP_THRESHOLD:
+            cleanup_ids.add(hits[0].id)
+        if district_done and player_total == 100:
+            solo_wipe_count += 1
+    return cleanup_ids, solo_wipe_count
+
+def _compute_cleanup_ids(logs):
+    cleanup_ids, _ = _district_stats(logs)
+    return cleanup_ids
+
 def _raid_verdict(logs):
-    non_cleanup_count = sum(1 for l in logs if not l.isCleanUp)
+    cleanup_ids, solo_wipe_count = _district_stats(logs)
+    non_cleanup_count = sum(1 for l in logs if l.id not in cleanup_ids)
     effective_max = max(1, non_cleanup_count)
     total_adj = 0.0
     for l in logs:
-        if l.isCleanUp:
+        if l.id in cleanup_ids:
             continue
         level = l.districLevel or 5
         try: level = int(level)
@@ -118,9 +147,8 @@ def _raid_verdict(logs):
         level_mult = 1.0 + (level - 5) * 0.05
         total_adj += (l.percentage or 0) * level_mult
     adj_per_attack = total_adj / effective_max
-    finish_count = sum(1 for l in logs if l.percentageTotal == 100 and not l.isCleanUp)
-    adj_per_attack = adj_per_attack * (1.05 ** finish_count)
-    score_100 = min(round(adj_per_attack * 100 / 60), 100)
+    adj_per_attack = adj_per_attack * (1.05 ** solo_wipe_count)
+    score_100 = min(round(adj_per_attack * 100 / 64.31), 100)
     if not logs:       return 'badge-inactive', 'Skipped',  score_100
     if score_100 >= 87: return 'badge-godlike',  'Godlike',  score_100
     if score_100 >= 80: return 'badge-dominant', 'Dominant', score_100
@@ -377,12 +405,8 @@ def task_update_raid_weekend(run_always: bool = False):
                         total_loot_all_attacks = member["capitalResourcesLooted"] if member else None
                         
 
-                        if current_percent == 100 and percentage_done < 20:
-                            is_cleanup = True
-                        else:
-                            is_cleanup = False
                         previous_percent = current_percent
-                        tmp_raid_weekend_log = create_db_raid_weekend_log(raid_weekend,player_tag,district_name,0,percentage_done,current_percent,stars,is_cleanup, defender_tag,defender_name,distric_level,total_loot_all_attacks)
+                        tmp_raid_weekend_log = create_db_raid_weekend_log(raid_weekend,player_tag,district_name,0,percentage_done,current_percent,stars,defender_tag,defender_name,distric_level,total_loot_all_attacks)
                         raid_weekend_log = db_raid_weekend_log_get(raid_weekend, defender_tag, district_name,percentage_done,current_percent)
                         if not raid_weekend_log:
                                 raid_weekend_log = db_raid_weekend_log_create_new(tmp_raid_weekend_log)
@@ -938,15 +962,11 @@ def raid_weekend_page():
                     'att_count': 0,
                     'cleanup_count': 0,
                     'capital_loot': 0,
-                    'finishes': 0,
+                    'solo_wipes': 0,
                     'attack_logs': [],
                 }
             p = player_map[tag]
             p['att_count'] += 1
-            if log.isCleanUp:
-                p['cleanup_count'] += 1
-            if log.percentageTotal == 100 and not log.isCleanUp:
-                p['finishes'] += 1
             if log.totalLootAllAttacks:
                 p['capital_loot'] = log.totalLootAllAttacks
             level = log.districLevel or 5
@@ -955,9 +975,7 @@ def raid_weekend_page():
             except (TypeError, ValueError):
                 level = 5
             level_mult = round(1.0 + (level - 5) * 0.05, 2)
-            is_cleanup = bool(log.isCleanUp)
-            pct        = log.percentage or 0
-            adj_score  = round(0.0 if is_cleanup else pct * level_mult, 2)
+            pct = log.percentage or 0
             p['attack_logs'].append({
                 'log_id':           log.id,
                 'district_name':    log.districtName or '—',
@@ -965,23 +983,44 @@ def raid_weekend_page():
                 'level_mult':       level_mult,
                 'stars':            log.stars or 0,
                 'percentage':       pct,
-                'adj_score':        adj_score,
+                'adj_score':        0.0,
                 'percentage_total': log.percentageTotal or 0,
-                'is_clean_up':      is_cleanup,
+                'is_clean_up':      False,
                 'defender_name':    log.defenderName or '—',
                 'defender_tag':     log.defenderTag or '—',
             })
 
         MAX_ATTACKS = 6
         for p in player_map.values():
+            # Determine cleanups using district grouping (condition 3: player's only hit on that district)
+            district_hits = {}
+            for l in p['attack_logs']:
+                key = (l['district_name'], l['defender_tag'])
+                district_hits.setdefault(key, []).append(l)
+            cleanup_log_ids = set()
+            solo_wipe_count = 0
+            for hits in district_hits.values():
+                district_done = any(l['percentage_total'] == 100 for l in hits)
+                player_total  = sum(l['percentage'] for l in hits)
+                if len(hits) == 1 and district_done and hits[0]['percentage'] < CLEANUP_THRESHOLD:
+                    cleanup_log_ids.add(hits[0]['log_id'])
+                if district_done and player_total == 100:
+                    solo_wipe_count += 1
+            for l in p['attack_logs']:
+                l['is_clean_up'] = l['log_id'] in cleanup_log_ids
+                l['adj_score']   = round(0.0 if l['is_clean_up'] else l['percentage'] * l['level_mult'], 2)
+
+            p['cleanup_count'] = len(cleanup_log_ids)
+            p['solo_wipes']      = solo_wipe_count
+
             non_cleanup = [l['percentage'] for l in p['attack_logs'] if not l['is_clean_up']]
             p['avg_pct'] = round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0
 
             effective_max  = max(1, p['att_count'] - p['cleanup_count'])
             total_adj      = sum(l['adj_score'] for l in p['attack_logs'])
             adj_per_attack = total_adj / effective_max
-            adj_per_attack = adj_per_attack * (1.05 ** p['finishes'])
-            score_100      = min(round(adj_per_attack * 100 / 60), 100)
+            adj_per_attack = adj_per_attack * (1.05 ** p['solo_wipes'])
+            score_100      = min(round(adj_per_attack * 100 / 64.31), 100)
             p['score_100']       = score_100
             p['adj_per_attack']  = round(adj_per_attack, 2)
             p['effective_max']   = effective_max
@@ -1490,7 +1529,8 @@ def player_profile(tag):
     raid_history = []
     for r in all_raids:
         logs = raid_logs_by_id.get(r.id, [])
-        non_cleanup = [l.percentage for l in logs if not l.isCleanUp and l.percentage is not None]
+        cleanup_ids, solo_wipe_count = _district_stats(logs)
+        non_cleanup = [l.percentage for l in logs if l.id not in cleanup_ids and l.percentage is not None]
         badge_class, judge_label, score_100 = _raid_verdict(logs)
         raid_history.append({
             'raid_id': r.id,
@@ -1499,8 +1539,8 @@ def player_profile(tag):
             'participated': len(logs) > 0,
             'att_count': len(logs),
             'avg_pct': round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0,
-            'finishes': sum(1 for l in logs if l.percentageTotal == 100),
-            'cleanups': sum(1 for l in logs if l.isCleanUp),
+            'solo_wipes': solo_wipe_count,
+            'cleanups': len(cleanup_ids),
             'badge_class': badge_class,
             'judge_label': judge_label,
             'score_100': score_100,

@@ -427,7 +427,7 @@
                         <th>Weekend</th>
                         <th>Attacks</th>
                         <th>Avg %</th>
-                        <th>Finishes</th>
+                        <th>Solo Wipes</th>
                         <th>Verdict</th>
                     </tr>
                 </thead>
@@ -437,7 +437,7 @@
                     <td class="mono text-muted" style="font-size:11px;">{{ r.start }}<br>{{ r.end }}</td>
                     <td class="mono {% if not r.participated %}text-muted{% endif %}">{{ r.att_count or '—' }}</td>
                     <td class="mono text-blue">{% if r.participated %}{{ r.avg_pct }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
-                    <td class="mono text-green">{% if r.participated %}{{ r.finishes }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    <td class="mono text-green">{% if r.participated %}{{ r.solo_wipes }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                     <td>
                         {% if r.participated %}
                         <span class="judgment {{ r.badge_class }}">

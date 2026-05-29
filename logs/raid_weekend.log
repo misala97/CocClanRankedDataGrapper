@@ -115,3 +115,8 @@ WHERE raid_weekend_log.raid_weekend_id = %(raid_weekend_id_1)s AND raid_weekend_
 2026-05-29 14:49:03 - INFO - [task_update_raid_weekend] - Running task at 2026-05-29 14:49:03.414342  
 2026-05-29 14:53:20 - INFO - [task_update_raid_weekend] - Running task at 2026-05-29 14:53:20.123871  
 2026-05-29 15:06:05 - INFO - [task_update_raid_weekend] - Running task at 2026-05-29 15:06:05.919451  
+2026-05-30 01:27:18 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 01:27:18.153032  
+2026-05-30 01:35:15 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 01:35:15.179028  
+2026-05-30 01:40:10 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 01:40:10.349938  
+2026-05-30 01:42:39 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 01:42:39.782188  
+2026-05-30 01:52:32 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 01:52:32.554264  

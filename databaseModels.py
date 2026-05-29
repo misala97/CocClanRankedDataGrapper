@@ -146,7 +146,6 @@ class RaidWeekendLog(db.Model):
     percentage = db.Column(db.Integer)
     percentageTotal = db.Column(db.Integer)
     stars = db.Column(db.Integer)
-    isCleanUp = db.Column(db.Boolean)
 
     playerTag = db.Column(db.String(50), db.ForeignKey('player.tag'))
 

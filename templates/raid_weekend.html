@@ -342,7 +342,7 @@
                         <th class="sortable" onclick="sortTable('capital_loot')">💰 Loot</th>
                         <th class="sortable" onclick="sortTable('avg_loot')">Avg Loot</th>
                         <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
-                        <th class="sortable" onclick="sortTable('finishes')">Finishes</th>
+                        <th class="sortable" onclick="sortTable('solo_wipes')">Solo Wipes</th>
                         <th class="sortable" onclick="sortTable('cleanup_count')">Cleanups</th>
                         <th class="sortable" onclick="sortTable('score_100')">Verdict</th>
                         <th>Details</th>
@@ -409,30 +409,64 @@ function buildVerdictDetails(p) {
     const nonCleanupCount = logs.filter(l => !l.is_clean_up).length;
     const missing = effectiveMax - nonCleanupCount;
 
-    let rows = logs.map(l => {
-        const cleanupCell = l.is_clean_up
+    // Group logs by district (preserve order of first appearance)
+    const districtOrder = [];
+    const districtGroups = {};
+    logs.forEach(l => {
+        const key = l.district_name + '|' + l.defender_tag;
+        if (!districtGroups[key]) { districtGroups[key] = []; districtOrder.push(key); }
+        districtGroups[key].push(l);
+    });
+
+    // Determine district type: solo wipe if player % sums to 100 and district done
+    const districtType = {};
+    districtOrder.forEach(key => {
+        const attacks = districtGroups[key];
+        const done  = attacks.some(l => l.percentage_total === 100);
+        const total = attacks.reduce((s, l) => s + l.percentage, 0);
+        const isCleanup = attacks.length === 1 && attacks[0].is_clean_up;
+        districtType[key] = isCleanup ? 'cleanup' : (done && total === 100) ? 'solo_wipe' : 'normal';
+    });
+
+    let rows = '';
+    districtOrder.forEach(key => {
+        const attacks = districtGroups[key];
+        const type    = districtType[key];
+        const span    = attacks.length;
+
+        const typeBadge = type === 'cleanup'
             ? `<span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>`
-            : `<span style="color:var(--muted);font-size:12px;">—</span>`;
-        const adjColor = l.is_clean_up ? 'var(--muted)' : 'var(--accent)';
-        const rowStyle = l.is_clean_up ? ' style="opacity:0.5;"' : '';
-        return `<tr${rowStyle}>
-            <td style="font-weight:600;">${escapeHTML(l.district_name)}</td>
-            <td>
-                <div style="font-weight:600;">${escapeHTML(l.defender_name)}</div>
-                <div style="font-size:11px;color:var(--muted);">${escapeHTML(l.defender_tag)}</div>
-            </td>
-            <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);">Lvl ${l.district_level}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);">${l.level_mult.toFixed(2)}×</td>
-            <td>${renderStars(l.stars)}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--blue);">${l.percentage}%</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${adjColor};">${l.adj_score.toFixed(2)}</td>
-            <td>${cleanupCell}</td>
-        </tr>`;
-    }).join('');
+            : type === 'solo_wipe'
+                ? `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:0.4px;text-transform:uppercase;background:rgba(188,140,255,0.15);color:var(--purple);border:1px solid rgba(188,140,255,0.35);">⚡ Solo Wipe</span>`
+                : `<span style="color:var(--muted);font-size:12px;">—</span>`;
+
+        attacks.forEach((l, i) => {
+            const adjColor = type === 'cleanup' ? 'var(--muted)' : 'var(--accent)';
+            const rowBg    = type === 'cleanup'
+                ? 'opacity:0.5;'
+                : type === 'solo_wipe'
+                    ? 'background:rgba(188,140,255,0.04);box-shadow:inset 3px 0 0 var(--purple);'
+                    : '';
+            const borderBottom = i < span - 1 ? 'border-bottom:1px dashed var(--bord2);' : '';
+
+            rows += `<tr style="${rowBg}${borderBottom}">
+                ${i === 0 ? `<td rowspan="${span}" style="font-weight:600;vertical-align:middle;border-right:1px solid var(--bord2);">${escapeHTML(l.district_name)}</td>` : ''}
+                <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);">${renderStars(l.stars)}</td>
+                <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--blue);">${l.percentage}%</td>
+                <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${adjColor};">${l.adj_score.toFixed(2)}</td>
+                ${i === 0 ? `<td rowspan="${span}" style="vertical-align:middle;border-left:1px solid var(--bord2);">
+                    <div style="font-size:11px;color:var(--muted);">Lvl ${l.district_level} · ${l.level_mult.toFixed(2)}×</div>
+                    <div style="margin-top:4px;">${typeBadge}</div>
+                </td>` : ''}
+            </tr>`;
+        });
+    });
 
     for (let i = 0; i < missing; i++) {
         rows += `<tr style="opacity:0.4;">
-            <td style="color:var(--red);">— missing —</td><td>—</td><td>—</td><td>—</td><td>${renderStars(0)}</td><td>—</td><td style="font-family:'Rajdhani',sans-serif;font-weight:700;">0.00</td><td style="color:var(--muted);font-size:12px;">—</td>
+            <td style="color:var(--red);border-right:1px solid var(--bord2);">— missing —</td>
+            <td>${renderStars(0)}</td><td>—</td><td style="font-family:'Rajdhani',sans-serif;font-weight:700;">0.00</td>
+            <td style="border-left:1px solid var(--bord2);color:var(--muted);font-size:12px;">—</td>
         </tr>`;
     }
 
@@ -440,15 +474,15 @@ function buildVerdictDetails(p) {
         <div class="detail-section">
             <h4>Verdict Breakdown – Level-Adjusted Score</h4>
             <div style="margin-bottom:10px;font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;">
-                ${p.finishes > 0
-                    ? `<span>Score: <strong style="color:var(--accent);">${p.adj_per_attack.toFixed(2)}</strong> = Σ adj. % / ${effectiveMax} attacks × <span style="color:var(--green);font-weight:700;">1.05<sup>${p.finishes}</sup></span> <span style="color:var(--green);">(finish bonus)</span></span>`
+                ${p.solo_wipes > 0
+                    ? `<span>Score: <strong style="color:var(--accent);">${p.adj_per_attack.toFixed(2)}</strong> = Σ adj. % / ${effectiveMax} attacks × <span style="color:var(--green);font-weight:700;">1.05<sup>${p.solo_wipes}</sup></span> <span style="color:var(--green);">(solo wipe bonus)</span></span>`
                     : `<span>Score: <strong style="color:var(--accent);">${p.adj_per_attack.toFixed(2)}</strong> = Σ adj. % / ${effectiveMax} attacks</span>`
                 }
                 <span>Verdict: <span class="judgment ${p.badge_class}" style="font-size:10px;padding:2px 8px;">${verdictName}${p.score_100 > 0 ? ` · ${p.score_100}` : ''}</span></span>
             </div>
             <table class="detail-table">
                 <thead><tr>
-                    <th>District</th><th>Defender</th><th>Level</th><th>Lvl Mult</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Cleanup</th>
+                    <th>District</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Info / Type</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
@@ -496,7 +530,7 @@ function buildTable() {
             <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--accent);">${p.capital_loot ? p.capital_loot.toLocaleString() : '—'}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;color:var(--muted);">${p.att_count > 0 && p.capital_loot ? Math.round(p.capital_loot / p.att_count).toLocaleString() : '—'}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--blue);">${p.avg_pct}%</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--green);">${p.finishes}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--green);">${p.solo_wipes}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--muted);">${p.cleanup_count}</td>
             <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
             <td><button type="button" class="action-btn details-toggle">Details</button></td>
@@ -516,7 +550,7 @@ function buildTable() {
         tbody.appendChild(detailRow);
     });
 
-    document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown · ${rows.reduce((s,p)=>s+p.finishes,0)} districts finished`;
+    document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown · ${rows.reduce((s,p)=>s+p.solo_wipes,0)} solo wipes`;
     updateSortHeaders();
 }
 

@@ -37,23 +37,21 @@ def create_db_raid_weekend_from_api(current_raid_weekend: dict):
         defensiveReward = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_DEFENSIVEREWARD) 
     )
     
-def create_db_raid_weekend_log(raid_weekend: RaidWeekend, player_tag: str, district_name: str, loot: int, percentage: int, percentage_total: int,stars: int, is_clean_up: bool, defender_tag: str, defender_name: str, district_level: int, total_loot_all_atacks) -> RaidWeekendLog:
+def create_db_raid_weekend_log(raid_weekend: RaidWeekend, player_tag: str, district_name: str, loot: int, percentage: int, percentage_total: int, stars: int, defender_tag: str, defender_name: str, district_level: int, total_loot_all_atacks) -> RaidWeekendLog:
     if not isinstance(raid_weekend, RaidWeekend):
         raise TypeError(f"Expected RaidWeekend object, got {type(raid_weekend).__name__}")
-    
 
     return RaidWeekendLog(
         raid_weekend_id=raid_weekend.id,
         playerTag=player_tag,
-        defenderName = defender_name,
-        defenderTag = defender_tag,
-        districLevel = district_level,
-        totalLootAllAttacks = total_loot_all_atacks,
+        defenderName=defender_name,
+        defenderTag=defender_tag,
+        districLevel=district_level,
+        totalLootAllAttacks=total_loot_all_atacks,
         districtName=district_name,
         percentage=percentage,
         percentageTotal=percentage_total,
         stars=stars,
-        isCleanUp=is_clean_up
     )
     
 def create_db_uptime_tracker(func_name: str, duration: str) -> UptimeTracker:    
