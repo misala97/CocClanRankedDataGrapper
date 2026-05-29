@@ -106,9 +106,8 @@ def _ranked_verdict(score_100, att_count, max_attacks):
 
 
 def _raid_verdict(logs):
-    MAX_ATTACKS = 6
-    cleanup_count = sum(1 for l in logs if l.isCleanUp)
-    effective_max = max(1, MAX_ATTACKS - cleanup_count)
+    non_cleanup_count = sum(1 for l in logs if not l.isCleanUp)
+    effective_max = max(1, non_cleanup_count)
     total_adj = 0.0
     for l in logs:
         if l.isCleanUp:
@@ -960,6 +959,7 @@ def raid_weekend_page():
             pct        = log.percentage or 0
             adj_score  = round(0.0 if is_cleanup else pct * level_mult, 2)
             p['attack_logs'].append({
+                'log_id':           log.id,
                 'district_name':    log.districtName or '—',
                 'district_level':   level,
                 'level_mult':       level_mult,
@@ -977,7 +977,7 @@ def raid_weekend_page():
             non_cleanup = [l['percentage'] for l in p['attack_logs'] if not l['is_clean_up']]
             p['avg_pct'] = round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0
 
-            effective_max  = max(1, MAX_ATTACKS - p['cleanup_count'])
+            effective_max  = max(1, p['att_count'] - p['cleanup_count'])
             total_adj      = sum(l['adj_score'] for l in p['attack_logs'])
             adj_per_attack = total_adj / effective_max
             adj_per_attack = adj_per_attack * (1.05 ** p['finishes'])
@@ -1010,11 +1010,20 @@ def raid_weekend_page():
         total_log_attacks = sum(p['att_count'] for p in player_data)
         cleanup_count = sum(p['cleanup_count'] for p in player_data)
 
+    has_ongoing = any(r.state == 'ongoing' for r in all_raids)
+    last_weekend_assigned = False
     raid_options = []
     for r in all_raids:
-        start = r.startTime.strftime('%d.%m.%Y') if r.startTime else '?'
-        end = r.endTime.strftime('%d.%m.%Y') if r.endTime else '?'
-        raid_options.append({'id': r.id, 'label': f"{start} – {end}"})
+        if r.state == 'ongoing':
+            label = 'Current Weekend'
+        elif has_ongoing and not last_weekend_assigned:
+            label = 'Last Weekend'
+            last_weekend_assigned = True
+        else:
+            start = r.startTime.strftime('%d.%m.%Y') if r.startTime else '?'
+            end = r.endTime.strftime('%d.%m.%Y') if r.endTime else '?'
+            label = f"{start} – {end}"
+        raid_options.append({'id': r.id, 'label': label})
 
     return render_template(
         'raid_weekend.html',

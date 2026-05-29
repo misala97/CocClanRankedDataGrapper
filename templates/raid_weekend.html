@@ -201,6 +201,25 @@
             font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
         }
 
+        /* ── RECENT ATTACKS ── */
+        .recent-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+        }
+        .recent-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 20px; cursor: pointer; user-select: none;
+            transition: background 0.15s;
+        }
+        .recent-header:hover { background: var(--surf2); }
+        .recent-header-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+        }
+        .recent-chevron { font-size: 11px; color: var(--muted); transition: transform 0.2s; }
+        .recent-chevron.open { transform: rotate(180deg); }
+        .recent-body { border-top: 1px solid var(--border); }
+
         /* ── RESPONSIVE ── */
         @media (max-width: 1024px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 900px) {
@@ -259,7 +278,7 @@
             <select name="raid_id" class="selector raid-sel" onchange="this.form.submit()">
                 {% for opt in raid_options %}
                 <option value="{{ opt.id }}" {% if opt.id == selected_id %}selected{% endif %}>
-                    {%- if loop.first %}⭐ Last Weekend{% else %}{{ opt.label }}{% endif %}
+                    {%- if loop.first %}⭐ {{ opt.label }}{% else %}{{ opt.label }}{% endif %}
                 </option>
                 {% endfor %}
             </select>
@@ -300,6 +319,17 @@
     </div>
     {% endif %}
 
+    <!-- Recent Attacks -->
+    {% if player_data %}
+    <div class="recent-card" id="recentCard">
+        <div class="recent-header" onclick="toggleRecent()">
+            <span class="recent-header-title">⚔️ 20 Most Recent Attacks</span>
+            <span class="recent-chevron" id="recentChevron">▼</span>
+        </div>
+        <div class="recent-body" id="recentBody" style="display:none;"></div>
+    </div>
+    {% endif %}
+
     <!-- Player Table -->
     {% if player_data %}
     <div class="table-scroll">
@@ -310,6 +340,7 @@
                         <th class="sortable" onclick="sortTable('player')">Player</th>
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
                         <th class="sortable" onclick="sortTable('capital_loot')">💰 Loot</th>
+                        <th class="sortable" onclick="sortTable('avg_loot')">Avg Loot</th>
                         <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
                         <th class="sortable" onclick="sortTable('finishes')">Finishes</th>
                         <th class="sortable" onclick="sortTable('cleanup_count')">Cleanups</th>
@@ -426,6 +457,9 @@ function buildVerdictDetails(p) {
 }
 
 function buildTable() {
+    playerData.forEach(p => {
+        p.avg_loot = (p.att_count > 0 && p.capital_loot) ? Math.round(p.capital_loot / p.att_count) : 0;
+    });
     const search = (document.getElementById('searchInput').value || '').toLowerCase();
     let rows = playerData.filter(p =>
         !search || (p.player_name || '').toLowerCase().includes(search) || (p.player_tag || '').toLowerCase().includes(search)
@@ -460,6 +494,7 @@ function buildTable() {
             </td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${p.att_count}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--accent);">${p.capital_loot ? p.capital_loot.toLocaleString() : '—'}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;color:var(--muted);">${p.att_count > 0 && p.capital_loot ? Math.round(p.capital_loot / p.att_count).toLocaleString() : '—'}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--blue);">${p.avg_pct}%</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--green);">${p.finishes}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--muted);">${p.cleanup_count}</td>
@@ -469,7 +504,7 @@ function buildTable() {
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'detail-row';
-        detailRow.innerHTML = `<td class="detail-cell" colspan="8"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
+        detailRow.innerHTML = `<td class="detail-cell" colspan="9"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
 
         const toggle = () => {
             const expanded = detailRow.classList.toggle('expanded');
@@ -511,6 +546,51 @@ function updateSortHeaders() {
         const m = fn.match(/'([^']+)'/);
         if (m && m[1] === currentSort.column) th.classList.add('sort-active', currentSort.direction);
     });
+}
+
+function buildRecentAttacks() {
+    const all = [];
+    playerData.forEach(p => {
+        (p.attack_logs || []).forEach(l => all.push({
+            ...l,
+            player_name: p.player_name,
+            player_tag:  p.player_tag,
+        }));
+    });
+    all.sort((a, b) => (b.log_id || 0) - (a.log_id || 0));
+    const top20 = all.slice(0, 20);
+    const body = document.getElementById('recentBody');
+    if (!top20.length) {
+        body.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded.</div>';
+        return;
+    }
+    body.innerHTML = `<table class="detail-table">
+        <thead><tr>
+            <th>Player</th><th>District</th><th>Lvl</th><th>Stars</th><th>%</th><th>Cleanup</th>
+        </tr></thead>
+        <tbody>${top20.map(l => {
+            const cleanupCell = l.is_clean_up
+                ? `<span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>`
+                : `<span style="color:var(--muted);font-size:12px;">—</span>`;
+            return `<tr${l.is_clean_up ? ' style="opacity:0.55;"' : ''}>
+                <td style="font-weight:600;"><a href="/player/${encodeURIComponent((l.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(l.player_name)} <span class="player-link-arrow">↗</span></a></td>
+                <td style="font-weight:600;">${escapeHTML(l.district_name)}</td>
+                <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);">Lvl ${l.district_level}</td>
+                <td>${renderStars(l.stars)}</td>
+                <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--blue);">${l.percentage}%</td>
+                <td>${cleanupCell}</td>
+            </tr>`;
+        }).join('')}</tbody>
+    </table>`;
+}
+
+function toggleRecent() {
+    const body = document.getElementById('recentBody');
+    const chevron = document.getElementById('recentChevron');
+    const open = body.style.display === 'none';
+    if (open) buildRecentAttacks();
+    body.style.display = open ? '' : 'none';
+    chevron.classList.toggle('open', open);
 }
 
 document.addEventListener('DOMContentLoaded', buildTable);
