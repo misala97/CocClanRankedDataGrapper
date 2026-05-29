@@ -1430,6 +1430,7 @@ def player_profile(tag):
         score_100 = min(round(th_adj * 100 / 3.45), 100)
         badge_class, judge_label, _ = _ranked_verdict(score_100, len(a_logs), max_attacks)
         ranked_history.append({
+            'league_season_id': rw.league_season_id,
             'start_day': rw.start_day.strftime('%d.%m.%y') if rw.start_day else '—',
             'end_day': rw.end_day.strftime('%d.%m.%y') if rw.end_day else '—',
             'league_tier': rw.league_tier or '—',
@@ -1480,6 +1481,7 @@ def player_profile(tag):
         non_cleanup = [l.percentage for l in logs if not l.isCleanUp and l.percentage is not None]
         badge_class, judge_label, score_100 = _raid_verdict(logs)
         raid_history.append({
+            'raid_id': r.id,
             'start': r.startTime.strftime('%d.%m.%Y') if r.startTime else '—',
             'end': r.endTime.strftime('%d.%m.%Y') if r.endTime else '—',
             'participated': len(logs) > 0,

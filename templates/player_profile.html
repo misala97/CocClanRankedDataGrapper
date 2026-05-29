@@ -389,7 +389,7 @@
                 </thead>
                 <tbody>
                 {% for rw in ranked_history %}
-                <tr>
+                <tr style="cursor:pointer;" onclick="window.location.href='/ranked?week_id={{ rw.league_season_id }}'">
                     <td class="mono text-muted" style="font-size:11px;">{{ rw.start_day }}<br>{{ rw.end_day }}</td>
                     <td style="font-size:12px;">
                         {% if rw.league_icon %}
@@ -433,7 +433,7 @@
                 </thead>
                 <tbody>
                 {% for r in raid_history %}
-                <tr>
+                <tr style="cursor:pointer;" onclick="window.location.href='/raid?raid_id={{ r.raid_id }}'">
                     <td class="mono text-muted" style="font-size:11px;">{{ r.start }}<br>{{ r.end }}</td>
                     <td class="mono {% if not r.participated %}text-muted{% endif %}">{{ r.att_count or '—' }}</td>
                     <td class="mono text-blue">{% if r.participated %}{{ r.avg_pct }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
