@@ -128,3 +128,9 @@ WHERE raid_weekend_log.raid_weekend_id = %(raid_weekend_id_1)s AND raid_weekend_
 2026-05-30 02:41:19 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 02:41:19.852808  
 2026-05-30 02:42:08 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 02:42:08.420587  
 2026-05-30 02:45:46 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 02:45:46.819176  
+2026-05-30 22:16:27 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 22:16:27.083768  
+2026-05-30 22:16:28 - ERROR - [task_update_raid_weekend] - Failed to create raid weekend logs: (raised as a result of Query-invoked autoflush; consider using a session.no_autoflush block if this flush is occurring prematurely)
+(pymysql.err.IntegrityError) (1452, 'Cannot add or update a child row: a foreign key constraint fails (`coc_stats`.`raid_weekend_log`, CONSTRAINT `raid_weekend_log_ibfk_1` FOREIGN KEY (`playerTag`) REFERENCES `player` (`tag`))')
+[SQL: INSERT INTO raid_weekend_log (raid_weekend_id, `defenderName`, `defenderTag`, `districtName`, `districLevel`, `totalLootAllAttacks`, percentage, `percentageTotal`, stars, `playerTag`) VALUES (%(raid_weekend_id)s, %(defenderName)s, %(defenderTag)s, %(districtName)s, %(districLevel)s, %(totalLootAllAttacks)s, %(percentage)s, %(percentageTotal)s, %(stars)s, %(playerTag)s)]
+[parameters: {'raid_weekend_id': 3, 'defenderName': 'LDS SPARTANS', 'defenderTag': '#2JUQU0G2', 'districtName': "Builder's Workshop", 'districLevel': 5, 'totalLootAllAttacks': 14635, 'percentage': 19, 'percentageTotal': 19, 'stars': 0, 'playerTag': '#GV82YLURV'}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)

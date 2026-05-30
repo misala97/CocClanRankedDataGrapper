@@ -97,3 +97,112 @@
 2026-05-26 11:58:23 - ERROR - [task_update_raid_weekend] - Failed to update raid weekend: Incorrect number of values in identifier to formulate primary key for session.get(); primary key columns are 'raid_weekend.id','raid_weekend.startTime','raid_weekend.endTime'
 2026-05-26 11:59:46 - ERROR - [task_update_raid_weekend] - Failed to update raid weekend: Incorrect number of values in identifier to formulate primary key for session.get(); primary key columns are 'raid_weekend.id','raid_weekend.startTime','raid_weekend.endTime'
 2026-05-26 12:07:08 - ERROR - [task_update_raid_weekend] - Failed to update raid weekend: Expected RaidWeekend object, got NoneType
+2026-05-30 22:19:22 - INFO - [task_update_ranked_weeks] - Running task at 2026-05-30 22:19:22.244887  
+2026-05-30 22:19:25 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fremdwort 
+2026-05-30 22:19:26 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fremdwort 
+2026-05-30 22:19:26 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fremdwort 
+2026-05-30 22:19:27 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fremdwort 
+2026-05-30 22:19:28 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fremdwort 
+2026-05-30 22:19:29 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fremdwort 
+2026-05-30 22:19:33 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  PyroFeuerHD 
+2026-05-30 22:19:34 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  PyroFeuerHD 
+2026-05-30 22:19:34 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  PyroFeuerHD 
+2026-05-30 22:19:37 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  FraizHD 
+2026-05-30 22:19:40 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  IAmDreamwing 
+2026-05-30 22:19:40 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  IAmDreamwing 
+2026-05-30 22:19:45 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Misala 
+2026-05-30 22:19:46 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Misala 
+2026-05-30 22:19:48 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  blu3prOud. 
+2026-05-30 22:19:49 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  blu3prOud. 
+2026-05-30 22:19:50 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  blu3prOud. 
+2026-05-30 22:19:51 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  blu3prOud. 
+2026-05-30 22:19:52 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  blu3prOud. 
+2026-05-30 22:19:52 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  blu3prOud. 
+2026-05-30 22:19:53 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  blu3prOud. 
+2026-05-30 22:19:54 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  blu3prOud. 
+2026-05-30 22:19:55 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  blu3prOud. 
+2026-05-30 22:19:56 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  blu3prOud. 
+2026-05-30 22:19:56 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  blu3prOud. 
+2026-05-30 22:19:59 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Germinator 
+2026-05-30 22:19:59 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Germinator 
+2026-05-30 22:20:04 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  bebra00 
+2026-05-30 22:20:07 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Volker Racho 
+2026-05-30 22:20:10 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Hadith 
+2026-05-30 22:20:12 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Alexa 
+2026-05-30 22:20:13 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Alexa 
+2026-05-30 22:20:16 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Reaper 
+2026-05-30 22:20:17 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Reaper 
+2026-05-30 22:20:18 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Reaper 
+2026-05-30 22:20:19 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Reaper 
+2026-05-30 22:20:19 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Reaper 
+2026-05-30 22:20:20 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Reaper 
+2026-05-30 22:20:22 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  AS Koma 
+2026-05-30 22:20:23 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  AS Koma 
+2026-05-30 22:20:28 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  skarmorist 
+2026-05-30 22:20:29 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  skarmorist 
+2026-05-30 22:20:30 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  skarmorist 
+2026-05-30 22:20:31 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  skarmorist 
+2026-05-30 22:20:31 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  skarmorist 
+2026-05-30 22:20:34 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  lord Vader 
+2026-05-30 22:20:35 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  lord Vader 
+2026-05-30 22:20:35 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  lord Vader 
+2026-05-30 22:20:36 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  lord Vader 
+2026-05-30 22:20:37 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  lord Vader 
+2026-05-30 22:20:38 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  lord Vader 
+2026-05-30 22:20:38 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  lord Vader 
+2026-05-30 22:20:39 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  lord Vader 
+2026-05-30 22:20:41 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Turbo_Thorsten 
+2026-05-30 22:20:42 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Turbo_Thorsten 
+2026-05-30 22:20:43 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Turbo_Thorsten 
+2026-05-30 22:20:44 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Turbo_Thorsten 
+2026-05-30 22:20:44 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Turbo_Thorsten 
+2026-05-30 22:20:45 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Turbo_Thorsten 
+2026-05-30 22:20:48 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  The Lord 
+2026-05-30 22:20:48 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  The Lord 
+2026-05-30 22:20:51 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Santahunter 
+2026-05-30 22:20:51 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Santahunter 
+2026-05-30 22:20:52 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Santahunter 
+2026-05-30 22:20:53 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Santahunter 
+2026-05-30 22:20:54 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Santahunter 
+2026-05-30 22:20:54 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Santahunter 
+2026-05-30 22:20:55 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Santahunter 
+2026-05-30 22:20:56 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Santahunter 
+2026-05-30 22:20:58 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Fogetek 
+2026-05-30 22:20:59 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  Fogetek 
+2026-05-30 22:21:00 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fogetek 
+2026-05-30 22:21:01 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fogetek 
+2026-05-30 22:21:01 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Fogetek 
+2026-05-30 22:21:04 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  369alex 
+2026-05-30 22:21:05 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  369alex 
+2026-05-30 22:21:06 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  369alex 
+2026-05-30 22:21:07 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  369alex 
+2026-05-30 22:21:08 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  369alex 
+2026-05-30 22:21:10 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  ruwell 
+2026-05-30 22:21:11 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  ruwell 
+2026-05-30 22:21:11 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  ruwell 
+2026-05-30 22:21:12 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  ruwell 
+2026-05-30 22:21:13 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  ruwell 
+2026-05-30 22:21:14 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  ruwell 
+2026-05-30 22:21:14 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  ruwell 
+2026-05-30 22:21:17 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  ruwell 2.0 
+2026-05-30 22:21:19 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  GerminatorSuxx 
+2026-05-30 22:21:20 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  GerminatorSuxx 
+2026-05-30 22:21:21 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  GerminatorSuxx 
+2026-05-30 22:21:21 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  GerminatorSuxx 
+2026-05-30 22:21:22 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  GerminatorSuxx 
+2026-05-30 22:21:23 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  GerminatorSuxx 
+2026-05-30 22:21:24 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  GerminatorSuxx 
+2026-05-30 22:21:28 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  finn_2502 
+2026-05-30 22:21:28 - INFO - [task_update_ranked_weeks] - Adding new ranked attack battle log for  finn_2502 
+2026-05-30 22:21:29 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  finn_2502 
+2026-05-30 22:21:32 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Alix 
+2026-05-30 22:21:33 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Alix 
+2026-05-30 22:21:35 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Neith 
+2026-05-30 22:21:35 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Neith 
+2026-05-30 22:21:36 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Neith 
+2026-05-30 22:21:38 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Dreamwing 
+2026-05-30 22:21:39 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Dreamwing 
+2026-05-30 22:21:41 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Löwenkralle 
+2026-05-30 22:21:42 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Löwenkralle 
+2026-05-30 22:21:42 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Löwenkralle 
+2026-05-30 22:21:43 - INFO - [task_update_ranked_weeks] - Adding new ranked defense log for  Löwenkralle 

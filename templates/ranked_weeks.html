@@ -772,12 +772,31 @@
         }
         const score = attMax > 0 ? (totalAdj / attMax) : 0;
         const verdictName = verdictLabels[item.badge_class] || '–';
+        const leagueDiff = (item.league_rank || 0) - (item.expected_league_rank || 0);
         return `<div style="padding:0 16px 16px;">
             <div class="detail-section">
                 <h4>Verdict Breakdown – TH-Adjusted Score</h4>
                 <div style="margin-bottom:10px;font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;">
                     <span>Your TH: <strong style="color:var(--text);">TH${playerTH}</strong></span>
-                    <span>Score: <strong style="color:var(--accent);">${score.toFixed(3)}</strong> = Σ adj. stars / ${attMax} attacks</span>
+                    ${(() => {
+                        const actualRank   = item.league_rank || 0;
+                        const expectedRank = item.expected_league_rank || 0;
+                        const lm           = item.league_mult || 1.0;
+                        const finalScore   = score * lm;
+                        if (leagueDiff > 0) {
+                            const steps1 = Math.max(0, Math.min(actualRank, 31) - expectedRank);
+                            const steps2 = Math.max(0, actualRank - Math.max(expectedRank, 31));
+                            let multHtml = '';
+                            if (steps1 > 0) multHtml += `<span style="color:var(--green);font-weight:700;">1.005<sup>${steps1}</sup></span>`;
+                            if (steps1 > 0 && steps2 > 0) multHtml += ` × `;
+                            if (steps2 > 0) multHtml += `<span style="color:var(--green);font-weight:700;">1.015<sup>${steps2}</sup></span>`;
+                            return `<span>Score: <strong style="color:var(--accent);">${finalScore.toFixed(3)}</strong> = Σ adj. stars / ${attMax} attacks × ${multHtml} <span style="color:var(--green);">(league bonus)</span></span>`;
+                        } else if (leagueDiff < 0) {
+                            return `<span>Score: <strong style="color:var(--accent);">${finalScore.toFixed(3)}</strong> = Σ adj. stars / ${attMax} attacks × <span style="color:var(--red);font-weight:700;">0.99<sup>${Math.abs(leagueDiff)}</sup></span> <span style="color:var(--red);">(league penalty)</span></span>`;
+                        } else {
+                            return `<span>Score: <strong style="color:var(--accent);">${score.toFixed(3)}</strong> = Σ adj. stars / ${attMax} attacks</span>`;
+                        }
+                    })()}
                     <span>Same-TH avg: <strong style="color:var(--muted);">${(score / thMultiplier(0, playerTH)).toFixed(2)} ★</strong></span>
                     <span>Verdict: <span class="judgment ${item.badge_class}" style="font-size:10px;padding:2px 8px;">${verdictName}</span></span>
                 </div>
@@ -809,7 +828,7 @@
             rows.sort((a, b) => {
                 const columnKey = currentSort.column === 'league' ? 'league_tier'
                     : currentSort.column === 'player' ? 'player_name'
-                    : currentSort.column === 'judge' ? 'th_adj_score'
+                    : currentSort.column === 'judge' ? 'score_100'
                     : currentSort.column;
                 let aValue = a[columnKey];
                 let bValue = b[columnKey];

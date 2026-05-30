@@ -92,6 +92,37 @@ def _calc_th_multiplier(diff, player_th):
     return 0.01
 
 
+EXPECTED_LEAGUE_RANK = {
+    7: 1, 8: 2, 9: 3, 10: 5, 11: 7, 12: 9,
+    13: 11, 14: 14, 15: 17, 16: 21, 17: 23, 18: 26,
+}
+_LEGEND_LEAGUE_RANKS = {
+    'legend league iii': 34, 'legend league ii': 35, 'legend league i': 36,
+}
+
+def _get_league_rank(league_tier):
+    if not league_tier:
+        return 0
+    lower = league_tier.lower()
+    if lower in _LEGEND_LEAGUE_RANKS:
+        return _LEGEND_LEAGUE_RANKS[lower]
+    m = re.search(r'(\d+)$', league_tier)
+    return int(m.group(1)) if m else 0
+
+def _league_mult(league_tier, player_th):
+    rank = _get_league_rank(league_tier)
+    expected = EXPECTED_LEAGUE_RANK.get(int(player_th) if player_th else 0, 1)
+    diff = rank - expected
+    if diff == 0:
+        return 1.0
+    if diff < 0:
+        return 0.99 ** abs(diff)
+    mult = 1.0
+    for r in range(expected + 1, rank + 1):
+        mult *= 1.015 if r >= 32 else 1.005
+    return mult
+
+
 def _ranked_verdict(score_100, att_count, max_attacks):
     missing = max(0, max_attacks - att_count)
     missing_text = f" ({missing} missing)" if missing else ""
@@ -809,7 +840,8 @@ def ranked_weeks_page():
         # TH-adjusted score: each attack weighted ±10% per TH level vs opponent,
         # divided by att_max so missing attacks directly tank the score.
         th_adj_score = round(sum(adj_attack_scores) / max_attacks, 3) if max_attacks > 0 else 0.0
-        score_100 = min(round(th_adj_score * 100 / 3.45), 100)
+        lm = _league_mult(league_tier, player_th or player.current_th or 0)
+        score_100 = min(round(th_adj_score * lm * 100 / 3.45), 100)
 
         if not is_active:
             badge_class = 'badge-inactive'
@@ -868,6 +900,9 @@ def ranked_weeks_page():
             'att_3star': att_3star,
             'att_avg': att_avg,
             'th_adj_score': th_adj_score,
+            'league_mult': round(lm, 4),
+            'league_rank': _get_league_rank(league_tier),
+            'expected_league_rank': EXPECTED_LEAGUE_RANK.get(int(player_th or player.current_th or 0), 1),
             'score_100': score_100,
             'player_th': player_th or player.current_th or 0,
             'def_count': def_count,
@@ -1366,7 +1401,8 @@ def calculate_skill_score(player_tag, period='month'):
             try: opp_th = int(l.opponent_th)
             except: opp_th = player_th
             adj.append((l.stars or 0) * _calc_th_multiplier(opp_th - player_th, player_th))
-        score_100 = min(round(sum(adj) / max_attacks * 100 / 3.45), 100)
+        lm = _league_mult(rw.league_tier, player_th)
+        score_100 = min(round(sum(adj) / max_attacks * lm * 100 / 3.45), 100)
         ranked_scores.append(score_100)
     ranked_scores.extend([0] * (total_seasons - len(ranked_scores)))
     avg_ranked = sum(ranked_scores) / len(ranked_scores) if ranked_scores else 0
@@ -1480,7 +1516,8 @@ def player_profile(tag):
             except: opp_th = player_th
             adj_scores.append((l.stars or 0) * _calc_th_multiplier(opp_th - player_th, player_th))
         th_adj = sum(adj_scores) / max_attacks if max_attacks else 0.0
-        score_100 = min(round(th_adj * 100 / 3.45), 100)
+        lm = _league_mult(rw.league_tier, player_th)
+        score_100 = min(round(th_adj * lm * 100 / 3.45), 100)
         badge_class, judge_label, _ = _ranked_verdict(score_100, len(a_logs), max_attacks)
         ranked_history.append({
             'league_season_id': rw.league_season_id,
@@ -1927,7 +1964,7 @@ if __name__ == '__main__':
     #task_update_ranked_weeks()
     #task_update_battle_logs()
     #task_update_done_ranked_weeks()
-    task_update_raid_weekend()
+    #task_update_raid_weekend()
     
     # Webserver starten (use_reloader=False verhindert, dass der Scheduler beim Speichern doppelt startet)
     app.run(debug=True, use_reloader=False)
