@@ -189,5 +189,14 @@ class PubQuizTeams(db.Model):
     round4_size = db.Column(db.Integer)
 
     round = db.relationship('PubQuizRounds', back_populates='teams')
-    
-    
+
+
+class AppUser(db.Model):
+    __tablename__ = 'app_user'
+
+    id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    username       = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash  = db.Column(db.String(256), nullable=False)
+    created_at     = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    is_approved    = db.Column(db.Boolean, default=False, nullable=False)
+    is_super_admin = db.Column(db.Boolean, default=False, nullable=False)

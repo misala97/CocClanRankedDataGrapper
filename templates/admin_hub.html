@@ -216,7 +216,8 @@
             <a href="/ranked">Ranked</a>
             <a href="/raid">Raids</a>
             <a href="/admin" class="nav-active">Admin</a>
-            <a href="/admin/logout" style="color:var(--muted);margin-left:4px">Sign out</a>
+            {% if is_super_admin %}<a href="/admin/users">Users</a>{% endif %}
+            <a href="/logout" style="color:var(--muted);margin-left:4px">Sign out</a>
         </div>
     </div>
 </nav>

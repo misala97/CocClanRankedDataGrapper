@@ -1681,38 +1681,163 @@ def clan_overview():
     return render_template('clan_overview.html', player_cards=player_cards, period=period)
 
 
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# ── Auth helpers ──────────────────────────────────────────────────────────────
+
+def _current_user():
+    uid = session.get('user_id')
+    return AppUser.query.get(uid) if uid else None
+
+def _is_env_admin():
+    return bool(session.get('env_admin_logged_in'))
+
+def _is_super_admin():
+    if _is_env_admin():
+        return True
+    u = _current_user()
+    return bool(u and u.is_approved and u.is_super_admin)
+
+def _any_access():
+    if _is_env_admin():
+        return True
+    u = _current_user()
+    return bool(u and u.is_approved and (u.is_super_admin))
+
 def require_admin_login(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get('admin_logged_in'):
-            return redirect(url_for('admin_login'))
+        if not _any_access():
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated
 
+def require_super_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not _is_super_admin():
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
 
-@app.route('/admin/login', methods=['GET', 'POST'])
-def admin_login():
-    if session.get('admin_logged_in'):
+@app.context_processor
+def inject_auth():
+    return {
+        'current_user': _current_user(),
+        'is_super_admin': _is_super_admin(),
+        'is_env_admin': _is_env_admin(),
+    }
+
+# ── Auth routes ───────────────────────────────────────────────────────────────
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if _any_access():
         return redirect(url_for('admin_hub'))
-
     error = None
     if request.method == 'POST':
-        username = request.form.get('username', '')
+        username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        user_ok = ADMIN_USER and secrets.compare_digest(username.encode(), ADMIN_USER.encode())
-        pass_ok = ADMIN_PASS and secrets.compare_digest(password.encode(), ADMIN_PASS.encode())
-        if user_ok and pass_ok:
-            session['admin_logged_in'] = True
+        env_ok = (ADMIN_USER and ADMIN_PASS and
+                  secrets.compare_digest(username.encode(), ADMIN_USER.encode()) and
+                  secrets.compare_digest(password.encode(), ADMIN_PASS.encode()))
+        if env_ok:
+            session.clear()
+            session['env_admin_logged_in'] = True
             return redirect(url_for('admin_hub'))
-        error = 'Invalid username or password.'
+        u = AppUser.query.filter_by(username=username).first()
+        if u and check_password_hash(u.password_hash, password):
+            if not u.is_approved:
+                error = 'Your account is pending approval.'
+            else:
+                session.clear()
+                session['user_id'] = u.id
+                return redirect(url_for('admin_hub'))
+        else:
+            error = 'Invalid username or password.'
+    return render_template('login.html', error=error)
 
-    return render_template('admin_login.html', error=error)
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if _any_access():
+        return redirect(url_for('admin_hub'))
+    error = None
+    success = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        if not username or not password:
+            error = 'Username and password are required.'
+        elif len(username) < 3:
+            error = 'Username must be at least 3 characters.'
+        elif AppUser.query.filter_by(username=username).first():
+            error = 'Username already taken.'
+        else:
+            db.session.add(AppUser(username=username, password_hash=generate_password_hash(password)))
+            db.session.commit()
+            success = 'Account created — an admin will approve it shortly.'
+    return render_template('register.html', error=error, success=success)
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
+
+@app.route('/admin/login')
+def admin_login():
+    return redirect(url_for('login'))
 
 
 @app.route('/admin/logout')
 def admin_logout():
-    session.pop('admin_logged_in', None)
+    session.clear()
     return redirect(url_for('index'))
+
+
+@app.route('/admin/users')
+@require_super_admin
+def admin_users():
+    users = AppUser.query.order_by(AppUser.is_approved, AppUser.created_at.desc()).all()
+    return render_template('admin_users.html', users=users)
+
+
+@app.route('/admin/users/<int:user_id>/approve', methods=['POST'])
+@require_super_admin
+def admin_user_approve(user_id):
+    u = AppUser.query.get_or_404(user_id)
+    u.is_approved = True
+    db.session.commit()
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:user_id>/reject', methods=['POST'])
+@require_super_admin
+def admin_user_reject(user_id):
+    u = AppUser.query.get_or_404(user_id)
+    u.is_approved = False
+    db.session.commit()
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@require_super_admin
+def admin_user_delete(user_id):
+    u = AppUser.query.get_or_404(user_id)
+    db.session.delete(u)
+    db.session.commit()
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:user_id>/perms', methods=['POST'])
+@require_super_admin
+def admin_user_perms(user_id):
+    u = AppUser.query.get_or_404(user_id)
+    u.is_super_admin = 'is_super_admin' in request.form
+    db.session.commit()
+    return redirect(url_for('admin_users'))
 
 
 @app.route('/admin')
@@ -1880,7 +2005,7 @@ def pubquiz():
 
 @app.route('/pubquiz/admin/logout')
 def pubquiz_admin_logout():
-    session.pop('admin_logged_in', None)
+    session.clear()
     return redirect(url_for('pubquiz'))
 
 

@@ -421,6 +421,7 @@
             <option value="down">⬇️ Relegations only</option>
         </select>
         <button type="button" class="action-btn" id="leftToggle" onclick="toggleLeft()">🚪 Show left</button>
+        <button type="button" class="action-btn" onclick="openReminder()" style="border-color:rgba(63,185,80,0.4);color:var(--green);">📣 Reminder</button>
         <button type="button" class="action-btn" id="inactiveToggle" onclick="toggleInactive()" style="margin-left:auto;">👁️ Hide inactive</button>
     </div>
 
@@ -1173,6 +1174,99 @@
     });
 </script>
 {% endif %}
+
+<!-- ── Reminder Modal ── -->
+<div id="reminderBackdrop" onclick="closeReminder()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;backdrop-filter:blur(4px);"></div>
+<div id="reminderModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;width:min(560px,90vw);box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <span style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:0.5px;">📣 Attack Reminder</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <button id="reminderLangDE" onclick="setReminderLang('de')" class="action-btn" style="padding:4px 10px;font-size:11px;">🇩🇪 DE</button>
+            <button id="reminderLangEN" onclick="setReminderLang('en')" class="action-btn" style="padding:4px 10px;font-size:11px;">🇬🇧 EN</button>
+            <button onclick="closeReminder()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;margin-left:4px;">✕</button>
+        </div>
+    </div>
+    <textarea id="reminderText" readonly style="width:100%;height:220px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;
+        color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.6;padding:12px;resize:none;outline:none;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+        <button onclick="copyReminder()" class="action-btn" style="border-color:rgba(63,185,80,0.4);color:var(--green);padding:8px 18px;font-size:12px;">📋 Copy to clipboard</button>
+        <span id="reminderCopied" style="display:none;align-items:center;color:var(--green);font-size:13px;font-weight:600;">✓ Copied!</span>
+    </div>
+</div>
+
+<script>
+let reminderLang = 'de';
+
+function buildReminderText(lang) {
+    const data = window.weekData || [];
+    const missing = data.filter(p => p.in_clan && p.badge_class !== 'badge-inactive' && p.att_count < p.att_max);
+    const weekLabel = document.querySelector('#week-select option:checked')?.text?.replace('⭐ ', '') || (lang === 'de' ? 'diese Woche' : 'this week');
+
+    if (lang === 'de') {
+        let msg = `⚔️ **Angriffs-Erinnerung — ${weekLabel}**\n\n`;
+        if (missing.length === 0) {
+            msg += 'Alle haben ihre Angriffe gemacht – super gemacht! 🏆';
+        } else {
+            msg += 'Folgende Mitglieder haben noch Angriffe übrig:\n\n';
+            missing.forEach(p => {
+                const left = p.att_max - p.att_count;
+                const zone = p.rank_status === 'down' ? ' ⚠️ **Abstiegszone!**' : p.rank_status === 'up' ? ' 🚀 **Aufstiegszone!**' : '';
+                msg += `• **${p.player_name}** — noch ${left} Angriff${left > 1 ? 'e' : ''}${zone}\n`;
+            });
+            msg += '\nBitte macht eure Angriffe noch vor Ende der Woche! 💪';
+        }
+        return msg;
+    } else {
+        let msg = `⚔️ **Attack Reminder — ${weekLabel}**\n\n`;
+        if (missing.length === 0) {
+            msg += 'Everyone has used all their attacks this week. Great job! 🏆';
+        } else {
+            msg += 'The following members still have attacks remaining:\n\n';
+            missing.forEach(p => {
+                const left = p.att_max - p.att_count;
+                const zone = p.rank_status === 'down' ? ' ⚠️ **Demotion zone!**' : p.rank_status === 'up' ? ' 🚀 **Promotion zone!**' : '';
+                msg += `• **${p.player_name}** — ${left} attack${left > 1 ? 's' : ''} left${zone}\n`;
+            });
+            msg += '\nPlease get your attacks in before the week ends! 💪';
+        }
+        return msg;
+    }
+}
+
+function setReminderLang(lang) {
+    reminderLang = lang;
+    document.getElementById('reminderText').value = buildReminderText(lang);
+    document.getElementById('reminderCopied').style.display = 'none';
+    document.getElementById('reminderLangDE').style.background = lang === 'de' ? 'rgba(240,165,0,0.15)' : '';
+    document.getElementById('reminderLangEN').style.background = lang === 'en' ? 'rgba(240,165,0,0.15)' : '';
+}
+
+function openReminder() {
+    reminderLang = 'de';
+    document.getElementById('reminderText').value = buildReminderText('de');
+    document.getElementById('reminderCopied').style.display = 'none';
+    document.getElementById('reminderLangDE').style.background = 'rgba(240,165,0,0.15)';
+    document.getElementById('reminderLangEN').style.background = '';
+    document.getElementById('reminderBackdrop').style.display = 'block';
+    document.getElementById('reminderModal').style.display = 'block';
+}
+
+function closeReminder() {
+    document.getElementById('reminderBackdrop').style.display = 'none';
+    document.getElementById('reminderModal').style.display = 'none';
+}
+
+function copyReminder() {
+    navigator.clipboard.writeText(document.getElementById('reminderText').value).then(() => {
+        const el = document.getElementById('reminderCopied');
+        el.style.display = 'flex';
+        setTimeout(() => { el.style.display = 'none'; }, 2000);
+    });
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeReminder(); });
+</script>
 
 </body>
 </html>
