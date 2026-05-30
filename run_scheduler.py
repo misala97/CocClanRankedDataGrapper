@@ -1,7 +1,7 @@
 import time
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from app import app, task_update_raid_weekend,task_update_clan_members, task_update_ranked_weeks, task_update_battle_logs, task_update_done_ranked_weeks
+from app import app, task_update_clan_war, task_update_raid_weekend,task_update_clan_members, task_update_ranked_weeks, task_update_battle_logs, task_update_done_ranked_weeks
 
 logging.basicConfig(level=logging.INFO)
 
@@ -13,10 +13,12 @@ if __name__ == '__main__':
     scheduler.add_job(func=task_update_battle_logs, trigger="interval", minutes=5,  max_instances=1)
     scheduler.add_job(func=task_update_done_ranked_weeks, trigger="interval", hours=1,  max_instances=1)
     scheduler.add_job(func=task_update_raid_weekend, trigger="interval", minutes=2, max_instances=1)
+    scheduler.add_job(func=task_update_clan_war, trigger="interval", minutes=2, max_instances=1)
     scheduler.start()
 
     task_update_raid_weekend(True)
     task_update_done_ranked_weeks()
+    task_update_clan_war()
     
     try:
         # Keep the script running
