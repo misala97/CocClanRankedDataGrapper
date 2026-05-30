@@ -134,3 +134,28 @@ WHERE raid_weekend_log.raid_weekend_id = %(raid_weekend_id_1)s AND raid_weekend_
 [SQL: INSERT INTO raid_weekend_log (raid_weekend_id, `defenderName`, `defenderTag`, `districtName`, `districLevel`, `totalLootAllAttacks`, percentage, `percentageTotal`, stars, `playerTag`) VALUES (%(raid_weekend_id)s, %(defenderName)s, %(defenderTag)s, %(districtName)s, %(districLevel)s, %(totalLootAllAttacks)s, %(percentage)s, %(percentageTotal)s, %(stars)s, %(playerTag)s)]
 [parameters: {'raid_weekend_id': 3, 'defenderName': 'LDS SPARTANS', 'defenderTag': '#2JUQU0G2', 'districtName': "Builder's Workshop", 'districLevel': 5, 'totalLootAllAttacks': 14635, 'percentage': 19, 'percentageTotal': 19, 'stars': 0, 'playerTag': '#GV82YLURV'}]
 (Background on this error at: https://sqlalche.me/e/20/gkpj)
+2026-05-30 22:50:31 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 22:50:31.706292  
+2026-05-30 22:50:32 - ERROR - [task_update_raid_weekend] - Failed to create raid weekend logs: (raised as a result of Query-invoked autoflush; consider using a session.no_autoflush block if this flush is occurring prematurely)
+(pymysql.err.IntegrityError) (1452, 'Cannot add or update a child row: a foreign key constraint fails (`coc_stats`.`raid_weekend_log`, CONSTRAINT `raid_weekend_log_ibfk_1` FOREIGN KEY (`playerTag`) REFERENCES `player` (`tag`))')
+[SQL: INSERT INTO raid_weekend_log (raid_weekend_id, `defenderName`, `defenderTag`, `districtName`, `districLevel`, `totalLootAllAttacks`, percentage, `percentageTotal`, stars, `playerTag`) VALUES (%(raid_weekend_id)s, %(defenderName)s, %(defenderTag)s, %(districtName)s, %(districLevel)s, %(totalLootAllAttacks)s, %(percentage)s, %(percentageTotal)s, %(stars)s, %(playerTag)s)]
+[parameters: {'raid_weekend_id': 3, 'defenderName': 'LDS SPARTANS', 'defenderTag': '#2JUQU0G2', 'districtName': "Builder's Workshop", 'districLevel': 5, 'totalLootAllAttacks': 14635, 'percentage': 19, 'percentageTotal': 19, 'stars': 0, 'playerTag': '#GV82YLURV'}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+2026-05-30 22:54:19 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 22:54:19.827374  
+2026-05-30 22:54:20 - ERROR - [task_update_raid_weekend] - Failed to create raid weekend logs: (raised as a result of Query-invoked autoflush; consider using a session.no_autoflush block if this flush is occurring prematurely)
+(pymysql.err.IntegrityError) (1452, 'Cannot add or update a child row: a foreign key constraint fails (`coc_stats`.`raid_weekend_log`, CONSTRAINT `raid_weekend_log_ibfk_1` FOREIGN KEY (`playerTag`) REFERENCES `player` (`tag`))')
+[SQL: INSERT INTO raid_weekend_log (raid_weekend_id, `defenderName`, `defenderTag`, `districtName`, `districLevel`, `totalLootAllAttacks`, percentage, `percentageTotal`, stars, `playerTag`) VALUES (%(raid_weekend_id)s, %(defenderName)s, %(defenderTag)s, %(districtName)s, %(districLevel)s, %(totalLootAllAttacks)s, %(percentage)s, %(percentageTotal)s, %(stars)s, %(playerTag)s)]
+[parameters: {'raid_weekend_id': 3, 'defenderName': 'LDS SPARTANS', 'defenderTag': '#2JUQU0G2', 'districtName': "Builder's Workshop", 'districLevel': 5, 'totalLootAllAttacks': 14635, 'percentage': 19, 'percentageTotal': 19, 'stars': 0, 'playerTag': '#GV82YLURV'}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+2026-05-30 22:58:04 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 22:58:04.693478  
+2026-05-30 23:00:24 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:00:24.502253  
+2026-05-30 23:08:12 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:08:12.093970  
+2026-05-30 23:09:43 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:09:43.147976  
+2026-05-30 23:11:41 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:11:41.110363  
+2026-05-30 23:18:33 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:18:33.993576  
+2026-05-30 23:24:27 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:24:27.550026  
+2026-05-30 23:35:39 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:35:39.690514  
+2026-05-30 23:37:03 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:37:03.520892  
+2026-05-30 23:43:22 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:43:22.349795  
+2026-05-30 23:46:45 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:46:45.663506  
+2026-05-30 23:48:43 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:48:43.909903  
+2026-05-30 23:53:06 - INFO - [task_update_raid_weekend] - Running task at 2026-05-30 23:53:06.558674  

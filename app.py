@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -434,7 +435,17 @@ def task_update_raid_weekend(run_always: bool = False):
                         
                         member = next((m for m in json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS) if json_get(m, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS_TAG) == player_tag), None)
                         total_loot_all_attacks = member["capitalResourcesLooted"] if member else None
-                        
+
+                        if not Player.query.filter_by(tag=player_tag).first():
+                            try:
+                                player_api = api_fetch_player_data(player_tag)
+                                tmp_player = create_db_player_from_api(player_api)
+                                db_player_create_new(tmp_player)
+                                db.session.flush()
+                            except Exception as e:
+                                raid_weekend_logger.warning(f"Could not auto-create player {player_tag}: {e}")
+                                previous_percent = current_percent
+                                continue
 
                         previous_percent = current_percent
                         tmp_raid_weekend_log = create_db_raid_weekend_log(raid_weekend,player_tag,district_name,0,percentage_done,current_percent,stars,defender_tag,defender_name,distric_level,total_loot_all_attacks)
@@ -1086,6 +1097,52 @@ def raid_weekend_page():
         total_log_attacks = sum(p['att_count'] for p in player_data)
         cleanup_count = sum(p['cleanup_count'] for p in player_data)
 
+    # Long-term stats: solo wipes per player per district
+    # A solo wipe = player's attacks on one district in one encounter sum to 100%
+    enc_subq = (
+        db.session.query(
+            RaidWeekendLog.playerTag,
+            RaidWeekendLog.districtName,
+            RaidWeekendLog.districLevel,
+            RaidWeekendLog.defenderTag,
+            RaidWeekendLog.raid_weekend_id,
+            func.count(RaidWeekendLog.id).label('att_count'),
+        )
+        .filter(RaidWeekendLog.defenderTag.isnot(None))
+        .group_by(
+            RaidWeekendLog.playerTag,
+            RaidWeekendLog.districtName,
+            RaidWeekendLog.districLevel,
+            RaidWeekendLog.defenderTag,
+            RaidWeekendLog.raid_weekend_id,
+        )
+        .having(func.sum(RaidWeekendLog.percentage) == 100)
+        .subquery()
+    )
+    hist_raw = (
+        db.session.query(
+            enc_subq.c.playerTag,
+            enc_subq.c.districtName,
+            enc_subq.c.districLevel,
+            func.count(enc_subq.c.att_count).label('n'),
+            func.avg(enc_subq.c.att_count).label('avg_attacks'),
+        )
+        .group_by(enc_subq.c.playerTag, enc_subq.c.districtName, enc_subq.c.districLevel)
+        .all()
+    )
+    clan_players = Player.query.filter_by(in_clan=True).all()
+    player_name_map = {p.tag: (p.name or p.tag) for p in clan_players}
+    in_clan_tags = {p.tag for p in clan_players}
+    hist_stats = [{
+        'player_tag':  str(r.playerTag),
+        'player_name': str(player_name_map.get(r.playerTag, r.playerTag)),
+        'district':    str(r.districtName) if r.districtName else None,
+        'level':       int(r.districLevel) if r.districLevel is not None else 0,
+        'clears':      int(r.n),
+        'avg_attacks': round(float(r.avg_attacks), 1) if r.avg_attacks is not None else 0,
+    } for r in hist_raw if r.playerTag in in_clan_tags]
+    hist_stats_json = json.dumps(hist_stats, default=str)
+
     has_ongoing = any(r.state == 'ongoing' for r in all_raids)
     last_weekend_assigned = False
     raid_options = []
@@ -1109,6 +1166,7 @@ def raid_weekend_page():
         player_data=player_data,
         total_log_attacks=total_log_attacks,
         cleanup_count=cleanup_count,
+        hist_stats_json=hist_stats_json,
     )
 
 
@@ -1960,11 +2018,11 @@ def pubquiz_delete_team(team_id):
 
 
 if __name__ == '__main__':
-    #task_update_clan_members()
+    task_update_clan_members()
     #task_update_ranked_weeks()
     #task_update_battle_logs()
     #task_update_done_ranked_weeks()
-    #task_update_raid_weekend()
+    task_update_raid_weekend()
     
     # Webserver starten (use_reloader=False verhindert, dass der Scheduler beim Speichern doppelt startet)
     app.run(debug=True, use_reloader=False)

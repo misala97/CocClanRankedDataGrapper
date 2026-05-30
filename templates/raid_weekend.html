@@ -7,6 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg:      #0d1117;
@@ -318,6 +319,15 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- District Stats -->
+    <div class="recent-card" id="districtStatsCard">
+        <div class="recent-header" onclick="toggleDistrictStats()">
+            <span class="recent-header-title">📊 Solo Wipe Long Term Statistic</span>
+            <span class="recent-chevron" id="districtStatsChevron">▼</span>
+        </div>
+        <div class="recent-body" id="districtStatsBody" style="display:none;"></div>
+    </div>
 
     <!-- Recent Attacks -->
     {% if player_data %}
@@ -652,9 +662,182 @@ function toggleRecent() {
     chevron.classList.toggle('open', open);
 }
 
+
 document.addEventListener('DOMContentLoaded', buildTable);
 </script>
 {% endif %}
+
+<script>
+const histStats = {{ hist_stats_json | safe }};
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+function dsEscape(v) { return String(v||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+let dsChart = null;
+let dsView  = 'district'; // 'district' | 'player'
+
+function dsAllDistricts() {
+    return [...new Set(histStats.map(r => r.district))].sort();
+}
+function dsAllPlayers() {
+    return [...new Set(histStats.map(r => r.player_name))].sort();
+}
+function dsLevelsFor(district) {
+    return [...new Set(histStats.filter(r => r.district === district).map(r => r.level))].sort((a,b)=>a-b);
+}
+
+function dsRebuild() {
+    const body = document.getElementById('districtStatsBody');
+    if (body.style.display === 'none') return;
+    buildDistrictStats();
+}
+
+function buildDistrictStats() {
+    const body       = document.getElementById('districtStatsBody');
+    const selDistrict = document.getElementById('dsDistrictSel')?.value || dsAllDistricts()[0] || '';
+    const selLevel    = document.getElementById('dsLevelSel')?.value   || 'all';
+    const selPlayer   = document.getElementById('dsPlayerSel')?.value  || dsAllPlayers()[0] || '';
+
+    const districts = dsAllDistricts();
+    const players   = dsAllPlayers();
+
+    // ── Controls HTML ────────────────────────────────────────────────────────
+    const viewBtnD = `<button onclick="dsSetView('district')" class="action-btn${dsView==='district'?' active-btn':''}" style="margin-right:4px;">By District</button>`;
+    const viewBtnP = `<button onclick="dsSetView('player')"   class="action-btn${dsView==='player'?' active-btn':''}" ">By Player</button>`;
+
+    let districtOpts = districts.map(d => `<option value="${dsEscape(d)}"${d===selDistrict?' selected':''}>${dsEscape(d)}</option>`).join('');
+    let playerOpts   = players.map(p   => `<option value="${dsEscape(p)}"${p===selPlayer?' selected':''}>${dsEscape(p)}</option>`).join('');
+
+    const levels = dsView === 'district' ? dsLevelsFor(selDistrict) : [];
+    let levelOpts = `<option value="all">All Levels</option>` + levels.map(l => `<option value="${l}"${String(l)===selLevel?' selected':''}>Level ${l}</option>`).join('');
+
+    const districtCtrl = `<label style="font-size:12px;color:var(--muted);margin-right:6px;">District</label><select id="dsDistrictSel" onchange="dsRebuild()" style="background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;">${districtOpts}</select>`;
+    const levelCtrl    = levels.length > 1 ? `<label style="font-size:12px;color:var(--muted);margin:0 6px 0 12px;">Level</label><select id="dsLevelSel" onchange="dsRebuild()" style="background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;">${levelOpts}</select>` : '';
+    const playerCtrl   = `<label style="font-size:12px;color:var(--muted);margin-right:6px;">Player</label><select id="dsPlayerSel" onchange="dsRebuild()" style="background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;">${playerOpts}</select>`;
+
+    const controls = dsView === 'district'
+        ? `${districtCtrl}${levelCtrl}`
+        : `${playerCtrl}`;
+
+    // ── Filter data ──────────────────────────────────────────────────────────
+    let labels = [], dataAvg = [], dataAtk = [], tableRows = '';
+
+    if (dsView === 'district') {
+        const filtered = histStats.filter(r =>
+            r.district === selDistrict &&
+            (selLevel === 'all' || String(r.level) === selLevel)
+        );
+        const aggMap = {};
+        filtered.forEach(r => {
+            if (!aggMap[r.player_name]) aggMap[r.player_name] = { total: 0, n: 0, clears: 0 };
+            aggMap[r.player_name].total  += r.avg_attacks * r.clears;
+            aggMap[r.player_name].n      += r.clears;
+            aggMap[r.player_name].clears += r.clears;
+        });
+        const sorted = Object.entries(aggMap).sort((a,b) =>
+            (b[1].clears - a[1].clears) || (a[1].total/a[1].n) - (b[1].total/b[1].n)
+        );
+        sorted.forEach(([name, d]) => {
+            const avg = d.n ? d.total / d.n : 0;
+            labels.push(name);
+            dataAvg.push(parseFloat(avg.toFixed(1)));
+            dataAtk.push(d.clears);
+            tableRows += `<tr>
+                <td style="font-weight:600;">${dsEscape(name)}</td>
+                <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:600;">${d.clears}</td>
+                <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${avg.toFixed(1)}</td>
+            </tr>`;
+        });
+    } else {
+        const filtered = histStats.filter(r => r.player_name === selPlayer);
+        const aggMap = {};
+        filtered.forEach(r => {
+            if (!aggMap[r.district]) aggMap[r.district] = { total: 0, n: 0, clears: 0 };
+            aggMap[r.district].total  += r.avg_attacks * r.clears;
+            aggMap[r.district].n      += r.clears;
+            aggMap[r.district].clears += r.clears;
+        });
+        const sorted = Object.entries(aggMap).sort((a,b) =>
+            (b[1].clears - a[1].clears) || (a[1].total/a[1].n) - (b[1].total/b[1].n)
+        );
+        sorted.forEach(([district, d]) => {
+            const avg = d.n ? d.total / d.n : 0;
+            labels.push(district);
+            dataAvg.push(parseFloat(avg.toFixed(1)));
+            dataAtk.push(d.clears);
+            tableRows += `<tr>
+                <td style="font-weight:600;">${dsEscape(district)}</td>
+                <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:600;">${d.clears}</td>
+                <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${avg.toFixed(1)}</td>
+            </tr>`;
+        });
+    }
+
+    const tableLabel = dsView === 'district' ? 'Player' : 'District';
+
+    body.innerHTML = `
+        <div style="padding:14px 20px 20px;">
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:14px;">
+                ${viewBtnD}${viewBtnP}
+                <span style="width:1px;height:22px;background:var(--border);margin:0 8px;"></span>
+                ${controls}
+            </div>
+            <div style="position:relative;height:260px;margin-bottom:16px;">
+                <canvas id="dsChartCanvas"></canvas>
+            </div>
+            <table class="detail-table">
+                <thead><tr>
+                    <th>${tableLabel}</th>
+                    <th style="text-align:center;">Solo Wipes</th>
+                    <th style="text-align:center;">Avg Attacks</th>
+                </tr></thead>
+                <tbody>${tableRows || '<tr><td colspan="3" style="color:var(--muted);padding:12px;">No data.</td></tr>'}</tbody>
+            </table>
+        </div>`;
+
+    // ── Draw chart ───────────────────────────────────────────────────────────
+    if (dsChart) { dsChart.destroy(); dsChart = null; }
+    const ctx = document.getElementById('dsChartCanvas');
+    if (ctx && labels.length) {
+        dsChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Avg Attacks',
+                    data: dataAvg,
+                    backgroundColor: dataAvg.map(v => v <= 1.5 ? 'hsla(142,60%,42%,0.85)' : v <= 2.5 ? 'hsla(48,90%,50%,0.85)' : v <= 3.5 ? 'hsla(25,90%,52%,0.85)' : 'hsla(0,75%,52%,0.85)'),
+                    borderRadius: 5, borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: {
+                    callbacks: { label: ctx => ` ${ctx.parsed.y} attacks  (${dataAtk[ctx.dataIndex]} solo wipes)` }
+                }},
+                scales: {
+                    x: { ticks: { color: '#8b949e', font: { family: 'Rajdhani', size: 12 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { min: 0, ticks: { color: '#8b949e', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.06)' } }
+                }
+            }
+        });
+    }
+}
+
+function dsSetView(v) {
+    dsView = v;
+    buildDistrictStats();
+}
+
+function toggleDistrictStats() {
+    const body    = document.getElementById('districtStatsBody');
+    const chevron = document.getElementById('districtStatsChevron');
+    const open    = body.style.display === 'none';
+    if (open) buildDistrictStats();
+    body.style.display = open ? '' : 'none';
+    chevron.classList.toggle('open', open);
+}
+</script>
 
 </body>
 </html>
