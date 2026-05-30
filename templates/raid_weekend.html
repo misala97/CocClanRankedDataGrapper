@@ -806,7 +806,7 @@ function buildDistrictStats() {
                 datasets: [{
                     label: 'Avg Attacks',
                     data: dataAvg,
-                    backgroundColor: dataAvg.map(v => v <= 1.5 ? 'hsla(142,60%,42%,0.85)' : v <= 2.5 ? 'hsla(48,90%,50%,0.85)' : v <= 3.5 ? 'hsla(25,90%,52%,0.85)' : 'hsla(0,75%,52%,0.85)'),
+                    backgroundColor: dataAvg.map(v => v <= 2.5 ? 'hsla(142,60%,42%,0.85)' : v <= 3.5 ? 'hsla(48,90%,50%,0.85)' : v <= 4.5 ? 'hsla(25,90%,52%,0.85)' : 'hsla(0,75%,52%,0.85)'),
                     borderRadius: 5, borderSkipped: false,
                 }]
             },
