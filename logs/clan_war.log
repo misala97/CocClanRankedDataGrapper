@@ -1,0 +1,14 @@
+2026-05-31 01:29:08 - INFO - [task_update_clan_war] - Running task at 2026-05-31 01:29:08.400749
+2026-05-31 01:31:34 - INFO - [task_update_clan_war] - Created war vs Global Warheads (state=preparation)
+2026-05-31 01:32:06 - INFO - [task_update_clan_war] - Running task at 2026-05-31 01:32:06.488654
+2026-05-31 01:32:07 - ERROR - [task_update_clan_war] - Failed to update clan war: name 'raid_weekend' is not defined
+2026-05-31 01:33:08 - INFO - [task_update_clan_war] - Running task at 2026-05-31 01:33:08.175720
+2026-05-31 01:33:09 - ERROR - [task_update_clan_war] - Failed to update clan war: name 'raid_weekend' is not defined
+2026-05-31 01:37:47 - INFO - [task_update_clan_war] - Running task at 2026-05-31 01:37:47.199931
+2026-05-31 01:37:48 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)
+2026-05-31 01:42:48 - INFO - [task_update_clan_war] - Running task at 2026-05-31 01:42:48.663617
+2026-05-31 01:42:49 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)
+2026-05-31 01:46:40 - INFO - [task_update_clan_war] - Running task at 2026-05-31 01:46:40.943196
+2026-05-31 01:46:41 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)
+2026-05-31 01:47:49 - INFO - [task_update_clan_war] - Running task at 2026-05-31 01:47:49.814909
+2026-05-31 01:47:50 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)

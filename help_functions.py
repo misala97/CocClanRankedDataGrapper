@@ -105,6 +105,44 @@ class JSON_RAID_WEEKEND_DATA:
     ITEMS_ATTACKLOG_DISTRICTS_ATTACKS_ATTACKER.TAG = JSONPath("tag")
     
     
+class JSON_CLAN_WAR_DATA:
+    # Top level
+    STATE                  = JSONPath("state")
+    TEAM_SIZE              = JSONPath("teamSize")
+    ATTACKS_PER_MEMBER     = JSONPath("attacksPerMember")
+    BATTLE_MODIFIER        = JSONPath("battleModifier")
+    PREPARATION_START_TIME = JSONPath("preparationStartTime")
+    START_TIME             = JSONPath("startTime")
+    END_TIME               = JSONPath("endTime")
+    CLAN                   = JSONPath("clan")
+    OPPONENT               = JSONPath("opponent")
+
+    # Applied to clan or opponent sub-dict
+    SIDE_TAG               = JSONPath("tag")
+    SIDE_NAME              = JSONPath("name")
+    SIDE_CLAN_LEVEL        = JSONPath("clanLevel")
+    SIDE_ATTACKS           = JSONPath("attacks")
+    SIDE_STARS             = JSONPath("stars")
+    SIDE_DESTRUCTION_PCT   = JSONPath("destructionPercentage")
+    SIDE_MEMBERS           = JSONPath("members")
+
+    # Applied to each member dict
+    MEMBER_TAG             = JSONPath("tag")
+    MEMBER_NAME            = JSONPath("name")
+    MEMBER_TH_LEVEL        = JSONPath("townhallLevel")
+    MEMBER_MAP_POSITION    = JSONPath("mapPosition")
+    MEMBER_OPP_ATTACKS     = JSONPath("opponentAttacks")
+    MEMBER_ATTACKS         = JSONPath("attacks")
+
+    # Applied to each attack dict
+    ATTACK_ATTACKER_TAG    = JSONPath("attackerTag")
+    ATTACK_DEFENDER_TAG    = JSONPath("defenderTag")
+    ATTACK_STARS           = JSONPath("stars")
+    ATTACK_DESTRUCTION_PCT = JSONPath("destructionPercentage")
+    ATTACK_ORDER           = JSONPath("order")
+    ATTACK_DURATION        = JSONPath("duration")
+
+
 class JSON_RANKED_GROUP_DATA:
     MEMBERS = JSONPath("members")
     MEMBERS_TROPHIES = JSONPath("leagueTrophies")

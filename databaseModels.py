@@ -200,3 +200,61 @@ class AppUser(db.Model):
     created_at     = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_approved    = db.Column(db.Boolean, default=False, nullable=False)
     is_super_admin = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class ClanWar(db.Model):
+    __tablename__ = 'clan_war'
+
+    id                       = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    state                    = db.Column(db.String(20))
+    team_size                = db.Column(db.Integer)
+    attacks_per_member       = db.Column(db.Integer)
+    battle_modifier          = db.Column(db.String(50))
+    preparation_start_time   = db.Column(db.DateTime)
+    start_time               = db.Column(db.DateTime, unique=True)
+    end_time                 = db.Column(db.DateTime)
+
+    opponent_tag             = db.Column(db.String(30))
+    opponent_name            = db.Column(db.String(100))
+    opponent_clan_level      = db.Column(db.Integer)
+
+    clan_stars               = db.Column(db.Integer, default=0)
+    clan_attacks             = db.Column(db.Integer, default=0)
+    clan_destruction_pct     = db.Column(db.Float, default=0.0)
+
+    opponent_stars           = db.Column(db.Integer, default=0)
+    opponent_attacks         = db.Column(db.Integer, default=0)
+    opponent_destruction_pct = db.Column(db.Float, default=0.0)
+
+    members = db.relationship('ClanWarMember', back_populates='clan_war', lazy=True, cascade='all, delete-orphan')
+    attacks = db.relationship('ClanWarAttack',  back_populates='clan_war', lazy=True, cascade='all, delete-orphan')
+
+
+class ClanWarMember(db.Model):
+    __tablename__ = 'clan_war_member'
+
+    id               = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    clan_war_id      = db.Column(db.Integer, db.ForeignKey('clan_war.id'))
+    is_opponent      = db.Column(db.Boolean, default=False, nullable=False)
+    player_tag       = db.Column(db.String(30))
+    player_name      = db.Column(db.String(100))
+    town_hall_level  = db.Column(db.Integer)
+    map_position     = db.Column(db.Integer)
+    opponent_attacks = db.Column(db.Integer, default=0)
+
+    clan_war = db.relationship('ClanWar', back_populates='members')
+
+
+class ClanWarAttack(db.Model):
+    __tablename__ = 'clan_war_attack'
+
+    id              = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    clan_war_id     = db.Column(db.Integer, db.ForeignKey('clan_war.id'))
+    attacker_tag    = db.Column(db.String(30))
+    defender_tag    = db.Column(db.String(30))
+    stars           = db.Column(db.Integer)
+    destruction_pct = db.Column(db.Float)
+    attack_order    = db.Column(db.Integer)
+    duration        = db.Column(db.Integer)
+
+    clan_war = db.relationship('ClanWar', back_populates='attacks')

@@ -863,7 +863,17 @@
                 : `<div class="league-cell"><span class="league-badge">${escapeHTML(item.league_tier||'–')}</span></div>`;
             const rankIcon = item.rank_status === 'up' ? '⬆️' : item.rank_status === 'down' ? '⬇️' : item.rank_status === 'inactive' ? '💤' : '➖';
             const rankText = item.rank ? `#${item.rank}` : '-';
-            const rankTitle = item.rank_status === 'up' ? 'Promotion' : item.rank_status === 'down' ? 'Relegation' : item.rank_status === 'inactive' ? 'Inactive' : 'Stay';
+            const pro = item.promo_spots, dem = item.dem_spots;
+            const zoneInfo = (pro != null && dem != null)
+                ? `Top ${pro} promote · Bottom ${dem} relegate`
+                : '';
+            const rankTitle = item.rank_status === 'up'
+                ? `Promotion zone\n${zoneInfo}`
+                : item.rank_status === 'down'
+                ? `Relegation zone\n${zoneInfo}`
+                : item.rank_status === 'inactive'
+                ? `Inactive\n${zoneInfo}`
+                : `Staying\n${zoneInfo}`;
             const badgeColor = getJudgeColor(item.badge_class);
 
             row.innerHTML = `

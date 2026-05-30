@@ -1,5 +1,5 @@
 from databaseModels import * 
-from help_functions import json_get, JSON_BATTLE_LOG_DATA, JSON_PLAYER_DATA, JSON_RANKED_GROUP_DATA, JSON_RAID_WEEKEND_DATA
+from help_functions import json_get, JSON_BATTLE_LOG_DATA, JSON_PLAYER_DATA, JSON_RANKED_GROUP_DATA, JSON_RAID_WEEKEND_DATA, JSON_CLAN_WAR_DATA
 import logging
 from typing import List
 from help_functions import get_name_to_id, get_resource_amount,parse_iso_datetime,get_weekly_attacks,get_member_rank_by_tag, get_next_monday, get_last_monday
@@ -320,4 +320,76 @@ def db_raid_weekend_update(raid_weekend: RaidWeekend, updated_raid_weekend: Raid
         raid_weekend.defensiveReward = updated_raid_weekend.defensiveReward
 
         logging.debug(f"Updated raid weekend {raid_weekend.startTime}")
-    return raid_weekend
+
+
+# ── Clan War ──────────────────────────────────────────────────────────────────
+
+def create_db_clan_war(war_data: dict) -> ClanWar:
+    if not isinstance(war_data, dict):
+        raise TypeError(f"Expected war dict, got {type(war_data).__name__}")
+    clan_data = json_get(war_data, JSON_CLAN_WAR_DATA.CLAN, default={}, raise_on_missing=False) or {}
+    opp_data  = json_get(war_data, JSON_CLAN_WAR_DATA.OPPONENT, default={}, raise_on_missing=False) or {}
+    return ClanWar(
+        state                    = json_get(war_data, JSON_CLAN_WAR_DATA.STATE),
+        team_size                = json_get(war_data, JSON_CLAN_WAR_DATA.TEAM_SIZE),
+        attacks_per_member       = json_get(war_data, JSON_CLAN_WAR_DATA.ATTACKS_PER_MEMBER),
+        battle_modifier          = json_get(war_data, JSON_CLAN_WAR_DATA.BATTLE_MODIFIER),
+        preparation_start_time   = parse_iso_datetime(json_get(war_data, JSON_CLAN_WAR_DATA.PREPARATION_START_TIME)),
+        start_time               = parse_iso_datetime(json_get(war_data, JSON_CLAN_WAR_DATA.START_TIME)),
+        end_time                 = parse_iso_datetime(json_get(war_data, JSON_CLAN_WAR_DATA.END_TIME)),
+        opponent_tag             = json_get(opp_data, JSON_CLAN_WAR_DATA.SIDE_TAG,           raise_on_missing=False),
+        opponent_name            = json_get(opp_data, JSON_CLAN_WAR_DATA.SIDE_NAME,          raise_on_missing=False),
+        opponent_clan_level      = json_get(opp_data, JSON_CLAN_WAR_DATA.SIDE_CLAN_LEVEL,    raise_on_missing=False),
+        clan_stars               = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_STARS,        default=0, raise_on_missing=False),
+        clan_attacks             = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_ATTACKS,      default=0, raise_on_missing=False),
+        clan_destruction_pct     = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_DESTRUCTION_PCT, default=0.0, raise_on_missing=False),
+        opponent_stars           = json_get(opp_data, JSON_CLAN_WAR_DATA.SIDE_STARS,         default=0, raise_on_missing=False),
+        opponent_attacks         = json_get(opp_data, JSON_CLAN_WAR_DATA.SIDE_ATTACKS,       default=0, raise_on_missing=False),
+        opponent_destruction_pct = json_get(opp_data, JSON_CLAN_WAR_DATA.SIDE_DESTRUCTION_PCT, default=0.0, raise_on_missing=False),
+    )
+
+
+def create_db_clan_war_member(clan_war: ClanWar, member: dict, is_opponent: bool) -> ClanWarMember:
+    if not isinstance(clan_war, ClanWar):
+        raise TypeError(f"Expected ClanWar object, got {type(clan_war).__name__}")
+    return ClanWarMember(
+        clan_war_id      = clan_war.id,
+        is_opponent      = is_opponent,
+        player_tag       = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_TAG),
+        player_name      = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_NAME),
+        town_hall_level  = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_TH_LEVEL),
+        map_position     = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_MAP_POSITION),
+        opponent_attacks = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_OPP_ATTACKS, default=0, raise_on_missing=False),
+    )
+
+
+def create_db_clan_war_attack(clan_war: ClanWar, attack: dict) -> ClanWarAttack:
+    if not isinstance(clan_war, ClanWar):
+        raise TypeError(f"Expected ClanWar object, got {type(clan_war).__name__}")
+    return ClanWarAttack(
+        clan_war_id     = clan_war.id,
+        attacker_tag    = json_get(attack, JSON_CLAN_WAR_DATA.ATTACK_ATTACKER_TAG),
+        defender_tag    = json_get(attack, JSON_CLAN_WAR_DATA.ATTACK_DEFENDER_TAG),
+        stars           = json_get(attack, JSON_CLAN_WAR_DATA.ATTACK_STARS),
+        destruction_pct = json_get(attack, JSON_CLAN_WAR_DATA.ATTACK_DESTRUCTION_PCT),
+        attack_order    = json_get(attack, JSON_CLAN_WAR_DATA.ATTACK_ORDER),
+        duration        = json_get(attack, JSON_CLAN_WAR_DATA.ATTACK_DURATION),
+    )
+
+
+def db_clan_war_get(start_time) -> ClanWar:
+    return ClanWar.query.filter_by(start_time=start_time).first()
+
+
+def db_clan_war_update(existing: ClanWar, updated: ClanWar):
+    if not isinstance(existing, ClanWar) or not isinstance(updated, ClanWar):
+        raise TypeError("Expected ClanWar objects")
+    existing.state                    = updated.state
+    existing.clan_stars               = updated.clan_stars
+    existing.clan_attacks             = updated.clan_attacks
+    existing.clan_destruction_pct     = updated.clan_destruction_pct
+    existing.opponent_stars           = updated.opponent_stars
+    existing.opponent_attacks         = updated.opponent_attacks
+    existing.opponent_destruction_pct = updated.opponent_destruction_pct
+    logging.debug(f"Updated clan war {existing.start_time}")
+    return existing

@@ -80,7 +80,15 @@ def api_fetch_league_group(group_tag: str, season_id: str, player_tag: str):
 
 def api_fetch_clan_data(clan_tag: str):
     clan_url = f"https://api.clashofclans.com/v1/clans/%23{clean_tag(clan_tag)}"
-    
+
     clan_data = api_call(clan_url)
-    
+
     return clan_data
+
+
+def api_fetch_clan_war(clan_tag: str):
+    war_url = f"https://api.clashofclans.com/v1/clans/%23{clean_tag(clan_tag)}/currentwar"
+
+    war_data = api_call(war_url)
+
+    return war_data

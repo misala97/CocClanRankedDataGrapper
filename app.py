@@ -252,6 +252,7 @@ ranked_logger = setup_task_logger('ranked_weeks', 'logs/task_ranked_weeks.log')
 ranked_done_logger = setup_task_logger('ranked_done', 'logs/task_ranked_done.log')
 clan_logger = setup_task_logger('clan_members', 'logs/task_clan_members.log')
 raid_weekend_logger = setup_task_logger('raid_weekend', 'logs/raid_weekend.log')
+clan_war_logger     = setup_task_logger('clan_war',     'logs/clan_war.log')
 
 
 # ==========================================
@@ -559,6 +560,86 @@ def task_update_ranked_weeks():
         db.session.commit()
                 
         
+def task_update_clan_war():
+    t0 = time.time()
+    clan_war_logger.info(f"Running task at {dt.datetime.now()}")
+    with app.app_context():
+
+        # Fetch war data
+        try:
+            war_data = api_fetch_clan_war(CLAN_TAG)
+            state = json_get(war_data, JSON_CLAN_WAR_DATA.STATE)
+        except Exception as e:
+            clan_war_logger.warning(f"Could not fetch clan war. Error: {e}")
+            return
+
+        if state == 'notInWar':
+            clan_war_logger.info("No active war.")
+            return
+
+        # Create or update war header
+        try:
+            tmp_clan_war = create_db_clan_war(war_data)
+            clan_war = db_clan_war_get(tmp_clan_war.start_time)
+            if not clan_war:
+                db.session.add(tmp_clan_war)
+                db.session.flush()
+                clan_war = tmp_clan_war
+                clan_war_logger.info(f"Created war vs {clan_war.opponent_name} (state={state})")
+            else:
+                db_clan_war_update(clan_war, tmp_clan_war)
+                clan_war_logger.info(f"Updated war vs {clan_war.opponent_name} (state={state})")
+        except Exception as e:
+            clan_war_logger.error(f"Failed to create/update clan war: {e}")
+            db.session.rollback()
+            return
+        db.session.commit()
+
+        # Members (only on creation — members don't change mid-war)
+        if not clan_war.members:
+            try:
+                for side_data, is_opponent in (
+                    (json_get(war_data, JSON_CLAN_WAR_DATA.CLAN),     False),
+                    (json_get(war_data, JSON_CLAN_WAR_DATA.OPPONENT), True),
+                ):
+                    for member in json_get(side_data, JSON_CLAN_WAR_DATA.SIDE_MEMBERS):
+                        db.session.add(create_db_clan_war_member(clan_war, member, is_opponent))
+            except Exception as e:
+                clan_war_logger.error(f"Failed to save war members: {e}")
+                db.session.rollback()
+                return
+            db.session.commit()
+
+        # Attack logs
+        if state not in ('inWar', 'warEnded'):
+            return
+
+        try:
+            existing_orders = {a.attack_order for a in clan_war.attacks}
+            for side_data, is_opponent in (
+                (json_get(war_data, JSON_CLAN_WAR_DATA.CLAN),     False),
+                (json_get(war_data, JSON_CLAN_WAR_DATA.OPPONENT), True),
+            ):
+                for member in json_get(side_data, JSON_CLAN_WAR_DATA.SIDE_MEMBERS):
+                    attacks = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_ATTACKS, raise_on_missing=False)
+                    if not attacks:
+                        continue
+                    for attack in attacks:
+                        order = json_get(attack, JSON_CLAN_WAR_DATA.ATTACK_ORDER)
+                        if order not in existing_orders:
+                            db.session.add(create_db_clan_war_attack(clan_war, attack))
+                            existing_orders.add(order)
+        except Exception as e:
+            clan_war_logger.error(f"Failed to save war attacks: {e}")
+            db.session.rollback()
+            return
+        db.session.commit()
+
+        duration = round(time.time() - t0, 2)
+        db_uptime_tracker_create_new(create_db_uptime_tracker(task_update_clan_war.__name__, duration))
+        db.session.commit()
+
+
 def task_update_clan_members():
     t0 = time.time()
     clan_logger.info(f"Running task at {dt.datetime.now()}  ")
@@ -929,6 +1010,8 @@ def ranked_weeks_page():
             'judge_label': judge_label,
             'is_active': is_active,
             'rank_status': rank_status,
+            'promo_spots': thresholds['pro'] if thresholds else None,
+            'dem_spots': thresholds['dem'] if thresholds else None,
             'in_clan': player.in_clan,
         })
 
@@ -1167,6 +1250,60 @@ def raid_weekend_page():
         total_log_attacks=total_log_attacks,
         cleanup_count=cleanup_count,
         hist_stats_json=hist_stats_json,
+    )
+
+
+@app.route('/war')
+def clan_war_page():
+    wars = ClanWar.query.order_by(ClanWar.start_time.desc()).all()
+    selected_id = request.args.get('war_id', type=int)
+    if not selected_id and wars:
+        selected_id = wars[0].id
+
+    selected_war = (
+        ClanWar.query
+        .options(selectinload(ClanWar.members), selectinload(ClanWar.attacks))
+        .filter_by(id=selected_id)
+        .first()
+    ) if selected_id else None
+
+    members_our, members_opp, attacks_by_attacker, attacks_on_defender, member_by_tag = [], [], {}, {}, {}
+
+    if selected_war:
+        members_our = sorted([m for m in selected_war.members if not m.is_opponent], key=lambda m: m.map_position or 999)
+        members_opp = sorted([m for m in selected_war.members if m.is_opponent],     key=lambda m: m.map_position or 999)
+        member_by_tag = {m.player_tag: m for m in selected_war.members}
+
+        for a in selected_war.attacks:
+            attacks_by_attacker.setdefault(a.attacker_tag, []).append(a)
+            attacks_on_defender.setdefault(a.defender_tag, []).append(a)
+        for lst in attacks_by_attacker.values():
+            lst.sort(key=lambda a: a.attack_order or 0)
+        for lst in attacks_on_defender.values():
+            lst.sort(key=lambda a: a.attack_order or 0)
+
+    war_options = []
+    for w in wars:
+        if w.state == 'preparation':
+            label = f"Preparation — vs {w.opponent_name or '?'}"
+        elif w.state == 'inWar':
+            label = f"Ongoing — vs {w.opponent_name or '?'}"
+        else:
+            start = w.start_time.strftime('%d.%m.%Y') if w.start_time else '?'
+            label = f"{start} — vs {w.opponent_name or '?'}"
+        war_options.append({'id': w.id, 'label': label})
+
+    return render_template(
+        'clanwar.html',
+        war=selected_war,
+        war_options=war_options,
+        selected_id=selected_id,
+        members_our=members_our,
+        members_opp=members_opp,
+        attacks_by_attacker=attacks_by_attacker,
+        attacks_on_defender=attacks_on_defender,
+        member_by_tag=member_by_tag,
+        now=dt.datetime.now(dt.timezone.utc),
     )
 
 
@@ -2143,11 +2280,12 @@ def pubquiz_delete_team(team_id):
 
 
 if __name__ == '__main__':
-    task_update_clan_members()
+    #task_update_clan_members()
     #task_update_ranked_weeks()
     #task_update_battle_logs()
     #task_update_done_ranked_weeks()
-    task_update_raid_weekend()
+    #task_update_raid_weekend()
+    task_update_clan_war()
     
     # Webserver starten (use_reloader=False verhindert, dass der Scheduler beim Speichern doppelt startet)
     app.run(debug=True, use_reloader=False)
