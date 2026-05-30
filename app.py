@@ -147,8 +147,8 @@ def _raid_verdict(logs):
         level_mult = 1.0 + (level - 5) * 0.05
         total_adj += (l.percentage or 0) * level_mult
     adj_per_attack = total_adj / effective_max
-    adj_per_attack = adj_per_attack * (1.05 ** solo_wipe_count)
-    score_100 = min(round(adj_per_attack * 100 / 64.31), 100)
+    adj_per_attack = adj_per_attack * (1.10 ** solo_wipe_count)
+    score_100 = min(round(adj_per_attack * 100 / 73.94), 100)
     if not logs:       return 'badge-inactive', 'Skipped',  score_100
     if score_100 >= 87: return 'badge-godlike',  'Godlike',  score_100
     if score_100 >= 80: return 'badge-dominant', 'Dominant', score_100
@@ -1019,8 +1019,8 @@ def raid_weekend_page():
             effective_max  = max(1, p['att_count'] - p['cleanup_count'])
             total_adj      = sum(l['adj_score'] for l in p['attack_logs'])
             adj_per_attack = total_adj / effective_max
-            adj_per_attack = adj_per_attack * (1.05 ** p['solo_wipes'])
-            score_100      = min(round(adj_per_attack * 100 / 64.31), 100)
+            adj_per_attack = adj_per_attack * (1.10 ** p['solo_wipes'])
+            score_100      = min(round(adj_per_attack * 100 / 73.94), 100)
             p['score_100']       = score_100
             p['adj_per_attack']  = round(adj_per_attack, 2)
             p['effective_max']   = effective_max
