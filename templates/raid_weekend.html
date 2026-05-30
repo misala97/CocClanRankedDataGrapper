@@ -418,46 +418,63 @@ function buildVerdictDetails(p) {
         districtGroups[key].push(l);
     });
 
-    // Determine district type: solo wipe if player % sums to 100 and district done
-    const districtType = {};
+    // Determine district type and stats
+    const districtType  = {};
+    const districtTotal = {};
     districtOrder.forEach(key => {
-        const attacks = districtGroups[key];
-        const done  = attacks.some(l => l.percentage_total === 100);
-        const total = attacks.reduce((s, l) => s + l.percentage, 0);
+        const attacks   = districtGroups[key];
+        const done      = attacks.some(l => l.percentage_total === 100);
+        const pctTotal  = attacks.reduce((s, l) => s + l.percentage, 0);
+        const adjTotal  = attacks.reduce((s, l) => s + l.adj_score, 0);
         const isCleanup = attacks.length === 1 && attacks[0].is_clean_up;
-        districtType[key] = isCleanup ? 'cleanup' : (done && total === 100) ? 'solo_wipe' : 'normal';
+        districtType[key]  = isCleanup ? 'cleanup' : (done && pctTotal === 100) ? 'solo_wipe' : 'normal';
+        districtTotal[key] = { pct: pctTotal, adj: adjTotal };
     });
+
+    const soloWipeCount = districtOrder.filter(k => districtType[k] === 'solo_wipe').length;
+    const tripleWipe    = soloWipeCount >= 3;
 
     let rows = '';
     districtOrder.forEach(key => {
         const attacks = districtGroups[key];
         const type    = districtType[key];
         const span    = attacks.length;
+        const totals  = districtTotal[key];
+        const first   = attacks[0];
 
-        const typeBadge = type === 'cleanup'
-            ? `<span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>`
-            : type === 'solo_wipe'
-                ? `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:0.4px;text-transform:uppercase;background:rgba(188,140,255,0.15);color:var(--purple);border:1px solid rgba(188,140,255,0.35);">⚡ Solo Wipe</span>`
-                : `<span style="color:var(--muted);font-size:12px;">—</span>`;
+        // District name cell — level info underneath
+        const districtNameCell = `<td rowspan="${span}" style="font-weight:600;vertical-align:middle;border-right:1px solid var(--bord2);">
+            ${escapeHTML(first.district_name)}
+            <div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px;">Lvl ${first.district_level} · ${first.level_mult.toFixed(2)}×</div>
+        </td>`;
+
+        // Summary cell — badge + totals stacked, no separate total row
+        let summaryContent = '';
+        if (type === 'solo_wipe') {
+            summaryContent = `
+                <span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:0.4px;text-transform:uppercase;background:rgba(188,140,255,0.15);color:var(--purple);border:1px solid rgba(188,140,255,0.35);">⚡ Solo Wipe</span>
+                <div style="margin-top:5px;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:var(--purple);">${totals.pct}% · ${totals.adj.toFixed(2)} adj</div>`;
+        } else if (type === 'cleanup') {
+            summaryContent = `
+                <span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>
+                <div style="margin-top:5px;font-family:'Rajdhani',sans-serif;font-size:12px;color:var(--muted);">${totals.pct}% raw</div>`;
+        } else {
+            summaryContent = `
+                <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--blue);">${totals.pct}%</div>
+                <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--accent);">${totals.adj.toFixed(2)} adj</div>`;
+        }
+        const summaryCell = `<td rowspan="${span}" style="vertical-align:middle;border-left:1px solid var(--bord2);padding:8px 12px;">${summaryContent}</td>`;
 
         attacks.forEach((l, i) => {
-            const adjColor = type === 'cleanup' ? 'var(--muted)' : 'var(--accent)';
-            const rowBg    = type === 'cleanup'
-                ? 'opacity:0.5;'
-                : type === 'solo_wipe'
-                    ? 'background:rgba(188,140,255,0.04);box-shadow:inset 3px 0 0 var(--purple);'
-                    : '';
+            const adjColor     = type === 'cleanup' ? 'var(--muted)' : 'var(--accent)';
+            const rowBg        = type === 'cleanup' ? 'opacity:0.5;' : type === 'solo_wipe' ? 'background:rgba(188,140,255,0.04);box-shadow:inset 3px 0 0 var(--purple);' : '';
             const borderBottom = i < span - 1 ? 'border-bottom:1px dashed var(--bord2);' : '';
-
             rows += `<tr style="${rowBg}${borderBottom}">
-                ${i === 0 ? `<td rowspan="${span}" style="font-weight:600;vertical-align:middle;border-right:1px solid var(--bord2);">${escapeHTML(l.district_name)}</td>` : ''}
-                <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);">${renderStars(l.stars)}</td>
-                <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--blue);">${l.percentage}%</td>
-                <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${adjColor};">${l.adj_score.toFixed(2)}</td>
-                ${i === 0 ? `<td rowspan="${span}" style="vertical-align:middle;border-left:1px solid var(--bord2);">
-                    <div style="font-size:11px;color:var(--muted);">Lvl ${l.district_level} · ${l.level_mult.toFixed(2)}×</div>
-                    <div style="margin-top:4px;">${typeBadge}</div>
-                </td>` : ''}
+                ${i === 0 ? districtNameCell : ''}
+                <td style="text-align:center;">${renderStars(l.stars)}</td>
+                <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--blue);">${l.percentage}%</td>
+                <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${adjColor};">${l.adj_score.toFixed(2)}</td>
+                ${i === 0 ? summaryCell : ''}
             </tr>`;
         });
     });
@@ -466,13 +483,21 @@ function buildVerdictDetails(p) {
         rows += `<tr style="opacity:0.4;">
             <td style="color:var(--red);border-right:1px solid var(--bord2);">— missing —</td>
             <td>${renderStars(0)}</td><td>—</td><td style="font-family:'Rajdhani',sans-serif;font-weight:700;">0.00</td>
-            <td style="border-left:1px solid var(--bord2);color:var(--muted);font-size:12px;">—</td>
+            <td style="border-left:1px solid var(--bord2);"></td>
         </tr>`;
     }
+
+    const tripleWipeBanner = tripleWipe ? `
+        <div style="margin-bottom:12px;padding:8px 14px;border-radius:8px;background:linear-gradient(90deg,rgba(188,140,255,0.15),rgba(188,140,255,0.05));border:1px solid rgba(188,140,255,0.4);display:flex;align-items:center;gap:10px;">
+            <span style="font-size:18px;">👑</span>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:1px;">Triple Solo Wipe${soloWipeCount > 3 ? ` ×${soloWipeCount}` : ''}</span>
+            <span style="font-size:12px;color:var(--muted);">every district destroyed single-handedly</span>
+        </div>` : '';
 
     return `<div style="padding:0 16px 16px;">
         <div class="detail-section">
             <h4>Verdict Breakdown – Level-Adjusted Score</h4>
+            ${tripleWipeBanner}
             <div style="margin-bottom:10px;font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;">
                 ${p.solo_wipes > 0
                     ? `<span>Score: <strong style="color:var(--accent);">${p.adj_per_attack.toFixed(2)}</strong> = Σ adj. % / ${effectiveMax} attacks × <span style="color:var(--green);font-weight:700;">1.10<sup>${p.solo_wipes}</sup></span> <span style="color:var(--green);">(solo wipe bonus)</span></span>`
@@ -482,7 +507,7 @@ function buildVerdictDetails(p) {
             </div>
             <table class="detail-table">
                 <thead><tr>
-                    <th>District</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Info / Type</th>
+                    <th>District</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Result</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>

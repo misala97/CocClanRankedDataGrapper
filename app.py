@@ -144,7 +144,7 @@ def _raid_verdict(logs):
         level = l.districLevel or 5
         try: level = int(level)
         except: level = 5
-        level_mult = 1.0 + (level - 5) * 0.05
+        level_mult = 1.0 + (level - 5) * (0.07 if level >= 5 else 0.05)
         total_adj += (l.percentage or 0) * level_mult
     adj_per_attack = total_adj / effective_max
     adj_per_attack = adj_per_attack * (1.10 ** solo_wipe_count)
@@ -910,6 +910,8 @@ def ranked_weeks_page():
                     'def_avg': round(sum(d_stars) / def_c, 2) if def_c else 0,
                     'trophies': rw.trophies or 0,
                     'rank': rw.rank,
+                    'league_tier': rw.league_tier or '',
+                    'league_icon': rw.league_icon or '',
                 })
         if history:
             player_history[player.tag] = history
@@ -974,7 +976,7 @@ def raid_weekend_page():
                 level = int(level)
             except (TypeError, ValueError):
                 level = 5
-            level_mult = round(1.0 + (level - 5) * 0.05, 2)
+            level_mult = round(1.0 + (level - 5) * (0.07 if level >= 5 else 0.05), 2)
             pct = log.percentage or 0
             p['attack_logs'].append({
                 'log_id':           log.id,
