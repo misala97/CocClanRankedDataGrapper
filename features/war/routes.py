@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request
 from sqlalchemy.orm import selectinload
 
 from models import ClanWar
+from services.helpers import avg_league_name
 
 war_bp = Blueprint('war', __name__)
 
@@ -22,15 +23,20 @@ def clan_war_page():
         .first()
     ) if selected_id else None
 
-    members_our, members_opp, attacks_by_attacker, attacks_on_defender, member_by_tag = [], [], {}, {}, {}
+    members_our, members_opp = [], []
+    attacks_by_attacker, attacks_on_defender, member_by_tag = {}, {}, {}
     avg_th_our = avg_th_opp = 0
+    avg_league_our = avg_league_opp = None
 
     if selected_war:
         members_our = sorted([m for m in selected_war.members if not m.is_opponent], key=lambda m: m.map_position or 999)
         members_opp = sorted([m for m in selected_war.members if m.is_opponent],     key=lambda m: m.map_position or 999)
         member_by_tag = {m.player_tag: m for m in selected_war.members}
+
         avg_th_our = round(sum(m.town_hall_level or 0 for m in members_our) / len(members_our), 1) if members_our else 0
         avg_th_opp = round(sum(m.town_hall_level or 0 for m in members_opp) / len(members_opp), 1) if members_opp else 0
+        avg_league_our = avg_league_name(members_our)
+        avg_league_opp = avg_league_name(members_opp)
 
         for a in selected_war.attacks:
             attacks_by_attacker.setdefault(a.attacker_tag, []).append(a)
@@ -63,5 +69,7 @@ def clan_war_page():
         member_by_tag=member_by_tag,
         avg_th_our=avg_th_our,
         avg_th_opp=avg_th_opp,
+        avg_league_our=avg_league_our,
+        avg_league_opp=avg_league_opp,
         now=dt.datetime.now(dt.timezone.utc),
     )

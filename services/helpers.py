@@ -69,8 +69,13 @@ class JSON_PLAYER_DATA:
 
 
 class JSON_CLAN_DATA:
-    MEMBER_LIST = JSONPath("memberList")
-    NAME = JSONPath("name")
+    MEMBER_LIST   = JSONPath("memberList")
+    NAME          = JSONPath("name")
+    WAR_LEAGUE    = JSONPath("warLeague.name")
+    LOCATION      = JSONPath("location.name")
+    WAR_WINS      = JSONPath("warWins")
+    WAR_FREQUENCY = JSONPath("warFrequency")
+    WIN_STREAK    = JSONPath("warWinStreak")
 
 
 class JSON_BATTLE_LOG_DATA:
@@ -115,8 +120,6 @@ class JSON_RAID_WEEKEND_DATA:
 class JSON_CLAN_WAR_DATA:
     STATE                  = JSONPath("state")
     TEAM_SIZE              = JSONPath("teamSize")
-    ATTACKS_PER_MEMBER     = JSONPath("attacksPerMember")
-    BATTLE_MODIFIER        = JSONPath("battleModifier")
     PREPARATION_START_TIME = JSONPath("preparationStartTime")
     START_TIME             = JSONPath("startTime")
     END_TIME               = JSONPath("endTime")
@@ -125,6 +128,7 @@ class JSON_CLAN_WAR_DATA:
     SIDE_TAG               = JSONPath("tag")
     SIDE_NAME              = JSONPath("name")
     SIDE_CLAN_LEVEL        = JSONPath("clanLevel")
+    SIDE_BADGE_LARGE       = JSONPath("badgeUrls.large")
     SIDE_ATTACKS           = JSONPath("attacks")
     SIDE_STARS             = JSONPath("stars")
     SIDE_DESTRUCTION_PCT   = JSONPath("destructionPercentage")
@@ -135,6 +139,7 @@ class JSON_CLAN_WAR_DATA:
     MEMBER_MAP_POSITION    = JSONPath("mapPosition")
     MEMBER_OPP_ATTACKS     = JSONPath("opponentAttacks")
     MEMBER_ATTACKS         = JSONPath("attacks")
+    MEMBER_LEAGUE          = JSONPath("league.name")
     ATTACK_ATTACKER_TAG    = JSONPath("attackerTag")
     ATTACK_DEFENDER_TAG    = JSONPath("defenderTag")
     ATTACK_STARS           = JSONPath("stars")
@@ -272,23 +277,42 @@ def get_weekly_attacks(league_string: str):
     return 0
 
 
+_LEAGUE_MAP = {
+    105000000: "Unranked",
+    105000001: "Skeleton League 1", 105000002: "Skeleton League 2", 105000003: "Skeleton League 3",
+    105000004: "Barbarian League 4", 105000005: "Barbarian League 5", 105000006: "Barbarian League 6",
+    105000007: "Archer League 7",   105000008: "Archer League 8",   105000009: "Archer League 9",
+    105000010: "Wizard League 10",  105000011: "Wizard League 11",  105000012: "Wizard League 12",
+    105000013: "Valkyrie League 13", 105000014: "Valkyrie League 14", 105000015: "Valkyrie League 15",
+    105000016: "Witch League 16",   105000017: "Witch League 17",   105000018: "Witch League 18",
+    105000019: "Golem League 19",   105000020: "Golem League 20",   105000021: "Golem League 21",
+    105000022: "P.E.K.K.A League 22", 105000023: "P.E.K.K.A League 23", 105000024: "P.E.K.K.A League 24",
+    105000025: "Titan League 25",   105000026: "Titan League 26",   105000027: "Titan League 27",
+    105000028: "Dragon League 28",  105000029: "Dragon League 29",  105000030: "Dragon League 30",
+    105000031: "Electro League 31", 105000032: "Electro League 32", 105000033: "Electro League 33",
+    105000034: "Legend League III", 105000035: "Legend League II",  105000036: "Legend League I",
+}
+_LEAGUE_NAME_TO_RANK = {name: (lid - 105000000) for lid, name in _LEAGUE_MAP.items()}
+
+
 def get_name_to_id(league_id: int) -> str:
-    league_map = {
-        105000000: "Unranked",
-        105000001: "Skeleton League 1", 105000002: "Skeleton League 2", 105000003: "Skeleton League 3",
-        105000004: "Barbarian League 4", 105000005: "Barbarian League 5", 105000006: "Barbarian League 6",
-        105000007: "Archer League 7", 105000008: "Archer League 8", 105000009: "Archer League 9",
-        105000010: "Wizard League 10", 105000011: "Wizard League 11", 105000012: "Wizard League 12",
-        105000013: "Valkyrie League 13", 105000014: "Valkyrie League 14", 105000015: "Valkyrie League 15",
-        105000016: "Witch League 16", 105000017: "Witch League 17", 105000018: "Witch League 18",
-        105000019: "Golem League 19", 105000020: "Golem League 20", 105000021: "Golem League 21",
-        105000022: "P.E.K.K.A League 22", 105000023: "P.E.K.K.A League 23", 105000024: "P.E.K.K.A League 24",
-        105000025: "Titan League 25", 105000026: "Titan League 26", 105000027: "Titan League 27",
-        105000028: "Dragon League 28", 105000029: "Dragon League 29", 105000030: "Dragon League 30",
-        105000031: "Electro League 31", 105000032: "Electro League 32", 105000033: "Electro League 33",
-        105000034: "Legend League III", 105000035: "Legend League II", 105000036: "Legend League I",
-    }
-    return league_map.get(league_id, "Unknown League")
+    return _LEAGUE_MAP.get(league_id, "Unknown League")
+
+
+def league_rank(name: str) -> int:
+    """Returns 0 (Unranked) → 36 (Legend League I). Unknown names return 0."""
+    return _LEAGUE_NAME_TO_RANK.get(name, 0)
+
+
+_SKIP_LEAGUES = {"Unranked", "Unknown League", None}
+
+def avg_league_name(members) -> str | None:
+    """Average ranked league across members, ignoring Unranked/null/unknown."""
+    ranks = [league_rank(m.ranked_league) for m in members if m.ranked_league not in _SKIP_LEAGUES]
+    if not ranks:
+        return None
+    avg_id = 105000000 + round(sum(ranks) / len(ranks))
+    return get_name_to_id(avg_id)
 
 
 def get_member_rank_by_tag(members, player_name):

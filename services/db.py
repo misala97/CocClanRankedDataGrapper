@@ -16,7 +16,7 @@ from services.helpers import (
     get_name_to_id, get_resource_amount, get_weekly_attacks,
     get_member_rank_by_tag, get_next_monday, get_last_monday,
     JSON_PLAYER_DATA, JSON_BATTLE_LOG_DATA, JSON_RANKED_GROUP_DATA,
-    JSON_RAID_WEEKEND_DATA, JSON_CLAN_WAR_DATA,
+    JSON_RAID_WEEKEND_DATA, JSON_CLAN_WAR_DATA, JSON_CLAN_DATA, avg_league_name,
 )
 
 
@@ -139,7 +139,7 @@ def create_db_battle_log(player: Player, battle_api: dict):
     )
 
 
-def create_db_clan_war(war_data: dict) -> ClanWar:
+def create_db_clan_war(war_data: dict, clan_full_api: dict = None, opp_full_api: dict = None) -> ClanWar:
     if not isinstance(war_data, dict):
         raise TypeError(f"Expected war dict, got {type(war_data).__name__}")
     clan_data = json_get(war_data, JSON_CLAN_WAR_DATA.CLAN,     default={}, raise_on_missing=False) or {}
@@ -147,24 +147,35 @@ def create_db_clan_war(war_data: dict) -> ClanWar:
     return ClanWar(
         state                    = json_get(war_data,  JSON_CLAN_WAR_DATA.STATE),
         team_size                = json_get(war_data,  JSON_CLAN_WAR_DATA.TEAM_SIZE),
-        attacks_per_member       = json_get(war_data,  JSON_CLAN_WAR_DATA.ATTACKS_PER_MEMBER),
-        battle_modifier          = json_get(war_data,  JSON_CLAN_WAR_DATA.BATTLE_MODIFIER),
         preparation_start_time   = parse_iso_datetime(json_get(war_data, JSON_CLAN_WAR_DATA.PREPARATION_START_TIME)),
         start_time               = parse_iso_datetime(json_get(war_data, JSON_CLAN_WAR_DATA.START_TIME)),
         end_time                 = parse_iso_datetime(json_get(war_data, JSON_CLAN_WAR_DATA.END_TIME)),
-        opponent_tag             = json_get(opp_data,  JSON_CLAN_WAR_DATA.SIDE_TAG,           raise_on_missing=False),
-        opponent_name            = json_get(opp_data,  JSON_CLAN_WAR_DATA.SIDE_NAME,          raise_on_missing=False),
-        opponent_clan_level      = json_get(opp_data,  JSON_CLAN_WAR_DATA.SIDE_CLAN_LEVEL,    raise_on_missing=False),
-        clan_stars               = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_STARS,         default=0, raise_on_missing=False),
-        clan_attacks             = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_ATTACKS,       default=0, raise_on_missing=False),
+        clan_name                = json_get(clan_full_api,  JSON_CLAN_DATA.NAME,                 raise_on_missing=False) if clan_full_api else None,
+        clan_badge               = json_get(clan_data,      JSON_CLAN_WAR_DATA.SIDE_BADGE_LARGE, raise_on_missing=False),
+        cwl_league               = json_get(clan_full_api,  JSON_CLAN_DATA.WAR_LEAGUE,           raise_on_missing=False) if clan_full_api else None,
+        clan_location            = json_get(clan_full_api,  JSON_CLAN_DATA.LOCATION,             raise_on_missing=False) if clan_full_api else None,
+        clan_wars_won            = json_get(clan_full_api,  JSON_CLAN_DATA.WAR_WINS,             raise_on_missing=False) if clan_full_api else None,
+        clan_war_frequency       = json_get(clan_full_api,  JSON_CLAN_DATA.WAR_FREQUENCY,        raise_on_missing=False) if clan_full_api else None,
+        clan_win_streak          = json_get(clan_full_api,  JSON_CLAN_DATA.WIN_STREAK,           raise_on_missing=False) if clan_full_api else None,
+        opponent_tag             = json_get(opp_data,       JSON_CLAN_WAR_DATA.SIDE_TAG,         raise_on_missing=False),
+        opponent_name            = json_get(opp_data,       JSON_CLAN_WAR_DATA.SIDE_NAME,        raise_on_missing=False),
+        opponent_clan_level      = json_get(opp_data,       JSON_CLAN_WAR_DATA.SIDE_CLAN_LEVEL,  raise_on_missing=False),
+        opponent_clan_badge      = json_get(opp_data,       JSON_CLAN_WAR_DATA.SIDE_BADGE_LARGE, raise_on_missing=False),
+        opponent_clan_location   = json_get(opp_full_api,   JSON_CLAN_DATA.LOCATION,             raise_on_missing=False) if opp_full_api else None,
+        opponent_cwl_league      = json_get(opp_full_api,   JSON_CLAN_DATA.WAR_LEAGUE,           raise_on_missing=False) if opp_full_api else None,
+        opponent_wars_won        = json_get(opp_full_api,   JSON_CLAN_DATA.WAR_WINS,             raise_on_missing=False) if opp_full_api else None,
+        opponent_war_frequency   = json_get(opp_full_api,   JSON_CLAN_DATA.WAR_FREQUENCY,        raise_on_missing=False) if opp_full_api else None,
+        opponent_win_streak      = json_get(opp_full_api,   JSON_CLAN_DATA.WIN_STREAK,           raise_on_missing=False) if opp_full_api else None,
+        clan_stars               = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_STARS,           default=0,   raise_on_missing=False),
+        clan_attacks             = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_ATTACKS,         default=0,   raise_on_missing=False),
         clan_destruction_pct     = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_DESTRUCTION_PCT, default=0.0, raise_on_missing=False),
-        opponent_stars           = json_get(opp_data,  JSON_CLAN_WAR_DATA.SIDE_STARS,         default=0, raise_on_missing=False),
-        opponent_attacks         = json_get(opp_data,  JSON_CLAN_WAR_DATA.SIDE_ATTACKS,       default=0, raise_on_missing=False),
+        opponent_stars           = json_get(opp_data,  JSON_CLAN_WAR_DATA.SIDE_STARS,           default=0,   raise_on_missing=False),
+        opponent_attacks         = json_get(opp_data,  JSON_CLAN_WAR_DATA.SIDE_ATTACKS,         default=0,   raise_on_missing=False),
         opponent_destruction_pct = json_get(opp_data,  JSON_CLAN_WAR_DATA.SIDE_DESTRUCTION_PCT, default=0.0, raise_on_missing=False),
     )
 
 
-def create_db_clan_war_member(clan_war: ClanWar, member: dict, is_opponent: bool) -> ClanWarMember:
+def create_db_clan_war_member(clan_war: ClanWar, member: dict, is_opponent: bool, ranked_league: str = None) -> ClanWarMember:
     if not isinstance(clan_war, ClanWar):
         raise TypeError(f"Expected ClanWar object, got {type(clan_war).__name__}")
     return ClanWarMember(
@@ -175,6 +186,7 @@ def create_db_clan_war_member(clan_war: ClanWar, member: dict, is_opponent: bool
         town_hall_level  = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_TH_LEVEL),
         map_position     = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_MAP_POSITION),
         opponent_attacks = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_OPP_ATTACKS, default=0, raise_on_missing=False),
+        ranked_league    = ranked_league,
     )
 
 
