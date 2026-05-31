@@ -230,11 +230,12 @@
             background: rgba(240,165,0,.08) !important;
             box-shadow: inset 3px 0 0 var(--accent);
         }
-        .member-row.row-tgt-3 { background: rgba(63,185,80,.1)   !important; box-shadow: inset 3px 0 0 #3fb950; }
-        .member-row.row-tgt-2 { background: rgba(227,179,65,.1)  !important; box-shadow: inset 3px 0 0 #e3b341; }
-        .member-row.row-tgt-1 { background: rgba(240,165,0,.1)   !important; box-shadow: inset 3px 0 0 #f0a500; }
-        .member-row.row-tgt-0 { background: rgba(139,148,158,.1) !important; box-shadow: inset 3px 0 0 #8b949e; }
-        .member-row.row-dim   { opacity: 0.18; }
+        .member-row.row-tgt-3    { background: rgba(63,185,80,.1)   !important; box-shadow: inset 3px 0 0 #3fb950; }
+        .member-row.row-tgt-2    { background: rgba(227,179,65,.1)  !important; box-shadow: inset 3px 0 0 #e3b341; }
+        .member-row.row-tgt-1    { background: rgba(240,165,0,.1)   !important; box-shadow: inset 3px 0 0 #f0a500; }
+        .member-row.row-tgt-0    { background: rgba(139,148,158,.1) !important; box-shadow: inset 3px 0 0 #8b949e; }
+        .member-row.row-tgt-open { background: rgba(88,166,255,.07) !important; box-shadow: inset 3px 0 0 #58a6ff; }
+        .member-row.row-dim      { opacity: 0.18; }
         .member-row { transition: background .1s, opacity .15s; }
 
         /* ── NO WAR ── */
@@ -1140,7 +1141,7 @@ function toggleCompare() {
     if (!grid || !svg) return;
 
     const activeTags = new Set();
-    const TGT_CLASSES = ['row-tgt-3','row-tgt-2','row-tgt-1','row-tgt-0'];
+    const TGT_CLASSES = ['row-tgt-3','row-tgt-2','row-tgt-1','row-tgt-0','row-tgt-open'];
 
     function getPos(row) {
         const gr = grid.getBoundingClientRect();
@@ -1151,6 +1152,21 @@ function toggleCompare() {
 
     function starColor(s) {
         return s === 3 ? '#3fb950' : s === 2 ? '#e3b341' : s === 1 ? '#f0a500' : '#8b949e';
+    }
+
+    function drawPotentialLine(x1, y1, x2, y2) {
+        const cx = (x1 + x2) / 2;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`);
+        path.setAttribute('stroke', '#58a6ff');
+        path.setAttribute('stroke-width', '1.5');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke-opacity', '0.35');
+        path.setAttribute('stroke-dasharray', '4 5');
+        path.style.opacity = '0';
+        path.style.transition = 'opacity 0.3s ease';
+        svg.appendChild(path);
+        requestAnimationFrame(() => { path.style.opacity = '1'; });
     }
 
     function drawCurve(x1, y1, x2, y2, stars, incoming = false) {
@@ -1241,6 +1257,25 @@ function toggleCompare() {
                 const x2 = isLeft ? srcPos.right + 2 : srcPos.left  - 2;
                 drawCurve(x1, atkPos.y, x2, srcPos.y, atk.stars, true);
             });
+
+            // potential targets: remaining attacks → opponent rows not yet 3-starred
+            if (attacks.length < 2) {
+                const oppCard = isLeft ? cards[1] : cards[0];
+                if (oppCard) {
+                    oppCard.querySelectorAll('.member-row[data-tag]').forEach(oppRow => {
+                        if (['row-tgt-0','row-tgt-1','row-tgt-2','row-tgt-3'].some(c => oppRow.classList.contains(c))) return;
+                        const recv = JSON.parse(oppRow.dataset.defendedBy || '[]');
+                        const best = recv.length ? Math.max(...recv.map(a => a.stars)) : 0;
+                        if (best < 3) {
+                            oppRow.classList.add('row-tgt-open');
+                            const dstPos = getPos(oppRow);
+                            const x1 = isLeft ? srcPos.right + 2 : srcPos.left  - 2;
+                            const x2 = isLeft ? dstPos.left  - 2 : dstPos.right + 2;
+                            drawPotentialLine(x1, srcPos.y, x2, dstPos.y);
+                        }
+                    });
+                }
+            }
         });
 
         document.querySelectorAll('.member-row').forEach(r => {
