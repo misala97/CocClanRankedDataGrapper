@@ -38,3 +38,5 @@
 2026-05-31 00:56:21 - INFO - [task_update_clan_members] - Running task at 2026-05-31 00:56:21.464469  
 2026-05-31 00:58:21 - INFO - [task_update_clan_members] - Running task at 2026-05-31 00:58:21.741605  
 2026-05-31 01:28:37 - INFO - [task_update_clan_members] - Running task at 2026-05-31 01:28:37.022386  
+2026-05-31 14:40:58 - INFO - [task_update_clan_members] - Starting at 2026-05-31 12:40:58 UTC
+2026-05-31 14:40:59 - INFO - [db_finalize_uptime] - Done in 0.9s | added=0 updated=48

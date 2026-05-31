@@ -1,0 +1,115 @@
+import datetime as dt
+import time
+
+from logging_config import setup_task_logger
+from services.helpers import json_get, JSON_CLAN_WAR_DATA
+
+clan_war_logger = setup_task_logger('clan_war', 'logs/clan_war.log')
+
+
+def task_update_clan_war():
+    from app import app, CLAN_TAG
+    from extensions import db
+    import extensions
+    from services.db import (
+        create_db_clan_war, db_clan_war_get, db_clan_war_update,
+        create_db_clan_war_member, create_db_clan_war_attack,
+        db_finalize_uptime,
+    )
+    from services.api import api_fetch_clan_war
+
+    t0 = time.time()
+    clan_war_logger.info(f"Starting at {dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
+    status = 'success'
+    error_msg = None
+    members_added = 0
+    attacks_added = 0
+    war_action = None
+
+    with app.app_context():
+        try:
+            war_data = api_fetch_clan_war(CLAN_TAG)
+            state    = json_get(war_data, JSON_CLAN_WAR_DATA.STATE)
+        except Exception as e:
+            clan_war_logger.warning(f"Could not fetch clan war: {e}", exc_info=True)
+            db_finalize_uptime(task_update_clan_war.__name__, t0, 'error', str(e), logger=clan_war_logger)
+            return
+
+        if state == 'notInWar':
+            clan_war_logger.info("No active war — skipping.")
+            db_finalize_uptime(task_update_clan_war.__name__, t0, 'skipped', summary='notInWar', logger=clan_war_logger)
+            return
+
+        try:
+            tmp_clan_war = create_db_clan_war(war_data)
+            clan_war     = db_clan_war_get(tmp_clan_war.start_time)
+            if not clan_war:
+                db.session.add(tmp_clan_war)
+                db.session.flush()
+                clan_war = tmp_clan_war
+                war_action = 'created'
+                clan_war_logger.info(f"Created war vs {clan_war.opponent_name} (state={state})")
+            else:
+                db_clan_war_update(clan_war, tmp_clan_war)
+                war_action = 'updated'
+                clan_war_logger.info(f"Updated war vs {clan_war.opponent_name} (state={state})")
+        except Exception as e:
+            clan_war_logger.error(f"Failed to create/update clan war: {e}", exc_info=True)
+            db.session.rollback()
+            db_finalize_uptime(task_update_clan_war.__name__, t0, 'error', str(e), logger=clan_war_logger)
+            return
+        db.session.commit()
+
+        if not clan_war.members:
+            try:
+                for side_data, is_opponent in (
+                    (json_get(war_data, JSON_CLAN_WAR_DATA.CLAN),     False),
+                    (json_get(war_data, JSON_CLAN_WAR_DATA.OPPONENT), True),
+                ):
+                    for member in json_get(side_data, JSON_CLAN_WAR_DATA.SIDE_MEMBERS):
+                        db.session.add(create_db_clan_war_member(clan_war, member, is_opponent))
+                        members_added += 1
+            except Exception as e:
+                clan_war_logger.error(f"Failed to save war members: {e}", exc_info=True)
+                db.session.rollback()
+                db_finalize_uptime(task_update_clan_war.__name__, t0, 'error', str(e), logger=clan_war_logger)
+                return
+            db.session.commit()
+
+        if state not in ('inWar', 'warEnded'):
+            summary = f"state={state} war={war_action} members_added={members_added}"
+            db_finalize_uptime(task_update_clan_war.__name__, t0, status, summary=summary, logger=clan_war_logger)
+            return
+
+        try:
+            existing_orders = {a.attack_order for a in clan_war.attacks}
+            for side_data, is_opponent in (
+                (json_get(war_data, JSON_CLAN_WAR_DATA.CLAN),     False),
+                (json_get(war_data, JSON_CLAN_WAR_DATA.OPPONENT), True),
+            ):
+                for member in json_get(side_data, JSON_CLAN_WAR_DATA.SIDE_MEMBERS):
+                    attacks = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_ATTACKS, raise_on_missing=False)
+                    if not attacks:
+                        continue
+                    for attack in attacks:
+                        order = json_get(attack, JSON_CLAN_WAR_DATA.ATTACK_ORDER)
+                        if order not in existing_orders:
+                            db.session.add(create_db_clan_war_attack(clan_war, attack))
+                            existing_orders.add(order)
+                            attacks_added += 1
+        except Exception as e:
+            clan_war_logger.error(f"Failed to save war attacks: {e}", exc_info=True)
+            db.session.rollback()
+            status = 'error'
+            error_msg = str(e)
+        db.session.commit()
+
+        summary = f"state={state} war={war_action} members_added={members_added} attacks_added={attacks_added}"
+        db_finalize_uptime(task_update_clan_war.__name__, t0, status, error_msg, summary, logger=clan_war_logger)
+
+        if extensions.scheduler:
+            if state == 'inWar':
+                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', minutes=3)
+            else:
+                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', hours=1)

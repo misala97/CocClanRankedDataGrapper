@@ -12,3 +12,11 @@
 2026-05-31 01:46:41 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)
 2026-05-31 01:47:49 - INFO - [task_update_clan_war] - Running task at 2026-05-31 01:47:49.814909
 2026-05-31 01:47:50 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)
+2026-05-31 02:01:27 - INFO - [task_update_clan_war] - Running task at 2026-05-31 02:01:27.961497
+2026-05-31 02:01:29 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)
+2026-05-31 14:48:02 - INFO - [task_update_clan_war] - Starting at 2026-05-31 12:48:02 UTC
+2026-05-31 14:48:02 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)
+2026-05-31 14:48:02 - INFO - [db_finalize_uptime] - Done in 0.84s | state=preparation war=updated members_added=0
+2026-05-31 14:48:11 - INFO - [task_update_clan_war] - Starting at 2026-05-31 12:48:11 UTC
+2026-05-31 14:48:11 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=preparation)
+2026-05-31 14:48:11 - INFO - [db_finalize_uptime] - Done in 0.82s | state=preparation war=updated members_added=0

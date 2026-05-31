@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clan War – CoC Analytics</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      #0d1117;
+            --surface: #161b22;
+            --surf2:   #1c2330;
+            --border:  #30363d;
+            --bord2:   #21262d;
+            --text:    #e6edf3;
+            --muted:   #8b949e;
+            --accent:  #f0a500;
+            --acc2:    #e8863a;
+            --green:   #3fb950;
+            --blue:    #58a6ff;
+            --red:     #f85149;
+            --yellow:  #e3b341;
+            --purple:  #bc8cff;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        a { text-decoration: none; color: inherit; }
+
+        /* NAV */
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(13,17,23,0.92);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-inner {
+            max-width: 1400px; margin: 0 auto; padding: 0 32px;
+            height: 62px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .nav-logo { display: flex; align-items: center; gap: 10px; transition: opacity .15s; }
+        .nav-logo:hover { opacity: .8; }
+        .logo-icon {
+            width: 36px; height: 36px; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            font-size: 18px; box-shadow: 0 0 16px rgba(240,165,0,.3);
+        }
+        .nav-logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: .5px; }
+        .back-link {
+            font-size: 13px; font-weight: 500; color: var(--muted);
+            padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+            transition: all .15s;
+        }
+        .back-link:hover { color: var(--text); border-color: var(--accent); background: rgba(240,165,0,.06); }
+
+        /* PAGE HEADER */
+        .page-header {
+            background: linear-gradient(180deg, rgba(240,165,0,.05) 0%, transparent 100%);
+            border-bottom: 1px solid var(--bord2);
+            padding: 36px 32px 28px;
+        }
+        .page-header-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+        .page-header h1 { font-family: 'Rajdhani', sans-serif; font-size: 36px; font-weight: 700; letter-spacing: 1px; }
+        .page-header h1 span { color: var(--accent); }
+        .page-sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+        /* CONTAINER */
+        .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
+
+        /* SELECTOR */
+        .selector {
+            padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surf2); color: var(--text); font-size: 13px;
+            font-family: 'DM Sans', sans-serif; cursor: pointer; min-width: 260px;
+        }
+        .selector:focus { outline: none; border-color: var(--accent); }
+
+        /* WAR HEADER CARD */
+        .war-header {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            padding: 28px 32px; margin-bottom: 24px;
+            display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px; align-items: center;
+        }
+        .clan-side { display: flex; flex-direction: column; }
+        .clan-side.right { align-items: flex-end; text-align: right; }
+        .clan-name { font-family: 'Rajdhani', sans-serif; font-size: 24px; font-weight: 700; }
+        .clan-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+        .score-block { text-align: center; }
+        .score-stars {
+            font-family: 'Rajdhani', sans-serif; font-size: 52px; font-weight: 700;
+            line-height: 1; display: flex; align-items: center; justify-content: center; gap: 12px;
+        }
+        .score-stars .our   { color: var(--green); }
+        .score-stars .sep   { color: var(--muted); font-size: 32px; }
+        .score-stars .their { color: var(--red); }
+        .score-pct { font-size: 13px; color: var(--muted); margin-top: 6px; }
+        .state-badge {
+            display: inline-block; margin-top: 10px;
+            padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase;
+        }
+        .state-preparation { background: rgba(240,165,0,.12); color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
+        .state-inWar        { background: rgba(63,185,80,.12);  color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+        .state-warEnded     { background: rgba(139,148,158,.1); color: var(--muted); border: 1px solid rgba(139,148,158,.2); }
+
+        /* TIME INFO */
+        .time-row { display: flex; gap: 24px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+        .time-item { text-align: center; }
+        .time-item .label { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
+        .time-item .value { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; color: var(--text); }
+
+        /* ROSTER GRID */
+        .roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 900px) { .roster-grid { grid-template-columns: 1fr; } }
+
+        .roster-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+        }
+        .roster-card-header {
+            background: var(--surf2); padding: 12px 18px;
+            font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700;
+            letter-spacing: .5px; text-transform: uppercase; color: var(--muted);
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* MEMBER ROW */
+        .member-row {
+            padding: 12px 18px; border-bottom: 1px solid var(--bord2);
+            display: grid; grid-template-columns: 32px 44px 1fr auto;
+            align-items: center; gap: 10px; transition: background .1s;
+        }
+        .member-row:last-child { border-bottom: none; }
+        .member-row:hover { background: rgba(255,255,255,.02); }
+
+        .map-pos { font-family: 'Rajdhani', sans-serif; font-weight: 700; color: var(--muted); font-size: 13px; text-align: center; }
+        .th-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 3px 7px; border-radius: 5px; font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .3px;
+            background: rgba(88,166,255,.1); color: var(--blue); border: 1px solid rgba(88,166,255,.2);
+        }
+        .member-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* ATTACKS */
+        .attacks-col { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+        .attack-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 3px 8px; border-radius: 5px; font-size: 11px; font-weight: 600;
+            font-family: 'Rajdhani', sans-serif; white-space: nowrap;
+        }
+        .attack-3 { background: rgba(63,185,80,.12);  color: var(--green); border: 1px solid rgba(63,185,80,.25); }
+        .attack-2 { background: rgba(227,179,65,.12); color: var(--yellow); border: 1px solid rgba(227,179,65,.25); }
+        .attack-1 { background: rgba(240,165,0,.1);   color: var(--accent); border: 1px solid rgba(240,165,0,.2); }
+        .attack-0 { background: rgba(248,81,73,.1);   color: var(--red);    border: 1px solid rgba(248,81,73,.2); }
+        .attack-empty { color: var(--muted); font-size: 11px; font-family: 'Rajdhani', sans-serif; opacity: .5; }
+
+        .def-info { font-size: 11px; color: var(--muted); font-family: 'Rajdhani', sans-serif; margin-top: 2px; }
+
+        /* NO WAR */
+        .no-war { text-align: center; padding: 80px 32px; color: var(--muted); }
+        .no-war-icon { font-size: 48px; margin-bottom: 12px; }
+        .no-war h2 { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-inner">
+        <a href="/" class="nav-logo">
+            <div class="logo-icon">⚔️</div>
+            <span>CoC Analytics</span>
+        </a>
+        <a href="/" class="back-link">← Home</a>
+    </div>
+</nav>
+
+<div class="page-header">
+    <div class="page-header-inner">
+        <div>
+            <h1>Clan <span>War</span></h1>
+            <p class="page-sub">Attack logs, star counts and member performance per war.</p>
+        </div>
+        {% if war_options %}
+        <form method="GET">
+            <select name="war_id" class="selector" onchange="this.form.submit()">
+                {% for opt in war_options %}
+                <option value="{{ opt.id }}" {% if opt.id == selected_id %}selected{% endif %}>{{ opt.label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="container">
+
+{% if not war %}
+<div class="no-war">
+    <div class="no-war-icon">🏳️</div>
+    <h2>No war data yet</h2>
+    <p style="margin-top:8px;font-size:14px;">Run <code>task_update_clan_war</code> to sync the current war.</p>
+</div>
+
+{% else %}
+
+{# ── WAR HEADER ── #}
+<div class="war-header">
+    <div class="clan-side">
+        <div class="clan-name">Insi Modus</div>
+        <div class="clan-meta">{{ war.team_size }}v{{ war.team_size }} · {{ war.attacks_per_member }} attacks each{% if avg_th_our %} · Ø TH{{ avg_th_our }}{% endif %}</div>
+    </div>
+
+    <div class="score-block">
+        <div class="score-stars">
+            <span class="our">{{ war.clan_stars }}</span>
+            <span class="sep">★</span>
+            <span class="their">{{ war.opponent_stars }}</span>
+        </div>
+        <div class="score-pct">
+            {{ '%.1f'|format(war.clan_destruction_pct) }}% &nbsp;vs&nbsp; {{ '%.1f'|format(war.opponent_destruction_pct) }}%
+        </div>
+        <div>
+            <span class="state-badge state-{{ war.state }}">
+                {% if war.state == 'preparation' %}Preparation
+                {% elif war.state == 'inWar' %}In War
+                {% else %}Ended{% endif %}
+            </span>
+        </div>
+        <div class="time-row" style="margin-top:14px;">
+            {% if war.start_time %}
+            <div class="time-item">
+                <div class="label">War Start</div>
+                <div class="value">{{ war.start_time | local_dt('%d.%m. %H:%M') }}</div>
+            </div>
+            {% endif %}
+            {% if war.end_time %}
+            <div class="time-item">
+                <div class="label">{% if war.state == 'warEnded' %}Ended{% else %}Ends{% endif %}</div>
+                <div class="value">{{ war.end_time | local_dt('%d.%m. %H:%M') }}</div>
+            </div>
+            {% endif %}
+            <div class="time-item">
+                <div class="label">Attacks</div>
+                <div class="value">{{ war.clan_attacks }} / {{ (war.team_size or 0) * (war.attacks_per_member or 2) }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="clan-side right">
+        <div class="clan-name">{{ war.opponent_name }}</div>
+        <div class="clan-meta">Level {{ war.opponent_clan_level }}{% if avg_th_opp %} · Ø TH{{ avg_th_opp }}{% endif %} · {{ war.opponent_attacks }} attacks used</div>
+    </div>
+</div>
+
+{# ── ROSTER ── #}
+{% if members_our or members_opp %}
+<div class="roster-grid">
+
+    {# OUR SIDE #}
+    <div class="roster-card">
+        <div class="roster-card-header">
+            <span>Our Clan</span>
+            <span>{{ members_our | length }} members</span>
+        </div>
+        {% for m in members_our %}
+        {% set my_attacks = attacks_by_attacker.get(m.player_tag, []) %}
+        {% set attacks_received = attacks_on_defender.get(m.player_tag, []) %}
+        <div class="member-row">
+            <div class="map-pos">#{{ m.map_position }}</div>
+            <div class="th-badge">TH{{ m.town_hall_level }}</div>
+            <div>
+                <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
+                {% if attacks_received %}
+                <div class="def-info">⬇ {{ m.opponent_attacks }} def · best {{ attacks_received | map(attribute='stars') | max }}★</div>
+                {% elif m.opponent_attacks %}
+                <div class="def-info">⬇ {{ m.opponent_attacks }} def</div>
+                {% endif %}
+            </div>
+            <div class="attacks-col">
+                {% for a in my_attacks %}
+                {% set defender = member_by_tag.get(a.defender_tag) %}
+                <span class="attack-pill attack-{{ a.stars }}" title="{{ a.destruction_pct }}% · {{ a.duration }}s">
+                    {% for _ in range(a.stars) %}★{% endfor %}{% for _ in range(3 - a.stars) %}☆{% endfor %}
+                    {{ a.destruction_pct | int }}%
+                    {% if defender %} → #{{ defender.map_position }}{% endif %}
+                </span>
+                {% endfor %}
+                {% set unused = (war.attacks_per_member or 2) - my_attacks | length %}
+                {% if unused > 0 and war.state != 'preparation' %}
+                {% for _ in range(unused) %}<span class="attack-empty">— unused —</span>{% endfor %}
+                {% elif unused > 0 %}
+                <span class="attack-empty">{{ unused }} left</span>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div style="padding:20px 18px;color:var(--muted);font-size:13px;">No member data yet.</div>
+        {% endfor %}
+    </div>
+
+    {# OPPONENT SIDE #}
+    <div class="roster-card">
+        <div class="roster-card-header">
+            <span>{{ war.opponent_name }}</span>
+            <span>{{ members_opp | length }} members</span>
+        </div>
+        {% for m in members_opp %}
+        {% set my_attacks = attacks_by_attacker.get(m.player_tag, []) %}
+        {% set attacks_received = attacks_on_defender.get(m.player_tag, []) %}
+        <div class="member-row">
+            <div class="map-pos">#{{ m.map_position }}</div>
+            <div class="th-badge">TH{{ m.town_hall_level }}</div>
+            <div>
+                <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
+                {% if attacks_received %}
+                <div class="def-info">⬆ hit {{ attacks_received | length }}x · best {{ attacks_received | map(attribute='stars') | max }}★</div>
+                {% endif %}
+            </div>
+            <div class="attacks-col">
+                {% for a in my_attacks %}
+                {% set defender = member_by_tag.get(a.defender_tag) %}
+                <span class="attack-pill attack-{{ a.stars }}" title="{{ a.destruction_pct }}% · {{ a.duration }}s">
+                    {% for _ in range(a.stars) %}★{% endfor %}{% for _ in range(3 - a.stars) %}☆{% endfor %}
+                    {{ a.destruction_pct | int }}%
+                    {% if defender %} → #{{ defender.map_position }}{% endif %}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div style="padding:20px 18px;color:var(--muted);font-size:13px;">No member data yet.</div>
+        {% endfor %}
+    </div>
+
+</div>
+{% else %}
+<div style="text-align:center;padding:48px;color:var(--muted);font-size:14px;">
+    War found but no member data yet — run <code>task_update_clan_war</code> again.
+</div>
+{% endif %}
+
+{% endif %}
+</div>
+
+</body>
+</html>
