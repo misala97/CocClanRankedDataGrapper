@@ -152,3 +152,18 @@
 2026-05-31 21:42:33 - INFO - [task_update_clan_war] - Starting at 2026-05-31 19:42:33 UTC
 2026-05-31 21:42:35 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=inWar)
 2026-05-31 21:42:36 - INFO - [db_finalize_uptime] - Done in 2.28s | state=inWar war=updated members_added=0 attacks_added=1
+2026-05-31 23:01:25 - INFO - [task_update_clan_war] - Starting at 2026-05-31 21:01:25 UTC
+2026-05-31 23:01:28 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=inWar)
+2026-05-31 23:01:28 - INFO - [db_finalize_uptime] - Done in 2.34s | state=inWar war=updated members_added=0 attacks_added=4
+2026-05-31 23:09:45 - INFO - [task_update_clan_war] - Starting at 2026-05-31 21:09:45 UTC
+2026-05-31 23:09:48 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=inWar)
+2026-05-31 23:09:48 - INFO - [db_finalize_uptime] - Done in 2.55s | state=inWar war=updated members_added=0 attacks_added=0
+2026-05-31 23:12:34 - INFO - [task_update_clan_war] - Starting at 2026-05-31 21:12:34 UTC
+2026-05-31 23:12:36 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=inWar)
+2026-05-31 23:12:36 - INFO - [db_finalize_uptime] - Done in 2.25s | state=inWar war=updated members_added=0 attacks_added=0
+2026-05-31 23:20:03 - INFO - [task_update_clan_war] - Starting at 2026-05-31 21:20:03 UTC
+2026-05-31 23:20:05 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=inWar)
+2026-05-31 23:20:05 - INFO - [db_finalize_uptime] - Done in 2.34s | state=inWar war=updated members_added=0 attacks_added=0
+2026-05-31 23:24:14 - INFO - [task_update_clan_war] - Starting at 2026-05-31 21:24:14 UTC
+2026-05-31 23:24:16 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=inWar)
+2026-05-31 23:24:16 - INFO - [db_finalize_uptime] - Done in 2.36s | state=inWar war=updated members_added=0 attacks_added=0

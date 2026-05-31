@@ -1,7 +1,7 @@
 import datetime as dt
 from collections import defaultdict
 
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
@@ -113,11 +113,14 @@ def admin_hub():
             'gap_events':     gap_events,
         }
 
+    members = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
+
     return render_template(
         'admin/admin_hub.html',
         by_function=dict(by_function),
         function_stats=function_stats,
         selected_days=days,
+        members=members,
     )
 
 
@@ -155,13 +158,42 @@ def admin_user_delete(user_id):
     return redirect(url_for('admin.admin_users'))
 
 
+@admin_bp.route('/admin/users/<int:user_id>/toggle-super', methods=['POST'])
+@require_super_admin
+def admin_user_toggle_super(user_id):
+    u = db.get_or_404(AppUser, user_id)
+    u.is_super_admin = not u.is_super_admin
+    db.session.commit()
+    return redirect(url_for('admin.admin_users'))
+
+
 @admin_bp.route('/admin/users/<int:user_id>/perms', methods=['POST'])
 @require_super_admin
 def admin_user_perms(user_id):
     u = db.get_or_404(AppUser, user_id)
-    u.is_super_admin = 'is_super_admin' in request.form
+    u.perm_create_reminder_ranked = 'perm_create_reminder_ranked' in request.form
     db.session.commit()
     return redirect(url_for('admin.admin_users'))
+
+
+@admin_bp.route('/admin/members')
+@require_admin_login
+def admin_members():
+    players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
+    return render_template('admin/admin_members.html', players=players)
+
+
+@admin_bp.route('/admin/members/<path:tag>/update', methods=['POST'])
+@require_admin_login
+def admin_member_update(tag):
+    player = db.get_or_404(Player, tag)
+    data = request.get_json()
+    if 'admin_comment' in data:
+        player.admin_comment = data['admin_comment'].strip() or None
+    if 'in_group_chat' in data:
+        player.in_group_chat = bool(data['in_group_chat'])
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 @admin_bp.route('/debug')

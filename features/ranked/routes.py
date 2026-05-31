@@ -158,6 +158,7 @@ def ranked_weeks_page():
             'promo_spots': thresholds['pro'] if thresholds else None,
             'dem_spots': thresholds['dem'] if thresholds else None,
             'in_clan': player.in_clan,
+            'in_group_chat': bool(player.in_group_chat),
         })
 
     week_data.sort(key=lambda item: (item['rank'] or 9999, item['player_name'] or ''))

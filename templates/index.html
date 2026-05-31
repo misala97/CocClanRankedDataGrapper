@@ -29,36 +29,7 @@
         body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
         a { text-decoration: none; color: inherit; }
 
-        /* ── NAV ── */
-        nav {
-            position: sticky; top: 0; z-index: 100;
-            background: rgba(13,17,23,0.92);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-        }
-        .nav-inner {
-            max-width: 1400px; margin: 0 auto; padding: 0 32px;
-            height: 62px; display: flex; align-items: center; justify-content: space-between;
-        }
-        .nav-logo { display: flex; align-items: center; gap: 10px; }
-        .logo-icon {
-            width: 36px; height: 36px; flex-shrink: 0;
-            background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border-radius: 8px; display: flex; align-items: center; justify-content: center;
-            font-size: 18px; box-shadow: 0 0 16px rgba(240,165,0,0.3);
-        }
-        .nav-logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: 0.5px; }
-        .nav-links { display: flex; align-items: center; gap: 6px; }
-        .nav-links a {
-            font-size: 13px; font-weight: 500; color: var(--muted);
-            padding: 6px 14px; border-radius: 6px; transition: color 0.15s, background 0.15s;
-        }
-        .nav-links a:hover { color: var(--text); background: var(--surf2); }
-        .nav-links .nav-admin {
-            border: 1px solid var(--border);
-            transition: color 0.15s, border-color 0.15s, background 0.15s;
-        }
-        .nav-links .nav-admin:hover { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,0.06); }
+        /* ── NAV: see _nav.html ── */
 
         /* ── HERO ── */
         .hero {
@@ -352,23 +323,7 @@
 </head>
 <body>
 
-<nav>
-    <div class="nav-inner">
-        <div class="nav-logo">
-            <div class="logo-icon">⚔️</div>
-            <span>CoC Analytics</span>
-        </div>
-        <div class="nav-links">
-            <a href="#features">Features</a>
-            {% if is_super_admin %}<a href="/admin" class="nav-admin">Admin Hub</a>{% endif %}
-            {% if is_env_admin or current_user %}
-                <a href="/logout" class="nav-admin">Logout</a>
-            {% else %}
-                <a href="/login" class="nav-admin">Login</a>
-            {% endif %}
-        </div>
-    </div>
-</nav>
+{% include '_nav.html' %}
 
 <!-- Hero -->
 <section class="hero">

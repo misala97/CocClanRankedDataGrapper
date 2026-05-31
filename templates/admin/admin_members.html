@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Admin – CoC Analytics</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      #0d1117;
+            --surface: #161b22;
+            --surf2:   #1c2330;
+            --border:  #30363d;
+            --bord2:   #21262d;
+            --text:    #e6edf3;
+            --muted:   #8b949e;
+            --accent:  #f0a500;
+            --acc2:    #e8863a;
+            --green:   #3fb950;
+            --blue:    #58a6ff;
+            --red:     #f85149;
+        }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        a { text-decoration: none; color: inherit; }
+
+        /* ── NAV: see _nav.html ── */
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 32px; }
+
+        .page-header { margin-bottom: 28px; }
+        .page-title { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; }
+        .page-subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+        /* search */
+        .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+        .search-input {
+            padding: 8px 14px; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px;
+            width: 260px; transition: border-color .15s;
+        }
+        .search-input:focus { outline: none; border-color: var(--accent); }
+        .count-label { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+        /* table */
+        .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
+        thead th {
+            padding: 11px 16px; text-align: left; font-size: 10px; font-weight: 700;
+            color: var(--muted); text-transform: uppercase; letter-spacing: .8px; white-space: nowrap;
+        }
+        tbody tr { border-bottom: 1px solid var(--bord2); transition: background .1s; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(255,255,255,.02); }
+        td { padding: 10px 16px; vertical-align: middle; }
+
+        .player-name { font-weight: 600; font-size: 13px; }
+        .player-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+        /* group chat toggle */
+        .gc-toggle {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer;
+            border: 1px solid; transition: all .15s; white-space: nowrap;
+        }
+        .gc-yes { background: rgba(63,185,80,.12); color: var(--green); border-color: rgba(63,185,80,.3); }
+        .gc-yes:hover { background: rgba(63,185,80,.2); }
+        .gc-no  { background: rgba(139,148,158,.08); color: var(--muted); border-color: rgba(139,148,158,.2); }
+        .gc-no:hover  { background: rgba(139,148,158,.15); border-color: rgba(139,148,158,.35); }
+
+        /* comment input */
+        .comment-wrap { display: flex; align-items: center; gap: 8px; }
+        .comment-input {
+            flex: 1; min-width: 0; padding: 6px 10px;
+            background: var(--surf2); border: 1px solid var(--bord2);
+            border-radius: 6px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px;
+            transition: border-color .15s;
+        }
+        .comment-input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+        .comment-input::placeholder { color: var(--muted); opacity: .6; }
+        .save-btn {
+            padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer;
+            background: transparent; border: 1px solid var(--border); color: var(--muted);
+            transition: all .15s; white-space: nowrap;
+        }
+        .save-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .save-btn.saved { border-color: var(--green); color: var(--green); }
+
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; z-index: 999;
+            background: var(--surface); border: 1px solid var(--green); border-radius: 8px;
+            padding: 10px 18px; font-size: 13px; color: var(--green);
+            font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: .3px;
+            opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+    </style>
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+<div class="container">
+    <div class="page-header">
+        <div class="page-title">👥 Member Administration</div>
+        <div class="page-subtitle">{{ players | length }} active members · Comments and group chat status</div>
+    </div>
+
+    <div class="toolbar">
+        <input type="search" class="search-input" id="search" placeholder="🔍 Search player…" oninput="filterTable()">
+        <span class="count-label" id="countLabel">{{ players | length }} members</span>
+    </div>
+
+    <div class="table-wrap">
+        <table id="memberTable">
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>Group Chat</th>
+                    <th>Comment</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in players %}
+            <tr data-name="{{ (p.name or '') | lower }}" data-tag="{{ p.tag | lower }}">
+                <td>
+                    <div class="player-name">{{ p.name or p.tag }}</div>
+                    <div class="player-tag">{{ p.tag }}</div>
+                </td>
+                <td>
+                    <button class="gc-toggle {% if p.in_group_chat %}gc-yes{% else %}gc-no{% endif %}"
+                            data-tag="{{ p.tag }}"
+                            data-state="{{ 'true' if p.in_group_chat else 'false' }}"
+                            onclick="toggleGroupChat(this)">
+                        {% if p.in_group_chat %}✓ In Group Chat{% else %}✗ Not in Group Chat{% endif %}
+                    </button>
+                </td>
+                <td>
+                    <div class="comment-wrap">
+                        <input class="comment-input"
+                               type="text"
+                               data-tag="{{ p.tag }}"
+                               value="{{ p.admin_comment or '' }}"
+                               placeholder="Add a note…"
+                               maxlength="300">
+                        <button class="save-btn" onclick="saveComment(this)">Save</button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="toast" id="toast">Saved</div>
+
+<script>
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+async function patch(tag, data) {
+    const res = await fetch(`/admin/members/${encodeURIComponent(tag)}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return res.ok;
+}
+
+function toggleGroupChat(btn) {
+    const tag      = btn.dataset.tag;
+    const newState = btn.dataset.state !== 'true';
+    btn.dataset.state = newState ? 'true' : 'false';
+    btn.className  = 'gc-toggle ' + (newState ? 'gc-yes' : 'gc-no');
+    btn.textContent = newState ? '✓ In Group Chat' : '✗ Not in Group Chat';
+    patch(tag, { in_group_chat: newState }).then(ok => {
+        if (ok) showToast('Saved');
+    });
+}
+
+function saveComment(btn) {
+    const input = btn.previousElementSibling;
+    const tag   = input.dataset.tag;
+    patch(tag, { admin_comment: input.value }).then(ok => {
+        if (ok) {
+            btn.textContent = '✓ Saved';
+            btn.classList.add('saved');
+            showToast('Comment saved');
+            setTimeout(() => { btn.textContent = 'Save'; btn.classList.remove('saved'); }, 2000);
+        }
+    });
+}
+
+// Save on Enter key
+document.querySelectorAll('.comment-input').forEach(inp => {
+    inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') inp.nextElementSibling.click();
+    });
+});
+
+function filterTable() {
+    const q = document.getElementById('search').value.toLowerCase();
+    let visible = 0;
+    document.querySelectorAll('#memberTable tbody tr').forEach(row => {
+        const match = !q || row.dataset.name.includes(q) || row.dataset.tag.includes(q);
+        row.style.display = match ? '' : 'none';
+        if (match) visible++;
+    });
+    document.getElementById('countLabel').textContent = visible + ' member' + (visible !== 1 ? 's' : '');
+}
+</script>
+
+</body>
+</html>

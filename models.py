@@ -12,6 +12,8 @@ class Player(db.Model):
     league_tier = db.Column(db.String(50))
     league_icon = db.Column(db.String(150))
     last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    admin_comment = db.Column(db.Text, nullable=True)
+    in_group_chat = db.Column(db.Boolean, default=False, nullable=True)
 
     ranked_weeks = db.relationship('RankedWeek', back_populates='player', lazy=True, cascade="all, delete-orphan")
     battle_logs = db.relationship('BattleLog', back_populates='player', lazy=True, cascade="all, delete-orphan")
@@ -176,6 +178,7 @@ class AppUser(db.Model):
     created_at     = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_approved    = db.Column(db.Boolean, default=False, nullable=False)
     is_super_admin = db.Column(db.Boolean, default=False, nullable=False)
+    perm_create_reminder_ranked = db.Column(db.Boolean, default=False, nullable=False)
 
 
 class ClanWar(db.Model):

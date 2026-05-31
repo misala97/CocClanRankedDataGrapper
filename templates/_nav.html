@@ -1,0 +1,145 @@
+<style>
+    nav {
+        position: sticky; top: 0; z-index: 100;
+        background: rgba(13,17,23,0.96);
+        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+        max-width: 1400px; margin: 0 auto; padding: 0 28px;
+        height: 58px; display: flex; align-items: center; gap: 6px;
+    }
+    .nav-logo {
+        display: flex; align-items: center; gap: 9px;
+        text-decoration: none; color: inherit; flex-shrink: 0;
+        transition: opacity .15s; margin-right: 6px;
+    }
+    .nav-logo:hover { opacity: .8; }
+    .logo-icon {
+        width: 32px; height: 32px; flex-shrink: 0;
+        background: linear-gradient(135deg, var(--accent), var(--acc2));
+        border-radius: 8px; display: flex; align-items: center; justify-content: center;
+        font-size: 16px; box-shadow: 0 0 12px rgba(240,165,0,.25);
+    }
+    .nav-logo-text {
+        font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 18px;
+        letter-spacing: .5px; white-space: nowrap;
+    }
+    .nav-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
+    .nav-links { display: flex; align-items: center; gap: 1px; flex: 1; min-width: 0; }
+    .nl {
+        font-size: 13px; font-weight: 500; color: var(--muted);
+        padding: 5px 11px; border-radius: 6px; text-decoration: none; white-space: nowrap;
+        transition: color .12s, background .12s;
+    }
+    .nl:hover { color: var(--text); background: rgba(255,255,255,.05); }
+    .nl-active { color: var(--text) !important; background: rgba(255,255,255,.07); }
+    .nav-right { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
+
+    /* Task dots */
+    .nav-tasks { display: flex; align-items: center; gap: 4px; }
+    .ntd {
+        width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+        cursor: default; position: relative;
+    }
+    .ntd-good { background: var(--green); box-shadow: 0 0 5px rgba(63,185,80,.55); }
+    .ntd-warn { background: var(--yellow); }
+    .ntd-bad  { background: var(--red);   box-shadow: 0 0 5px rgba(248,81,73,.45); }
+    .ntd-none { background: var(--border); }
+    .ntd-tip {
+        display: none; position: absolute; top: calc(100% + 10px); left: 50%;
+        transform: translateX(-50%); z-index: 300;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 7px; padding: 7px 11px; white-space: nowrap;
+        font-size: 11px; color: var(--text); pointer-events: none;
+        box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    }
+    .ntd-tip-name { font-weight: 700; margin-bottom: 1px; font-family: 'Rajdhani', sans-serif; font-size: 12px; }
+    .ntd-tip-time { color: var(--muted); font-size: 11px; }
+    .ntd:hover .ntd-tip { display: block; }
+
+    /* User chip */
+    .nav-user {
+        display: flex; align-items: center; gap: 7px;
+        padding: 3px 10px 3px 6px; border-radius: 20px;
+        background: var(--surf2); border: 1px solid var(--border); flex-shrink: 0;
+        transition: border-color .15s;
+    }
+    .nav-user:hover { border-color: rgba(255,255,255,.18); }
+    .nav-avatar {
+        width: 20px; height: 20px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent), var(--acc2));
+        display: flex; align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 700; color: #000;
+        font-family: 'Rajdhani', sans-serif; flex-shrink: 0;
+    }
+    .nav-uname { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
+    .nav-signout {
+        font-size: 11px; color: var(--muted); text-decoration: none;
+        padding: 4px 8px; border-radius: 5px; border: 1px solid var(--border);
+        transition: all .12s; white-space: nowrap; flex-shrink: 0;
+    }
+    .nav-signout:hover { color: var(--red); border-color: rgba(248,81,73,.4); background: rgba(248,81,73,.06); }
+    .nav-login {
+        font-size: 12px; font-weight: 600; color: var(--muted);
+        padding: 5px 13px; border-radius: 6px; border: 1px solid var(--border);
+        text-decoration: none; transition: all .12s; flex-shrink: 0;
+    }
+    .nav-login:hover { color: var(--accent); border-color: rgba(240,165,0,.4); background: rgba(240,165,0,.05); }
+</style>
+
+{% set _p = request.path %}
+<nav>
+    <div class="nav-inner">
+        <a href="/" class="nav-logo">
+            <div class="logo-icon">⚔️</div>
+            <span class="nav-logo-text">CoC Analytics</span>
+        </a>
+
+        <div class="nav-sep"></div>
+
+        <div class="nav-links">
+            <a href="/"        class="nl {% if _p == '/' %}nl-active{% endif %}">Home</a>
+            <a href="/ranked"  class="nl {% if _p.startswith('/ranked') %}nl-active{% endif %}">Ranked</a>
+            <a href="/battles" class="nl {% if _p.startswith('/battles') %}nl-active{% endif %}">Battles</a>
+            <a href="/raid"    class="nl {% if _p.startswith('/raid') %}nl-active{% endif %}">Raids</a>
+            <a href="/war"     class="nl {% if _p.startswith('/war') %}nl-active{% endif %}">War</a>
+            <a href="/clan"    class="nl {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nl-active{% endif %}">Clan</a>
+            {% if is_super_admin or current_user %}
+            <a href="/admin"   class="nl {% if _p.startswith('/admin') %}nl-active{% endif %}">Admin</a>
+            {% endif %}
+        </div>
+
+        <div class="nav-right">
+            {% if nav_task_status %}
+            <div class="nav-tasks">
+                {% for t in nav_task_status %}
+                <div class="ntd ntd-{{ t.status }}">
+                    <div class="ntd-tip">
+                        <div class="ntd-tip-name">{{ t.label }}</div>
+                        <div class="ntd-tip-time">{{ t.time_str }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="nav-sep"></div>
+            {% endif %}
+
+            {% if current_user %}
+            <div class="nav-user">
+                <div class="nav-avatar">{{ current_user.username[0] | upper }}</div>
+                <span class="nav-uname">{{ current_user.username }}</span>
+            </div>
+            <a href="/logout" class="nav-signout">Sign out</a>
+            {% elif is_env_admin %}
+            <div class="nav-user">
+                <div class="nav-avatar">A</div>
+                <span class="nav-uname">Admin</span>
+            </div>
+            <a href="/logout" class="nav-signout">Sign out</a>
+            {% else %}
+            <a href="/login" class="nav-login">Login</a>
+            {% endif %}
+        </div>
+    </div>
+</nav>

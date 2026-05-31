@@ -35,6 +35,12 @@ def _any_access():
     u = _current_user()
     return bool(u and u.is_approved)
 
+def _can_create_reminder_ranked():
+    if _is_super_admin():
+        return True
+    u = _current_user()
+    return bool(u and u.is_approved and u.perm_create_reminder_ranked)
+
 def require_admin_login(f):
     @wraps(f)
     def decorated(*args, **kwargs):

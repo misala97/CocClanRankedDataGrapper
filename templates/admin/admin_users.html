@@ -27,31 +27,7 @@
         body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
         a { text-decoration: none; color: inherit; }
 
-        nav {
-            position: sticky; top: 0; z-index: 100;
-            background: rgba(13,17,23,0.92);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-        }
-        .nav-inner {
-            max-width: 1100px; margin: 0 auto; padding: 0 32px;
-            height: 62px; display: flex; align-items: center; justify-content: space-between;
-        }
-        .nav-logo { display: flex; align-items: center; gap: 10px; }
-        .logo-icon {
-            width: 36px; height: 36px; flex-shrink: 0;
-            background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border-radius: 8px; display: flex; align-items: center; justify-content: center;
-            font-size: 18px; box-shadow: 0 0 16px rgba(240,165,0,0.3);
-        }
-        .nav-logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: 0.5px; }
-        .nav-links { display: flex; align-items: center; gap: 8px; }
-        .nav-link {
-            font-size: 13px; font-weight: 500; color: var(--muted);
-            padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
-            transition: all 0.15s;
-        }
-        .nav-link:hover { color: var(--text); border-color: var(--accent); background: rgba(240,165,0,0.06); }
+        /* ── NAV: see _nav.html ── */
 
         .container { max-width: 1100px; margin: 0 auto; padding: 36px 32px; }
 
@@ -107,30 +83,34 @@
         .btn-save    { background: rgba(88,166,255,0.1); color: var(--blue); border-color: rgba(88,166,255,0.3); }
         .btn-save:hover { background: rgba(88,166,255,0.2); }
 
-        .perm-form { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .perm-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .perm-label {
             display: flex; align-items: center; gap: 6px;
             font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;
         }
         .perm-label input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+        .perm-all-granted { font-size: 11px; color: var(--muted); font-style: italic; opacity: .6; }
+
+        .super-toggle {
+            padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer;
+            transition: all .15s; border: 1px solid; white-space: nowrap; display: inline-block;
+        }
+        .super-toggle.is-super {
+            background: rgba(188,140,255,.12); color: var(--purple); border-color: rgba(188,140,255,.3);
+        }
+        .super-toggle.is-super:hover { background: rgba(188,140,255,.22); }
+        .super-toggle.not-super {
+            background: transparent; color: var(--muted); border-color: var(--border);
+        }
+        .super-toggle.not-super:hover { border-color: var(--purple); color: var(--purple); }
 
         .empty { padding: 24px 16px; color: var(--muted); font-size: 14px; }
     </style>
 </head>
 <body>
 
-<nav>
-    <div class="nav-inner">
-        <a href="/" class="nav-logo">
-            <div class="logo-icon">⚔️</div>
-            <span>CoC Analytics</span>
-        </a>
-        <div class="nav-links">
-            <a href="/admin" class="nav-link">Admin Hub</a>
-            <a href="/logout" class="nav-link">Logout</a>
-        </div>
-    </div>
-</nav>
+{% include '_nav.html' %}
 
 <div class="container">
     <h1>👥 User Management</h1>
@@ -193,26 +173,36 @@
                     <tr>
                         <th>Username</th>
                         <th>Registered</th>
-                        <th>Role / Permissions</th>
+                        <th>Super Admin</th>
+                        <th>Permissions</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for u in approved %}
                 <tr>
-                    <td class="username">
-                        {{ u.username }}
-                        {% if u.is_super_admin %}<span class="super-badge">⭐ Super Admin</span>{% endif %}
-                    </td>
+                    <td class="username">{{ u.username }}</td>
                     <td class="date">{{ u.created_at | local_dt('%d.%m.%Y') }}</td>
                     <td>
-                        <form method="POST" action="/admin/users/{{ u.id }}/perms" class="perm-form" id="perm-form-{{ u.id }}">
+                        <form method="POST" action="/admin/users/{{ u.id }}/toggle-super"
+                              {% if u.is_super_admin %}onsubmit="return confirm('Remove Super Admin from {{ u.username }}?')"{% endif %}>
+                            <button type="submit" class="super-toggle {% if u.is_super_admin %}is-super{% else %}not-super{% endif %}">
+                                {% if u.is_super_admin %}⭐ Super Admin{% else %}☆ Make Super Admin{% endif %}
+                            </button>
+                        </form>
+                    </td>
+                    <td>
+                        {% if u.is_super_admin %}
+                            <span class="perm-all-granted">All permissions granted</span>
+                        {% else %}
+                        <form method="POST" action="/admin/users/{{ u.id }}/perms" class="perm-form">
                             <label class="perm-label">
-                                <input type="checkbox" name="is_super_admin" {% if u.is_super_admin %}checked{% endif %}>
-                                Super Admin
+                                <input type="checkbox" name="perm_create_reminder_ranked" {% if u.perm_create_reminder_ranked %}checked{% endif %}>
+                                Ranked Reminder
                             </label>
                             <button type="submit" class="btn btn-save">Save</button>
                         </form>
+                        {% endif %}
                     </td>
                     <td>
                         <div class="actions">

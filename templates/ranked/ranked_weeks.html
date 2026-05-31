@@ -31,32 +31,7 @@
         body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
         a { text-decoration: none; color: inherit; }
 
-        /* ── NAV ── */
-        nav {
-            position: sticky; top: 0; z-index: 100;
-            background: rgba(13,17,23,0.92);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-        }
-        .nav-inner {
-            max-width: 1400px; margin: 0 auto; padding: 0 32px;
-            height: 62px; display: flex; align-items: center; justify-content: space-between;
-        }
-        .nav-logo { display: flex; align-items: center; gap: 10px; transition: opacity 0.15s; }
-        .nav-logo:hover { opacity: 0.8; }
-        .logo-icon {
-            width: 36px; height: 36px; flex-shrink: 0;
-            background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border-radius: 8px; display: flex; align-items: center; justify-content: center;
-            font-size: 18px; box-shadow: 0 0 16px rgba(240,165,0,0.3);
-        }
-        .nav-logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: 0.5px; }
-        .back-link {
-            font-size: 13px; font-weight: 500; color: var(--muted);
-            padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
-            transition: color 0.15s, border-color 0.15s, background 0.15s;
-        }
-        .back-link:hover { color: var(--text); border-color: var(--accent); background: rgba(240,165,0,0.06); }
+        /* ── NAV: see _nav.html ── */
 
         /* ── PAGE HEADER ── */
         .page-header {
@@ -376,15 +351,7 @@
 </head>
 <body>
 
-<nav>
-    <div class="nav-inner">
-        <a href="/" class="nav-logo">
-            <div class="logo-icon">⚔️</div>
-            <span>CoC Analytics</span>
-        </a>
-        <a href="/" class="back-link">← Home</a>
-    </div>
-</nav>
+{% include '_nav.html' %}
 
 <div class="page-header">
     <div class="page-header-inner">
@@ -421,7 +388,9 @@
             <option value="down">⬇️ Relegations only</option>
         </select>
         <button type="button" class="action-btn" id="leftToggle" onclick="toggleLeft()">🚪 Show left</button>
+        {% if can_create_reminder_ranked %}
         <button type="button" class="action-btn" onclick="openReminder()" style="border-color:rgba(63,185,80,0.4);color:var(--green);">📣 Reminder</button>
+        {% endif %}
         <button type="button" class="action-btn" id="inactiveToggle" onclick="toggleInactive()" style="margin-left:auto;">👁️ Hide inactive</button>
     </div>
 
@@ -1210,7 +1179,7 @@ let reminderLang = 'de';
 
 function buildReminderText(lang) {
     const data = window.weekData || [];
-    const missing = data.filter(p => p.in_clan && p.badge_class !== 'badge-inactive' && p.att_count < p.att_max);
+    const missing = data.filter(p => p.in_clan && p.in_group_chat && p.badge_class !== 'badge-inactive' && p.att_count < p.att_max);
     const weekLabel = document.querySelector('#week-select option:checked')?.text?.replace('⭐ ', '') || (lang === 'de' ? 'diese Woche' : 'this week');
 
     if (lang === 'de') {

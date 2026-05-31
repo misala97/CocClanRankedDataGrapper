@@ -79,7 +79,33 @@ def local_dt_filter(value, fmt='%d.%m.%Y %H:%M'):
 
 # ── Auth context processor ────────────────────────────────────────────────────
 
-from features.auth.routes import _current_user, _is_super_admin, _is_env_admin
+from features.auth.routes import _current_user, _is_super_admin, _is_env_admin, _can_create_reminder_ranked
+import datetime as _dt
+
+def _nav_task_status():
+    try:
+        known = [
+            ('task_update_battle_logs',  'Battles'),
+            ('task_update_ranked_weeks', 'Ranked'),
+            ('task_update_clan_members', 'Members'),
+            ('task_update_raid_weekend', 'Raids'),
+            ('task_update_clan_war',     'War'),
+        ]
+        now = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+        result = []
+        for fn, label in known:
+            last = UptimeTracker.query.filter_by(function=fn)\
+                       .order_by(UptimeTracker.time.desc()).first()
+            if last and last.time:
+                mins = round((now - last.time).total_seconds() / 60)
+                status = 'good' if mins < 15 else ('warn' if mins < 60 else 'bad')
+                time_str = f'{mins}m ago' if mins < 60 else f'{mins // 60}h ago'
+            else:
+                status, time_str = 'none', 'No data'
+            result.append({'label': label, 'status': status, 'time_str': time_str})
+        return result
+    except Exception:
+        return []
 
 @app.context_processor
 def inject_auth():
@@ -87,6 +113,8 @@ def inject_auth():
         'current_user':  _current_user(),
         'is_super_admin': _is_super_admin(),
         'is_env_admin':   _is_env_admin(),
+        'can_create_reminder_ranked': _can_create_reminder_ranked(),
+        'nav_task_status': _nav_task_status(),
     }
 
 # ── Core routes ───────────────────────────────────────────────────────────────
@@ -197,6 +225,6 @@ if __name__ == '__main__':
     #task_update_battle_logs()
     #task_update_raid_weekend(run_always=True)
     #task_update_ranked_weeks()
-    task_update_clan_war()
+    #task_update_clan_war()
 
     app.run(debug=True, use_reloader=False)
