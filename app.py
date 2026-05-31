@@ -136,6 +136,40 @@ def index():
     ).count()
     week_start_name = week_start.strftime('%A')
 
+    active_war  = ClanWar.query.filter(
+        ClanWar.state.in_(['preparation', 'inWar'])
+    ).order_by(ClanWar.start_time.desc()).first()
+
+    active_raid = RaidWeekend.query.filter(
+        RaidWeekend.state == 'ongoing'
+    ).order_by(RaidWeekend.startTime.desc()).first()
+
+    active_raid_est_medals = None
+    if active_raid:
+        from services.helpers import raid_district_medal_value
+        destroyed = (
+            RaidWeekendLog.query
+            .filter(RaidWeekendLog.raid_weekend_id == active_raid.id,
+                    RaidWeekendLog.percentageTotal >= 100)
+            .with_entities(RaidWeekendLog.defenderTag, RaidWeekendLog.districtName, RaidWeekendLog.districLevel)
+            .distinct()
+            .all()
+        )
+        total_medals  = sum(raid_district_medal_value(r.districtName, r.districLevel) for r in destroyed)
+        total_attacks = RaidWeekendLog.query.filter_by(raid_weekend_id=active_raid.id).count()
+        past_def = (
+            RaidWeekend.query
+            .filter(RaidWeekend.defensiveReward > 0)
+            .order_by(RaidWeekend.startTime.desc())
+            .limit(10)
+            .with_entities(RaidWeekend.defensiveReward)
+            .all()
+        )
+        avg_def = round(sum(r.defensiveReward for r in past_def) / len(past_def)) if past_def else 0
+        if total_medals > 0 and total_attacks > 0:
+            baseline = total_medals / total_attacks
+            active_raid_est_medals = max(0, min(round(baseline * 6), 1620)) + avg_def
+
     return render_template(
         'index.html',
         clan_name=clan_name,
@@ -143,6 +177,9 @@ def index():
         battle_logs_this_week=battle_logs_this_week,
         ranked_battles_this_week=ranked_battles_this_week,
         week_start_name=week_start_name,
+        active_war=active_war,
+        active_raid=active_raid,
+        active_raid_est_medals=active_raid_est_medals,
     )
 
 

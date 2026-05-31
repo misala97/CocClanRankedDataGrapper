@@ -264,9 +264,8 @@ def player_profile(tag):
                         .all())
     battle_history = []
     for b in recent_battles_q:
-        local_time = to_local(b.time)
         battle_history.append({
-            'time':         local_time.strftime('%d.%m.%y %H:%M') if local_time else '—',
+            'time':         b.time,
             'opponent_tag': b.opponent_tag or '—',
             'stars':        min(b.stars or 0, 3),
             'percentage':   b.percentage or 0,

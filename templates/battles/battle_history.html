@@ -187,6 +187,35 @@
         .type-home    { background: rgba(88,166,255,0.10); color: var(--blue);   border: 1px solid rgba(88,166,255,0.25); }
         .type-other   { background: rgba(139,148,158,0.10); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
 
+        /* ── TIMING HEATMAP ── */
+        .hm-wrap { margin-bottom: 18px; }
+        .hm-label {
+            font-size: 10px; font-weight: 700; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px;
+            font-family: 'Rajdhani', sans-serif;
+        }
+        .hm-hour-row { display: flex; align-items: center; gap: 3px; padding-left: 32px; margin-bottom: 4px; }
+        .hm-hour-lbl { width: 14px; font-size: 9px; color: var(--muted); font-family: 'Rajdhani', sans-serif; text-align: center; flex-shrink: 0; }
+        .hm-row { display: flex; align-items: center; gap: 3px; margin-bottom: 3px; }
+        .hm-day  { width: 28px; font-size: 10px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; flex-shrink: 0; text-align: right; padding-right: 4px; }
+        .hm-cell { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; cursor: default; transition: opacity .1s; }
+        .hm-cell:hover { opacity: .65; }
+
+        /* ── DETAIL STATS PANEL ── */
+        .detail-top { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 18px; align-items: flex-start; }
+        .stat-panel { flex: 1; min-width: 200px; }
+        .sp-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; font-family: 'Rajdhani', sans-serif; }
+        .star-dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+        .sd-label { font-size: 1.05em; letter-spacing: 1px; width: 42px; flex-shrink: 0; }
+        .sd-bar-wrap { flex: 1; height: 8px; background: var(--surf2); border-radius: 4px; overflow: hidden; }
+        .sd-bar { height: 100%; border-radius: 4px; transition: width .3s; }
+        .sd-pct { width: 34px; text-align: right; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; flex-shrink: 0; }
+        .sd-count { width: 28px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 10px; flex-shrink: 0; }
+        .qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .qs-card { background: var(--surf2); border: 1px solid var(--bord2); border-radius: 8px; padding: 10px 12px; }
+        .qs-val { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1; }
+        .qs-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
         /* ── RECENT ATTACKS ── */
         .recent-card {
             background: var(--surface); border: 1px solid var(--border);
@@ -474,10 +503,111 @@
         </tr>`;
     }
 
+    function parseLocalTime(ts) {
+        // ts = "2025-05-15T14:32:00+02:00" — already server-local time.
+        // Avoid new Date() which would re-interpret in browser TZ.
+        if (!ts || ts.length < 13) return null;
+        const hour = parseInt(ts.substring(11, 13), 10);
+        const parts = ts.substring(0, 10).split('-').map(Number);
+        if (parts.length < 3) return null;
+        const dow = (new Date(parts[0], parts[1] - 1, parts[2]).getDay() + 6) % 7;
+        return { hour, dow };
+    }
+
+    function buildHeatmap(logs) {
+        const counts = Array.from({length: 7}, () => new Array(24).fill(0));
+        logs.forEach(l => {
+            const t = parseLocalTime(l.time_sort);
+            if (!t) return;
+            counts[t.dow][t.hour]++;
+        });
+        const maxCount = Math.max(1, ...counts.flat());
+        const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+        const hourLabels = Array.from({length: 24}, (_, h) =>
+            `<span class="hm-hour-lbl">${h % 6 === 0 ? h : ''}</span>`
+        ).join('');
+        const rows = DAYS.map((day, di) => {
+            const cells = Array.from({length: 24}, (_, h) => {
+                const c = counts[di][h];
+                let bg;
+                if (c === 0) {
+                    bg = 'var(--surf2)';
+                } else {
+                    const t = Math.sqrt(c / maxCount);
+                    const a = (0.2 + t * 0.8).toFixed(2);
+                    bg = `rgba(240,165,0,${a})`;
+                }
+                const tip = c === 0 ? `${day} ${h}:00 – no attacks` : `${day} ${h}:00 – ${c} attack${c > 1 ? 's' : ''}`;
+                return `<div class="hm-cell" style="background:${bg}" title="${tip}"></div>`;
+            }).join('');
+            return `<div class="hm-row"><span class="hm-day">${day}</span>${cells}</div>`;
+        }).join('');
+        return `<div class="hm-wrap">
+            <div class="hm-label">Attack Timing · local time</div>
+            <div class="hm-hour-row">${hourLabels}</div>
+            ${rows}
+        </div>`;
+    }
+
+    function buildDetailStats(logs) {
+        const total = logs.length;
+        const starCounts = [0, 0, 0, 0];
+        let totalPct = 0;
+        const dayCounts  = new Array(7).fill(0);
+        const hourCounts = new Array(24).fill(0);
+
+        logs.forEach(l => {
+            starCounts[Math.min(l.stars || 0, 3)]++;
+            totalPct += l.percentage || 0;
+            const t = parseLocalTime(l.time_sort);
+            if (t) { dayCounts[t.dow]++; hourCounts[t.hour]++; }
+        });
+
+        const avgPct    = total ? Math.round(totalPct / total) : 0;
+        const threeStar = total ? Math.round(starCounts[3] / total * 100) : 0;
+        const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+        const peakDay  = DAYS[dayCounts.indexOf(Math.max(...dayCounts))];
+        const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
+        const peakHourStr = `${peakHour}:00`;
+
+        const STAR_COLORS = ['#8b949e','#f0a500','#e3b341','#3fb950'];
+        const STAR_LABELS = [
+            '<span style="color:var(--muted);opacity:.4">★★★</span>',
+            '<span style="color:var(--accent)">★</span><span style="color:var(--muted);opacity:.4">★★</span>',
+            '<span style="color:var(--yellow)">★★</span><span style="color:var(--muted);opacity:.4">★</span>',
+            '<span style="color:var(--green)">★★★</span>',
+        ];
+        const distRows = [3, 2, 1, 0].map(s => {
+            const cnt  = starCounts[s];
+            const pct  = total ? Math.round(cnt / total * 100) : 0;
+            return `<div class="star-dist-row">
+                <span class="sd-label" style="font-size:1.05em;letter-spacing:1px;">${STAR_LABELS[s]}</span>
+                <div class="sd-bar-wrap"><div class="sd-bar" style="width:${pct}%;background:${STAR_COLORS[s]}"></div></div>
+                <span class="sd-pct">${pct}%</span>
+                <span class="sd-count">${cnt}×</span>
+            </div>`;
+        }).join('');
+
+        return `<div class="stat-panel">
+            <div class="sp-title">Star Distribution</div>
+            ${distRows}
+        </div>
+        <div class="stat-panel">
+            <div class="sp-title">Quick Stats</div>
+            <div class="qs-grid">
+                <div class="qs-card"><div class="qs-val">${avgPct}%</div><div class="qs-lbl">Avg Destruction</div></div>
+                <div class="qs-card"><div class="qs-val" style="color:var(--green)">${threeStar}%</div><div class="qs-lbl">3★ Rate</div></div>
+                <div class="qs-card"><div class="qs-val" style="color:var(--blue)">${peakDay}</div><div class="qs-lbl">Most Active Day</div></div>
+                <div class="qs-card"><div class="qs-val" style="color:var(--purple)">${peakHourStr}</div><div class="qs-lbl">Peak Hour</div></div>
+            </div>
+        </div>`;
+    }
+
     function buildDetailTable(logs) {
         if (!logs || !logs.length) return '<div style="color:var(--muted);padding:8px 0;font-size:13px;">No attacks recorded.</div>';
         const sorted = [...logs].sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
-        return `<table class="detail-table">
+        return `<div class="detail-top">${buildHeatmap(logs)}${buildDetailStats(logs)}</div>
+        <table class="detail-table">
             <thead><tr><th>Time</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th>💰 Gold</th><th>⚗️ Elixir</th><th>🔴 Dark</th></tr></thead>
             <tbody>${sorted.map(attackLogRow).join('')}</tbody>
         </table>`;

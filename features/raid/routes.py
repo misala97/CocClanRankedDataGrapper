@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import RaidWeekend, RaidWeekendLog, Player
-from services.helpers import CLEANUP_THRESHOLD
+from services.helpers import CLEANUP_THRESHOLD, raid_district_medal_value
 
 raid_bp = Blueprint('raid', __name__)
 
@@ -24,6 +24,7 @@ def raid_weekend_page():
     player_data = []
     total_log_attacks = 0
     cleanup_count = 0
+    est_medals_6atk = None
 
     if selected_raid:
         logs = (
@@ -130,6 +131,48 @@ def raid_weekend_page():
         total_log_attacks = sum(p['att_count'] for p in player_data)
         cleanup_count = sum(p['cleanup_count'] for p in player_data)
 
+        # ── Estimated raid medals ─────────────────────────────────────────────
+        destroyed = (
+            RaidWeekendLog.query
+            .filter(
+                RaidWeekendLog.raid_weekend_id == selected_raid.id,
+                RaidWeekendLog.percentageTotal >= 100,
+            )
+            .with_entities(RaidWeekendLog.defenderTag, RaidWeekendLog.districtName, RaidWeekendLog.districLevel)
+            .distinct()
+            .all()
+        )
+        total_medals  = sum(raid_district_medal_value(r.districtName, r.districLevel) for r in destroyed)
+        total_attacks = max(total_log_attacks, 1)
+
+        # Average defensive reward from last 10 finished raids
+        past_def = (
+            RaidWeekend.query
+            .filter(RaidWeekend.defensiveReward > 0)
+            .order_by(RaidWeekend.startTime.desc())
+            .limit(10)
+            .with_entities(RaidWeekend.defensiveReward)
+            .all()
+        )
+        avg_defensive = round(sum(r.defensiveReward for r in past_def) / len(past_def)) if past_def else 0
+
+        if total_medals > 0:
+            baseline = total_medals / total_attacks
+            off_6atk = max(0, min(round(baseline * 6), 1620))
+            est_medals_6atk = off_6atk + avg_defensive
+            for p in player_data:
+                p['est_medals'] = max(0, min(round(min(p['att_count'], 6) * baseline), 1620)) + avg_defensive
+        elif selected_raid.offensiveReward and selected_raid.offensiveReward > 0:
+            baseline = selected_raid.offensiveReward
+            off_6atk = min(round(baseline * 6), 1620)
+            est_medals_6atk = off_6atk + avg_defensive
+            for p in player_data:
+                p['est_medals'] = min(round(min(p['att_count'], 6) * baseline), 1620) + avg_defensive
+        else:
+            est_medals_6atk = None
+            for p in player_data:
+                p['est_medals'] = None
+
     # Long-term solo wipe stats
     enc_subq = (
         db.session.query(
@@ -199,4 +242,5 @@ def raid_weekend_page():
         total_log_attacks=total_log_attacks,
         cleanup_count=cleanup_count,
         hist_stats_json=hist_stats_json,
+        est_medals_6atk=est_medals_6atk,
     )

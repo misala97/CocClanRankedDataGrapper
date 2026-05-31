@@ -28,6 +28,7 @@ def clan_war_page():
     avg_th_our = avg_th_opp = 0
     avg_league_our = avg_league_opp = None
     members_our_json = members_opp_json = []
+    all_attacks_json = []
 
     if selected_war:
         members_our = sorted([m for m in selected_war.members if not m.is_opponent], key=lambda m: m.map_position or 999)
@@ -51,6 +52,22 @@ def clan_war_page():
             lst.sort(key=lambda a: a.attack_order or 0)
         for lst in attacks_on_defender.values():
             lst.sort(key=lambda a: a.attack_order or 0)
+
+        for a in sorted(selected_war.attacks, key=lambda a: a.attack_order or 0):
+            atk = member_by_tag.get(a.attacker_tag)
+            dfn = member_by_tag.get(a.defender_tag)
+            all_attacks_json.append({
+                'order':         int(a.attack_order or 0),
+                'attacker_name': str(atk.player_name or '?') if atk else '?',
+                'attacker_pos':  int(atk.map_position or 0)   if atk else 0,
+                'attacker_th':   int(atk.town_hall_level or 0) if atk else 0,
+                'attacker_side': 'opp' if (atk and atk.is_opponent) else 'our',
+                'defender_name': str(dfn.player_name or '?') if dfn else '?',
+                'defender_pos':  int(dfn.map_position or 0)   if dfn else 0,
+                'defender_th':   int(dfn.town_hall_level or 0) if dfn else 0,
+                'stars':         int(a.stars or 0),
+                'pct':           int(a.destruction_pct or 0),
+            })
 
     war_options = []
     for w in wars:
@@ -79,5 +96,6 @@ def clan_war_page():
         avg_league_opp=avg_league_opp,
         members_our_json=members_our_json,
         members_opp_json=members_opp_json,
+        all_attacks_json=all_attacks_json,
         now=dt.datetime.now(dt.timezone.utc),
     )

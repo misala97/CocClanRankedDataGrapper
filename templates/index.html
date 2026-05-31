@@ -124,6 +124,107 @@
         @keyframes float      { 0%, 100% { transform: translateY(0); }    50% { transform: translateY(-16px); } }
         @keyframes pulse-glow { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
 
+        /* ── LIVE EVENTS ── */
+        .live-section {
+            border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, rgba(63,185,80,.03) 0%, transparent 100%);
+            padding: 28px 32px;
+        }
+        .live-inner { max-width: 1400px; margin: 0 auto; }
+        .live-hdr {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+        }
+        .live-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+            background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.6);
+            animation: live-pulse 1.8s ease-in-out infinite;
+        }
+        @keyframes live-pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(63,185,80,.6); }
+            50%       { opacity: .5; box-shadow: 0 0 14px rgba(63,185,80,1); }
+        }
+        .live-hdr-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            letter-spacing: 1.8px; text-transform: uppercase; color: var(--green);
+        }
+        .live-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px;
+        }
+        .live-card {
+            display: block;
+            background: var(--surface); border-radius: 12px; overflow: hidden;
+            transition: transform .2s, box-shadow .2s;
+            position: relative;
+        }
+        .live-card:hover { transform: translateY(-2px); }
+
+        .live-card { border: 1px solid rgba(63,185,80,.3); }
+        .live-card:hover { box-shadow: 0 8px 32px rgba(63,185,80,.1); }
+
+        /* top stripe */
+        .lc-stripe {
+            height: 3px; width: 100%;
+            background: linear-gradient(90deg, var(--green), #39d353);
+        }
+
+        .lc-content { padding: 18px 22px 20px; }
+
+        /* header row */
+        .lc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .lc-title-row { display: flex; align-items: center; gap: 12px; }
+        .lc-icon {
+            width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; font-size: 20px;
+            background: var(--surf2); border: 1px solid var(--border);
+        }
+        .lc-name {
+            font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; color: var(--text);
+        }
+        .lc-state {
+            padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase;
+        }
+        .lcs-war  { background: rgba(240,165,0,.12); color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
+        .lcs-prep { background: rgba(227,179,65,.12); color: var(--yellow); border: 1px solid rgba(227,179,65,.3); }
+        .lcs-raid { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
+
+        /* scoreboard (war) */
+        .lc-score {
+            display: flex; align-items: center; justify-content: center;
+            gap: 12px; margin-bottom: 14px;
+        }
+        .lc-score-side { text-align: center; flex: 1; }
+        .lc-score-num {
+            font-family: 'Rajdhani', sans-serif; font-size: 36px; font-weight: 700; line-height: 1;
+        }
+        .lc-score-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
+        .lc-score-sep { font-family: 'Rajdhani', sans-serif; font-size: 18px; color: var(--border); font-weight: 700; }
+        .lc-score-our  .lc-score-num { color: var(--green); }
+        .lc-score-them .lc-score-num { color: var(--red); }
+
+        /* big stat (raid) */
+        .lc-big-stat { text-align: center; margin-bottom: 14px; }
+        .lc-big-num {
+            font-family: 'Rajdhani', sans-serif; font-size: 38px; font-weight: 700;
+            color: var(--accent); line-height: 1;
+        }
+        .lc-big-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+        /* footer meta */
+        .lc-meta {
+            display: flex; align-items: center; justify-content: space-between;
+            padding-top: 12px; border-top: 1px solid var(--bord2);
+            font-size: 12px; color: var(--muted); gap: 8px; flex-wrap: wrap;
+        }
+        .lc-meta strong { color: var(--text); font-weight: 600; }
+        .lc-meta-end { display: flex; align-items: center; gap: 5px; }
+        .lc-meta-end::before { content: '⏰'; font-size: 11px; }
+        .lc-arrow-row {
+            position: absolute; top: 20px; right: 16px;
+            font-size: 16px; color: var(--muted); transition: color .15s, transform .15s;
+        }
+        .live-card:hover .lc-arrow-row { color: var(--green); transform: translateX(2px); }
+
         /* ── FEATURES SECTION ── */
         .features {
             padding: 80px 32px;
@@ -296,6 +397,97 @@
         </div>
     </div>
 </section>
+
+{% if active_war or active_raid %}
+<!-- Live Events -->
+<div class="live-section">
+    <div class="live-inner">
+        <div class="live-hdr">
+            <span class="live-dot"></span>
+            <span class="live-hdr-title">Ongoing Events</span>
+        </div>
+        <div class="live-grid">
+
+            {% if active_war %}
+            <a href="/war" class="live-card">
+                <div class="lc-stripe"></div>
+                <div class="lc-content">
+                    <div class="lc-header">
+                        <div class="lc-title-row">
+                            <div class="lc-icon">🛡️</div>
+                            <span class="lc-name">Clan War</span>
+                        </div>
+                        <span class="lc-state {% if active_war.state == 'inWar' %}lcs-war{% else %}lcs-prep{% endif %}">
+                            {% if active_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}
+                        </span>
+                    </div>
+
+                    {% if active_war.state == 'inWar' %}
+                    <div class="lc-score">
+                        <div class="lc-score-side lc-score-our">
+                            <div class="lc-score-num">{{ active_war.clan_stars or 0 }}</div>
+                            <div class="lc-score-lbl">{{ active_war.clan_name or 'Us' }} ★</div>
+                        </div>
+                        <div class="lc-score-sep">—</div>
+                        <div class="lc-score-side lc-score-them">
+                            <div class="lc-score-num">{{ active_war.opponent_stars or 0 }}</div>
+                            <div class="lc-score-lbl">{{ active_war.opponent_name or 'Them' }} ★</div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div style="text-align:center;padding:14px 0 18px;color:var(--muted);font-size:13px;">
+                        War starts {{ active_war.start_time | local_dt('%d.%m · %H:%M') if active_war.start_time else 'soon' }}
+                    </div>
+                    {% endif %}
+
+                    <div class="lc-meta">
+                        <span>vs <strong>{{ active_war.opponent_name or '?' }}</strong>{% if active_war.team_size %} · {{ active_war.team_size }}v{{ active_war.team_size }}{% endif %}</span>
+                        {% if active_war.end_time %}
+                        <span class="lc-meta-end">Ends {{ active_war.end_time | local_dt('%d.%m · %H:%M') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <span class="lc-arrow-row">›</span>
+            </a>
+            {% endif %}
+
+            {% if active_raid %}
+            <a href="/raid" class="live-card">
+                <div class="lc-stripe"></div>
+                <div class="lc-content">
+                    <div class="lc-header">
+                        <div class="lc-title-row">
+                            <div class="lc-icon">🏆</div>
+                            <span class="lc-name">Raid Weekend</span>
+                        </div>
+                        <span class="lc-state lcs-raid">Ongoing</span>
+                    </div>
+
+                    <div class="lc-big-stat">
+                        {% if active_raid_est_medals %}
+                        <div class="lc-big-num">≈{{ active_raid_est_medals }}</div>
+                        <div class="lc-big-lbl">Est. Medals (off. + avg def.)</div>
+                        {% else %}
+                        <div class="lc-big-num" style="color:var(--muted)">—</div>
+                        <div class="lc-big-lbl">Est. Medals</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="lc-meta">
+                        <span>Started {{ active_raid.startTime.strftime('%d.%m') if active_raid.startTime else '—' }}</span>
+                        {% if active_raid.endTime %}
+                        <span class="lc-meta-end">Ends {{ active_raid.endTime | local_dt('%d.%m · %H:%M') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <span class="lc-arrow-row">›</span>
+            </a>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Features -->
 <section id="features" class="features">

@@ -12,6 +12,15 @@ LOCAL_TZ = ZoneInfo(os.getenv("TIMEZONE", "Europe/Berlin"))
 
 CLEANUP_THRESHOLD = 35
 
+RAID_DISTRICT_MEDALS     = {1: 135, 2: 225, 3: 350, 4: 405, 5: 460}
+RAID_CAPITAL_PEAK_MEDALS = {2: 180, 3: 360, 4: 585, 5: 810, 6: 1115, 7: 1240, 8: 1260, 9: 1375, 10: 1450}
+
+def raid_district_medal_value(name, level):
+    lvl = int(level or 0)
+    if name and 'capital peak' in name.lower():
+        return RAID_CAPITAL_PEAK_MEDALS.get(lvl, 0)
+    return RAID_DISTRICT_MEDALS.get(lvl, 0)
+
 
 # ── Timezone ──────────────────────────────────────────────────────────────────
 
@@ -307,12 +316,14 @@ def league_rank(name: str) -> int:
 _SKIP_LEAGUES = {"Unranked", "Unknown League", None}
 
 def avg_league_name(members) -> str | None:
-    """Average ranked league across members, ignoring Unranked/null/unknown."""
-    ranks = [league_rank(m.ranked_league) for m in members if m.ranked_league not in _SKIP_LEAGUES]
-    if not ranks:
+    """Average ranked league across all members, counting no-data as rank 0."""
+    if not members:
         return None
-    avg_id = 105000000 + round(sum(ranks) / len(ranks))
-    return get_name_to_id(avg_id)
+    ranks = [league_rank(m.ranked_league) if m.ranked_league not in _SKIP_LEAGUES else 0 for m in members]
+    avg_rank = round(sum(ranks) / len(ranks))
+    if avg_rank <= 0:
+        return None
+    return get_name_to_id(105000000 + avg_rank)
 
 
 def get_member_rank_by_tag(members, player_name):

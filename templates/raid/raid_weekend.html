@@ -317,6 +317,13 @@
             <div class="stat-value" style="color:var(--purple);">{{ (selected_raid.defensiveReward or 0) + (selected_raid.offensiveReward or 0) * 6 }}</div>
             <div class="stat-label">Raid Medals</div>
         </div>
+        {% if est_medals_6atk %}
+        <div class="stat-card">
+            <div class="stat-icon">🏅</div>
+            <div class="stat-value" style="color:var(--yellow);">≈{{ est_medals_6atk }}</div>
+            <div class="stat-label">Est. Medals (off. + avg def.)</div>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
