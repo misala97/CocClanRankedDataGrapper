@@ -748,9 +748,9 @@
                     {% if m.ranked_league %}<span class="member-sub">{{ m.ranked_league }}</span>{% endif %}
                     {% if can_edit_clan_war %}
                     <button class="war-flag {% if m.is_rushed %}flag-on{% else %}flag-off{% endif %}"
-                            onclick="toggleWarFlag(event, this, '/war/api/member/{{ m.id }}/is-rushed')">Rushed</button>
+                            onclick="event.stopPropagation()" ondblclick="toggleWarFlag(event, this, '/war/api/member/{{ m.id }}/is-rushed')">Rushed</button>
                     <button class="war-flag {% if m.is_troll %}flag-on{% else %}flag-off{% endif %}"
-                            onclick="toggleWarFlag(event, this, '/war/api/member/{{ m.id }}/is-troll')">Troll</button>
+                            onclick="event.stopPropagation()" ondblclick="toggleWarFlag(event, this, '/war/api/member/{{ m.id }}/is-troll')">Troll</button>
                     {% else %}
                     {% if m.is_rushed %}<span class="war-flag flag-on">Rushed</span>{% endif %}
                     {% if m.is_troll  %}<span class="war-flag flag-on">Troll</span>{% endif %}
@@ -804,6 +804,7 @@
 <script>
 function toggleWarFlag(event, btn, url) {
     event.stopPropagation();
+    event.preventDefault();
     fetch(url, {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}})
         .then(r => r.json())
         .then(data => {
