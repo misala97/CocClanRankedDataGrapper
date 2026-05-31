@@ -1,9 +1,11 @@
 import datetime as dt
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, jsonify
 from sqlalchemy.orm import selectinload
 
-from models import ClanWar
+from extensions import db
+from models import ClanWar, ClanWarMember
+from features.auth.routes import _can_edit_clan_war
 from services.helpers import avg_league_name, league_rank
 
 war_bp = Blueprint('war', __name__)
@@ -99,3 +101,37 @@ def clan_war_page():
         all_attacks_json=all_attacks_json,
         now=dt.datetime.now(dt.timezone.utc),
     )
+
+
+@war_bp.route('/war/api/<int:war_id>/castle-empty', methods=['POST'])
+def war_toggle_castle_empty(war_id):
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+    war = db.get_or_404(ClanWar, war_id)
+    war.castle_empty = not war.castle_empty
+    db.session.commit()
+    return jsonify(ok=True, value=war.castle_empty)
+
+
+@war_bp.route('/war/api/member/<int:member_id>/is-rushed', methods=['POST'])
+def war_toggle_member_rushed(member_id):
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+    m = db.get_or_404(ClanWarMember, member_id)
+    if not m.is_opponent:
+        return jsonify(error='Only opponent members can be flagged'), 400
+    m.is_rushed = not m.is_rushed
+    db.session.commit()
+    return jsonify(ok=True, value=m.is_rushed)
+
+
+@war_bp.route('/war/api/member/<int:member_id>/is-troll', methods=['POST'])
+def war_toggle_member_troll(member_id):
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+    m = db.get_or_404(ClanWarMember, member_id)
+    if not m.is_opponent:
+        return jsonify(error='Only opponent members can be flagged'), 400
+    m.is_troll = not m.is_troll
+    db.session.commit()
+    return jsonify(ok=True, value=m.is_troll)

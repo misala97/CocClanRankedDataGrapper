@@ -179,6 +179,7 @@ class AppUser(db.Model):
     is_approved    = db.Column(db.Boolean, default=False, nullable=False)
     is_super_admin = db.Column(db.Boolean, default=False, nullable=False)
     perm_create_reminder_ranked = db.Column(db.Boolean, default=False, nullable=False)
+    perm_clan_war_edits         = db.Column(db.Boolean, default=False, nullable=False)
 
 
 class ClanWar(db.Model):
@@ -212,6 +213,7 @@ class ClanWar(db.Model):
     opponent_stars           = db.Column(db.Integer, default=0)
     opponent_attacks         = db.Column(db.Integer, default=0)
     opponent_destruction_pct = db.Column(db.Float, default=0.0)
+    castle_empty             = db.Column(db.Boolean, default=False, nullable=False)
 
     members = db.relationship('ClanWarMember', back_populates='clan_war', lazy=True, cascade='all, delete-orphan')
     attacks = db.relationship('ClanWarAttack',  back_populates='clan_war', lazy=True, cascade='all, delete-orphan')
@@ -229,6 +231,8 @@ class ClanWarMember(db.Model):
     map_position     = db.Column(db.Integer)
     opponent_attacks = db.Column(db.Integer, default=0)
     ranked_league    = db.Column(db.String(50), nullable=True)
+    is_rushed        = db.Column(db.Boolean, default=False, nullable=False)
+    is_troll         = db.Column(db.Boolean, default=False, nullable=False)
 
     clan_war = db.relationship('ClanWar', back_populates='members')
 

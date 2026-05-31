@@ -41,6 +41,12 @@ def _can_create_reminder_ranked():
     u = _current_user()
     return bool(u and u.is_approved and u.perm_create_reminder_ranked)
 
+def _can_edit_clan_war():
+    if _is_super_admin():
+        return True
+    u = _current_user()
+    return bool(u and u.is_approved and u.perm_clan_war_edits)
+
 def require_admin_login(f):
     @wraps(f)
     def decorated(*args, **kwargs):

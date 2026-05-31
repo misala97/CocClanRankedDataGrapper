@@ -79,7 +79,7 @@ def local_dt_filter(value, fmt='%d.%m.%Y %H:%M'):
 
 # ── Auth context processor ────────────────────────────────────────────────────
 
-from features.auth.routes import _current_user, _is_super_admin, _is_env_admin, _can_create_reminder_ranked
+from features.auth.routes import _current_user, _is_super_admin, _is_env_admin, _can_create_reminder_ranked, _can_edit_clan_war
 import datetime as _dt
 
 def _nav_task_status():
@@ -114,6 +114,7 @@ def inject_auth():
         'is_super_admin': _is_super_admin(),
         'is_env_admin':   _is_env_admin(),
         'can_create_reminder_ranked': _can_create_reminder_ranked(),
+        'can_edit_clan_war': _can_edit_clan_war(),
         'nav_task_status': _nav_task_status(),
     }
 

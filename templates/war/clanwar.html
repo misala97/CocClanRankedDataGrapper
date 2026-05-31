@@ -169,7 +169,8 @@
 
         .member-info {}
         .member-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .member-sub  { font-size: 10px; color: var(--muted); margin-top: 2px; font-family: 'Rajdhani', sans-serif; line-height: 1.4; }
+        .member-sub-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+        .member-sub  { font-size: 10px; color: var(--muted); font-family: 'Rajdhani', sans-serif; line-height: 1.4; white-space: nowrap; }
 
         .attacks-col { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 90px; }
         .attack-pill {
@@ -368,6 +369,20 @@
         .no-war-icon { font-size: 48px; margin-bottom: 12px; }
         .no-war h2 { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); }
 
+        /* ── WAR FLAGS ── */
+        .war-flag {
+            display: inline-flex; align-items: center;
+            padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase;
+            cursor: default; border: 1px solid transparent; line-height: 1.6;
+        }
+        .war-flag.flag-on  { background: rgba(248,81,73,.12); color: var(--red);   border-color: rgba(248,81,73,.3); }
+        .war-flag.flag-off { background: var(--surf2);         color: var(--muted); border-color: var(--bord2); opacity: .45; }
+        button.war-flag { cursor: pointer; transition: opacity .15s, border-color .15s; }
+        button.war-flag:hover { opacity: 1 !important; }
+        button.war-flag.flag-off:hover { border-color: var(--muted); color: var(--muted); }
+        button.war-flag.flag-on:hover  { border-color: var(--red); }
+
         /* ── ATTACK LOG ── */
         .recent-card {
             background: var(--surface); border: 1px solid var(--border);
@@ -526,6 +541,15 @@
             {% elif war.state == 'inWar' %}In War
             {% else %}Ended{% endif %}
         </span>
+        {% if can_edit_clan_war %}
+        <button class="war-flag {% if war.castle_empty %}flag-on{% else %}flag-off{% endif %}"
+                id="castleEmptyBtn"
+                onclick="toggleWarFlag(event, this, '/war/api/{{ war.id }}/castle-empty')">
+            🏰 Castle Empty
+        </button>
+        {% elif war.castle_empty %}
+        <span class="war-flag flag-on">🏰 Castle Empty</span>
+        {% endif %}
         {% if war.start_time or war.end_time %}
         <div class="score-times">
             {% if war.start_time %}
@@ -658,7 +682,7 @@
             <div class="th-badge">TH{{ m.town_hall_level }}</div>
             <div class="member-info">
                 <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
-                {% if m.ranked_league %}<div class="member-sub">{{ m.ranked_league }}</div>{% endif %}
+                {% if m.ranked_league %}<div class="member-sub-row"><span class="member-sub">{{ m.ranked_league }}</span></div>{% endif %}
             </div>
             <div class="def-col">
                 {% if attacks_received %}
@@ -719,7 +743,18 @@
             <div class="th-badge">TH{{ m.town_hall_level }}</div>
             <div class="member-info">
                 <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
-                {% if m.ranked_league %}<div class="member-sub">{{ m.ranked_league }}</div>{% endif %}
+                <div class="member-sub-row">
+                    {% if m.ranked_league %}<span class="member-sub">{{ m.ranked_league }}</span>{% endif %}
+                    {% if can_edit_clan_war %}
+                    <button class="war-flag {% if m.is_rushed %}flag-on{% else %}flag-off{% endif %}"
+                            onclick="toggleWarFlag(event, this, '/war/api/member/{{ m.id }}/is-rushed')">Rushed</button>
+                    <button class="war-flag {% if m.is_troll %}flag-on{% else %}flag-off{% endif %}"
+                            onclick="toggleWarFlag(event, this, '/war/api/member/{{ m.id }}/is-troll')">Troll</button>
+                    {% else %}
+                    {% if m.is_rushed %}<span class="war-flag flag-on">Rushed</span>{% endif %}
+                    {% if m.is_troll  %}<span class="war-flag flag-on">Troll</span>{% endif %}
+                    {% endif %}
+                </div>
             </div>
             <div class="def-col">
                 {% if attacks_received %}
@@ -763,6 +798,38 @@
 
 {% endif %}
 </div>
+
+{% if war %}
+<script>
+function toggleWarFlag(event, btn, url) {
+    event.stopPropagation();
+    fetch(url, {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                btn.classList.toggle('flag-on',  data.value);
+                btn.classList.toggle('flag-off', !data.value);
+            }
+        });
+}
+
+function equalizeRosterRows() {
+    const cards = document.querySelectorAll('#rosterGrid .roster-card');
+    if (cards.length < 2) return;
+    const leftRows  = cards[0].querySelectorAll('.member-row');
+    const rightRows = cards[1].querySelectorAll('.member-row');
+    leftRows.forEach(r  => r.style.height = '');
+    rightRows.forEach(r => r.style.height = '');
+    const n = Math.min(leftRows.length, rightRows.length);
+    for (let i = 0; i < n; i++) {
+        const h = Math.max(leftRows[i].offsetHeight, rightRows[i].offsetHeight);
+        leftRows[i].style.height  = h + 'px';
+        rightRows[i].style.height = h + 'px';
+    }
+}
+document.addEventListener('DOMContentLoaded', equalizeRosterRows);
+</script>
+{% endif %}
 
 {% if war and members_our and members_opp %}
 <script>

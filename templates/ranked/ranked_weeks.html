@@ -885,6 +885,8 @@
                 </td>
             `;
 
+            row.querySelectorAll('a').forEach(a => a.addEventListener('click', e => e.stopPropagation()));
+
             const toggleButton = row.querySelector('.details-toggle');
             if (!item.is_active) {
                 row.style.cursor = 'default';

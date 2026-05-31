@@ -172,6 +172,7 @@ def admin_user_toggle_super(user_id):
 def admin_user_perms(user_id):
     u = db.get_or_404(AppUser, user_id)
     u.perm_create_reminder_ranked = 'perm_create_reminder_ranked' in request.form
+    u.perm_clan_war_edits         = 'perm_clan_war_edits'         in request.form
     db.session.commit()
     return redirect(url_for('admin.admin_users'))
 

@@ -200,6 +200,10 @@
                                 <input type="checkbox" name="perm_create_reminder_ranked" {% if u.perm_create_reminder_ranked %}checked{% endif %}>
                                 Ranked Reminder
                             </label>
+                            <label class="perm-label">
+                                <input type="checkbox" name="perm_clan_war_edits" {% if u.perm_clan_war_edits %}checked{% endif %}>
+                                Clan War Edits
+                            </label>
                             <button type="submit" class="btn btn-save">Save</button>
                         </form>
                         {% endif %}
