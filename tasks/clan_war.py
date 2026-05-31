@@ -102,6 +102,16 @@ def task_update_clan_war():
             db.session.commit()
 
         if state not in ('inWar', 'warEnded'):
+            if extensions.scheduler and state == 'preparation' and clan_war.start_time:
+                war_start_utc = clan_war.start_time.replace(tzinfo=dt.timezone.utc)
+                now_utc = dt.datetime.now(dt.timezone.utc)
+                if war_start_utc > now_utc:
+                    extensions.scheduler.reschedule_job('clan_war_update', trigger='date', run_date=war_start_utc)
+                    clan_war_logger.info(f"Rescheduled to fire at war start: {war_start_utc}")
+                else:
+                    extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', minutes=3)
+            elif extensions.scheduler:
+                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', hours=1)
             summary = f"state={state} war={war_action} members_added={members_added}"
             db_finalize_uptime(task_update_clan_war.__name__, t0, status, summary=summary, logger=clan_war_logger)
             return
@@ -137,3 +147,4 @@ def task_update_clan_war():
                 extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', minutes=3)
             else:
                 extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', hours=1)
+        

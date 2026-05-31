@@ -7,7 +7,7 @@ from services.helpers import json_get, JSON_RAID_WEEKEND_DATA
 raid_weekend_logger = setup_task_logger('raid_weekend', 'logs/raid_weekend.log')
 
 
-def task_update_raid_weekend(run_always: bool = False):
+def task_update_raid_weekend():
     from app import app, CLAN_TAG
     from extensions import db
     from services.db import (
@@ -29,11 +29,6 @@ def task_update_raid_weekend(run_always: bool = False):
     logs_added = 0
 
     with app.app_context():
-        if dt.datetime.now(dt.timezone.utc).weekday() not in (4, 5, 6, 0) and not run_always:
-            raid_weekend_logger.info("Skipping — not raid weekend.")
-            db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'skipped', summary='not_weekend', logger=raid_weekend_logger)
-            return
-
         try:
             raid_weekend_all_api = api_fetch_raid_weekend(CLAN_TAG)
             current_raid_weekend = json_get(raid_weekend_all_api, JSON_RAID_WEEKEND_DATA.ITEMS)[0]
@@ -114,3 +109,14 @@ def task_update_raid_weekend(run_always: bool = False):
             summary=f"logs_added={logs_added}",
             logger=raid_weekend_logger,
         )
+
+        import extensions
+        if extensions.scheduler:
+            if raid_weekend.state == 'ended' and raid_weekend.endTime:
+                next_run = raid_weekend.endTime + dt.timedelta(days=4)
+                next_run = next_run.replace(tzinfo=dt.timezone.utc)
+                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='date', run_date=next_run)
+                raid_weekend_logger.info(f"Raid ended — rescheduled to {next_run} UTC")
+            elif raid_weekend.state == 'ongoing':
+                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', minutes=3)
+                raid_weekend_logger.info("Raid ongoing — keeping 3-minute interval")

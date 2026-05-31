@@ -18,11 +18,11 @@ if __name__ == '__main__':
     scheduler.add_job(func=task_update_clan_members, trigger="interval", minutes=5,  max_instances=1)
     scheduler.add_job(func=task_update_ranked_weeks, trigger="interval", minutes=10, max_instances=1)
     scheduler.add_job(func=task_update_battle_logs,  trigger="interval", minutes=5,  max_instances=1)
-    scheduler.add_job(func=task_update_raid_weekend, trigger="interval", minutes=3,  max_instances=1)
+    scheduler.add_job(func=task_update_raid_weekend, trigger="interval", minutes=3,  max_instances=1, id='raid_weekend_update')
     scheduler.add_job(func=task_update_clan_war,     trigger="interval", hours=1,    max_instances=1, id='clan_war_update')
     scheduler.start()
 
-    task_update_raid_weekend(True)
+    task_update_raid_weekend()
     task_update_clan_war()
 
     try:
