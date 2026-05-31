@@ -202,6 +202,87 @@
         .attack-empty { color: var(--muted); font-size: 10px; font-family: 'Rajdhani', sans-serif; opacity: .45; }
 
         /* ── NO WAR ── */
+        /* ── COMPARE PANEL ── */
+        .compare-btn {
+            display: flex; align-items: center; gap: 8px;
+            margin: 0 0 20px; padding: 10px 22px;
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all .15s;
+        }
+        .compare-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,.05); }
+        .compare-btn.open  { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,.06); }
+
+        .compare-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            margin-bottom: 24px; overflow: hidden;
+            display: none;
+        }
+        .compare-card.open { display: block; }
+
+        .compare-section { padding: 20px 28px; border-bottom: 1px solid var(--bord2); }
+        .compare-section:last-child { border-bottom: none; }
+        .compare-section-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
+            letter-spacing: 1px; text-transform: uppercase; color: var(--muted);
+            margin-bottom: 16px;
+        }
+
+        /* prediction bar */
+        .pred-bar-wrap { position: relative; height: 36px; border-radius: 8px; overflow: hidden; background: var(--surf2); margin-bottom: 10px; }
+        .pred-bar-our  { position: absolute; left: 0; top: 0; height: 100%; background: linear-gradient(90deg, rgba(63,185,80,.5), rgba(63,185,80,.2)); transition: width .6s ease; }
+        .pred-bar-opp  { position: absolute; right: 0; top: 0; height: 100%; background: linear-gradient(270deg, rgba(248,81,73,.5), rgba(248,81,73,.2)); transition: width .6s ease; }
+        .pred-bar-labels { display: flex; justify-content: space-between; font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; }
+        .pred-label-our  { color: var(--green); }
+        .pred-label-opp  { color: var(--red); }
+        .pred-verdict { text-align: center; font-size: 13px; color: var(--muted); margin-top: 6px; }
+        .pred-factors { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+        .pred-factor {
+            padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+            font-family: 'Rajdhani', sans-serif; border: 1px solid;
+        }
+        .pf-our  { background: rgba(63,185,80,.08);  color: var(--green);  border-color: rgba(63,185,80,.2); }
+        .pf-opp  { background: rgba(248,81,73,.08);  color: var(--red);    border-color: rgba(248,81,73,.2); }
+        .pf-even { background: rgba(139,148,158,.08); color: var(--muted); border-color: rgba(139,148,158,.2); }
+
+        /* stats table */
+        .cmp-table { width: 100%; border-collapse: collapse; }
+        .cmp-table tr { border-bottom: 1px solid var(--bord2); }
+        .cmp-table tr:last-child { border-bottom: none; }
+        .cmp-table td { padding: 8px 0; font-size: 13px; }
+        .cmp-table .col-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; width: 120px; }
+        .cmp-table .col-our   { font-weight: 600; padding-right: 12px; }
+        .cmp-table .col-opp   { font-weight: 600; padding-left: 12px; text-align: right; }
+        .cmp-table .win-our   { color: var(--green); }
+        .cmp-table .win-opp   { color: var(--red); }
+        .cmp-table .col-mid   { text-align: center; width: 24px; font-size: 11px; color: var(--muted); }
+
+        /* TH distribution */
+        .th-dist-grid { display: flex; flex-direction: column; gap: 6px; }
+        .th-dist-row  { display: grid; grid-template-columns: 60px 1fr 40px 40px 1fr 60px; gap: 6px; align-items: center; font-size: 12px; }
+        .th-dist-label { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 12px; color: var(--muted); text-align: center; }
+        .th-bar-our   { height: 10px; border-radius: 3px; background: var(--green); opacity: .7; margin-left: auto; }
+        .th-bar-opp   { height: 10px; border-radius: 3px; background: var(--red);   opacity: .7; }
+        .th-count     { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; text-align: center; }
+
+        /* position matchup */
+        .matchup-summary { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+        .matchup-stat { text-align: center; }
+        .matchup-stat .mn { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; }
+        .matchup-stat .ml { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+        .mn-green { color: var(--green); }
+        .mn-red   { color: var(--red); }
+        .mn-muted { color: var(--muted); }
+
+        .matchup-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .matchup-table th { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); padding: 4px 8px; text-align: center; }
+        .matchup-table td { padding: 5px 8px; border-top: 1px solid var(--bord2); text-align: center; }
+        .matchup-table td:first-child { text-align: left; }
+        .matchup-table td:last-child  { text-align: right; }
+        .mt-adv  { color: var(--green);  font-weight: 700; }
+        .mt-dis  { color: var(--red);    font-weight: 700; }
+        .mt-even { color: var(--muted); }
+
         .no-war { text-align: center; padding: 80px 32px; color: var(--muted); }
         .no-war-icon { font-size: 48px; margin-bottom: 12px; }
         .no-war h2 { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); }
@@ -419,6 +500,20 @@
 
 </div>
 
+{# ── COMPARE ── #}
+{% if members_our and members_opp %}
+<button class="compare-btn" id="compareBtn" onclick="toggleCompare()">📊 Compare &amp; Predict</button>
+
+<div class="compare-card" id="compareCard">
+
+    <div class="compare-section" id="cmp-prediction"></div>
+    <div class="compare-section" id="cmp-stats"></div>
+    <div class="compare-section" id="cmp-th"></div>
+    <div class="compare-section" id="cmp-matchup"></div>
+
+</div>
+{% endif %}
+
 {# ── ROSTER ── #}
 {% if members_our or members_opp %}
 <div class="roster-grid">
@@ -517,5 +612,207 @@
 
 {% endif %}
 </div>
+
+{% if war and members_our and members_opp %}
+<script>
+const OUR  = {{ members_our_json | tojson | safe }};
+const OPP  = {{ members_opp_json | tojson | safe }};
+const WAR  = {
+    ourName:      {{ (war.clan_name or 'Our Clan') | tojson | safe }},
+    oppName:      {{ (war.opponent_name or 'Opponent') | tojson | safe }},
+    warsWonOur:   {{ war.clan_wars_won      | default(0) | int }},
+    warsWonOpp:   {{ war.opponent_wars_won  | default(0) | int }},
+    streakOur:    {{ war.clan_win_streak     | default(0) | int }},
+    streakOpp:    {{ war.opponent_win_streak | default(0) | int }},
+    cwlOur:       {{ (war.cwl_league or '') | tojson | safe }},
+    cwlOpp:       {{ (war.opponent_cwl_league or '') | tojson | safe }},
+};
+
+const SKIP = new Set(['Unranked', 'Unknown League', '']);
+
+function avg(arr) { return arr.length ? arr.reduce((a,b) => a+b,0) / arr.length : 0; }
+function clamp(v,lo,hi) { return Math.max(lo, Math.min(hi, v)); }
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+
+function buildCompare() {
+    const len = Math.min(OUR.length, OPP.length);
+
+    // ── TH analysis ──────────────────────────────────────────────────────────
+    const avgThOur = avg(OUR.map(m => m.th));
+    const avgThOpp = avg(OPP.map(m => m.th));
+
+    let thDiffTotal = 0;
+    for (let i = 0; i < len; i++) thDiffTotal += OUR[i].th - OPP[i].th;
+    const thDiffAvg = thDiffTotal / len;   // positive = we're ahead
+
+    // ── League analysis ───────────────────────────────────────────────────────
+    const ourRanks = OUR.filter(m => m.lr > 0).map(m => m.lr);
+    const oppRanks = OPP.filter(m => m.lr > 0).map(m => m.lr);
+    const avgLrOur = avg(ourRanks);
+    const avgLrOpp = avg(oppRanks);
+    const leagueDiff = (avgLrOur - avgLrOpp) / 36;  // -1 to +1
+
+    // ── War experience ────────────────────────────────────────────────────────
+    const maxWins = Math.max(WAR.warsWonOur, WAR.warsWonOpp, 1);
+    const warsScore = (Math.log(WAR.warsWonOur + 1) - Math.log(WAR.warsWonOpp + 1)) / Math.log(maxWins + 1);
+
+    // ── Streak ────────────────────────────────────────────────────────────────
+    const maxStreak = Math.max(WAR.streakOur, WAR.streakOpp, 1);
+    const streakScore = (WAR.streakOur - WAR.streakOpp) / maxStreak;
+
+    // ── Combined score → win probability ─────────────────────────────────────
+    const rawScore = thDiffAvg * 0.55 + leagueDiff * 22 * 0.25 + warsScore * 0.10 + streakScore * 0.10;
+    let prob = sigmoid(rawScore * 1.4);
+    prob = clamp(prob, 0.28, 0.72);
+    const ourPct  = Math.round(prob * 100);
+    const oppPct  = 100 - ourPct;
+
+    // ── Position matchup ──────────────────────────────────────────────────────
+    let better = 0, even = 0, worse = 0;
+    for (let i = 0; i < len; i++) {
+        const d = OUR[i].th - OPP[i].th;
+        if (d > 0) better++; else if (d < 0) worse++; else even++;
+    }
+
+    // ── TH distribution ───────────────────────────────────────────────────────
+    const thOur = {}, thOpp = {};
+    OUR.forEach(m => { thOur[m.th] = (thOur[m.th]||0) + 1; });
+    OPP.forEach(m => { thOpp[m.th] = (thOpp[m.th]||0) + 1; });
+    const allThs = [...new Set([...Object.keys(thOur), ...Object.keys(thOpp)].map(Number))].sort((a,b) => b-a);
+    const maxCount = Math.max(...allThs.map(t => Math.max(thOur[t]||0, thOpp[t]||0)), 1);
+
+    // ── Factor badges ─────────────────────────────────────────────────────────
+    function factor(label, score, fmt) {
+        const cls = score > 0.05 ? 'pf-our' : score < -0.05 ? 'pf-opp' : 'pf-even';
+        const arrow = score > 0.05 ? '↑' : score < -0.05 ? '↓' : '≈';
+        return `<span class="pred-factor ${cls}">${arrow} ${label}: ${fmt}</span>`;
+    }
+
+    const f_th     = factor('Avg TH', thDiffAvg, `${avgThOur.toFixed(1)} vs ${avgThOpp.toFixed(1)}`);
+    const f_league = factor('Avg League', leagueDiff, avgLrOur > 0 || avgLrOpp > 0 ? `rank ${avgLrOur.toFixed(0)} vs ${avgLrOpp.toFixed(0)}` : 'no data');
+    const f_pos    = factor('Position edge', (better - worse) / len, `+${better} / ≈${even} / -${worse}`);
+    const f_wars   = factor('War experience', warsScore, `${WAR.warsWonOur} vs ${WAR.warsWonOpp} wins`);
+    const f_streak = factor('Streak', streakScore, `${WAR.streakOur} vs ${WAR.streakOpp}`);
+
+    const verdict = prob > 0.54 ? `${WAR.ourName} hold a statistically meaningful advantage.`
+                  : prob < 0.46 ? `${WAR.oppName} hold a statistically meaningful advantage.`
+                  : 'This war looks like an even matchup — could go either way.';
+
+    // ── Render prediction ─────────────────────────────────────────────────────
+    document.getElementById('cmp-prediction').innerHTML = `
+        <div class="compare-section-title">📊 War Prediction</div>
+        <div class="pred-bar-wrap">
+            <div class="pred-bar-our"  style="width:${ourPct}%"></div>
+            <div class="pred-bar-opp"  style="width:${oppPct}%"></div>
+        </div>
+        <div class="pred-bar-labels">
+            <span class="pred-label-our">${WAR.ourName} — ${ourPct}%</span>
+            <span class="pred-label-opp">${oppPct}% — ${WAR.oppName}</span>
+        </div>
+        <div class="pred-verdict">${verdict}</div>
+        <div class="pred-factors">${f_th}${f_league}${f_pos}${f_wars}${f_streak}</div>
+    `;
+
+    // ── Render stats table ────────────────────────────────────────────────────
+    function row(label, ourVal, oppVal, higherIsBetter = true) {
+        const diff = parseFloat(ourVal) - parseFloat(oppVal);
+        const ourWins = higherIsBetter ? diff > 0 : diff < 0;
+        const oppWins = higherIsBetter ? diff < 0 : diff > 0;
+        return `<tr>
+            <td class="col-label">${label}</td>
+            <td class="col-our ${ourWins ? 'win-our' : oppWins ? '' : ''}">${ourVal}</td>
+            <td class="col-mid">${ourWins ? '✓' : oppWins ? '' : '='}</td>
+            <td class="col-opp ${oppWins ? 'win-opp' : ''}">${oppVal}</td>
+        </tr>`;
+    }
+
+    document.getElementById('cmp-stats').innerHTML = `
+        <div class="compare-section-title">📋 Key Stats</div>
+        <table class="cmp-table">
+            <thead><tr>
+                <th class="col-label" style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding-bottom:6px;text-align:left"></th>
+                <th style="font-size:11px;color:var(--muted);padding-bottom:6px;text-align:left">${WAR.ourName}</th>
+                <th></th>
+                <th style="font-size:11px;color:var(--muted);padding-bottom:6px;text-align:right">${WAR.oppName}</th>
+            </tr></thead>
+            <tbody>
+                ${row('Avg TH', avgThOur.toFixed(1), avgThOpp.toFixed(1))}
+                ${avgLrOur > 0 || avgLrOpp > 0 ? row('Avg League Rank', avgLrOur.toFixed(1), avgLrOpp.toFixed(1)) : ''}
+                ${WAR.warsWonOur > 0 || WAR.warsWonOpp > 0 ? row('Wars Won', WAR.warsWonOur, WAR.warsWonOpp) : ''}
+                ${row('Win Streak', WAR.streakOur, WAR.streakOpp)}
+                ${row('Positions Ahead', better, worse)}
+            </tbody>
+        </table>
+    `;
+
+    // ── Render TH distribution ────────────────────────────────────────────────
+    const thRows = allThs.map(th => {
+        const o = thOur[th] || 0;
+        const p = thOpp[th] || 0;
+        const ourW = Math.round((o / maxCount) * 120);
+        const oppW = Math.round((p / maxCount) * 120);
+        return `<div class="th-dist-row">
+            <span class="th-count" style="color:var(--green);text-align:right">${o > 0 ? o : ''}</span>
+            <div style="display:flex;justify-content:flex-end"><div class="th-bar-our" style="width:${ourW}px"></div></div>
+            <span class="th-dist-label">TH${th}</span>
+            <span class="th-dist-label">TH${th}</span>
+            <div><div class="th-bar-opp" style="width:${oppW}px"></div></div>
+            <span class="th-count" style="color:var(--red)">${p > 0 ? p : ''}</span>
+        </div>`;
+    }).join('');
+
+    document.getElementById('cmp-th').innerHTML = `
+        <div class="compare-section-title">🏰 TH Distribution</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;margin-bottom:8px;">
+            <span style="font-size:11px;color:var(--green);font-weight:600">${WAR.ourName}</span>
+            <span style="font-size:11px;color:var(--red);font-weight:600;text-align:right">${WAR.oppName}</span>
+        </div>
+        <div class="th-dist-grid">${thRows}</div>
+    `;
+
+    // ── Render position matchup ───────────────────────────────────────────────
+    const matchupRows = Array.from({length: len}, (_,i) => {
+        const o = OUR[i], p = OPP[i];
+        const diff = o.th - p.th;
+        const cls  = diff > 0 ? 'mt-adv' : diff < 0 ? 'mt-dis' : 'mt-even';
+        const note = diff > 0 ? `+${diff} TH` : diff < 0 ? `${diff} TH` : 'even';
+        return `<tr>
+            <td>${o.name}</td>
+            <td>TH${o.th}</td>
+            <td class="${cls}">${note}</td>
+            <td>TH${p.th}</td>
+            <td>${p.name}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('cmp-matchup').innerHTML = `
+        <div class="compare-section-title">⚔️ Position Matchup</div>
+        <div class="matchup-summary">
+            <div class="matchup-stat"><div class="mn mn-green">${better}</div><div class="ml">Ahead</div></div>
+            <div class="matchup-stat"><div class="mn mn-muted">${even}</div><div class="ml">Even</div></div>
+            <div class="matchup-stat"><div class="mn mn-red">${worse}</div><div class="ml">Behind</div></div>
+        </div>
+        <table class="matchup-table">
+            <thead><tr>
+                <th style="text-align:left">${WAR.ourName}</th>
+                <th>TH</th><th>Diff</th><th>TH</th>
+                <th style="text-align:right">${WAR.oppName}</th>
+            </tr></thead>
+            <tbody>${matchupRows}</tbody>
+        </table>
+    `;
+}
+
+function toggleCompare() {
+    const card = document.getElementById('compareCard');
+    const btn  = document.getElementById('compareBtn');
+    const open = card.classList.toggle('open');
+    btn.classList.toggle('open', open);
+    btn.textContent = open ? '✕ Close Comparison' : '📊 Compare & Predict';
+    if (open) buildCompare();
+}
+</script>
+{% endif %}
+
 </body>
 </html>

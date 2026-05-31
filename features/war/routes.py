@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request
 from sqlalchemy.orm import selectinload
 
 from models import ClanWar
-from services.helpers import avg_league_name
+from services.helpers import avg_league_name, league_rank
 
 war_bp = Blueprint('war', __name__)
 
@@ -27,6 +27,7 @@ def clan_war_page():
     attacks_by_attacker, attacks_on_defender, member_by_tag = {}, {}, {}
     avg_th_our = avg_th_opp = 0
     avg_league_our = avg_league_opp = None
+    members_our_json = members_opp_json = []
 
     if selected_war:
         members_our = sorted([m for m in selected_war.members if not m.is_opponent], key=lambda m: m.map_position or 999)
@@ -37,6 +38,11 @@ def clan_war_page():
         avg_th_opp = round(sum(m.town_hall_level or 0 for m in members_opp) / len(members_opp), 1) if members_opp else 0
         avg_league_our = avg_league_name(members_our)
         avg_league_opp = avg_league_name(members_opp)
+
+        SKIP_LEAGUES = {'Unranked', 'Unknown League', None, ''}
+
+        members_our_json = [{'th': m.town_hall_level or 0, 'name': m.player_name or '', 'pos': m.map_position or 0, 'league': m.ranked_league or '', 'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0} for m in members_our]
+        members_opp_json = [{'th': m.town_hall_level or 0, 'name': m.player_name or '', 'pos': m.map_position or 0, 'league': m.ranked_league or '', 'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0} for m in members_opp]
 
         for a in selected_war.attacks:
             attacks_by_attacker.setdefault(a.attacker_tag, []).append(a)
@@ -71,5 +77,7 @@ def clan_war_page():
         avg_th_opp=avg_th_opp,
         avg_league_our=avg_league_our,
         avg_league_opp=avg_league_opp,
+        members_our_json=members_our_json,
+        members_opp_json=members_opp_json,
         now=dt.datetime.now(dt.timezone.utc),
     )
