@@ -128,10 +128,11 @@ def index():
     clan_name      = (latest_war.clan_name  if latest_war and latest_war.clan_name  else None) or "Our Clan"
     clan_badge_url = (latest_war.clan_badge if latest_war and latest_war.clan_badge else None)
 
+    from services.helpers import LOCAL_TZ
     total_members = Player.query.filter_by(in_clan=True).count()
-    now = dt.datetime.now(dt.timezone.utc)
-    week_start_date = (now - dt.timedelta(days=now.weekday())).date()
-    week_start = dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day, tzinfo=dt.timezone.utc)
+    now_local = dt.datetime.now(LOCAL_TZ)
+    week_start_date = (now_local - dt.timedelta(days=now_local.weekday())).date()
+    week_start = dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day, tzinfo=LOCAL_TZ)
 
     week_logs = BattleLog.query.join(BattleLog.player).filter(
         BattleLog.time >= week_start,

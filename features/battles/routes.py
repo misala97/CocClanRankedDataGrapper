@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import BattleLog
-from services.helpers import to_local
+from services.helpers import to_local, LOCAL_TZ
 
 battles_bp = Blueprint('battles', __name__)
 
@@ -16,8 +16,8 @@ def battle_history_page():
     selected_type    = request.args.get('type', 'all')
     selected_week_str = request.args.get('week', None)
 
-    now = dt.datetime.now(dt.timezone.utc)
-    current_week_start = (now - dt.timedelta(days=now.weekday())).date()
+    now_local = dt.datetime.now(LOCAL_TZ)
+    current_week_start = (now_local - dt.timedelta(days=now_local.weekday())).date()
     is_all_time = (selected_week_str == 'all')
 
     if not is_all_time:
@@ -30,7 +30,7 @@ def battle_history_page():
         else:
             week_start = current_week_start
         week_end       = week_start + dt.timedelta(days=6)
-        week_start_dt  = dt.datetime(week_start.year, week_start.month, week_start.day, tzinfo=dt.timezone.utc)
+        week_start_dt  = dt.datetime(week_start.year, week_start.month, week_start.day, tzinfo=LOCAL_TZ)
         next_monday_dt = week_start_dt + dt.timedelta(days=7)
 
     oldest = (
