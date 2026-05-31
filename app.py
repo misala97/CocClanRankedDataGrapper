@@ -150,13 +150,15 @@ def index():
         if not (b.time and first_log_time_idx.get(b.player_tag) and
                 b.time <= first_log_time_idx[b.player_tag] + import_window)
     )
+    current_season = db.session.query(RankedWeek.league_season_id)\
+        .order_by(RankedWeek.league_season_id.desc()).first()
     ranked_battles_this_week = RankedBattleLog.query.join(
         Player, RankedBattleLog.player_tag == Player.tag
     ).filter(
-        RankedBattleLog.ranked_week.has(RankedWeek.start_day >= week_start_date),
+        RankedBattleLog.league_season_id == current_season[0],
         RankedBattleLog.attack == True,
         Player.in_clan == True
-    ).count()
+    ).count() if current_season else 0
     week_start_name = week_start.strftime('%A')
 
     active_war  = ClanWar.query.filter(
