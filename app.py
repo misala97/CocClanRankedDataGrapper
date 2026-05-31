@@ -132,7 +132,8 @@ def index():
     total_members = Player.query.filter_by(in_clan=True).count()
     now_local = dt.datetime.now(LOCAL_TZ)
     week_start_date = (now_local - dt.timedelta(days=now_local.weekday())).date()
-    week_start = dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day, tzinfo=LOCAL_TZ)
+    week_start = dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day, tzinfo=LOCAL_TZ)\
+        .astimezone(dt.timezone.utc).replace(tzinfo=None)
 
     week_logs = BattleLog.query.join(BattleLog.player).filter(
         BattleLog.time >= week_start,

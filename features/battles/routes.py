@@ -30,7 +30,8 @@ def battle_history_page():
         else:
             week_start = current_week_start
         week_end       = week_start + dt.timedelta(days=6)
-        week_start_dt  = dt.datetime(week_start.year, week_start.month, week_start.day, tzinfo=LOCAL_TZ)
+        week_start_dt  = dt.datetime(week_start.year, week_start.month, week_start.day, tzinfo=LOCAL_TZ)\
+            .astimezone(dt.timezone.utc).replace(tzinfo=None)
         next_monday_dt = week_start_dt + dt.timedelta(days=7)
 
     oldest = (
