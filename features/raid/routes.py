@@ -19,7 +19,7 @@ def raid_weekend_page():
     if not selected_id and all_raids:
         selected_id = all_raids[0].id
 
-    selected_raid = RaidWeekend.query.filter_by(id=selected_id).first() if selected_id else None
+    selected_raid = next((r for r in all_raids if r.id == selected_id), None) if selected_id else None
 
     player_data = []
     total_log_attacks = 0

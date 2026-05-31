@@ -8,7 +8,7 @@ from extensions import db
 from models import Player, RankedWeek, RankedBattleLog, BattleLog, RaidWeekend, RaidWeekendLog
 from services.db import db_player_get
 from services.helpers import (
-    to_local, _calc_th_multiplier, _league_mult, _ranked_verdict,
+    _calc_th_multiplier, _league_mult, _ranked_verdict,
     _district_stats, _raid_verdict,
 )
 
@@ -312,6 +312,151 @@ def player_profile(tag):
                            raid_history=raid_history)
 
 
+def _calculate_scores_bulk(player_tags, period='month'):
+    if not player_tags:
+        return {}
+
+    now = dt.datetime.now(dt.timezone.utc)
+    if period == 'week':
+        season_limit, raid_limit, battle_days = 1, 1, 7
+    elif period == 'month':
+        season_limit, raid_limit, battle_days = 4, 4, 30
+    else:
+        season_limit, raid_limit, battle_days = 16, 20, 180
+
+    weeks_float = battle_days / 7
+
+    # ── seasons (shared) ─────────────────────────────────────────────────────
+    season_ids = [r.league_season_id for r in
+                  db.session.query(RankedWeek.league_season_id).distinct()
+                  .order_by(RankedWeek.league_season_id.desc()).limit(season_limit).all()]
+    total_seasons = len(season_ids)
+
+    all_weeks = (RankedWeek.query
+                 .filter(RankedWeek.league_season_id.in_(season_ids))
+                 .options(selectinload(RankedWeek.battle_logs))
+                 .all()) if season_ids else []
+    weeks_by_player = {}
+    for w in all_weeks:
+        weeks_by_player.setdefault(w.player_tag, []).append(w)
+
+    # ── ranked attack counts (bulk) ───────────────────────────────────────────
+    all_week_pks = [(w.league_group_tag, w.league_season_id) for w in all_weeks]
+    if all_week_pks:
+        ranked_attack_map = dict(
+            db.session.query(RankedBattleLog.player_tag, func.count())
+            .filter(RankedBattleLog.player_tag.in_(player_tags),
+                    RankedBattleLog.attack == True,
+                    tuple_(RankedBattleLog.league_group_tag, RankedBattleLog.league_season_id).in_(all_week_pks))
+            .group_by(RankedBattleLog.player_tag)
+            .all()
+        )
+    else:
+        ranked_attack_map = {}
+
+    # ── battle stats (bulk) ───────────────────────────────────────────────────
+    cutoff = now - dt.timedelta(days=battle_days)
+    loot_expr = (func.coalesce(BattleLog.loot_gold, 0) +
+                 func.coalesce(BattleLog.loot_elixir, 0) +
+                 func.coalesce(BattleLog.loot_dark_elixir, 0))
+
+    battle_rows = (db.session.query(BattleLog.player_tag, func.count(), func.sum(loot_expr))
+                   .filter(BattleLog.player_tag.in_(player_tags),
+                           BattleLog.attack == True,
+                           BattleLog.time >= cutoff)
+                   .group_by(BattleLog.player_tag)
+                   .all())
+    battle_count_map = {tag: cnt  for tag, cnt, _   in battle_rows}
+    loot_map         = {tag: loot for tag, _,   loot in battle_rows}
+
+    clan_member_count = len(player_tags)
+    clan_total_battles = sum(battle_count_map.values())
+    clan_total_loot    = sum((v or 0) for v in loot_map.values())
+    clan_weekly_avg    = clan_total_battles / clan_member_count / weeks_float if clan_member_count else 0
+    clan_avg_loot      = clan_total_loot / clan_member_count if clan_member_count else 0
+
+    # ── raid logs (bulk) ─────────────────────────────────────────────────────
+    last_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).limit(raid_limit).all()
+    raid_ids   = [r.id for r in last_raids]
+    total_raids = len(raid_ids)
+
+    all_raid_logs = (RaidWeekendLog.query
+                     .filter(RaidWeekendLog.playerTag.in_(player_tags),
+                             RaidWeekendLog.raid_weekend_id.in_(raid_ids))
+                     .all()) if raid_ids else []
+    raid_logs_by_player = {}
+    for l in all_raid_logs:
+        raid_logs_by_player.setdefault(l.playerTag, {}).setdefault(l.raid_weekend_id, []).append(l)
+
+    # ── compute per-player ────────────────────────────────────────────────────
+    results = {}
+    for tag in player_tags:
+        player_weeks  = weeks_by_player.get(tag, [])
+        player_max    = sum(w.max_attacks or 0 for w in player_weeks)
+
+        # --- activity ---
+        total_done         = ranked_attack_map.get(tag, 0)
+        ranked_score       = min(100, round(100 * total_done / player_max)) if player_max else 0
+        battles_in_window  = battle_count_map.get(tag, 0)
+        player_weekly_avg  = battles_in_window / weeks_float
+        battle_score       = min(100, round(100 * player_weekly_avg / clan_weekly_avg)) if clan_weekly_avg > 0 else 0
+        raid_attacks       = sum(len(v) for v in raid_logs_by_player.get(tag, {}).values())
+        raid_max_possible  = total_raids * 6
+        raid_score         = min(100, round(100 * raid_attacks / raid_max_possible)) if raid_max_possible else 0
+        act_total          = round((ranked_score + battle_score + raid_score) / 3)
+        if act_total >= 80:   act_label, act_color = 'Active',   'green'
+        elif act_total >= 50: act_label, act_color = 'Regular',  'blue'
+        elif act_total >= 20: act_label, act_color = 'Casual',   'accent'
+        else:                 act_label, act_color = 'Inactive', 'red'
+
+        # --- skill ---
+        ranked_skill_scores = []
+        for rw in player_weeks:
+            a_logs      = [l for l in rw.battle_logs if l.attack is True or l.attack == 1]
+            player_th   = rw.townhall or 0
+            max_attacks = rw.max_attacks or 0
+            if not max_attacks:
+                continue
+            adj = []
+            for l in a_logs:
+                try:    opp_th = int(l.opponent_th)
+                except: opp_th = player_th
+                adj.append((l.stars or 0) * _calc_th_multiplier(opp_th - player_th, player_th))
+            lm = _league_mult(rw.league_tier, player_th)
+            ranked_skill_scores.append(min(round(sum(adj) / max_attacks * lm * 100 / 3.45), 100))
+        ranked_skill_scores.extend([0] * (total_seasons - len(ranked_skill_scores)))
+        ranked_skill = round(sum(ranked_skill_scores) / len(ranked_skill_scores)) if ranked_skill_scores else 0
+
+        raid_logs_by_id  = raid_logs_by_player.get(tag, {})
+        raid_skill_scores = [_raid_verdict(raid_logs_by_id.get(rid, []))[2] for rid in raid_ids]
+        raid_skill        = round(sum(raid_skill_scores) / len(raid_skill_scores)) if raid_skill_scores else 0
+
+        player_loot  = loot_map.get(tag) or 0
+        battle_skill = min(100, round(100 * player_loot / clan_avg_loot)) if clan_avg_loot > 0 else 0
+
+        sk_total = round((ranked_skill + raid_skill + battle_skill) / 3)
+        if sk_total >= 80:   sk_label, sk_color = 'Elite',   'purple'
+        elif sk_total >= 60: sk_label, sk_color = 'Strong',  'green'
+        elif sk_total >= 40: sk_label, sk_color = 'Average', 'blue'
+        elif sk_total >= 20: sk_label, sk_color = 'Weak',    'accent'
+        else:                sk_label, sk_color = 'Novice',  'muted'
+
+        results[tag] = {
+            'activity': {
+                'score': act_total, 'label': act_label, 'label_color': act_color,
+                'ranked_score': ranked_score, 'battle_score': battle_score, 'raid_score': raid_score,
+                'has_data': total_seasons > 0 or battles_in_window > 0 or total_raids > 0,
+            },
+            'skill': {
+                'score': sk_total, 'label': sk_label, 'label_color': sk_color,
+                'ranked_skill': ranked_skill, 'battle_skill': battle_skill, 'raid_skill': raid_skill,
+                'has_data': total_seasons > 0 or total_raids > 0 or player_loot > 0,
+            },
+        }
+
+    return results
+
+
 @player_bp.route('/clan')
 def clan_overview():
     period = request.args.get('period', 'month')
@@ -319,19 +464,24 @@ def clan_overview():
         period = 'month'
 
     players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
+    scores  = _calculate_scores_bulk([p.tag for p in players], period)
+
     player_cards = []
     for player in players:
-        activity = calculate_activity_score(player.tag, period)
-        skill    = calculate_skill_score(player.tag, period)
+        s        = scores.get(player.tag, {})
+        activity = s.get('activity', {'score': 0, 'label': 'Inactive', 'label_color': 'red',
+                                      'ranked_score': 0, 'battle_score': 0, 'raid_score': 0, 'has_data': False})
+        skill    = s.get('skill',    {'score': 0, 'label': 'Novice',   'label_color': 'muted',
+                                      'ranked_skill': 0, 'battle_skill': 0, 'raid_skill': 0, 'has_data': False})
         player_cards.append({
-            'name':         player.name or player.tag,
-            'tag':          player.tag,
-            'tag_url':      player.tag.replace('#', ''),
-            'th':           player.current_th,
-            'league_icon':  player.league_icon,
-            'activity':     activity,
-            'skill':        skill,
-            'combined':     activity['score'] + skill['score'],
+            'name':        player.name or player.tag,
+            'tag':         player.tag,
+            'tag_url':     player.tag.replace('#', ''),
+            'th':          player.current_th,
+            'league_icon': player.league_icon,
+            'activity':    activity,
+            'skill':       skill,
+            'combined':    activity['score'] + skill['score'],
         })
     player_cards.sort(key=lambda x: (-x['combined'], x['name']))
 

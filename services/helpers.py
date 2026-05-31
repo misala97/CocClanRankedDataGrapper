@@ -80,6 +80,7 @@ class JSON_PLAYER_DATA:
 class JSON_CLAN_DATA:
     MEMBER_LIST   = JSONPath("memberList")
     NAME          = JSONPath("name")
+    BADGE_LARGE   = JSONPath("badgeUrls.large")
     WAR_LEAGUE    = JSONPath("warLeague.name")
     LOCATION      = JSONPath("location.name")
     WAR_WINS      = JSONPath("warWins")

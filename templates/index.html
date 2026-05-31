@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ clan_name }} – Clash of Clans Analytics</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23f0a500%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z%22/><path d=%22M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z%22/><path d=%22M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z%22/><path d=%22M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z%22/></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -21,6 +21,7 @@
             --green:   #3fb950;
             --blue:    #58a6ff;
             --red:     #f85149;
+            --yellow:  #e3b341;
             --purple:  #bc8cff;
         }
 
@@ -91,7 +92,9 @@
             width: 100%; height: 100%; background: var(--surface); border: 1px solid var(--border);
             border-radius: 24px; display: flex; align-items: center; justify-content: center;
             font-size: 80px; animation: float 6s ease-in-out infinite; position: relative; z-index: 1;
+            overflow: hidden;
         }
+        .emblem-inner img { width: 75%; height: 75%; object-fit: contain; }
         @keyframes float      { 0%, 100% { transform: translateY(0); }    50% { transform: translateY(-16px); } }
         @keyframes pulse-glow { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
 
@@ -169,9 +172,15 @@
             font-family: 'Rajdhani', sans-serif; font-size: 36px; font-weight: 700; line-height: 1;
         }
         .lc-score-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
-        .lc-score-sep { font-family: 'Rajdhani', sans-serif; font-size: 18px; color: var(--border); font-weight: 700; }
+        .lc-score-sep {
+            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+            letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase;
+            padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;
+            background: var(--surf2);
+        }
         .lc-score-our  .lc-score-num { color: var(--green); }
         .lc-score-them .lc-score-num { color: var(--red); }
+        .lc-score-atk  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
         /* big stat (raid) */
         .lc-big-stat { text-align: center; margin-bottom: 14px; }
@@ -190,11 +199,14 @@
         .lc-meta strong { color: var(--text); font-weight: 600; }
         .lc-meta-end { display: flex; align-items: center; gap: 5px; }
         .lc-meta-end::before { content: '⏰'; font-size: 11px; }
-        .lc-arrow-row {
-            position: absolute; top: 20px; right: 16px;
-            font-size: 16px; color: var(--muted); transition: color .15s, transform .15s;
+        .lc-goto {
+            font-size: 11px; font-weight: 600; font-family: 'Rajdhani', sans-serif;
+            letter-spacing: .6px; text-transform: uppercase;
+            color: var(--muted); border: 1px solid var(--border);
+            padding: 3px 10px; border-radius: 6px; background: var(--surf2);
+            transition: color .15s, border-color .15s;
         }
-        .live-card:hover .lc-arrow-row { color: var(--green); transform: translateX(2px); }
+        .live-card:hover .lc-goto { color: var(--green); border-color: rgba(63,185,80,.4); }
 
         /* ── FEATURES SECTION ── */
         .features {
@@ -348,7 +360,22 @@
             </div>
         </div>
         <div class="hero-emblem">
-            <div class="emblem-inner">⚔️</div>
+            <div class="emblem-inner">
+                {% if clan_badge_url %}
+                <img src="{{ clan_badge_url }}" alt="{{ clan_name }} badge">
+                {% else %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#f0a500" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
+                    <path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                    <path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/>
+                    <path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/>
+                    <path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/>
+                    <path d="M15.5 9H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5S16.33 9 15.5 9z"/>
+                    <path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/>
+                    <path d="M8.5 15H10v-1.5c0-.83-.67-1.5-1.5-1.5S7 12.67 7 13.5 7.67 15 8.5 15z"/>
+                </svg>
+                {% endif %}
+            </div>
         </div>
     </div>
 </section>
@@ -381,11 +408,13 @@
                     <div class="lc-score">
                         <div class="lc-score-side lc-score-our">
                             <div class="lc-score-num">{{ active_war.clan_stars or 0 }}</div>
+                            <div class="lc-score-atk">{{ active_war.clan_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
                             <div class="lc-score-lbl">{{ active_war.clan_name or 'Us' }} ★</div>
                         </div>
-                        <div class="lc-score-sep">—</div>
+                        <div class="lc-score-sep">VS</div>
                         <div class="lc-score-side lc-score-them">
                             <div class="lc-score-num">{{ active_war.opponent_stars or 0 }}</div>
+                            <div class="lc-score-atk">{{ active_war.opponent_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
                             <div class="lc-score-lbl">{{ active_war.opponent_name or 'Them' }} ★</div>
                         </div>
                     </div>
@@ -397,12 +426,14 @@
 
                     <div class="lc-meta">
                         <span>vs <strong>{{ active_war.opponent_name or '?' }}</strong>{% if active_war.team_size %} · {{ active_war.team_size }}v{{ active_war.team_size }}{% endif %}</span>
-                        {% if active_war.end_time %}
-                        <span class="lc-meta-end">Ends {{ active_war.end_time | local_dt('%d.%m · %H:%M') }}</span>
-                        {% endif %}
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            {% if active_war.end_time %}
+                            <span class="lc-meta-end">Ends {{ active_war.end_time | local_dt('%d.%m · %H:%M') }}</span>
+                            {% endif %}
+                            <span class="lc-goto">Go to →</span>
+                        </div>
                     </div>
                 </div>
-                <span class="lc-arrow-row">›</span>
             </a>
             {% endif %}
 
@@ -430,12 +461,14 @@
 
                     <div class="lc-meta">
                         <span>Started {{ active_raid.startTime.strftime('%d.%m') if active_raid.startTime else '—' }}</span>
-                        {% if active_raid.endTime %}
-                        <span class="lc-meta-end">Ends {{ active_raid.endTime | local_dt('%d.%m · %H:%M') }}</span>
-                        {% endif %}
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            {% if active_raid.endTime %}
+                            <span class="lc-meta-end">Ends {{ active_raid.endTime | local_dt('%d.%m · %H:%M') }}</span>
+                            {% endif %}
+                            <span class="lc-goto">Go to →</span>
+                        </div>
                     </div>
                 </div>
-                <span class="lc-arrow-row">›</span>
             </a>
             {% endif %}
 

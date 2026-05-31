@@ -85,11 +85,11 @@ import datetime as _dt
 def _nav_task_status():
     try:
         known = [
-            ('task_update_battle_logs',  'Battles'),
             ('task_update_ranked_weeks', 'Ranked'),
-            ('task_update_clan_members', 'Members'),
+            ('task_update_battle_logs',  'Battles'),
             ('task_update_raid_weekend', 'Raids'),
             ('task_update_clan_war',     'War'),
+            ('task_update_clan_members', 'Members'),
         ]
         now = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
         result = []
@@ -123,16 +123,9 @@ def inject_auth():
 def index():
     import datetime as dt
     from sqlalchemy import func as sa_func
-    from services.api import api_fetch_clan_data
-    from services.helpers import json_get, JSON_CLAN_DATA
-
-    try:
-        clan_data = api_fetch_clan_data(CLAN_TAG)
-        clan_name = json_get(clan_data, JSON_CLAN_DATA.NAME, "Clan")
-    except Exception as e:
-        import logging
-        logging.getLogger().warning(f"Could not fetch clan data for homepage: {e}")
-        clan_name = "Our Clan"
+    latest_war = ClanWar.query.order_by(ClanWar.start_time.desc()).first()
+    clan_name      = (latest_war.clan_name  if latest_war and latest_war.clan_name  else None) or "Our Clan"
+    clan_badge_url = (latest_war.clan_badge if latest_war and latest_war.clan_badge else None)
 
     total_members = Player.query.filter_by(in_clan=True).count()
     now = dt.datetime.now(dt.timezone.utc)
@@ -201,6 +194,7 @@ def index():
     return render_template(
         'index.html',
         clan_name=clan_name,
+        clan_badge_url=clan_badge_url,
         total_members=total_members,
         battle_logs_this_week=battle_logs_this_week,
         ranked_battles_this_week=ranked_battles_this_week,

@@ -37,7 +37,8 @@
     .nav-right { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
 
     /* Task dots */
-    .nav-tasks { display: flex; align-items: center; gap: 4px; }
+    .nav-tasks { display: flex; align-items: center; gap: 6px; }
+    .ntd-group { display: flex; align-items: center; gap: 5px; }
     .ntd {
         width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
         cursor: default; position: relative;
@@ -45,7 +46,11 @@
     .ntd-good { background: var(--green); box-shadow: 0 0 5px rgba(63,185,80,.55); }
     .ntd-warn { background: var(--yellow); }
     .ntd-bad  { background: var(--red);   box-shadow: 0 0 5px rgba(248,81,73,.45); }
-    .ntd-none { background: var(--border); }
+    .ntd-none { background: #4a5058; }
+    .ntd-current {
+        width: 9px; height: 9px;
+        box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px rgba(255,255,255,.5) !important;
+    }
     .ntd-tip {
         display: none; position: absolute; top: calc(100% + 10px); left: 50%;
         transform: translateX(-50%); z-index: 300;
@@ -57,6 +62,15 @@
     .ntd-tip-name { font-weight: 700; margin-bottom: 1px; font-family: 'Rajdhani', sans-serif; font-size: 12px; }
     .ntd-tip-time { color: var(--muted); font-size: 11px; }
     .ntd:hover .ntd-tip { display: block; }
+    .ntd-inline-time {
+        font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+        letter-spacing: .3px;
+    }
+    .ntd-inline-good { color: var(--green); }
+    .ntd-inline-warn { color: var(--yellow); }
+    .ntd-inline-bad  { color: var(--red); }
+    .ntd-inline-none { color: var(--muted); }
+    .ntd-sep { width: 2px; height: 15px; background: rgba(224, 224, 224, 0.46); flex-shrink: 0; }
 
     /* User chip */
     .nav-user {
@@ -89,6 +103,7 @@
 </style>
 
 {% set _p = request.path %}
+{% set _task_pages = {'Battles': '/battles', 'Ranked': '/ranked', 'Members': '/clan', 'Raids': '/raid', 'War': '/war'} %}
 <nav>
     <div class="nav-inner">
         <a href="/" class="nav-logo">
@@ -114,12 +129,18 @@
             {% if nav_task_status %}
             <div class="nav-tasks">
                 {% for t in nav_task_status %}
-                <div class="ntd ntd-{{ t.status }}">
-                    <div class="ntd-tip">
-                        <div class="ntd-tip-name">{{ t.label }}</div>
-                        <div class="ntd-tip-time">{{ t.time_str }}</div>
+                {% set _tpath = _task_pages.get(t.label, '') %}
+                {% set _is_cur = _tpath and _p.startswith(_tpath) %}
+                <div class="ntd-group">
+                    <div class="ntd ntd-{{ t.status }}{% if _is_cur %} ntd-current{% endif %}">
+                        <div class="ntd-tip">
+                            <div class="ntd-tip-name">{{ t.label }}</div>
+                            <div class="ntd-tip-time">{{ t.time_str }}</div>
+                        </div>
                     </div>
+                    {% if _is_cur %}<span class="ntd-inline-time ntd-inline-{{ t.status }}">{{ t.time_str }}</span>{% endif %}
                 </div>
+                {% if not loop.last %}<span class="ntd-sep"></span>{% endif %}
                 {% endfor %}
             </div>
             <div class="nav-sep"></div>

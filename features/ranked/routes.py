@@ -25,16 +25,29 @@ def ranked_weeks_page():
     if not selected_week_id and distinct_weeks:
         selected_week_id = distinct_weeks[0].league_season_id
 
+    last_10_seasons = [dw.league_season_id for dw in distinct_weeks[:10]]
+    season_filter   = set(last_10_seasons)
+    if selected_week_id:
+        season_filter.add(selected_week_id)
+
+    all_weeks = (RankedWeek.query
+                 .filter(RankedWeek.league_season_id.in_(season_filter))
+                 .options(selectinload(RankedWeek.battle_logs))
+                 .all()) if season_filter else []
+    weeks_by_player = {}
+    for w in all_weeks:
+        weeks_by_player.setdefault(w.player_tag, []).append(w)
+
+    distinct_week_map = {dw.league_season_id: dw for dw in distinct_weeks}
+
     week_data = []
-    all_players = Player.query.options(
-        selectinload(Player.ranked_weeks).selectinload(RankedWeek.battle_logs)
-    ).all()
+    all_players = Player.query.all()
 
     for player in all_players:
         ranked_week = None
         if selected_week_id:
             ranked_week = next(
-                (rw for rw in player.ranked_weeks if rw.league_season_id == selected_week_id),
+                (rw for rw in weeks_by_player.get(player.tag, []) if rw.league_season_id == selected_week_id),
                 None
             )
 
@@ -163,13 +176,16 @@ def ranked_weeks_page():
 
     week_data.sort(key=lambda item: (item['rank'] or 9999, item['player_name'] or ''))
 
-    last_10_seasons = [dw.league_season_id for dw in distinct_weeks[:10]]
     player_history = {}
+    player_weeks_by_season = {}
+    for tag, weeks in weeks_by_player.items():
+        player_weeks_by_season[tag] = {w.league_season_id: w for w in weeks}
+
     for player in all_players:
         history = []
         for season_id in reversed(last_10_seasons):
-            dw = next((d for d in distinct_weeks if d.league_season_id == season_id), None)
-            rw = next((r for r in player.ranked_weeks if r.league_season_id == season_id), None)
+            dw = distinct_week_map.get(season_id)
+            rw = player_weeks_by_season.get(player.tag, {}).get(season_id)
             if rw and dw:
                 a_stars = [log.stars or 0 for log in rw.battle_logs if log.attack is True or log.attack == 1]
                 d_stars = [log.stars or 0 for log in rw.battle_logs if not (log.attack is True or log.attack == 1)]
