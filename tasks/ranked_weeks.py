@@ -129,6 +129,7 @@ def task_update_ranked_weeks():
                 try:
                     tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
                     db_ranked_week_update(done_week, tmp_ranked_week, True)
+                    weeks_updated += 1
                 except Exception as e:
                     ranked_logger.error(f"Failed to update done ranked week for {done_week.player.name}: {e}", exc_info=True)
                     db.session.rollback()
