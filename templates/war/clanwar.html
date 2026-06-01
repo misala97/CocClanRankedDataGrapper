@@ -538,15 +538,18 @@
             <h1>Clan <span>War</span></h1>
             <p class="page-sub">Attack logs, star counts and member performance per war.</p>
         </div>
-        {% if war_options %}
-        <form method="GET">
-            <select name="war_id" class="selector" onchange="this.form.submit()">
-                {% for opt in war_options %}
-                <option value="{{ opt.id }}" {% if opt.id == selected_id %}selected{% endif %}>{{ opt.label }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            {% if war_options %}
+            <form method="GET">
+                <select name="war_id" class="selector" onchange="this.form.submit()">
+                    {% for opt in war_options %}
+                    <option value="{{ opt.id }}" {% if opt.id == selected_id %}selected{% endif %}>{{ opt.label }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% endif %}
+            <a href="/war/stats" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--surf2);color:var(--muted);font-size:12px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;text-transform:uppercase;transition:all .15s;text-decoration:none;" onmouseover="this.style.color='var(--text)';this.style.borderColor='var(--muted)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">📊 Long-term Stats</a>
+        </div>
     </div>
 </div>
 

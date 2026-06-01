@@ -59,7 +59,7 @@ WAR_COMBOS = {
     (FARM, FARM):                      (50,  'Farmer'),
     (FAILED_FARM, FARM):               (25,  'Inconsitend Farmer'),
     (WASTED, FARM):                    (25,  'Inconsitend Farmer'),
-    (WASTED, WASTED):                  (0, 'Wasted'),
+    (WASTED, WASTED):                  (15, 'Wasted'),
     (NO_ATTACK, NO_ATTACK):            (0,   'No Show'),
 }
 
