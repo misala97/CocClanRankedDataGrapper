@@ -366,6 +366,71 @@
         .mt-dis  { color: var(--red);   font-weight: 700; }
         .mt-even { color: var(--muted); }
 
+        /* ── JUDGMENT BADGES ── */
+        .judgment {
+            display: inline-block; padding: 5px 12px; border-radius: 20px;
+            font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.5px; text-transform: uppercase; border: 1px solid transparent;
+        }
+        .badge-godlike  { background: rgba(188,140,255,0.15); color: var(--purple); border-color: rgba(188,140,255,0.4); }
+        .badge-dominant { background: rgba(240,165,0,0.15);   color: var(--accent); border-color: rgba(240,165,0,0.35); }
+        .badge-wow      { background: rgba(63,185,80,0.12);   color: var(--green);  border-color: rgba(63,185,80,0.3); }
+        .badge-good     { background: rgba(88,166,255,0.12);  color: var(--blue);   border-color: rgba(88,166,255,0.25); }
+        .badge-warning  { background: rgba(210,153,34,0.12);  color: var(--yellow); border-color: rgba(210,153,34,0.3); }
+        .badge-suck     { background: rgba(248,81,73,0.12);   color: var(--red);    border-color: rgba(248,81,73,0.3); }
+        .badge-inactive { background: rgba(139,148,158,0.08); color: var(--muted);  border-color: rgba(139,148,158,0.2); }
+
+        /* ── VERDICT DETAIL EXPAND ── */
+        .vd-row { display: none; }
+        .vd-row.expanded { display: table-row; }
+        .vd-cell { padding: 0 !important; border: none !important; background: var(--bg); border-bottom: 1px solid var(--border) !important; }
+        .vd-inner { padding: 16px; }
+        .vd-section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+        .vd-section h4 {
+            margin-bottom: 12px; font-family: 'Rajdhani', sans-serif; font-size: 13px;
+            font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px;
+        }
+
+        /* ── VERDICT TABLE ── */
+        .vt-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .vt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .vt-table thead th {
+            padding: 11px 16px; text-align: left; font-weight: 600; color: var(--muted);
+            font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
+            border-bottom: 1px solid var(--border); background: var(--surf2);
+        }
+        .vt-table tbody tr { border-bottom: 1px solid var(--bord2); transition: background 0.12s; cursor: pointer; }
+        .vt-table tbody tr:last-child { border-bottom: none; }
+        .vt-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+        .vt-table tbody td { padding: 12px 16px; vertical-align: middle; }
+        .vt-sortable { cursor: pointer; user-select: none; }
+        .vt-sortable:hover { color: var(--text); }
+        .vt-sort-active { color: var(--accent) !important; }
+        .vt-sort-active.asc::after  { content: ' ↑'; font-size: 0.85em; }
+        .vt-sort-active.desc::after { content: ' ↓'; font-size: 0.85em; }
+
+        /* ── ACTION BUTTON ── */
+        .action-btn {
+            padding: 5px 14px; background: transparent; color: var(--accent);
+            border: 1px solid rgba(240,165,0,0.35); border-radius: 6px;
+            font-weight: 700; font-size: 11px; font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer;
+            transition: all 0.15s; min-width: 72px;
+        }
+        .action-btn:hover { background: rgba(240,165,0,0.1); border-color: var(--accent); }
+
+        /* ── ATTACK PILLS ── */
+        .atk-pill {
+            display: inline-block; padding: 1px 6px; border-radius: 10px;
+            font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.4px; text-transform: uppercase; border: 1px solid transparent;
+        }
+        .ap-farm    { background: rgba(248,81,73,0.1);   color: var(--red);    border-color: rgba(248,81,73,0.25); }
+        .ap-cleanup { background: rgba(88,166,255,0.1);  color: var(--blue);   border-color: rgba(88,166,255,0.25); }
+        .ap-3star   { background: rgba(248,81,73,0.07);  color: var(--red);    border-color: rgba(248,81,73,0.18); opacity:.75; }
+        .ap-rushed  { background: rgba(240,165,0,0.08);  color: var(--accent); border-color: rgba(240,165,0,0.2);  opacity:.8; }
+        .ap-troll   { background: rgba(139,148,158,0.08);color: var(--muted);  border-color: rgba(139,148,158,0.2);opacity:.8; }
+
         .no-war { text-align: center; padding: 80px 32px; color: var(--muted); }
         .no-war-icon { font-size: 48px; margin-bottom: 12px; }
         .no-war h2 { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); }
@@ -640,6 +705,32 @@
     <div class="cmp-sec" id="cmp-th"></div>
     <div class="cmp-sec" id="cmp-league"></div>
     <div class="cmp-sec" id="cmp-matchup"></div>
+</div>
+{% endif %}
+
+{# ── WAR VERDICTS ── #}
+{% if war_verdicts %}
+<div class="recent-card" id="warVerdictCard">
+    <div class="recent-header" onclick="toggleWarVerdicts()">
+        <span class="recent-header-title">⚔ War Performance · {{ war_verdicts | length }} players</span>
+        <span class="recent-chevron" id="warVerdictChevron">▼</span>
+    </div>
+    <div class="recent-body" id="warVerdictBody" style="display:none;">
+        <div class="vt-wrap">
+            <table class="vt-table" id="warVerdictTable">
+                <thead>
+                    <tr>
+                        <th class="vt-sortable" onclick="sortWarVerdict('player_name')">Player</th>
+                        <th class="vt-sortable" onclick="sortWarVerdict('attacks_used')" style="text-align:center;">Attacks</th>
+                        <th class="vt-sortable" onclick="sortWarVerdict('score')" style="text-align:center;">Score</th>
+                        <th style="text-align:center;">Verdict</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="warVerdictTbody"></tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endif %}
 
@@ -1093,6 +1184,10 @@ function buildWarAttackLog() {
     const rows = attacks.slice(0, 20).map(a => {
         const nameColor = a.attacker_side === 'our' ? 'var(--green)' : 'var(--red)';
         const starScore = a.stars === 3 ? 'var(--green)' : a.stars === 2 ? 'var(--yellow)' : a.stars === 1 ? 'var(--accent)' : 'var(--muted)';
+        let pills = '';
+        if (a.already_3star) pills += `<span class="atk-pill ap-3star">Already ★★★</span> `;
+        if (a.is_cleanup)    pills += `<span class="atk-pill ap-cleanup">Cleanup</span>`;
+        else if (a.is_farm && !a.already_3star) pills += `<span class="atk-pill ap-farm">Farm</span>`;
         return `<tr>
             <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.attacker_pos}</td>
             <td style="font-weight:600;color:${nameColor}">${escapeHTML(a.attacker_name)}</td>
@@ -1103,16 +1198,143 @@ function buildWarAttackLog() {
             <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.defender_th}</td>
             <td>${renderStars(a.stars)}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-weight:700;color:${starScore}">${a.pct}%</td>
+            <td>${pills}</td>
         </tr>`;
     }).join('');
     body.innerHTML = `<div class="table-scroll"><table class="detail-table">
         <thead><tr>
             <th>#</th><th>Attacker</th><th>TH</th><th></th>
-            <th>#</th><th>Defender</th><th>TH</th><th>Stars</th><th>Dest %</th>
+            <th>#</th><th>Defender</th><th>TH</th><th>Stars</th><th>Dest %</th><th>Tags</th>
         </tr></thead>
         <tbody>${rows}</tbody>
     </table></div>`;
 }
+
+{% if war_verdicts %}
+const WAR_VERDICTS = {{ war_verdicts | tojson | safe }};
+let wvSort = { col: 'score', dir: 'desc' };
+
+function renderWVStars(n) {
+    return `<span style="font-size:1.15em;letter-spacing:1px;color:var(--yellow)">${'★'.repeat(n)}</span>`
+         + `<span style="font-size:1.15em;letter-spacing:1px;color:var(--muted);opacity:.4">${'☆'.repeat(3-n)}</span>`;
+}
+
+function renderWVPills(a) {
+    let p = '';
+    if (a.already_3star) p += `<span class="atk-pill ap-3star">Already ★★★</span> `;
+    if (a.is_cleanup)    p += `<span class="atk-pill ap-cleanup">Cleanup</span> `;
+    else if (a.is_farm && !a.already_3star) p += `<span class="atk-pill ap-farm">Farm</span> `;
+    if (a.is_rushed)     p += `<span class="atk-pill ap-rushed">Rushed</span> `;
+    if (a.is_troll)      p += `<span class="atk-pill ap-troll">Troll</span> `;
+    return p;
+}
+
+function buildWVDetails(v) {
+    const verdictMap = {
+        'badge-godlike':'War Hero','badge-dominant':'Excellent','badge-wow':'Solid',
+        'badge-good':'Average','badge-warning':'Weak','badge-suck':'Disaster','badge-inactive':'No Show'
+    };
+    let rows = '';
+    v.attack_details.forEach(a => {
+        const thDiff = a.th_diff > 0 ? `<span style="color:var(--red)">↑TH+${a.th_diff}</span>`
+                     : a.th_diff < 0 ? `<span style="color:var(--green)">↓TH${a.th_diff}</span>`
+                     : `<span style="color:var(--muted)">=TH</span>`;
+        rows += `<tr>
+            <td>${renderWVStars(a.stars)}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--blue);">${a.pct}%</td>
+            <td>
+                <span style="font-weight:600">${escapeHTML(a.defender_name)}</span>
+                <span style="font-size:11px;color:var(--muted);margin-left:6px;">TH${a.defender_th} · #${a.defender_pos}</span>
+                ${thDiff}
+            </td>
+            <td>${renderWVPills(a)}</td>
+        </tr>`;
+    });
+    if (v.attacks_used === 0) {
+        rows = `<tr><td colspan="4" style="color:var(--muted);font-style:italic;opacity:.6">No attacks used</td></tr>`;
+    }
+    return `<div class="vd-inner"><div class="vd-section">
+        <h4>Verdict Breakdown</h4>
+        <div style="margin-bottom:12px;font-size:12px;color:var(--muted);display:flex;gap:20px;flex-wrap:wrap;">
+            <span>Attacks used: <strong style="color:var(--text)">${v.attacks_used} / 2</strong></span>
+            <span>Score: <strong style="color:var(--accent)">${v.score}</strong> = Σ (TH-adj stars × modifiers) / 2 attacks / 3</span>
+            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${verdictMap[v.badge] || v.label}${v.score > 0 ? ` · ${v.score}` : ''}</span></span>
+        </div>
+        <table class="detail-table">
+            <thead><tr><th>Stars</th><th>Dest %</th><th>Target</th><th>Tags</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </div></div>`;
+}
+
+function buildWarVerdictTable() {
+    const sorted = [...WAR_VERDICTS].sort((a, b) => {
+        let av = a[wvSort.col] ?? 0, bv = b[wvSort.col] ?? 0;
+        if (typeof av === 'string') av = av.toLowerCase();
+        if (typeof bv === 'string') bv = bv.toLowerCase();
+        if (av < bv) return wvSort.dir === 'asc' ? -1 : 1;
+        if (av > bv) return wvSort.dir === 'asc' ?  1 : -1;
+        return 0;
+    });
+    const tbody = document.getElementById('warVerdictTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    const verdictMap = {
+        'badge-godlike':'War Hero','badge-dominant':'Excellent','badge-wow':'Solid',
+        'badge-good':'Average','badge-warning':'Weak','badge-suck':'Disaster','badge-inactive':'No Show'
+    };
+    sorted.forEach(v => {
+        const row = document.createElement('tr');
+        const atkSummary = v.attack_details.map(a =>
+            `${renderWVStars(a.stars)} → <span style="font-size:11px;color:var(--muted);">${escapeHTML(a.defender_name)} TH${a.defender_th}</span>${renderWVPills(a)}`
+        ).join('<br>') || `<span style="color:var(--muted);opacity:.45;">—</span>`;
+
+        row.innerHTML = `
+            <td>
+                <div style="font-weight:600;font-size:13.5px;">${escapeHTML(v.player_name)}</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:1px;">${v.league ? escapeHTML(v.league) + ' · ' : ''}TH${v.player_th} · #${v.map_pos}</div>
+            </td>
+            <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${v.attacks_used}<span style="font-size:12px;color:var(--muted);font-weight:400;">/2</span></td>
+            <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;">${v.score}</td>
+            <td style="text-align:center;"><span class="judgment ${v.badge}">${verdictMap[v.badge] || v.label}</span></td>
+            <td><button type="button" class="action-btn details-toggle" onclick="event.stopPropagation()">Details</button></td>
+        `;
+
+        const detailRow = document.createElement('tr');
+        detailRow.className = 'vd-row';
+        detailRow.innerHTML = `<td class="vd-cell" colspan="5">${buildWVDetails(v)}</td>`;
+
+        row.addEventListener('click', () => {
+            const open = detailRow.classList.toggle('expanded');
+            row.querySelector('.details-toggle').textContent = open ? 'Close' : 'Details';
+        });
+
+        tbody.appendChild(row);
+        tbody.appendChild(detailRow);
+    });
+
+    document.querySelectorAll('#warVerdictTable .vt-sortable').forEach(th => {
+        th.classList.remove('vt-sort-active','asc','desc');
+        const col = th.getAttribute('onclick')?.match(/sortWarVerdict\('(\w+)'\)/)?.[1];
+        if (col === wvSort.col) { th.classList.add('vt-sort-active', wvSort.dir); }
+    });
+}
+
+function sortWarVerdict(col) {
+    if (wvSort.col === col) wvSort.dir = wvSort.dir === 'asc' ? 'desc' : 'asc';
+    else { wvSort.col = col; wvSort.dir = col === 'player_name' ? 'asc' : 'desc'; }
+    buildWarVerdictTable();
+}
+
+function toggleWarVerdicts() {
+    const body    = document.getElementById('warVerdictBody');
+    const chevron = document.getElementById('warVerdictChevron');
+    const opening = body.style.display === 'none' || body.style.display === '';
+    body.style.display = opening ? 'block' : 'none';
+    chevron.classList.toggle('open', opening);
+    if (opening && !document.getElementById('warVerdictTbody').children.length) buildWarVerdictTable();
+}
+{% endif %}
 
 function toggleWarAttackLog() {
     const body    = document.getElementById('warLogBody');
