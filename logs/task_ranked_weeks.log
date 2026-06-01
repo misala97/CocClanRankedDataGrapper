@@ -276,3 +276,8 @@
 2026-05-31 14:46:30 - INFO - [db_finalize_uptime] - Done in 81.65s | weeks_created=0 weeks_updated=30 attack_logs=6 defense_logs=18 players_failed=0
 2026-05-31 14:46:44 - INFO - [task_update_ranked_weeks] - Starting at 2026-05-31 12:46:44 UTC
 2026-05-31 14:47:46 - INFO - [db_finalize_uptime] - Done in 62.62s | weeks_created=0 weeks_updated=30 attack_logs=0 defense_logs=0 players_failed=0
+2026-06-01 10:53:03 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 08:53:03 UTC
+2026-06-01 11:04:33 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 09:04:33 UTC
+2026-06-01 11:10:36 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 09:10:36 UTC
+2026-06-01 11:14:21 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 09:14:21 UTC
+2026-06-01 11:15:52 - INFO - [db_finalize_uptime] - Done in 91.61s | weeks_created=22 weeks_updated=3 attack_logs=0 defense_logs=0 players_failed=0

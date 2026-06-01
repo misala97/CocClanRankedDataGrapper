@@ -120,7 +120,14 @@ def task_update_ranked_weeks():
 
             for done_week in db_ranked_week_get_all_done(db_player):
                 try:
-                    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, group_data_api)
+                    done_group_data_api = api_fetch_league_group(done_week.league_group_tag, done_week.league_season_id, db_player.tag)
+                except Exception as e:
+                    ranked_logger.warning(f"Could not fetch league group for {db_player.name}: {e}")
+                    players_failed += 1
+                    continue
+                
+                try:
+                    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
                     db_ranked_week_update(done_week, tmp_ranked_week, True)
                 except Exception as e:
                     ranked_logger.error(f"Failed to update done ranked week for {done_week.player.name}: {e}", exc_info=True)

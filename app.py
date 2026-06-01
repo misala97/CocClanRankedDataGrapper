@@ -223,7 +223,7 @@ if __name__ == '__main__':
     #task_update_clan_members()
     #task_update_battle_logs()
     #task_update_raid_weekend()
-    #task_update_ranked_weeks()
+    task_update_ranked_weeks()
     #task_update_clan_war()
 
     app.run(debug=True, use_reloader=False)
