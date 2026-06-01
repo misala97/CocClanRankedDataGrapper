@@ -6,7 +6,8 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from models import ClanWar, ClanWarMember
 from features.auth.routes import _can_edit_clan_war
-from services.helpers import avg_league_name, league_rank, _calc_th_multiplier
+from services.helpers import avg_league_name, league_rank
+from features.war.war_combos import classify_attack, get_war_verdict
 
 war_bp = Blueprint('war', __name__)
 
@@ -64,11 +65,11 @@ def clan_war_page():
             dfn_pos = int(dfn.map_position or 0)    if dfn else 0
             prior   = [x for x in attacks_on_defender.get(a.defender_tag, [])
                        if (x.attack_order or 0) < (a.attack_order or 0)]
-            already_3star = any(x.stars >= 3 for x in prior)
-            pos_diff  = dfn_pos - atk_pos
-            th_favor  = atk_th  - dfn_th
-            is_farm    = already_3star or (pos_diff >= 3 and th_favor >= 3)
-            is_cleanup = not already_3star and pos_diff >= 5 and th_favor >= 2
+            already_3star      = any(x.stars >= 3 for x in prior)
+            partially_attacked = len(prior) > 0 and not already_3star
+            atk_label = classify_attack(
+                int(a.stars or 0), atk_th, dfn_th, already_3star, partially_attacked
+            ) if atk_th and dfn_th else 'unknown'
             all_attacks_json.append({
                 'order':         int(a.attack_order or 0),
                 'attacker_name': str(atk.player_name or '?') if atk else '?',
@@ -80,9 +81,7 @@ def clan_war_page():
                 'defender_th':   dfn_th,
                 'stars':         int(a.stars or 0),
                 'pct':           int(a.destruction_pct or 0),
-                'already_3star': already_3star,
-                'is_farm':       is_farm,
-                'is_cleanup':    is_cleanup,
+                'label':         atk_label,
             })
 
     # ── War verdicts ──────────────────────────────────────────────────────────
@@ -94,34 +93,31 @@ def clan_war_page():
             atk_list = attacks_by_attacker.get(m.player_tag, [])
 
             atk_details = []
-            total_adj   = 0.0
+            labels      = []
 
             for atk in atk_list:
                 dfn      = member_by_tag.get(atk.defender_tag)
                 dfn_th   = (dfn.town_hall_level or 0) if dfn else atk_th
-                dfn_pos  = (dfn.map_position or 0)   if dfn else 0
+                dfn_pos  = (dfn.map_position or 0)    if dfn else 0
                 stars    = atk.stars or 0
 
                 prior = [a for a in attacks_on_defender.get(atk.defender_tag, [])
                          if (a.attack_order or 0) < (atk.attack_order or 0)]
-                already_3star = any(a.stars >= 3 for a in prior)
+                already_3star      = any(a.stars >= 3 for a in prior)
+                partially_attacked = len(prior) > 0 and not already_3star
 
-                pos_diff    = dfn_pos - atk_pos          # positive → defender weaker
-                th_favor    = atk_th  - dfn_th           # positive → attacker stronger TH
-                is_farm     = already_3star or (pos_diff >= 5 and th_favor >= 2)
-                is_cleanup  = not already_3star and pos_diff >= 5 and th_favor >= 2
-                is_rushed   = bool(dfn.is_rushed) if dfn else False
-                is_troll    = bool(dfn.is_troll)  if dfn else False
+                label = classify_attack(stars, atk_th, dfn_th, already_3star, partially_attacked)
+                labels.append(label)
 
-                adj = stars * _calc_th_multiplier(dfn_th - atk_th, atk_th)
-                if is_rushed or is_troll:
-                    adj *= 0.9
+                stars_before = max((a.stars for a in prior), default=0)
+
                 if already_3star:
-                    adj *= 0.3
-                elif is_cleanup:
-                    adj *= 0.8
+                    target_state = 'cleared'
+                elif partially_attacked:
+                    target_state = 'partial'
+                else:
+                    target_state = 'fresh'
 
-                total_adj += adj
                 atk_details.append({
                     'defender_name': (dfn.player_name or '?') if dfn else '?',
                     'defender_th':   dfn_th,
@@ -129,34 +125,28 @@ def clan_war_page():
                     'stars':         stars,
                     'pct':           int(atk.destruction_pct or 0),
                     'th_diff':       dfn_th - atk_th,
-                    'already_3star': already_3star,
-                    'is_farm':       is_farm,
-                    'is_cleanup':    is_cleanup,
-                    'is_rushed':     is_rushed,
-                    'is_troll':      is_troll,
+                    'pos_diff':      dfn_pos - atk_pos,
+                    'label':         label,
+                    'stars_before':  stars_before,
+                    'target_state':  target_state,
                 })
 
-            score = min(round(total_adj / 2 / 3 * 100), 100)
+            while len(labels) < 2:
+                labels.append('no_attack')
 
-            if not atk_list:
-                badge, label = 'badge-inactive', 'No Show'
-            elif score >= 80: badge, label = 'badge-godlike',  'War Hero'
-            elif score >= 65: badge, label = 'badge-dominant', 'Excellent'
-            elif score >= 50: badge, label = 'badge-wow',      'Solid'
-            elif score >= 30: badge, label = 'badge-good',     'Average'
-            elif score >= 10: badge, label = 'badge-warning',  'Weak'
-            else:             badge, label = 'badge-suck',     'Disaster'
+            score, verdict_label, badge = get_war_verdict(labels[0], labels[1])
 
             war_verdicts.append({
-                'player_name':  m.player_name or m.player_tag,
-                'player_th':    atk_th,
-                'map_pos':      atk_pos,
-                'league':       m.ranked_league or '',
-                'attacks_used': len(atk_list),
+                'player_name':    m.player_name or m.player_tag,
+                'player_th':      atk_th,
+                'map_pos':        atk_pos,
+                'league':         m.ranked_league or '',
+                'attacks_used':   len(atk_list),
                 'attack_details': atk_details,
-                'score':        score,
-                'badge':        badge,
-                'label':        label,
+                'score':          score,
+                'badge':          badge,
+                'label':          verdict_label,
+                'atk_labels':     labels,
             })
 
         war_verdicts.sort(key=lambda x: -x['score'])

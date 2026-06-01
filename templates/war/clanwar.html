@@ -372,13 +372,14 @@
             font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
             letter-spacing: 0.5px; text-transform: uppercase; border: 1px solid transparent;
         }
-        .badge-godlike  { background: rgba(188,140,255,0.15); color: var(--purple); border-color: rgba(188,140,255,0.4); }
-        .badge-dominant { background: rgba(240,165,0,0.15);   color: var(--accent); border-color: rgba(240,165,0,0.35); }
-        .badge-wow      { background: rgba(63,185,80,0.12);   color: var(--green);  border-color: rgba(63,185,80,0.3); }
-        .badge-good     { background: rgba(88,166,255,0.12);  color: var(--blue);   border-color: rgba(88,166,255,0.25); }
-        .badge-warning  { background: rgba(210,153,34,0.12);  color: var(--yellow); border-color: rgba(210,153,34,0.3); }
-        .badge-suck     { background: rgba(248,81,73,0.12);   color: var(--red);    border-color: rgba(248,81,73,0.3); }
-        .badge-inactive { background: rgba(139,148,158,0.08); color: var(--muted);  border-color: rgba(139,148,158,0.2); }
+        .badge-godlike   { background: rgba(188,140,255,0.15); color: var(--purple); border-color: rgba(188,140,255,0.4); }
+        .badge-dominant  { background: rgba(240,165,0,0.15);   color: var(--accent); border-color: rgba(240,165,0,0.35); }
+        .badge-wow       { background: rgba(63,185,80,0.12);   color: var(--green);  border-color: rgba(63,185,80,0.3); }
+        .badge-good      { background: rgba(88,166,255,0.12);  color: var(--blue);   border-color: rgba(88,166,255,0.25); }
+        .badge-warning   { background: rgba(210,153,34,0.12);  color: var(--yellow); border-color: rgba(210,153,34,0.3); }
+        .badge-suck      { background: rgba(248,81,73,0.12);   color: var(--red);    border-color: rgba(248,81,73,0.3); }
+        .badge-inactive  { background: rgba(139,148,158,0.08); color: var(--muted);  border-color: rgba(139,148,158,0.2); }
+        .badge-undefined { background: rgba(139,148,158,0.06); color: var(--muted);  border-color: rgba(139,148,158,0.2); border-style: dashed; }
 
         /* ── VERDICT DETAIL EXPAND ── */
         .vd-row { display: none; }
@@ -386,10 +387,42 @@
         .vd-cell { padding: 0 !important; border: none !important; background: var(--bg); border-bottom: 1px solid var(--border) !important; }
         .vd-inner { padding: 16px; }
         .vd-section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
-        .vd-section h4 {
-            margin-bottom: 12px; font-family: 'Rajdhani', sans-serif; font-size: 13px;
-            font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px;
+        .vd-meta { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+
+        /* ── ATTACK CARDS ── */
+        .atk-cards { display: flex; flex-direction: column; gap: 8px; }
+        .atk-card {
+            display: flex; align-items: stretch;
+            background: var(--surf2); border: 1px solid var(--bord2); border-radius: 8px; overflow: hidden;
         }
+        .atk-card-th {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 4px; padding: 14px 16px; min-width: 150px;
+            border-right: 1px solid var(--bord2);
+            font-family: 'Rajdhani', sans-serif; font-weight: 700;
+        }
+        .atk-th-row { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+        .atk-th-you  { color: var(--text); }
+        .atk-th-sep  { color: var(--muted); font-size: 12px; }
+        .atk-th-them { color: var(--text); }
+        .atk-th-diff { font-size: 11px; letter-spacing: .3px; font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+        .atk-th-divider { width: 100%; height: 1px; background: var(--bord2); margin: 4px 0; }
+        .atk-card-target {
+            flex: 1; padding: 14px 16px; border-right: 1px solid var(--bord2);
+            display: flex; flex-direction: column; justify-content: center; gap: 4px;
+        }
+        .atk-target-name { font-weight: 600; font-size: 14px; line-height: 1.2; }
+        .atk-target-meta { display: flex; align-items: center; gap: 8px; }
+        .atk-target-pos   { font-size: 11px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+        .atk-target-state { margin-top: 5px; }
+        .atk-state-dead    { font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--red); opacity: .8; }
+        .atk-state-partial { font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--yellow); }
+        .atk-state-fresh   { font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); opacity: .55; }
+        .atk-card-result {
+            display: flex; align-items: center; gap: 10px;
+            padding: 14px 18px; min-width: 190px; justify-content: flex-end;
+        }
+        .atk-result-pct { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 15px; color: var(--blue); }
 
         /* ── VERDICT TABLE ── */
         .vt-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -425,11 +458,17 @@
             font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
             letter-spacing: 0.4px; text-transform: uppercase; border: 1px solid transparent;
         }
-        .ap-farm    { background: rgba(248,81,73,0.1);   color: var(--red);    border-color: rgba(248,81,73,0.25); }
-        .ap-cleanup { background: rgba(88,166,255,0.1);  color: var(--blue);   border-color: rgba(88,166,255,0.25); }
-        .ap-3star   { background: rgba(248,81,73,0.07);  color: var(--red);    border-color: rgba(248,81,73,0.18); opacity:.75; }
-        .ap-rushed  { background: rgba(240,165,0,0.08);  color: var(--accent); border-color: rgba(240,165,0,0.2);  opacity:.8; }
-        .ap-troll   { background: rgba(139,148,158,0.08);color: var(--muted);  border-color: rgba(139,148,158,0.2);opacity:.8; }
+        .ap-clear           { background: rgba(63,185,80,0.12);   color: var(--green);  border-color: rgba(63,185,80,0.3); }
+        .ap-failed-clear    { background: rgba(210,153,34,0.12);  color: var(--yellow); border-color: rgba(210,153,34,0.3); }
+        .ap-high-clear      { background: rgba(188,140,255,0.12); color: var(--purple); border-color: rgba(188,140,255,0.3); }
+        .ap-farm            { background: rgba(88,166,255,0.12);  color: var(--blue);   border-color: rgba(88,166,255,0.25); }
+        .ap-failed-farm     { background: rgba(248,81,73,0.12);   color: var(--red);    border-color: rgba(248,81,73,0.3); }
+        .ap-low-clear       { background: rgba(63,185,80,0.07);   color: var(--green);  border-color: rgba(63,185,80,0.2); opacity:.85; }
+        .ap-low-clear-fail  { background: rgba(210,153,34,0.08);  color: var(--yellow); border-color: rgba(210,153,34,0.2); opacity:.85; }
+        .ap-clean-up        { background: rgba(88,166,255,0.1);   color: var(--blue);   border-color: rgba(88,166,255,0.22); }
+        .ap-failed-clean-up { background: rgba(248,81,73,0.1);    color: var(--red);    border-color: rgba(248,81,73,0.25); }
+        .ap-wasted          { background: rgba(139,148,158,0.08); color: var(--muted);  border-color: rgba(139,148,158,0.2); opacity:.75; }
+        .ap-no-attack       { background: rgba(139,148,158,0.05); color: var(--muted);  border-color: rgba(139,148,158,0.15); opacity:.6; }
 
         .no-war { text-align: center; padding: 80px 32px; color: var(--muted); }
         .no-war-icon { font-size: 48px; margin-bottom: 12px; }
@@ -1184,10 +1223,7 @@ function buildWarAttackLog() {
     const rows = attacks.slice(0, 20).map(a => {
         const nameColor = a.attacker_side === 'our' ? 'var(--green)' : 'var(--red)';
         const starScore = a.stars === 3 ? 'var(--green)' : a.stars === 2 ? 'var(--yellow)' : a.stars === 1 ? 'var(--accent)' : 'var(--muted)';
-        let pills = '';
-        if (a.already_3star) pills += `<span class="atk-pill ap-3star">Already ★★★</span> `;
-        if (a.is_cleanup)    pills += `<span class="atk-pill ap-cleanup">Cleanup</span>`;
-        else if (a.is_farm && !a.already_3star) pills += `<span class="atk-pill ap-farm">Farm</span>`;
+        const pills = a.label ? renderAttackLabel(a.label) : '';
         return `<tr>
             <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.attacker_pos}</td>
             <td style="font-weight:600;color:${nameColor}">${escapeHTML(a.attacker_name)}</td>
@@ -1219,51 +1255,102 @@ function renderWVStars(n) {
          + `<span style="font-size:1.15em;letter-spacing:1px;color:var(--muted);opacity:.4">${'☆'.repeat(3-n)}</span>`;
 }
 
-function renderWVPills(a) {
-    let p = '';
-    if (a.already_3star) p += `<span class="atk-pill ap-3star">Already ★★★</span> `;
-    if (a.is_cleanup)    p += `<span class="atk-pill ap-cleanup">Cleanup</span> `;
-    else if (a.is_farm && !a.already_3star) p += `<span class="atk-pill ap-farm">Farm</span> `;
-    if (a.is_rushed)     p += `<span class="atk-pill ap-rushed">Rushed</span> `;
-    if (a.is_troll)      p += `<span class="atk-pill ap-troll">Troll</span> `;
-    return p;
+function renderWarStars(n) {
+    n = parseInt(n) || 0;
+    const filled = `<span style="color:var(--yellow);">${'★'.repeat(n)}</span>`;
+    const empty  = `<span style="color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
+    return `<span style="font-size:1.18em;letter-spacing:1px;">${filled}${empty}</span>`;
+}
+
+function renderBeforeStars(n) {
+    n = parseInt(n) || 0;
+    const filled = `<span style="color:var(--yellow);opacity:.7;">${'★'.repeat(n)}</span>`;
+    const empty  = `<span style="color:var(--muted);opacity:0.3;">${'☆'.repeat(3 - n)}</span>`;
+    return `<span style="font-size:1.0em;letter-spacing:1px;">${filled}${empty}</span>`;
+}
+
+const ATTACK_LABEL_MAP = {
+    'clear':           ['Clear',          'ap-clear'],
+    'failed_clear':    ['Failed Clear',    'ap-failed-clear'],
+    'high_clear':      ['High Clear',      'ap-high-clear'],
+    'farm':            ['Farm',            'ap-farm'],
+    'failed_farm':     ['Failed Farm',     'ap-failed-farm'],
+    'low_clear':       ['Low Clear',       'ap-low-clear'],
+    'low_clear_fail':  ['Low Clear Fail',  'ap-low-clear-fail'],
+    'clean_up':        ['Clean Up',        'ap-clean-up'],
+    'failed_clean_up': ['Failed Clean Up', 'ap-failed-clean-up'],
+    'wasted':          ['Wasted',          'ap-wasted'],
+    'no_attack':       ['No Attack',       'ap-no-attack'],
+};
+
+function renderAttackLabel(label) {
+    const entry = ATTACK_LABEL_MAP[label];
+    if (!entry) return `<span class="atk-pill ap-wasted">${label}</span>`;
+    return `<span class="atk-pill ${entry[1]}">${entry[0]}</span>`;
 }
 
 function buildWVDetails(v) {
-    const verdictMap = {
-        'badge-godlike':'War Hero','badge-dominant':'Excellent','badge-wow':'Solid',
-        'badge-good':'Average','badge-warning':'Weak','badge-suck':'Disaster','badge-inactive':'No Show'
-    };
-    let rows = '';
-    v.attack_details.forEach(a => {
-        const thDiff = a.th_diff > 0 ? `<span style="color:var(--red)">↑TH+${a.th_diff}</span>`
-                     : a.th_diff < 0 ? `<span style="color:var(--green)">↓TH${a.th_diff}</span>`
-                     : `<span style="color:var(--muted)">=TH</span>`;
-        rows += `<tr>
-            <td>${renderWVStars(a.stars)}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--blue);">${a.pct}%</td>
-            <td>
-                <span style="font-weight:600">${escapeHTML(a.defender_name)}</span>
-                <span style="font-size:11px;color:var(--muted);margin-left:6px;">TH${a.defender_th} · #${a.defender_pos}</span>
-                ${thDiff}
-            </td>
-            <td>${renderWVPills(a)}</td>
-        </tr>`;
-    });
+    let cards = '';
+
     if (v.attacks_used === 0) {
-        rows = `<tr><td colspan="4" style="color:var(--muted);font-style:italic;opacity:.6">No attacks used</td></tr>`;
+        cards = `<div style="padding:10px 0;color:var(--muted);font-style:italic;opacity:.6">No attacks used this war.</div>`;
+    } else {
+        v.attack_details.forEach(a => {
+            const d = a.th_diff;
+            const diffColor  = d > 0 ? 'var(--red)' : d < 0 ? 'var(--green)' : 'var(--muted)';
+            const dirSymbol  = d > 0 ? '↑' : d < 0 ? '↓' : '=';
+            const diffMag    = d !== 0 ? `<div class="atk-th-diff" style="color:${diffColor}">${d > 0 ? '+' : ''}${d}</div>` : '';
+
+            const p = a.pos_diff;
+            const posColor   = p > 0 ? 'var(--green)' : p < 0 ? 'var(--red)' : 'var(--muted)';
+            const posSymbol  = p > 0 ? '↓' : p < 0 ? '↑' : '=';
+            const posMag     = p !== 0 ? `<div class="atk-th-diff" style="color:${posColor}">${p > 0 ? '+' : ''}${p}</div>` : '';
+
+            const stateHtml  = a.target_state === 'cleared'
+                ? `<span class="atk-state-dead">Cleared</span>`
+                : a.target_state === 'partial'
+                ? renderBeforeStars(a.stars_before ?? 0)
+                : `<span class="atk-state-fresh">Fresh</span>`;
+            cards += `
+            <div class="atk-card">
+                <div class="atk-card-th">
+                    <div class="atk-th-row">
+                        <span class="atk-th-you">TH${v.player_th}</span>
+                        <span class="atk-th-sep" style="color:${diffColor}">${dirSymbol}</span>
+                        <span class="atk-th-them">TH${a.defender_th}</span>
+                    </div>
+                    ${diffMag}
+                    <div class="atk-th-divider"></div>
+                    <div class="atk-th-row">
+                        <span class="atk-th-you">#${v.map_pos}</span>
+                        <span class="atk-th-sep" style="color:${posColor}">${posSymbol}</span>
+                        <span class="atk-th-them">#${a.defender_pos}</span>
+                    </div>
+                    ${posMag}
+                </div>
+                <div class="atk-card-target">
+                    <div class="atk-target-name">${escapeHTML(a.defender_name)}</div>
+                    <div class="atk-target-meta"><span class="atk-target-pos">#${a.defender_pos}</span></div>
+                    <div class="atk-target-state">${stateHtml}</div>
+                </div>
+                <div class="atk-card-result">
+                    ${renderWarStars(a.stars)}
+                    <span class="atk-result-pct">${a.pct}%</span>
+                    ${renderAttackLabel(a.label)}
+                </div>
+            </div>`;
+        });
     }
+
+    const comboKey = v.atk_labels ? v.atk_labels.map(l => (ATTACK_LABEL_MAP[l] || [l])[0]).join(' + ') : '';
     return `<div class="vd-inner"><div class="vd-section">
-        <h4>Verdict Breakdown</h4>
-        <div style="margin-bottom:12px;font-size:12px;color:var(--muted);display:flex;gap:20px;flex-wrap:wrap;">
-            <span>Attacks used: <strong style="color:var(--text)">${v.attacks_used} / 2</strong></span>
-            <span>Score: <strong style="color:var(--accent)">${v.score}</strong> = Σ (TH-adj stars × modifiers) / 2 attacks / 3</span>
-            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${verdictMap[v.badge] || v.label}${v.score > 0 ? ` · ${v.score}` : ''}</span></span>
+        <div class="vd-meta">
+            <span>Attacks: <strong style="color:var(--text)">${v.attacks_used} / 2</strong></span>
+            <span>Combo: <strong style="color:var(--text)">${comboKey}</strong></span>
+            <span>Score: <strong style="color:var(--accent)">${v.score}</strong></span>
+            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${v.label}</span></span>
         </div>
-        <table class="detail-table">
-            <thead><tr><th>Stars</th><th>Dest %</th><th>Target</th><th>Tags</th></tr></thead>
-            <tbody>${rows}</tbody>
-        </table>
+        <div class="atk-cards">${cards}</div>
     </div></div>`;
 }
 
@@ -1279,14 +1366,10 @@ function buildWarVerdictTable() {
     const tbody = document.getElementById('warVerdictTbody');
     if (!tbody) return;
     tbody.innerHTML = '';
-    const verdictMap = {
-        'badge-godlike':'War Hero','badge-dominant':'Excellent','badge-wow':'Solid',
-        'badge-good':'Average','badge-warning':'Weak','badge-suck':'Disaster','badge-inactive':'No Show'
-    };
     sorted.forEach(v => {
         const row = document.createElement('tr');
         const atkSummary = v.attack_details.map(a =>
-            `${renderWVStars(a.stars)} → <span style="font-size:11px;color:var(--muted);">${escapeHTML(a.defender_name)} TH${a.defender_th}</span>${renderWVPills(a)}`
+            `${renderWarStars(a.stars)} ${renderAttackLabel(a.label)} <span style="font-size:11px;color:var(--muted);">→ ${escapeHTML(a.defender_name)} TH${a.defender_th}</span>`
         ).join('<br>') || `<span style="color:var(--muted);opacity:.45;">—</span>`;
 
         row.innerHTML = `
@@ -1296,7 +1379,7 @@ function buildWarVerdictTable() {
             </td>
             <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${v.attacks_used}<span style="font-size:12px;color:var(--muted);font-weight:400;">/2</span></td>
             <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;">${v.score}</td>
-            <td style="text-align:center;"><span class="judgment ${v.badge}">${verdictMap[v.badge] || v.label}</span></td>
+            <td style="text-align:center;"><span class="judgment ${v.badge}" title="${v.badge === 'badge-undefined' ? v.label : ''}">${v.badge === 'badge-undefined' ? '?' : v.label}</span></td>
             <td><button type="button" class="action-btn details-toggle" onclick="event.stopPropagation()">Details</button></td>
         `;
 
