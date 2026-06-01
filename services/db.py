@@ -83,10 +83,10 @@ def db_finalize_uptime(func_name: str, t0: float, status: str = 'success', error
 def create_db_ranked_week(league_group_tag, league_season_id, player_data_api, league_group_data_api) -> RankedWeek:
     league_members = json_get(league_group_data_api, JSON_RANKED_GROUP_DATA.MEMBERS)
     player_tag     = json_get(player_data_api, JSON_PLAYER_DATA.TAG)
-    rank           = get_member_rank_by_tag(league_members, player_tag)
-    if rank <= 0 or rank > len(league_members):
-        raise ValueError(f"Invalid rank {rank} for player {player_tag}")
-    player_group_data = league_members[rank - 1]
+    calculated_rank           = get_member_rank_by_tag(league_members, player_tag)
+    if calculated_rank <= 0 or calculated_rank > len(league_members):
+        raise ValueError(f"Invalid rank {calculated_rank} for player {player_tag}")
+    player_group_data = league_members[calculated_rank - 1]
     league_tier_name  = get_name_to_id(json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ID))
     league_icon       = json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ICON_URLS.LARGE, "Unranked")
     return RankedWeek(
@@ -94,7 +94,7 @@ def create_db_ranked_week(league_group_tag, league_season_id, player_data_api, l
         league_season_id = league_season_id,
         player_tag       = json_get(player_data_api, JSON_PLAYER_DATA.TAG),
         trophies         = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_TROPHIES),
-        rank             = rank,
+        rank             = calculated_rank,
         start_day        = get_last_monday(),
         end_day          = get_next_monday(),
         max_attacks      = get_weekly_attacks(league_tier_name),
@@ -107,6 +107,31 @@ def create_db_ranked_week(league_group_tag, league_season_id, player_data_api, l
         league_icon      = league_icon,
     )
 
+
+def create_db_ranked_week_done(done_week_db : RankedWeek,  league_group_data_api) -> RankedWeek:
+    league_members = json_get(league_group_data_api, JSON_RANKED_GROUP_DATA.MEMBERS)
+    player_tag     = done_week_db.player_tag
+    calculated_rank           = get_member_rank_by_tag(league_members, player_tag)
+    if calculated_rank <= 0 or calculated_rank > len(league_members):
+        raise ValueError(f"Invalid rank {calculated_rank} for player {player_tag}")
+    player_group_data = league_members[calculated_rank - 1]
+    return RankedWeek(
+        league_group_tag = done_week_db.league_group_tag,
+        league_season_id = done_week_db.league_season_id,
+        player_tag       = done_week_db.player_tag,
+        trophies         = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_TROPHIES),
+        rank             = calculated_rank,
+        start_day        = done_week_db.start_day,
+        end_day          = done_week_db.end_day,
+        max_attacks      = done_week_db.max_attacks,
+        townhall         = done_week_db.townhall,
+        attack_wins      = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_WIN_COUNT),
+        attack_losses    = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT),
+        defense_wins     = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_WIN_COUNT),
+        defense_losses   = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_LOSE_COUNT),
+        league_tier      = done_week_db.league_tier,
+        league_icon      = done_week_db.league_icon,
+    )
 
 def create_db_ranked_battle_log(opponent_db: Player, attack_api: dict, player_data_api: dict, is_attack: bool):
     return RankedBattleLog(
@@ -218,13 +243,12 @@ def db_ranked_week_get(group_tag, season_id, player_tag) -> RankedWeek:
 def db_raid_weekend_get(start_time, end_time) -> RaidWeekend:
     return RaidWeekend.query.filter(RaidWeekend.startTime == start_time, RaidWeekend.endTime == end_time).first()
 
-def db_ranked_week_get_all_done(db_player: Player) -> List[RankedWeek]:
+def db_ranked_week_get_all_done() -> List[RankedWeek]:
     now_utc = dt.datetime.now(dt.timezone.utc)
-    cutoff_date = now_utc.date() if now_utc.hour >= 5 else now_utc.date() - dt.timedelta(days=1)
+    cutoff_date = now_utc.date() if now_utc.hour >= 6 else now_utc.date() - dt.timedelta(days=1)
     return RankedWeek.query.filter(
         RankedWeek.is_done == False,
         RankedWeek.end_day <= cutoff_date,
-        RankedWeek.player == db_player,
     ).all()
 
 def db_ranked_battle_log_get(ranked_week: RankedWeek, opponent_tag: str, is_attack: bool) -> RankedBattleLog:

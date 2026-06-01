@@ -281,3 +281,139 @@
 2026-06-01 11:10:36 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 09:10:36 UTC
 2026-06-01 11:14:21 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 09:14:21 UTC
 2026-06-01 11:15:52 - INFO - [db_finalize_uptime] - Done in 91.61s | weeks_created=22 weeks_updated=3 attack_logs=0 defense_logs=0 players_failed=0
+2026-06-01 12:42:40 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 10:42:40 UTC
+2026-06-01 12:42:46 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for skarmoristRush: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:42:47 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for Hadith: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:42:47 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for Homers87: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:42:48 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for bebra00: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:42:49 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for Hadith: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:42:50 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for Dave: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:42:50 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for Fremdwort: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:42:51 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for lord Vader: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:42:52 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for finn_2502: '<=' not supported between instances of 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 130, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week(done_week.league_group_tag, done_week.league_season_id, player_api, done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 87, in create_db_ranked_week
+    if rank <= 0 or rank > len(league_members):
+       ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'NoneType' and 'int'
+2026-06-01 12:51:19 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 10:51:19 UTC
+2026-06-01 12:51:25 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for skarmoristRush: 'RankedWeek' object has no attribute 'league_tier_name'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 131, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week_done(done_week , done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 132, in create_db_ranked_week_done
+    league_tier      = done_week_db.league_tier_name,
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RankedWeek' object has no attribute 'league_tier_name'. Did you mean: 'league_tier'?
+2026-06-01 12:51:26 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for Hadith: 'RankedWeek' object has no attribute 'league_tier_name'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 131, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week_done(done_week , done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 132, in create_db_ranked_week_done
+    league_tier      = done_week_db.league_tier_name,
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RankedWeek' object has no attribute 'league_tier_name'. Did you mean: 'league_tier'?
+2026-06-01 12:51:26 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for Homers87: 'RankedWeek' object has no attribute 'league_tier_name'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 131, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week_done(done_week , done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 132, in create_db_ranked_week_done
+    league_tier      = done_week_db.league_tier_name,
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RankedWeek' object has no attribute 'league_tier_name'. Did you mean: 'league_tier'?
+2026-06-01 12:51:27 - ERROR - [task_update_ranked_weeks] - Failed to update done ranked week for bebra00: 'RankedWeek' object has no attribute 'league_tier_name'
+Traceback (most recent call last):
+  File "c:\Users\michi\Desktop\CodingStuff\tasks\ranked_weeks.py", line 131, in task_update_ranked_weeks
+    tmp_ranked_week = create_db_ranked_week_done(done_week , done_group_data_api)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\michi\Desktop\CodingStuff\services\db.py", line 132, in create_db_ranked_week_done
+    league_tier      = done_week_db.league_tier_name,
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RankedWeek' object has no attribute 'league_tier_name'. Did you mean: 'league_tier'?
+2026-06-01 12:52:00 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 10:52:00 UTC
+2026-06-01 12:53:14 - INFO - [db_finalize_uptime] - Done in 73.76s | weeks_created=0 weeks_updated=48 attack_logs=0 defense_logs=0 players_failed=0
+2026-06-01 12:56:22 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 10:56:22 UTC
+2026-06-01 12:57:22 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 10:57:22 UTC
+2026-06-01 12:57:38 - WARNING - [task_update_ranked_weeks] - Marius
+2026-06-01 12:58:05 - WARNING - [task_update_ranked_weeks] - Marius
+2026-06-01 12:59:05 - INFO - [db_finalize_uptime] - Done in 103.08s | weeks_created=0 weeks_updated=89 attack_logs=0 defense_logs=0 players_failed=0
+2026-06-01 13:00:45 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 11:00:45 UTC
+2026-06-01 13:01:42 - INFO - [db_finalize_uptime] - Done in 56.6s | weeks_created=0 weeks_updated=25 attack_logs=0 defense_logs=0 players_failed=0
+2026-06-01 13:02:23 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 11:02:23 UTC
+2026-06-01 13:02:31 - WARNING - [task_update_ranked_weeks] - Marius
+2026-06-01 13:03:12 - WARNING - [task_update_ranked_weeks] - Marius
+2026-06-01 13:07:46 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 11:07:46 UTC
+2026-06-01 13:07:54 - WARNING - [task_update_ranked_weeks] - Marius
+2026-06-01 13:10:23 - INFO - [task_update_ranked_weeks] - Starting at 2026-06-01 11:10:23 UTC
+2026-06-01 13:10:28 - WARNING - [task_update_ranked_weeks] - Marius
+2026-06-01 13:11:18 - INFO - [db_finalize_uptime] - Done in 55.22s | weeks_created=0 weeks_updated=26 attack_logs=0 defense_logs=0 players_failed=0
