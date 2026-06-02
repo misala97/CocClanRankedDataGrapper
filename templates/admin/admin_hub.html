@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -23,8 +23,9 @@
             --green:   #3fb950;
             --blue:    #58a6ff;
             --red:     #f85149;
+            --yellow:  #e3b341;
             --purple:  #bc8cff;
-            --yellow:  #d29922;
+            --orange:  #d29922;
         }
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,20 +35,26 @@
 
         /* ── NAV: see _nav.html ── */
 
-        /* ── PAGE ── */
-        .page-wrap { max-width: 1400px; margin: 0 auto; padding: 40px 32px 80px; }
-
-        /* ── HEADER ── */
+        /* ── PAGE HEADER ── */
         .page-header {
+            background: linear-gradient(180deg, rgba(240,165,0,0.05) 0%, transparent 100%);
+            border-bottom: 1px solid var(--bord2); padding: 44px 32px 32px;
+        }
+        .page-header-inner {
+            max-width: 1400px; margin: 0 auto;
             display: flex; align-items: flex-start; justify-content: space-between;
-            flex-wrap: wrap; gap: 16px; margin-bottom: 36px;
+            flex-wrap: wrap; gap: 16px;
         }
-        .page-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 36px; font-weight: 700;
-            display: flex; align-items: center; gap: 12px;
+        .page-header h1 {
+            font-family: 'Rajdhani', sans-serif; font-size: 40px; font-weight: 700;
+            letter-spacing: 1px; line-height: 1; margin-bottom: 8px;
         }
-        .page-subtitle { font-size: 14px; color: var(--muted); margin-top: 6px; }
+        .page-header h1 span { color: var(--accent); }
+        .page-header p { color: var(--muted); font-size: 14px; }
         .day-pills { display: flex; gap: 6px; align-items: center; }
+
+        /* ── CONTAINER ── */
+        .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px 80px; }
         .day-pill {
             padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600;
             border: 1px solid var(--border); color: var(--muted);
@@ -248,6 +255,29 @@
         }
         .m-search:focus { outline: none; border-color: var(--accent); }
 
+        /* ── WAR PREFERENCE ── */
+        .wp-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .4px;
+            border: none; transition: all .15s; white-space: nowrap;
+        }
+        .wp-btn.wp-readonly { cursor: default; opacity: .8; }
+        .wp-btn:not(.wp-readonly) { cursor: pointer; }
+        .wp-in   { background: var(--green); color: #0d1117; }
+        .wp-btn:not(.wp-readonly).wp-in:hover   { filter: brightness(1.15); }
+        .wp-out  { background: var(--red);   color: #fff; }
+        .wp-btn:not(.wp-readonly).wp-out:hover  { filter: brightness(1.15); }
+        .wp-none { background: var(--surf2); color: var(--muted); border: 1px solid var(--border); }
+        .wp-btn:not(.wp-readonly).wp-none:hover { color: var(--text); border-color: var(--muted); }
+
+        /* ── FOOTER ── */
+        .page-footer {
+            text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
+            margin-top: 4px; border-top: 1px solid var(--bord2);
+            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
+        }
+
         /* ── RESPONSIVE ── */
         @media (max-width: 1200px) { .status-grid { grid-template-columns: repeat(3, 1fr); } }
         @media (max-width: 900px)  { .status-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -262,13 +292,11 @@
 
 {% include '_nav.html' %}
 
-<div class="page-wrap">
-
-    <!-- Header -->
-    <div class="page-header">
+<div class="page-header">
+    <div class="page-header-inner">
         <div>
-            <div class="page-title">⚙️ Admin Hub</div>
-            <div class="page-subtitle">Background task monitoring and system status</div>
+            <h1>⚙️ Admin <span>Hub</span></h1>
+            <p>Background task monitoring and system status</p>
         </div>
         <div class="day-pills">
             <a href="?days=1"  class="day-pill {% if selected_days == 1  %}active{% endif %}">24h</a>
@@ -277,6 +305,9 @@
             <a href="?days=30" class="day-pill {% if selected_days == 30 %}active{% endif %}">30d</a>
         </div>
     </div>
+</div>
+
+<div class="container">
 
     {% set known_functions = [
         ['task_update_battle_logs',  '⚔️',  'Battle Logs'],
@@ -452,6 +483,7 @@
                     <tr>
                         <th>Player</th>
                         <th>Group Chat</th>
+                        <th>War Pref</th>
                         <th>Comment</th>
                     </tr>
                 </thead>
@@ -466,9 +498,31 @@
                         <button class="gc-toggle {% if p.in_group_chat %}gc-yes{% else %}gc-no{% endif %}"
                                 data-tag="{{ p.tag }}"
                                 data-state="{{ 'true' if p.in_group_chat else 'false' }}"
-                                onclick="toggleGC(this)">
+                                ondblclick="toggleGC(this)">
                             {% if p.in_group_chat %}✓ In Group Chat{% else %}✗ Not in Chat{% endif %}
                         </button>
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:10px; align-items:flex-end;">
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                                <span style="font-size:9px; color:var(--muted); font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.6px; text-transform:uppercase;">API</span>
+                                {% set wpi = p.war_preference_in_game or '' %}
+                                <button class="wp-btn wp-readonly wp-{{ wpi or 'none' }}" disabled title="In-game preference">
+                                    {%- if wpi == 'in' %}In{%- elif wpi == 'out' %}Out{%- else %}—{%- endif %}
+                                </button>
+                            </div>
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                                <span style="font-size:9px; color:var(--muted); font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.6px; text-transform:uppercase;">Custom</span>
+                                {% set wpc = p.war_preference_custom or '' %}
+                                <button class="wp-btn wp-{{ wpc or 'none' }}"
+                                        data-tag="{{ p.tag }}"
+                                        data-state="{{ wpc }}"
+                                        ondblclick="cycleWarPref(this)"
+                                        title="Double-click to change">
+                                    {%- if wpc == 'in' %}In{%- elif wpc == 'out' %}Out{%- else %}—{%- endif %}
+                                </button>
+                            </div>
+                        </div>
                     </td>
                     <td>
                         <div class="comment-wrap">
@@ -489,6 +543,8 @@
     </div><!-- /collapse-card members -->
 
 </div>
+
+<div class="page-footer">{{ op_count.n }}/{{ known_functions|length }} tasks operational · last {{ selected_days }}d</div>
 
 <script>
 const byFunction    = {{ by_function    | tojson | safe }};
@@ -717,6 +773,17 @@ function saveComment(btn) {
 document.querySelectorAll('.comment-input').forEach(inp => {
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.nextElementSibling.click(); });
 });
+
+function cycleWarPref(btn) {
+    const states = ['', 'in', 'out'];
+    const labels = { '': '—', 'in': 'In', 'out': 'Out' };
+    const classes = { '': 'wp-none', 'in': 'wp-in', 'out': 'wp-out' };
+    const next = states[(states.indexOf(btn.dataset.state) + 1) % states.length];
+    btn.dataset.state = next;
+    btn.className = 'wp-btn ' + classes[next];
+    btn.textContent = labels[next];
+    memberPatch(btn.dataset.tag, { war_preference_custom: next });
+}
 
 function filterMembers() {
     const q = document.getElementById('memberSearch').value.toLowerCase();

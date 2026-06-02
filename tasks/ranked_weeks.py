@@ -43,6 +43,14 @@ def task_update_ranked_weeks():
                 continue
 
             try:
+                #Bei manchen fehlts
+                war_pref = json_get(player_api, JSON_PLAYER_DATA.WAR_PREFERENCE, default="out", raise_on_missing=False)
+                if war_pref and db_player.war_preference_in_game != war_pref:
+                    db_player.war_preference_in_game = war_pref
+            except Exception as e:
+                ranked_logger.warning(f"Could not update war preference for {db_player.name}: {e}")
+
+            try:
                 season_id = json_get(player_api, JSON_PLAYER_DATA.CURRENT_LEAGUE_SEASON_ID)
                 group_tag = None
                 if season_id != 0:

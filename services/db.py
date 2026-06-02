@@ -348,8 +348,8 @@ def db_player_update_all_inactive() -> None:
     )
 
 def db_player_update(player: Player, updated_player: Player) -> Player:
-    if (player.current_th != updated_player.current_th or
-            player.name != updated_player.name or
+    if (player.current_th  != updated_player.current_th or
+            player.name    != updated_player.name or
             player.league_tier != updated_player.league_tier or
             player.in_clan != updated_player.in_clan):
         player.current_th  = updated_player.current_th

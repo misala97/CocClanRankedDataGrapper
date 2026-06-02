@@ -68,6 +68,7 @@ class JSON_PLAYER_DATA:
     TAG = JSONPath("tag")
     NAME = JSONPath("name")
     TOWN_HALL_LEVEL = JSONPath("townHallLevel")
+    WAR_PREFERENCE = JSONPath("warPreference")
     CURRENT_LEAGUE_GROUP_TAG = JSONPath("currentLeagueGroupTag")
     CURRENT_LEAGUE_SEASON_ID = JSONPath("currentLeagueSeasonId")
     LEAGUE_TIER = JSONPath("leagueTier")

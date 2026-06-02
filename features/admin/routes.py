@@ -193,6 +193,9 @@ def admin_member_update(tag):
         player.admin_comment = data['admin_comment'].strip() or None
     if 'in_group_chat' in data:
         player.in_group_chat = bool(data['in_group_chat'])
+    if 'war_preference_custom' in data:
+        v = data['war_preference_custom']
+        player.war_preference_custom = v if v in ('in', 'out') else None
     db.session.commit()
     return jsonify(ok=True)
 

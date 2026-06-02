@@ -55,6 +55,7 @@
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
             background: var(--surface); padding: 12px 18px;
             border-radius: 10px; border: 1px solid var(--border); margin-bottom: 20px;
+            position: sticky; top: 58px; z-index: 99;
         }
         .controls label {
             font-size: 11px; font-weight: 700; color: var(--muted);
@@ -455,7 +456,6 @@
         </div>
     </div>
     <div id="mobileList"></div>
-    <div class="page-footer" id="playerCount"></div>
 
     {% else %}
     <div class="table-scroll">
@@ -469,6 +469,8 @@
     {% endif %}
 
 </div>
+
+<div class="page-footer" id="playerCount"></div>
 
 {% if week_data %}
 <script>
@@ -994,7 +996,8 @@
             });
         }
 
-        document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown`;
+        const weekLabel = document.querySelector('#week-select option:checked')?.textContent?.trim() || '';
+        document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown${weekLabel ? ' · ' + weekLabel : ''}`;
         updateSortHeaders();
     }
 

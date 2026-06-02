@@ -19,9 +19,11 @@
             --accent:  #f0a500;
             --acc2:    #e8863a;
             --green:   #3fb950;
-            --red:     #f85149;
             --blue:    #58a6ff;
+            --red:     #f85149;
+            --yellow:  #e3b341;
             --purple:  #bc8cff;
+            --orange:  #d29922;
         }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
@@ -29,10 +31,20 @@
 
         /* ── NAV: see _nav.html ── */
 
-        .container { max-width: 1100px; margin: 0 auto; padding: 36px 32px; }
+        /* ── PAGE HEADER ── */
+        .page-header {
+            background: linear-gradient(180deg, rgba(240,165,0,0.05) 0%, transparent 100%);
+            border-bottom: 1px solid var(--bord2); padding: 44px 32px 32px;
+        }
+        .page-header-inner { max-width: 1400px; margin: 0 auto; }
+        .page-header h1 {
+            font-family: 'Rajdhani', sans-serif; font-size: 40px; font-weight: 700;
+            letter-spacing: 1px; line-height: 1; margin-bottom: 8px;
+        }
+        .page-header h1 span { color: var(--accent); }
+        .page-header p { color: var(--muted); font-size: 14px; }
 
-        h1 { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; margin-bottom: 6px; }
-        .page-sub { color: var(--muted); font-size: 14px; margin-bottom: 36px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
 
         .section { margin-bottom: 40px; }
         .section-title {
@@ -106,15 +118,27 @@
         .super-toggle.not-super:hover { border-color: var(--purple); color: var(--purple); }
 
         .empty { padding: 24px 16px; color: var(--muted); font-size: 14px; }
+
+        /* ── FOOTER ── */
+        .page-footer {
+            text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
+            margin-top: 4px; border-top: 1px solid var(--bord2);
+            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
+        }
     </style>
 </head>
 <body>
 
 {% include '_nav.html' %}
 
+<div class="page-header">
+    <div class="page-header-inner">
+        <h1>User <span>Management</span></h1>
+        <p>Approve registrations and manage user roles.</p>
+    </div>
+</div>
+
 <div class="container">
-    <h1>👥 User Management</h1>
-    <p class="page-sub">Approve registrations and manage user roles.</p>
 
     {% set pending = users | selectattr('is_approved', 'equalto', false) | list %}
     {% set approved = users | selectattr('is_approved', 'equalto', true) | list %}
@@ -228,6 +252,8 @@
         </div>
     </div>
 </div>
+
+<div class="page-footer">{{ approved | length }} active · {{ pending | length }} pending approval</div>
 
 </body>
 </html>

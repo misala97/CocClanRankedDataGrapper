@@ -12,8 +12,11 @@ class Player(db.Model):
     league_tier = db.Column(db.String(50))
     league_icon = db.Column(db.String(150))
     last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    admin_comment = db.Column(db.Text, nullable=True)
-    in_group_chat = db.Column(db.Boolean, default=False, nullable=True)
+    admin_comment          = db.Column(db.Text, nullable=True)
+    in_group_chat          = db.Column(db.Boolean, default=False, nullable=True)
+    war_preference_in_game = db.Column(db.String(20), nullable=True)
+    war_preference_custom  = db.Column(db.String(20), nullable=True)
+    join_date              = db.Column(db.Date, nullable=True, default=lambda: datetime.now(timezone.utc).date())
 
     ranked_weeks = db.relationship('RankedWeek', back_populates='player', lazy=True, cascade="all, delete-orphan")
     battle_logs = db.relationship('BattleLog', back_populates='player', lazy=True, cascade="all, delete-orphan")
