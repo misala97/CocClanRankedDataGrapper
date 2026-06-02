@@ -12,7 +12,6 @@
             --bg:      #0d1117;
             --surface: #161b22;
             --surf2:   #1c2330;
-            --surf3:   #222b38;
             --border:  #30363d;
             --bord2:   #21262d;
             --text:    #e6edf3;
@@ -31,44 +30,37 @@
         /* ── HERO ── */
         .hero {
             position:relative; overflow:hidden;
-            background:linear-gradient(160deg, rgba(240,165,0,.07) 0%, rgba(88,166,255,.04) 50%, transparent 100%);
-            border-bottom:1px solid var(--bord2); padding:40px 32px 32px;
+            background:linear-gradient(160deg,rgba(240,165,0,.07) 0%,rgba(88,166,255,.04) 50%,transparent 100%);
+            border-bottom:1px solid var(--bord2); padding:40px 32px 28px;
         }
-        .hero::before {
-            content:''; position:absolute; inset:0;
-            background:radial-gradient(ellipse 60% 50% at 15% 50%, rgba(240,165,0,.06), transparent);
-            pointer-events:none;
-        }
-        .hero-inner { max-width:1400px; margin:0 auto; display:flex; align-items:flex-start; justify-content:space-between; gap:24px; flex-wrap:wrap; position:relative; }
+        .hero::before { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 60% 50% at 15% 50%,rgba(240,165,0,.06),transparent); pointer-events:none; }
+        .hero-inner { max-width:1400px; margin:0 auto; display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap; position:relative; }
         .hero-title { font-family:'Rajdhani',sans-serif; font-size:40px; font-weight:700; letter-spacing:.5px; line-height:1.05; }
         .hero-title span { color:var(--accent); }
         .hero-sub { color:var(--muted); font-size:13px; margin-top:5px; }
         .hero-sub strong { color:var(--text); }
-        .nav-back { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border:1px solid var(--border); border-radius:8px; background:var(--surf2); color:var(--muted); font-size:11px; font-weight:700; font-family:'Rajdhani',sans-serif; letter-spacing:.6px; text-transform:uppercase; transition:all .15s; white-space:nowrap; }
+        .nav-back { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border:1px solid var(--border); border-radius:8px; background:var(--surf2); color:var(--muted); font-size:11px; font-weight:700; font-family:'Rajdhani',sans-serif; letter-spacing:.6px; text-transform:uppercase; transition:all .15s; }
         .nav-back:hover { color:var(--text); border-color:var(--accent); }
 
         /* ── LAYOUT ── */
         .container { max-width:1400px; margin:0 auto; padding:28px 32px; }
         .section { margin-bottom:28px; }
-        .section-title {
-            font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase;
-            letter-spacing:1.2px; color:var(--muted); margin-bottom:14px; display:flex; align-items:center; gap:10px;
-        }
+        .section-title { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin-bottom:14px; display:flex; align-items:center; gap:10px; }
         .section-title::after { content:''; flex:1; height:1px; background:var(--bord2); }
 
-        /* ── CARDS ── */
-        .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; }
-        .card-pad { padding:22px 24px; }
+        /* ── FARM TOGGLE ── */
+        .toggle-bar { display:flex; align-items:center; gap:12px; margin-bottom:24px; padding:14px 18px; background:var(--surface); border:1px solid var(--border); border-radius:10px; flex-wrap:wrap; }
+        .toggle-label { font-size:12px; font-weight:600; color:var(--muted); font-family:'Rajdhani',sans-serif; text-transform:uppercase; letter-spacing:.6px; }
+        .toggle-group { display:flex; border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+        .toggle-btn { padding:6px 16px; background:transparent; color:var(--muted); border:none; font-size:11px; font-weight:700; font-family:'Rajdhani',sans-serif; letter-spacing:.5px; text-transform:uppercase; cursor:pointer; transition:all .15s; }
+        .toggle-btn.active { background:var(--accent); color:#000; }
+        .toggle-hint { font-size:11px; color:var(--muted); margin-left:auto; }
 
-        /* ── TOP STAT ROW ── */
+        /* ── STAT STRIP ── */
         .stat-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
-        .stat-tile {
-            background:var(--surface); border:1px solid var(--border); border-radius:12px;
-            padding:20px 22px; position:relative; overflow:hidden;
-        }
+        .stat-tile { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 22px; position:relative; overflow:hidden; }
         .stat-tile::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; border-radius:12px 12px 0 0; }
         .st-wins::before   { background:var(--green); }
-        .st-losses::before { background:var(--red); }
         .st-rate::before   { background:var(--accent); }
         .st-stars::before  { background:var(--yellow); }
         .st-part::before   { background:var(--blue); }
@@ -78,70 +70,51 @@
         .stat-sub { font-size:11px; color:var(--muted); margin-top:5px; }
         .stat-bar-bg { height:4px; background:var(--surf2); border-radius:2px; margin-top:10px; overflow:hidden; border:1px solid var(--bord2); }
         .stat-bar-fill { height:100%; border-radius:2px; }
-
-        /* Record tile */
         .record-split { display:flex; gap:0; margin-top:4px; }
         .rec-item { flex:1; text-align:center; }
         .rec-item:not(:last-child) { border-right:1px solid var(--bord2); }
         .rec-n { font-family:'Rajdhani',sans-serif; font-size:34px; font-weight:700; line-height:1; }
         .rec-l { font-size:10px; font-weight:700; letter-spacing:.5px; margin-top:2px; }
 
-        /* ── FORM STRIP ── */
-        .form-wrap { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 22px; }
-        .form-dots { display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
-        .fdot {
-            width:38px; height:38px; border-radius:8px; display:flex; flex-direction:column;
-            align-items:center; justify-content:center; gap:1px;
-            font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700;
-            cursor:default; transition:transform .1s; position:relative;
-        }
-        .fdot:hover { transform:scale(1.1); z-index:2; }
-        .fdot.win  { background:rgba(63,185,80,.15);  color:var(--green);  border:1px solid rgba(63,185,80,.3); }
-        .fdot.loss { background:rgba(248,81,73,.12);  color:var(--red);    border:1px solid rgba(248,81,73,.25); }
-        .fdot.draw { background:rgba(139,148,158,.1); color:var(--muted);  border:1px solid rgba(139,148,158,.2); }
-        .fdot-score { font-size:8px; opacity:.7; line-height:1; }
-        .form-sep { width:1px; height:30px; background:var(--bord2); margin:0 4px; flex-shrink:0; }
-
-        /* ── TWO COLUMN ── */
-        .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-        .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
-
-        /* ── HIGHLIGHT CARDS ── */
-        .hl-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 22px; position:relative; overflow:hidden; }
-        .hl-card-label { font-size:10px; font-weight:700; font-family:'Rajdhani',sans-serif; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
-        .hl-opponent { font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:700; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .hl-score { display:flex; align-items:baseline; gap:6px; margin-bottom:4px; }
-        .hl-our   { font-family:'Rajdhani',sans-serif; font-size:30px; font-weight:700; color:var(--green); }
-        .hl-sep   { font-size:16px; color:var(--bord2); font-family:'Rajdhani',sans-serif; }
-        .hl-opp   { font-family:'Rajdhani',sans-serif; font-size:30px; font-weight:700; color:var(--red); }
-        .hl-meta  { font-size:11px; color:var(--muted); }
-        .hl-glow-win  { box-shadow:inset 0 0 40px rgba(63,185,80,.04); border-color:rgba(63,185,80,.2); }
-        .hl-glow-loss { box-shadow:inset 0 0 40px rgba(248,81,73,.04); border-color:rgba(248,81,73,.2); }
-        .hl-glow-star { box-shadow:inset 0 0 40px rgba(227,179,65,.04); border-color:rgba(227,179,65,.2); }
-
         /* ── HALL OF FAME ── */
         .hof-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
-        .hof-section { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-        .hof-header { padding:12px 18px; border-bottom:1px solid var(--bord2); display:flex; align-items:center; gap:8px; }
+        .hof-section { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+        .hof-header { padding:12px 18px; border-bottom:1px solid var(--bord2); display:flex; align-items:center; gap:8px; flex-shrink:0; }
         .hof-header-title { font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); }
-        .hof-entry { display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--bord2); }
+        .hof-list { overflow-y:auto; max-height:180px; flex:1; }
+        .hof-list::-webkit-scrollbar { width:4px; }
+        .hof-list::-webkit-scrollbar-track { background:transparent; }
+        .hof-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+        .hof-entry { display:flex; align-items:center; gap:10px; padding:10px 18px; border-bottom:1px solid var(--bord2); transition:background .1s; }
         .hof-entry:last-child { border-bottom:none; }
-        .hof-medal { font-size:20px; flex-shrink:0; width:28px; text-align:center; }
-        .hof-name { font-weight:600; font-size:13px; }
-        .hof-sub  { font-size:11px; color:var(--muted); margin-top:1px; }
-        .hof-val  { margin-left:auto; font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700; text-align:right; }
-        .hof-val-sub { font-size:10px; color:var(--muted); font-family:'DM Sans',sans-serif; font-weight:400; text-align:right; }
+        .hof-entry:hover { background:rgba(255,255,255,.02); }
+        .hof-medal { font-size:16px; flex-shrink:0; width:24px; text-align:center; }
+        .hof-pos { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:13px; color:var(--muted); width:24px; text-align:center; flex-shrink:0; }
+        .hof-name { font-weight:600; font-size:12.5px; }
+        .hof-sub  { font-size:10px; color:var(--muted); margin-top:1px; }
+        .hof-val  { margin-left:auto; font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; text-align:right; flex-shrink:0; }
+        .hof-val-sub { font-size:9px; color:var(--muted); font-family:'DM Sans',sans-serif; font-weight:400; text-align:right; }
         .th-chip-sm { display:inline-block; padding:0 5px; border-radius:3px; font-size:9px; font-weight:700; font-family:'Rajdhani',sans-serif; background:var(--surf2); border:1px solid var(--bord2); color:var(--muted); margin-right:3px; }
 
         /* ── FINGERPRINT ── */
         .fingerprint-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px 24px; }
-        .fp-bar { height:20px; border-radius:10px; display:flex; gap:2px; overflow:hidden; margin-bottom:14px; }
-        .fp-seg { height:100%; border-radius:2px; position:relative; min-width:3px; transition:opacity .2s; cursor:default; }
-        .fp-seg:hover { opacity:.8; }
+        .fp-bar { height:22px; border-radius:11px; display:flex; gap:2px; overflow:hidden; margin-bottom:14px; }
+        .fp-seg { height:100%; cursor:default; min-width:3px; transition:filter .15s; }
+        .fp-seg:hover { filter:brightness(1.3); }
         .fp-legend { display:flex; flex-wrap:wrap; gap:8px; }
-        .fp-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); }
+        .fp-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); cursor:default; }
         .fp-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 
+        /* custom tooltip */
+        .fp-tooltip {
+            position:fixed; z-index:999; background:var(--surf2); border:1px solid var(--border);
+            border-radius:7px; padding:7px 12px; font-size:12px; font-family:'DM Sans',sans-serif;
+            color:var(--text); pointer-events:none; white-space:nowrap;
+            box-shadow:0 4px 16px rgba(0,0,0,.4); display:none;
+        }
+        .fp-tooltip strong { color:var(--accent); }
+
+        /* label colors */
         .lb-clear          { background:#3fb950; }
         .lb-failed-clear   { background:#e3b341; }
         .lb-high-clear     { background:#bc8cff; }
@@ -155,115 +128,97 @@
 
         /* ── TH BREAKDOWN ── */
         .th-grid { display:flex; flex-wrap:wrap; gap:10px; }
-        .th-tile {
-            background:var(--surface); border:1px solid var(--border); border-radius:10px;
-            padding:14px 18px; min-width:130px; flex:1;
-        }
+        .th-tile { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 18px; min-width:130px; flex:1; }
         .th-tile-num { font-family:'Rajdhani',sans-serif; font-size:22px; font-weight:700; margin-bottom:8px; }
         .th-tile-stat { font-size:11px; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:3px; }
         .th-tile-stat strong { color:var(--text); font-family:'Rajdhani',sans-serif; font-size:13px; }
         .th-mini-bar { height:3px; background:var(--surf2); border-radius:2px; margin-top:6px; overflow:hidden; }
-        .th-mini-fill { height:100%; border-radius:2px; background:var(--accent); }
+        .th-mini-fill { height:100%; border-radius:2px; }
 
         /* ── PLAYER TABLE ── */
-        .table-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-        .table-header { padding:16px 22px; border-bottom:1px solid var(--bord2); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+        .table-scroll { overflow-x:auto; border-radius:12px; border:1px solid var(--border); }
+        .table-wrapper { background:var(--surface); overflow:hidden; min-width:780px; }
+        .table-header { padding:14px 20px; border-bottom:1px solid var(--bord2); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; background:var(--surface); }
         .table-header-title { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); }
-        .sort-hint { font-size:11px; color:var(--muted); }
-
-        .pt-wrap { overflow-x:auto; }
-        table.pt { width:100%; border-collapse:collapse; font-size:12.5px; }
-        table.pt thead th {
-            padding:10px 14px; text-align:left; font-weight:700; color:var(--muted);
-            font-size:10px; text-transform:uppercase; letter-spacing:.8px; white-space:nowrap;
-            border-bottom:1px solid var(--border); background:var(--surf2);
-            cursor:pointer; user-select:none; transition:color .12s;
-        }
-        table.pt thead th:hover { color:var(--text); }
-        table.pt thead th.sort-asc::after  { content:' ↑'; color:var(--accent); }
-        table.pt thead th.sort-desc::after { content:' ↓'; color:var(--accent); }
-        table.pt thead th.sort-asc,
-        table.pt thead th.sort-desc { color:var(--accent); }
-        table.pt tbody tr { border-bottom:1px solid var(--bord2); transition:background .1s; }
+        table.pt { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
+        col.col-league  { width:52px; }
+        col.col-player  { width:180px; }
+        col.col-wars    { width:64px; }
+        col.col-attacks { width:90px; }
+        col.col-avg     { width:80px; }
+        col.col-rate    { width:72px; }
+        col.col-verdict { width:90px; }
+        table.pt thead { background:var(--surf2); border-bottom:1px solid var(--border); }
+        table.pt thead th { padding:11px 8px; text-align:left; font-weight:600; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.7px; white-space:nowrap; overflow:hidden; }
+        table.pt thead th.sortable { cursor:pointer; user-select:none; }
+        table.pt thead th.sortable:hover { color:var(--text); }
+        table.pt thead th.sort-active { color:var(--accent); }
+        table.pt thead th.sort-active.asc::after  { content:' ↑'; font-size:.85em; }
+        table.pt thead th.sort-active.desc::after { content:' ↓'; font-size:.85em; }
+        /* group separators after Player, Attacks */
+        table.pt thead th:nth-child(2), table.pt tbody td:nth-child(2),
+        table.pt thead th:nth-child(4), table.pt tbody td:nth-child(4),
+        table.pt thead th:nth-child(5), table.pt tbody td:nth-child(5) { border-right:2px solid var(--border); }
+        table.pt tbody tr { border-bottom:1px solid var(--bord2); transition:background .12s; }
         table.pt tbody tr:last-child { border-bottom:none; }
-        table.pt tbody tr:hover { background:rgba(255,255,255,.025); }
-        table.pt tbody td { padding:11px 14px; vertical-align:middle; }
+        table.pt tbody tr:hover { background:rgba(255,255,255,.03); }
+        table.pt tbody td { padding:12px 8px; vertical-align:middle; overflow:hidden; }
 
-        .pt-rank { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:14px; color:var(--muted); text-align:center; }
-        .pt-rank.gold   { color:#ffd700; }
-        .pt-rank.silver { color:#c0c0c0; }
-        .pt-rank.bronze { color:#cd7f32; }
-
-        .pt-player-name { font-weight:600; font-size:13px; }
-        .pt-player-sub  { font-size:10px; color:var(--muted); margin-top:1px; }
+        .league-icon { width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:help; filter:drop-shadow(0 2px 4px rgba(0,0,0,.4)); display:block; margin:0 auto; }
+        .league-icon-placeholder { width:36px; height:36px; display:block; margin:0 auto; }
+        .pt-player-name { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .pt-player-sub  { font-size:10px; color:var(--muted); margin-top:2px; }
         .th-chip { display:inline-block; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700; font-family:'Rajdhani',sans-serif; background:var(--surf2); border:1px solid var(--bord2); margin-right:4px; }
-
-        .pt-num { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:16px; text-align:center; line-height:1; }
-        .pt-sub { font-size:10px; color:var(--muted); text-align:center; margin-top:2px; font-family:'DM Sans',sans-serif; }
-
-        .part-wrap { min-width:80px; }
+        .pt-num { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:22px; text-align:center; line-height:1; }
+        .pt-sub { font-size:10px; color:var(--muted); text-align:center; margin-top:2px; }
         .part-bar { height:3px; background:var(--surf2); border-radius:2px; margin-top:4px; overflow:hidden; }
         .part-fill { height:100%; border-radius:2px; }
+        .star-pips { display:flex; gap:1px; justify-content:center; margin-top:3px; font-size:11px; letter-spacing:1px; }
+        .judgment { display:inline-block; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; border:1px solid; white-space:nowrap; letter-spacing:.4px; font-family:'Rajdhani',sans-serif; text-transform:uppercase; }
+        .badge-godlike  { background:rgba(188,140,255,.15); color:var(--purple); border-color:rgba(188,140,255,.4); }
+        .badge-dominant { background:rgba(240,165,0,.15);   color:var(--accent); border-color:rgba(240,165,0,.35); }
+        .badge-wow      { background:rgba(63,185,80,.12);   color:var(--green);  border-color:rgba(63,185,80,.3); }
+        .badge-good     { background:rgba(88,166,255,.12);  color:var(--blue);   border-color:rgba(88,166,255,.25); }
+        .badge-warning  { background:rgba(210,153,34,.12);  color:var(--yellow); border-color:rgba(210,153,34,.3); }
+        .badge-suck     { background:rgba(248,81,73,.12);   color:var(--red);    border-color:rgba(248,81,73,.3); }
+        .badge-undefined{ background:rgba(139,148,158,.06); color:var(--muted);  border-color:rgba(139,148,158,.2); border-style:dashed; }
 
-        .star-pips { display:flex; gap:2px; justify-content:center; margin-top:3px; }
-        .star-pip { width:5px; height:5px; border-radius:50%; background:var(--bord2); }
-        .star-pip.on { background:var(--yellow); }
-
-        .lbar-mini { height:6px; border-radius:3px; display:flex; gap:1px; overflow:hidden; min-width:80px; margin-bottom:3px; }
-        .lbar-seg { height:100%; border-radius:1px; min-width:2px; }
-
-        .lc-pill { font-size:9px; font-weight:700; font-family:'Rajdhani',sans-serif; padding:1px 5px; border-radius:3px; letter-spacing:.3px; }
-        .lc-clear          { background:rgba(63,185,80,.12);   color:#3fb950; }
-        .lc-failed-clear   { background:rgba(227,179,65,.12);  color:#e3b341; }
-        .lc-high-clear     { background:rgba(188,140,255,.12); color:#bc8cff; }
-        .lc-farm           { background:rgba(88,166,255,.12);  color:#58a6ff; }
-        .lc-failed-farm    { background:rgba(248,81,73,.12);   color:#f85149; }
-        .lc-low-clear      { background:rgba(63,185,80,.08);   color:rgba(63,185,80,.8); }
-        .lc-low-clear-fail { background:rgba(227,179,65,.08);  color:rgba(227,179,65,.8); }
-        .lc-clean-up       { background:rgba(88,166,255,.08);  color:rgba(88,166,255,.8); }
-        .lc-failed-clean   { background:rgba(248,81,73,.08);   color:rgba(248,81,73,.8); }
-        .lc-wasted         { background:rgba(139,148,158,.08); color:#8b949e; }
-
-        /* ── RECENT WARS TABLE ── */
+        /* ── RECENT WARS ── */
         .rw-table { width:100%; border-collapse:collapse; font-size:12.5px; }
         .rw-table thead th { padding:9px 14px; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.7px; font-weight:700; color:var(--muted); border-bottom:1px solid var(--bord2); background:var(--surf2); }
-        .rw-table tbody tr { border-bottom:1px solid var(--bord2); transition:background .1s; }
+        .rw-table tbody tr { border-bottom:1px solid var(--bord2); transition:background .1s; cursor:pointer; }
         .rw-table tbody tr:last-child { border-bottom:none; }
-        .rw-table tbody tr:hover { background:rgba(255,255,255,.02); }
+        .rw-table tbody tr:hover { background:rgba(255,255,255,.03); }
         .rw-table tbody td { padding:10px 14px; vertical-align:middle; }
         .rw-badge { display:inline-block; padding:2px 10px; border-radius:6px; font-size:10px; font-weight:700; font-family:'Rajdhani',sans-serif; letter-spacing:.5px; text-transform:uppercase; }
         .rw-win  { background:rgba(63,185,80,.12);  color:var(--green);  border:1px solid rgba(63,185,80,.25); }
         .rw-loss { background:rgba(248,81,73,.12);  color:var(--red);    border:1px solid rgba(248,81,73,.25); }
         .rw-draw { background:rgba(139,148,158,.1); color:var(--muted);  border:1px solid rgba(139,148,158,.2); }
 
-        /* ── SHAME / MISSING ── */
+        /* ── SHAME ── */
         .shame-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
         .shame-tile { background:var(--surface); border:1px solid rgba(248,81,73,.2); border-radius:10px; padding:14px 16px; }
         .shame-name { font-weight:600; font-size:12px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .shame-num { font-family:'Rajdhani',sans-serif; font-size:28px; font-weight:700; color:var(--red); line-height:1; }
         .shame-sub { font-size:10px; color:var(--muted); margin-top:2px; }
 
-        /* ── EMPTY ── */
         .empty { text-align:center; padding:80px 32px; color:var(--muted); }
         .empty-icon { font-size:52px; margin-bottom:14px; }
 
         @media(max-width:1100px) { .stat-strip { grid-template-columns:repeat(3,1fr); } .hof-grid { grid-template-columns:1fr; } }
-        @media(max-width:800px)  { .stat-strip { grid-template-columns:1fr 1fr; } .two-col,.three-col { grid-template-columns:1fr; } .shame-grid { grid-template-columns:repeat(3,1fr); } .container { padding:16px; } }
+        @media(max-width:800px)  { .stat-strip { grid-template-columns:1fr 1fr; } .shame-grid { grid-template-columns:repeat(3,1fr); } .container { padding:16px; } }
     </style>
 </head>
 <body>
 
 {% include '_nav.html' ignore missing %}
 
-{# ── HERO ── #}
 <div class="hero">
     <div class="hero-inner">
         <div>
             <div class="hero-title">⚔ War <span>Statistics</span></div>
             <div class="hero-sub">
-                <strong>{{ total_wars }}</strong> wars recorded
-                {% if first_war_date %} · since <strong>{{ first_war_date }}</strong>{% endif %}
-                 · all-time clan war performance
+                <strong>{{ total_wars }}</strong> wars recorded{% if first_war_date %} · since <strong>{{ first_war_date }}</strong>{% endif %} · all-time clan war performance
             </div>
         </div>
         <a href="/war" class="nav-back">← Live War</a>
@@ -275,11 +230,20 @@
 <div class="empty"><div class="empty-icon">📊</div><h2 style="font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;">No ended wars yet</h2><p style="margin-top:8px;">Stats appear once wars conclude.</p></div>
 {% else %}
 
+{# ── FARM TOGGLE ── #}
+<div class="toggle-bar">
+    <span class="toggle-label">Attack Filter</span>
+    <div class="toggle-group">
+        <button class="toggle-btn active" id="btnNoFarm" onclick="setFarm(false)">Exclude Farm</button>
+        <button class="toggle-btn"        id="btnAll"    onclick="setFarm(true)">All Attacks</button>
+    </div>
+    <span class="toggle-hint" id="toggleHint">Farm &amp; Failed Farm attacks excluded from stats below</span>
+</div>
+
 {# ── STAT STRIP ── #}
 <div class="section">
     <div class="section-title">Clan Overview</div>
     <div class="stat-strip">
-
         <div class="stat-tile st-wins">
             <div class="stat-label">Record</div>
             <div class="record-split">
@@ -287,115 +251,52 @@
                 <div class="rec-item"><div class="rec-n" style="color:var(--red)">{{ losses }}</div><div class="rec-l" style="color:var(--red)">Losses</div></div>
                 <div class="rec-item"><div class="rec-n" style="color:var(--muted)">{{ draws }}</div><div class="rec-l" style="color:var(--muted)">Draws</div></div>
             </div>
-        </div>
-
-        <div class="stat-tile st-rate">
-            <div class="stat-label">Win Rate</div>
-            <div class="stat-big" style="color:var(--accent)">{{ win_rate }}%</div>
-            <div class="stat-sub">{{ wins }}W out of {{ total_wars }} wars</div>
-            <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{{ win_rate }}%;background:var(--accent);"></div></div>
-        </div>
-
-        <div class="stat-tile st-stars">
-            <div class="stat-label">Stars Balance</div>
-            <div style="display:flex;align-items:baseline;gap:8px;">
-                <div class="stat-big" style="color:var(--green)">{{ total_stars_for }}</div>
-                <div style="color:var(--bord2);font-family:'Rajdhani',sans-serif;font-size:20px;">★</div>
-                <div class="stat-big" style="color:var(--red);font-size:32px;">{{ total_stars_against }}</div>
-            </div>
-            <div class="stat-sub">
-                {% if star_diff > 0 %}<span style="color:var(--green)">+{{ star_diff }} star advantage</span>
-                {% elif star_diff < 0 %}<span style="color:var(--red)">{{ star_diff }} star deficit</span>
-                {% else %}<span style="color:var(--muted)">Perfectly even</span>{% endif %}
-            </div>
-            {% set total_s = total_stars_for + total_stars_against %}
-            {% if total_s > 0 %}
-            <div class="stat-bar-bg" style="display:flex;padding:0;">
-                <div style="height:4px;width:{{ '%.1f'|format(total_stars_for/total_s*100) }}%;background:var(--green);border-radius:2px 0 0 2px;"></div>
-                <div style="height:4px;width:{{ '%.1f'|format(total_stars_against/total_s*100) }}%;background:var(--red);border-radius:0 2px 2px 0;"></div>
+            {% if win_streak > 1 %}
+            <div style="margin-top:12px;text-align:center;">
+                <span style="background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.25);padding:2px 10px;border-radius:12px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:.5px;text-transform:uppercase;">🔥 {{ win_streak }}W Streak</span>
             </div>
             {% endif %}
         </div>
-
+        <div class="stat-tile st-rate">
+            <div class="stat-label">Win Rate</div>
+            <div class="stat-big" style="color:var(--accent)">{{ win_rate }}%</div>
+            <div class="stat-sub">{{ wins }}W out of {{ total_wars }} {{ 'war' if total_wars == 1 else 'wars' }}</div>
+            <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{{ win_rate }}%;background:var(--accent);"></div></div>
+        </div>
+        <div class="stat-tile st-stars">
+            <div class="stat-label">Stars Balance</div>
+            <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:4px;">
+                <div style="text-align:center;">
+                    <div class="stat-big" style="color:var(--green)">{{ total_stars_for }}</div>
+                    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">Ours</div>
+                </div>
+                <div style="color:var(--border);font-family:'Rajdhani',sans-serif;font-size:28px;line-height:1;padding-bottom:14px;">/</div>
+                <div style="text-align:center;">
+                    <div class="stat-big" style="color:var(--red)">{{ total_stars_against }}</div>
+                    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">Theirs</div>
+                </div>
+            </div>
+            <div class="stat-sub">{% if star_diff > 0 %}<span style="color:var(--green)">+{{ star_diff }} advantage</span>{% elif star_diff < 0 %}<span style="color:var(--red)">{{ star_diff }} deficit</span>{% else %}Even{% endif %}</div>
+            {% set ts = total_stars_for + total_stars_against %}
+            {% if ts > 0 %}
+            <div class="stat-bar-bg" style="display:flex;padding:0;margin-top:8px;">
+                <div style="height:4px;width:{{ '%.1f'|format(total_stars_for/ts*100) }}%;background:var(--green);border-radius:2px 0 0 2px;"></div>
+                <div style="height:4px;width:{{ '%.1f'|format(total_stars_against/ts*100) }}%;background:var(--red);border-radius:0 2px 2px 0;"></div>
+            </div>
+            {% endif %}
+        </div>
         <div class="stat-tile st-part">
-            <div class="stat-label">Attack Participation</div>
+            <div class="stat-label">Participation</div>
             <div class="stat-big" style="color:var(--blue)">{{ clan_participation_rate }}%</div>
-            <div class="stat-sub">{{ total_attacks_used_clan }} / {{ total_attacks_possible_clan }} attacks used</div>
+            <div class="stat-sub">{{ total_attacks_used_clan }} / {{ total_attacks_possible_clan }} attacks</div>
             <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{{ clan_participation_rate }}%;background:var(--blue);"></div></div>
         </div>
-
         <div class="stat-tile st-3star">
             <div class="stat-label">3★ Rate</div>
             <div class="stat-big" style="color:var(--purple)">{{ clan_3star_rate }}%</div>
-            <div class="stat-sub">out of {{ total_attacks_used_clan }} attacks</div>
+            <div class="stat-sub" id="threeStarNote">farm attacks excluded</div>
             <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{{ clan_3star_rate }}%;background:var(--purple);"></div></div>
         </div>
-
-    </div>
-</div>
-
-{# ── WAR FORM ── #}
-{% if war_timeline %}
-<div class="section">
-    <div class="section-title">War Form · {{ war_timeline|length }} Wars (oldest → newest)</div>
-    <div class="form-wrap">
-        <div class="form-dots">
-            {% for w in war_timeline %}
-            {% if loop.index0 > 0 and loop.index0 % 10 == 0 %}<div class="form-sep"></div>{% endif %}
-            <div class="fdot {{ w.result }}" title="{{ w.date }} vs {{ w.opponent }}&#10;{{ w.our_stars }}★ – {{ w.opp_stars }}★ ({{ w.our_pct }}% / {{ w.opp_pct }}%) · {{ w.size }}v{{ w.size }}">
-                <span>{{ w.result[0]|upper }}</span>
-                <span class="fdot-score">{{ w.our_stars }}-{{ w.opp_stars }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-{% endif %}
-
-{# ── HIGHLIGHTS ── #}
-<div class="section">
-    <div class="section-title">Clan Highlights</div>
-    <div class="three-col">
-
-        {% if biggest_win %}
-        <div class="hl-card hl-glow-win">
-            <div class="hl-card-label">🏆 Biggest Win</div>
-            <div class="hl-opponent">{{ biggest_win.opponent }}</div>
-            <div class="hl-score">
-                <span class="hl-our">{{ biggest_win.our_stars }}</span>
-                <span class="hl-sep">★</span>
-                <span class="hl-opp">{{ biggest_win.opp_stars }}</span>
-            </div>
-            <div class="hl-meta">{{ biggest_win.date }} · +{{ biggest_win.our_stars - biggest_win.opp_stars }} star margin · {{ biggest_win.size }}v{{ biggest_win.size }}</div>
-        </div>
-        {% endif %}
-
-        {% if best_star_war %}
-        <div class="hl-card hl-glow-star">
-            <div class="hl-card-label">⭐ Most Stars in a War</div>
-            <div class="hl-opponent">{{ best_star_war.opponent }}</div>
-            <div class="hl-score">
-                <span class="hl-our">{{ best_star_war.our_stars }}</span>
-                <span class="hl-sep" style="color:var(--yellow);">★</span>
-                <span class="hl-opp" style="color:var(--muted);">{{ best_star_war.opp_stars }}</span>
-            </div>
-            <div class="hl-meta">{{ best_star_war.date }} · {{ best_star_war.our_pct }}% destruction · {{ best_star_war.size }}v{{ best_star_war.size }}</div>
-        </div>
-        {% endif %}
-
-        {% if biggest_loss %}
-        <div class="hl-card hl-glow-loss">
-            <div class="hl-card-label">💀 Hardest Loss</div>
-            <div class="hl-opponent">{{ biggest_loss.opponent }}</div>
-            <div class="hl-score">
-                <span class="hl-our">{{ biggest_loss.our_stars }}</span>
-                <span class="hl-sep">★</span>
-                <span class="hl-opp">{{ biggest_loss.opp_stars }}</span>
-            </div>
-            <div class="hl-meta">{{ biggest_loss.date }} · -{{ biggest_loss.opp_stars - biggest_loss.our_stars }} star deficit · {{ biggest_loss.size }}v{{ biggest_loss.size }}</div>
-        </div>
-        {% endif %}
-
     </div>
 </div>
 
@@ -405,148 +306,73 @@
     <div class="hof-grid">
 
         <div class="hof-section">
-            <div class="hof-header">
-                <span style="font-size:16px;">⭐</span>
-                <span class="hof-header-title">Best Average Stars</span>
-            </div>
-            {% for p in hof_avg_stars %}
-            <div class="hof-entry">
-                <div class="hof-medal">{{ ['🥇','🥈','🥉'][loop.index0] }}</div>
-                <div>
-                    <div class="hof-name">{{ p.name }}</div>
-                    <div class="hof-sub"><span class="th-chip-sm">TH{{ p.th }}</span>{{ p.wars }} wars</div>
-                </div>
-                <div style="margin-left:auto;text-align:right;">
-                    <div class="hof-val" style="color:var(--yellow)">{{ p.avg_stars }}</div>
-                    <div class="hof-val-sub">avg ★/atk</div>
-                </div>
-            </div>
-            {% else %}
-            <div style="padding:14px 18px;color:var(--muted);font-size:12px;">Not enough data yet</div>
-            {% endfor %}
+            <div class="hof-header"><span style="font-size:16px">⭐</span><span class="hof-header-title">Best Average Stars</span></div>
+            <div class="hof-list" id="hofAvg"></div>
         </div>
 
         <div class="hof-section">
-            <div class="hof-header">
-                <span style="font-size:16px;">💥</span>
-                <span class="hof-header-title">Best 3★ Rate</span>
-            </div>
-            {% for p in hof_3star_rate %}
-            <div class="hof-entry">
-                <div class="hof-medal">{{ ['🥇','🥈','🥉'][loop.index0] }}</div>
-                <div>
-                    <div class="hof-name">{{ p.name }}</div>
-                    <div class="hof-sub"><span class="th-chip-sm">TH{{ p.th }}</span>{{ p.three_stars }} triples</div>
-                </div>
-                <div style="margin-left:auto;text-align:right;">
-                    <div class="hof-val" style="color:var(--purple)">{{ p.three_star_rate }}%</div>
-                    <div class="hof-val-sub">3★ rate</div>
-                </div>
-            </div>
-            {% else %}
-            <div style="padding:14px 18px;color:var(--muted);font-size:12px;">Not enough data yet</div>
-            {% endfor %}
+            <div class="hof-header"><span style="font-size:16px">💥</span><span class="hof-header-title">Best 3★ Rate</span></div>
+            <div class="hof-list" id="hof3star"></div>
         </div>
 
         <div class="hof-section">
-            <div class="hof-header">
-                <span style="font-size:16px;">⚔️</span>
-                <span class="hof-header-title">Most Wars</span>
-            </div>
-            {% for p in hof_most_wars %}
-            <div class="hof-entry">
-                <div class="hof-medal">{{ ['🥇','🥈','🥉'][loop.index0] }}</div>
-                <div>
-                    <div class="hof-name">{{ p.name }}</div>
-                    <div class="hof-sub"><span class="th-chip-sm">TH{{ p.th }}</span>{{ p.participation }}% attendance</div>
-                </div>
-                <div style="margin-left:auto;text-align:right;">
-                    <div class="hof-val" style="color:var(--green)">{{ p.wars }}</div>
-                    <div class="hof-val-sub">wars played</div>
-                </div>
-            </div>
-            {% else %}
-            <div style="padding:14px 18px;color:var(--muted);font-size:12px;">No data</div>
-            {% endfor %}
+            <div class="hof-header"><span style="font-size:16px">⚔️</span><span class="hof-header-title">Most Wars Played</span></div>
+            <div class="hof-list" id="hofWars"></div>
         </div>
 
     </div>
 </div>
 
-{# ── ATTACK FINGERPRINT ── #}
+{# ── FINGERPRINT ── #}
 <div class="section">
     <div class="section-title">Clan Attack Fingerprint</div>
     <div class="fingerprint-card">
-        {% set total_lbl = label_totals.values()|sum %}
-        {% if total_lbl > 0 %}
-        <div class="fp-bar">
-            {% for key, cls in [('clear','lb-clear'),('failed_clear','lb-failed-clear'),('high_clear','lb-high-clear'),('farm','lb-farm'),('failed_farm','lb-failed-farm'),('low_clear','lb-low-clear'),('low_clear_fail','lb-low-clear-fail'),('clean_up','lb-clean-up'),('failed_clean_up','lb-failed-clean'),('wasted','lb-wasted')] %}
-            {% set cnt = label_totals.get(key, 0) %}
-            {% if cnt > 0 %}
-            {% set pct = '%.1f'|format(cnt / total_lbl * 100) %}
-            <div class="fp-seg {{ cls }}" style="width:{{ pct }}%;" title="{{ key }}: {{ cnt }} ({{ pct }}%)"></div>
-            {% endif %}
-            {% endfor %}
-        </div>
-        <div class="fp-legend">
-            {% for key, name, cls in [('clear','Clear','lb-clear'),('failed_clear','Failed Clear','lb-failed-clear'),('high_clear','High Clear','lb-high-clear'),('farm','Farm','lb-farm'),('failed_farm','Failed Farm','lb-failed-farm'),('low_clear','Low Clear','lb-low-clear'),('low_clear_fail','Low Clear Fail','lb-low-clear-fail'),('clean_up','Clean Up','lb-clean-up'),('failed_clean_up','Failed C.U.','lb-failed-clean'),('wasted','Wasted','lb-wasted')] %}
-            {% set cnt = label_totals.get(key, 0) %}
-            {% if cnt > 0 %}
-            <div class="fp-item">
-                <div class="fp-dot {{ cls }}"></div>
-                <span>{{ name }}: <strong style="color:var(--text)">{{ cnt }}</strong> ({{ '%.0f'|format(cnt/total_lbl*100) }}%)</span>
-            </div>
-            {% endif %}
-            {% endfor %}
-        </div>
-        {% else %}
-        <div style="color:var(--muted);font-size:13px;">No attack data available.</div>
-        {% endif %}
+        <div class="fp-bar" id="fpBar"></div>
+        <div class="fp-legend" id="fpLegend"></div>
     </div>
 </div>
+<div class="fp-tooltip" id="fpTooltip"></div>
 
 {# ── TH BREAKDOWN ── #}
-{% if per_th_list %}
 <div class="section">
     <div class="section-title">Performance by Town Hall Level</div>
-    <div class="th-grid">
-        {% for t in per_th_list %}
-        {% set avg_color = 'var(--green)' if t.avg_stars >= 2.5 else ('var(--yellow)' if t.avg_stars >= 1.5 else 'var(--red)') %}
-        <div class="th-tile">
-            <div class="th-tile-num" style="color:{{ avg_color }}">TH{{ t.th }}</div>
-            <div class="th-tile-stat"><span>Players</span><strong>{{ t.player_count }}</strong></div>
-            <div class="th-tile-stat"><span>Avg ★</span><strong style="color:{{ avg_color }}">{{ t.avg_stars }}</strong></div>
-            <div class="th-tile-stat"><span>3★ Rate</span><strong>{{ t.three_star_rate }}%</strong></div>
-            <div class="th-tile-stat"><span>Total ★</span><strong style="color:var(--yellow)">{{ t.stars }}</strong></div>
-            <div class="th-mini-bar"><div class="th-mini-fill" style="width:{{ [t.avg_stars/3*100,100]|min }}%;background:{{ avg_color }};"></div></div>
-        </div>
-        {% endfor %}
-    </div>
+    <div class="th-grid" id="thGrid"></div>
 </div>
-{% endif %}
 
 {# ── PLAYER LEADERBOARD ── #}
 <div class="section">
     <div class="section-title">Player Leaderboard</div>
-    <div class="table-card">
-        <div class="table-header">
-            <span class="table-header-title">{{ player_list|length }} Players · All Wars</span>
-            <span class="sort-hint" style="font-size:10px;color:var(--muted);">Click columns to sort</span>
-        </div>
-        <div class="pt-wrap">
+    <div class="table-header" style="border-radius:12px 12px 0 0;border:1px solid var(--border);border-bottom:none;">
+        <span class="table-header-title">{{ player_list|length }} Players · All Wars</span>
+        <span style="font-size:10px;color:var(--muted);">Click columns to sort</span>
+    </div>
+    <div class="table-scroll" style="border-radius:0 0 12px 12px;">
+        <div class="table-wrapper">
             <table class="pt" id="playerTable">
+                <colgroup>
+                    <col class="col-league">
+                    <col class="col-player">
+                    <col class="col-wars">
+                    <col class="col-attacks">
+                    <col class="col-avg">
+                    <col class="col-rate">
+                    <col class="col-rate">
+                    <col class="col-rate">
+                    <col class="col-rate">
+                    <col class="col-verdict">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th style="text-align:center;width:36px;" onclick="ptSort('_rank')">#</th>
-                        <th onclick="ptSort('name')">Player</th>
-                        <th style="text-align:center;" onclick="ptSort('wars')">Wars</th>
-                        <th style="text-align:center;min-width:90px;" onclick="ptSort('participation')">Attacks</th>
-                        <th style="text-align:center;" onclick="ptSort('avg_stars')">Avg ★</th>
-                        <th style="text-align:center;" onclick="ptSort('three_star_rate')">3★ Rate</th>
-                        <th style="text-align:center;" onclick="ptSort('avg_destruction')">Avg Dest</th>
-                        <th style="text-align:center;" onclick="ptSort('stars')">Total ★</th>
-                        <th style="text-align:center;" onclick="ptSort('star_pct')">Share</th>
-                        <th style="min-width:140px;">Labels</th>
+                        <th class="sortable" onclick="ptSort('_league_rank')" style="text-align:center;">League</th>
+                        <th class="sortable" onclick="ptSort('name')">Player</th>
+                        <th class="sortable" onclick="ptSort('wars')" style="text-align:center;">Wars</th>
+                        <th class="sortable" onclick="ptSort('participation')" style="text-align:center;">Attacks</th>
+                        <th class="sortable" onclick="ptSort('_avg_stars')" style="text-align:center;">Avg ★</th>
+                        <th class="sortable" onclick="ptSort('_three_star_rate')" style="text-align:center;">3★</th>
+                        <th class="sortable" onclick="ptSort('_two_star_rate')" style="text-align:center;">2★</th>
+                        <th class="sortable" onclick="ptSort('_one_star_rate')" style="text-align:center;">1★</th>
+                        <th class="sortable" onclick="ptSort('_zero_star_rate')" style="text-align:center;">0★</th>
+                        <th class="sortable" onclick="ptSort('avg_verdict')" style="text-align:center;">Avg Score</th>
                     </tr>
                 </thead>
                 <tbody id="ptBody"></tbody>
@@ -562,20 +388,20 @@
     <div class="table-card">
         <div class="pt-wrap">
             <table class="rw-table">
-                <thead><tr><th>Result</th><th>Date</th><th>Opponent</th><th>Size</th><th>Our Stars</th><th>Their Stars</th><th>Our Dest%</th><th>Their Dest%</th></tr></thead>
+                <thead><tr><th>Result</th><th>Date</th><th>Opponent</th><th>Size</th><th>Our ★</th><th>Their ★</th><th>Our Dest%</th><th>Their Dest%</th></tr></thead>
                 <tbody>
-                    {% for w in recent_wars %}
-                    <tr>
-                        <td><span class="rw-badge rw-{{ w.result }}">{{ w.result }}</span></td>
-                        <td style="color:var(--muted);font-size:12px;font-family:'Rajdhani',sans-serif;font-weight:700;">{{ w.date }}</td>
-                        <td style="font-weight:600;">{{ w.opponent }}</td>
-                        <td style="color:var(--muted);font-size:12px;text-align:center;">{{ w.size }}v{{ w.size }}</td>
-                        <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:var(--green);text-align:center;">{{ w.our_stars }}</td>
-                        <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:var(--red);text-align:center;">{{ w.opp_stars }}</td>
-                        <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--blue);text-align:center;">{{ w.our_pct }}%</td>
-                        <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--muted);text-align:center;">{{ w.opp_pct }}%</td>
-                    </tr>
-                    {% endfor %}
+                {% for w in recent_wars %}
+                <tr onclick="window.location='/war?war_id={{ w.id }}'">
+                    <td><span class="rw-badge rw-{{ w.result }}">{{ w.result }}</span></td>
+                    <td style="color:var(--muted);font-size:12px;font-family:'Rajdhani',sans-serif;font-weight:700;">{{ w.date_full }}</td>
+                    <td style="font-weight:600;">{{ w.opponent }}</td>
+                    <td style="color:var(--muted);font-size:12px;text-align:center;">{{ w.size }}v{{ w.size }}</td>
+                    <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:var(--green);text-align:center;">{{ w.our_stars }}</td>
+                    <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:var(--red);text-align:center;">{{ w.opp_stars }}</td>
+                    <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--blue);text-align:center;">{{ w.our_pct }}%</td>
+                    <td style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--muted);text-align:center;">{{ w.opp_pct }}%</td>
+                </tr>
+                {% endfor %}
                 </tbody>
             </table>
         </div>
@@ -591,7 +417,7 @@
         {% for p in hof_shame %}
         <div class="shame-tile">
             <div class="shame-name" title="{{ p.name }}">{{ p.name }}</div>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:8px;"><span class="th-chip-sm">TH{{ p.th }}</span> {{ p.wars }} wars</div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:8px;"><span class="th-chip-sm">TH{{ p.th }}</span>{{ p.wars }} wars</div>
             <div class="shame-num">{{ p.participation }}%</div>
             <div class="shame-sub">{{ p.attacks_used }}/{{ p.attacks_possible }} attacks · {{ p.attacks_missed }} missed</div>
         </div>
@@ -604,22 +430,215 @@
 </div>
 
 <script>
-const PLAYERS  = {{ player_list | tojson | safe }};
+const PLAYERS     = {{ player_list      | tojson | safe }};
+const LBL_ALL     = {{ label_totals     | tojson | safe }};
+const LBL_NF      = {{ label_totals_nf  | tojson | safe }};
+const TH_ALL      = {{ per_th_list      | tojson | safe }};
+const TH_NF       = {{ per_th_list_nf   | tojson | safe }};
+const HOF_AVG_ALL = {{ hof_avg_stars    | tojson | safe }};
+const HOF_AVG_NF  = {{ hof_avg_stars_nf | tojson | safe }};
+const HOF_3_ALL   = {{ hof_3star_rate   | tojson | safe }};
+const HOF_3_NF    = {{ hof_3star_rate_nf| tojson | safe }};
+const HOF_WARS    = {{ hof_most_wars    | tojson | safe }};
 
-const LABEL_META = {
-    'clear':           { name:'Clear',         cls:'lc-clear',         bar:'lb-clear' },
-    'failed_clear':    { name:'Failed Clear',   cls:'lc-failed-clear',  bar:'lb-failed-clear' },
-    'high_clear':      { name:'High Clear',     cls:'lc-high-clear',    bar:'lb-high-clear' },
-    'farm':            { name:'Farm',           cls:'lc-farm',          bar:'lb-farm' },
-    'failed_farm':     { name:'Failed Farm',    cls:'lc-failed-farm',   bar:'lb-failed-farm' },
-    'low_clear':       { name:'Low Clear',      cls:'lc-low-clear',     bar:'lb-low-clear' },
-    'low_clear_fail':  { name:'Low Cl. Fail',   cls:'lc-low-clear-fail',bar:'lb-low-clear-fail' },
-    'clean_up':        { name:'Clean Up',       cls:'lc-clean-up',      bar:'lb-clean-up' },
-    'failed_clean_up': { name:'Failed C.U.',    cls:'lc-failed-clean',  bar:'lb-failed-clean' },
-    'wasted':          { name:'Wasted',         cls:'lc-wasted',        bar:'lb-wasted' },
-};
+const LABEL_META = [
+    { key:'clear',           name:'Clear',        cls:'lc-clear',         bar:'lb-clear',         color:'#3fb950' },
+    { key:'failed_clear',    name:'Failed Clear', cls:'lc-failed-clear',  bar:'lb-failed-clear',  color:'#e3b341' },
+    { key:'high_clear',      name:'High Clear',   cls:'lc-high-clear',    bar:'lb-high-clear',    color:'#bc8cff' },
+    { key:'farm',            name:'Farm',         cls:'lc-farm',          bar:'lb-farm',           color:'#58a6ff' },
+    { key:'failed_farm',     name:'Failed Farm',  cls:'lc-failed-farm',   bar:'lb-failed-farm',   color:'#f85149' },
+    { key:'low_clear',       name:'Low Clear',    cls:'lc-low-clear',     bar:'lb-low-clear',     color:'rgba(63,185,80,.55)' },
+    { key:'low_clear_fail',  name:'Low Cl.Fail',  cls:'lc-low-clear-fail',bar:'lb-low-clear-fail',color:'rgba(227,179,65,.55)' },
+    { key:'clean_up',        name:'Clean Up',     cls:'lc-clean-up',      bar:'lb-clean-up',      color:'rgba(88,166,255,.6)' },
+    { key:'failed_clean_up', name:'Failed C.U.',  cls:'lc-failed-clean',  bar:'lb-failed-clean',  color:'rgba(248,81,73,.5)' },
+    { key:'wasted',          name:'Wasted',       cls:'lc-wasted',        bar:'lb-wasted',        color:'#30363d' },
+];
 
-let ptSortCol = 'avg_stars', ptSortDir = 'desc';
+let showFarm = false; // default: exclude farm
+let ptSortCol = '_league_rank', ptSortDir = 'desc';
+
+function setFarm(val) {
+    showFarm = val;
+    document.getElementById('btnNoFarm').classList.toggle('active', !val);
+    document.getElementById('btnAll').classList.toggle('active', val);
+    document.getElementById('toggleHint').textContent = val
+        ? 'Showing all attacks including Farm & Failed Farm'
+        : 'Farm & Failed Farm attacks excluded from stats below';
+    document.getElementById('threeStarNote').textContent = val
+        ? 'all attacks included'
+        : 'farm attacks excluded';
+    renderAll();
+}
+
+function renderAll() {
+    renderHoF();
+    renderFingerprint();
+    renderTH();
+    renderTable();
+}
+
+/* ── Helpers ── */
+function esc(s) { const d=document.createElement('div'); d.appendChild(document.createTextNode(String(s))); return d.innerHTML; }
+
+function medal(i) { return i===0?'🥇':i===1?'🥈':i===2?'🥉':''; }
+
+function renderStars(n) {
+    n = parseInt(n) || 0;
+    const filled = `<span style="color:var(--yellow);">${'★'.repeat(n)}</span>`;
+    const empty  = `<span style="color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
+    return `<span style="font-size:1.18em;letter-spacing:1px;">${filled}${empty}</span>`;
+}
+
+function starPips(avg) {
+    return `<div class="star-pips">${renderStars(Math.round(avg))}</div>`;
+}
+
+function renderLabelBar(labels, noFarm) {
+    const total = Object.values(labels).reduce((a,b)=>a+b,0);
+    if (!total) return '<span style="color:var(--muted);font-size:10px;">—</span>';
+    let bar='<div class="lbar-mini">', pills='<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;">';
+    for(const m of LABEL_META) {
+        if(noFarm && (m.key==='farm'||m.key==='failed_farm')) continue;
+        const n=labels[m.key]||0; if(!n) continue;
+        const pct=(n/total*100).toFixed(1);
+        bar+=`<div class="lbar-seg ${m.bar}" style="width:${pct}%"></div>`;
+        pills+=`<span class="lc-pill ${m.cls}">${m.name.split(' ')[0]}: ${n}</span>`;
+    }
+    return bar+'</div>'+pills+'</div>';
+}
+
+/* ── Hall of Fame ── */
+function renderHoF() {
+    const avgList  = showFarm ? HOF_AVG_ALL : HOF_AVG_NF;
+    const list3    = showFarm ? HOF_3_ALL   : HOF_3_NF;
+    const avgKey   = showFarm ? 'avg_stars'       : 'avg_stars_nf';
+    const rateKey  = showFarm ? 'three_star_rate'  : 'three_star_rate_nf';
+    const starsKey = showFarm ? 'attacks_used'     : 'attacks_used_nf';
+
+    function buildList(arr, valFn, subFn, color, headerNote='') {
+        if(!arr.length) return '<div style="padding:12px 18px;color:var(--muted);font-size:12px;">Not enough data</div>';
+        return headerNote + arr.map((p,i) => `
+            <div class="hof-entry">
+                <div class="${i<3?'hof-medal':'hof-pos'}">${i<3?medal(i):i+1}</div>
+                <div>
+                    <div class="hof-name">${esc(p.name)}</div>
+                    <div class="hof-sub"><span class="th-chip-sm">TH${p.th}</span>${subFn(p)}</div>
+                </div>
+                <div>
+                    <div class="hof-val" style="color:${color}">${valFn(p)}</div>
+                    <div class="hof-val-sub">${i<3?'':`#${i+1}`}</div>
+                </div>
+            </div>`).join('');
+    }
+
+    const avgFallback   = avgList.length === 0;
+    const threeFallback = list3.length  === 0;
+
+    document.getElementById('hofAvg').innerHTML = avgFallback
+        ? buildList(HOF_WARS, p => p.wars + ' war' + (p.wars !== 1 ? 's' : ''), p => `${p.participation}% attendance`, 'var(--muted)',
+            '<div style="font-size:10px;color:var(--blue);padding:6px 18px 0;font-family:\'Rajdhani\',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Need more wars for avg ★ data</div>')
+        : buildList(avgList, p => p[avgKey].toFixed(2), p => `${p[starsKey]} attacks`, 'var(--yellow)');
+
+    document.getElementById('hof3star').innerHTML = threeFallback
+        ? buildList(HOF_WARS, p => p.wars + ' war' + (p.wars !== 1 ? 's' : ''), p => `${p.participation}% attendance`, 'var(--muted)',
+            '<div style="font-size:10px;color:var(--blue);padding:6px 18px 0;font-family:\'Rajdhani\',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Need more wars for 3★ rate data</div>')
+        : buildList(list3, p => `${p[rateKey]}%`, p => `${p[showFarm?'three_stars':'three_stars_nf']} triples`, 'var(--purple)');
+    document.getElementById('hofWars').innerHTML = buildList(
+        HOF_WARS,
+        p => p.wars,
+        p => `${p.participation}% attendance`,
+        'var(--green)'
+    );
+}
+
+/* ── Fingerprint ── */
+const tooltip = document.getElementById('fpTooltip');
+function renderFingerprint() {
+    const lbl = showFarm ? LBL_ALL : LBL_NF;
+    const total = Object.values(lbl).reduce((a,b)=>a+b,0);
+    const bar   = document.getElementById('fpBar');
+    const leg   = document.getElementById('fpLegend');
+    bar.innerHTML = ''; leg.innerHTML = '';
+    if(!total) { bar.innerHTML='<span style="color:var(--muted);font-size:12px;">No data</span>'; return; }
+    for(const m of LABEL_META) {
+        if(!showFarm && (m.key==='farm'||m.key==='failed_farm')) continue;
+        const n=lbl[m.key]||0; if(!n) continue;
+        const pct=(n/total*100);
+        const seg=document.createElement('div');
+        seg.className='fp-seg '+m.bar;
+        seg.style.width=pct.toFixed(2)+'%';
+        seg.dataset.label=m.name;
+        seg.dataset.count=n;
+        seg.dataset.pct=pct.toFixed(1);
+        seg.addEventListener('mousemove', e=>{
+            tooltip.style.display='block';
+            tooltip.style.left=(e.clientX+14)+'px';
+            tooltip.style.top=(e.clientY-36)+'px';
+            tooltip.innerHTML=`<strong>${seg.dataset.label}</strong>: ${seg.dataset.count} attacks (${seg.dataset.pct}%)`;
+        });
+        seg.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
+        bar.appendChild(seg);
+
+        const item=document.createElement('div');
+        item.className='fp-item';
+        item.innerHTML=`<div class="fp-dot" style="background:${m.color}"></div><span>${m.name}: <strong style="color:var(--text)">${n}</strong> (${pct.toFixed(0)}%)</span>`;
+        leg.appendChild(item);
+    }
+}
+
+/* ── TH Breakdown ── */
+function renderTH() {
+    const list = showFarm ? TH_ALL : TH_NF;
+    const el = document.getElementById('thGrid');
+    // Always iterate TH_ALL so every TH level is shown, even if no-farm data is empty
+    el.innerHTML = TH_ALL.map(tAll => {
+        const t = list.find(x => x.th === tAll.th);
+        const noData = !showFarm && (!t || t.attacks === 0);
+        if (noData) {
+            return `<div class="th-tile" style="opacity:.5;border-color:rgba(139,148,158,.2);">
+                <div class="th-tile-num" style="color:var(--muted)">TH${tAll.th}</div>
+                <div class="th-tile-stat"><span>Players</span><strong>${tAll.player_count}</strong></div>
+                <div style="margin-top:8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--blue);">Farm Only</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px;">No non-farm attacks</div>
+            </div>`;
+        }
+        const d = t || tAll;
+        const c = d.avg_stars>=2.5?'var(--green)':d.avg_stars>=1.5?'var(--yellow)':'var(--red)';
+        const w = Math.min(d.avg_stars/3*100,100).toFixed(0);
+        return `<div class="th-tile">
+            <div class="th-tile-num" style="color:${c}">TH${d.th}</div>
+            <div class="th-tile-stat"><span>Players</span><strong>${tAll.player_count}</strong></div>
+            <div class="th-tile-stat"><span>Avg ★</span><strong style="color:${c}">${d.avg_stars}</strong></div>
+            <div class="th-tile-stat"><span>3★ Rate</span><strong>${d.three_star_rate}%</strong></div>
+            <div class="th-tile-stat"><span>Total ★</span><strong style="color:var(--yellow)">${d.stars}</strong></div>
+            <div class="th-mini-bar"><div class="th-mini-fill" style="width:${w}%;background:${c};"></div></div>
+        </div>`;
+    }).join('');
+}
+
+/* ── Player Table ── */
+function leagueSortKey(tier) {
+    if (!tier || tier === 'Unranked' || tier === 'Unknown League') return 0;
+    if (/ III$/.test(tier)) return 34;
+    if (/ II$/.test(tier))  return 35;
+    if (/ I$/.test(tier))   return 36;
+    const m = tier.match(/(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+}
+
+function verdictBadge(score) {
+    if (score >= 80) return 'badge-godlike';
+    if (score >= 65) return 'badge-dominant';
+    if (score >= 50) return 'badge-wow';
+    if (score >= 30) return 'badge-good';
+    if (score >= 10) return 'badge-warning';
+    if (score >  0)  return 'badge-suck';
+    return 'badge-undefined';
+}
+
+function rateColor(r) {
+    return r >= 70 ? 'var(--green)' : r >= 40 ? 'var(--yellow)' : 'var(--red)';
+}
 
 function ptSort(col) {
     if (ptSortCol === col) ptSortDir = ptSortDir === 'asc' ? 'desc' : 'asc';
@@ -627,38 +646,26 @@ function ptSort(col) {
     renderTable();
 }
 
-function esc(s) {
-    const d = document.createElement('div');
-    d.appendChild(document.createTextNode(String(s)));
-    return d.innerHTML;
-}
-
-function renderLabelBar(labels) {
-    const total = Object.values(labels).reduce((a,b) => a+b, 0);
-    if (!total) return '<span style="color:var(--muted);font-size:10px;">—</span>';
-    let bar = '<div class="lbar-mini">', pills = '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;">';
-    for (const [key, meta] of Object.entries(LABEL_META)) {
-        const n = labels[key] || 0;
-        if (!n) continue;
-        const pct = (n / total * 100).toFixed(1);
-        bar  += `<div class="lbar-seg ${meta.bar}" style="width:${pct}%" title="${meta.name}: ${n}"></div>`;
-        pills += `<span class="lc-pill ${meta.cls}">${meta.name.split(' ')[0]}: ${n}</span>`;
-    }
-    return bar + '</div>' + pills + '</div>';
-}
-
-function starPips(avg) {
-    let h = '';
-    for (let i = 0; i < 3; i++) h += `<div class="star-pip${i < avg ? ' on' : ''}"></div>`;
-    return `<div class="star-pips">${h}</div>`;
-}
-
 function renderTable() {
-    const data = PLAYERS.map((p, i) => ({ ...p, _rank: i + 1 }));
+    const avgKey      = showFarm ? 'avg_stars'       : 'avg_stars_nf';
+    const threeKey    = showFarm ? 'three_star_rate'  : 'three_star_rate_nf';
+    const twoKey      = showFarm ? 'two_star_rate'    : 'two_star_rate_nf';
+    const oneKey      = showFarm ? 'one_star_rate'    : 'one_star_rate_nf';
+    const zeroKey     = showFarm ? 'zero_star_rate'   : 'zero_star_rate_nf';
+
+    const data = PLAYERS.map(p => ({
+        ...p,
+        _league_rank:      leagueSortKey(p.league),
+        _avg_stars:        p[avgKey]   ?? 0,
+        _three_star_rate:  p[threeKey] ?? 0,
+        _two_star_rate:    p[twoKey]   ?? 0,
+        _one_star_rate:    p[oneKey]   ?? 0,
+        _zero_star_rate:   p[zeroKey]  ?? 0,
+    }));
+
     data.sort((a, b) => {
         let av = a[ptSortCol] ?? 0, bv = b[ptSortCol] ?? 0;
-        if (typeof av === 'string') av = av.toLowerCase();
-        if (typeof bv === 'string') bv = bv.toLowerCase();
+        if (typeof av === 'string') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
         if (av < bv) return ptSortDir === 'asc' ? -1 : 1;
         if (av > bv) return ptSortDir === 'asc' ?  1 : -1;
         return 0;
@@ -667,66 +674,72 @@ function renderTable() {
     const tbody = document.getElementById('ptBody');
     tbody.innerHTML = '';
 
-    data.forEach((p, i) => {
-        const rank = i + 1;
-        const rankCls = rank === 1 ? ' gold' : rank === 2 ? ' silver' : rank === 3 ? ' bronze' : '';
-        const rankLabel = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
-
+    data.forEach(p => {
+        const farmOnly = !showFarm && p.attacks_used_nf === 0;
         const thColor = p.th >= 17 ? 'var(--purple)' : p.th >= 15 ? 'var(--blue)' : p.th >= 13 ? 'var(--green)' : 'var(--muted)';
-        const avgColor = p.avg_stars >= 2.5 ? 'var(--green)' : p.avg_stars >= 1.5 ? 'var(--yellow)' : 'var(--red)';
-        const rateColor = p.three_star_rate >= 70 ? 'var(--green)' : p.three_star_rate >= 40 ? 'var(--yellow)' : 'var(--red)';
-        const destColor = p.avg_destruction >= 80 ? 'var(--green)' : p.avg_destruction >= 60 ? 'var(--yellow)' : 'var(--red)';
-        const partColor = p.participation >= 90 ? 'var(--green)' : p.participation >= 70 ? 'var(--yellow)' : 'var(--red)';
+        const avg     = p[avgKey] ?? 0;
+        const avgC    = avg >= 2.5 ? 'var(--green)' : avg >= 1.5 ? 'var(--yellow)' : 'var(--red)';
+        const partC   = p.participation >= 90 ? 'var(--green)' : p.participation >= 70 ? 'var(--yellow)' : 'var(--red)';
+        const badge   = verdictBadge(p.avg_verdict);
+
+        const leagueCell = p.league_icon
+            ? `<img src="${p.league_icon}" class="league-icon" alt="" title="${esc(p.league)}">`
+            : `<div class="league-icon-placeholder"></div>`;
+
+        const farmOnlyCells = `<td colspan="6">
+            <span style="color:var(--blue);font-size:11px;font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Farm Only</span>
+            <span style="color:var(--muted);font-size:11px;margin-left:8px;">${p.attacks_used}/${p.attacks_possible} attacks</span>
+        </td>`;
+
+        const fmtRate = (r, inv=false) => {
+            if (r === 0) return inv
+                ? `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:var(--green)">—</span>`
+                : `<span style="color:var(--bord2);font-family:'Rajdhani',sans-serif;font-size:16px;">—</span>`;
+            const c = inv
+                ? (r <= 15 ? 'var(--yellow)' : 'var(--red)')
+                : rateColor(r);
+            return `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:${c}">${r}%</span>`;
+        };
+
+        const statCells = farmOnly ? farmOnlyCells : `
+            <td style="text-align:center">
+                <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:20px;color:${avgC};line-height:1">${avg.toFixed(2)}</div>
+                ${starPips(avg)}
+            </td>
+            <td style="text-align:center">${fmtRate(p[threeKey]??0)}</td>
+            <td style="text-align:center">${fmtRate(p[twoKey]??0, true)}</td>
+            <td style="text-align:center">${fmtRate(p[oneKey]??0, true)}</td>
+            <td style="text-align:center">${fmtRate(p[zeroKey]??0, true)}</td>
+            <td style="text-align:center"><span class="judgment ${badge}">${p.avg_verdict}</span></td>`;
 
         const tr = document.createElement('tr');
+        if (farmOnly) tr.style.opacity = '0.5';
         tr.innerHTML = `
-            <td class="pt-rank${rankCls}" style="text-align:center">${rankLabel}</td>
+            <td style="text-align:center">${leagueCell}</td>
             <td>
-                <div class="pt-player-name">
-                    <span class="th-chip" style="border-color:${thColor};color:${thColor}">TH${p.th}</span>${esc(p.name)}
-                </div>
+                <div class="pt-player-name"><span class="th-chip" style="border-color:${thColor};color:${thColor}">TH${p.th}</span>${esc(p.name)}</div>
                 <div class="pt-player-sub">${p.league ? esc(p.league) : '—'}</div>
             </td>
             <td style="text-align:center">
-                <div class="pt-num">${p.wars}</div>
-            </td>
-            <td class="part-wrap">
-                <div class="pt-num" style="font-size:13px;">${p.attacks_used}<span style="font-size:10px;color:var(--muted);">/${p.attacks_possible}</span></div>
-                <div class="pt-sub" style="color:${partColor}">${p.participation}%</div>
-                <div class="part-bar"><div class="part-fill" style="width:${p.participation}%;background:${partColor};"></div></div>
+                <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px">${p.wars}</div>
             </td>
             <td>
-                <div class="pt-num" style="color:${avgColor}">${p.avg_stars.toFixed(2)}</div>
-                ${starPips(p.avg_stars)}
+                <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;text-align:center;line-height:1">${p.attacks_used}<span style="font-size:13px;color:var(--muted)">/${p.attacks_possible}</span></div>
+                <div style="font-size:10px;color:${partC};text-align:center;margin-top:2px">${p.participation}%</div>
+                <div class="part-bar"><div class="part-fill" style="width:${p.participation}%;background:${partC}"></div></div>
             </td>
-            <td style="text-align:center">
-                <div class="pt-num" style="color:${rateColor}">${p.three_star_rate}%</div>
-                <div class="pt-sub">${p.three_stars} triples</div>
-            </td>
-            <td style="text-align:center">
-                <div class="pt-num" style="font-size:14px;color:${destColor}">${p.avg_destruction}%</div>
-            </td>
-            <td style="text-align:center">
-                <div class="pt-num" style="color:var(--yellow)">${p.stars}</div>
-                <div class="pt-sub">★ total</div>
-            </td>
-            <td style="text-align:center">
-                <div class="pt-num" style="font-size:13px;color:var(--accent)">${p.star_pct}%</div>
-                <div class="pt-sub">of clan</div>
-            </td>
-            <td>${renderLabelBar(p.labels)}</td>
-        `;
+            ${statCells}`;
         tbody.appendChild(tr);
     });
 
     document.querySelectorAll('table.pt thead th').forEach(th => {
-        th.classList.remove('sort-asc','sort-desc');
+        th.classList.remove('sort-active', 'asc', 'desc');
         const col = th.getAttribute('onclick')?.match(/ptSort\('(\w+)'\)/)?.[1];
-        if (col === ptSortCol) th.classList.add(ptSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+        if (col === ptSortCol) th.classList.add('sort-active', ptSortDir);
     });
 }
 
-renderTable();
+renderAll();
 </script>
 </body>
 </html>
