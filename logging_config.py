@@ -1,7 +1,6 @@
 import logging
 import os
 import sys
-from logging.handlers import RotatingFileHandler
 
 
 class ConsoleColorFormatter(logging.Formatter):
@@ -56,7 +55,7 @@ def setup_task_logger(name, log_file):
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-    file_handler = RotatingFileHandler(log_file, maxBytes=1024 * 1024, backupCount=5)
+    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
     file_handler.setFormatter(_file_formatter)
     logger.addHandler(file_handler)
 
