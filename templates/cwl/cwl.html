@@ -57,6 +57,11 @@
         .clan-badge-sm { width: 28px; height: 28px; object-fit: contain; }
         .our-row td { background: rgba(240,165,0,.05); }
         .our-row:hover td { background: rgba(240,165,0,.08) !important; }
+        th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+        th.sortable:hover { color: var(--text); }
+        th.sortable.sorted { color: var(--accent); }
+        .sort-icon { font-size: 9px; opacity: .5; margin-left: 3px; }
+        th.sortable.sorted .sort-icon { opacity: 1; }
         .result-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
         .rp-win  { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
         .rp-loss { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.25); }
@@ -348,31 +353,41 @@
 <div class="section-card">
     <div class="section-header">
         <h3>Standings · {{ season.season }}{% if season.league_name %} · {{ season.league_name }}{% endif %}</h3>
-        <span style="font-size:11px;color:var(--muted);">click a clan to expand roster</span>
+        <span style="font-size:11px;color:var(--muted);">click header to sort · click clan row to expand roster</span>
     </div>
-    <table>
+    <table id="standings-table">
         <thead>
             <tr>
                 <th style="width:36px;text-align:center;">#</th>
-                <th>Clan</th>
-                <th style="text-align:center;">W</th>
-                <th style="text-align:center;">L</th>
-                <th style="text-align:center;">D</th>
-                <th style="text-align:center;">Stars</th>
-                <th style="text-align:center;">Avg Dest %</th>
-                <th style="text-align:center;">Players</th>
-                <th style="text-align:center;">Avg TH</th>
-                <th style="text-align:center;">Avg League</th>
+                <th class="sortable" data-col="name" data-type="str" onclick="sortStandings(this)">Clan <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="wins"    data-type="num" onclick="sortStandings(this)" style="text-align:center;">W <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="losses"  data-type="num" onclick="sortStandings(this)" style="text-align:center;">L <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="draws"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">D <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="stars"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">Stars <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="dest"    data-type="num" onclick="sortStandings(this)" style="text-align:center;">Avg Dest % <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="players" data-type="num" onclick="sortStandings(this)" style="text-align:center;">Players <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="avgth"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">Avg TH <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="avglr"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">Avg League <span class="sort-icon">⇅</span></th>
                 <th style="width:28px;"></th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="standings-tbody">
         {% for s in standings %}
         {% set is_ours = s.tag == our_tag %}
         {% set r = clan_rosters.get(s.tag, {}) %}
         {% set tagc = s.tag|replace('#','') %}
-        <tr class="{% if is_ours %}our-row{% endif %}" onclick="toggleClanRoster('{{ tagc }}')" style="cursor:pointer;">
-            <td class="mono text-muted" style="text-align:center;">{{ loop.index }}</td>
+        <tr class="standing-row {% if is_ours %}our-row{% endif %}"
+            onclick="toggleClanRoster('{{ tagc }}')" style="cursor:pointer;"
+            data-name="{{ s.name }}"
+            data-wins="{{ s.wins }}"
+            data-losses="{{ s.losses }}"
+            data-draws="{{ s.draws }}"
+            data-stars="{{ s.stars }}"
+            data-dest="{{ (s.destruction / s.wars * 10000)|round|int if s.wars else 0 }}"
+            data-players="{{ r.count or 0 }}"
+            data-avgth="{{ ((r.avg_th or 0) * 10)|round|int }}"
+            data-avglr="{{ r.avg_lr or 0 }}">
+            <td class="mono text-muted standing-rank" style="text-align:center;">{{ loop.index }}</td>
             <td>
                 <div class="clan-col">
                     {% if s.badge_url %}<img src="{{ s.badge_url }}" class="clan-badge-sm" alt="">{% endif %}
@@ -390,7 +405,7 @@
             <td style="text-align:center;font-size:12px;color:var(--blue);">{{ r.avg_league or '—' }}</td>
             <td style="text-align:center;color:var(--muted);font-size:11px;" id="chevron-clan-{{ tagc }}">▶</td>
         </tr>
-        <tr id="clan-roster-{{ tagc }}" style="display:none;">
+        <tr class="roster-row" id="clan-roster-{{ tagc }}" style="display:none;">
             <td colspan="11" style="padding:0;background:var(--surf2);">
                 {% if r.members %}
                 <table style="border-top:1px solid var(--bord2);">
@@ -398,14 +413,14 @@
                         <tr>
                             <th style="width:36px;text-align:center;">#</th>
                             <th>Player</th>
-                            <th style="text-align:center;">TH</th>
-                            <th>League</th>
+                            <th class="sortable" data-col="th" data-type="num" onclick="sortRoster('{{ tagc }}',this)" style="text-align:center;cursor:pointer;">TH <span class="sort-icon">⇅</span></th>
+                            <th class="sortable" data-col="lr" data-type="num" onclick="sortRoster('{{ tagc }}',this)" style="cursor:pointer;">League <span class="sort-icon">⇅</span></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="roster-tbody-{{ tagc }}">
                     {% for m in r.members %}
-                    <tr>
-                        <td class="mono text-muted" style="text-align:center;">{{ loop.index }}</td>
+                    <tr data-th="{{ m.town_hall_level or 0 }}" data-lr="{{ league_rank(m.ranked_league) if m.ranked_league else 0 }}">
+                        <td class="mono text-muted roster-rank" style="text-align:center;">{{ loop.index }}</td>
                         <td style="font-weight:500;">{{ m.player_name or m.player_tag }}</td>
                         <td class="mono" style="text-align:center;color:var(--accent);">{{ m.town_hall_level or '?' }}</td>
                         <td style="font-size:12px;color:var(--blue);">{{ m.ranked_league or '—' }}</td>
@@ -731,6 +746,95 @@ const LABEL_MAP = {
 function renderLabel(label) {
     const e = LABEL_MAP[label];
     return e ? `<span class="atk-pill ${e[1]}">${e[0]}</span>` : `<span class="atk-pill ap-wasted">${label}</span>`;
+}
+
+// ── Standings sort ────────────────────────────────────────────────────────────
+const _standingsSort = { col: null, asc: true };
+
+function sortStandings(th) {
+    const col  = th.dataset.col;
+    const type = th.dataset.type;
+    if (_standingsSort.col === col) {
+        _standingsSort.asc = !_standingsSort.asc;
+    } else {
+        _standingsSort.col = col;
+        _standingsSort.asc = (type === 'str');
+    }
+
+    const tbody = document.getElementById('standings-tbody');
+    const allRows = Array.from(tbody.querySelectorAll('tr'));
+
+    // Group into [standing-row, roster-row] pairs
+    const pairs = [];
+    for (let i = 0; i < allRows.length; i++) {
+        if (allRows[i].classList.contains('standing-row')) {
+            pairs.push([allRows[i], allRows[i + 1] || null]);
+        }
+    }
+
+    pairs.sort((a, b) => {
+        const av = a[0].dataset[col] ?? '';
+        const bv = b[0].dataset[col] ?? '';
+        const cmp = type === 'num' ? (parseFloat(av) - parseFloat(bv))
+                                   : av.localeCompare(bv, undefined, { sensitivity: 'base' });
+        return _standingsSort.asc ? cmp : -cmp;
+    });
+
+    pairs.forEach(([sr, rr], i) => {
+        tbody.appendChild(sr);
+        if (rr) tbody.appendChild(rr);
+        const rankCell = sr.querySelector('.standing-rank');
+        if (rankCell) rankCell.textContent = i + 1;
+    });
+
+    // Update header indicators
+    document.querySelectorAll('#standings-table th.sortable').forEach(el => {
+        el.classList.toggle('sorted', el.dataset.col === col);
+        el.querySelector('.sort-icon').textContent =
+            el.dataset.col === col ? (_standingsSort.asc ? '▲' : '▼') : '⇅';
+    });
+}
+
+// ── Roster sort ───────────────────────────────────────────────────────────────
+const _rosterSort = {};
+
+function sortRoster(tagClean, th) {
+    const col  = th.dataset.col;
+    const type = th.dataset.type;
+    if (!_rosterSort[tagClean]) _rosterSort[tagClean] = { col: null, asc: true };
+    const state = _rosterSort[tagClean];
+    if (state.col === col) {
+        state.asc = !state.asc;
+    } else {
+        state.col = col;
+        state.asc = false; // TH and league default highest-first
+    }
+
+    const tbody = document.getElementById('roster-tbody-' + tagClean);
+    if (!tbody) return;
+
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+        const av = a.dataset[col] ?? '';
+        const bv = b.dataset[col] ?? '';
+        const cmp = type === 'num' ? (parseFloat(av) - parseFloat(bv))
+                                   : av.localeCompare(bv, undefined, { sensitivity: 'base' });
+        return state.asc ? cmp : -cmp;
+    });
+
+    rows.forEach((row, i) => {
+        tbody.appendChild(row);
+        const rankCell = row.querySelector('.roster-rank');
+        if (rankCell) rankCell.textContent = i + 1;
+    });
+
+    // Update header indicators
+    const table = tbody.closest('table');
+    table.querySelectorAll('th.sortable').forEach(el => {
+        el.classList.toggle('sorted', el.dataset.col === col);
+        el.querySelector('.sort-icon').textContent =
+            el.dataset.col === col ? (state.asc ? '▲' : '▼') : '⇅';
+    });
 }
 
 // ── Standing row → roster expand ─────────────────────────────────────────────

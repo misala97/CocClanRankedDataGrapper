@@ -198,11 +198,13 @@ def cwl_page():
     for clan in clans:
         members = sorted(clan.members, key=lambda m: m.town_hall_level or 0, reverse=True)
         avg_th  = (sum(m.town_hall_level or 0 for m in members) / len(members)) if members else 0
+        al      = avg_league_name(members)
         clan_rosters[clan.tag] = {
-            'members':     members,
-            'avg_th':      round(avg_th, 1),
-            'avg_league':  avg_league_name(members),
-            'count':       len(members),
+            'members':    members,
+            'avg_th':     round(avg_th, 1),
+            'avg_league': al,
+            'avg_lr':     league_rank(al) if al else 0,
+            'count':      len(members),
         }
 
     # ── Standings ─────────────────────────────────────────────────────────────
@@ -260,4 +262,5 @@ def cwl_page():
         standings=sorted_standings,
         sorted_rounds=sorted_rounds,
         now=dt.datetime.now(dt.timezone.utc),
+        league_rank=league_rank,
     )
