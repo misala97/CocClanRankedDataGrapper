@@ -236,3 +236,21 @@
 2026-06-02 02:28:50 - INFO - [task_update_clan_war] - Starting at 2026-06-02 00:28:50 UTC
 2026-06-02 02:28:52 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=warEnded)
 2026-06-02 02:28:52 - INFO - [db_finalize_uptime] - Done in 2.28s | state=warEnded war=updated members_added=0 attacks_added=0
+2026-06-02 02:48:21 - INFO - [task_update_clan_war] - Starting at 2026-06-02 00:48:21 UTC
+2026-06-02 02:48:23 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=warEnded)
+2026-06-02 02:48:23 - INFO - [db_finalize_uptime] - Done in 2.27s | state=warEnded war=updated members_added=0 attacks_added=0
+2026-06-02 03:05:53 - INFO - [task_update_clan_war] - Starting at 2026-06-02 01:05:53 UTC
+2026-06-02 03:05:56 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=warEnded)
+2026-06-02 03:05:56 - INFO - [db_finalize_uptime] - Done in 2.55s | state=warEnded war=updated members_added=0 attacks_added=0
+2026-06-02 03:07:45 - INFO - [task_update_clan_war] - Starting at 2026-06-02 01:07:45 UTC
+2026-06-02 03:07:47 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=warEnded)
+2026-06-02 03:07:47 - INFO - [db_finalize_uptime] - Done in 2.34s | state=warEnded war=updated members_added=0 attacks_added=0
+2026-06-02 03:11:02 - INFO - [task_update_clan_war] - Starting at 2026-06-02 01:11:02 UTC
+2026-06-02 03:11:04 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=warEnded)
+2026-06-02 03:11:04 - INFO - [db_finalize_uptime] - Done in 2.25s | state=warEnded war=updated members_added=0 attacks_added=0
+2026-06-02 03:14:06 - INFO - [task_update_clan_war] - Starting at 2026-06-02 01:14:06 UTC
+2026-06-02 03:14:11 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=warEnded)
+2026-06-02 03:14:11 - INFO - [db_finalize_uptime] - Done in 5.35s | state=warEnded war=updated members_added=0 attacks_added=0
+2026-06-02 03:17:46 - INFO - [task_update_clan_war] - Starting at 2026-06-02 01:17:46 UTC
+2026-06-02 03:17:50 - INFO - [task_update_clan_war] - Updated war vs Global Warheads (state=warEnded)
+2026-06-02 03:17:50 - INFO - [db_finalize_uptime] - Done in 4.8s | state=warEnded war=updated members_added=0 attacks_added=0

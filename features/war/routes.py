@@ -241,9 +241,11 @@ def war_stats_page():
                     'stars': 0, 'three_stars': 0, 'two_stars': 0, 'one_stars': 0, 'zero_stars': 0,
                     'destruction_sum': 0.0, 'labels': {l: 0 for l in ALL_LABELS},
                     'verdict_scores': [],
+                    'dfn_th_sum': 0.0, 'dfn_th_sum_nf': 0.0,
                     'attacks_used_nf': 0,
                     'stars_nf': 0, 'three_stars_nf': 0, 'two_stars_nf': 0, 'one_stars_nf': 0, 'zero_stars_nf': 0,
                     'destruction_sum_nf': 0.0, 'labels_nf': {l: 0 for l in ALL_LABELS},
+                    'th_breakdown': {},
                 }
             ps = player_stats[tag]
             ps['name']        = m.player_name or tag
@@ -269,14 +271,37 @@ def war_stats_page():
                 war_labels.append(lbl)
                 ps['stars'] += stars
                 ps['destruction_sum'] += float(atk.destruction_pct or 0)
+                ps['dfn_th_sum'] += dfn_th
                 if stars == 3:   ps['three_stars'] += 1
                 elif stars == 2: ps['two_stars']   += 1
                 elif stars == 1: ps['one_stars']   += 1
                 else:            ps['zero_stars']  += 1
                 if lbl in ps['labels']: ps['labels'][lbl] += 1
+                if dfn_th > 0:
+                    thb = ps['th_breakdown'].setdefault(dfn_th, {
+                        'th': dfn_th,
+                        'attacks': 0, 'stars': 0,
+                        'three_stars': 0, 'two_stars': 0, 'one_stars': 0, 'zero_stars': 0,
+                        'attacks_nf': 0, 'stars_nf': 0,
+                        'three_stars_nf': 0, 'two_stars_nf': 0, 'one_stars_nf': 0, 'zero_stars_nf': 0,
+                    })
+                    thb['attacks'] += 1
+                    thb['stars'] += stars
+                    if stars == 3:   thb['three_stars'] += 1
+                    elif stars == 2: thb['two_stars']   += 1
+                    elif stars == 1: thb['one_stars']   += 1
+                    else:            thb['zero_stars']  += 1
+                    if lbl not in FARM_LABELS:
+                        thb['attacks_nf'] += 1
+                        thb['stars_nf'] += stars
+                        if stars == 3:   thb['three_stars_nf'] += 1
+                        elif stars == 2: thb['two_stars_nf']   += 1
+                        elif stars == 1: thb['one_stars_nf']   += 1
+                        else:            thb['zero_stars_nf']  += 1
                 if lbl not in FARM_LABELS:
                     ps['stars_nf'] += stars
                     ps['destruction_sum_nf'] += float(atk.destruction_pct or 0)
+                    ps['dfn_th_sum_nf'] += dfn_th
                     ps['attacks_used_nf'] += 1
                     if stars == 3:   ps['three_stars_nf'] += 1
                     elif stars == 2: ps['two_stars_nf']   += 1
@@ -314,7 +339,17 @@ def war_stats_page():
         ps['star_pct']            = round(ps['stars']    / total_clan_stars    * 100, 1) if total_clan_stars    else 0
         ps['star_pct_nf']         = round(ps['stars_nf'] / total_clan_stars_nf * 100, 1) if total_clan_stars_nf else 0
         vs = ps['verdict_scores']
-        ps['avg_verdict']         = round(sum(vs) / len(vs), 1) if vs else 0.0
+        ps['avg_verdict']    = round(sum(vs) / len(vs), 1) if vs else 0.0
+        ps['avg_dfn_th']     = round(ps['dfn_th_sum']    / used,    1) if used    else 0.0
+        ps['avg_dfn_th_nf']  = round(ps['dfn_th_sum_nf'] / used_nf, 1) if used_nf else 0.0
+        thb_list = sorted(ps['th_breakdown'].values(), key=lambda x: x['th'])
+        for t in thb_list:
+            a, a_nf = t['attacks'], t['attacks_nf']
+            t['avg_stars']          = round(t['stars']    / a,    2) if a    else 0.0
+            t['three_star_rate']    = round(t['three_stars']    / a    * 100) if a    else 0
+            t['avg_stars_nf']       = round(t['stars_nf'] / a_nf, 2) if a_nf else 0.0
+            t['three_star_rate_nf'] = round(t['three_stars_nf'] / a_nf * 100) if a_nf else 0
+        ps['th_breakdown'] = thb_list
         player_list.append(ps)
 
     player_list.sort(key=lambda x: (-x['wars'], -x['avg_stars']))
@@ -325,6 +360,9 @@ def war_stats_page():
     total_3stars_clan           = sum(p['three_stars']       for p in player_list)
     clan_participation_rate     = round(total_attacks_used_clan / total_attacks_possible_clan * 100) if total_attacks_possible_clan else 0
     clan_3star_rate             = round(total_3stars_clan / total_attacks_used_clan * 100) if total_attacks_used_clan else 0
+    total_3stars_clan_nf        = sum(p['three_stars_nf']  for p in player_list)
+    total_attacks_used_clan_nf  = sum(p['attacks_used_nf'] for p in player_list)
+    clan_3star_rate_nf          = round(total_3stars_clan_nf / total_attacks_used_clan_nf * 100) if total_attacks_used_clan_nf else 0
     star_diff                   = total_stars_for - total_stars_against
 
     # ── Label totals (both variants) ──────────────────────────────────────────
@@ -398,6 +436,7 @@ def war_stats_page():
         total_attacks_possible_clan=total_attacks_possible_clan,
         clan_participation_rate=clan_participation_rate,
         clan_3star_rate=clan_3star_rate,
+        clan_3star_rate_nf=clan_3star_rate_nf,
         label_totals=label_totals,
         label_totals_nf=label_totals_nf,
         per_th_list=per_th_list,

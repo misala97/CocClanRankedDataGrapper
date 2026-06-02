@@ -49,7 +49,7 @@
         .section-title::after { content:''; flex:1; height:1px; background:var(--bord2); }
 
         /* ── FARM TOGGLE ── */
-        .toggle-bar { display:flex; align-items:center; gap:12px; margin-bottom:24px; padding:14px 18px; background:var(--surface); border:1px solid var(--border); border-radius:10px; flex-wrap:wrap; }
+        .toggle-bar { display:flex; align-items:center; gap:12px; margin-bottom:24px; padding:14px 18px; background:var(--surface); border:1px solid var(--border); border-radius:10px; flex-wrap:wrap; position:sticky; top:58px; z-index:50; }
         .toggle-label { font-size:12px; font-weight:600; color:var(--muted); font-family:'Rajdhani',sans-serif; text-transform:uppercase; letter-spacing:.6px; }
         .toggle-group { display:flex; border:1px solid var(--border); border-radius:7px; overflow:hidden; }
         .toggle-btn { padding:6px 16px; background:transparent; color:var(--muted); border:none; font-size:11px; font-weight:700; font-family:'Rajdhani',sans-serif; letter-spacing:.5px; text-transform:uppercase; cursor:pointer; transition:all .15s; }
@@ -57,8 +57,9 @@
         .toggle-hint { font-size:11px; color:var(--muted); margin-left:auto; }
 
         /* ── STAT STRIP ── */
-        .stat-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
-        .stat-tile { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 22px; position:relative; overflow:hidden; }
+        .stat-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; align-items:stretch; }
+        .stat-tile { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 22px; position:relative; overflow:hidden; display:flex; flex-direction:column; }
+        .stat-bar-bg { margin-top:auto !important; }
         .stat-tile::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; border-radius:12px 12px 0 0; }
         .st-wins::before   { background:var(--green); }
         .st-rate::before   { background:var(--accent); }
@@ -81,7 +82,7 @@
         .hof-section { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
         .hof-header { padding:12px 18px; border-bottom:1px solid var(--bord2); display:flex; align-items:center; gap:8px; flex-shrink:0; }
         .hof-header-title { font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); }
-        .hof-list { overflow-y:auto; max-height:180px; flex:1; }
+        .hof-list { overflow-y:auto; max-height:208px; flex:1; }
         .hof-list::-webkit-scrollbar { width:4px; }
         .hof-list::-webkit-scrollbar-track { background:transparent; }
         .hof-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
@@ -92,7 +93,7 @@
         .hof-pos { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:13px; color:var(--muted); width:24px; text-align:center; flex-shrink:0; }
         .hof-name { font-weight:600; font-size:12.5px; }
         .hof-sub  { font-size:10px; color:var(--muted); margin-top:1px; }
-        .hof-val  { margin-left:auto; font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; text-align:right; flex-shrink:0; }
+        .hof-val  { font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; text-align:right; }
         .hof-val-sub { font-size:9px; color:var(--muted); font-family:'DM Sans',sans-serif; font-weight:400; text-align:right; }
         .th-chip-sm { display:inline-block; padding:0 5px; border-radius:3px; font-size:9px; font-weight:700; font-family:'Rajdhani',sans-serif; background:var(--surf2); border:1px solid var(--bord2); color:var(--muted); margin-right:3px; }
 
@@ -137,10 +138,10 @@
 
         /* ── PLAYER TABLE ── */
         .table-scroll { overflow-x:auto; border-radius:12px; border:1px solid var(--border); }
-        .table-wrapper { background:var(--surface); overflow:hidden; min-width:780px; }
+        .table-wrapper { background:var(--surface); overflow:hidden; min-width:1020px; }
         .table-header { padding:14px 20px; border-bottom:1px solid var(--bord2); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; background:var(--surface); }
         .table-header-title { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); }
-        table.pt { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
+        table.pt { width:100%; border-collapse:collapse; font-size:14px; table-layout:fixed; }
         col.col-league  { width:52px; }
         col.col-player  { width:180px; }
         col.col-wars    { width:64px; }
@@ -155,10 +156,11 @@
         table.pt thead th.sort-active { color:var(--accent); }
         table.pt thead th.sort-active.asc::after  { content:' ↑'; font-size:.85em; }
         table.pt thead th.sort-active.desc::after { content:' ↓'; font-size:.85em; }
-        /* group separators after Player, Attacks */
+        /* group separators after Player, Attacks, Avg★, Avg Score */
         table.pt thead th:nth-child(2), table.pt tbody td:nth-child(2),
         table.pt thead th:nth-child(4), table.pt tbody td:nth-child(4),
-        table.pt thead th:nth-child(5), table.pt tbody td:nth-child(5) { border-right:2px solid var(--border); }
+        table.pt thead th:nth-child(6), table.pt tbody td:nth-child(6),
+        table.pt thead th:nth-child(11), table.pt tbody td:nth-child(11) { border-right:2px solid var(--border); }
         table.pt tbody tr { border-bottom:1px solid var(--bord2); transition:background .12s; }
         table.pt tbody tr:last-child { border-bottom:none; }
         table.pt tbody tr:hover { background:rgba(255,255,255,.03); }
@@ -166,8 +168,8 @@
 
         .league-icon { width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:help; filter:drop-shadow(0 2px 4px rgba(0,0,0,.4)); display:block; margin:0 auto; }
         .league-icon-placeholder { width:36px; height:36px; display:block; margin:0 auto; }
-        .pt-player-name { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .pt-player-sub  { font-size:10px; color:var(--muted); margin-top:2px; }
+        .pt-player-name { font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .pt-player-sub  { font-size:12px; color:var(--muted); margin-top:2px; display:flex; align-items:center; gap:3px; }
         .th-chip { display:inline-block; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700; font-family:'Rajdhani',sans-serif; background:var(--surf2); border:1px solid var(--bord2); margin-right:4px; }
         .pt-num { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:22px; text-align:center; line-height:1; }
         .pt-sub { font-size:10px; color:var(--muted); text-align:center; margin-top:2px; }
@@ -204,6 +206,26 @@
 
         .empty { text-align:center; padding:80px 32px; color:var(--muted); }
         .empty-icon { font-size:52px; margin-bottom:14px; }
+
+        /* ── DETAIL EXPANSION ── */
+        .detail-row > td { padding:0; background:var(--surf2); border-bottom:1px solid var(--border); }
+        .detail-inner { padding:14px 20px 16px; }
+        .detail-header { font-size:10px; font-family:'Rajdhani',sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); margin-bottom:12px; }
+        .thb-grid { display:flex; flex-wrap:wrap; gap:8px; }
+        .thb-tile { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 14px; min-width:90px; }
+        .thb-tile.thb-farm-only { opacity:.6; border-color:rgba(88,166,255,.3); }
+        .thb-num { font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; line-height:1; }
+        .thb-diff { font-size:10px; margin-top:1px; font-family:'Rajdhani',sans-serif; font-weight:700; }
+        .thb-atk { font-size:10px; color:var(--muted); margin-top:4px; }
+        .thb-avg { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; margin-top:2px; }
+        .thb-stars { display:flex; gap:5px; flex-wrap:wrap; margin-top:4px; font-size:11px; font-family:'Rajdhani',sans-serif; font-weight:700; }
+        .thb-farm { font-size:9px; color:var(--blue); margin-top:3px; font-family:'Rajdhani',sans-serif; }
+        .action-btn { padding:6px 14px; background:transparent; color:var(--accent); border:1px solid rgba(240,165,0,0.35); border-radius:6px; font-weight:700; font-size:11px; font-family:'Rajdhani',sans-serif; letter-spacing:.5px; text-transform:uppercase; cursor:pointer; transition:all .15s; white-space:nowrap; }
+        .action-btn:hover { background:rgba(240,165,0,0.1); border-color:var(--accent); box-shadow:0 0 12px rgba(240,165,0,0.18); }
+        .player-link { color:inherit; text-decoration:none; transition:color .15s; }
+        .player-link:hover { color:var(--accent); }
+        .player-link-arrow { font-size:10px; color:var(--muted); opacity:.4; transition:opacity .15s, color .15s; vertical-align:super; }
+        .player-link:hover .player-link-arrow { opacity:1; color:var(--accent); }
 
         @media(max-width:1100px) { .stat-strip { grid-template-columns:repeat(3,1fr); } .hof-grid { grid-template-columns:1fr; } }
         @media(max-width:800px)  { .stat-strip { grid-template-columns:1fr 1fr; } .shame-grid { grid-template-columns:repeat(3,1fr); } .container { padding:16px; } }
@@ -276,13 +298,15 @@
                     <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">Theirs</div>
                 </div>
             </div>
-            <div class="stat-sub">{% if star_diff > 0 %}<span style="color:var(--green)">+{{ star_diff }} advantage</span>{% elif star_diff < 0 %}<span style="color:var(--red)">{{ star_diff }} deficit</span>{% else %}Even{% endif %}</div>
+            <div class="stat-sub" style="margin-top:4px;">{% if star_diff > 0 %}<span style="color:var(--green)">+{{ star_diff }} advantage</span>{% elif star_diff < 0 %}<span style="color:var(--red)">{{ star_diff }} deficit</span>{% else %}Even{% endif %}</div>
             {% set ts = total_stars_for + total_stars_against %}
             {% if ts > 0 %}
-            <div class="stat-bar-bg" style="display:flex;padding:0;margin-top:8px;">
+            <div class="stat-bar-bg" style="display:flex;padding:0;">
                 <div style="height:4px;width:{{ '%.1f'|format(total_stars_for/ts*100) }}%;background:var(--green);border-radius:2px 0 0 2px;"></div>
                 <div style="height:4px;width:{{ '%.1f'|format(total_stars_against/ts*100) }}%;background:var(--red);border-radius:0 2px 2px 0;"></div>
             </div>
+            {% else %}
+            <div class="stat-bar-bg"></div>
             {% endif %}
         </div>
         <div class="stat-tile st-part">
@@ -293,9 +317,9 @@
         </div>
         <div class="stat-tile st-3star">
             <div class="stat-label">3★ Rate</div>
-            <div class="stat-big" style="color:var(--purple)">{{ clan_3star_rate }}%</div>
+            <div class="stat-big" style="color:var(--purple)" id="threeStarVal">{{ clan_3star_rate_nf }}%</div>
             <div class="stat-sub" id="threeStarNote">farm attacks excluded</div>
-            <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{{ clan_3star_rate }}%;background:var(--purple);"></div></div>
+            <div class="stat-bar-bg"><div class="stat-bar-fill" id="threeStarBar" style="width:{{ clan_3star_rate_nf }}%;background:var(--purple);"></div></div>
         </div>
     </div>
 </div>
@@ -342,11 +366,7 @@
 {# ── PLAYER LEADERBOARD ── #}
 <div class="section">
     <div class="section-title">Player Leaderboard</div>
-    <div class="table-header" style="border-radius:12px 12px 0 0;border:1px solid var(--border);border-bottom:none;">
-        <span class="table-header-title">{{ player_list|length }} Players · All Wars</span>
-        <span style="font-size:10px;color:var(--muted);">Click columns to sort</span>
-    </div>
-    <div class="table-scroll" style="border-radius:0 0 12px 12px;">
+    <div class="table-scroll">
         <div class="table-wrapper">
             <table class="pt" id="playerTable">
                 <colgroup>
@@ -354,12 +374,15 @@
                     <col class="col-player">
                     <col class="col-wars">
                     <col class="col-attacks">
+                    <col style="width:72px;">
                     <col class="col-avg">
                     <col class="col-rate">
                     <col class="col-rate">
                     <col class="col-rate">
                     <col class="col-rate">
                     <col class="col-verdict">
+                    <col style="width:100px;">
+                    <col style="width:90px;">
                 </colgroup>
                 <thead>
                     <tr>
@@ -367,12 +390,15 @@
                         <th class="sortable" onclick="ptSort('name')">Player</th>
                         <th class="sortable" onclick="ptSort('wars')" style="text-align:center;">Wars</th>
                         <th class="sortable" onclick="ptSort('participation')" style="text-align:center;">Attacks</th>
+                        <th class="sortable" onclick="ptSort('_avg_dfn_th')" style="text-align:center;">Avg TH</th>
                         <th class="sortable" onclick="ptSort('_avg_stars')" style="text-align:center;">Avg ★</th>
                         <th class="sortable" onclick="ptSort('_three_star_rate')" style="text-align:center;">3★</th>
                         <th class="sortable" onclick="ptSort('_two_star_rate')" style="text-align:center;">2★</th>
                         <th class="sortable" onclick="ptSort('_one_star_rate')" style="text-align:center;">1★</th>
                         <th class="sortable" onclick="ptSort('_zero_star_rate')" style="text-align:center;">0★</th>
                         <th class="sortable" onclick="ptSort('avg_verdict')" style="text-align:center;">Avg Score</th>
+                        <th style="text-align:center;color:var(--blue);border-left:none;">Farms</th>
+                        <th style="text-align:center;width:40px;"></th>
                     </tr>
                 </thead>
                 <tbody id="ptBody"></tbody>
@@ -430,7 +456,9 @@
 </div>
 
 <script>
-const PLAYERS     = {{ player_list      | tojson | safe }};
+const PLAYERS         = {{ player_list       | tojson | safe }};
+const RATE_3STAR_ALL  = {{ clan_3star_rate    | tojson | safe }};
+const RATE_3STAR_NF   = {{ clan_3star_rate_nf | tojson | safe }};
 const LBL_ALL     = {{ label_totals     | tojson | safe }};
 const LBL_NF      = {{ label_totals_nf  | tojson | safe }};
 const TH_ALL      = {{ per_th_list      | tojson | safe }};
@@ -464,9 +492,10 @@ function setFarm(val) {
     document.getElementById('toggleHint').textContent = val
         ? 'Showing all attacks including Farm & Failed Farm'
         : 'Farm & Failed Farm attacks excluded from stats below';
-    document.getElementById('threeStarNote').textContent = val
-        ? 'all attacks included'
-        : 'farm attacks excluded';
+    const rate3 = val ? RATE_3STAR_ALL : RATE_3STAR_NF;
+    document.getElementById('threeStarNote').textContent = val ? 'all attacks included' : 'farm attacks excluded';
+    document.getElementById('threeStarVal').textContent  = rate3 + '%';
+    document.getElementById('threeStarBar').style.width  = rate3 + '%';
     renderAll();
 }
 
@@ -520,13 +549,12 @@ function renderHoF() {
         return headerNote + arr.map((p,i) => `
             <div class="hof-entry">
                 <div class="${i<3?'hof-medal':'hof-pos'}">${i<3?medal(i):i+1}</div>
-                <div>
+                <div style="flex:1;min-width:0;">
                     <div class="hof-name">${esc(p.name)}</div>
                     <div class="hof-sub"><span class="th-chip-sm">TH${p.th}</span>${subFn(p)}</div>
                 </div>
-                <div>
+                <div style="margin-left:auto;text-align:right;flex-shrink:0;">
                     <div class="hof-val" style="color:${color}">${valFn(p)}</div>
-                    <div class="hof-val-sub">${i<3?'':`#${i+1}`}</div>
                 </div>
             </div>`).join('');
     }
@@ -653,6 +681,8 @@ function renderTable() {
     const oneKey      = showFarm ? 'one_star_rate'    : 'one_star_rate_nf';
     const zeroKey     = showFarm ? 'zero_star_rate'   : 'zero_star_rate_nf';
 
+    const dfnThKey = showFarm ? 'avg_dfn_th' : 'avg_dfn_th_nf';
+
     const data = PLAYERS.map(p => ({
         ...p,
         _league_rank:      leagueSortKey(p.league),
@@ -661,6 +691,7 @@ function renderTable() {
         _two_star_rate:    p[twoKey]   ?? 0,
         _one_star_rate:    p[oneKey]   ?? 0,
         _zero_star_rate:   p[zeroKey]  ?? 0,
+        _avg_dfn_th:       p[dfnThKey] ?? 0,
     }));
 
     data.sort((a, b) => {
@@ -675,41 +706,68 @@ function renderTable() {
     tbody.innerHTML = '';
 
     data.forEach(p => {
-        const farmOnly = !showFarm && p.attacks_used_nf === 0;
+        const farmOnly = !showFarm && p.attacks_used > 0 && p.attacks_used_nf === 0;
         const thColor = p.th >= 17 ? 'var(--purple)' : p.th >= 15 ? 'var(--blue)' : p.th >= 13 ? 'var(--green)' : 'var(--muted)';
         const avg     = p[avgKey] ?? 0;
         const avgC    = avg >= 2.5 ? 'var(--green)' : avg >= 1.5 ? 'var(--yellow)' : 'var(--red)';
         const partC   = p.participation >= 90 ? 'var(--green)' : p.participation >= 70 ? 'var(--yellow)' : 'var(--red)';
         const badge   = verdictBadge(p.avg_verdict);
 
+        const totalFarm = p.attacks_used - p.attacks_used_nf;
+
         const leagueCell = p.league_icon
             ? `<img src="${p.league_icon}" class="league-icon" alt="" title="${esc(p.league)}">`
             : `<div class="league-icon-placeholder"></div>`;
 
-        const farmOnlyCells = `<td colspan="6">
+        const avgDfnTh   = p[dfnThKey] ?? 0;
+        const thDiff     = avgDfnTh > 0 ? +(avgDfnTh - p.th).toFixed(1) : null;
+        const thDiffColor= thDiff === null ? 'var(--muted)' : thDiff > 0.3 ? 'var(--accent)' : thDiff < -0.3 ? 'var(--muted)' : 'var(--text)';
+        const thDiffStr  = thDiff === null ? '—' : (thDiff > 0 ? `+${thDiff}` : `${thDiff}`);
+
+        const threeCount = showFarm ? p.three_stars : p.three_stars_nf;
+        const twoCount   = showFarm ? p.two_stars   : p.two_stars_nf;
+        const oneCount   = showFarm ? p.one_stars   : p.one_stars_nf;
+        const zeroCount  = showFarm ? p.zero_stars  : p.zero_stars_nf;
+
+        const farmOnlyCells = `<td colspan="7">
             <span style="color:var(--blue);font-size:11px;font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Farm Only</span>
             <span style="color:var(--muted);font-size:11px;margin-left:8px;">${p.attacks_used}/${p.attacks_possible} attacks</span>
         </td>`;
 
-        const fmtRate = (r, inv=false) => {
-            if (r === 0) return inv
+        const fmtRate = (r, count, inv=false) => {
+            const sub = `<div style="font-size:10px;color:var(--muted);margin-top:1px;">${count}</div>`;
+            if (r === 0) return (inv
                 ? `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:var(--green)">—</span>`
-                : `<span style="color:var(--bord2);font-family:'Rajdhani',sans-serif;font-size:16px;">—</span>`;
-            const c = inv
-                ? (r <= 15 ? 'var(--yellow)' : 'var(--red)')
-                : rateColor(r);
-            return `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:${c}">${r}%</span>`;
+                : `<span style="color:var(--bord2);font-family:'Rajdhani',sans-serif;font-size:16px;">—</span>`) + sub;
+            const c = inv ? (r <= 15 ? 'var(--yellow)' : 'var(--red)') : rateColor(r);
+            return `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:${c}">${r}%</span>${sub}`;
         };
 
+        const farmsCell = `<td style="text-align:center;">
+            ${totalFarm > 0
+                ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;color:var(--blue);line-height:1;">${totalFarm}</div>
+                   <div style="font-size:10px;color:var(--muted);margin-top:2px;">farm atk</div>`
+                : `<span style="color:var(--bord2);font-family:'Rajdhani',sans-serif;font-size:14px;">—</span>`
+            }
+        </td>`;
+
+        const detailCell = `<td style="text-align:center;padding:8px;">
+            <button type="button" class="action-btn details-toggle" data-tag="${esc(p.tag)}">Details</button>
+        </td>`;
+
         const statCells = farmOnly ? farmOnlyCells : `
+            <td style="text-align:center">
+                <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;">TH${avgDfnTh.toFixed(1)}</div>
+                <div style="font-size:10px;color:${thDiffColor};margin-top:1px;">${thDiffStr}</div>
+            </td>
             <td style="text-align:center">
                 <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:20px;color:${avgC};line-height:1">${avg.toFixed(2)}</div>
                 ${starPips(avg)}
             </td>
-            <td style="text-align:center">${fmtRate(p[threeKey]??0)}</td>
-            <td style="text-align:center">${fmtRate(p[twoKey]??0, true)}</td>
-            <td style="text-align:center">${fmtRate(p[oneKey]??0, true)}</td>
-            <td style="text-align:center">${fmtRate(p[zeroKey]??0, true)}</td>
+            <td style="text-align:center">${fmtRate(p[threeKey]??0, threeCount)}</td>
+            <td style="text-align:center">${fmtRate(p[twoKey]??0, twoCount, true)}</td>
+            <td style="text-align:center">${fmtRate(p[oneKey]??0, oneCount, true)}</td>
+            <td style="text-align:center">${fmtRate(p[zeroKey]??0, zeroCount, true)}</td>
             <td style="text-align:center"><span class="judgment ${badge}">${p.avg_verdict}</span></td>`;
 
         const tr = document.createElement('tr');
@@ -717,19 +775,25 @@ function renderTable() {
         tr.innerHTML = `
             <td style="text-align:center">${leagueCell}</td>
             <td>
-                <div class="pt-player-name"><span class="th-chip" style="border-color:${thColor};color:${thColor}">TH${p.th}</span>${esc(p.name)}</div>
-                <div class="pt-player-sub">${p.league ? esc(p.league) : '—'}</div>
+                <div class="pt-player-name"><a href="/player/${encodeURIComponent((p.tag||'').replace('#',''))}" class="player-link">${esc(p.name)} <span class="player-link-arrow">↗</span></a></div>
+                <div class="pt-player-sub"><span style="color:${thColor};font-weight:700;">TH${p.th}</span> · ⚔ ${p.wars}</div>
             </td>
             <td style="text-align:center">
                 <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px">${p.wars}</div>
             </td>
             <td>
-                <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;text-align:center;line-height:1">${p.attacks_used}<span style="font-size:13px;color:var(--muted)">/${p.attacks_possible}</span></div>
-                <div style="font-size:10px;color:${partC};text-align:center;margin-top:2px">${p.participation}%</div>
-                <div class="part-bar"><div class="part-fill" style="width:${p.participation}%;background:${partC}"></div></div>
+                <div title="${p.participation}% participation" style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;text-align:center;line-height:1;cursor:default;">${p.attacks_used}<span style="font-size:13px;color:var(--muted)">/${p.attacks_possible}</span></div>
+                <div class="part-bar" style="margin-top:4px;"><div class="part-fill" style="width:${p.participation}%;background:${partC}"></div></div>
             </td>
-            ${statCells}`;
+            ${statCells}
+            ${farmsCell}
+            ${detailCell}`;
         tbody.appendChild(tr);
+
+        const toggleBtn = tr.querySelector('.details-toggle');
+        tr.style.cursor = 'pointer';
+        tr.querySelectorAll('a').forEach(a => a.addEventListener('click', e => e.stopPropagation()));
+        tr.addEventListener('click', () => toggleDetail(toggleBtn));
     });
 
     document.querySelectorAll('table.pt thead th').forEach(th => {
@@ -737,6 +801,69 @@ function renderTable() {
         const col = th.getAttribute('onclick')?.match(/ptSort\('(\w+)'\)/)?.[1];
         if (col === ptSortCol) th.classList.add('sort-active', ptSortDir);
     });
+}
+
+function toggleDetail(btn) {
+    const tag = btn.dataset.tag;
+    const tr = btn.closest('tr');
+    const next = tr.nextElementSibling;
+    if (next && next.classList.contains('detail-row')) {
+        next.remove();
+        btn.textContent = 'Details';
+        return;
+    }
+    const p = PLAYERS.find(x => x.tag === tag);
+    if (!p || !p.th_breakdown || !p.th_breakdown.length) return;
+    btn.textContent = 'Close';
+
+    const avgKey   = showFarm ? 'avg_stars'      : 'avg_stars_nf';
+    const attKey   = showFarm ? 'attacks'         : 'attacks_nf';
+    const threeKey = showFarm ? 'three_stars'     : 'three_stars_nf';
+    const twoKey   = showFarm ? 'two_stars'       : 'two_stars_nf';
+    const oneKey   = showFarm ? 'one_stars'       : 'one_stars_nf';
+    const zeroKey  = showFarm ? 'zero_stars'      : 'zero_stars_nf';
+
+    const tiles = [...p.th_breakdown]
+        .sort((a, b) => b.th - a.th)
+        .map(t => {
+            const a   = t[attKey];
+            const avg = a ? t[avgKey] : 0;
+            const avgC = avg >= 2.5 ? 'var(--green)' : avg >= 1.5 ? 'var(--yellow)' : 'var(--red)';
+            const thDiff = t.th - p.th;
+            const thDiffStr = thDiff > 0 ? `+${thDiff}` : `${thDiff}`;
+            const thDiffC = thDiff > 0 ? 'var(--accent)' : thDiff < 0 ? 'var(--muted)' : 'var(--text)';
+            const farmA = t.attacks - t.attacks_nf;
+            if (a === 0) {
+                return `<div class="thb-tile thb-farm-only">
+                    <div class="thb-num" style="color:var(--muted)">TH${t.th}</div>
+                    <div class="thb-atk" style="color:var(--blue)">${t.attacks} farm only</div>
+                </div>`;
+            }
+            return `<div class="thb-tile">
+                <div class="thb-num" style="color:${avgC}">TH${t.th}</div>
+                <div class="thb-diff" style="color:${thDiffC}">${thDiffStr} diff</div>
+                <div class="thb-atk">${a} attack${a !== 1 ? 's' : ''}</div>
+                <div class="thb-avg" style="color:${avgC}">${avg.toFixed(2)} avg★</div>
+                <div class="thb-stars">
+                    <span style="color:var(--yellow)">3★${t[threeKey]}</span>
+                    <span style="color:var(--text)">2★${t[twoKey]}</span>
+                    <span style="color:var(--muted)">1★${t[oneKey]}</span>
+                    <span style="color:var(--red)">0★${t[zeroKey]}</span>
+                </div>
+                ${farmA > 0 && !showFarm ? `<div class="thb-farm">+${farmA} farm atk</div>` : ''}
+            </div>`;
+        }).join('');
+
+    const colspan = tr.children.length;
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'detail-row';
+    detailRow.innerHTML = `<td colspan="${colspan}" style="padding:0;background:var(--surf2);border-bottom:1px solid var(--border);">
+        <div class="detail-inner">
+            <div class="detail-header">Performance vs Defender TH · ${esc(p.name)}</div>
+            <div class="thb-grid">${tiles}</div>
+        </div>
+    </td>`;
+    tr.after(detailRow);
 }
 
 renderAll();
