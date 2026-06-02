@@ -253,3 +253,111 @@ class ClanWarAttack(db.Model):
     duration        = db.Column(db.Integer)
 
     clan_war = db.relationship('ClanWar', back_populates='attacks')
+
+
+# ── Clan War League ───────────────────────────────────────────────────────────
+
+class CWLSeason(db.Model):
+    __tablename__ = 'cwl_season'
+
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    season       = db.Column(db.String(10), unique=True, nullable=False)  # e.g. "2025-05"
+    state        = db.Column(db.String(20))
+    league_name  = db.Column(db.String(50), nullable=True)
+    last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                             onupdate=lambda: datetime.now(timezone.utc))
+
+    clans = db.relationship('CWLClan', back_populates='season', lazy=True, cascade='all, delete-orphan')
+    wars  = db.relationship('CWLWar',  back_populates='season', lazy=True, cascade='all, delete-orphan')
+
+
+class CWLClan(db.Model):
+    __tablename__ = 'cwl_clan'
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    season_id  = db.Column(db.Integer, db.ForeignKey('cwl_season.id'), nullable=False)
+    tag        = db.Column(db.String(30), nullable=False)
+    name       = db.Column(db.String(100))
+    badge_url  = db.Column(db.String(200), nullable=True)
+
+    season  = db.relationship('CWLSeason', back_populates='clans')
+    members = db.relationship('CWLClanMember', back_populates='clan', lazy=True, cascade='all, delete-orphan')
+
+
+class CWLWar(db.Model):
+    __tablename__ = 'cwl_war'
+
+    id                    = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    season_id             = db.Column(db.Integer, db.ForeignKey('cwl_season.id'), nullable=False)
+    round_number          = db.Column(db.Integer, nullable=False)
+    war_tag               = db.Column(db.String(50), nullable=False)
+    state                 = db.Column(db.String(20))
+    start_time            = db.Column(db.DateTime)
+    end_time              = db.Column(db.DateTime)
+    team_size             = db.Column(db.Integer)
+    clan_tag              = db.Column(db.String(30))
+    clan_name             = db.Column(db.String(100))
+    clan_badge            = db.Column(db.String(200), nullable=True)
+    clan_stars            = db.Column(db.Integer, default=0)
+    clan_attacks          = db.Column(db.Integer, default=0)
+    clan_destruction_pct  = db.Column(db.Float, default=0.0)
+    opp_tag               = db.Column(db.String(30))
+    opp_name              = db.Column(db.String(100))
+    opp_badge             = db.Column(db.String(200), nullable=True)
+    opp_stars             = db.Column(db.Integer, default=0)
+    opp_attacks           = db.Column(db.Integer, default=0)
+    opp_destruction_pct   = db.Column(db.Float, default=0.0)
+
+    season  = db.relationship('CWLSeason', back_populates='wars')
+    members = db.relationship('CWLMember', back_populates='war', lazy=True, cascade='all, delete-orphan')
+    attacks = db.relationship('CWLAttack', back_populates='war', lazy=True, cascade='all, delete-orphan')
+
+
+class CWLClanMember(db.Model):
+    """Day-1 roster snapshot for every member of every CWL clan."""
+    __tablename__ = 'cwl_clan_member'
+
+    id              = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    clan_id         = db.Column(db.Integer, db.ForeignKey('cwl_clan.id'), nullable=False)
+    player_tag      = db.Column(db.String(30))
+    player_name     = db.Column(db.String(100))
+    town_hall_level = db.Column(db.Integer)
+    ranked_league   = db.Column(db.String(50), nullable=True)
+    is_rushed       = db.Column(db.Boolean, default=False, nullable=False)
+    is_troll        = db.Column(db.Boolean, default=False, nullable=False)
+
+    clan = db.relationship('CWLClan', back_populates='members')
+
+
+class CWLMember(db.Model):
+    __tablename__ = 'cwl_member'
+
+    id               = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    war_id           = db.Column(db.Integer, db.ForeignKey('cwl_war.id'), nullable=False)
+    clan_tag         = db.Column(db.String(30))
+    player_tag       = db.Column(db.String(30))
+    player_name      = db.Column(db.String(100))
+    town_hall_level  = db.Column(db.Integer)
+    map_position     = db.Column(db.Integer)
+    is_opponent      = db.Column(db.Boolean, default=False)
+    ranked_league    = db.Column(db.String(50), nullable=True)
+    opponent_attacks = db.Column(db.Integer, default=0)
+    is_rushed        = db.Column(db.Boolean, default=False, nullable=False)
+    is_troll         = db.Column(db.Boolean, default=False, nullable=False)
+
+    war = db.relationship('CWLWar', back_populates='members')
+
+
+class CWLAttack(db.Model):
+    __tablename__ = 'cwl_attack'
+
+    id              = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    war_id          = db.Column(db.Integer, db.ForeignKey('cwl_war.id'), nullable=False)
+    attacker_tag    = db.Column(db.String(30))
+    defender_tag    = db.Column(db.String(30))
+    stars           = db.Column(db.Integer)
+    destruction_pct = db.Column(db.Float)
+    attack_order    = db.Column(db.Integer)
+    duration        = db.Column(db.Integer)
+
+    war = db.relationship('CWLWar', back_populates='attacks')

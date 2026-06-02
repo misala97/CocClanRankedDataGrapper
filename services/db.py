@@ -10,6 +10,7 @@ from models import (
     Player, RankedWeek, RankedBattleLog, BattleLog,
     RaidWeekend, RaidWeekendLog, UptimeTracker,
     ClanWar, ClanWarMember, ClanWarAttack,
+    CWLSeason, CWLClan, CWLClanMember, CWLWar, CWLMember, CWLAttack,
 )
 from services.helpers import (
     json_get, parse_iso_datetime,
@@ -17,6 +18,7 @@ from services.helpers import (
     get_member_rank_by_tag, get_next_monday, get_last_monday,
     JSON_PLAYER_DATA, JSON_BATTLE_LOG_DATA, JSON_RANKED_GROUP_DATA,
     JSON_RAID_WEEKEND_DATA, JSON_CLAN_WAR_DATA, JSON_CLAN_DATA, avg_league_name,
+    JSON_CWL_GROUP_DATA, JSON_CWL_WAR_DATA,
 )
 
 
@@ -407,3 +409,94 @@ def db_clan_war_update(existing: ClanWar, updated: ClanWar):
     existing.opponent_destruction_pct = updated.opponent_destruction_pct
     logging.debug(f"Updated clan war {existing.start_time}")
     return existing
+
+
+# ── CWL helpers ───────────────────────────────────────────────────────────────
+
+def db_cwl_season_get(season: str):
+    return CWLSeason.query.filter_by(season=season).first()
+
+def db_cwl_season_create(season_str: str, state: str, league_name: str) -> CWLSeason:
+    obj = CWLSeason(season=season_str, state=state, league_name=league_name)
+    db.session.add(obj)
+    db.session.flush()
+    logging.debug(f"Created CWL season {season_str}")
+    return obj
+
+def db_cwl_season_update(existing: CWLSeason, state: str, league_name: str):
+    existing.state       = state
+    existing.league_name = league_name or existing.league_name
+    logging.debug(f"Updated CWL season {existing.season} state={state}")
+
+def db_cwl_war_get(war_tag: str) -> CWLWar:
+    return CWLWar.query.filter_by(war_tag=war_tag).first()
+
+def create_db_cwl_war(season_id: int, round_number: int, war_tag: str, war_data: dict) -> CWLWar:
+    clan = json_get(war_data, JSON_CWL_WAR_DATA.CLAN,     default={}, raise_on_missing=False) or {}
+    opp  = json_get(war_data, JSON_CWL_WAR_DATA.OPPONENT, default={}, raise_on_missing=False) or {}
+    return CWLWar(
+        season_id            = season_id,
+        round_number         = round_number,
+        war_tag              = war_tag,
+        state                = json_get(war_data, JSON_CWL_WAR_DATA.STATE),
+        start_time           = parse_iso_datetime(json_get(war_data, JSON_CWL_WAR_DATA.START_TIME)),
+        end_time             = parse_iso_datetime(json_get(war_data, JSON_CWL_WAR_DATA.END_TIME)),
+        team_size            = json_get(war_data, JSON_CWL_WAR_DATA.TEAM_SIZE),
+        clan_tag             = json_get(clan, JSON_CWL_WAR_DATA.SIDE_TAG),
+        clan_name            = json_get(clan, JSON_CWL_WAR_DATA.SIDE_NAME),
+        clan_badge           = json_get(clan, JSON_CWL_WAR_DATA.SIDE_BADGE),
+        clan_stars           = json_get(clan, JSON_CWL_WAR_DATA.SIDE_STARS,       default=0, raise_on_missing=False) or 0,
+        clan_attacks         = json_get(clan, JSON_CWL_WAR_DATA.SIDE_ATTACKS,     default=0, raise_on_missing=False) or 0,
+        clan_destruction_pct = json_get(clan, JSON_CWL_WAR_DATA.SIDE_DESTRUCTION, default=0.0, raise_on_missing=False) or 0.0,
+        opp_tag              = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_TAG),
+        opp_name             = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_NAME),
+        opp_badge            = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_BADGE),
+        opp_stars            = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_STARS,       default=0, raise_on_missing=False) or 0,
+        opp_attacks          = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_ATTACKS,     default=0, raise_on_missing=False) or 0,
+        opp_destruction_pct  = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_DESTRUCTION, default=0.0, raise_on_missing=False) or 0.0,
+    )
+
+def db_cwl_war_update(existing: CWLWar, war_data: dict):
+    clan = json_get(war_data, JSON_CWL_WAR_DATA.CLAN,     default={}, raise_on_missing=False) or {}
+    opp  = json_get(war_data, JSON_CWL_WAR_DATA.OPPONENT, default={}, raise_on_missing=False) or {}
+    existing.state                = json_get(war_data, JSON_CWL_WAR_DATA.STATE)
+    existing.clan_stars           = json_get(clan, JSON_CWL_WAR_DATA.SIDE_STARS,       default=0,   raise_on_missing=False) or 0
+    existing.clan_attacks         = json_get(clan, JSON_CWL_WAR_DATA.SIDE_ATTACKS,     default=0,   raise_on_missing=False) or 0
+    existing.clan_destruction_pct = json_get(clan, JSON_CWL_WAR_DATA.SIDE_DESTRUCTION, default=0.0, raise_on_missing=False) or 0.0
+    existing.opp_stars            = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_STARS,       default=0,   raise_on_missing=False) or 0
+    existing.opp_attacks          = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_ATTACKS,     default=0,   raise_on_missing=False) or 0
+    existing.opp_destruction_pct  = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_DESTRUCTION, default=0.0, raise_on_missing=False) or 0.0
+    logging.debug(f"Updated CWL war {existing.war_tag}")
+
+def create_db_cwl_clan_member(clan_id: int, member_data: dict, ranked_league: str = None) -> CWLClanMember:
+    return CWLClanMember(
+        clan_id         = clan_id,
+        player_tag      = json_get(member_data, JSON_CWL_GROUP_DATA.CLAN_MEMBER_TAG, raise_on_missing=False),
+        player_name     = json_get(member_data, JSON_CWL_GROUP_DATA.CLAN_MEMBER_NAME, raise_on_missing=False),
+        town_hall_level = json_get(member_data, JSON_CWL_GROUP_DATA.CLAN_MEMBER_TH, raise_on_missing=False),
+        ranked_league   = ranked_league,
+    )
+
+
+def create_db_cwl_member(war_id: int, clan_tag: str, member_data: dict, is_opponent: bool, ranked_league: str = None) -> CWLMember:
+    return CWLMember(
+        war_id          = war_id,
+        clan_tag        = clan_tag,
+        player_tag      = json_get(member_data, JSON_CWL_WAR_DATA.MEMBER_TAG),
+        player_name     = json_get(member_data, JSON_CWL_WAR_DATA.MEMBER_NAME),
+        town_hall_level = json_get(member_data, JSON_CWL_WAR_DATA.MEMBER_TH),
+        map_position    = json_get(member_data, JSON_CWL_WAR_DATA.MEMBER_POS),
+        is_opponent     = is_opponent,
+        ranked_league   = ranked_league,
+    )
+
+def create_db_cwl_attack(war_id: int, attack_data: dict) -> CWLAttack:
+    return CWLAttack(
+        war_id          = war_id,
+        attacker_tag    = json_get(attack_data, JSON_CWL_WAR_DATA.ATTACK_ATTACKER_TAG),
+        defender_tag    = json_get(attack_data, JSON_CWL_WAR_DATA.ATTACK_DEFENDER_TAG),
+        stars           = json_get(attack_data, JSON_CWL_WAR_DATA.ATTACK_STARS),
+        destruction_pct = json_get(attack_data, JSON_CWL_WAR_DATA.ATTACK_DESTRUCTION),
+        attack_order    = json_get(attack_data, JSON_CWL_WAR_DATA.ATTACK_ORDER),
+        duration        = json_get(attack_data, JSON_CWL_WAR_DATA.ATTACK_DURATION),
+    )

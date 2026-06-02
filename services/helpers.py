@@ -182,6 +182,50 @@ class JSON_RANKED_GROUP_DATA:
     DEFENSE_LOGS_CREATION_TIME = JSONPath("creationTime")
 
 
+class JSON_CWL_GROUP_DATA:
+    STATE           = JSONPath("state")
+    SEASON          = JSONPath("season")
+    WAR_LEAGUE      = JSONPath("warLeague")
+    WAR_LEAGUE_NAME = JSONPath("name")
+    CLANS           = JSONPath("clans")
+    CLAN_TAG        = JSONPath("tag")
+    CLAN_NAME       = JSONPath("name")
+    CLAN_BADGE      = JSONPath("badgeUrls.large")
+    CLAN_MEMBERS    = JSONPath("members")
+    CLAN_MEMBER_TAG = JSONPath("tag")
+    CLAN_MEMBER_NAME= JSONPath("name")
+    CLAN_MEMBER_TH  = JSONPath("townHallLevel")
+    ROUNDS          = JSONPath("rounds")
+    ROUND_WAR_TAGS  = JSONPath("warTags")
+
+
+class JSON_CWL_WAR_DATA:
+    STATE        = JSONPath("state")
+    TEAM_SIZE    = JSONPath("teamSize")
+    START_TIME   = JSONPath("startTime")
+    END_TIME     = JSONPath("endTime")
+    CLAN         = JSONPath("clan")
+    OPPONENT     = JSONPath("opponent")
+    SIDE_TAG     = JSONPath("tag")
+    SIDE_NAME    = JSONPath("name")
+    SIDE_BADGE   = JSONPath("badgeUrls.large")
+    SIDE_STARS   = JSONPath("stars")
+    SIDE_ATTACKS = JSONPath("attacks")
+    SIDE_DESTRUCTION = JSONPath("destructionPercentage")
+    SIDE_MEMBERS = JSONPath("members")
+    MEMBER_TAG   = JSONPath("tag")
+    MEMBER_NAME  = JSONPath("name")
+    MEMBER_TH    = JSONPath("townhallLevel")
+    MEMBER_POS   = JSONPath("mapPosition")
+    MEMBER_ATTACKS      = JSONPath("attacks")
+    ATTACK_ATTACKER_TAG = JSONPath("attackerTag")
+    ATTACK_DEFENDER_TAG = JSONPath("defenderTag")
+    ATTACK_STARS        = JSONPath("stars")
+    ATTACK_DESTRUCTION  = JSONPath("destructionPercentage")
+    ATTACK_ORDER        = JSONPath("order")
+    ATTACK_DURATION     = JSONPath("duration")
+
+
 # ── json_get ──────────────────────────────────────────────────────────────────
 
 def json_get(json_object: dict, key, default=None, raise_on_missing: bool = True):

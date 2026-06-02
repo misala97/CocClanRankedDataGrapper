@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clan War League – CoC Analytics</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      #0d1117;
+            --surface: #161b22;
+            --surf2:   #1c2330;
+            --border:  #30363d;
+            --bord2:   #21262d;
+            --text:    #e6edf3;
+            --muted:   #8b949e;
+            --accent:  #f0a500;
+            --acc2:    #e8863a;
+            --green:   #3fb950;
+            --blue:    #58a6ff;
+            --red:     #f85149;
+            --yellow:  #e3b341;
+            --purple:  #bc8cff;
+            --orange:  #d29922;
+        }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        a { text-decoration: none; color: inherit; }
+
+        .page-header {
+            background: linear-gradient(180deg, rgba(240,165,0,.05) 0%, transparent 100%);
+            border-bottom: 1px solid var(--bord2); padding: 44px 32px 32px;
+        }
+        .page-header-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+        .page-header h1 { font-family: 'Rajdhani', sans-serif; font-size: 40px; font-weight: 700; letter-spacing: 1px; line-height: 1; margin-bottom: 8px; }
+        .page-header h1 span { color: var(--accent); }
+        .page-sub { color: var(--muted); font-size: 14px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
+        .selector { padding: 7px 13px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-family: 'DM Sans', sans-serif; background: var(--surf2); color: var(--text); cursor: pointer; appearance: none; min-width: 220px; }
+        .selector:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(240,165,0,.12); }
+
+        /* ── STANDINGS ── */
+        .section-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+        .section-header { padding: 14px 20px; border-bottom: 1px solid var(--bord2); background: var(--surf2); display: flex; align-items: center; justify-content: space-between; }
+        .section-header h3 { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead th { padding: 10px 16px; text-align: left; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; border-bottom: 1px solid var(--bord2); white-space: nowrap; font-family: 'Rajdhani', sans-serif; background: var(--surf2); }
+        tbody tr { border-bottom: 1px solid var(--bord2); transition: background .12s; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(255,255,255,.03); }
+        tbody td { padding: 11px 16px; vertical-align: middle; }
+        .mono { font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+        .text-muted { color: var(--muted); }
+        .clan-col { display: flex; align-items: center; gap: 10px; }
+        .clan-badge-sm { width: 28px; height: 28px; object-fit: contain; }
+        .our-row td { background: rgba(240,165,0,.05); }
+        .our-row:hover td { background: rgba(240,165,0,.08) !important; }
+        .result-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
+        .rp-win  { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
+        .rp-loss { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.25); }
+        .rp-draw { background: rgba(139,148,158,.1); color: var(--muted);  border: 1px solid rgba(139,148,158,.2); }
+
+        /* ── ROUND COLLAPSE ── */
+        .round-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+        .round-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; transition: background .15s; }
+        .round-header:hover { background: var(--surf2); }
+        .round-header-left { display: flex; align-items: center; gap: 14px; }
+        .round-label { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; }
+        .round-matchup { font-size: 13px; color: var(--muted); }
+        .round-score { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .round-chevron { font-size: 11px; color: var(--muted); transition: transform .2s; }
+        .round-chevron.open { transform: rotate(180deg); }
+        .round-body { border-top: 1px solid var(--border); display: none; }
+        .round-body.open { display: block; }
+
+        /* ── WAR HEADER ── */
+        .war-header { background: var(--surface); border-bottom: 1px solid var(--bord2); padding: 28px 32px; display: grid; grid-template-columns: 1fr 220px 1fr; gap: 0; align-items: stretch; }
+        .clan-panel { display: flex; flex-direction: column; }
+        .clan-panel.right { align-items: flex-end; padding-left: 28px; }
+        .clan-panel:not(.right) { padding-right: 28px; }
+        .clan-ident { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+        .clan-panel.right .clan-ident { flex-direction: row-reverse; }
+        .clan-badge-img { width: 60px; height: 60px; object-fit: contain; flex-shrink: 0; }
+        .clan-badge-ph  { width: 60px; height: 60px; background: var(--surf2); border: 1px solid var(--border); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+        .clan-name-text { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; line-height: 1.1; }
+        .clan-panel.right .clan-name-text { text-align: right; }
+        .score-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0 20px; text-align: center; border-left: 1px solid var(--bord2); border-right: 1px solid var(--bord2); }
+        .score-stars { font-family: 'Rajdhani', sans-serif; font-size: 52px; font-weight: 700; line-height: 1; display: flex; align-items: center; gap: 10px; }
+        .score-stars .our { color: var(--green); }
+        .score-stars .sep { color: var(--bord2); font-size: 32px; }
+        .score-stars .their { color: var(--red); }
+        .score-attacks { display: flex; align-items: center; gap: 8px; font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; }
+        .atk-our { color: var(--green); } .atk-opp { color: var(--red); } .atk-sep { color: var(--muted); font-size: 11px; }
+        .score-pct { font-size: 12px; color: var(--muted); }
+        .state-badge { margin-top: 2px; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
+        .state-preparation { background: rgba(240,165,0,.12); color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
+        .state-inWar       { background: rgba(63,185,80,.12);  color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+        .state-warEnded    { background: rgba(139,148,158,.1); color: var(--muted); border: 1px solid rgba(139,148,158,.2); }
+        .score-times { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+        .score-time-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+        .score-time-row .tl { color: var(--muted); } .score-time-row .tv { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; }
+        .score-size { margin-top: 6px; font-size: 12px; color: var(--muted); padding-top: 8px; border-top: 1px solid var(--bord2); width: 100%; text-align: center; }
+
+        /* ── COMPARE ── */
+        .compare-btn { display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 0; padding: 6px 14px; background: var(--surf2); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+        .compare-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,.05); }
+        .compare-btn.open  { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,.06); }
+        .compare-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin: 0 32px 24px; overflow: hidden; display: none; }
+        .compare-card.open { display: block; }
+        .cmp-sec { padding: 22px 28px; border-bottom: 1px solid var(--bord2); }
+        .cmp-sec:last-child { border-bottom: none; }
+        .cmp-title { font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+        .cmp-title::after { content:''; flex:1; height:1px; background:var(--bord2); }
+        .pred-split { display: grid; height: 44px; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+        .pred-half-our { background: linear-gradient(90deg, rgba(63,185,80,.35) 0%, rgba(63,185,80,.15) 100%); display: flex; align-items: center; padding: 0 16px; border-right: 2px solid var(--surface); }
+        .pred-half-opp { background: linear-gradient(270deg, rgba(248,81,73,.35) 0%, rgba(248,81,73,.15) 100%); display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; }
+        .pred-pct { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; }
+        .pred-pct-name { font-size: 12px; font-weight: 500; margin-left: 6px; opacity: .8; }
+        .pred-half-our .pred-pct { color: var(--green); } .pred-half-opp .pred-pct { color: var(--red); }
+        .pred-verdict { text-align: center; font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+        .pred-factors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+        .pred-factor-row { background: var(--surf2); border-radius: 8px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--bord2); }
+        .pfr-label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+        .pfr-vals  { display: flex; justify-content: space-between; align-items: baseline; }
+        .pfr-our   { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; }
+        .pfr-sep   { font-size: 10px; color: var(--muted); }
+        .pfr-opp   { font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; }
+        .pfr-win-our .pfr-our { color: var(--green); } .pfr-win-opp .pfr-opp { color: var(--red); }
+        .pfr-win-our .pfr-opp, .pfr-win-opp .pfr-our { color: var(--muted); opacity: .6; }
+        .stat-cmp-row { display: grid; grid-template-columns: 1fr 140px 1fr; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--bord2); }
+        .stat-cmp-row:last-child { border-bottom: none; }
+        .scr-our { text-align: right; font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; }
+        .scr-opp { text-align: left; font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; }
+        .scr-label { text-align: center; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding: 0 12px; }
+        .scr-win { color: var(--green); } .scr-lose { color: var(--muted); opacity: .5; }
+        .dist-header { display: grid; grid-template-columns: 1fr 64px 1fr; margin-bottom: 10px; }
+        .dist-our-lbl { font-size: 11px; font-weight: 600; color: var(--green); }
+        .dist-opp-lbl { font-size: 11px; font-weight: 600; color: var(--red); text-align: right; }
+        .dist-row { display: grid; grid-template-columns: 32px 1fr 64px 1fr 32px; gap: 6px; align-items: center; margin-bottom: 5px; }
+        .dist-count-our { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; color: var(--green); text-align: right; }
+        .dist-count-opp { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; color: var(--red); }
+        .dist-bar-our { height: 8px; border-radius: 3px; background: var(--green); opacity: .65; margin-left: auto; }
+        .dist-bar-opp { height: 8px; border-radius: 3px; background: var(--red); opacity: .65; }
+        .dist-lbl { font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .lg-summary { display: flex; gap: 20px; margin-bottom: 16px; }
+        .lg-sum-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+        .lg-sum-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .lg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .lg-table th { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--bord2); }
+        .lg-table td { padding: 6px 6px; border-bottom: 1px solid var(--bord2); }
+        .lg-table tr:last-child td { border-bottom: none; }
+        .lg-table .lgt-pos { color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 700; text-align: center; width: 32px; }
+        .lg-table .lgt-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lg-table .lgt-lg { font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; }
+        .lg-table .lgt-diff { text-align: center; font-family: 'Rajdhani', sans-serif; font-weight: 700; width: 48px; }
+        .lg-adv { color: var(--green); background: rgba(63,185,80,.05); }
+        .lg-dis { color: var(--red);   background: rgba(248,81,73,.05); }
+        .lg-even { color: var(--muted); }
+        .no-data-lg { color: var(--muted); font-style: italic; }
+        .matchup-summary { display: flex; gap: 32px; justify-content: center; margin-bottom: 16px; }
+        .matchup-stat { text-align: center; }
+        .matchup-stat .mn { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; }
+        .matchup-stat .ml { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+        .mn-green { color: var(--green); } .mn-red { color: var(--red); } .mn-muted { color: var(--muted); }
+
+        /* ── CARDS (verdict/log) ── */
+        .recent-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin: 0 32px 24px; overflow: hidden; }
+        .recent-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; transition: background .15s; }
+        .recent-header:hover { background: var(--surf2); }
+        .recent-header-title { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+        .recent-chevron { font-size: 11px; color: var(--muted); transition: transform .2s; }
+        .recent-chevron.open { transform: rotate(180deg); }
+        .recent-body { border-top: 1px solid var(--border); display: none; }
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .detail-table thead { background: var(--surf2); }
+        .detail-table th { padding: 9px 14px; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; font-family: 'Rajdhani', sans-serif; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        .detail-table td { padding: 9px 14px; border-bottom: 1px solid var(--bord2); color: var(--text); }
+        .detail-table tbody tr:last-child td { border-bottom: none; }
+        .detail-table tbody tr:hover { background: rgba(255,255,255,.025); }
+
+        /* ── VERDICT TABLE ── */
+        .vt-wrap { overflow-x: auto; }
+        .vt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .vt-table thead th { padding: 11px 16px; text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; white-space: nowrap; border-bottom: 1px solid var(--border); background: var(--surf2); }
+        .vt-table tbody tr { border-bottom: 1px solid var(--bord2); transition: background .12s; cursor: pointer; }
+        .vt-table tbody tr:last-child { border-bottom: none; }
+        .vt-table tbody tr:hover { background: rgba(255,255,255,.03); }
+        .vt-table tbody td { padding: 12px 16px; vertical-align: middle; }
+        .vt-sortable { cursor: pointer; user-select: none; }
+        .vt-sortable:hover { color: var(--text); }
+        .vt-sort-active { color: var(--accent) !important; }
+        .vt-sort-active.asc::after  { content: ' ↑'; font-size: .85em; }
+        .vt-sort-active.desc::after { content: ' ↓'; font-size: .85em; }
+        .vd-row { display: none; }
+        .vd-row.expanded { display: table-row; }
+        .vd-cell { padding: 0 !important; background: var(--bg); border-bottom: 1px solid var(--border) !important; }
+        .vd-inner { padding: 16px; }
+        .vd-section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+        .vd-meta { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+        .action-btn { padding: 6px 14px; background: transparent; color: var(--accent); border: 1px solid rgba(240,165,0,.35); border-radius: 6px; font-weight: 700; font-size: 11px; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; cursor: pointer; transition: all .15s; min-width: 72px; }
+        .action-btn:hover { background: rgba(240,165,0,.1); border-color: var(--accent); }
+
+        /* ── ATTACK CARDS ── */
+        .atk-cards { display: flex; flex-direction: column; gap: 8px; }
+        .atk-card { display: flex; align-items: stretch; background: var(--surf2); border: 1px solid var(--bord2); border-radius: 8px; overflow: hidden; }
+        .atk-card-th { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 14px 16px; min-width: 150px; border-right: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+        .atk-th-row { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+        .atk-th-sep { color: var(--muted); font-size: 12px; }
+        .atk-th-diff { font-size: 11px; letter-spacing: .3px; }
+        .atk-th-divider { width: 100%; height: 1px; background: var(--bord2); margin: 4px 0; }
+        .atk-card-target { flex: 1; padding: 14px 16px; border-right: 1px solid var(--bord2); display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+        .atk-target-name { font-weight: 600; font-size: 14px; }
+        .atk-target-meta { display: flex; align-items: center; gap: 8px; }
+        .atk-target-pos { font-size: 11px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+        .atk-state-dead    { font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--red); opacity: .8; }
+        .atk-state-partial { font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--yellow); }
+        .atk-state-fresh   { font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); opacity: .55; }
+        .atk-card-result { display: flex; align-items: center; gap: 10px; padding: 14px 18px; min-width: 190px; justify-content: flex-end; }
+        .atk-result-pct { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 15px; color: var(--blue); }
+
+        /* ── ROSTER ── */
+        .roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 120px; position: relative; margin: 0 32px 32px; }
+        .roster-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .roster-card-header { background: var(--surf2); padding: 11px 18px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+        .rh-left { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text); }
+        .rh-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .rh-meta { font-size: 11px; color: var(--muted); }
+        .roster-col-hdr { display: grid; grid-template-columns: 26px 38px 1fr 72px auto; padding: 5px 18px; gap: 10px; background: rgba(255,255,255,.015); border-bottom: 1px solid var(--border); font-size: 9px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+        .roster-col-hdr .rch-def { text-align: center; }
+        .roster-col-hdr .rch-atk { text-align: right; }
+        .member-row { padding: 10px 18px; border-bottom: 1px solid var(--bord2); display: grid; grid-template-columns: 26px 38px 1fr 72px auto; align-items: center; gap: 10px; transition: background .1s; cursor: pointer; }
+        .member-row:last-child { border-bottom: none; }
+        .member-row:hover { background: rgba(255,255,255,.02); }
+        .member-row.row-sel    { background: rgba(240,165,0,.08) !important; box-shadow: inset 3px 0 0 var(--accent); }
+        .member-row.row-tgt-3  { background: rgba(63,185,80,.1)   !important; box-shadow: inset 3px 0 0 #3fb950; }
+        .member-row.row-tgt-2  { background: rgba(227,179,65,.1)  !important; box-shadow: inset 3px 0 0 #e3b341; }
+        .member-row.row-tgt-1  { background: rgba(240,165,0,.1)   !important; box-shadow: inset 3px 0 0 #f0a500; }
+        .member-row.row-tgt-0  { background: rgba(139,148,158,.1) !important; box-shadow: inset 3px 0 0 #8b949e; }
+        .member-row.row-tgt-open { background: rgba(88,166,255,.07) !important; box-shadow: inset 3px 0 0 #58a6ff; }
+        .member-row.row-dim    { opacity: .18; }
+        .member-row { transition: background .1s, opacity .15s; }
+        .map-pos { font-family: 'Rajdhani', sans-serif; font-weight: 700; color: var(--muted); font-size: 12px; text-align: center; }
+        .th-badge { display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif; background: rgba(88,166,255,.1); color: var(--blue); border: 1px solid rgba(88,166,255,.2); }
+        .member-info {}
+        .member-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .member-sub-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+        .member-sub { font-size: 10px; color: var(--muted); font-family: 'Rajdhani', sans-serif; line-height: 1.4; white-space: nowrap; }
+        .attacks-col { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 90px; }
+        .attack-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: 'Rajdhani', sans-serif; white-space: nowrap; letter-spacing: .2px; }
+        .attack-3 { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
+        .attack-2 { background: rgba(227,179,65,.12); color: var(--yellow); border: 1px solid rgba(227,179,65,.25); }
+        .attack-1 { background: rgba(240,165,0,.1);   color: var(--accent); border: 1px solid rgba(240,165,0,.2); }
+        .attack-0 { background: rgba(248,81,73,.1);   color: var(--red);    border: 1px solid rgba(248,81,73,.2); }
+        .atk-count { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 14px; text-align: right; white-space: nowrap; }
+        .atk-full { color: var(--green); } .atk-partial { color: var(--yellow); } .atk-none { color: var(--muted); opacity: .4; } .atk-prep { color: var(--muted); font-size: 11px; }
+        .atk-pills { display: none; }
+        .def-col { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 4px; }
+        .def-stars { font-size: 1.18em; letter-spacing: 1px; white-space: nowrap; }
+        .def-filled { color: var(--yellow); } .def-empty { color: var(--muted); opacity: .4; }
+        .def-hits { font-size: 9px; color: var(--muted); font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; }
+        .def-safe { font-size: 11px; color: var(--green); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+        .toggle-all-btn { padding: 3px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer; background: transparent; border: 1px solid var(--border); color: var(--muted); transition: all .15s; }
+        .toggle-all-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .toggle-all-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,.08); }
+        .league-pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'Rajdhani', sans-serif; letter-spacing: .2px; }
+        .lp-gold { background: rgba(240,165,0,.1); color: var(--accent); border: 1px solid rgba(240,165,0,.25); }
+
+        /* ── ATTACK PILLS ── */
+        .atk-pill { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .4px; text-transform: uppercase; border: 1px solid transparent; }
+        .ap-clear           { background: rgba(63,185,80,.12);   color: var(--green);  border-color: rgba(63,185,80,.3); }
+        .ap-failed-clear    { background: rgba(210,153,34,.12);  color: var(--yellow); border-color: rgba(210,153,34,.3); }
+        .ap-high-clear      { background: rgba(188,140,255,.12); color: var(--purple); border-color: rgba(188,140,255,.3); }
+        .ap-farm            { background: rgba(88,166,255,.12);  color: var(--blue);   border-color: rgba(88,166,255,.25); }
+        .ap-failed-farm     { background: rgba(248,81,73,.12);   color: var(--red);    border-color: rgba(248,81,73,.3); }
+        .ap-low-clear       { background: rgba(63,185,80,.07);   color: var(--green);  border-color: rgba(63,185,80,.2); opacity:.85; }
+        .ap-low-clear-fail  { background: rgba(210,153,34,.08);  color: var(--yellow); border-color: rgba(210,153,34,.2); opacity:.85; }
+        .ap-clean-up        { background: rgba(88,166,255,.1);   color: var(--blue);   border-color: rgba(88,166,255,.22); }
+        .ap-failed-clean-up { background: rgba(248,81,73,.1);    color: var(--red);    border-color: rgba(248,81,73,.25); }
+        .ap-wasted          { background: rgba(139,148,158,.08); color: var(--muted);  border-color: rgba(139,148,158,.2); opacity:.75; }
+        .ap-no-attack       { background: rgba(139,148,158,.05); color: var(--muted);  border-color: rgba(139,148,158,.15); opacity:.6; }
+
+        /* ── JUDGMENT BADGES ── */
+        .judgment { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid; white-space: nowrap; letter-spacing: .4px; font-family: 'Rajdhani', sans-serif; text-transform: uppercase; }
+        .badge-godlike   { background: rgba(188,140,255,.15); color: var(--purple); border-color: rgba(188,140,255,.4); }
+        .badge-dominant  { background: rgba(240,165,0,.15);   color: var(--accent); border-color: rgba(240,165,0,.35); }
+        .badge-wow       { background: rgba(63,185,80,.12);   color: var(--green);  border-color: rgba(63,185,80,.3); }
+        .badge-good      { background: rgba(88,166,255,.12);  color: var(--blue);   border-color: rgba(88,166,255,.25); }
+        .badge-warning   { background: rgba(210,153,34,.12);  color: var(--orange); border-color: rgba(210,153,34,.3); }
+        .badge-suck      { background: rgba(248,81,73,.12);   color: var(--red);    border-color: rgba(248,81,73,.3); }
+        .badge-inactive  { background: rgba(139,148,158,.08); color: var(--muted);  border-color: rgba(139,148,158,.2); }
+        .badge-undefined { background: rgba(139,148,158,.06); color: var(--muted);  border-color: rgba(139,148,158,.2); border-style: dashed; }
+
+        .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: .3px; }
+        .no-war { text-align: center; padding: 80px 32px; color: var(--muted); }
+        .no-war h2 { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); margin-top: 12px; }
+
+        @media (max-width: 900px) {
+            .war-header { grid-template-columns: 1fr; gap: 20px; }
+            .clan-panel.right { border-left: none; padding-left: 0; border-top: 1px solid var(--bord2); padding-top: 20px; align-items: flex-start; }
+            .clan-panel.right .clan-ident { flex-direction: row; }
+            .clan-panel.right .clan-name-text { text-align: left; }
+            .score-center { border: none; border-top: 1px solid var(--bord2); border-bottom: 1px solid var(--bord2); padding: 20px 0; }
+            .roster-grid { grid-template-columns: 1fr; gap: 16px; margin: 0 14px 24px; }
+            .recent-card, .compare-card { margin-left: 14px; margin-right: 14px; }
+            .nav-inner, .page-header, .container { padding-left: 16px; padding-right: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+<div class="page-header">
+    <div class="page-header-inner">
+        <div>
+            <h1>Clan War <span>League</span></h1>
+            <p class="page-sub">Season standings and per-round war performance.</p>
+        </div>
+        {% if seasons %}
+        <form method="GET">
+            <select name="season_id" class="selector" onchange="this.form.submit()">
+                {% for s in seasons %}
+                <option value="{{ s.id }}" {% if season and s.id == season.id %}selected{% endif %}>
+                    {{ s.season }}{% if s.league_name %} · {{ s.league_name }}{% endif %}{% if s.state != 'ended' %} ({{ s.state }}){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="container">
+
+{% if not season %}
+<div class="no-war">
+    <div style="font-size:48px;">🏆</div>
+    <h2>No CWL data yet</h2>
+    <p style="margin-top:8px;font-size:14px;">Run <code>task_update_cwl</code> to sync the current season.</p>
+</div>
+
+{% else %}
+
+{# ── STANDINGS + ROSTERS ── #}
+<div class="section-card">
+    <div class="section-header">
+        <h3>Standings · {{ season.season }}{% if season.league_name %} · {{ season.league_name }}{% endif %}</h3>
+        <span style="font-size:11px;color:var(--muted);">click a clan to expand roster</span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width:36px;text-align:center;">#</th>
+                <th>Clan</th>
+                <th style="text-align:center;">W</th>
+                <th style="text-align:center;">L</th>
+                <th style="text-align:center;">D</th>
+                <th style="text-align:center;">Stars</th>
+                <th style="text-align:center;">Avg Dest %</th>
+                <th style="text-align:center;">Players</th>
+                <th style="text-align:center;">Avg TH</th>
+                <th style="text-align:center;">Avg League</th>
+                <th style="width:28px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for s in standings %}
+        {% set is_ours = s.tag == our_tag %}
+        {% set r = clan_rosters.get(s.tag, {}) %}
+        {% set tagc = s.tag|replace('#','') %}
+        <tr class="{% if is_ours %}our-row{% endif %}" onclick="toggleClanRoster('{{ tagc }}')" style="cursor:pointer;">
+            <td class="mono text-muted" style="text-align:center;">{{ loop.index }}</td>
+            <td>
+                <div class="clan-col">
+                    {% if s.badge_url %}<img src="{{ s.badge_url }}" class="clan-badge-sm" alt="">{% endif %}
+                    <span style="font-weight:600;">{{ s.name }}</span>
+                    {% if is_ours %}<span style="color:var(--accent);font-size:11px;font-family:'Rajdhani',sans-serif;font-weight:700;">(us)</span>{% endif %}
+                </div>
+            </td>
+            <td class="mono" style="color:var(--green);text-align:center;">{{ s.wins }}</td>
+            <td class="mono" style="color:var(--red);text-align:center;">{{ s.losses }}</td>
+            <td class="mono text-muted" style="text-align:center;">{{ s.draws }}</td>
+            <td class="mono" style="color:var(--accent);text-align:center;">{{ s.stars }}</td>
+            <td class="mono" style="color:var(--blue);text-align:center;">{{ '%.1f'|format(s.destruction / s.wars if s.wars else 0) }}%</td>
+            <td class="mono text-muted" style="text-align:center;">{{ r.count or '—' }}</td>
+            <td class="mono" style="text-align:center;">{% if r.avg_th %}{{ '%.1f'|format(r.avg_th) }}{% else %}—{% endif %}</td>
+            <td style="text-align:center;font-size:12px;color:var(--blue);">{{ r.avg_league or '—' }}</td>
+            <td style="text-align:center;color:var(--muted);font-size:11px;" id="chevron-clan-{{ tagc }}">▶</td>
+        </tr>
+        <tr id="clan-roster-{{ tagc }}" style="display:none;">
+            <td colspan="11" style="padding:0;background:var(--surf2);">
+                {% if r.members %}
+                <table style="border-top:1px solid var(--bord2);">
+                    <thead>
+                        <tr>
+                            <th style="width:36px;text-align:center;">#</th>
+                            <th>Player</th>
+                            <th style="text-align:center;">TH</th>
+                            <th>League</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for m in r.members %}
+                    <tr>
+                        <td class="mono text-muted" style="text-align:center;">{{ loop.index }}</td>
+                        <td style="font-weight:500;">{{ m.player_name or m.player_tag }}</td>
+                        <td class="mono" style="text-align:center;color:var(--accent);">{{ m.town_hall_level or '?' }}</td>
+                        <td style="font-size:12px;color:var(--blue);">{{ m.ranked_league or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="padding:14px 20px;color:var(--muted);font-size:13px;">No roster data yet — syncs on first CWL day.</p>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--muted);">No completed wars yet.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# ── ROUNDS ── #}
+{% for round_num, d in sorted_rounds %}
+{% set war = d.war %}
+{% set n = round_num %}
+<div class="round-card">
+
+    <div class="round-header" onclick="toggleRound({{ n }})">
+        <div class="round-header-left">
+            <span class="round-label">Day {{ n }}</span>
+            <span style="font-size:13px;color:var(--muted);">{{ d.our_clan_name }} vs {{ d.opp_clan_name }}</span>
+            {% if d.result %}
+                {% if d.result == 'win' %}<span class="result-pill rp-win">Win</span>
+                {% elif d.result == 'loss' %}<span class="result-pill rp-loss">Loss</span>
+                {% else %}<span class="result-pill rp-draw">Draw</span>{% endif %}
+            {% endif %}
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;">
+            {% if war.state in ('inWar','warEnded') %}
+            <div class="round-score">
+                <span style="color:var(--green);">{{ d.our_stars }}</span>
+                <span style="color:var(--bord2);">★</span>
+                <span style="color:var(--red);">{{ d.opp_stars }}</span>
+            </div>
+            {% endif %}
+            <span class="state-badge state-{{ war.state }}">
+                {% if war.state == 'preparation' %}Prep{% elif war.state == 'inWar' %}Live{% else %}Ended{% endif %}
+            </span>
+            <span class="round-chevron" id="chevron-{{ n }}">▼</span>
+        </div>
+    </div>
+
+    <div class="round-body" id="round-body-{{ n }}">
+
+        {# ── WAR HEADER ── #}
+        <div class="war-header">
+            <div class="clan-panel">
+                <div class="clan-ident">
+                    {% if d.our_clan_badge %}<img src="{{ d.our_clan_badge }}" class="clan-badge-img" alt="">
+                    {% else %}<div class="clan-badge-ph">🛡️</div>{% endif %}
+                    <div class="clan-name-text">{{ d.our_clan_name }}</div>
+                </div>
+            </div>
+            <div class="score-center">
+                <div class="score-stars">
+                    <span class="our">{{ d.our_stars }}</span>
+                    <span class="sep">★</span>
+                    <span class="their">{{ d.opp_stars }}</span>
+                </div>
+                {% if war.team_size %}
+                <div class="score-pct" style="font-family:'Rajdhani',sans-serif;font-size:12px;color:var(--muted);letter-spacing:.5px;">max <strong style="color:var(--text)">{{ war.team_size * 3 }}</strong> ★</div>
+                {% endif %}
+                <div class="score-attacks">
+                    <span class="atk-our">{{ d.our_attacks }}/{{ war.team_size or 0 }}</span>
+                    <span class="atk-sep">⚔</span>
+                    <span class="atk-opp">{{ d.opp_attacks }}/{{ war.team_size or 0 }}</span>
+                </div>
+                <div class="score-pct">{{ '%.1f'|format(d.our_pct or 0) }}% vs {{ '%.1f'|format(d.opp_pct or 0) }}%</div>
+                <span class="state-badge state-{{ war.state }}">
+                    {% if war.state == 'preparation' %}Preparation{% elif war.state == 'inWar' %}In War{% else %}Ended{% endif %}
+                </span>
+                {% if war.start_time or war.end_time %}
+                <div class="score-times">
+                    {% if war.start_time %}<div class="score-time-row"><span class="tl">Start</span><span class="tv">{{ war.start_time | local_dt('%d.%m. %H:%M') }}</span></div>{% endif %}
+                    {% if war.end_time %}<div class="score-time-row"><span class="tl">{% if war.state == 'warEnded' %}Ended{% else %}Ends{% endif %}</span><span class="tv">{{ war.end_time | local_dt('%d.%m. %H:%M') }}</span></div>{% endif %}
+                </div>
+                {% endif %}
+                <div class="score-size">{{ war.team_size }}v{{ war.team_size }}</div>
+                {% if d.members_our and d.members_opp %}
+                <button class="compare-btn" id="cmpBtn-{{ n }}" onclick="toggleCompare({{ n }})">📊 Compare &amp; Predict</button>
+                {% endif %}
+            </div>
+            <div class="clan-panel right">
+                <div class="clan-ident">
+                    <div class="clan-name-text">{{ d.opp_clan_name }}</div>
+                    {% if d.opp_clan_badge %}<img src="{{ d.opp_clan_badge }}" class="clan-badge-img" alt="">
+                    {% else %}<div class="clan-badge-ph">🛡️</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# ── COMPARE CARD ── #}
+        {% if d.members_our and d.members_opp %}
+        <div class="compare-card" id="cmpCard-{{ n }}">
+            <div class="cmp-sec" id="cmp-prediction-{{ n }}"></div>
+            <div class="cmp-sec" id="cmp-stats-{{ n }}"></div>
+            <div class="cmp-sec" id="cmp-th-{{ n }}"></div>
+            <div class="cmp-sec" id="cmp-matchup-{{ n }}"></div>
+        </div>
+        {% endif %}
+
+        {# ── WAR VERDICTS ── #}
+        {% if d.war_verdicts %}
+        <div class="recent-card" id="wvCard-{{ n }}">
+            <div class="recent-header" onclick="toggleVerdicts({{ n }})">
+                <span class="recent-header-title">⚔ War Performance · {{ d.war_verdicts|length }} players</span>
+                <span class="recent-chevron" id="wvChevron-{{ n }}">▼</span>
+            </div>
+            <div class="recent-body" id="wvBody-{{ n }}">
+                <div class="vt-wrap">
+                    <table class="vt-table" id="wvTable-{{ n }}">
+                        <thead>
+                            <tr>
+                                <th class="vt-sortable" onclick="sortVerdicts({{ n }},'player_name')">Player</th>
+                                <th class="vt-sortable" onclick="sortVerdicts({{ n }},'attacks_used')" style="text-align:center;">Attacks</th>
+                                <th class="vt-sortable" onclick="sortVerdicts({{ n }},'score')" style="text-align:center;">Score</th>
+                                <th style="text-align:center;">Verdict</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="wvTbody-{{ n }}"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── ATTACK LOG ── #}
+        {% if d.all_attacks_json %}
+        <div class="recent-card">
+            <div class="recent-header" onclick="toggleLog({{ n }})">
+                <span class="recent-header-title">⚔ Attack Log · {{ d.all_attacks_json|length }} attacks</span>
+                <span class="recent-chevron" id="logChevron-{{ n }}">▼</span>
+            </div>
+            <div class="recent-body" id="logBody-{{ n }}"></div>
+        </div>
+        {% endif %}
+
+        {# ── ROSTER ── #}
+        {% if d.members_our or d.members_opp %}
+        <div class="roster-grid" id="rosterGrid-{{ n }}">
+            <svg id="warConnections-{{ n }}" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5;"></svg>
+
+            {# OUR SIDE #}
+            <div class="roster-card">
+                <div class="roster-card-header">
+                    <span class="rh-left">{{ d.our_clan_name }}</span>
+                    <div class="rh-right">
+                        <span class="rh-meta">{{ d.members_our|length }} members</span>
+                        <button class="toggle-all-btn" onclick="toggleAllSide(this,event,{{ n }})">Select All</button>
+                    </div>
+                </div>
+                <div class="roster-col-hdr">
+                    <span></span><span></span><span>Player</span>
+                    <span class="rch-def">Defense</span>
+                    <span class="rch-atk">Attacks</span>
+                </div>
+                {% for m in d.members_our %}
+                {% set my_attacks = d.attacks_by_attacker.get(m.player_tag, []) %}
+                {% set attacks_received = d.attacks_on_defender.get(m.player_tag, []) %}
+                <div class="member-row"
+                     data-tag="{{ m.player_tag }}"
+                     data-round="{{ n }}"
+                     data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'
+                     data-defended-by='[{% for a in attacks_received %}{"tag":"{{ a.attacker_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'>
+                    <div class="map-pos">#{{ m.map_position }}</div>
+                    <div class="th-badge">TH{{ m.town_hall_level }}</div>
+                    <div class="member-info">
+                        <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
+                        {% if m.league_tier %}<div class="member-sub-row"><span class="member-sub">{{ m.league_tier }}</span></div>{% endif %}
+                    </div>
+                    <div class="def-col">
+                        {% if attacks_received %}
+                            {% set best_stars = attacks_received | map(attribute='stars') | max %}
+                            <span class="def-stars"><span class="def-filled">{% for _ in range(best_stars) %}★{% endfor %}</span><span class="def-empty">{% for _ in range(3 - best_stars) %}☆{% endfor %}</span></span>
+                            <span class="def-hits">{{ attacks_received|length }}×</span>
+                        {% elif war.state != 'preparation' %}
+                            <span class="def-safe">🛡 Untouched</span>
+                        {% else %}
+                            <span style="color:var(--muted);font-size:10px;">—</span>
+                        {% endif %}
+                    </div>
+                    <div class="attacks-col">
+                        {% set used = my_attacks|length %}
+                        {% if war.state == 'preparation' %}
+                        <span class="atk-count atk-prep">{{ 1 - used }} left</span>
+                        {% elif used == 1 %}<span class="atk-count atk-full">1/1</span>
+                        {% else %}<span class="atk-count atk-none">0/1</span>
+                        {% endif %}
+                        <div class="atk-pills">
+                            {% for a in my_attacks %}
+                            {% set defender = d.member_by_tag.get(a.defender_tag) %}
+                            <span class="attack-pill attack-{{ a.stars }}" title="{{ a.destruction_pct }}%">
+                                {% for _ in range(a.stars) %}★{% endfor %}{% for _ in range(3 - a.stars) %}☆{% endfor %}
+                                {{ a.destruction_pct|int }}%{% if defender %} → {{ defender.player_name|truncate(12,True,'…') }} TH{{ defender.town_hall_level }}{% endif %}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div style="padding:20px 18px;color:var(--muted);font-size:13px;">No member data yet.</div>
+                {% endfor %}
+            </div>
+
+            {# OPP SIDE #}
+            <div class="roster-card">
+                <div class="roster-card-header">
+                    <span class="rh-left">{{ d.opp_clan_name }}</span>
+                    <div class="rh-right">
+                        <span class="rh-meta">{{ d.members_opp|length }} members</span>
+                    </div>
+                </div>
+                <div class="roster-col-hdr">
+                    <span></span><span></span><span>Player</span>
+                    <span class="rch-def">Defense</span>
+                    <span class="rch-atk">Attacks</span>
+                </div>
+                {% for m in d.members_opp %}
+                {% set my_attacks = d.attacks_by_attacker.get(m.player_tag, []) %}
+                {% set attacks_received = d.attacks_on_defender.get(m.player_tag, []) %}
+                <div class="member-row"
+                     data-tag="{{ m.player_tag }}"
+                     data-round="{{ n }}"
+                     data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'
+                     data-defended-by='[{% for a in attacks_received %}{"tag":"{{ a.attacker_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'>
+                    <div class="map-pos">#{{ m.map_position }}</div>
+                    <div class="th-badge">TH{{ m.town_hall_level }}</div>
+                    <div class="member-info">
+                        <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
+                        {% if m.league_tier %}<div class="member-sub-row"><span class="member-sub">{{ m.league_tier }}</span></div>{% endif %}
+                    </div>
+                    <div class="def-col">
+                        {% if attacks_received %}
+                            {% set best_stars = attacks_received | map(attribute='stars') | max %}
+                            <span class="def-stars"><span class="def-filled">{% for _ in range(best_stars) %}★{% endfor %}</span><span class="def-empty">{% for _ in range(3 - best_stars) %}☆{% endfor %}</span></span>
+                            <span class="def-hits">{{ attacks_received|length }}×</span>
+                        {% elif war.state != 'preparation' %}
+                            <span class="def-safe">🛡 Untouched</span>
+                        {% else %}
+                            <span style="color:var(--muted);font-size:10px;">—</span>
+                        {% endif %}
+                    </div>
+                    <div class="attacks-col">
+                        {% set used = my_attacks|length %}
+                        {% if used == 1 %}<span class="atk-count atk-full">1/1</span>
+                        {% else %}<span class="atk-count atk-none">0/1</span>
+                        {% endif %}
+                        <div class="atk-pills">
+                            {% for a in my_attacks %}
+                            {% set defender = d.member_by_tag.get(a.defender_tag) %}
+                            <span class="attack-pill attack-{{ a.stars }}" title="{{ a.destruction_pct }}%">
+                                {% for _ in range(a.stars) %}★{% endfor %}{% for _ in range(3 - a.stars) %}☆{% endfor %}
+                                {{ a.destruction_pct|int }}%{% if defender %} → {{ defender.player_name|truncate(12,True,'…') }} TH{{ defender.town_hall_level }}{% endif %}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div style="padding:20px 18px;color:var(--muted);font-size:13px;">No member data yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+    </div>{# end round-body #}
+</div>{# end round-card #}
+{% endfor %}
+
+{% if not sorted_rounds %}
+<div style="text-align:center;padding:40px;color:var(--muted);font-size:14px;">No wars found for our clan in this season yet.</div>
+{% endif %}
+
+{% endif %}
+</div>
+
+<div class="page-footer">CoC Analytics · Clan War League{% if season %} · {{ season.season }}{% endif %}</div>
+
+<script>
+// ── Per-round data ────────────────────────────────────────────────────────────
+const CWL = {
+{% for round_num, d in sorted_rounds %}
+    {{ round_num }}: {
+        verdicts: {{ d.war_verdicts | tojson | safe }},
+        attacks:  {{ d.all_attacks_json | tojson | safe }},
+        our:      {{ d.members_our_json | tojson | safe }},
+        opp:      {{ d.members_opp_json | tojson | safe }},
+        ourName:  {{ d.our_clan_name | tojson | safe }},
+        oppName:  {{ d.opp_clan_name | tojson | safe }},
+        wvSort:   { col: 'score', dir: 'desc' },
+    },
+{% endfor %}
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function escapeHTML(s) {
+    return String(s || '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function renderStars(n, big) {
+    n = parseInt(n) || 0;
+    const sz = big ? '1.18em' : '1.0em';
+    return `<span style="font-size:${sz};letter-spacing:1px;color:var(--yellow)">${'★'.repeat(n)}</span>`
+         + `<span style="font-size:${sz};letter-spacing:1px;color:var(--muted);opacity:.4">${'☆'.repeat(3-n)}</span>`;
+}
+const LABEL_MAP = {
+    'clear':['Clear','ap-clear'], 'failed_clear':['Failed Clear','ap-failed-clear'],
+    'high_clear':['High Clear','ap-high-clear'], 'farm':['Farm','ap-farm'],
+    'failed_farm':['Failed Farm','ap-failed-farm'], 'low_clear':['Low Clear','ap-low-clear'],
+    'low_clear_fail':['Low Clear Fail','ap-low-clear-fail'], 'clean_up':['Clean Up','ap-clean-up'],
+    'failed_clean_up':['Failed Clean Up','ap-failed-clean-up'], 'wasted':['Wasted','ap-wasted'],
+    'no_attack':['No Attack','ap-no-attack'],
+};
+function renderLabel(label) {
+    const e = LABEL_MAP[label];
+    return e ? `<span class="atk-pill ${e[1]}">${e[0]}</span>` : `<span class="atk-pill ap-wasted">${label}</span>`;
+}
+
+// ── Standing row → roster expand ─────────────────────────────────────────────
+function toggleClanRoster(tagClean) {
+    const row     = document.getElementById('clan-roster-' + tagClean);
+    const chevron = document.getElementById('chevron-clan-' + tagClean);
+    const open    = row.style.display === 'none';
+    row.style.display = open ? 'table-row' : 'none';
+    chevron.textContent = open ? '▼' : '▶';
+}
+
+// ── Round toggle ──────────────────────────────────────────────────────────────
+function toggleRound(n) {
+    const body    = document.getElementById('round-body-' + n);
+    const chevron = document.getElementById('chevron-' + n);
+    const open    = body.classList.toggle('open');
+    chevron.classList.toggle('open', open);
+    if (open) equalizeRoster(n);
+}
+
+// ── Verdict table ─────────────────────────────────────────────────────────────
+function buildVerdictDetails(v) {
+    let cards = '';
+    if (!v.attacks_used) {
+        cards = `<div style="padding:10px 0;color:var(--muted);font-style:italic;opacity:.6">No attacks used this war.</div>`;
+    } else {
+        (v.attack_details || []).forEach(a => {
+            const d = a.th_diff;
+            const diffColor = d > 0 ? 'var(--red)' : d < 0 ? 'var(--green)' : 'var(--muted)';
+            const dir       = d > 0 ? '↑' : d < 0 ? '↓' : '=';
+            const diffMag   = d !== 0 ? `<div class="atk-th-diff" style="color:${diffColor}">${d>0?'+':''}${d}</div>` : '';
+            const p = a.pos_diff;
+            const posColor = p > 0 ? 'var(--green)' : p < 0 ? 'var(--red)' : 'var(--muted)';
+            const posDir   = p > 0 ? '↓' : p < 0 ? '↑' : '=';
+            const posMag   = p !== 0 ? `<div class="atk-th-diff" style="color:${posColor}">${p>0?'+':''}${p}</div>` : '';
+            const stateHtml = a.target_state === 'cleared'
+                ? `<span class="atk-state-dead">Cleared</span>`
+                : a.target_state === 'partial'
+                ? `${renderStars(a.stars_before ?? 0, false)}`
+                : `<span class="atk-state-fresh">Fresh</span>`;
+            cards += `<div class="atk-card">
+                <div class="atk-card-th">
+                    <div class="atk-th-row"><span>TH${v.player_th}</span><span class="atk-th-sep" style="color:${diffColor}">${dir}</span><span>TH${a.defender_th}</span></div>
+                    ${diffMag}<div class="atk-th-divider"></div>
+                    <div class="atk-th-row"><span>#${v.map_pos}</span><span class="atk-th-sep" style="color:${posColor}">${posDir}</span><span>#${a.defender_pos}</span></div>
+                    ${posMag}
+                </div>
+                <div class="atk-card-target">
+                    <div class="atk-target-name">${escapeHTML(a.defender_name)}</div>
+                    <div class="atk-target-meta"><span class="atk-target-pos">#${a.defender_pos}</span></div>
+                    <div>${stateHtml}</div>
+                </div>
+                <div class="atk-card-result">
+                    ${renderStars(a.stars, true)}
+                    <span class="atk-result-pct">${a.pct}%</span>
+                    ${renderLabel(a.label)}
+                </div>
+            </div>`;
+        });
+    }
+    const combo = (v.atk_labels || []).map(l => (LABEL_MAP[l] || [l])[0]).join(' + ');
+    return `<div class="vd-inner"><div class="vd-section">
+        <div class="vd-meta">
+            <span>Attacks: <strong style="color:var(--text)">${v.attacks_used} / 1</strong></span>
+            <span>Combo: <strong style="color:var(--text)">${combo}</strong></span>
+            <span>Score: <strong style="color:var(--accent)">${v.score}</strong></span>
+            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${v.label}</span></span>
+        </div>
+        <div class="atk-cards">${cards}</div>
+    </div></div>`;
+}
+
+function buildVerdictTable(n) {
+    const r = CWL[n]; if (!r) return;
+    const sorted = [...r.verdicts].sort((a, b) => {
+        let av = a[r.wvSort.col] ?? 0, bv = b[r.wvSort.col] ?? 0;
+        if (typeof av === 'string') av = av.toLowerCase();
+        if (typeof bv === 'string') bv = bv.toLowerCase();
+        if (av < bv) return r.wvSort.dir === 'asc' ? -1 : 1;
+        if (av > bv) return r.wvSort.dir === 'asc' ?  1 : -1;
+        return 0;
+    });
+    const tbody = document.getElementById('wvTbody-' + n);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    sorted.forEach(v => {
+        const row = document.createElement('tr');
+        const atkSum = v.attack_details.map(a =>
+            `${renderStars(a.stars,false)} ${renderLabel(a.label)} <span style="font-size:11px;color:var(--muted);">→ ${escapeHTML(a.defender_name)} TH${a.defender_th}</span>`
+        ).join('<br>') || `<span style="color:var(--muted);opacity:.45;">—</span>`;
+        row.innerHTML = `
+            <td>
+                <div style="font-weight:600;font-size:13.5px;">${escapeHTML(v.player_name)}</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:1px;">${v.league ? escapeHTML(v.league)+' · ' : ''}TH${v.player_th} · #${v.map_pos}</div>
+            </td>
+            <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${v.attacks_used}<span style="font-size:12px;color:var(--muted);font-weight:400;">/1</span></td>
+            <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;">${v.score}</td>
+            <td style="text-align:center;"><span class="judgment ${v.badge}">${v.badge==='badge-undefined'?'?':v.label}</span></td>
+            <td><button type="button" class="action-btn details-toggle" onclick="event.stopPropagation()">Details</button></td>`;
+        const detailRow = document.createElement('tr');
+        detailRow.className = 'vd-row';
+        detailRow.innerHTML = `<td class="vd-cell" colspan="5">${buildVerdictDetails(v)}</td>`;
+        row.addEventListener('click', () => {
+            const open = detailRow.classList.toggle('expanded');
+            row.querySelector('.details-toggle').textContent = open ? 'Close' : 'Details';
+        });
+        tbody.appendChild(row);
+        tbody.appendChild(detailRow);
+    });
+    document.querySelectorAll(`#wvTable-${n} .vt-sortable`).forEach(th => {
+        th.classList.remove('vt-sort-active','asc','desc');
+        const col = th.getAttribute('onclick')?.match(/sortVerdicts\(\d+,'(\w+)'\)/)?.[1];
+        if (col === r.wvSort.col) th.classList.add('vt-sort-active', r.wvSort.dir);
+    });
+}
+
+function sortVerdicts(n, col) {
+    const r = CWL[n]; if (!r) return;
+    if (r.wvSort.col === col) r.wvSort.dir = r.wvSort.dir === 'asc' ? 'desc' : 'asc';
+    else { r.wvSort.col = col; r.wvSort.dir = col === 'player_name' ? 'asc' : 'desc'; }
+    buildVerdictTable(n);
+}
+
+function toggleVerdicts(n) {
+    const body    = document.getElementById('wvBody-' + n);
+    const chevron = document.getElementById('wvChevron-' + n);
+    const opening = body.style.display === 'none' || !body.style.display;
+    body.style.display = opening ? 'block' : 'none';
+    chevron.classList.toggle('open', opening);
+    if (opening && !document.getElementById('wvTbody-' + n)?.children.length) buildVerdictTable(n);
+}
+
+// ── Attack log ────────────────────────────────────────────────────────────────
+function buildAttackLog(n) {
+    const r    = CWL[n]; if (!r) return;
+    const body = document.getElementById('logBody-' + n); if (!body) return;
+    const atks = [...r.attacks].reverse();
+    if (!atks.length) { body.innerHTML = '<div style="padding:16px;color:var(--muted);">No attacks yet.</div>'; return; }
+    const rows = atks.map(a => {
+        const nc = a.attacker_side === 'our' ? 'var(--green)' : 'var(--red)';
+        const sc = a.stars===3?'var(--green)':a.stars===2?'var(--yellow)':a.stars===1?'var(--accent)':'var(--muted)';
+        return `<tr>
+            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.attacker_pos}</td>
+            <td style="font-weight:600;color:${nc}">${escapeHTML(a.attacker_name)}</td>
+            <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.attacker_th}</td>
+            <td style="color:var(--muted);text-align:center;font-size:13px">→</td>
+            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.defender_pos}</td>
+            <td style="font-weight:600">${escapeHTML(a.defender_name)}</td>
+            <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.defender_th}</td>
+            <td>${renderStars(a.stars,true)}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-weight:700;color:${sc}">${a.pct}%</td>
+            <td>${a.label?renderLabel(a.label):''}</td>
+        </tr>`;
+    }).join('');
+    body.innerHTML = `<div class="table-scroll"><table class="detail-table">
+        <thead><tr><th>#</th><th>Attacker</th><th>TH</th><th></th><th>#</th><th>Defender</th><th>TH</th><th>Stars</th><th>Dest%</th><th>Tags</th></tr></thead>
+        <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+function toggleLog(n) {
+    const body    = document.getElementById('logBody-' + n);
+    const chevron = document.getElementById('logChevron-' + n);
+    const opening = body.style.display === 'none' || !body.style.display;
+    body.style.display = opening ? 'block' : 'none';
+    chevron.classList.toggle('open', opening);
+    if (opening && !body.innerHTML.trim()) buildAttackLog(n);
+}
+
+// ── Compare ───────────────────────────────────────────────────────────────────
+function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+function clamp(v,lo,hi) { return Math.max(lo,Math.min(hi,v)); }
+function sigmoid(x) { return 1/(1+Math.exp(-x)); }
+
+function buildCompare(n) {
+    const r = CWL[n]; if (!r) return;
+    const OUR = r.our, OPP = r.opp;
+    const len = Math.min(OUR.length, OPP.length);
+    const avgThOur = avg(OUR.map(m=>m.th)), avgThOpp = avg(OPP.map(m=>m.th));
+    let thDiffTotal=0, thBetter=0, thEven=0, thWorse=0;
+    for (let i=0;i<len;i++) { const d=OUR[i].th-OPP[i].th; thDiffTotal+=d; if(d>0)thBetter++;else if(d<0)thWorse++;else thEven++; }
+    const thDiffAvg = thDiffTotal/len;
+    const posScore = (thBetter-thWorse)/len;
+    const avgLrOur = avg(OUR.slice(0,len).map(m=>m.lr)), avgLrOpp = avg(OPP.slice(0,len).map(m=>m.lr));
+    const leagueDiff = (avgLrOur-avgLrOpp)/36;
+    const prob = clamp(sigmoid((thDiffAvg*0.55+posScore*0.25+leagueDiff*2*0.20)*1.8),0.25,0.75);
+    const ourPct = Math.round(prob*100), oppPct = 100-ourPct;
+    const verdict = ourPct>54?`${r.ourName} have a statistical edge.`:ourPct<46?`${r.oppName} have a statistical edge.`:'This looks like an even matchup.';
+
+    function fc(label,ov,pv,score) {
+        const cls=score>0.05?'pfr-win-our':score<-0.05?'pfr-win-opp':'';
+        return `<div class="pred-factor-row ${cls}"><div class="pfr-label">${label}</div><div class="pfr-vals"><span class="pfr-our">${ov}</span><span class="pfr-sep">vs</span><span class="pfr-opp">${pv}</span></div></div>`;
+    }
+    document.getElementById(`cmp-prediction-${n}`).innerHTML = `
+        <div class="cmp-title">📊 War Prediction</div>
+        <div class="pred-split" style="grid-template-columns:${ourPct}fr ${oppPct}fr">
+            <div class="pred-half-our"><span class="pred-pct">${ourPct}%</span><span class="pred-pct-name">${r.ourName}</span></div>
+            <div class="pred-half-opp"><span class="pred-pct-name">${r.oppName}</span><span class="pred-pct">${oppPct}%</span></div>
+        </div>
+        <div class="pred-verdict">${verdict}</div>
+        <div class="pred-factors-grid">
+            ${fc('Avg TH',avgThOur.toFixed(1),avgThOpp.toFixed(1),thDiffAvg)}
+            ${fc('Positions Ahead',`+${thBetter}`,`+${thWorse}`,posScore)}
+        </div>`;
+
+    function sr(label,ov,pv,hb=true) {
+        const diff=parseFloat(ov)-parseFloat(pv);
+        const ow=hb?diff>0.01:diff<-0.01, pw=hb?diff<-0.01:diff>0.01;
+        return `<div class="stat-cmp-row"><div class="scr-our ${ow?'scr-win':pw?'scr-lose':''}">${ov}</div><div class="scr-label">${label}</div><div class="scr-opp ${pw?'scr-win':ow?'scr-lose':''}">${pv}</div></div>`;
+    }
+    document.getElementById(`cmp-stats-${n}`).innerHTML = `
+        <div class="cmp-title">📋 Key Stats</div>
+        <div style="display:grid;grid-template-columns:1fr 140px 1fr;margin-bottom:8px;">
+            <span style="font-size:11px;font-weight:600;color:var(--green)">${r.ourName}</span><span></span>
+            <span style="font-size:11px;font-weight:600;color:var(--red)">${r.oppName}</span>
+        </div>
+        ${sr('AVG TH',avgThOur.toFixed(1),avgThOpp.toFixed(1))}
+        ${sr('POSITIONS AHEAD',thBetter,thWorse)}`;
+
+    const thOur={},thOpp={};
+    OUR.forEach(m=>{thOur[m.th]=(thOur[m.th]||0)+1;});
+    OPP.forEach(m=>{thOpp[m.th]=(thOpp[m.th]||0)+1;});
+    const allThs=[...new Set([...Object.keys(thOur),...Object.keys(thOpp)].map(Number))].sort((a,b)=>b-a);
+    const maxC=Math.max(...allThs.map(t=>Math.max(thOur[t]||0,thOpp[t]||0)),1);
+    document.getElementById(`cmp-th-${n}`).innerHTML = `
+        <div class="cmp-title">🏰 TH Distribution</div>
+        <div class="dist-header"><span class="dist-our-lbl">${r.ourName}</span><span></span><span class="dist-opp-lbl">${r.oppName}</span></div>
+        ${allThs.map(th=>{const o=thOur[th]||0,p=thOpp[th]||0;const ow=Math.round(o/maxC*130),pw=Math.round(p/maxC*130);
+        return `<div class="dist-row"><span class="dist-count-our">${o||''}</span><div style="display:flex;justify-content:flex-end"><div class="dist-bar-our" style="width:${ow}px"></div></div><span class="dist-lbl">TH${th}</span><div><div class="dist-bar-opp" style="width:${pw}px"></div></div><span class="dist-count-opp">${p||''}</span></div>`;}).join('')}`;
+
+    const matchupRows=Array.from({length:len},(_,i)=>{
+        const o=OUR[i],p=OPP[i],d=o.th-p.th;
+        const rc=d>0?'lg-adv':d<0?'lg-dis':'lg-even',dc=d>0?'mt-adv':d<0?'mt-dis':'mt-even';
+        return `<tr class="${rc}"><td class="lgt-pos">#${o.pos}</td><td class="lgt-name">${escapeHTML(o.name)}</td><td class="lgt-lg">TH${o.th}</td><td class="lgt-diff ${dc}">${d>0?'+':''}${d||'='}</td><td class="lgt-lg" style="text-align:right">TH${p.th}</td><td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td></tr>`;
+    }).join('');
+    document.getElementById(`cmp-matchup-${n}`).innerHTML = `
+        <div class="cmp-title">⚔️ TH Matchup by Position</div>
+        <div class="matchup-summary">
+            <div class="matchup-stat"><div class="mn mn-green">${thBetter}</div><div class="ml">Ahead</div></div>
+            <div class="matchup-stat"><div class="mn mn-muted">${thEven}</div><div class="ml">Even</div></div>
+            <div class="matchup-stat"><div class="mn mn-red">${thWorse}</div><div class="ml">Behind</div></div>
+        </div>
+        <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${r.ourName}</th><th>TH</th><th>Diff</th><th style="text-align:right">TH</th><th style="text-align:right">${r.oppName}</th></tr></thead><tbody>${matchupRows}</tbody></table>`;
+}
+
+function toggleCompare(n) {
+    const card = document.getElementById('cmpCard-' + n);
+    const btn  = document.getElementById('cmpBtn-' + n);
+    if (!card) return;
+    const open = card.classList.toggle('open');
+    btn.classList.toggle('open', open);
+    btn.textContent = open ? '✕ Close Comparison' : '📊 Compare & Predict';
+    if (open) buildCompare(n);
+}
+
+// ── Roster connections ────────────────────────────────────────────────────────
+const rosterState = {};
+
+function equalizeRoster(n) {
+    const grid = document.getElementById('rosterGrid-' + n); if (!grid) return;
+    const cards = grid.querySelectorAll('.roster-card');
+    if (cards.length < 2) return;
+    const L = cards[0].querySelectorAll('.member-row'), R = cards[1].querySelectorAll('.member-row');
+    L.forEach(r=>r.style.height=''); R.forEach(r=>r.style.height='');
+    const cnt = Math.min(L.length, R.length);
+    for (let i=0;i<cnt;i++) {
+        const h = Math.max(L[i].offsetHeight, R[i].offsetHeight);
+        L[i].style.height = R[i].style.height = h + 'px';
+    }
+}
+
+function initRoster(n) {
+    const grid = document.getElementById('rosterGrid-' + n); if (!grid) return;
+    const svg  = document.getElementById('warConnections-' + n);
+    rosterState[n] = new Set();
+    const TGT = ['row-tgt-3','row-tgt-2','row-tgt-1','row-tgt-0','row-tgt-open'];
+
+    function getPos(row) {
+        const gr=grid.getBoundingClientRect(), rr=row.getBoundingClientRect();
+        return { left:rr.left-gr.left, right:rr.right-gr.left, y:rr.top-gr.top+rr.height/2 };
+    }
+    function starColor(s) { return s===3?'#3fb950':s===2?'#e3b341':s===1?'#f0a500':'#8b949e'; }
+    function drawCurve(x1,y1,x2,y2,stars,dashed) {
+        const color=starColor(stars), cx=(x1+x2)/2;
+        const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+        path.setAttribute('d',`M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`);
+        path.setAttribute('stroke',color); path.setAttribute('stroke-width',dashed?'1.5':'2');
+        path.setAttribute('fill','none'); path.setAttribute('stroke-opacity',dashed?'0.5':'0.9');
+        if (dashed) path.setAttribute('stroke-dasharray','6 4');
+        const len2=200;
+        if (!dashed) { path.style.strokeDasharray=len2; path.style.strokeDashoffset=len2; svg.appendChild(path); requestAnimationFrame(()=>{path.style.transition='stroke-dashoffset 0.4s ease';path.style.strokeDashoffset='0';}); }
+        else { path.style.opacity='0'; path.style.transition='opacity 0.3s ease'; svg.appendChild(path); requestAnimationFrame(()=>{path.style.opacity='1';}); }
+        const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        dot.setAttribute('cx',x2); dot.setAttribute('cy',y2); dot.setAttribute('r',dashed?'4':'5');
+        dot.setAttribute('fill',dashed?'none':color);
+        if (dashed){dot.setAttribute('stroke',color);dot.setAttribute('stroke-width','1.5');}
+        dot.style.opacity='0'; dot.style.transition='opacity 0.2s ease 0.38s'; svg.appendChild(dot);
+        requestAnimationFrame(()=>{dot.style.opacity=dashed?'0.7':'0.9';});
+    }
+    function drawPotential(x1,y1,x2,y2) {
+        const cx=(x1+x2)/2;
+        const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+        path.setAttribute('d',`M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`);
+        path.setAttribute('stroke','#58a6ff'); path.setAttribute('stroke-width','1.5');
+        path.setAttribute('fill','none'); path.setAttribute('stroke-opacity','0.35');
+        path.setAttribute('stroke-dasharray','4 5');
+        path.style.opacity='0'; path.style.transition='opacity 0.3s ease'; svg.appendChild(path);
+        requestAnimationFrame(()=>{path.style.opacity='1';});
+    }
+
+    function syncButtons() {
+        grid.querySelectorAll('.toggle-all-btn').forEach(btn => {
+            const card=btn.closest('.roster-card');
+            const tags=[...card.querySelectorAll('.member-row[data-tag]')].map(r=>r.dataset.tag);
+            const allSel=tags.length>0&&tags.every(t=>rosterState[n].has(t));
+            btn.textContent=allSel?'Deselect All':'Select All';
+            btn.classList.toggle('active',tags.some(t=>rosterState[n].has(t)));
+        });
+    }
+
+    function rebuild() {
+        svg.innerHTML='';
+        grid.querySelectorAll('.member-row').forEach(r=>r.classList.remove('row-sel','row-dim',...TGT));
+        syncButtons();
+        if (!rosterState[n].size) return;
+        const cards=grid.querySelectorAll('.roster-card');
+        rosterState[n].forEach(tag => {
+            const row=grid.querySelector(`.member-row[data-tag="${CSS.escape(tag)}"]`); if(!row) return;
+            row.classList.add('row-sel');
+            const isLeft=cards[0]&&cards[0].contains(row);
+            const srcPos=getPos(row);
+            JSON.parse(row.dataset.attacks||'[]').forEach(atk=>{
+                const defRow=grid.querySelector(`.member-row[data-tag="${CSS.escape(atk.tag)}"]`); if(!defRow) return;
+                defRow.classList.add('row-tgt-'+atk.stars);
+                const dstPos=getPos(defRow);
+                drawCurve(isLeft?srcPos.right+2:srcPos.left-2,srcPos.y,isLeft?dstPos.left-2:dstPos.right+2,dstPos.y,atk.stars,false);
+            });
+            JSON.parse(row.dataset.defendedBy||'[]').forEach(atk=>{
+                const atkRow=grid.querySelector(`.member-row[data-tag="${CSS.escape(atk.tag)}"]`); if(!atkRow) return;
+                atkRow.classList.add('row-tgt-'+atk.stars);
+                const atkPos=getPos(atkRow);
+                drawCurve(isLeft?atkPos.left-2:atkPos.right+2,atkPos.y,isLeft?srcPos.right+2:srcPos.left-2,srcPos.y,atk.stars,true);
+            });
+            if (JSON.parse(row.dataset.attacks||'[]').length < 1) {
+                const oppCard=isLeft?cards[1]:cards[0];
+                if(oppCard) oppCard.querySelectorAll('.member-row[data-tag]').forEach(oppRow=>{
+                    if(TGT.some(c=>oppRow.classList.contains(c))) return;
+                    const recv=JSON.parse(oppRow.dataset.defendedBy||'[]');
+                    if(Math.max(...recv.map(a=>a.stars),0)<3){
+                        oppRow.classList.add('row-tgt-open');
+                        const dstPos=getPos(oppRow);
+                        drawPotential(isLeft?srcPos.right+2:srcPos.left-2,srcPos.y,isLeft?dstPos.left-2:dstPos.right+2,dstPos.y);
+                    }
+                });
+            }
+        });
+        grid.querySelectorAll('.member-row').forEach(r=>{
+            if(!r.classList.contains('row-sel')&&!TGT.some(c=>r.classList.contains(c))) r.classList.add('row-dim');
+        });
+    }
+
+    grid.querySelectorAll('.member-row[data-tag]').forEach(r => {
+        r.addEventListener('click', e => {
+            e.stopPropagation();
+            const tag=r.dataset.tag;
+            if(rosterState[n].has(tag)) rosterState[n].delete(tag); else rosterState[n].add(tag);
+            rebuild();
+        });
+    });
+    document.addEventListener('click', ()=>{ if(rosterState[n]?.size){rosterState[n].clear();rebuild();} });
+
+    window['toggleAllSide'] = function(btn, event, rn) {
+        event.stopPropagation();
+        const card=btn.closest('.roster-card');
+        const tags=[...card.querySelectorAll('.member-row[data-tag]')].map(r=>r.dataset.tag);
+        const allSel=tags.every(t=>rosterState[rn].has(t));
+        if(allSel) tags.forEach(t=>rosterState[rn].delete(t));
+        else tags.forEach(t=>rosterState[rn].add(t));
+        if(rn===n) rebuild();
+    };
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    {% for round_num, d in sorted_rounds %}
+    initRoster({{ round_num }});
+    {% if d.war.state == 'inWar' %}
+    toggleRound({{ round_num }});
+    {% endif %}
+    {% endfor %}
+    {% if sorted_rounds %}
+    // Open last round if none live
+    const liveOpen = document.querySelector('.round-body.open');
+    if (!liveOpen) toggleRound({{ sorted_rounds[-1][0] }});
+    {% endif %}
+});
+</script>
+
+</body>
+</html>

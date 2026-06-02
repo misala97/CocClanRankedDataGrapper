@@ -55,3 +55,11 @@ def api_fetch_clan_data(clan_tag: str):
 
 def api_fetch_clan_war(clan_tag: str):
     return api_call(f"https://api.clashofclans.com/v1/clans/%23{clean_tag(clan_tag)}/currentwar")
+
+
+def api_fetch_cwl_league_group(clan_tag: str):
+    return api_call(f"https://api.clashofclans.com/v1/clans/%23{clean_tag(clan_tag)}/currentwar/leaguegroup")
+
+
+def api_fetch_cwl_war(war_tag: str):
+    return api_call(f"https://api.clashofclans.com/v1/clanwarleagues/wars/%23{clean_tag(war_tag)}")

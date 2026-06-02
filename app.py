@@ -57,6 +57,7 @@ from features.war.routes     import war_bp
 from features.battles.routes import battles_bp
 from features.player.routes  import player_bp
 from features.pubquiz.routes import pubquiz_bp
+from features.cwl.routes     import cwl_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
@@ -66,6 +67,7 @@ app.register_blueprint(war_bp)
 app.register_blueprint(battles_bp)
 app.register_blueprint(player_bp)
 app.register_blueprint(pubquiz_bp)
+app.register_blueprint(cwl_bp)
 
 # ── Template filters ─────────────────────────────────────────────────────────
 
@@ -89,6 +91,7 @@ def _nav_task_status():
             ('task_update_battle_logs',  'Battles'),
             ('task_update_raid_weekend', 'Raids'),
             ('task_update_clan_war',     'War'),
+            ('task_update_cwl',          'CWL'),
             ('task_update_clan_members', 'Members'),
         ]
         now = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
@@ -218,6 +221,7 @@ if __name__ == '__main__':
     from tasks.ranked_weeks  import task_update_ranked_weeks
     from tasks.clan_war      import task_update_clan_war
     from tasks.clan_members  import task_update_clan_members
+    from tasks.cwl           import task_update_cwl
 
     # Uncomment to run tasks manually before starting:
     #task_update_clan_members()
@@ -225,5 +229,6 @@ if __name__ == '__main__':
     #task_update_raid_weekend()
     #task_update_ranked_weeks()
     #task_update_clan_war()
+    task_update_cwl()
 
     app.run(debug=True, use_reloader=False)
