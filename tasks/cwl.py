@@ -18,7 +18,7 @@ def task_update_cwl():
         create_db_cwl_clan_member,
         db_finalize_uptime,
     )
-    from services.api import api_fetch_cwl_league_group, api_fetch_cwl_war, api_fetch_player_data
+    from services.api import api_fetch_cwl_league_group, api_fetch_cwl_war, api_fetch_player_data, api_fetch_clan_data
     from models import CWLClan, CWLClanMember, CWLMember, CWLAttack
 
     t0 = time.time()
@@ -126,18 +126,25 @@ def task_update_cwl():
                 try:
                     war = db_cwl_war_get(war_tag)
                     if not war:
-                        war = create_db_cwl_war(season.id, round_num, war_tag, war_data)
+                        clan_side    = json_get(war_data, JSON_CWL_WAR_DATA.CLAN,     default={}, raise_on_missing=False) or {}
+                        opp_side     = json_get(war_data, JSON_CWL_WAR_DATA.OPPONENT, default={}, raise_on_missing=False) or {}
+                        clan_tag_war = json_get(clan_side, JSON_CWL_WAR_DATA.SIDE_TAG, raise_on_missing=False)
+                        opp_tag_war  = json_get(opp_side,  JSON_CWL_WAR_DATA.SIDE_TAG, raise_on_missing=False)
+                        clan_api = opp_api = None
+                        try:
+                            clan_api = api_fetch_clan_data(clan_tag_war)
+                        except Exception as e:
+                            cwl_logger.warning(f"Could not fetch clan data for {clan_tag_war}: {e}")
+                        try:
+                            opp_api = api_fetch_clan_data(opp_tag_war)
+                        except Exception as e:
+                            cwl_logger.warning(f"Could not fetch clan data for {opp_tag_war}: {e}")
+                        war = create_db_cwl_war(season.id, round_num, war_tag, war_data, clan_api, opp_api)
                         db.session.add(war)
                         db.session.flush()
-                        clan_name = json_get(
-                            json_get(war_data, JSON_CWL_WAR_DATA.CLAN, default={}) or {},
-                            JSON_CWL_WAR_DATA.SIDE_NAME
-                        )
-                        opp_name = json_get(
-                            json_get(war_data, JSON_CWL_WAR_DATA.OPPONENT, default={}) or {},
-                            JSON_CWL_WAR_DATA.SIDE_NAME
-                        )
-                        cwl_logger.info(f"Created CWL war R{round_num} {war_tag}: {clan_name} vs {opp_name}")
+                        cwl_logger.info(f"Created CWL war R{round_num} {war_tag}: "
+                                        f"{json_get(clan_side, JSON_CWL_WAR_DATA.SIDE_NAME, raise_on_missing=False)} "
+                                        f"vs {json_get(opp_side, JSON_CWL_WAR_DATA.SIDE_NAME, raise_on_missing=False)}")
                     else:
                         db_cwl_war_update(war, war_data)
                 except Exception as e:

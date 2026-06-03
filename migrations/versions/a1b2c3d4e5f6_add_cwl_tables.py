@@ -19,6 +19,12 @@ depends_on = None
 
 
 def upgrade():
+    conn = op.get_bind()
+    conn.execute(sa.text('SET FOREIGN_KEY_CHECKS=0'))
+    for t in ['cwl_attack', 'cwl_member', 'cwl_war', 'cwl_clan_member', 'cwl_clan', 'cwl_season']:
+        conn.execute(sa.text(f'DROP TABLE IF EXISTS `{t}`'))
+    conn.execute(sa.text('SET FOREIGN_KEY_CHECKS=1'))
+
     op.create_table(
         'cwl_season',
         sa.Column('id',           sa.Integer(),    nullable=False, autoincrement=True),
@@ -62,18 +68,30 @@ def upgrade():
         sa.Column('start_time',           sa.DateTime(), nullable=True),
         sa.Column('end_time',             sa.DateTime(), nullable=True),
         sa.Column('team_size',            sa.Integer(),  nullable=True),
-        sa.Column('clan_tag',             sa.String(30), nullable=True),
-        sa.Column('clan_name',            sa.String(100),nullable=True),
-        sa.Column('clan_badge',           sa.String(200),nullable=True),
-        sa.Column('clan_stars',           sa.Integer(),  nullable=True),
-        sa.Column('clan_attacks',         sa.Integer(),  nullable=True),
-        sa.Column('clan_destruction_pct', sa.Float(),    nullable=True),
-        sa.Column('opp_tag',              sa.String(30), nullable=True),
-        sa.Column('opp_name',             sa.String(100),nullable=True),
-        sa.Column('opp_badge',            sa.String(200),nullable=True),
-        sa.Column('opp_stars',            sa.Integer(),  nullable=True),
-        sa.Column('opp_attacks',          sa.Integer(),  nullable=True),
-        sa.Column('opp_destruction_pct',  sa.Float(),    nullable=True),
+        sa.Column('clan_tag',             sa.String(30),  nullable=True),
+        sa.Column('clan_name',            sa.String(100), nullable=True),
+        sa.Column('clan_badge',           sa.String(200), nullable=True),
+        sa.Column('clan_level',           sa.Integer(),   nullable=True),
+        sa.Column('clan_cwl_league',      sa.String(50),  nullable=True),
+        sa.Column('clan_location',        sa.String(100), nullable=True),
+        sa.Column('clan_wars_won',        sa.Integer(),   nullable=True),
+        sa.Column('clan_war_frequency',   sa.String(50),  nullable=True),
+        sa.Column('clan_win_streak',      sa.Integer(),   nullable=True),
+        sa.Column('clan_stars',           sa.Integer(),   nullable=True),
+        sa.Column('clan_attacks',         sa.Integer(),   nullable=True),
+        sa.Column('clan_destruction_pct', sa.Float(),     nullable=True),
+        sa.Column('opp_tag',              sa.String(30),  nullable=True),
+        sa.Column('opp_name',             sa.String(100), nullable=True),
+        sa.Column('opp_badge',            sa.String(200), nullable=True),
+        sa.Column('opp_level',            sa.Integer(),   nullable=True),
+        sa.Column('opp_cwl_league',       sa.String(50),  nullable=True),
+        sa.Column('opp_location',         sa.String(100), nullable=True),
+        sa.Column('opp_wars_won',         sa.Integer(),   nullable=True),
+        sa.Column('opp_war_frequency',    sa.String(50),  nullable=True),
+        sa.Column('opp_win_streak',       sa.Integer(),   nullable=True),
+        sa.Column('opp_stars',            sa.Integer(),   nullable=True),
+        sa.Column('opp_attacks',          sa.Integer(),   nullable=True),
+        sa.Column('opp_destruction_pct',  sa.Float(),     nullable=True),
         sa.ForeignKeyConstraint(['season_id'], ['cwl_season.id']),
         sa.PrimaryKeyConstraint('id'),
     )

@@ -271,6 +271,17 @@
         .toggle-all-btn:hover { border-color: var(--accent); color: var(--accent); }
         .toggle-all-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,.08); }
         .league-pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'Rajdhani', sans-serif; letter-spacing: .2px; }
+        .lp-gold   { background: rgba(240,165,0,.1);   color: var(--accent); border: 1px solid rgba(240,165,0,.25); }
+        .lp-purple { background: rgba(188,140,255,.1); color: var(--purple); border: 1px solid rgba(188,140,255,.25); }
+        .stat-list { display: flex; flex-direction: column; gap: 10px; }
+        .stat-divider { height: 1px; background: var(--bord2); margin: 14px 0; }
+        .stat-entry { display: flex; align-items: center; gap: 12px; }
+        .clan-panel.right .stat-entry { flex-direction: row-reverse; }
+        .sk { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; min-width: 76px; flex-shrink: 0; }
+        .clan-panel.right .sk { text-align: right; }
+        .sv { font-size: 13px; font-weight: 500; color: var(--text); }
+        .sv.muted { color: var(--muted); }
+        .sv.green  { color: var(--green); }
         .lp-gold { background: rgba(240,165,0,.1); color: var(--accent); border: 1px solid rgba(240,165,0,.25); }
 
         /* ── ATTACK PILLS ── */
@@ -407,6 +418,46 @@
         </tr>
         <tr class="roster-row" id="clan-roster-{{ tagc }}" style="display:none;">
             <td colspan="11" style="padding:0;background:var(--surf2);">
+                {# ── Comparison header: our clan (left) vs expanded clan (right) ── #}
+                {% set wi  = clan_war_info.get(s.tag, {}) %}
+                {% set owr = clan_rosters.get(our_tag, {}) %}
+                {% set owi = clan_war_info.get(our_tag, {}) %}
+                <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--bord2);">
+                    {# Left: our clan #}
+                    <div class="clan-panel" style="padding:20px 28px;border-right:1px solid var(--bord2);">
+                        <div class="clan-ident">
+                            {% if our_clan and our_clan.badge_url %}<img src="{{ our_clan.badge_url }}" class="clan-badge-img" alt="">{% endif %}
+                            <div class="clan-name-text">{{ our_clan.name if our_clan else 'Our Clan' }}</div>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-list">
+                            {% if owi.cwl_league %}<div class="stat-entry"><span class="sk">CWL</span><span class="sv"><span class="league-pill lp-purple">{{ owi.cwl_league }}</span></span></div>{% endif %}
+                            {% if owr.avg_league %}<div class="stat-entry"><span class="sk">Avg League</span><span class="sv"><span class="league-pill lp-gold">{{ owr.avg_league }}</span></span></div>{% endif %}
+                            {% if owr.avg_th %}<div class="stat-entry"><span class="sk">Avg TH</span><span class="sv">{{ '%.1f'|format(owr.avg_th) }}</span></div>{% endif %}
+                            {% if owi.location %}<div class="stat-entry"><span class="sk">Location</span><span class="sv">{{ owi.location }}</span></div>{% endif %}
+                            {% if owi.wars_won is not none %}<div class="stat-entry"><span class="sk">Wars Won</span><span class="sv">{{ owi.wars_won }}</span></div>{% endif %}
+                            {% if owi.war_frequency %}<div class="stat-entry"><span class="sk">Frequency</span><span class="sv muted">{{ owi.war_frequency }}</span></div>{% endif %}
+                            <div class="stat-entry"><span class="sk">Streak</span>{% if owi.win_streak %}<span class="sv green">🔥 {{ owi.win_streak }}</span>{% else %}<span class="sv muted">🧊 0</span>{% endif %}</div>
+                        </div>
+                    </div>
+                    {# Right: expanded clan (mirrored) #}
+                    <div class="clan-panel right" style="padding:20px 28px;">
+                        <div class="clan-ident">
+                            <div class="clan-name-text">{{ s.name }}</div>
+                            {% if s.badge_url %}<img src="{{ s.badge_url }}" class="clan-badge-img" alt="">{% endif %}
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-list">
+                            {% if wi.cwl_league %}<div class="stat-entry"><span class="sk">CWL</span><span class="sv"><span class="league-pill lp-purple">{{ wi.cwl_league }}</span></span></div>{% endif %}
+                            {% if r.avg_league %}<div class="stat-entry"><span class="sk">Avg League</span><span class="sv"><span class="league-pill lp-gold">{{ r.avg_league }}</span></span></div>{% endif %}
+                            {% if r.avg_th %}<div class="stat-entry"><span class="sk">Avg TH</span><span class="sv">{{ '%.1f'|format(r.avg_th) }}</span></div>{% endif %}
+                            {% if wi.location %}<div class="stat-entry"><span class="sk">Location</span><span class="sv">{{ wi.location }}</span></div>{% endif %}
+                            {% if wi.wars_won is not none %}<div class="stat-entry"><span class="sk">Wars Won</span><span class="sv">{{ wi.wars_won }}</span></div>{% endif %}
+                            {% if wi.war_frequency %}<div class="stat-entry"><span class="sk">Frequency</span><span class="sv muted">{{ wi.war_frequency }}</span></div>{% endif %}
+                            <div class="stat-entry"><span class="sk">Streak</span>{% if wi.win_streak %}<span class="sv green">🔥 {{ wi.win_streak }}</span>{% else %}<span class="sv muted">🧊 0</span>{% endif %}</div>
+                        </div>
+                    </div>
+                </div>
                 {% if r.members %}
                 <table style="border-top:1px solid var(--bord2);">
                     <thead>
@@ -475,13 +526,25 @@
 
         {# ── WAR HEADER ── #}
         <div class="war-header">
+            {# Our clan #}
             <div class="clan-panel">
                 <div class="clan-ident">
                     {% if d.our_clan_badge %}<img src="{{ d.our_clan_badge }}" class="clan-badge-img" alt="">
                     {% else %}<div class="clan-badge-ph">🛡️</div>{% endif %}
                     <div class="clan-name-text">{{ d.our_clan_name }}</div>
                 </div>
+                <div class="stat-divider"></div>
+                <div class="stat-list">
+                    {% if d.our_cwl_league %}<div class="stat-entry"><span class="sk">CWL</span><span class="sv"><span class="league-pill lp-purple">{{ d.our_cwl_league }}</span></span></div>{% endif %}
+                    {% if d.our_avg_league %}<div class="stat-entry"><span class="sk">Avg League</span><span class="sv"><span class="league-pill lp-gold">{{ d.our_avg_league }}</span></span></div>{% endif %}
+                    <div class="stat-entry"><span class="sk">Avg TH</span><span class="sv">{{ d.our_avg_th }}</span></div>
+                    {% if d.our_location %}<div class="stat-entry"><span class="sk">Location</span><span class="sv">{{ d.our_location }}</span></div>{% endif %}
+                    {% if d.our_wars_won is not none %}<div class="stat-entry"><span class="sk">Wars Won</span><span class="sv">{{ d.our_wars_won }}</span></div>{% endif %}
+                    {% if d.our_war_frequency %}<div class="stat-entry"><span class="sk">Frequency</span><span class="sv muted">{{ d.our_war_frequency }}</span></div>{% endif %}
+                    <div class="stat-entry"><span class="sk">Streak</span>{% if d.our_win_streak %}<span class="sv green">🔥 {{ d.our_win_streak }}</span>{% else %}<span class="sv muted">🧊 0</span>{% endif %}</div>
+                </div>
             </div>
+            {# Score center #}
             <div class="score-center">
                 <div class="score-stars">
                     <span class="our">{{ d.our_stars }}</span>
@@ -511,11 +574,22 @@
                 <button class="compare-btn" id="cmpBtn-{{ n }}" onclick="toggleCompare({{ n }})">📊 Compare &amp; Predict</button>
                 {% endif %}
             </div>
+            {# Opponent clan #}
             <div class="clan-panel right">
                 <div class="clan-ident">
                     <div class="clan-name-text">{{ d.opp_clan_name }}</div>
                     {% if d.opp_clan_badge %}<img src="{{ d.opp_clan_badge }}" class="clan-badge-img" alt="">
                     {% else %}<div class="clan-badge-ph">🛡️</div>{% endif %}
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-list">
+                    {% if d.opp_cwl_league %}<div class="stat-entry"><span class="sk">CWL</span><span class="sv"><span class="league-pill lp-purple">{{ d.opp_cwl_league }}</span></span></div>{% endif %}
+                    {% if d.opp_avg_league %}<div class="stat-entry"><span class="sk">Avg League</span><span class="sv"><span class="league-pill lp-gold">{{ d.opp_avg_league }}</span></span></div>{% endif %}
+                    <div class="stat-entry"><span class="sk">Avg TH</span><span class="sv">{{ d.opp_avg_th }}</span></div>
+                    {% if d.opp_location %}<div class="stat-entry"><span class="sk">Location</span><span class="sv">{{ d.opp_location }}</span></div>{% endif %}
+                    {% if d.opp_wars_won is not none %}<div class="stat-entry"><span class="sk">Wars Won</span><span class="sv">{{ d.opp_wars_won }}</span></div>{% endif %}
+                    {% if d.opp_war_frequency %}<div class="stat-entry"><span class="sk">Frequency</span><span class="sv muted">{{ d.opp_war_frequency }}</span></div>{% endif %}
+                    <div class="stat-entry"><span class="sk">Streak</span>{% if d.opp_win_streak %}<span class="sv green">🔥 {{ d.opp_win_streak }}</span>{% else %}<span class="sv muted">🧊 0</span>{% endif %}</div>
                 </div>
             </div>
         </div>

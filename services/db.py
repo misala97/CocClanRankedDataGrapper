@@ -431,7 +431,8 @@ def db_cwl_season_update(existing: CWLSeason, state: str, league_name: str):
 def db_cwl_war_get(war_tag: str) -> CWLWar:
     return CWLWar.query.filter_by(war_tag=war_tag).first()
 
-def create_db_cwl_war(season_id: int, round_number: int, war_tag: str, war_data: dict) -> CWLWar:
+def create_db_cwl_war(season_id: int, round_number: int, war_tag: str, war_data: dict,
+                      clan_api: dict = None, opp_api: dict = None) -> CWLWar:
     clan = json_get(war_data, JSON_CWL_WAR_DATA.CLAN,     default={}, raise_on_missing=False) or {}
     opp  = json_get(war_data, JSON_CWL_WAR_DATA.OPPONENT, default={}, raise_on_missing=False) or {}
     return CWLWar(
@@ -445,12 +446,24 @@ def create_db_cwl_war(season_id: int, round_number: int, war_tag: str, war_data:
         clan_tag             = json_get(clan, JSON_CWL_WAR_DATA.SIDE_TAG),
         clan_name            = json_get(clan, JSON_CWL_WAR_DATA.SIDE_NAME),
         clan_badge           = json_get(clan, JSON_CWL_WAR_DATA.SIDE_BADGE),
+        clan_level           = json_get(clan, JSON_CWL_WAR_DATA.SIDE_CLAN_LEVEL,  raise_on_missing=False),
+        clan_cwl_league      = json_get(clan_api, JSON_CLAN_DATA.WAR_LEAGUE,      raise_on_missing=False) if clan_api else None,
+        clan_location        = json_get(clan_api, JSON_CLAN_DATA.LOCATION,        raise_on_missing=False) if clan_api else None,
+        clan_wars_won        = json_get(clan_api, JSON_CLAN_DATA.WAR_WINS,        raise_on_missing=False) if clan_api else None,
+        clan_war_frequency   = json_get(clan_api, JSON_CLAN_DATA.WAR_FREQUENCY,   raise_on_missing=False) if clan_api else None,
+        clan_win_streak      = json_get(clan_api, JSON_CLAN_DATA.WIN_STREAK,      raise_on_missing=False) if clan_api else None,
         clan_stars           = json_get(clan, JSON_CWL_WAR_DATA.SIDE_STARS,       default=0, raise_on_missing=False) or 0,
         clan_attacks         = json_get(clan, JSON_CWL_WAR_DATA.SIDE_ATTACKS,     default=0, raise_on_missing=False) or 0,
         clan_destruction_pct = json_get(clan, JSON_CWL_WAR_DATA.SIDE_DESTRUCTION, default=0.0, raise_on_missing=False) or 0.0,
         opp_tag              = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_TAG),
         opp_name             = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_NAME),
         opp_badge            = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_BADGE),
+        opp_level            = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_CLAN_LEVEL,  raise_on_missing=False),
+        opp_cwl_league       = json_get(opp_api,  JSON_CLAN_DATA.WAR_LEAGUE,      raise_on_missing=False) if opp_api else None,
+        opp_location         = json_get(opp_api,  JSON_CLAN_DATA.LOCATION,        raise_on_missing=False) if opp_api else None,
+        opp_wars_won         = json_get(opp_api,  JSON_CLAN_DATA.WAR_WINS,        raise_on_missing=False) if opp_api else None,
+        opp_war_frequency    = json_get(opp_api,  JSON_CLAN_DATA.WAR_FREQUENCY,   raise_on_missing=False) if opp_api else None,
+        opp_win_streak       = json_get(opp_api,  JSON_CLAN_DATA.WIN_STREAK,      raise_on_missing=False) if opp_api else None,
         opp_stars            = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_STARS,       default=0, raise_on_missing=False) or 0,
         opp_attacks          = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_ATTACKS,     default=0, raise_on_missing=False) or 0,
         opp_destruction_pct  = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_DESTRUCTION, default=0.0, raise_on_missing=False) or 0.0,

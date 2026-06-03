@@ -136,6 +136,10 @@ def _build_war_detail(war, our_tag):
         war_verdicts.sort(key=lambda x: -x['score'])
 
     our_side = war.clan_tag == our_tag
+
+    def _avg_th(members):
+        return round(sum(m.town_hall_level or 0 for m in members) / len(members), 1) if members else '—'
+
     return {
         'war':              war,
         'our_tag':          our_tag,
@@ -145,12 +149,26 @@ def _build_war_detail(war, our_tag):
         'our_stars':        war.clan_stars  if our_side else war.opp_stars,
         'our_attacks':      war.clan_attacks if our_side else war.opp_attacks,
         'our_pct':          war.clan_destruction_pct if our_side else war.opp_destruction_pct,
+        'our_avg_th':       _avg_th(members_our),
+        'our_avg_league':   avg_league_name(members_our),
+        'our_cwl_league':   war.clan_cwl_league    if our_side else war.opp_cwl_league,
+        'our_location':     war.clan_location      if our_side else war.opp_location,
+        'our_wars_won':     war.clan_wars_won      if our_side else war.opp_wars_won,
+        'our_war_frequency':war.clan_war_frequency if our_side else war.opp_war_frequency,
+        'our_win_streak':   war.clan_win_streak    if our_side else war.opp_win_streak,
         'opp_clan_tag':     war.opp_tag     if our_side else war.clan_tag,
         'opp_clan_name':    war.opp_name    if our_side else war.clan_name,
         'opp_clan_badge':   war.opp_badge   if our_side else war.clan_badge,
         'opp_stars':        war.opp_stars   if our_side else war.clan_stars,
         'opp_attacks':      war.opp_attacks if our_side else war.clan_attacks,
         'opp_pct':          war.opp_destruction_pct if our_side else war.clan_destruction_pct,
+        'opp_avg_th':       _avg_th(members_opp),
+        'opp_avg_league':   avg_league_name(members_opp),
+        'opp_cwl_league':   war.opp_cwl_league     if our_side else war.clan_cwl_league,
+        'opp_location':     war.opp_location       if our_side else war.clan_location,
+        'opp_wars_won':     war.opp_wars_won       if our_side else war.clan_wars_won,
+        'opp_war_frequency':war.opp_war_frequency  if our_side else war.clan_war_frequency,
+        'opp_win_streak':   war.opp_win_streak     if our_side else war.clan_win_streak,
         'members_our':      members_our,
         'members_opp':      members_opp,
         'members_our_json': members_our_json,
@@ -252,13 +270,30 @@ def cwl_page():
 
     sorted_rounds = sorted(rounds.items())
 
+    # ── Extended clan info from first available war per clan ──────────────────
+    clan_war_info = {}
+    for war in wars:
+        for tag, cwl_l, loc, won, freq, streak in [
+            (war.clan_tag, war.clan_cwl_league, war.clan_location, war.clan_wars_won, war.clan_war_frequency, war.clan_win_streak),
+            (war.opp_tag,  war.opp_cwl_league,  war.opp_location,  war.opp_wars_won,  war.opp_war_frequency,  war.opp_win_streak),
+        ]:
+            if tag and tag not in clan_war_info:
+                clan_war_info[tag] = {
+                    'cwl_league': cwl_l, 'location': loc,
+                    'wars_won': won, 'war_frequency': freq, 'win_streak': streak,
+                }
+
+    our_clan = next((c for c in clans if c.tag == our_tag), None)
+
     return render_template(
         'cwl/cwl.html',
         season=season,
         seasons=seasons,
         our_tag=our_tag,
+        our_clan=our_clan,
         clans=clans,
         clan_rosters=clan_rosters,
+        clan_war_info=clan_war_info,
         standings=sorted_standings,
         sorted_rounds=sorted_rounds,
         now=dt.datetime.now(dt.timezone.utc),
