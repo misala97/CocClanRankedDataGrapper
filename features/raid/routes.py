@@ -13,7 +13,7 @@ raid_bp = Blueprint('raid', __name__)
 
 @raid_bp.route('/raid')
 def raid_weekend_page():
-    all_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).all()
+    all_raids = RaidWeekend.query.order_by(RaidWeekend.start_time.desc()).all()
 
     selected_id = request.args.get('raid_id', type=int)
     if not selected_id and all_raids:
@@ -36,7 +36,7 @@ def raid_weekend_page():
 
         player_map = {}
         for log in logs:
-            tag = log.playerTag
+            tag = log.player_tag
             if tag not in player_map:
                 player_map[tag] = {
                     'player_name': log.player.name if log.player else tag,
@@ -50,9 +50,9 @@ def raid_weekend_page():
                 }
             p = player_map[tag]
             p['att_count'] += 1
-            if log.totalLootAllAttacks:
-                p['capital_loot'] = log.totalLootAllAttacks
-            level = log.districLevel or 5
+            if log.total_loot_all_attacks:
+                p['capital_loot'] = log.total_loot_all_attacks
+            level = log.district_level or 5
             try:
                 level = int(level)
             except (TypeError, ValueError):
@@ -61,16 +61,16 @@ def raid_weekend_page():
             pct = log.percentage or 0
             p['attack_logs'].append({
                 'log_id':           log.id,
-                'district_name':    log.districtName or '—',
+                'district_name':    log.district_name or '—',
                 'district_level':   level,
                 'level_mult':       level_mult,
                 'stars':            log.stars or 0,
                 'percentage':       pct,
                 'adj_score':        0.0,
-                'percentage_total': log.percentageTotal or 0,
+                'percentage_total': log.percentage_total or 0,
                 'is_clean_up':      False,
-                'defender_name':    log.defenderName or '—',
-                'defender_tag':     log.defenderTag or '—',
+                'defender_name':    log.defender_name or '—',
+                'defender_tag':     log.defender_tag or '—',
             })
 
         MAX_ATTACKS = 6
@@ -136,25 +136,25 @@ def raid_weekend_page():
             RaidWeekendLog.query
             .filter(
                 RaidWeekendLog.raid_weekend_id == selected_raid.id,
-                RaidWeekendLog.percentageTotal >= 100,
+                RaidWeekendLog.percentage_total >= 100,
             )
-            .with_entities(RaidWeekendLog.defenderTag, RaidWeekendLog.districtName, RaidWeekendLog.districLevel)
+            .with_entities(RaidWeekendLog.defender_tag, RaidWeekendLog.district_name, RaidWeekendLog.district_level)
             .distinct()
             .all()
         )
-        total_medals  = sum(raid_district_medal_value(r.districtName, r.districLevel) for r in destroyed)
+        total_medals  = sum(raid_district_medal_value(r.district_name, r.district_level) for r in destroyed)
         total_attacks = max(total_log_attacks, 1)
 
         # Average defensive reward from last 10 finished raids
         past_def = (
             RaidWeekend.query
-            .filter(RaidWeekend.defensiveReward > 0)
-            .order_by(RaidWeekend.startTime.desc())
+            .filter(RaidWeekend.defensive_reward > 0)
+            .order_by(RaidWeekend.start_time.desc())
             .limit(10)
-            .with_entities(RaidWeekend.defensiveReward)
+            .with_entities(RaidWeekend.defensive_reward)
             .all()
         )
-        avg_defensive = round(sum(r.defensiveReward for r in past_def) / len(past_def)) if past_def else 0
+        avg_defensive = round(sum(r.defensive_reward for r in past_def) / len(past_def)) if past_def else 0
 
         if total_medals > 0:
             baseline = total_medals / total_attacks
@@ -162,8 +162,8 @@ def raid_weekend_page():
             est_medals_6atk = off_6atk + avg_defensive
             for p in player_data:
                 p['est_medals'] = max(0, min(round(min(p['att_count'], 6) * baseline), 1620)) + avg_defensive
-        elif selected_raid.offensiveReward and selected_raid.offensiveReward > 0:
-            baseline = selected_raid.offensiveReward
+        elif selected_raid.offensive_reward and selected_raid.offensive_reward > 0:
+            baseline = selected_raid.offensive_reward
             off_6atk = min(round(baseline * 6), 1620)
             est_medals_6atk = off_6atk + avg_defensive
             for p in player_data:
@@ -176,19 +176,19 @@ def raid_weekend_page():
     # Long-term solo wipe stats
     enc_subq = (
         db.session.query(
-            RaidWeekendLog.playerTag,
-            RaidWeekendLog.districtName,
-            RaidWeekendLog.districLevel,
-            RaidWeekendLog.defenderTag,
+            RaidWeekendLog.player_tag,
+            RaidWeekendLog.district_name,
+            RaidWeekendLog.district_level,
+            RaidWeekendLog.defender_tag,
             RaidWeekendLog.raid_weekend_id,
             func.count(RaidWeekendLog.id).label('att_count'),
         )
-        .filter(RaidWeekendLog.defenderTag.isnot(None))
+        .filter(RaidWeekendLog.defender_tag.isnot(None))
         .group_by(
-            RaidWeekendLog.playerTag,
-            RaidWeekendLog.districtName,
-            RaidWeekendLog.districLevel,
-            RaidWeekendLog.defenderTag,
+            RaidWeekendLog.player_tag,
+            RaidWeekendLog.district_name,
+            RaidWeekendLog.district_level,
+            RaidWeekendLog.defender_tag,
             RaidWeekendLog.raid_weekend_id,
         )
         .having(func.sum(RaidWeekendLog.percentage) == 100)
@@ -196,26 +196,26 @@ def raid_weekend_page():
     )
     hist_raw = (
         db.session.query(
-            enc_subq.c.playerTag,
-            enc_subq.c.districtName,
-            enc_subq.c.districLevel,
+            enc_subq.c.player_tag,
+            enc_subq.c.district_name,
+            enc_subq.c.district_level,
             func.count(enc_subq.c.att_count).label('n'),
             func.avg(enc_subq.c.att_count).label('avg_attacks'),
         )
-        .group_by(enc_subq.c.playerTag, enc_subq.c.districtName, enc_subq.c.districLevel)
+        .group_by(enc_subq.c.player_tag, enc_subq.c.district_name, enc_subq.c.district_level)
         .all()
     )
     clan_players    = Player.query.filter_by(in_clan=True).all()
     player_name_map = {p.tag: (p.name or p.tag) for p in clan_players}
     in_clan_tags    = {p.tag for p in clan_players}
     hist_stats = [{
-        'player_tag':  str(r.playerTag),
-        'player_name': str(player_name_map.get(r.playerTag, r.playerTag)),
-        'district':    str(r.districtName) if r.districtName else None,
-        'level':       int(r.districLevel) if r.districLevel is not None else 0,
+        'player_tag':  str(r.player_tag),
+        'player_name': str(player_name_map.get(r.player_tag, r.player_tag)),
+        'district':    str(r.district_name) if r.district_name else None,
+        'level':       int(r.district_level) if r.district_level is not None else 0,
         'clears':      int(r.n),
         'avg_attacks': round(float(r.avg_attacks), 1) if r.avg_attacks is not None else 0,
-    } for r in hist_raw if r.playerTag in in_clan_tags]
+    } for r in hist_raw if r.player_tag in in_clan_tags]
     hist_stats_json = json.dumps(hist_stats, default=str)
 
     has_ongoing = any(r.state == 'ongoing' for r in all_raids)
@@ -228,8 +228,8 @@ def raid_weekend_page():
             label = 'Last Weekend'
             last_weekend_assigned = True
         else:
-            start = r.startTime.strftime('%d.%m.%Y') if r.startTime else '?'
-            end   = r.endTime.strftime('%d.%m.%Y') if r.endTime else '?'
+            start = r.start_time.strftime('%d.%m.%Y') if r.start_time else '?'
+            end   = r.end_time.strftime('%d.%m.%Y') if r.end_time else '?'
             label = f"{start} – {end}"
         raid_options.append({'id': r.id, 'label': label})
 

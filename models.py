@@ -5,21 +5,25 @@ from extensions import db
 class Player(db.Model):
     __tablename__ = 'player'
 
-    tag = db.Column(db.String(50), primary_key=True)
-    name = db.Column(db.String(100))
-    current_th = db.Column(db.Integer)
-    in_clan = db.Column(db.Boolean)
-    league_tier = db.Column(db.String(50))
-    league_icon = db.Column(db.String(150))
-    last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    tag                    = db.Column(db.String(50), primary_key=True)
+    name                   = db.Column(db.String(100))
+    current_th             = db.Column(db.Integer)
+    in_clan                = db.Column(db.Boolean)
+    league_tier            = db.Column(db.String(50))
+    last_updated           = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     admin_comment          = db.Column(db.Text, nullable=True)
-    in_group_chat          = db.Column(db.Boolean, default=False, nullable=True)
+    in_group_chat          = db.Column(db.Boolean, default=False, nullable=False)   # fix #8: was nullable=True
     war_preference_in_game = db.Column(db.String(20), nullable=True)
     war_preference_custom  = db.Column(db.String(20), nullable=True)
     join_date              = db.Column(db.Date, nullable=True, default=lambda: datetime.now(timezone.utc).date())
 
     ranked_weeks = db.relationship('RankedWeek', back_populates='player', lazy=True, cascade="all, delete-orphan")
-    battle_logs = db.relationship('BattleLog', back_populates='player', lazy=True, cascade="all, delete-orphan")
+    battle_logs  = db.relationship('BattleLog',  back_populates='player', lazy=True, cascade="all, delete-orphan")
+
+    @property
+    def league_icon(self) -> str:
+        from services.helpers import league_icon_url
+        return league_icon_url(self.league_tier)
 
 
 class RankedWeek(db.Model):
@@ -27,42 +31,46 @@ class RankedWeek(db.Model):
 
     league_group_tag = db.Column(db.String(50), primary_key=True)
     league_season_id = db.Column(db.String(50), primary_key=True)
-    player_tag = db.Column(db.String(50), db.ForeignKey('player.tag'), primary_key=True)
+    player_tag       = db.Column(db.String(50), db.ForeignKey('player.tag'), primary_key=True)
 
-    trophies = db.Column(db.Integer)
-    rank = db.Column(db.Integer)
-    start_day = db.Column(db.Date)
-    end_day = db.Column(db.Date)
-    max_attacks = db.Column(db.Integer)
-    townhall = db.Column(db.Integer)
-    attack_wins = db.Column(db.Integer)
-    attack_losses = db.Column(db.Integer)
-    defense_wins = db.Column(db.Integer)
+    trophies       = db.Column(db.Integer)
+    rank           = db.Column(db.Integer)
+    start_day      = db.Column(db.Date)
+    end_day        = db.Column(db.Date)
+    max_attacks    = db.Column(db.Integer)
+    townhall       = db.Column(db.Integer)
+    attack_wins    = db.Column(db.Integer)
+    attack_losses  = db.Column(db.Integer)
+    defense_wins   = db.Column(db.Integer)
     defense_losses = db.Column(db.Integer)
-    league_tier = db.Column(db.String(50))
-    league_icon = db.Column(db.String(150))
-    is_done = db.Column(db.Boolean, default=False)
-    last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    league_tier    = db.Column(db.String(50))
+    is_done        = db.Column(db.Boolean, default=False)
+    last_updated   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    player = db.relationship('Player', back_populates='ranked_weeks')
+    player      = db.relationship('Player', back_populates='ranked_weeks')
     battle_logs = db.relationship('RankedBattleLog', back_populates='ranked_week', lazy=True, cascade="all, delete-orphan")
+
+    @property
+    def league_icon(self) -> str:
+        from services.helpers import league_icon_url
+        return league_icon_url(self.league_tier)
 
 
 class RankedBattleLog(db.Model):
     __tablename__ = 'ranked_battle_log'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    opponent_tag = db.Column(db.String(50), nullable=False)
+    id               = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    opponent_tag     = db.Column(db.String(50), nullable=False)
     league_group_tag = db.Column(db.String(50))
     league_season_id = db.Column(db.String(50))
-    player_tag = db.Column(db.String(50))
-    attack = db.Column(db.Boolean)
-    stars = db.Column(db.Integer)
-    percentage = db.Column(db.Integer)
-    trophies = db.Column(db.Integer)
-    opponent_name = db.Column(db.String(100))
-    opponent_th = db.Column(db.String(100))
-    time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    player_tag       = db.Column(db.String(50))
+    attack           = db.Column(db.Boolean)
+    stars            = db.Column(db.Integer)
+    percentage       = db.Column(db.Integer)
+    trophies         = db.Column(db.Integer)
+    opponent_name    = db.Column(db.String(100))
+    opponent_th      = db.Column(db.Integer)    # fix #1: was String(100)
+    time             = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     ranked_week = db.relationship('RankedWeek', back_populates='battle_logs')
     player = db.relationship(
@@ -83,72 +91,82 @@ class RankedBattleLog(db.Model):
 class BattleLog(db.Model):
     __tablename__ = 'battle_log'
 
-    player_tag = db.Column(db.String(50), db.ForeignKey('player.tag'), primary_key=True)
-    opponent_tag = db.Column(db.String(50), primary_key=True)
-    loot_gold = db.Column(db.Integer, primary_key=True)
-    loot_elixir = db.Column(db.Integer, primary_key=True)
-    loot_dark_elixir = db.Column(db.Integer, primary_key=True)
-    attack = db.Column(db.Boolean)
-    stars = db.Column(db.Integer)
-    percentage = db.Column(db.Integer)
-    type = db.Column(db.String(50))
-    time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    id               = db.Column(db.Integer, primary_key=True, autoincrement=True)   # fix #3: surrogate PK
+    player_tag       = db.Column(db.String(50), db.ForeignKey('player.tag'))
+    opponent_tag     = db.Column(db.String(50))
+    loot_gold        = db.Column(db.Integer)
+    loot_elixir      = db.Column(db.Integer)
+    loot_dark_elixir = db.Column(db.Integer)
+    attack           = db.Column(db.Boolean)
+    stars            = db.Column(db.Integer)
+    percentage       = db.Column(db.Integer)
+    type             = db.Column(db.String(50))
+    time             = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     player = db.relationship('Player', back_populates='battle_logs')
+
+    __table_args__ = (
+        db.UniqueConstraint('player_tag', 'opponent_tag', 'loot_gold', 'loot_elixir', 'loot_dark_elixir',
+                            name='uq_battle_log'),
+    )
 
 
 class RaidWeekend(db.Model):
     __tablename__ = 'raid_weekend'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    startTime = db.Column(db.DateTime, primary_key=True)
-    endTime = db.Column(db.DateTime, primary_key=True)
-    state = db.Column(db.String(20))
-    capitalTotalLoot = db.Column(db.Integer)
-    raidsCompleted = db.Column(db.Integer)
-    totalAttacks = db.Column(db.Integer)
-    enemyDistrictsDestroyed = db.Column(db.Integer)
-    offensiveReward = db.Column(db.Integer)
-    defensiveReward = db.Column(db.Integer)
+    id                        = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    start_time                = db.Column(db.DateTime)   # fix #5: was startTime
+    end_time                  = db.Column(db.DateTime)   # fix #5: was endTime
+    state                     = db.Column(db.String(20))
+    capital_total_loot        = db.Column(db.Integer)    # fix #5: was capitalTotalLoot
+    raids_completed           = db.Column(db.Integer)    # fix #5: was raidsCompleted
+    total_attacks             = db.Column(db.Integer)    # fix #5: was totalAttacks
+    enemy_districts_destroyed = db.Column(db.Integer)   # fix #5: was enemyDistrictsDestroyed
+    offensive_reward          = db.Column(db.Integer)   # fix #5: was offensiveReward
+    defensive_reward          = db.Column(db.Integer)   # fix #5: was defensiveReward
 
     logs = db.relationship('RaidWeekendLog', back_populates='raid_weekend', lazy=True, cascade="all, delete-orphan")
+
+    __table_args__ = (
+        db.UniqueConstraint('start_time', 'end_time', name='uq_raid_weekend'),  # fix #4
+    )
 
 
 class RaidWeekendLog(db.Model):
     __tablename__ = 'raid_weekend_log'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    raid_weekend_id = db.Column(db.Integer, db.ForeignKey('raid_weekend.id'))
-    defenderName = db.Column(db.String(30))
-    defenderTag = db.Column(db.String(30))
-    districtName = db.Column(db.String(30))
-    districLevel = db.Column(db.Integer)
-    totalLootAllAttacks = db.Column(db.Integer)
-    percentage = db.Column(db.Integer)
-    percentageTotal = db.Column(db.Integer)
-    stars = db.Column(db.Integer)
-    playerTag = db.Column(db.String(50), db.ForeignKey('player.tag'))
+    id                    = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    raid_weekend_id       = db.Column(db.Integer, db.ForeignKey('raid_weekend.id'))
+    defender_name         = db.Column(db.String(30))    # fix #5: was defenderName
+    defender_tag          = db.Column(db.String(30))    # fix #5: was defenderTag
+    district_name         = db.Column(db.String(30))    # fix #5: was districtName
+    district_level        = db.Column(db.Integer)       # fix #2+#5: was districLevel (typo)
+    total_loot_all_attacks = db.Column(db.Integer)      # fix #5: was totalLootAllAttacks
+    percentage            = db.Column(db.Integer)
+    percentage_total      = db.Column(db.Integer)       # fix #5: was percentageTotal
+    stars                 = db.Column(db.Integer)
+    player_tag            = db.Column(db.String(50), db.ForeignKey('player.tag'))  # fix #5: was playerTag
 
     raid_weekend = db.relationship('RaidWeekend', back_populates='logs')
-    player = db.relationship('Player', foreign_keys=[playerTag])
+    player       = db.relationship('Player', foreign_keys=[player_tag])
 
 
 class UptimeTracker(db.Model):
     __tablename__ = 'uptime_tracker'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    function = db.Column(db.String(50))
-    time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    duration = db.Column(db.String(50))
-    status = db.Column(db.String(20), default='success')
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    function      = db.Column(db.String(50))
+    time          = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    duration      = db.Column(db.Float)     # fix #6: was String(50)
+    status        = db.Column(db.String(20), default='success')
     error_message = db.Column(db.Text, nullable=True)
-    summary = db.Column(db.String(200), nullable=True)
+    summary       = db.Column(db.String(200), nullable=True)
 
 
 class PubQuizRounds(db.Model):
     __tablename__ = 'pubquiz_rounds'
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    datum = db.Column(db.DateTime)
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    datum      = db.Column(db.DateTime)
     bilderrunde = db.Column(db.String(100))
     quizmaster = db.Column(db.String(100))
 
@@ -157,17 +175,17 @@ class PubQuizRounds(db.Model):
 
 class PubQuizTeams(db.Model):
     __tablename__ = 'pubquiz_teams'
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    name = db.Column(db.String(100))
-    round_id = db.Column(db.Integer, db.ForeignKey('pubquiz_rounds.id'))
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name          = db.Column(db.String(100))
+    round_id      = db.Column(db.Integer, db.ForeignKey('pubquiz_rounds.id'))
     round1_points = db.Column(db.Float)
     round2_points = db.Column(db.Float)
     round3_points = db.Column(db.Float)
     round4_points = db.Column(db.Float)
-    round1_size = db.Column(db.Integer)
-    round2_size = db.Column(db.Integer)
-    round3_size = db.Column(db.Integer)
-    round4_size = db.Column(db.Integer)
+    round1_size   = db.Column(db.Integer)
+    round2_size   = db.Column(db.Integer)
+    round3_size   = db.Column(db.Integer)
+    round4_size   = db.Column(db.Integer)
 
     round = db.relationship('PubQuizRounds', back_populates='teams')
 
@@ -194,6 +212,7 @@ class ClanWar(db.Model):
     preparation_start_time   = db.Column(db.DateTime)
     start_time               = db.Column(db.DateTime, unique=True)
     end_time                 = db.Column(db.DateTime)
+    clan_tag                 = db.Column(db.String(30), nullable=True)   # fix #9
     clan_name                = db.Column(db.String(100), nullable=True)
     clan_badge               = db.Column(db.String(200), nullable=True)
     cwl_league               = db.Column(db.String(50),  nullable=True)
@@ -261,7 +280,7 @@ class CWLSeason(db.Model):
     __tablename__ = 'cwl_season'
 
     id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    season       = db.Column(db.String(10), unique=True, nullable=False)  # e.g. "2025-05"
+    season       = db.Column(db.String(10), unique=True, nullable=False)
     state        = db.Column(db.String(20))
     league_name  = db.Column(db.String(50), nullable=True)
     last_updated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),

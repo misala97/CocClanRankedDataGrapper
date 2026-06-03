@@ -116,15 +116,15 @@ def calculate_activity_score(player_tag, period='week'):
     player_weekly_avg = battles_in_window / weeks
     battle_score      = min(100, round(100 * player_weekly_avg / clan_weekly_avg)) if clan_weekly_avg > 0 else 0
 
-    last_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).limit(raid_limit).all()
+    last_raids = RaidWeekend.query.order_by(RaidWeekend.start_time.desc()).limit(raid_limit).all()
     if join_date:
-        eligible_raids = [r for r in last_raids if r.startTime and r.startTime.date() >= join_date]
+        eligible_raids = [r for r in last_raids if r.start_time and r.start_time.date() >= join_date]
     else:
         eligible_raids = last_raids
     eligible_raid_ids = [r.id for r in eligible_raids]
     eligible_raid_count = len(eligible_raids)
     raid_attacks = (RaidWeekendLog.query
-                    .filter(RaidWeekendLog.playerTag == player_tag,
+                    .filter(RaidWeekendLog.player_tag == player_tag,
                             RaidWeekendLog.raid_weekend_id.in_(eligible_raid_ids))
                     .count()) if eligible_raid_ids else 0
     raid_max_possible = eligible_raid_count * 6
@@ -215,11 +215,11 @@ def calculate_skill_score(player_tag, period='month'):
     avg_ranked   = sum(ranked_scores) / len(ranked_scores) if ranked_scores else 0
     ranked_skill = round(avg_ranked)
 
-    last_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).limit(raid_limit).all()
+    last_raids = RaidWeekend.query.order_by(RaidWeekend.start_time.desc()).limit(raid_limit).all()
     raid_ids   = [r.id for r in last_raids]
     total_raids = len(raid_ids)
     player_raid_logs = (RaidWeekendLog.query
-                        .filter(RaidWeekendLog.playerTag == player_tag,
+                        .filter(RaidWeekendLog.player_tag == player_tag,
                                 RaidWeekendLog.raid_weekend_id.in_(raid_ids))
                         .all()) if raid_ids else []
     logs_by_raid = {}
@@ -411,12 +411,12 @@ def player_profile(tag):
             'attack':       bool(b.attack),
         })
 
-    player_raid_logs = RaidWeekendLog.query.filter(RaidWeekendLog.playerTag == actual_tag).all()
+    player_raid_logs = RaidWeekendLog.query.filter(RaidWeekendLog.player_tag == actual_tag).all()
     raid_logs_by_id  = {}
     for l in player_raid_logs:
         raid_logs_by_id.setdefault(l.raid_weekend_id, []).append(l)
 
-    all_raids   = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).all()
+    all_raids   = RaidWeekend.query.order_by(RaidWeekend.start_time.desc()).all()
     raid_history = []
     for r in all_raids:
         logs = raid_logs_by_id.get(r.id, [])
@@ -425,8 +425,8 @@ def player_profile(tag):
         badge_class, judge_label, score_100 = _raid_verdict(logs)
         raid_history.append({
             'raid_id':    r.id,
-            'start':      r.startTime.strftime('%d.%m.%Y') if r.startTime else '—',
-            'end':        r.endTime.strftime('%d.%m.%Y')   if r.endTime   else '—',
+            'start':      r.start_time.strftime('%d.%m.%Y') if r.start_time else '—',
+            'end':        r.end_time.strftime('%d.%m.%Y')   if r.end_time   else '—',
             'participated': len(logs) > 0,
             'att_count':  len(logs),
             'avg_pct':    round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0,
@@ -571,16 +571,16 @@ def _calculate_scores_bulk(player_tags, period='month'):
     clan_avg_loot      = clan_total_loot / clan_member_count if clan_member_count else 0
 
     # ── raid logs (bulk) ─────────────────────────────────────────────────────
-    last_raids = RaidWeekend.query.order_by(RaidWeekend.startTime.desc()).limit(raid_limit).all()
+    last_raids = RaidWeekend.query.order_by(RaidWeekend.start_time.desc()).limit(raid_limit).all()
     raid_ids   = [r.id for r in last_raids]
 
     all_raid_logs = (RaidWeekendLog.query
-                     .filter(RaidWeekendLog.playerTag.in_(player_tags),
+                     .filter(RaidWeekendLog.player_tag.in_(player_tags),
                              RaidWeekendLog.raid_weekend_id.in_(raid_ids))
                      .all()) if raid_ids else []
     raid_logs_by_player = {}
     for l in all_raid_logs:
-        raid_logs_by_player.setdefault(l.playerTag, {}).setdefault(l.raid_weekend_id, []).append(l)
+        raid_logs_by_player.setdefault(l.player_tag, {}).setdefault(l.raid_weekend_id, []).append(l)
 
     # ── join dates (bulk) ────────────────────────────────────────────────────
     join_dates = dict(
@@ -647,7 +647,7 @@ def _calculate_scores_bulk(player_tags, period='month'):
         player_weekly_avg  = battles_in_window / weeks_float
         battle_score       = min(100, round(100 * player_weekly_avg / clan_weekly_avg)) if clan_weekly_avg > 0 else 0
         join_date          = join_dates.get(tag)
-        eligible_raids     = [r for r in last_raids if not join_date or (r.startTime and r.startTime.date() >= join_date)]
+        eligible_raids     = [r for r in last_raids if not join_date or (r.start_time and r.start_time.date() >= join_date)]
         eligible_raid_ids  = {r.id for r in eligible_raids}
         raid_attacks       = sum(len(v) for rid, v in raid_logs_by_player.get(tag, {}).items() if rid in eligible_raid_ids)
         raid_max_possible  = len(eligible_raids) * 6

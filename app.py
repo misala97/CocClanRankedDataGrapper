@@ -171,7 +171,19 @@ def index():
 
     active_raid = RaidWeekend.query.filter(
         RaidWeekend.state == 'ongoing'
-    ).order_by(RaidWeekend.startTime.desc()).first()
+    ).order_by(RaidWeekend.start_time.desc()).first()
+
+    active_cwl_season = CWLSeason.query.filter(
+        CWLSeason.state.in_(['preparation', 'inWar'])
+    ).order_by(CWLSeason.id.desc()).first()
+
+    active_cwl_war = None
+    if active_cwl_season:
+        active_cwl_war = CWLWar.query.filter(
+            CWLWar.season_id == active_cwl_season.id,
+            CWLWar.state.in_(['preparation', 'inWar']),
+            db.or_(CWLWar.clan_tag == CLAN_TAG, CWLWar.opp_tag == CLAN_TAG)
+        ).first()
 
     active_raid_est_medals = None
     if active_raid:
@@ -179,22 +191,22 @@ def index():
         destroyed = (
             RaidWeekendLog.query
             .filter(RaidWeekendLog.raid_weekend_id == active_raid.id,
-                    RaidWeekendLog.percentageTotal >= 100)
-            .with_entities(RaidWeekendLog.defenderTag, RaidWeekendLog.districtName, RaidWeekendLog.districLevel)
+                    RaidWeekendLog.percentage_total >= 100)
+            .with_entities(RaidWeekendLog.defender_tag, RaidWeekendLog.district_name, RaidWeekendLog.district_level)
             .distinct()
             .all()
         )
-        total_medals  = sum(raid_district_medal_value(r.districtName, r.districLevel) for r in destroyed)
+        total_medals  = sum(raid_district_medal_value(r.district_name, r.district_level) for r in destroyed)
         total_attacks = RaidWeekendLog.query.filter_by(raid_weekend_id=active_raid.id).count()
         past_def = (
             RaidWeekend.query
-            .filter(RaidWeekend.defensiveReward > 0)
-            .order_by(RaidWeekend.startTime.desc())
+            .filter(RaidWeekend.defensive_reward > 0)
+            .order_by(RaidWeekend.start_time.desc())
             .limit(10)
-            .with_entities(RaidWeekend.defensiveReward)
+            .with_entities(RaidWeekend.defensive_reward)
             .all()
         )
-        avg_def = round(sum(r.defensiveReward for r in past_def) / len(past_def)) if past_def else 0
+        avg_def = round(sum(r.defensive_reward for r in past_def) / len(past_def)) if past_def else 0
         if total_medals > 0 and total_attacks > 0:
             baseline = total_medals / total_attacks
             active_raid_est_medals = max(0, min(round(baseline * 6), 1620)) + avg_def
@@ -210,6 +222,8 @@ def index():
         active_war=active_war,
         active_raid=active_raid,
         active_raid_est_medals=active_raid_est_medals,
+        active_cwl_season=active_cwl_season,
+        active_cwl_war=active_cwl_war,
     )
 
 
@@ -224,11 +238,11 @@ if __name__ == '__main__':
     from tasks.cwl           import task_update_cwl
 
     # Uncomment to run tasks manually before starting:
-    #task_update_clan_members()
-    #task_update_battle_logs()
-    #task_update_raid_weekend()
-    #task_update_ranked_weeks()
-    #task_update_clan_war()
+    task_update_clan_members()
+    task_update_battle_logs()
+    task_update_raid_weekend()
+    task_update_ranked_weeks()
+    task_update_clan_war()
     task_update_cwl()
 
     app.run(debug=True, use_reloader=False)

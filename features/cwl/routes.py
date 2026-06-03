@@ -260,6 +260,16 @@ def cwl_page():
         key=lambda s: (-s['wins'], -s['stars'], -s['destruction']),
     )
 
+    current_enemy_tag = None
+    for war in wars:
+        if war.state in ('inWar', 'preparation'):
+            if war.clan_tag == our_tag:
+                current_enemy_tag = war.opp_tag
+            elif war.opp_tag == our_tag:
+                current_enemy_tag = war.clan_tag
+            if current_enemy_tag:
+                break
+
     # ── Per-round war details (our clan only) ─────────────────────────────────
     rounds = {}
     for war in wars:
@@ -291,6 +301,7 @@ def cwl_page():
         seasons=seasons,
         our_tag=our_tag,
         our_clan=our_clan,
+        current_enemy_tag=current_enemy_tag,
         clans=clans,
         clan_rosters=clan_rosters,
         clan_war_info=clan_war_info,

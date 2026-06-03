@@ -380,7 +380,7 @@
     </div>
 </section>
 
-{% if active_war or active_raid %}
+{% if active_war or active_raid or active_cwl_season %}
 <!-- Live Events -->
 <div class="live-section">
     <div class="live-inner">
@@ -437,6 +437,63 @@
             </a>
             {% endif %}
 
+            {% if active_cwl_season %}
+            <a href="/cwl" class="live-card">
+                <div class="lc-stripe"></div>
+                <div class="lc-content">
+                    <div class="lc-header">
+                        <div class="lc-title-row">
+                            <div class="lc-icon">🏅</div>
+                            <span class="lc-name">Clan War League</span>
+                        </div>
+                        <span class="lc-state {% if active_cwl_war and active_cwl_war.state == 'inWar' %}lcs-war{% else %}lcs-prep{% endif %}">
+                            {% if active_cwl_war and active_cwl_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}
+                        </span>
+                    </div>
+
+                    {% if active_cwl_war and active_cwl_war.state == 'inWar' %}
+                    {% set our_side = active_cwl_war.clan_tag == CLAN_TAG %}
+                    {% set our_stars  = active_cwl_war.clan_stars  if our_side else active_cwl_war.opp_stars %}
+                    {% set our_atk    = active_cwl_war.clan_attacks if our_side else active_cwl_war.opp_attacks %}
+                    {% set opp_stars  = active_cwl_war.opp_stars   if our_side else active_cwl_war.clan_stars %}
+                    {% set opp_atk    = active_cwl_war.opp_attacks  if our_side else active_cwl_war.clan_attacks %}
+                    {% set opp_name   = active_cwl_war.opp_name    if our_side else active_cwl_war.clan_name %}
+                    <div class="lc-score">
+                        <div class="lc-score-side lc-score-our">
+                            <div class="lc-score-num">{{ our_stars or 0 }}</div>
+                            <div class="lc-score-atk">{{ our_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
+                            <div class="lc-score-lbl">Us ★</div>
+                        </div>
+                        <div class="lc-score-sep">VS</div>
+                        <div class="lc-score-side lc-score-them">
+                            <div class="lc-score-num">{{ opp_stars or 0 }}</div>
+                            <div class="lc-score-atk">{{ opp_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
+                            <div class="lc-score-lbl">{{ opp_name or 'Them' }} ★</div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div style="text-align:center;padding:14px 0 18px;color:var(--muted);font-size:13px;">
+                        {% if active_cwl_war and active_cwl_war.start_time %}
+                        War starts {{ active_cwl_war.start_time | local_dt('%d.%m · %H:%M') }}
+                        {% else %}
+                        Season {{ active_cwl_season.season }} · {{ active_cwl_season.league_name or 'CWL' }}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <div class="lc-meta">
+                        <span>{{ active_cwl_season.season }}{% if active_cwl_season.league_name %} · {{ active_cwl_season.league_name }}{% endif %}{% if active_cwl_war %} · Round {{ active_cwl_war.round_number }}{% endif %}</span>
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            {% if active_cwl_war and active_cwl_war.end_time %}
+                            <span class="lc-meta-end">Ends {{ active_cwl_war.end_time | local_dt('%d.%m · %H:%M') }}</span>
+                            {% endif %}
+                            <span class="lc-goto">Go to →</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+            {% endif %}
+
             {% if active_raid %}
             <a href="/raid" class="live-card">
                 <div class="lc-stripe"></div>
@@ -460,10 +517,10 @@
                     </div>
 
                     <div class="lc-meta">
-                        <span>Started {{ active_raid.startTime.strftime('%d.%m') if active_raid.startTime else '—' }}</span>
+                        <span>Started {{ active_raid.start_time.strftime('%d.%m') if active_raid.start_time else '—' }}</span>
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            {% if active_raid.endTime %}
-                            <span class="lc-meta-end">Ends {{ active_raid.endTime | local_dt('%d.%m · %H:%M') }}</span>
+                            {% if active_raid.end_time %}
+                            <span class="lc-meta-end">Ends {{ active_raid.end_time | local_dt('%d.%m · %H:%M') }}</span>
                             {% endif %}
                             <span class="lc-goto">Go to →</span>
                         </div>
@@ -521,14 +578,14 @@
             <p>Clan war performance metrics and detailed battle results.</p>
         </a>
 
-        <div class="feature-card disabled">
+        <a href="/cwl" class="feature-card active">
             <div class="card-top">
                 <div class="feature-icon">🏅</div>
-                <span class="badge badge-soon">Soon</span>
+                <span class="badge badge-active">Active</span>
             </div>
             <h4>Clan War League</h4>
-            <p>League standings and clan war league insights and analytics.</p>
-        </div>
+            <p>CWL standings, per-round war details, clan rosters and league comparisons across all 8 clans.</p>
+        </a>
 
         <a href="/clan" class="feature-card active">
             <div class="card-top">
@@ -571,14 +628,15 @@
                     <li><a href="/battles" class="live-link">Battle History</a></li>
                     <li><a href="/raid" class="live-link">Raid Weekend</a></li>
                     <li><a href="/clan" class="live-link">Clan Overview</a></li>
+                    <li><a href="/war" class="live-link">Clan War</a></li>
+                    <li><a href="/cwl" class="live-link">Clan War League</a></li>
                     {% if is_super_admin %}<li><a href="/admin" class="live-link">Admin Hub</a></li>{% endif %}
                 </ul>
             </div>
             <div>
                 <h4>Coming Soon</h4>
                 <ul class="footer-links">
-                    <li><a href="/war" class="live-link">Clan War</a></li>
-                    <li><span class="soon-link">Clan War League</span></li>
+                    <li><span class="soon-link">More features</span></li>
                 </ul>
             </div>
             <div>
@@ -596,7 +654,7 @@
         <div class="footer-bottom">
             <p>&copy; 2026 CoC Analytics &mdash; Unofficial fan project, not affiliated with Supercell.</p>
             <div class="links">
-                <span style="color:var(--muted);font-size:12px">5 features live &middot; 2 in development</span>
+                <span style="color:var(--muted);font-size:12px">6 features live</span>
             </div>
         </div>
     </div>

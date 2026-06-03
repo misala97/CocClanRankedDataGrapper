@@ -39,7 +39,7 @@ def task_update_raid_weekend():
 
         try:
             tmp_raid_weekend = create_db_raid_weekend_from_api(current_raid_weekend)
-            raid_weekend = db_raid_weekend_get(tmp_raid_weekend.startTime, tmp_raid_weekend.endTime)
+            raid_weekend = db_raid_weekend_get(tmp_raid_weekend.start_time, tmp_raid_weekend.end_time)
             if not raid_weekend:
                 raid_weekend = db_raid_weekend_create_new(tmp_raid_weekend)
             else:
@@ -112,8 +112,8 @@ def task_update_raid_weekend():
 
         import extensions
         if extensions.scheduler:
-            if raid_weekend.state == 'ended' and raid_weekend.endTime:
-                next_run = raid_weekend.endTime + dt.timedelta(days=4)
+            if raid_weekend.state == 'ended' and raid_weekend.end_time:
+                next_run = raid_weekend.end_time + dt.timedelta(days=4)
                 next_run = next_run.replace(tzinfo=dt.timezone.utc)
                 extensions.scheduler.reschedule_job('raid_weekend_update', trigger='date', run_date=next_run)
                 raid_weekend_logger.info(f"Raid ended — rescheduled to {next_run} UTC")

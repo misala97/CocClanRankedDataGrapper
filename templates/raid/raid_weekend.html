@@ -225,9 +225,9 @@
         <h1>Raid <span>Weekend</span></h1>
         <p>
         {% if selected_raid %}
-            {{ selected_raid.startTime | local_dt('%d.%m.%Y') }}
+            {{ selected_raid.start_time | local_dt('%d.%m.%Y') }}
             –
-            {{ selected_raid.endTime | local_dt('%d.%m.%Y') }}
+            {{ selected_raid.end_time | local_dt('%d.%m.%Y') }}
             {% set s = (selected_raid.state or '')|lower %}
             {% if s == 'ended' %}<span class="badge badge-ended" style="margin-left:8px;">Ended</span>
             {% elif s == 'ongoing' %}<span class="badge badge-ongoing" style="margin-left:8px;">Ongoing</span>
@@ -266,7 +266,7 @@
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-icon">💰</div>
-            <div class="stat-value" style="color:var(--accent);">{{ '{:,}'.format(selected_raid.capitalTotalLoot or 0) }}</div>
+            <div class="stat-value" style="color:var(--accent);">{{ '{:,}'.format(selected_raid.capital_total_loot or 0) }}</div>
             <div class="stat-label">Capital Loot</div>
         </div>
         <div class="stat-card">
@@ -277,15 +277,15 @@
         <div class="stat-card">
             <div class="stat-icon">🏰</div>
             <div class="stat-value" style="color:var(--green);">
-                {%- set districts = selected_raid.enemyDistrictsDestroyed or 0 -%}
-                {%- set attacks = selected_raid.totalAttacks or 0 -%}
+                {%- set districts = selected_raid.enemy_districts_destroyed or 0 -%}
+                {%- set attacks = selected_raid.total_attacks or 0 -%}
                 {{ (attacks / districts) | round(1) if districts else '—' }}
             </div>
             <div class="stat-label">Avg Attacks / District</div>
         </div>
         <div class="stat-card">
             <div class="stat-icon">🏅</div>
-            <div class="stat-value" style="color:var(--purple);">{{ (selected_raid.defensiveReward or 0) + (selected_raid.offensiveReward or 0) * 6 }}</div>
+            <div class="stat-value" style="color:var(--purple);">{{ (selected_raid.defensive_reward or 0) + (selected_raid.offensive_reward or 0) * 6 }}</div>
             <div class="stat-label">Raid Medals</div>
         </div>
         {% if est_medals_6atk %}

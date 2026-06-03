@@ -66,6 +66,7 @@
         .rp-win  { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
         .rp-loss { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.25); }
         .rp-draw { background: rgba(139,148,158,.1); color: var(--muted);  border: 1px solid rgba(139,148,158,.2); }
+        .enemy-pill { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; background: rgba(248,81,73,.12); color: var(--red); border: 1px solid rgba(248,81,73,.25); margin-left: 6px; }
 
         /* ── ROUND COLLAPSE ── */
         .round-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
@@ -385,6 +386,7 @@
         <tbody id="standings-tbody">
         {% for s in standings %}
         {% set is_ours = s.tag == our_tag %}
+        {% set is_enemy = s.tag == current_enemy_tag %}
         {% set r = clan_rosters.get(s.tag, {}) %}
         {% set tagc = s.tag|replace('#','') %}
         <tr class="standing-row {% if is_ours %}our-row{% endif %}"
@@ -403,7 +405,7 @@
                 <div class="clan-col">
                     {% if s.badge_url %}<img src="{{ s.badge_url }}" class="clan-badge-sm" alt="">{% endif %}
                     <span style="font-weight:600;">{{ s.name }}</span>
-                    {% if is_ours %}<span style="color:var(--accent);font-size:11px;font-family:'Rajdhani',sans-serif;font-weight:700;">(us)</span>{% endif %}
+                    {% if is_enemy %}<span class="enemy-pill">⚔ NOW</span>{% endif %}
                 </div>
             </td>
             <td class="mono" style="color:var(--green);text-align:center;">{{ s.wins }}</td>

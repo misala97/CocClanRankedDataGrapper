@@ -348,6 +348,51 @@ _LEAGUE_MAP = {
     105000031: "Electro League 31", 105000032: "Electro League 32", 105000033: "Electro League 33",
     105000034: "Legend League III", 105000035: "Legend League II",  105000036: "Legend League I",
 }
+
+_B = "https://api-assets.clashofclans.com/leaguetiers/326/"
+LEAGUE_ICONS: dict[str, str] = {
+    "Unranked":             _B + "yyYo5DUFeFBZvmMEQh0ZxvG-1sUOZ_S3kDMB7RllXX0.png",
+    "Skeleton League 1":    _B + "CiSJYHyhMuloCpIIJ3n5-xCnRWrEd9vcq_zu6Ahkl3o.png",
+    "Skeleton League 2":    _B + "CmM-Tihn6ojPGJstmTK_HC-QairrpYLyRhdKhQjkacQ.png",
+    "Skeleton League 3":    _B + "YMnWU25Xs2SvtAkVS2WDDbcUQY-PTfCK9OSvCKJnwJU.png",
+    "Barbarian League 4":   _B + "CoTrW7nhyiNIDCI4WHUK-0BuhOxibwd_tfASdtmMWFE.png",
+    "Barbarian League 5":   _B + "7Alm6gwA1lYoRn5m8vrXAfbTKIK2fFU7OxfYhYwWJYM.png",
+    "Barbarian League 6":   _B + "pQHVG1p0IboE8Ggp0U1YR7U8dWhVn4YSS1zSPH61F0I.png",
+    "Archer League 7":      _B + "x1c7byHQmOHQVKGxAn1sqOW2XOCzTYW-e6OKjq-FBco.png",
+    "Archer League 8":      _B + "lzneKpnJ_ADL1Xb1rceH7-svqRN1UaLnI7ldd8BbyxI.png",
+    "Archer League 9":      _B + "ieEdz9Mqbo7g9iJfXwTnIh7Iwz-37aPEmWma1ENEwXE.png",
+    "Wizard League 10":     _B + "3kJYaYpDwKF8AEkwRLkm-947_t2mAhpEQcZJYulPPIA.png",
+    "Wizard League 11":     _B + "XazuJHG2wjBq39KEA4g4hh1nKJQwVO0fRoVDPHvWwAY.png",
+    "Wizard League 12":     _B + "A_ZoGbh1g8wYRWygsQ_wMgbVz8GXvvfavKwlSx8C8PQ.png",
+    "Valkyrie League 13":   _B + "6BwmbzkNm6p2unZonTauFQ_683uNl4NYtoOXJmEs78c.png",
+    "Valkyrie League 14":   _B + "7AbbZbiV6whmfa6CZtqt6Ml4NgFH1B-UqCxc59ziqfk.png",
+    "Valkyrie League 15":   _B + "vT-0ssHYx5zJbBbbjB5NHPXnlHk76MDxJmG7iKmghc4.png",
+    "Witch League 16":      _B + "a3zg3PSqri2WrWD8tGzKs0hJ5OrND1Rx1SJ45f5O0gE.png",
+    "Witch League 17":      _B + "3mEMvpajLceJ3EKu7u_JIh_cOEsT7wyh701zum9hqCY.png",
+    "Witch League 18":      _B + "GeLamlTvRYNnZp5lEW64pyaORN30rCdrxTjU7oJoTN8.png",
+    "Golem League 19":      _B + "yS8XBv_a_SNtCpcofsWMFaojRNwO504Py7HyDCBCjYU.png",
+    "Golem League 20":      _B + "uizNRh8glQZuAbLdCa-EQSf3oJnge3nqoXHjtQ6O8pw.png",
+    "Golem League 21":      _B + "WkqDvnK0CXI-Nc0TNTKG_fSuzRYoLRC54HFOdMCxVTI.png",
+    "P.E.K.K.A League 22":  _B + "iTWXPUUFQy0uEb7NDpMTyzGMFOJvlC4SLAqlHYgC8do.png",
+    "P.E.K.K.A League 23":  _B + "0eDMQmsiZ0gs8xzViGfVETnYjwzgELTKwYhH3izevT4.png",
+    "P.E.K.K.A League 24":  _B + "vxV7LI0votsz0_n-8lW-Lag96D5HwKsEgEk_7247zC4.png",
+    "Titan League 25":      _B + "JLqVXdNkAGjD_yqMRDgu9KK-hDrulNPjsKU4EugHqX8.png",
+    "Titan League 26":      _B + "yIfqSgrhiYRcuMbAPCoeCj1FTmfylCLxnrAljEZc8K0.png",
+    "Titan League 27":      _B + "1AhObOl55grQIWnGmn1J9qMWq5pmRA3aBObfYkQEjko.png",
+    "Dragon League 28":     _B + "YCZ7O_3_c8eCBYvX-92qiWeLc6Md6eNJ5A8O-2vUg7I.png",
+    "Dragon League 29":     _B + "DIMeRH3N4lrNObA3zAmk_eUin8nvNeLR89qYznnA--s.png",
+    "Dragon League 30":     _B + "g7m9aF8YoYj9b0olPsyT4eUIxyYEmkqr53wYxWmzpE4.png",
+    "Electro League 31":    _B + "qVORiRguZ-xMq8L0g7rE1-rZuiA-lKlI8VKuMndRy4w.png",
+    "Electro League 32":    _B + "iX8uNhG6jBcQATWFS8a0gtidGy9O1PRYtXZZMTtUK3U.png",
+    "Electro League 33":    _B + "VFqkaQimExWtSmIf9PC8WEpj4Vd58oLjPWyZqfVb5VE.png",
+    "Legend League III":    _B + "BvEu_UE53UzADvTRiU9AdyOrlvb1RqvBmMau_uX6xm0.png",
+    "Legend League II":     _B + "2fQPjjBJCXzHdYY8Eul4DQUBB232Bhiw5KPv6TOLMgQ.png",
+    "Legend League I":      _B + "s5Y12RDRg7tgznd2RwU9kgLbedC5Not4peiHfOaWfJo.png",
+}
+
+def league_icon_url(league_name: str | None) -> str:
+    """Return the large CDN icon URL for a league name, or empty string if unknown."""
+    return LEAGUE_ICONS.get(league_name or "", "")
 _LEAGUE_NAME_TO_RANK = {name: (lid - 105000000) for lid, name in _LEAGUE_MAP.items()}
 
 
@@ -496,12 +541,12 @@ def _ranked_verdict(score_100, att_count, max_attacks):
 def _district_stats(logs):
     district_hits = {}
     for l in logs:
-        key = (l.districtName, l.defenderTag)
+        key = (l.district_name, l.defender_tag)
         district_hits.setdefault(key, []).append(l)
     cleanup_ids = set()
     solo_wipe_count = 0
     for hits in district_hits.values():
-        district_done = any((l.percentageTotal or 0) == 100 for l in hits)
+        district_done = any((l.percentage_total or 0) == 100 for l in hits)
         player_total  = sum(l.percentage or 0 for l in hits)
         if len(hits) == 1 and district_done and (hits[0].percentage or 0) < CLEANUP_THRESHOLD:
             cleanup_ids.add(hits[0].id)
@@ -523,7 +568,7 @@ def _raid_verdict(logs):
     for l in logs:
         if l.id in cleanup_ids:
             continue
-        level = l.districLevel or 5
+        level = l.district_level or 5
         try: level = int(level)
         except: level = 5
         level_mult = 1.0 + (level - 5) * (0.07 if level >= 5 else 0.05)
