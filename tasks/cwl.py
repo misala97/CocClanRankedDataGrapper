@@ -199,7 +199,7 @@ def task_update_cwl():
         cwl_logger.info(summary)
         db_finalize_uptime(task_update_cwl.__name__, t0, status, error_msg, summary, logger=cwl_logger)
 
-        if extensions.scheduler:
+        if extensions.scheduler and extensions.scheduler.get_job('cwl_update'):
             if state in ('preparation', 'inWar'):
                 extensions.scheduler.reschedule_job('cwl_update', trigger='interval', minutes=10)
             else:
