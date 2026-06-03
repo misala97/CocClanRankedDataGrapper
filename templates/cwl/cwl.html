@@ -92,8 +92,9 @@
         .text-muted { color: var(--muted); }
         .clan-col { display: flex; align-items: center; gap: 10px; }
         .clan-badge-sm { width: 28px; height: 28px; object-fit: contain; }
-        .our-row td { background: rgba(240,165,0,.05); }
-        .our-row:hover td { background: rgba(240,165,0,.08) !important; }
+        .our-row td { background: rgba(240,165,0,.10); }
+        .our-row:hover td { background: rgba(240,165,0,.15) !important; }
+        .you-pill { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; background: rgba(240,165,0,.18); color: var(--accent); border: 1px solid rgba(240,165,0,.4); margin-left: 6px; }
         th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
         th.sortable:hover { color: var(--text); }
         th.sortable.sorted { color: var(--accent); }
@@ -103,7 +104,9 @@
         .rp-win  { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
         .rp-loss { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.25); }
         .rp-draw { background: rgba(139,148,158,.1); color: var(--muted);  border: 1px solid rgba(139,148,158,.2); }
-        .enemy-pill { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; background: rgba(248,81,73,.12); color: var(--red); border: 1px solid rgba(248,81,73,.25); margin-left: 6px; }
+        .enemy-pill    { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; background: rgba(248,81,73,.12); color: var(--red);    border: 1px solid rgba(248,81,73,.25);    margin-left: 6px; }
+        .tomorrow-pill { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; background: rgba(88,166,255,.12); color: var(--blue);   border: 1px solid rgba(88,166,255,.25);   margin-left: 6px; }
+        .col-sep { border-left: 1px solid var(--border) !important; }
 
         /* ── ROUND COLLAPSE ── */
         .round-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
@@ -198,9 +201,12 @@
         .lg-table .lgt-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .lg-table .lgt-lg { font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; }
         .lg-table .lgt-diff { text-align: center; font-family: 'Rajdhani', sans-serif; font-weight: 700; width: 48px; }
-        .lg-adv { color: var(--green); background: rgba(63,185,80,.05); }
-        .lg-dis { color: var(--red);   background: rgba(248,81,73,.05); }
+        .lg-adv  { color: var(--green); background: rgba(63,185,80,.05); }
+        .lg-dis  { color: var(--red);   background: rgba(248,81,73,.05); }
         .lg-even { color: var(--muted); }
+        .mt-adv  { color: var(--green); font-weight: 700; }
+        .mt-dis  { color: var(--red);   font-weight: 700; }
+        .mt-even { color: var(--muted); }
         .no-data-lg { color: var(--muted); font-style: italic; }
         .matchup-summary { display: flex; gap: 32px; justify-content: center; margin-bottom: 16px; }
         .matchup-stat { text-align: center; }
@@ -351,6 +357,21 @@
         .no-war { text-align: center; padding: 80px 32px; color: var(--muted); }
         .no-war h2 { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); margin-top: 12px; }
 
+        /* ── ZONE INDICATORS ── */
+        .zone-promote > td:first-child { border-left: 3px solid rgba(63,185,80,.65); }
+        .zone-relegate > td:first-child { border-left: 3px solid rgba(248,81,73,.65); }
+
+        /* ── STICKY MY-CLAN BAR ── */
+        #sticky-my-clan {
+            position: fixed; top: 108px; left: 50%; transform: translateX(-50%);
+            z-index: 97; background: var(--surface);
+            border: 1px solid rgba(240,165,0,.4); border-radius: 8px;
+            padding: 7px 18px; align-items: center; gap: 12px;
+            font-family: 'DM Sans', sans-serif; font-size: 13px;
+            box-shadow: 0 4px 20px rgba(0,0,0,.5); white-space: nowrap;
+            pointer-events: none;
+        }
+
         @media (max-width: 900px) {
             .war-header { grid-template-columns: 1fr; gap: 20px; }
             .clan-panel.right { border-left: none; padding-left: 0; border-top: 1px solid var(--bord2); padding-top: 20px; align-items: flex-start; }
@@ -405,71 +426,80 @@
 
 {% else %}
 
-{# ── STANDINGS + ROSTERS ── #}
+{# ── ROSTER ── #}
 <div class="section-card">
-    <div class="section-header">
-        <h3>Standings · {{ season.season }}{% if season.league_name %} · {{ season.league_name }}{% endif %}</h3>
-        <span style="font-size:11px;color:var(--muted);">click header to sort · click clan row to expand roster</span>
+    <div class="section-header" onclick="toggleRosterSection()" style="cursor:pointer;user-select:none;">
+        <h3>Clan Rosters</h3>
+        <span id="roster-sec-chev" style="color:var(--muted);font-size:11px;">▶</span>
     </div>
-    <table id="standings-table">
+    <div id="roster-sec-body" style="display:none;">
+    <table id="roster-table">
         <thead>
             <tr>
                 <th style="width:36px;text-align:center;">#</th>
-                <th class="sortable" data-col="name" data-type="str" onclick="sortStandings(this)">Clan <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="wins"    data-type="num" onclick="sortStandings(this)" style="text-align:center;">W <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="losses"  data-type="num" onclick="sortStandings(this)" style="text-align:center;">L <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="draws"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">D <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="stars"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">Stars <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="dest"    data-type="num" onclick="sortStandings(this)" style="text-align:center;">Avg Dest % <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="players" data-type="num" onclick="sortStandings(this)" style="text-align:center;">Players <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="avgth"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">Avg TH <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="avglr"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">Avg League <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="name"     data-type="str" onclick="sortRosterTable(this)">Clan <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="players"  data-type="num" onclick="sortRosterTable(this)" style="text-align:center;">Players <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="avgth"    data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--red);">Avg TH <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="avglr"    data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--red);">Avg League <span class="sort-icon">⇅</span></th>
+                <th class="sortable col-sep" data-col="top15th"  data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--blue);">Top 15 TH <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="top15lr"  data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--blue);">Top 15 League <span class="sort-icon">⇅</span></th>
+                <th class="sortable col-sep" data-col="activeth" data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--green);">Active TH <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="activelr" data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--green);">Active League <span class="sort-icon">⇅</span></th>
                 <th style="width:28px;"></th>
             </tr>
         </thead>
-        <tbody id="standings-tbody">
+        <tbody id="roster-sec-tbody">
+        {% set our_top15_th = clan_rosters.get(our_tag, {}).top15_avg_th or 0 %}
         {% for s in standings %}
-        {% set is_ours = s.tag == our_tag %}
-        {% set is_enemy = s.tag == current_enemy_tag %}
         {% set r = clan_rosters.get(s.tag, {}) %}
         {% set tagc = s.tag|replace('#','') %}
-        <tr class="standing-row {% if is_ours %}our-row{% endif %}"
+        {% set wi  = clan_war_info.get(s.tag, {}) %}
+        {% set owr = clan_rosters.get(our_tag, {}) %}
+        {% set owi = clan_war_info.get(our_tag, {}) %}
+        {% set is_enemy    = s.tag == current_enemy_tag %}
+        {% set is_tomorrow = s.tag == tomorrow_enemy_tag %}
+        {% set is_ours     = s.tag == our_tag %}
+        <tr class="roster-sec-row {% if s.tag == our_tag %}our-row{% endif %}"
             onclick="toggleClanRoster('{{ tagc }}')" style="cursor:pointer;"
             data-name="{{ s.name }}"
-            data-wins="{{ s.wins }}"
-            data-losses="{{ s.losses }}"
-            data-draws="{{ s.draws }}"
-            data-stars="{{ s.stars }}"
-            data-dest="{{ (s.destruction / s.wars * 10000)|round|int if s.wars else 0 }}"
             data-players="{{ r.count or 0 }}"
             data-avgth="{{ ((r.avg_th or 0) * 10)|round|int }}"
-            data-avglr="{{ r.avg_lr or 0 }}">
-            <td class="mono text-muted standing-rank" style="text-align:center;">{{ loop.index }}</td>
+            data-avglr="{{ r.avg_lr or 0 }}"
+            data-top15th="{{ ((r.top15_avg_th or 0) * 10)|round|int }}"
+            data-top15lr="{{ r.top15_league_lr or 0 }}"
+            data-activeth="{{ ((r.active_avg_th or 0) * 10)|round|int }}"
+            data-activelr="{{ r.active_league_lr or 0 }}">
+            <td class="mono text-muted roster-sec-rank" style="text-align:center;">{{ loop.index }}</td>
             <td>
                 <div class="clan-col">
                     {% if s.badge_url %}<img src="{{ s.badge_url }}" class="clan-badge-sm" alt="">{% endif %}
                     <span style="font-weight:600;">{{ s.name }}</span>
                     {% if is_enemy %}<span class="enemy-pill">⚔ NOW</span>{% endif %}
+                    {% if is_tomorrow %}<span class="tomorrow-pill">⏰ NEXT</span>{% endif %}
                 </div>
             </td>
-            <td class="mono" style="color:var(--green);text-align:center;">{{ s.wins }}</td>
-            <td class="mono" style="color:var(--red);text-align:center;">{{ s.losses }}</td>
-            <td class="mono text-muted" style="text-align:center;">{{ s.draws }}</td>
-            <td class="mono" style="color:var(--accent);text-align:center;">{{ s.stars }}</td>
-            <td class="mono" style="color:var(--blue);text-align:center;">{{ '%.1f'|format(s.destruction / s.wars if s.wars else 0) }}%</td>
             <td class="mono text-muted" style="text-align:center;">{{ r.count or '—' }}</td>
-            <td class="mono" style="text-align:center;">{% if r.avg_th %}{{ '%.1f'|format(r.avg_th) }}{% else %}—{% endif %}</td>
-            <td style="text-align:center;font-size:12px;color:var(--blue);">{{ r.avg_league or '—' }}</td>
+            <td class="mono" style="text-align:center;color:var(--red);">{% if r.avg_th %}{{ '%.1f'|format(r.avg_th) }}{% else %}—{% endif %}</td>
+            <td style="text-align:center;font-size:12px;color:var(--red);">{{ r.avg_league or '—' }}</td>
+            <td class="mono col-sep" style="text-align:center;color:var(--blue);">
+                {%- if r.top15_avg_th -%}
+                    {{ '%.1f'|format(r.top15_avg_th) }}
+                    {%- if not is_ours and our_top15_th -%}
+                        {%- set delta = r.top15_avg_th - our_top15_th -%}
+                        <div style="font-size:10px;font-weight:600;margin-top:2px;color:var(--{% if delta > 0.05 %}green{% elif delta < -0.05 %}red{% else %}muted{% endif %});">
+                            {%- if delta > 0.05 %}▲ +{{ '%.1f'|format(delta) }}{% elif delta < -0.05 %}▼ {{ '%.1f'|format(delta) }}{% else %}={% endif -%}
+                        </div>
+                    {%- endif -%}
+                {%- else -%}—{%- endif -%}
+            </td>
+            <td style="text-align:center;font-size:12px;color:var(--blue);">{{ r.top15_league or '—' }}</td>
+            <td class="mono col-sep" style="text-align:center;color:var(--green);">{% if r.active_avg_th %}{{ '%.1f'|format(r.active_avg_th) }}{% else %}—{% endif %}</td>
+            <td style="text-align:center;font-size:12px;color:var(--green);">{{ r.active_league or '—' }}</td>
             <td style="text-align:center;color:var(--muted);font-size:11px;" id="chevron-clan-{{ tagc }}">▶</td>
         </tr>
         <tr class="roster-row" id="clan-roster-{{ tagc }}" style="display:none;">
-            <td colspan="11" style="padding:0;background:var(--surf2);">
-                {# ── Comparison header: our clan (left) vs expanded clan (right) ── #}
-                {% set wi  = clan_war_info.get(s.tag, {}) %}
-                {% set owr = clan_rosters.get(our_tag, {}) %}
-                {% set owi = clan_war_info.get(our_tag, {}) %}
+            <td colspan="10" style="padding:0;background:var(--surf2);">
                 <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--bord2);">
-                    {# Left: our clan #}
                     <div class="clan-panel" style="padding:20px 28px;border-right:1px solid var(--bord2);">
                         <div class="clan-ident">
                             {% if our_clan and our_clan.badge_url %}<img src="{{ our_clan.badge_url }}" class="clan-badge-img" alt="">{% endif %}
@@ -486,7 +516,6 @@
                             <div class="stat-entry"><span class="sk">Streak</span>{% if owi.win_streak %}<span class="sv green">🔥 {{ owi.win_streak }}</span>{% else %}<span class="sv muted">🧊 0</span>{% endif %}</div>
                         </div>
                     </div>
-                    {# Right: expanded clan (mirrored) #}
                     <div class="clan-panel right" style="padding:20px 28px;">
                         <div class="clan-ident">
                             <div class="clan-name-text">{{ s.name }}</div>
@@ -526,16 +555,172 @@
                     </tbody>
                 </table>
                 {% else %}
-                <p style="padding:14px 20px;color:var(--muted);font-size:13px;">No roster data yet — syncs on first CWL day.</p>
+                <p style="padding:14px 20px;color:var(--muted);font-size:13px;">No roster data yet.</p>
                 {% endif %}
             </td>
         </tr>
-        {% else %}
-        <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--muted);">No completed wars yet.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+{# ── STANDINGS ── #}
+<div class="section-card">
+    <div class="section-header">
+        <h3>Standings · {{ season.season }}{% if season.league_name %} · {{ season.league_name }}{% endif %}</h3>
+        <span style="font-size:11px;color:var(--muted);">click row to see battle days · click header to sort</span>
+    </div>
+    <table id="standings-table">
+        <thead>
+            <tr>
+                <th style="width:36px;text-align:center;">#</th>
+                <th class="sortable" data-col="name"   data-type="str" onclick="sortStandings(this)">Clan <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="wins"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">W <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="losses" data-type="num" onclick="sortStandings(this)" style="text-align:center;">L <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="draws"  data-type="num" onclick="sortStandings(this)" style="text-align:center;">D <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="stars"  data-type="num" onclick="sortStandings(this)" style="text-align:center;">Stars <span class="sort-icon">⇅</span></th>
+                <th style="text-align:center;white-space:nowrap;width:80px;">Trend</th>
+                <th class="sortable" data-col="eff"    data-type="num" onclick="sortStandings(this)" style="text-align:center;">Eff <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="dest"   data-type="num" onclick="sortStandings(this)" style="text-align:center;">Avg Dest % <span class="sort-icon">⇅</span></th>
+                <th style="text-align:center;white-space:nowrap;">Day Attacks</th>
+                <th style="width:28px;"></th>
+            </tr>
+        </thead>
+        <tbody id="standings-tbody">
+        {% for s in standings %}
+        {% set is_ours     = s.tag == our_tag %}
+        {% set is_enemy    = s.tag == current_enemy_tag %}
+        {% set is_tomorrow = s.tag == tomorrow_enemy_tag %}
+        {% set tagc = s.tag|replace('#','') %}
+        {% set da = current_day_attacks.get(s.tag, {}) %}
+        <tr class="standing-row {% if is_ours %}our-row{% endif %} {% if loop.first %}zone-promote{% elif loop.last %}zone-relegate{% endif %}"
+            onclick="toggleStanding('{{ tagc }}')" style="cursor:pointer;"
+            data-name="{{ s.name }}"
+            data-wins="{{ s.wins }}"
+            data-losses="{{ s.losses }}"
+            data-draws="{{ s.draws }}"
+            data-stars="{{ s.stars }}"
+            data-dest="{{ (s.destruction / s.wars * 10000)|round|int if s.wars else 0 }}"
+            data-eff="{{ ((s.stars * 100 / s.attacks)|round|int) if s.attacks else 0 }}">
+            <td class="mono text-muted standing-rank" style="text-align:center;">{{ loop.index }}</td>
+            <td>
+                <div class="clan-col">
+                    {% if s.badge_url %}<img src="{{ s.badge_url }}" class="clan-badge-sm" alt="">{% endif %}
+                    <span style="font-weight:600;">{{ s.name }}</span>
+                    {% if is_enemy %}<span class="enemy-pill">⚔ NOW</span>{% endif %}
+                    {% if is_tomorrow %}<span class="tomorrow-pill">⏰ NEXT</span>{% endif %}
+                </div>
+            </td>
+            <td class="mono" style="color:var(--green);text-align:center;">{{ s.wins }}</td>
+            <td class="mono" style="color:var(--red);text-align:center;">{{ s.losses }}</td>
+            <td class="mono text-muted" style="text-align:center;">{{ s.draws }}</td>
+            <td class="mono" style="color:var(--accent);text-align:center;">{{ s.stars }}</td>
+            <td style="text-align:center;padding:6px 8px;">
+                {% if s.rounds %}
+                <svg viewBox="0 0 {{ [s.rounds|length * 9 - 2, 7]|max }} 20" width="{{ [s.rounds|length * 9 - 2, 7]|max }}" height="20" style="display:block;margin:0 auto;">
+                {% for rd in s.rounds %}
+                {% set bar_h = [((rd.our_stars / 45) * 17)|round|int, 2]|max %}
+                <rect x="{{ loop.index0 * 9 }}" y="{{ 20 - bar_h }}" width="7" height="{{ bar_h }}"
+                      fill="{{ '#3fb950' if rd.result == 'win' else ('#f85149' if rd.result == 'loss' else ('#e3b341' if rd.result == 'draw' else '#8b949e')) }}"
+                      rx="1" opacity="{{ '1' if rd.result else '0.4' }}"/>
+                {% endfor %}
+                </svg>
+                {% else %}
+                <span style="color:var(--muted);font-size:11px;">—</span>
+                {% endif %}
+            </td>
+            {% set eff = (s.stars / s.attacks)|round(2) if s.attacks else 0 %}
+            <td class="mono" style="text-align:center;color:var(--{% if eff >= 2.5 %}green{% elif eff >= 2.0 %}accent{% elif eff >= 1.5 %}yellow{% elif s.attacks %}red{% else %}muted{% endif %});">{{ '%.2f'|format(eff) if s.attacks else '—' }}</td>
+            <td class="mono" style="color:var(--blue);text-align:center;">{{ '%.1f'|format(s.destruction / s.wars if s.wars else 0) }}%</td>
+            <td class="mono" style="text-align:center;">
+                {%- if da -%}
+                    <span style="color:var(--{% if da.done == da.total %}green{% elif da.done > 0 %}accent{% else %}muted{% endif %});">{{ da.done }}</span><span style="color:var(--muted);">/{{ da.total }}</span>
+                {%- else -%}<span style="color:var(--muted);">—</span>{%- endif -%}
+            </td>
+            <td style="text-align:center;color:var(--muted);font-size:11px;" id="std-chev-{{ tagc }}">▶</td>
+        </tr>
+        <tr id="std-detail-{{ tagc }}" style="display:none;">
+            <td colspan="11" style="padding:0;border-bottom:1px solid var(--bord2);">
+                {% if s.rounds %}
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:var(--bg);">
+                            <th style="padding:8px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Rajdhani',sans-serif;border-bottom:1px solid var(--bord2);text-align:left;">Day</th>
+                            <th style="padding:8px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Rajdhani',sans-serif;border-bottom:1px solid var(--bord2);text-align:left;">Opponent</th>
+                            <th style="padding:8px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Rajdhani',sans-serif;border-bottom:1px solid var(--bord2);text-align:center;">Stars</th>
+                            <th style="padding:8px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Rajdhani',sans-serif;border-bottom:1px solid var(--bord2);text-align:center;">Dest %</th>
+                            <th style="padding:8px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Rajdhani',sans-serif;border-bottom:1px solid var(--bord2);text-align:center;">Attacks</th>
+                            <th style="padding:8px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Rajdhani',sans-serif;border-bottom:1px solid var(--bord2);text-align:center;">Status</th>
+                            <th style="padding:8px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Rajdhani',sans-serif;border-bottom:1px solid var(--bord2);text-align:center;">Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for rd in s.rounds %}
+                    <tr style="border-bottom:1px solid var(--bord2);">
+                        <td style="padding:10px 16px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;">Day {{ rd.round }}</td>
+                        <td style="padding:10px 16px;">
+                            <div class="clan-col">
+                                {% if rd.opp_badge %}<img src="{{ rd.opp_badge }}" class="clan-badge-sm" alt="">{% endif %}
+                                <span style="font-weight:600;">{{ rd.opp_name }}</span>
+                            </div>
+                        </td>
+                        <td style="padding:10px 16px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;">
+                            <span style="color:var(--green);">{{ rd.our_stars }}</span>
+                            <span style="color:var(--muted);font-size:11px;margin:0 4px;">★</span>
+                            <span style="color:var(--red);">{{ rd.opp_stars }}</span>
+                        </td>
+                        <td style="padding:10px 16px;text-align:center;color:var(--blue);">{{ '%.1f'|format(rd.our_pct) }}%</td>
+                        <td style="padding:10px 16px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">
+                            <span style="color:var(--{% if rd.atk_done == rd.atk_total %}green{% elif rd.atk_done > 0 %}accent{% else %}muted{% endif %});">{{ rd.atk_done }}</span><span style="color:var(--muted);">/{{ rd.atk_total }}</span>
+                        </td>
+                        <td style="padding:10px 16px;text-align:center;">
+                            <span class="state-badge state-{{ rd.state }}">{% if rd.state == 'inWar' %}Live{% elif rd.state == 'warEnded' %}Ended{% else %}Prep{% endif %}</span>
+                        </td>
+                        <td style="padding:10px 16px;text-align:center;">
+                            {% if rd.result == 'win' %}<span class="result-pill rp-win">Win</span>
+                            {% elif rd.result == 'loss' %}<span class="result-pill rp-loss">Loss</span>
+                            {% elif rd.result == 'draw' %}<span class="result-pill rp-draw">Draw</span>
+                            {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="padding:14px 20px;color:var(--muted);font-size:13px;">No battle data yet.</p>
+                {% endif %}
+            </td>
+        </tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
+
+{# ── STICKY MY-CLAN BAR ── #}
+{% for s in standings %}{% if s.tag == our_tag %}
+{% set eff = (s.stars / s.attacks)|round(2) if s.attacks else 0 %}
+<div id="sticky-my-clan" style="display:none;">
+    {% if s.badge_url %}<img src="{{ s.badge_url }}" style="width:20px;height:20px;object-fit:contain;flex-shrink:0;" alt="">{% endif %}
+    <span style="font-weight:600;">{{ s.name }}</span>
+    <div style="width:1px;height:14px;background:var(--border);"></div>
+    <span id="smc-rank" style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Rank {{ loop.index }}</span>
+    <div style="width:1px;height:14px;background:var(--border);"></div>
+    <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;">
+        <span style="color:var(--green);">{{ s.wins }}W</span>
+        <span style="color:var(--muted);margin:0 3px;">·</span>
+        <span style="color:var(--red);">{{ s.losses }}L</span>
+        <span style="color:var(--muted);margin:0 3px;">·</span>
+        <span style="color:var(--muted);">{{ s.draws }}D</span>
+    </span>
+    <div style="width:1px;height:14px;background:var(--border);"></div>
+    <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--accent);">★ {{ s.stars }}</span>
+    {% if s.attacks %}
+    <div style="width:1px;height:14px;background:var(--border);"></div>
+    <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:var(--{% if eff >= 2.5 %}green{% elif eff >= 2.0 %}accent{% elif eff >= 1.5 %}yellow{% else %}red{% endif %});">{{ '%.2f'|format(eff) }}★/atk</span>
+    {% endif %}
+</div>
+{% endif %}{% endfor %}
 
 {# ── ROUNDS ── #}
 {% for round_num, d in sorted_rounds %}
@@ -646,6 +831,7 @@
             <div class="cmp-sec" id="cmp-prediction-{{ n }}"></div>
             <div class="cmp-sec" id="cmp-stats-{{ n }}"></div>
             <div class="cmp-sec" id="cmp-th-{{ n }}"></div>
+            <div class="cmp-sec" id="cmp-league-{{ n }}"></div>
             <div class="cmp-sec" id="cmp-matchup-{{ n }}"></div>
         </div>
         {% endif %}
@@ -698,6 +884,8 @@
                     <span class="rh-left">{{ d.our_clan_name }}</span>
                     <div class="rh-right">
                         <span class="rh-meta">{{ d.members_our|length }} members</span>
+                        {% if d.our_avg_th %}<span class="rh-meta">· Ø TH {{ d.our_avg_th }}</span>{% endif %}
+                        {% if d.our_avg_league %}<span class="league-pill lp-gold" style="font-size:10px;">{{ d.our_avg_league }}</span>{% endif %}
                         <button class="toggle-all-btn" onclick="toggleAllSide(this,event,{{ n }})">Select All</button>
                     </div>
                 </div>
@@ -760,6 +948,8 @@
                     <span class="rh-left">{{ d.opp_clan_name }}</span>
                     <div class="rh-right">
                         <span class="rh-meta">{{ d.members_opp|length }} members</span>
+                        {% if d.opp_avg_th %}<span class="rh-meta">· Ø TH {{ d.opp_avg_th }}</span>{% endif %}
+                        {% if d.opp_avg_league %}<span class="league-pill lp-gold" style="font-size:10px;">{{ d.opp_avg_league }}</span>{% endif %}
                     </div>
                 </div>
                 <div class="roster-col-hdr">
@@ -833,13 +1023,17 @@
 const CWL = {
 {% for round_num, d in sorted_rounds %}
     {{ round_num }}: {
-        verdicts: {{ d.war_verdicts | tojson | safe }},
-        attacks:  {{ d.all_attacks_json | tojson | safe }},
-        our:      {{ d.members_our_json | tojson | safe }},
-        opp:      {{ d.members_opp_json | tojson | safe }},
-        ourName:  {{ d.our_clan_name | tojson | safe }},
-        oppName:  {{ d.opp_clan_name | tojson | safe }},
-        wvSort:   { col: 'score', dir: 'desc' },
+        verdicts:    {{ d.war_verdicts | tojson | safe }},
+        attacks:     {{ d.all_attacks_json | tojson | safe }},
+        our:         {{ d.members_our_json | tojson | safe }},
+        opp:         {{ d.members_opp_json | tojson | safe }},
+        ourName:     {{ d.our_clan_name | tojson | safe }},
+        oppName:     {{ d.opp_clan_name | tojson | safe }},
+        warsWonOur:  {{ d.our_wars_won | default(0) | tojson }},
+        warsWonOpp:  {{ d.opp_wars_won | default(0) | tojson }},
+        streakOur:   {{ d.our_win_streak | default(0) | tojson }},
+        streakOpp:   {{ d.opp_win_streak | default(0) | tojson }},
+        wvSort:      { col: 'score', dir: 'desc' },
     },
 {% endfor %}
 };
@@ -884,7 +1078,7 @@ function sortStandings(th) {
     const tbody = document.getElementById('standings-tbody');
     const allRows = Array.from(tbody.querySelectorAll('tr'));
 
-    // Group into [standing-row, roster-row] pairs
+    // Group into [standing-row, detail-row] pairs
     const pairs = [];
     for (let i = 0; i < allRows.length; i++) {
         if (allRows[i].classList.contains('standing-row')) {
@@ -954,6 +1148,57 @@ function sortRoster(tagClean, th) {
         el.classList.toggle('sorted', el.dataset.col === col);
         el.querySelector('.sort-icon').textContent =
             el.dataset.col === col ? (state.asc ? '▲' : '▼') : '⇅';
+    });
+}
+
+// ── Standings row → battle days expand ───────────────────────────────────────
+function toggleStanding(tagClean) {
+    const row     = document.getElementById('std-detail-' + tagClean);
+    const chevron = document.getElementById('std-chev-' + tagClean);
+    const open    = row.style.display === 'none';
+    row.style.display = open ? 'table-row' : 'none';
+    chevron.textContent = open ? '▼' : '▶';
+}
+
+// ── Roster section collapse ───────────────────────────────────────────────────
+function toggleRosterSection() {
+    const body    = document.getElementById('roster-sec-body');
+    const chevron = document.getElementById('roster-sec-chev');
+    const open    = body.style.display === 'none';
+    body.style.display = open ? '' : 'none';
+    chevron.textContent = open ? '▼' : '▶';
+}
+
+// ── Roster table sort ─────────────────────────────────────────────────────────
+const _rosterTableSort = { col: null, asc: true };
+function sortRosterTable(th) {
+    const col  = th.dataset.col;
+    const type = th.dataset.type;
+    if (_rosterTableSort.col === col) { _rosterTableSort.asc = !_rosterTableSort.asc; }
+    else { _rosterTableSort.col = col; _rosterTableSort.asc = (type === 'str'); }
+    const tbody = document.getElementById('roster-sec-tbody');
+    const allRows = Array.from(tbody.querySelectorAll('tr'));
+    const pairs = [];
+    for (let i = 0; i < allRows.length; i++) {
+        if (allRows[i].classList.contains('roster-sec-row')) {
+            pairs.push([allRows[i], allRows[i + 1] || null]);
+        }
+    }
+    pairs.sort((a, b) => {
+        const av = a[0].dataset[col] ?? '';
+        const bv = b[0].dataset[col] ?? '';
+        const cmp = type === 'num' ? (parseFloat(av) - parseFloat(bv)) : av.localeCompare(bv, undefined, { sensitivity: 'base' });
+        return _rosterTableSort.asc ? cmp : -cmp;
+    });
+    pairs.forEach(([sr, rr], i) => {
+        tbody.appendChild(sr);
+        if (rr) tbody.appendChild(rr);
+        const rank = sr.querySelector('.roster-sec-rank');
+        if (rank) rank.textContent = i + 1;
+    });
+    document.querySelectorAll('#roster-table th.sortable').forEach(el => {
+        el.classList.toggle('sorted', el.dataset.col === col);
+        el.querySelector('.sort-icon').textContent = el.dataset.col === col ? (_rosterTableSort.asc ? '▲' : '▼') : '⇅';
     });
 }
 
@@ -1166,13 +1411,16 @@ function buildCompare(n) {
         return `<div class="stat-cmp-row"><div class="scr-our ${ow?'scr-win':pw?'scr-lose':''}">${ov}</div><div class="scr-label">${label}</div><div class="scr-opp ${pw?'scr-win':ow?'scr-lose':''}">${pv}</div></div>`;
     }
     document.getElementById(`cmp-stats-${n}`).innerHTML = `
-        <div class="cmp-title">📋 Key Stats</div>
+        <div class="cmp-title">📋 Key Statistics</div>
         <div style="display:grid;grid-template-columns:1fr 140px 1fr;margin-bottom:8px;">
             <span style="font-size:11px;font-weight:600;color:var(--green)">${r.ourName}</span><span></span>
             <span style="font-size:11px;font-weight:600;color:var(--red)">${r.oppName}</span>
         </div>
         ${sr('AVG TH',avgThOur.toFixed(1),avgThOpp.toFixed(1))}
-        ${sr('POSITIONS AHEAD',thBetter,thWorse)}`;
+        ${avgLrOur>0||avgLrOpp>0?sr('AVG LEAGUE RANK',avgLrOur>0?avgLrOur.toFixed(1):'—',avgLrOpp>0?avgLrOpp.toFixed(1):'—'):''}
+        ${sr('WARS WON',r.warsWonOur??'—',r.warsWonOpp??'—')}
+        ${sr('WIN STREAK',r.streakOur??'—',r.streakOpp??'—')}
+        ${sr('TH POSITIONS AHEAD',thBetter,thWorse)}`;
 
     const thOur={},thOpp={};
     OUR.forEach(m=>{thOur[m.th]=(thOur[m.th]||0)+1;});
@@ -1184,6 +1432,27 @@ function buildCompare(n) {
         <div class="dist-header"><span class="dist-our-lbl">${r.ourName}</span><span></span><span class="dist-opp-lbl">${r.oppName}</span></div>
         ${allThs.map(th=>{const o=thOur[th]||0,p=thOpp[th]||0;const ow=Math.round(o/maxC*130),pw=Math.round(p/maxC*130);
         return `<div class="dist-row"><span class="dist-count-our">${o||''}</span><div style="display:flex;justify-content:flex-end"><div class="dist-bar-our" style="width:${ow}px"></div></div><span class="dist-lbl">TH${th}</span><div><div class="dist-bar-opp" style="width:${pw}px"></div></div><span class="dist-count-opp">${p||''}</span></div>`;}).join('')}`;
+
+    let lgBetter=0,lgEven=0,lgWorse=0;
+    const lgRows=Array.from({length:len},(_,i)=>{
+        const o=OUR[i],p=OPP[i];
+        const hasO=o.lr>0,hasP=p.lr>0;
+        const diff=hasO&&hasP?o.lr-p.lr:null;
+        let rowCls='',diffLabel='—';
+        if(diff!==null){if(diff>0){rowCls='lg-adv';diffLabel=`+${diff}`;lgBetter++;}else if(diff<0){rowCls='lg-dis';diffLabel=`${diff}`;lgWorse++;}else{rowCls='lg-even';diffLabel='=';lgEven++;}}
+        else{rowCls='lg-even';if(!hasO&&!hasP)lgEven++;}
+        const oLg=hasO?o.league:'<span class="no-data-lg">—</span>';
+        const pLg=hasP?p.league:'<span class="no-data-lg">—</span>';
+        return `<tr class="${rowCls}"><td class="lgt-pos">#${o.pos}</td><td class="lgt-name">${escapeHTML(o.name)}</td><td class="lgt-lg">${oLg}</td><td class="lgt-diff">${diffLabel}</td><td class="lgt-lg" style="text-align:right">${pLg}</td><td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td></tr>`;
+    }).join('');
+    document.getElementById(`cmp-league-${n}`).innerHTML=`
+        <div class="cmp-title">🎯 League Comparison</div>
+        <div class="lg-summary">
+            <div class="lg-sum-item"><div class="lg-sum-dot" style="background:var(--green)"></div><span style="color:var(--green);font-weight:600">${lgBetter}</span><span style="color:var(--muted)"> ahead</span></div>
+            <div class="lg-sum-item"><div class="lg-sum-dot" style="background:var(--muted)"></div><span style="color:var(--muted);font-weight:600">${lgEven}</span><span style="color:var(--muted)"> even</span></div>
+            <div class="lg-sum-item"><div class="lg-sum-dot" style="background:var(--red)"></div><span style="color:var(--red);font-weight:600">${lgWorse}</span><span style="color:var(--muted)"> behind</span></div>
+        </div>
+        <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${r.ourName}</th><th style="text-align:left">League</th><th>Diff</th><th style="text-align:right">League</th><th style="text-align:right">${r.oppName}</th></tr></thead><tbody>${lgRows}</tbody></table>`;
 
     const matchupRows=Array.from({length:len},(_,i)=>{
         const o=OUR[i],p=OPP[i],d=o.th-p.th;
@@ -1337,8 +1606,29 @@ function initRoster(n) {
     };
 }
 
+// ── Sticky my-clan bar ────────────────────────────────────────────────────────
+function initStickyMyClan() {
+    const sticky = document.getElementById('sticky-my-clan');
+    if (!sticky) return;
+    const ourRow = document.querySelector('#standings-tbody .our-row');
+    if (!ourRow) return;
+    const card = ourRow.closest('.section-card');
+    const rankEl = document.getElementById('smc-rank');
+    window.addEventListener('scroll', () => {
+        const rr = ourRow.getBoundingClientRect();
+        const cr = card.getBoundingClientRect();
+        const show = rr.bottom < 108 && cr.bottom > 160;
+        sticky.style.display = show ? 'flex' : 'none';
+        if (show && rankEl) {
+            const rc = ourRow.querySelector('.standing-rank');
+            if (rc) rankEl.textContent = 'Rank ' + rc.textContent.trim();
+        }
+    }, { passive: true });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+    initStickyMyClan();
     {% for round_num, d in sorted_rounds %}
     initRoster({{ round_num }});
     {% if d.war.state == 'inWar' %}

@@ -158,9 +158,12 @@
             padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700;
             font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase;
         }
-        .lcs-war  { background: rgba(240,165,0,.12); color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
-        .lcs-prep { background: rgba(227,179,65,.12); color: var(--yellow); border: 1px solid rgba(227,179,65,.3); }
-        .lcs-raid { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
+        .lcs-war     { background: rgba(240,165,0,.12); color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
+        .lcs-prep    { background: rgba(227,179,65,.12); color: var(--yellow); border: 1px solid rgba(227,179,65,.3); }
+        .lcs-raid    { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
+        .lcs-winning { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
+        .lcs-losing  { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.3); }
+        .lcs-tied    { background: rgba(139,148,158,.1); color: var(--muted);  border: 1px solid rgba(139,148,158,.2); }
 
         /* scoreboard (war) */
         .lc-score {
@@ -453,22 +456,31 @@
 
                     {% if active_cwl_war and active_cwl_war.state == 'inWar' %}
                     {% set our_side = active_cwl_war.clan_tag == CLAN_TAG %}
-                    {% set our_stars  = active_cwl_war.clan_stars  if our_side else active_cwl_war.opp_stars %}
-                    {% set our_atk    = active_cwl_war.clan_attacks if our_side else active_cwl_war.opp_attacks %}
-                    {% set opp_stars  = active_cwl_war.opp_stars   if our_side else active_cwl_war.clan_stars %}
-                    {% set opp_atk    = active_cwl_war.opp_attacks  if our_side else active_cwl_war.clan_attacks %}
-                    {% set opp_name   = active_cwl_war.opp_name    if our_side else active_cwl_war.clan_name %}
+                    {% set our_stars  = active_cwl_war.clan_stars   if our_side else active_cwl_war.opp_stars %}
+                    {% set our_atk    = active_cwl_war.clan_attacks  if our_side else active_cwl_war.opp_attacks %}
+                    {% set our_name   = active_cwl_war.clan_name    if our_side else active_cwl_war.opp_name %}
+                    {% set opp_stars  = active_cwl_war.opp_stars    if our_side else active_cwl_war.clan_stars %}
+                    {% set opp_atk    = active_cwl_war.opp_attacks   if our_side else active_cwl_war.clan_attacks %}
+                    {% set opp_name   = active_cwl_war.opp_name     if our_side else active_cwl_war.clan_name %}
+                    {% set our_s = our_stars or 0 %}
+                    {% set opp_s = opp_stars or 0 %}
+                    {% if our_s > opp_s %}{% set status_cls = 'lcs-winning' %}{% set status_lbl = 'Winning' %}
+                    {% elif our_s < opp_s %}{% set status_cls = 'lcs-losing' %}{% set status_lbl = 'Losing' %}
+                    {% else %}{% set status_cls = 'lcs-tied' %}{% set status_lbl = 'Tied' %}{% endif %}
                     <div class="lc-score">
                         <div class="lc-score-side lc-score-our">
-                            <div class="lc-score-num">{{ our_stars or 0 }}</div>
+                            <div class="lc-score-num">{{ our_s }}<span style="font-size:18px;opacity:.7;">★</span></div>
                             <div class="lc-score-atk">{{ our_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
-                            <div class="lc-score-lbl">Us ★</div>
+                            <div class="lc-score-lbl">{{ our_name or clan_name }}</div>
                         </div>
-                        <div class="lc-score-sep">VS</div>
+                        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                            <div class="lc-score-sep">VS</div>
+                            <span class="lc-state {{ status_cls }}">{{ status_lbl }}</span>
+                        </div>
                         <div class="lc-score-side lc-score-them">
-                            <div class="lc-score-num">{{ opp_stars or 0 }}</div>
+                            <div class="lc-score-num">{{ opp_s }}<span style="font-size:18px;opacity:.7;">★</span></div>
                             <div class="lc-score-atk">{{ opp_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
-                            <div class="lc-score-lbl">{{ opp_name or 'Them' }} ★</div>
+                            <div class="lc-score-lbl">{{ opp_name or 'Opponent' }}</div>
                         </div>
                     </div>
                     {% else %}

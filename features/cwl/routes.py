@@ -217,12 +217,19 @@ def cwl_page():
         members = sorted(clan.members, key=lambda m: m.town_hall_level or 0, reverse=True)
         avg_th  = (sum(m.town_hall_level or 0 for m in members) / len(members)) if members else 0
         al      = avg_league_name(members)
+        top15   = members[:15]
+        top15_th = round(sum(m.town_hall_level or 0 for m in top15) / len(top15), 1) if top15 else 0
+        top15_al = avg_league_name(top15)
         clan_rosters[clan.tag] = {
-            'members':    members,
-            'avg_th':     round(avg_th, 1),
-            'avg_league': al,
-            'avg_lr':     league_rank(al) if al else 0,
-            'count':      len(members),
+            'members':       members,
+            'avg_th':        round(avg_th, 1),
+            'avg_league':    al,
+            'avg_lr':        league_rank(al) if al else 0,
+            'count':         len(members),
+            'top15_avg_th':  top15_th,
+            'top15_league':  top15_al,
+            'top15_league_lr': league_rank(top15_al) if top15_al else 0,
+            'active_members': {},  # filled below after wars are processed
         }
 
     # ── Standings ─────────────────────────────────────────────────────────────
@@ -230,45 +237,102 @@ def cwl_page():
         'name': c.name, 'badge_url': c.badge_url, 'tag': c.tag,
         'wars': 0, 'wins': 0, 'losses': 0, 'draws': 0,
         'stars': 0, 'destruction': 0.0, 'attacks': 0,
+        'rounds': [],
     } for c in clans}
 
     for war in wars:
-        if war.state != 'warEnded':
+        if war.state == 'preparation':
             continue
-        for tag, stars, pct, atk, opp_tag, opp_stars, opp_pct in (
+        ended = war.state == 'warEnded'
+        for tag, stars, pct, atk, opp_tag, opp_stars, opp_pct, opp_name, opp_badge in (
             (war.clan_tag, war.clan_stars or 0, float(war.clan_destruction_pct or 0), war.clan_attacks or 0,
-             war.opp_tag,  war.opp_stars  or 0, float(war.opp_destruction_pct  or 0)),
+             war.opp_tag,  war.opp_stars  or 0, float(war.opp_destruction_pct  or 0), war.opp_name, war.opp_badge),
             (war.opp_tag,  war.opp_stars  or 0, float(war.opp_destruction_pct  or 0), war.opp_attacks or 0,
-             war.clan_tag, war.clan_stars or 0, float(war.clan_destruction_pct or 0)),
+             war.clan_tag, war.clan_stars or 0, float(war.clan_destruction_pct or 0), war.clan_name, war.clan_badge),
         ):
             if tag not in standings:
                 continue
             s = standings[tag]
-            s['wars']        += 1
             s['stars']       += stars
             s['destruction'] += pct
             s['attacks']     += atk
-            if stars > opp_stars or (stars == opp_stars and pct > opp_pct):
-                s['wins'] += 1
-            elif opp_stars > stars or (stars == opp_stars and opp_pct > pct):
-                s['losses'] += 1
-            else:
-                s['draws'] += 1
+            result = None
+            if ended:
+                s['wars'] += 1
+                if stars > opp_stars or (stars == opp_stars and pct > opp_pct):
+                    s['wins'] += 1
+                    result = 'win'
+                elif opp_stars > stars or (stars == opp_stars and opp_pct > pct):
+                    s['losses'] += 1
+                    result = 'loss'
+                else:
+                    s['draws'] += 1
+                    result = 'draw'
+            s['rounds'].append({
+                'round':     war.round_number,
+                'opp_name':  opp_name or '?',
+                'opp_badge': opp_badge,
+                'our_stars': stars,
+                'opp_stars': opp_stars,
+                'our_pct':   round(pct, 1),
+                'opp_pct':   round(opp_pct, 1),
+                'state':     war.state,
+                'result':    result,
+                'atk_done':  atk,
+                'atk_total': war.team_size or 0,
+            })
+
+    for s_data in standings.values():
+        s_data['rounds'].sort(key=lambda r: r['round'])
+
+    # ── Active attacker stats per clan (across all war days) ──────────────────
+    class _MP:
+        def __init__(self, ranked_league): self.ranked_league = ranked_league
+
+    for war in wars:
+        if war.state not in ('inWar', 'warEnded'):
+            continue
+        attacker_tags = {a.attacker_tag for a in war.attacks}
+        for member in war.members:
+            if member.player_tag not in attacker_tags:
+                continue
+            r = clan_rosters.get(member.clan_tag)
+            if r is None:
+                continue
+            if member.player_tag not in r['active_members']:
+                r['active_members'][member.player_tag] = (member.town_hall_level or 0, member.ranked_league)
+
+    for r in clan_rosters.values():
+        active = r['active_members']
+        if active:
+            ths = [th for th, _ in active.values()]
+            r['active_avg_th'] = round(sum(ths) / len(ths), 1)
+            al = avg_league_name([_MP(lg) for _, lg in active.values()])
+            r['active_league']    = al
+            r['active_league_lr'] = league_rank(al) if al else 0
+            r['active_count']     = len(active)
+        else:
+            r['active_avg_th']    = 0
+            r['active_league']    = None
+            r['active_league_lr'] = 0
+            r['active_count']     = 0
 
     sorted_standings = sorted(
         standings.values(),
         key=lambda s: (-s['wins'], -s['stars'], -s['destruction']),
     )
 
-    current_enemy_tag = None
+    current_enemy_tag  = None
+    tomorrow_enemy_tag = None
     for war in wars:
-        if war.state in ('inWar', 'preparation'):
-            if war.clan_tag == our_tag:
-                current_enemy_tag = war.opp_tag
-            elif war.opp_tag == our_tag:
-                current_enemy_tag = war.clan_tag
-            if current_enemy_tag:
-                break
+        involves_us = (war.clan_tag == our_tag or war.opp_tag == our_tag)
+        if not involves_us:
+            continue
+        opp = war.opp_tag if war.clan_tag == our_tag else war.clan_tag
+        if war.state == 'inWar' and not current_enemy_tag:
+            current_enemy_tag = opp
+        elif war.state == 'preparation' and not tomorrow_enemy_tag:
+            tomorrow_enemy_tag = opp
 
     # ── Per-round war details (our clan only) ─────────────────────────────────
     rounds = {}
@@ -293,6 +357,19 @@ def cwl_page():
                     'wars_won': won, 'war_frequency': freq, 'win_streak': streak,
                 }
 
+    # ── Current day attack progress ───────────────────────────────────────────
+    current_day_attacks = {}
+    for war in wars:
+        if war.state != 'inWar':
+            continue
+        size = war.team_size or 0
+        for tag, atk in (
+            (war.clan_tag, war.clan_attacks or 0),
+            (war.opp_tag,  war.opp_attacks  or 0),
+        ):
+            if tag:
+                current_day_attacks[tag] = {'done': atk, 'total': size}
+
     our_clan = next((c for c in clans if c.tag == our_tag), None)
 
     return render_template(
@@ -302,9 +379,11 @@ def cwl_page():
         our_tag=our_tag,
         our_clan=our_clan,
         current_enemy_tag=current_enemy_tag,
+        tomorrow_enemy_tag=tomorrow_enemy_tag,
         clans=clans,
         clan_rosters=clan_rosters,
         clan_war_info=clan_war_info,
+        current_day_attacks=current_day_attacks,
         standings=sorted_standings,
         sorted_rounds=sorted_rounds,
         now=dt.datetime.now(dt.timezone.utc),

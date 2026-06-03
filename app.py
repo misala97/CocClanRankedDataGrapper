@@ -224,6 +224,7 @@ def index():
         active_raid_est_medals=active_raid_est_medals,
         active_cwl_season=active_cwl_season,
         active_cwl_war=active_cwl_war,
+        CLAN_TAG=CLAN_TAG,
     )
 
 

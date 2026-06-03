@@ -182,7 +182,7 @@ def task_update_cwl():
                         json_get(war_data, JSON_CWL_WAR_DATA.OPPONENT) or {},
                     ):
                         for member_data in json_get(side_data, JSON_CWL_WAR_DATA.SIDE_MEMBERS) or []:
-                            for attack_data in json_get(member_data, JSON_CWL_WAR_DATA.MEMBER_ATTACKS) or []:
+                            for attack_data in json_get(member_data, JSON_CWL_WAR_DATA.MEMBER_ATTACKS, raise_on_missing=False) or []:
                                 order = json_get(attack_data, JSON_CWL_WAR_DATA.ATTACK_ORDER)
                                 if order not in existing_orders:
                                     db.session.add(create_db_cwl_attack(war.id, attack_data))
