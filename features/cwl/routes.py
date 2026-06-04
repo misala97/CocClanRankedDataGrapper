@@ -1,11 +1,12 @@
 import datetime as dt
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, jsonify
 from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import CWLSeason, CWLClan, CWLClanMember, CWLWar, CWLMember, CWLAttack
 from features.war.war_combos import classify_attack, get_war_verdict
+from features.auth.routes import _can_edit_clan_war
 from services.helpers import league_rank, avg_league_name
 
 cwl_bp = Blueprint('cwl', __name__)
@@ -238,7 +239,7 @@ def cwl_page():
     standings = {c.tag: {
         'name': c.name, 'badge_url': c.badge_url, 'tag': c.tag,
         'wars': 0, 'wins': 0, 'losses': 0, 'draws': 0,
-        'stars': 0, 'destruction': 0.0, 'attacks': 0,
+        'stars': 0, 'destruction': 0.0, 'attacks': 0, 'attacks_possible': 0,
         'rounds': [],
     } for c in clans}
 
@@ -255,9 +256,10 @@ def cwl_page():
             if tag not in standings:
                 continue
             s = standings[tag]
-            s['stars']       += stars
-            s['destruction'] += pct
-            s['attacks']     += atk
+            s['stars']             += stars
+            s['destruction']       += pct
+            s['attacks']           += atk
+            s['attacks_possible']  += war.team_size or 0
             result = None
             if ended:
                 s['wars'] += 1
@@ -287,43 +289,93 @@ def cwl_page():
     for s_data in standings.values():
         s_data['rounds'].sort(key=lambda r: r['round'])
 
-    # ── Active attacker stats per clan (across all war days) ──────────────────
+    # ── CWL score: stars + 10 per win + 10 live bonus if currently winning ────
+    for war in wars:
+        if war.state != 'inWar':
+            continue
+        for tag, our_stars, opp_stars, our_pct, opp_pct in (
+            (war.clan_tag, war.clan_stars or 0, war.opp_stars or 0,
+             float(war.clan_destruction_pct or 0), float(war.opp_destruction_pct or 0)),
+            (war.opp_tag,  war.opp_stars  or 0, war.clan_stars or 0,
+             float(war.opp_destruction_pct or 0), float(war.clan_destruction_pct or 0)),
+        ):
+            if tag not in standings:
+                continue
+            standings[tag]['live_winning'] = (
+                our_stars > opp_stars or
+                (our_stars == opp_stars and our_pct > opp_pct)
+            )
+
+    for s_data in standings.values():
+        s_data.setdefault('live_winning', False)
+        s_data['score'] = s_data['stars'] + s_data['wins'] * 10 + (10 if s_data['live_winning'] else 0)
+
+    # ── Active member stats per clan (selected for any war day) ─────────────
     class _MP:
         def __init__(self, ranked_league): self.ranked_league = ranked_league
 
     for war in wars:
         if war.state not in ('inWar', 'warEnded'):
             continue
-        attacker_tags = {a.attacker_tag for a in war.attacks}
+        attack_counts = {}
+        for a in war.attacks:
+            attack_counts[a.attacker_tag] = attack_counts.get(a.attacker_tag, 0) + 1
         for member in war.members:
-            if member.player_tag not in attacker_tags:
-                continue
             r = clan_rosters.get(member.clan_tag)
             if r is None:
                 continue
-            if member.player_tag not in r['active_members']:
-                r['active_members'][member.player_tag] = (member.town_hall_level or 0, member.ranked_league)
+            tag = member.player_tag
+            if tag not in r['active_members']:
+                r['active_members'][tag] = {
+                    'th': member.town_hall_level or 0,
+                    'league': member.ranked_league,
+                    'wars_selected': 0,
+                    'attacks_done': 0,
+                }
+            r['active_members'][tag]['wars_selected'] += 1
+            r['active_members'][tag]['attacks_done'] += attack_counts.get(tag, 0)
 
     for r in clan_rosters.values():
         active = r['active_members']
         if active:
-            ths = [th for th, _ in active.values()]
-            r['active_avg_th']      = round(sum(ths) / len(ths), 1)
-            al = avg_league_name([_MP(lg) for _, lg in active.values()])
-            r['active_league']      = al
-            r['active_league_lr']   = league_rank(al) if al else 0
-            r['active_count']       = len(active)
-            r['active_unranked']    = sum(1 for _, lg in active.values() if lg in SKIP_LEAGUES)
+            ths = [v['th'] for v in active.values()]
+            r['active_avg_th']    = round(sum(ths) / len(ths), 1)
+            al = avg_league_name([_MP(v['league']) for v in active.values()])
+            r['active_league']    = al
+            r['active_league_lr'] = league_rank(al) if al else 0
+            r['active_count']     = len(active)
+            r['active_unranked']  = sum(1 for v in active.values() if v['league'] in SKIP_LEAGUES)
         else:
-            r['active_avg_th']      = 0
-            r['active_league']      = None
-            r['active_league_lr']   = 0
-            r['active_count']       = 0
-            r['active_unranked']    = 0
+            r['active_avg_th']    = 0
+            r['active_league']    = None
+            r['active_league_lr'] = 0
+            r['active_count']     = 0
+            r['active_unranked']  = 0
+
+    # ── Sort day-1 roster by current-day map position ────────────────────────
+    # Find the most recent inWar/warEnded war per clan (prefer inWar over warEnded)
+    clan_current_war = {}
+    for war in sorted(wars, key=lambda w: w.round_number or 0):
+        if war.state not in ('inWar', 'warEnded'):
+            continue
+        for tag in (war.clan_tag, war.opp_tag):
+            if tag not in clan_current_war or war.state == 'inWar':
+                clan_current_war[tag] = war
+
+    for clan_tag, war in clan_current_war.items():
+        r = clan_rosters.get(clan_tag)
+        if r is None:
+            continue
+        pos_lookup = {
+            m.player_tag: m.map_position or 999
+            for m in war.members
+            if m.clan_tag == clan_tag
+        }
+        r['members'] = sorted(r['members'], key=lambda m: pos_lookup.get(m.player_tag, 999))
 
     sorted_standings = sorted(
         standings.values(),
-        key=lambda s: (-s['wins'], -s['stars'], -s['destruction']),
+        key=lambda s: (-s['score'], -s['stars'], -s['destruction']),
     )
 
     current_enemy_tag  = None
@@ -393,3 +445,55 @@ def cwl_page():
         now=dt.datetime.now(dt.timezone.utc),
         league_rank=league_rank,
     )
+
+
+# ── Flag toggle API ───────────────────────────────────────────────────────────
+
+@cwl_bp.route('/cwl/api/war/<int:war_id>/castle-empty', methods=['POST'])
+def cwl_toggle_castle_empty(war_id):
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+    war = db.get_or_404(CWLWar, war_id)
+    war.castle_empty = not war.castle_empty
+    db.session.commit()
+    return jsonify(ok=True, value=war.castle_empty)
+
+
+@cwl_bp.route('/cwl/api/member/<int:member_id>/is-rushed', methods=['POST'])
+def cwl_toggle_member_rushed(member_id):
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+    m = db.get_or_404(CWLMember, member_id)
+    m.is_rushed = not m.is_rushed
+    db.session.commit()
+    return jsonify(ok=True, value=m.is_rushed)
+
+
+@cwl_bp.route('/cwl/api/member/<int:member_id>/is-troll', methods=['POST'])
+def cwl_toggle_member_troll(member_id):
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+    m = db.get_or_404(CWLMember, member_id)
+    m.is_troll = not m.is_troll
+    db.session.commit()
+    return jsonify(ok=True, value=m.is_troll)
+
+
+@cwl_bp.route('/cwl/api/clan-member/<int:member_id>/is-rushed', methods=['POST'])
+def cwl_toggle_clan_member_rushed(member_id):
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+    m = db.get_or_404(CWLClanMember, member_id)
+    m.is_rushed = not m.is_rushed
+    db.session.commit()
+    return jsonify(ok=True, value=m.is_rushed)
+
+
+@cwl_bp.route('/cwl/api/clan-member/<int:member_id>/is-troll', methods=['POST'])
+def cwl_toggle_clan_member_troll(member_id):
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+    m = db.get_or_404(CWLClanMember, member_id)
+    m.is_troll = not m.is_troll
+    db.session.commit()
+    return jsonify(ok=True, value=m.is_troll)

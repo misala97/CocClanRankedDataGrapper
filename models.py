@@ -341,6 +341,7 @@ class CWLWar(db.Model):
     opp_stars             = db.Column(db.Integer, default=0)
     opp_attacks           = db.Column(db.Integer, default=0)
     opp_destruction_pct   = db.Column(db.Float, default=0.0)
+    castle_empty          = db.Column(db.Boolean, default=False, nullable=False)
 
     season  = db.relationship('CWLSeason', back_populates='wars')
     members = db.relationship('CWLMember', back_populates='war', lazy=True, cascade='all, delete-orphan')

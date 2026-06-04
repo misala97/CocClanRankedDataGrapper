@@ -69,7 +69,7 @@ def require_super_admin(f):
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if _any_access():
-        return redirect(url_for('admin.admin_hub'))
+        return redirect(url_for('index'))
     error = None
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -80,7 +80,7 @@ def login():
         if env_ok:
             session.clear()
             session['env_admin_logged_in'] = True
-            return redirect(url_for('admin.admin_hub'))
+            return redirect(url_for('index'))
         u = AppUser.query.filter_by(username=username).first()
         if u and check_password_hash(u.password_hash, password):
             if not u.is_approved:
@@ -88,7 +88,7 @@ def login():
             else:
                 session.clear()
                 session['user_id'] = u.id
-                return redirect(url_for('admin.admin_hub'))
+                return redirect(url_for('index'))
         else:
             error = 'Invalid username or password.'
     return render_template('auth/login.html', error=error)
@@ -97,7 +97,7 @@ def login():
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     if _any_access():
-        return redirect(url_for('admin.admin_hub'))
+        return redirect(url_for('index'))
     error = None
     success = None
     if request.method == 'POST':
