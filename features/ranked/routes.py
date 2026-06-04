@@ -186,7 +186,9 @@ def ranked_weeks_page():
         for season_id in reversed(last_10_seasons):
             dw = distinct_week_map.get(season_id)
             rw = player_weeks_by_season.get(player.tag, {}).get(season_id)
-            if rw and dw:
+            if not dw:
+                continue
+            if rw:
                 a_stars = [log.stars or 0 for log in rw.battle_logs if log.attack is True or log.attack == 1]
                 d_stars = [log.stars or 0 for log in rw.battle_logs if not (log.attack is True or log.attack == 1)]
                 att_c = len(a_stars)
@@ -225,6 +227,17 @@ def ranked_weeks_page():
                     'league_icon': rw.league_icon or '',
                     'score_100': score_100_hist,
                     'badge_class': badge_hist,
+                    'is_inactive': False,
+                })
+            else:
+                history.append({
+                    'label': dw.start_day.strftime('%d.%m.%y'),
+                    'att_count': 0, 'att_max': 0, 'att_avg': 0,
+                    'def_count': 0, 'def_avg': 0,
+                    'trophies': 0, 'rank': None,
+                    'league_tier': '', 'league_icon': '',
+                    'score_100': 0, 'badge_class': 'badge-inactive',
+                    'is_inactive': True,
                 })
         if history:
             player_history[player.tag] = history

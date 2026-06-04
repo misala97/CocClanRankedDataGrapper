@@ -693,28 +693,39 @@
             const rowAttPct   = h.att_max > 0 ? Math.round(h.att_count / h.att_max * 100) : 0;
             const rowBarColor = rowAttPct >= 90 ? 'var(--green)' : rowAttPct >= 60 ? 'var(--accent)' : 'var(--red)';
 
+            const isLatest = i === 0;
+            const nowTag   = isLatest ? '<span class="hist-now-tag">NOW</span>' : '';
+
+            if (h.is_inactive) {
+                return `<tr style="opacity:0.38;">
+                    <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
+                    <td colspan="8" style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.6px;text-transform:uppercase;">
+                        <span style="padding:2px 8px;border:1px solid rgba(139,148,158,0.2);border-radius:4px;background:rgba(139,148,158,0.06);">Inactive</span>
+                    </td>
+                </tr>`;
+            }
+
+            // Compare trends against previous active week (skip inactive ones)
             let attTrend = '', defTrend = '', trophyDelta = '', rankDelta = '';
-            const prev = tableHistory[i + 1]; // older week (i+1 in reversed array)
-            if (prev) {
-                const dA = h.att_avg - prev.att_avg;
+            const prevActive = tableHistory.slice(i + 1).find(w => !w.is_inactive);
+            if (prevActive) {
+                const dA = h.att_avg - prevActive.att_avg;
                 if (dA > 0.05)       attTrend = `<span style="color:var(--green);font-size:10px;"> ▲</span>`;
                 else if (dA < -0.05) attTrend = `<span style="color:var(--red);font-size:10px;"> ▼</span>`;
-                const dD = h.def_avg - prev.def_avg;
+                const dD = h.def_avg - prevActive.def_avg;
                 if (dD > 0.05)       defTrend = `<span style="color:var(--red);font-size:10px;"> ▲</span>`;
                 else if (dD < -0.05) defTrend = `<span style="color:var(--green);font-size:10px;"> ▼</span>`;
-                const dt = h.trophies - prev.trophies;
+                const dt = h.trophies - prevActive.trophies;
                 if (dt > 0)      trophyDelta = `<span style="color:var(--green);font-size:10px;"> +${dt}</span>`;
                 else if (dt < 0) trophyDelta = `<span style="color:var(--red);font-size:10px;"> ${dt}</span>`;
-                if (h.rank && prev.rank) {
-                    const dr = h.rank - prev.rank;
+                if (h.rank && prevActive.rank) {
+                    const dr = h.rank - prevActive.rank;
                     if (dr < 0)      rankDelta = `<span style="color:var(--green);font-size:10px;"> ▲${Math.abs(dr)}</span>`;
                     else if (dr > 0) rankDelta = `<span style="color:var(--red);font-size:10px;"> ▼${dr}</span>`;
                 }
             }
 
-            const isLatest = i === 0;
             const rowStyle = isLatest ? 'background:rgba(240,165,0,0.035);' : '';
-            const nowTag   = isLatest ? '<span class="hist-now-tag">NOW</span>' : '';
             const verdictCell = h.badge_class
                 ? `<span class="judgment ${h.badge_class}" style="font-size:10px;padding:2px 8px;">${escapeHTML(verdictLabels[h.badge_class]||'–')}</span>${h.score_100 > 0 ? ` <span style="color:var(--muted);font-size:11px;font-family:'Rajdhani',sans-serif;">${h.score_100}</span>` : ''}`
                 : '–';
