@@ -1,0 +1,19 @@
+<div class="page-header">
+    <div class="page-header-inner">
+        {% if page_header_right %}
+        <div>
+            <h1>{{ page_header_title | safe }}</h1>
+            {% if page_header_desc %}<p class="page-sub">{{ page_header_desc | safe }}</p>{% endif %}
+        </div>
+        <div>{{ page_header_right | safe }}</div>
+        {% else %}
+        <h1>{{ page_header_title | safe }}</h1>
+        {% if page_header_desc %}<p class="page-sub">{{ page_header_desc | safe }}</p>{% endif %}
+        {% endif %}
+    </div>
+    {% if page_controls | default('') | trim %}
+    <div class="page-header-controls">
+        <div class="controls">{{ page_controls | safe }}</div>
+    </div>
+    {% endif %}
+</div>

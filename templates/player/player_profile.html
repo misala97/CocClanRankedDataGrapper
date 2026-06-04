@@ -1,30 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if player %}{{ player.name }}{% else %}Player Not Found{% endif %} – CoC Analytics</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg:      #0d1117;
-            --surface: #161b22;
-            --surf2:   #1c2330;
-            --border:  #30363d;
-            --bord2:   #21262d;
-            --text:    #e6edf3;
-            --muted:   #8b949e;
-            --accent:  #f0a500;
-            --acc2:    #e8863a;
-            --green:   #3fb950;
-            --blue:    #58a6ff;
-            --red:     #f85149;
-            --purple:  #bc8cff;
-            --yellow:  #e3b341;
-            --orange:  #d29922;
-        }
+{% set page_title = (player.name if player else 'Player Not Found') ~ ' – CoC Analytics' %}
+{% include '_head.html' %}
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
@@ -32,39 +9,7 @@
 
         /* ── NAV: see _nav.html ── */
 
-        .page-header {
-            position: relative; overflow: hidden;
-            background: var(--bg);
-            padding: 52px 32px 36px;
-            min-height: 170px;
-            border-bottom: 1px solid rgba(240,165,0,.15);
-        }
-        .page-header::before {
-            content: ''; position: absolute;
-            top: -80px; left: -60px; width: 600px; height: 380px;
-            background: radial-gradient(ellipse at 25% 60%, rgba(240,165,0,.09), transparent 65%);
-            pointer-events: none;
-        }
-        .page-header-inner {
-            max-width: 1400px; margin: 0 auto;
-            display: flex; align-items: flex-start; justify-content: space-between;
-            gap: 20px; flex-wrap: wrap; position: relative; z-index: 1;
-        }
-        .page-header h1 {
-            font-family: 'Rajdhani', sans-serif; font-size: 52px; font-weight: 700;
-            letter-spacing: 3px; line-height: 1; text-transform: uppercase;
-            margin-bottom: 10px; position: relative; padding-left: 20px;
-        }
-        .page-header h1::before {
-            content: ''; position: absolute; left: 0; top: 0.08em; bottom: 0.08em;
-            width: 4px; background: linear-gradient(180deg, #f0a500, #e8863a);
-            border-radius: 2px; box-shadow: 0 0 16px rgba(240,165,0,.55);
-        }
-        .page-header h1 span {
-            background: linear-gradient(135deg, #f0a500 0%, #ffd060 50%, #e8863a 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .page-header p, .page-sub { color: var(--muted); font-size: 14px; padding-left: 20px; margin-top: 6px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .page-header p, .page-sub { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
         .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
 
@@ -91,6 +36,10 @@
         .badge-suck     { background: rgba(248,81,73,0.12);   color: var(--red);    border-color: rgba(248,81,73,0.3); }
         .badge-useless  { background: rgba(139,148,158,0.08); color: var(--muted);  border-color: rgba(139,148,158,0.2); }
         .badge-inactive { background: rgba(139,148,158,0.08); color: var(--muted);  border-color: rgba(139,148,158,0.2); }
+        tr.row-absent { opacity: 0.45; }
+        tr.row-absent td { color: var(--muted) !important; }
+        tr.row-absent .judgment { background: none; border-color: var(--border); color: var(--muted); }
+        tr.row-absent:hover { opacity: 0.65; }
 
         /* ── TYPE BADGES ── */
         .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; text-transform: uppercase; }
@@ -225,36 +174,15 @@
 {% include '_nav.html' %}
 
 {% if not player %}
-<div class="page-header">
-    <div class="page-header-inner">
-        <h1>Player <span>Not Found</span></h1>
-        <p>No player found with tag {{ player_tag }}</p>
-    </div>
-</div>
+{% set page_header_title = 'Player <span>Not Found</span>' %}
+{% set page_header_desc = 'No player found with tag ' ~ player_tag %}
 {% else %}
+{% set page_header_title %}{{ player.name | e }}<span>.</span>{% endset %}
+{% set page_header_desc %}<span style="font-family:'Rajdhani',sans-serif;font-weight:600;">{{ player.tag }}</span> <span style="color:var(--border);">·</span> TH{{ player.current_th or '?' }} <span style="color:var(--border);">·</span> {% if player.league_icon %}<img src="{{ player.league_icon }}" alt="" style="width:18px;height:18px;vertical-align:middle;">{% endif %} {{ player.league_tier or 'Unranked' }} <span style="color:var(--border);">·</span> {% if player.in_clan %}<span class="badge badge-in">In Clan</span>{% else %}<span class="badge badge-out">Left Clan</span>{% endif %}{% endset %}
+{% endif %}
+{% include '_page_header.html' %}
 
-<div class="page-header">
-    <div class="page-header-inner">
-        <h1>{{ player.name | e }}<span>.</span></h1>
-        <p>
-            <span style="font-family:'Rajdhani',sans-serif;font-weight:600;">{{ player.tag }}</span>
-            <span style="color:var(--border);">·</span>
-            TH{{ player.current_th or '?' }}
-            <span style="color:var(--border);">·</span>
-            {% if player.league_icon %}
-                <img src="{{ player.league_icon }}" alt="" style="width:18px;height:18px;vertical-align:middle;">
-            {% endif %}
-            {{ player.league_tier or 'Unranked' }}
-            <span style="color:var(--border);">·</span>
-            {% if player.in_clan %}
-                <span class="badge badge-in">In Clan</span>
-            {% else %}
-                <span class="badge badge-out">Left Clan</span>
-            {% endif %}
-        </p>
-    </div>
-</div>
-
+{% if player %}
 <div class="container">
 
     <script>
@@ -390,7 +318,7 @@
                 </thead>
                 <tbody>
                 {% for rw in ranked_history %}
-                <tr style="cursor:pointer;" onclick="window.location.href='/ranked?week_id={{ rw.league_season_id }}'">
+                <tr class="{% if rw.att_count == 0 %}row-absent{% endif %}" style="cursor:pointer;" onclick="window.location.href='/ranked?week_id={{ rw.league_season_id }}'">
                     <td class="mono text-muted" style="font-size:11px;">{{ rw.start_day }}<br>{{ rw.end_day }}</td>
                     <td style="font-size:12px;">
                         {% if rw.league_icon %}
@@ -434,7 +362,7 @@
                 </thead>
                 <tbody>
                 {% for r in raid_history %}
-                <tr style="cursor:pointer;" onclick="window.location.href='/raid?raid_id={{ r.raid_id }}'">
+                <tr class="{% if not r.participated %}row-absent{% endif %}" style="cursor:pointer;" onclick="window.location.href='/raid?raid_id={{ r.raid_id }}'">
                     <td class="mono text-muted" style="font-size:11px;">{{ r.start }}<br>{{ r.end }}</td>
                     <td class="mono {% if not r.participated %}text-muted{% endif %}">{{ r.att_count or '—' }}</td>
                     <td class="mono text-blue">{% if r.participated %}{{ r.avg_pct }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
@@ -475,7 +403,7 @@
                 </thead>
                 <tbody>
                 {% for w in war_history %}
-                <tr style="cursor:pointer;" onclick="window.location.href='/war?war_id={{ w.war_id }}'">
+                <tr class="{% if w.att_count == 0 %}row-absent{% endif %}" style="cursor:pointer;" onclick="window.location.href='/war?war_id={{ w.war_id }}'">
                     <td class="mono text-muted" style="font-size:11px;">{{ w.start }}<br>{{ w.end }}</td>
                     <td style="font-size:12px;">{{ w.opponent }}</td>
                     <td class="mono {% if w.att_count == w.att_max %}text-green{% elif w.att_count == 0 %}text-red{% endif %}">

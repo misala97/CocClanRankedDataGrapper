@@ -1,68 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clan War League – CoC Analytics</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg:      #0d1117;
-            --surface: #161b22;
-            --surf2:   #1c2330;
-            --border:  #30363d;
-            --bord2:   #21262d;
-            --text:    #e6edf3;
-            --muted:   #8b949e;
-            --accent:  #f0a500;
-            --acc2:    #e8863a;
-            --green:   #3fb950;
-            --blue:    #58a6ff;
-            --red:     #f85149;
-            --yellow:  #e3b341;
-            --purple:  #bc8cff;
-            --orange:  #d29922;
-        }
+{% set page_title = 'Clan War League – CoC Analytics' %}
+{% include '_head.html' %}
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
         a { text-decoration: none; color: inherit; }
-
-        .page-header {
-            position: relative;
-            background: var(--bg);
-            padding: 32px 32px 20px;
-            border-bottom: 1px solid rgba(240,165,0,.15);
-        }
-        .page-header::before {
-            content: ''; position: absolute; inset: 0;
-            background: radial-gradient(ellipse 45% 150% at 5% 50%, rgba(240,165,0,.09), transparent 65%);
-            pointer-events: none;
-        }
-        .page-header-inner {
-            max-width: 1400px; margin: 0 auto;
-            display: flex; align-items: flex-start; justify-content: space-between;
-            gap: 20px; flex-wrap: wrap; position: relative; z-index: 1;
-        }
-        .page-header h1 {
-            font-family: 'Rajdhani', sans-serif; font-size: 52px; font-weight: 700;
-            letter-spacing: 3px; line-height: 1; text-transform: uppercase;
-            margin-bottom: 10px; position: relative; padding-left: 20px;
-        }
-        .page-header h1::before {
-            content: ''; position: absolute; left: 0; top: 0.08em; bottom: 0.08em;
-            width: 4px; background: linear-gradient(180deg, #f0a500, #e8863a);
-            border-radius: 2px; box-shadow: 0 0 16px rgba(240,165,0,.55);
-        }
-        .page-header h1 span {
-            background: linear-gradient(135deg, #f0a500 0%, #ffd060 50%, #e8863a 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .page-header p, .page-sub { color: var(--muted); font-size: 14px; padding-left: 20px; margin-top: 6px; }
-        .page-header p, .page-sub { color: var(--muted); font-size: 14px; padding-left: 20px; margin-top: 6px; }
-        .page-controls { padding: 0 32px 16px; position: sticky; top: 58px; z-index: 99; background: var(--bg); }
-        .page-controls .controls { max-width: 1400px; margin: 0 auto; margin-bottom: 0; position: static; }
         .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
         .controls {
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -381,7 +323,6 @@
             .roster-grid { grid-template-columns: 1fr; gap: 16px; margin: 0 14px 24px; }
             .recent-card, .compare-card { margin-left: 14px; margin-right: 14px; }
             .nav-inner, .container { padding-left: 16px; padding-right: 16px; }
-            .page-header { padding: 36px 16px 28px; }
             .page-header h1 { font-size: 36px; letter-spacing: 1.5px; }
         }
     </style>
@@ -390,30 +331,23 @@
 
 {% include '_nav.html' %}
 
-<div class="page-header">
-    <div class="page-header-inner">
-        <div>
-            <h1>Clan War <span>League</span></h1>
-            <p class="page-sub">Season standings and per-round war performance.</p>
-        </div>
-    </div>
-</div>
+{% set page_header_title = 'Clan War <span>League</span>' %}
+{% set page_header_desc = 'Season standings and per-round war performance.' %}
+{% set page_controls %}
 {% if seasons %}
-<div class="page-controls">
-    <div class="controls">
-        <label>Season</label>
-        <form method="GET" style="display:contents;">
-            <select name="season_id" class="selector" onchange="this.form.submit()">
-                {% for s in seasons %}
-                <option value="{{ s.id }}" {% if season and s.id == season.id %}selected{% endif %}>
-                    {{ s.season }}{% if s.league_name %} · {{ s.league_name }}{% endif %}{% if s.state != 'ended' %} ({{ s.state }}){% endif %}
-                </option>
-                {% endfor %}
-            </select>
-        </form>
-    </div>
-</div>
+<label>Season</label>
+<form method="GET" style="display:contents;">
+    <select name="season_id" class="selector" onchange="this.form.submit()">
+        {% for s in seasons %}
+        <option value="{{ s.id }}" {% if season and s.id == season.id %}selected{% endif %}>
+            {{ s.season }}{% if s.league_name %} · {{ s.league_name }}{% endif %}{% if s.state != 'ended' %} ({{ s.state }}){% endif %}
+        </option>
+        {% endfor %}
+    </select>
+</form>
 {% endif %}
+{% endset %}
+{% include '_page_header.html' %}
 
 <div class="container">
 
@@ -439,17 +373,19 @@
                 <th style="width:36px;text-align:center;">#</th>
                 <th class="sortable" data-col="name"     data-type="str" onclick="sortRosterTable(this)">Clan <span class="sort-icon">⇅</span></th>
                 <th class="sortable" data-col="players"  data-type="num" onclick="sortRosterTable(this)" style="text-align:center;">Players <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="avgth"    data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--red);">Avg TH <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="avglr"    data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--red);">Avg League <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="avgth"    data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--accent);">Avg TH <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="avglr"    data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--accent);">Avg League <span class="sort-icon">⇅</span></th>
                 <th class="sortable col-sep" data-col="top15th"  data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--blue);">Top 15 TH <span class="sort-icon">⇅</span></th>
                 <th class="sortable" data-col="top15lr"  data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--blue);">Top 15 League <span class="sort-icon">⇅</span></th>
-                <th class="sortable col-sep" data-col="activeth" data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--green);">Active TH <span class="sort-icon">⇅</span></th>
-                <th class="sortable" data-col="activelr" data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--green);">Active League <span class="sort-icon">⇅</span></th>
+                <th class="sortable col-sep" data-col="activeth" data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--purple);">Active TH <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="activelr" data-type="num" onclick="sortRosterTable(this)" style="text-align:center;color:var(--purple);">Active League <span class="sort-icon">⇅</span></th>
                 <th style="width:28px;"></th>
             </tr>
         </thead>
         <tbody id="roster-sec-tbody">
-        {% set our_top15_th = clan_rosters.get(our_tag, {}).top15_avg_th or 0 %}
+        {% set our_avg_th    = clan_rosters.get(our_tag, {}).avg_th or 0 %}
+        {% set our_top15_th  = clan_rosters.get(our_tag, {}).top15_avg_th or 0 %}
+        {% set our_active_th = clan_rosters.get(our_tag, {}).active_avg_th or 0 %}
         {% for s in standings %}
         {% set r = clan_rosters.get(s.tag, {}) %}
         {% set tagc = s.tag|replace('#','') %}
@@ -479,8 +415,18 @@
                 </div>
             </td>
             <td class="mono text-muted" style="text-align:center;">{{ r.count or '—' }}</td>
-            <td class="mono" style="text-align:center;color:var(--red);">{% if r.avg_th %}{{ '%.1f'|format(r.avg_th) }}{% else %}—{% endif %}</td>
-            <td style="text-align:center;font-size:12px;color:var(--red);">{{ r.avg_league or '—' }}</td>
+            <td class="mono" style="text-align:center;color:var(--accent);">
+                {%- if r.avg_th -%}
+                    {{ '%.1f'|format(r.avg_th) }}
+                    {%- if not is_ours and our_avg_th -%}
+                        {%- set delta = r.avg_th - our_avg_th -%}
+                        <div style="font-size:10px;font-weight:600;margin-top:2px;color:var(--{% if delta > 0.05 %}green{% elif delta < -0.05 %}red{% else %}muted{% endif %});">
+                            {%- if delta > 0.05 %}▲ +{{ '%.1f'|format(delta) }}{% elif delta < -0.05 %}▼ {{ '%.1f'|format(delta) }}{% else %}={% endif -%}
+                        </div>
+                    {%- endif -%}
+                {%- else -%}—{%- endif -%}
+            </td>
+            <td style="text-align:center;font-size:12px;color:var(--accent);">{{ r.avg_league or '—' }}{% if r.avg_unranked %}<div style="font-size:10px;color:var(--muted);margin-top:1px;">+{{ r.avg_unranked }} unranked</div>{% endif %}</td>
             <td class="mono col-sep" style="text-align:center;color:var(--blue);">
                 {%- if r.top15_avg_th -%}
                     {{ '%.1f'|format(r.top15_avg_th) }}
@@ -492,9 +438,19 @@
                     {%- endif -%}
                 {%- else -%}—{%- endif -%}
             </td>
-            <td style="text-align:center;font-size:12px;color:var(--blue);">{{ r.top15_league or '—' }}</td>
-            <td class="mono col-sep" style="text-align:center;color:var(--green);">{% if r.active_avg_th %}{{ '%.1f'|format(r.active_avg_th) }}{% else %}—{% endif %}</td>
-            <td style="text-align:center;font-size:12px;color:var(--green);">{{ r.active_league or '—' }}</td>
+            <td style="text-align:center;font-size:12px;color:var(--blue);">{{ r.top15_league or '—' }}{% if r.top15_unranked %}<div style="font-size:10px;color:var(--muted);margin-top:1px;">+{{ r.top15_unranked }} unranked</div>{% endif %}</td>
+            <td class="mono col-sep" style="text-align:center;color:var(--purple);">
+                {%- if r.active_avg_th -%}
+                    {{ '%.1f'|format(r.active_avg_th) }}
+                    {%- if not is_ours and our_active_th -%}
+                        {%- set delta = r.active_avg_th - our_active_th -%}
+                        <div style="font-size:10px;font-weight:600;margin-top:2px;color:var(--{% if delta > 0.05 %}green{% elif delta < -0.05 %}red{% else %}muted{% endif %});">
+                            {%- if delta > 0.05 %}▲ +{{ '%.1f'|format(delta) }}{% elif delta < -0.05 %}▼ {{ '%.1f'|format(delta) }}{% else %}={% endif -%}
+                        </div>
+                    {%- endif -%}
+                {%- else -%}—{%- endif -%}
+            </td>
+            <td style="text-align:center;font-size:12px;color:var(--purple);">{{ r.active_league or '—' }}{% if r.active_unranked %}<div style="font-size:10px;color:var(--muted);margin-top:1px;">+{{ r.active_unranked }} unranked</div>{% endif %}</td>
             <td style="text-align:center;color:var(--muted);font-size:11px;" id="chevron-clan-{{ tagc }}">▶</td>
         </tr>
         <tr class="roster-row" id="clan-roster-{{ tagc }}" style="display:none;">
@@ -547,7 +503,7 @@
                     {% for m in r.members %}
                     <tr data-th="{{ m.town_hall_level or 0 }}" data-lr="{{ league_rank(m.ranked_league) if m.ranked_league else 0 }}">
                         <td class="mono text-muted roster-rank" style="text-align:center;">{{ loop.index }}</td>
-                        <td style="font-weight:500;">{{ m.player_name or m.player_tag }}</td>
+                        <td style="font-weight:500;{% if m.player_tag in r.active_members %}color:var(--green);{% endif %}">{{ m.player_name or m.player_tag }}</td>
                         <td class="mono" style="text-align:center;color:var(--accent);">{{ m.town_hall_level or '?' }}</td>
                         <td style="font-size:12px;color:var(--blue);">{{ m.ranked_league or '—' }}</td>
                     </tr>
@@ -1383,9 +1339,14 @@ function buildCompare(n) {
     for (let i=0;i<len;i++) { const d=OUR[i].th-OPP[i].th; thDiffTotal+=d; if(d>0)thBetter++;else if(d<0)thWorse++;else thEven++; }
     const thDiffAvg = thDiffTotal/len;
     const posScore = (thBetter-thWorse)/len;
-    const avgLrOur = avg(OUR.slice(0,len).map(m=>m.lr)), avgLrOpp = avg(OPP.slice(0,len).map(m=>m.lr));
+    const avgLrOur = avg(OUR.slice(0,len).map(m=>m.lr).filter(r=>r>0));
+    const avgLrOpp = avg(OPP.slice(0,len).map(m=>m.lr).filter(r=>r>0));
     const leagueDiff = (avgLrOur-avgLrOpp)/36;
-    const prob = clamp(sigmoid((thDiffAvg*0.55+posScore*0.25+leagueDiff*2*0.20)*1.8),0.25,0.75);
+    const maxWins = Math.max(r.warsWonOur, r.warsWonOpp, 1);
+    const warsScore = (Math.log(r.warsWonOur+1) - Math.log(r.warsWonOpp+1)) / Math.log(maxWins+1);
+    const maxStreak = Math.max(r.streakOur, r.streakOpp, 1);
+    const streakScore = (r.streakOur - r.streakOpp) / maxStreak;
+    const prob = clamp(sigmoid((thDiffAvg*0.45+posScore*0.25+leagueDiff*2*0.20+warsScore*0.05+streakScore*0.05)*1.8),0.25,0.75);
     const ourPct = Math.round(prob*100), oppPct = 100-ourPct;
     const verdict = ourPct>54?`${r.ourName} have a statistical edge.`:ourPct<46?`${r.oppName} have a statistical edge.`:'This looks like an even matchup.';
 
@@ -1402,7 +1363,10 @@ function buildCompare(n) {
         <div class="pred-verdict">${verdict}</div>
         <div class="pred-factors-grid">
             ${fc('Avg TH',avgThOur.toFixed(1),avgThOpp.toFixed(1),thDiffAvg)}
-            ${fc('Positions Ahead',`+${thBetter}`,`+${thWorse}`,posScore)}
+            ${fc('Avg League Rank',avgLrOur>0?avgLrOur.toFixed(1):'—',avgLrOpp>0?avgLrOpp.toFixed(1):'—',leagueDiff)}
+            ${fc('Position Edge',`+${thBetter} ahead`,`+${thWorse} ahead`,posScore)}
+            ${fc('Wars Won',r.warsWonOur,r.warsWonOpp,warsScore)}
+            ${fc('Win Streak',r.streakOur||'—',r.streakOpp||'—',streakScore)}
         </div>`;
 
     function sr(label,ov,pv,hb=true) {
@@ -1447,10 +1411,10 @@ function buildCompare(n) {
     }).join('');
     document.getElementById(`cmp-league-${n}`).innerHTML=`
         <div class="cmp-title">🎯 League Comparison</div>
-        <div class="lg-summary">
-            <div class="lg-sum-item"><div class="lg-sum-dot" style="background:var(--green)"></div><span style="color:var(--green);font-weight:600">${lgBetter}</span><span style="color:var(--muted)"> ahead</span></div>
-            <div class="lg-sum-item"><div class="lg-sum-dot" style="background:var(--muted)"></div><span style="color:var(--muted);font-weight:600">${lgEven}</span><span style="color:var(--muted)"> even</span></div>
-            <div class="lg-sum-item"><div class="lg-sum-dot" style="background:var(--red)"></div><span style="color:var(--red);font-weight:600">${lgWorse}</span><span style="color:var(--muted)"> behind</span></div>
+        <div class="matchup-summary">
+            <div class="matchup-stat"><div class="mn mn-green">${lgBetter}</div><div class="ml">Ahead</div></div>
+            <div class="matchup-stat"><div class="mn mn-muted">${lgEven}</div><div class="ml">Even</div></div>
+            <div class="matchup-stat"><div class="mn mn-red">${lgWorse}</div><div class="ml">Behind</div></div>
         </div>
         <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${r.ourName}</th><th style="text-align:left">League</th><th>Diff</th><th style="text-align:right">League</th><th style="text-align:right">${r.oppName}</th></tr></thead><tbody>${lgRows}</tbody></table>`;
 

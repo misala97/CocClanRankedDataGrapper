@@ -221,15 +221,17 @@ def cwl_page():
         top15_th = round(sum(m.town_hall_level or 0 for m in top15) / len(top15), 1) if top15 else 0
         top15_al = avg_league_name(top15)
         clan_rosters[clan.tag] = {
-            'members':       members,
-            'avg_th':        round(avg_th, 1),
-            'avg_league':    al,
-            'avg_lr':        league_rank(al) if al else 0,
-            'count':         len(members),
-            'top15_avg_th':  top15_th,
-            'top15_league':  top15_al,
-            'top15_league_lr': league_rank(top15_al) if top15_al else 0,
-            'active_members': {},  # filled below after wars are processed
+            'members':            members,
+            'avg_th':             round(avg_th, 1),
+            'avg_league':         al,
+            'avg_lr':             league_rank(al) if al else 0,
+            'avg_unranked':       sum(1 for m in members if m.ranked_league in SKIP_LEAGUES),
+            'count':              len(members),
+            'top15_avg_th':       top15_th,
+            'top15_league':       top15_al,
+            'top15_league_lr':    league_rank(top15_al) if top15_al else 0,
+            'top15_unranked':     sum(1 for m in top15 if m.ranked_league in SKIP_LEAGUES),
+            'active_members':     {},  # filled below after wars are processed
         }
 
     # ── Standings ─────────────────────────────────────────────────────────────
@@ -306,16 +308,18 @@ def cwl_page():
         active = r['active_members']
         if active:
             ths = [th for th, _ in active.values()]
-            r['active_avg_th'] = round(sum(ths) / len(ths), 1)
+            r['active_avg_th']      = round(sum(ths) / len(ths), 1)
             al = avg_league_name([_MP(lg) for _, lg in active.values()])
-            r['active_league']    = al
-            r['active_league_lr'] = league_rank(al) if al else 0
-            r['active_count']     = len(active)
+            r['active_league']      = al
+            r['active_league_lr']   = league_rank(al) if al else 0
+            r['active_count']       = len(active)
+            r['active_unranked']    = sum(1 for _, lg in active.values() if lg in SKIP_LEAGUES)
         else:
-            r['active_avg_th']    = 0
-            r['active_league']    = None
-            r['active_league_lr'] = 0
-            r['active_count']     = 0
+            r['active_avg_th']      = 0
+            r['active_league']      = None
+            r['active_league_lr']   = 0
+            r['active_count']       = 0
+            r['active_unranked']    = 0
 
     sorted_standings = sorted(
         standings.values(),

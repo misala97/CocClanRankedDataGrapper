@@ -1,32 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Hub – CoC Analytics</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <style>
-        :root {
-            --bg:      #0d1117;
-            --surface: #161b22;
-            --surf2:   #1c2330;
-            --border:  #30363d;
-            --bord2:   #21262d;
-            --text:    #e6edf3;
-            --muted:   #8b949e;
-            --accent:  #f0a500;
-            --acc2:    #e8863a;
-            --green:   #3fb950;
-            --blue:    #58a6ff;
-            --red:     #f85149;
-            --yellow:  #e3b341;
-            --purple:  #bc8cff;
-            --orange:  #d29922;
-        }
+{% set page_title = 'Admin Hub – CoC Analytics' %}
+{% set chartjs = true %}
+{% set chartjs_adapter = true %}
+{% include '_head.html' %}
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
@@ -35,51 +12,8 @@
 
         /* ── NAV: see _nav.html ── */
 
-        /* ── PAGE HEADER ── */
-        .page-header {
-            position: relative; overflow: hidden;
-            background: var(--bg);
-            padding: 52px 32px 36px;
-            min-height: 170px;
-            border-bottom: 1px solid rgba(240,165,0,.15);
-        }
-        .page-header::before {
-            content: ''; position: absolute;
-            top: -80px; left: -60px; width: 600px; height: 380px;
-            background: radial-gradient(ellipse at 25% 60%, rgba(240,165,0,.09), transparent 65%);
-            pointer-events: none;
-        }
-        .page-header-inner {
-            max-width: 1400px; margin: 0 auto;
-            display: flex; align-items: flex-start; justify-content: space-between;
-            gap: 20px; flex-wrap: wrap; position: relative; z-index: 1;
-        }
-        .page-header h1 {
-            font-family: 'Rajdhani', sans-serif; font-size: 52px; font-weight: 700;
-            letter-spacing: 3px; line-height: 1; text-transform: uppercase;
-            margin-bottom: 10px; position: relative; padding-left: 20px;
-        }
-        .page-header h1::before {
-            content: ''; position: absolute; left: 0; top: 0.08em; bottom: 0.08em;
-            width: 4px; background: linear-gradient(180deg, #f0a500, #e8863a);
-            border-radius: 2px; box-shadow: 0 0 16px rgba(240,165,0,.55);
-        }
-        .page-header h1 span {
-            background: linear-gradient(135deg, #f0a500 0%, #ffd060 50%, #e8863a 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .page-header p, .page-sub { color: var(--muted); font-size: 14px; padding-left: 20px; margin-top: 6px; }
-        .day-pills { display: flex; gap: 6px; align-items: center; }
-
         /* ── CONTAINER ── */
         .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px 80px; }
-        .day-pill {
-            padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600;
-            border: 1px solid var(--border); color: var(--muted);
-            background: var(--surface); cursor: pointer; transition: all 0.15s;
-        }
-        .day-pill:hover { border-color: var(--accent); color: var(--text); }
-        .day-pill.active { border-color: var(--accent); color: var(--accent); background: rgba(240,165,0,0.08); }
 
         /* ── COLLAPSIBLE SECTION ── */
         .collapse-card {
@@ -301,10 +235,7 @@
         @media (max-width: 900px)  { .status-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 720px)  {
             .fn-grid, .status-grid { grid-template-columns: 1fr; }
-            .page-wrap { padding: 24px 16px 60px; }
             .nav-inner { padding: 0 16px; }
-            .page-header { padding: 36px 16px 28px; }
-            .page-header h1 { font-size: 36px; letter-spacing: 1.5px; }
         }
     </style>
 </head>
@@ -312,20 +243,18 @@
 
 {% include '_nav.html' %}
 
-<div class="page-header">
-    <div class="page-header-inner">
-        <div>
-            <h1>⚙️ Admin <span>Hub</span></h1>
-            <p>Background task monitoring and system status</p>
-        </div>
-        <div class="day-pills">
-            <a href="?days=1"  class="day-pill {% if selected_days == 1  %}active{% endif %}">24h</a>
-            <a href="?days=7"  class="day-pill {% if selected_days == 7  %}active{% endif %}">7d</a>
-            <a href="?days=14" class="day-pill {% if selected_days == 14 %}active{% endif %}">14d</a>
-            <a href="?days=30" class="day-pill {% if selected_days == 30 %}active{% endif %}">30d</a>
-        </div>
-    </div>
-</div>
+{% set page_header_title = '⚙️ Admin <span>Hub</span>' %}
+{% set page_header_desc = 'Background task monitoring and system status' %}
+{% set page_controls %}
+<label>Period</label>
+<select class="selector" onchange="window.location='?days='+this.value">
+    <option value="1"  {% if selected_days == 1  %}selected{% endif %}>24 hours</option>
+    <option value="7"  {% if selected_days == 7  %}selected{% endif %}>7 days</option>
+    <option value="14" {% if selected_days == 14 %}selected{% endif %}>14 days</option>
+    <option value="30" {% if selected_days == 30 %}selected{% endif %}>30 days</option>
+</select>
+{% endset %}
+{% include '_page_header.html' %}
 
 <div class="container">
 

@@ -9,8 +9,17 @@ from models import Player, RankedWeek, RankedBattleLog, BattleLog, RaidWeekend, 
 from services.db import db_player_get
 from services.helpers import (
     _calc_th_multiplier, _league_mult, _ranked_verdict,
-    _district_stats, _raid_verdict,
+    _district_stats, _raid_verdict, LOCAL_TZ,
 )
+
+
+def _week_cutoff(now_utc, battle_days):
+    if battle_days == 7:
+        now_local = dt.datetime.now(LOCAL_TZ)
+        week_start_date = (now_local - dt.timedelta(days=now_local.weekday())).date()
+        return dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day,
+                           tzinfo=LOCAL_TZ).astimezone(dt.timezone.utc).replace(tzinfo=None)
+    return now_utc - dt.timedelta(days=battle_days)
 from features.war.war_combos import classify_attack, get_war_verdict
 
 player_bp = Blueprint('player', __name__)
@@ -98,7 +107,7 @@ def calculate_activity_score(player_tag, period='week'):
 
     ranked_score = min(100, round(100 * total_done / player_total_max)) if player_total_max else 0
 
-    cutoff = now - dt.timedelta(days=battle_days)
+    cutoff = _week_cutoff(now, battle_days)
     weeks  = battle_days / 7
     battles_in_window = (BattleLog.query
                          .filter(BattleLog.player_tag == player_tag,
@@ -281,9 +290,12 @@ def calculate_skill_score(player_tag, period='month'):
         if a.attacker_tag == player_tag:
             player_by_war.setdefault(a.clan_war_id, []).append(a)
 
-    attacked_war_ids = set(player_by_war.keys())
     war_skill_scores = []
-    for war_id, p_attacks in player_by_war.items():
+    for war_id in participated_war_ids:
+        p_attacks = player_by_war.get(war_id, [])
+        if not p_attacks:
+            war_skill_scores.append(0)
+            continue
         my_member = war_member_map.get(war_id)
         player_th = my_member.town_hall_level if my_member else 0
         score, _, _, _ = _war_player_verdict(
@@ -322,7 +334,7 @@ def calculate_skill_score(player_tag, period='month'):
         'battle_detail': f'{_fmt_loot(player_loot)} loot · Clan avg: {_fmt_loot(clan_avg_loot)}',
         'war_skill': war_skill, 'war_max': 100,
         'war_skill_has_data': bool(war_skill_scores),
-        'war_detail': f'Avg verdict {war_skill:.0f}/100 · {len(attacked_war_ids)} wars attacked',
+        'war_detail': f'Avg verdict {war_skill:.0f}/100 · {len(participated_war_ids)} wars selected',
         'has_data': has_data,
     }
 
@@ -550,7 +562,7 @@ def _calculate_scores_bulk(player_tags, period='month'):
         ranked_attack_map = {}
 
     # ── battle stats (bulk) ───────────────────────────────────────────────────
-    cutoff = now - dt.timedelta(days=battle_days)
+    cutoff = _week_cutoff(now, battle_days)
     loot_expr = (func.coalesce(BattleLog.loot_gold, 0) +
                  func.coalesce(BattleLog.loot_elixir, 0) +
                  func.coalesce(BattleLog.loot_dark_elixir, 0))

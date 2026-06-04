@@ -408,10 +408,12 @@ def league_rank(name: str) -> int:
 _SKIP_LEAGUES = {"Unranked", "Unknown League", None}
 
 def avg_league_name(members) -> str | None:
-    """Average ranked league across all members, counting no-data as rank 0."""
+    """Average ranked league across members who have a league, excluding unranked."""
     if not members:
         return None
-    ranks = [league_rank(m.ranked_league) if m.ranked_league not in _SKIP_LEAGUES else 0 for m in members]
+    ranks = [league_rank(m.ranked_league) for m in members if m.ranked_league not in _SKIP_LEAGUES]
+    if not ranks:
+        return None
     avg_rank = round(sum(ranks) / len(ranks))
     if avg_rank <= 0:
         return None

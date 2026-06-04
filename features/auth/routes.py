@@ -50,7 +50,7 @@ def _can_edit_clan_war():
 def require_admin_login(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not _any_access():
+        if not _is_super_admin():
             return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
     return decorated
