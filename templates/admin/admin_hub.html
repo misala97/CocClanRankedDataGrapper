@@ -512,7 +512,7 @@
                 <div id="war-manual-inputs" style="display:none;flex-direction:row;align-items:flex-end;gap:16px;">
                     <div>
                         <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">War Size</label>
-                        <input id="war-size" type="number" min="5" max="50" value="15"
+                        <input id="war-size" type="number" min="5" max="50" step="5" value="15"
                                style="width:80px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;">
                     </div>
                     <div>
@@ -906,8 +906,9 @@ function _scoreColor(v) {
 }
 
 function _roleStyle(role) {
-    if (role === 'Fill-up')      return 'background:rgba(139,148,158,.1);color:var(--muted);border:1px solid rgba(139,148,158,.2);';
-    if (role === 'War pref: In') return 'background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.25);';
+    if (role === 'Fill-up')               return 'background:rgba(139,148,158,.1);color:var(--muted);border:1px solid rgba(139,148,158,.2);';
+    if (role === 'War pref: In')          return 'background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.25);';
+    if (role && role.startsWith('Sparse')) return 'background:rgba(88,166,255,.1);color:var(--blue);border:1px solid rgba(88,166,255,.25);';
     return 'background:rgba(240,165,0,.1);color:var(--accent);border:1px solid rgba(240,165,0,.25);';
 }
 

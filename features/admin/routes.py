@@ -287,11 +287,21 @@ def debug_dashboard():
 # ── CWL Roster Recommendation ─────────────────────────────────────────────────
 
 def _player_war_stats(player_tag):
-    """Return (war_score 0-100, war_skill 0-100) using the same logic as the player profile."""
+    """Return (war_score 0-100, war_skill 0-100, wars_participated) using the last month's data."""
+    import datetime as dt
     from features.player.routes import calculate_activity_score, calculate_skill_score
+    from models import ClanWar, ClanWarMember
     act   = calculate_activity_score(player_tag, period='month')
     skill = calculate_skill_score(player_tag, period='month')
-    return act.get('war_score', 0), skill.get('war_skill', 0)
+    cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)).replace(tzinfo=None)
+    wars_participated = (ClanWarMember.query
+                         .join(ClanWar, ClanWarMember.clan_war_id == ClanWar.id)
+                         .filter(ClanWarMember.player_tag == player_tag,
+                                 ClanWarMember.is_opponent == False,
+                                 ClanWar.state == 'warEnded',
+                                 ClanWar.start_time >= cutoff)
+                         .count())
+    return act.get('war_score', 0), skill.get('war_skill', 0), wars_participated
 
 
 @admin_bp.route('/admin/war-roster', methods=['POST'])
@@ -301,14 +311,14 @@ def admin_war_roster():
     auto_mode = request.form.get('war_size', '') == 'auto'
     war_size_raw = request.form.get('war_size', 15)
     fill_ups_raw = request.form.get('fill_ups', 5)
-    war_size = None if auto_mode else max(5, min(50, int(war_size_raw)))
+    war_size = None if auto_mode else max(5, min(50, round(int(war_size_raw) / 5) * 5))
     fill_ups = None  # computed below for both modes
 
     players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
 
     enriched = []
     for p in players:
-        war_score, war_skill = _player_war_stats(p.tag)
+        war_score, war_skill, war_count = _player_war_stats(p.tag)
         enriched.append({
             'tag':        p.tag,
             'name':       p.name,
@@ -316,6 +326,7 @@ def admin_war_roster():
             'war_pref':   p.war_preference_custom,
             'war_score':  war_score,
             'verdict':    war_skill,
+            'war_count':  war_count,
             'league':     p.league_tier or '',
         })
 
@@ -337,9 +348,18 @@ def admin_war_roster():
     selected_tags = set()
     main_spots = war_size - fill_ups
 
-    # Step 1 — pref='in' AND eligible: picked first by composite DESC, capped at main_spots
+    # Step 1a — pref='in' AND < 5 wars in timeframe: include regardless of composite
     main_roster = []
-    for p in sorted([p for p in eligible if p['war_pref'] == 'in'],
+    for p in sorted([p for p in enriched if p['war_pref'] == 'in' and p['war_count'] < 5
+                     and not _opted_out(p)],
+                    key=lambda p: -p['th']):
+        if len(main_roster) >= main_spots:
+            break
+        main_roster.append({**p, 'reason': 'Sparse data (<5 wars)'})
+        selected_tags.add(p['tag'])
+
+    # Step 1b — pref='in' AND eligible: picked by composite DESC, capped at main_spots
+    for p in sorted([p for p in eligible if p['war_pref'] == 'in' and p['tag'] not in selected_tags],
                     key=lambda p: (-_composite(p), -p['th'])):
         if len(main_roster) >= main_spots:
             break
