@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import AppUser, Player, BattleLog, RankedWeek, UptimeTracker
+from models import AppUser, Player, BattleLog, RankedWeek, UptimeTracker, ClanWar, ClanWarMember, ClanWarAttack
 from features.auth.routes import require_admin_login, require_super_admin
 
 admin_bp = Blueprint('admin', __name__)
@@ -282,3 +282,83 @@ def debug_dashboard():
         current_tag=filter_tag,
         current_sort=sort_by,
     )
+
+
+# ── CWL Roster Recommendation ─────────────────────────────────────────────────
+
+def _player_war_stats(player_tag):
+    """Return (war_score 0-100, war_skill 0-100) using the same logic as the player profile."""
+    from features.player.routes import calculate_activity_score, calculate_skill_score
+    act   = calculate_activity_score(player_tag, period='month')
+    skill = calculate_skill_score(player_tag, period='month')
+    return act.get('war_score', 0), skill.get('war_skill', 0)
+
+
+@admin_bp.route('/admin/war-roster', methods=['POST'])
+@require_super_admin
+def admin_war_roster():
+    war_size = max(5, min(50, request.form.get('war_size', 15, type=int)))
+    fill_ups = max(0, min(war_size, request.form.get('fill_ups', 5, type=int)))
+
+    players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
+
+    enriched = []
+    for p in players:
+        war_score, war_skill = _player_war_stats(p.tag)
+        enriched.append({
+            'tag':        p.tag,
+            'name':       p.name,
+            'th':         p.current_th or 0,
+            'war_pref':   p.war_preference_custom,
+            'war_score':  war_score,
+            'verdict':    war_skill,
+            'league':     p.league_tier or '',
+        })
+
+    # Step 1 — fill-ups: x lowest THs
+    sorted_by_th  = sorted(enriched, key=lambda p: (p['th'], p['name']))
+    fill_up_list  = sorted_by_th[:fill_ups]
+    fill_up_tags  = {p['tag'] for p in fill_up_list}
+
+    remaining = [p for p in enriched if p['tag'] not in fill_up_tags]
+
+    selected      = []
+    selected_tags = set(fill_up_tags)
+    spots         = war_size - fill_ups
+
+    # Step 2 — war_preference_custom == 'in'
+    for p in remaining:
+        if len(selected) >= spots:
+            break
+        if p['war_pref'] == 'in' and p['tag'] not in selected_tags:
+            selected.append({**p, 'reason': 'War pref: In'})
+            selected_tags.add(p['tag'])
+
+    # Step 3 — war activity score == 100
+    for p in remaining:
+        if len(selected) >= spots:
+            break
+        if p['war_score'] == 100 and p['tag'] not in selected_tags:
+            selected.append({**p, 'reason': 'Activity: 100'})
+            selected_tags.add(p['tag'])
+
+    # Step 4 — highest war verdict (fill rest)
+    by_verdict = sorted(
+        [p for p in remaining if p['tag'] not in selected_tags],
+        key=lambda p: -p['verdict']
+    )
+    for p in by_verdict:
+        if len(selected) >= spots:
+            break
+        selected.append({**p, 'reason': f'Verdict: {p["verdict"]}'})
+        selected_tags.add(p['tag'])
+
+    roster = (
+        [{**p, 'role': 'Fill-up'} for p in fill_up_list] +
+        selected
+    )
+
+    # players not selected
+    bench = [p for p in enriched if p['tag'] not in selected_tags]
+
+    return jsonify(roster=roster, bench=bench, war_size=war_size, fill_ups=fill_ups)
