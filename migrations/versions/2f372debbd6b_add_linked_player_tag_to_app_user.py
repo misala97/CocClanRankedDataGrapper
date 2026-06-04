@@ -16,10 +16,11 @@ depends_on = None
 
 
 def upgrade():
-    # Column must use utf8mb4_general_ci to match player.tag collation for FK to work
+    # Column must use utf8mb4_general_ci to match player.tag collation for FK to work.
+    # Use ADD COLUMN for fresh databases; local dev had the column pre-created so was stamped directly.
     op.execute(
         "ALTER TABLE app_user "
-        "MODIFY COLUMN linked_player_tag VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL, "
+        "ADD COLUMN linked_player_tag VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL, "
         "ADD CONSTRAINT app_user_ibfk_1 FOREIGN KEY (linked_player_tag) REFERENCES player (tag)"
     )
 
