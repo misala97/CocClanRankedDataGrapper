@@ -337,14 +337,14 @@ def admin_war_roster():
     selected_tags = set()
     main_spots = war_size - fill_ups
 
-    # Step 1 — pref='in' AND eligible: picked first, capped at main_spots
+    # Step 1 — pref='in' AND eligible: picked first by composite DESC, capped at main_spots
     main_roster = []
-    for p in eligible:
+    for p in sorted([p for p in eligible if p['war_pref'] == 'in'],
+                    key=lambda p: (-_composite(p), -p['th'])):
         if len(main_roster) >= main_spots:
             break
-        if p['war_pref'] == 'in':
-            main_roster.append({**p, 'reason': 'War pref: In'})
-            selected_tags.add(p['tag'])
+        main_roster.append({**p, 'reason': 'War pref: In'})
+        selected_tags.add(p['tag'])
 
     # Step 2 — remaining eligible spots by composite DESC, TH DESC
     main_spots_left = main_spots - len(main_roster)
