@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+{% set page_title = 'My Profile – CoC Analytics' %}
+{% include '_head.html' %}
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        a { text-decoration: none; color: inherit; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 28px 32px; }
+
+        /* ── HERO CARD ── */
+        .hero-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+            padding: 28px 32px; display: flex; align-items: center; gap: 24px;
+            margin-bottom: 28px; position: relative; overflow: hidden;
+        }
+        .hero-card::before {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(ellipse 60% 120% at 0% 50%, rgba(240,165,0,.06), transparent 60%);
+            pointer-events: none;
+        }
+        .hero-avatar {
+            width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 28px; font-weight: 700; color: #000;
+            font-family: 'Rajdhani', sans-serif;
+            box-shadow: 0 0 0 3px rgba(240,165,0,.25);
+        }
+        .hero-info { flex: 1; min-width: 0; }
+        .hero-username {
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;
+        }
+        .hero-name {
+            font-family: 'Rajdhani', sans-serif; font-size: 30px; font-weight: 700;
+            letter-spacing: 1px; color: var(--text); line-height: 1.1;
+        }
+        .hero-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+        .meta-pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.3px; border: 1px solid;
+        }
+        .pill-th    { background: rgba(240,165,0,.1);  color: var(--accent); border-color: rgba(240,165,0,.3); }
+        .pill-in    { background: rgba(63,185,80,.1);   color: var(--green);  border-color: rgba(63,185,80,.25); }
+        .pill-out   { background: rgba(248,81,73,.1);   color: var(--red);    border-color: rgba(248,81,73,.25); }
+        .pill-league { background: rgba(188,140,255,.1); color: var(--purple); border-color: rgba(188,140,255,.25); }
+        .hero-tag { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: 'Rajdhani', sans-serif; }
+
+        /* ── GRID ── */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px; }
+        @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+        /* ── STAT CARDS ── */
+        .stat-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            padding: 20px 22px;
+        }
+        .card-label {
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px;
+            margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--bord2);
+            display: flex; align-items: center; gap: 6px;
+        }
+        .big-num {
+            font-family: 'Rajdhani', sans-serif; font-size: 42px; font-weight: 700; line-height: 1;
+            color: var(--text);
+        }
+        .big-sub { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+        /* ── RANKED CARD ── */
+        .ranked-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .ranked-trophies {
+            font-family: 'Rajdhani', sans-serif; font-size: 38px; font-weight: 700; color: var(--accent);
+            line-height: 1;
+        }
+        .ranked-trophies-sub { font-size: 12px; color: var(--muted); }
+        .ranked-attacks-row { display: flex; align-items: center; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+        .atk-block { text-align: center; }
+        .atk-num { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); }
+        .atk-lbl { font-size: 11px; color: var(--muted); }
+        .ranked-progress { margin-top: 14px; }
+        .progress-bar {
+            height: 6px; background: var(--surf2); border-radius: 3px; overflow: hidden; margin-top: 5px;
+        }
+        .progress-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--acc2)); }
+
+        /* ── BATTLES LIST ── */
+        .battle-list { margin-top: 6px; }
+        .battle-row {
+            display: flex; align-items: center; gap: 10px; padding: 8px 0;
+            border-bottom: 1px solid var(--bord2); font-size: 13px;
+        }
+        .battle-row:last-child { border-bottom: none; }
+        .star-row { display: flex; gap: 2px; }
+        .star { font-size: 13px; }
+        .star-on  { color: var(--accent); }
+        .star-off { color: var(--border); }
+        .battle-pct { font-size: 12px; color: var(--muted); min-width: 38px; text-align: right; }
+        .battle-time { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+        .badge-atk  { color: var(--green); font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif; }
+        .badge-def  { color: var(--muted); font-size: 11px; font-family: 'Rajdhani', sans-serif; }
+
+        /* ── WAR ROWS ── */
+        .war-row {
+            display: flex; align-items: center; gap: 10px; padding: 9px 0;
+            border-bottom: 1px solid var(--bord2); font-size: 13px;
+        }
+        .war-row:last-child { border-bottom: none; }
+        .war-opp { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .war-date { font-size: 11px; color: var(--muted); white-space: nowrap; }
+        .war-attacks { display: flex; gap: 6px; }
+        .war-atk {
+            font-size: 11px; font-family: 'Rajdhani', sans-serif; font-weight: 700;
+            padding: 2px 7px; border-radius: 4px; white-space: nowrap;
+        }
+        .war-atk-good { background: rgba(63,185,80,.1); color: var(--green); border: 1px solid rgba(63,185,80,.25); }
+        .war-atk-mid  { background: rgba(240,165,0,.1); color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
+        .war-atk-bad  { background: rgba(248,81,73,.1); color: var(--red);    border: 1px solid rgba(248,81,73,.25); }
+        .war-no-atk   { background: rgba(139,148,158,.08); color: var(--muted); border: 1px solid rgba(139,148,158,.2); }
+
+        /* ── NO LINK PLACEHOLDER ── */
+        .no-link {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+            padding: 48px 32px; text-align: center; margin-top: 40px;
+        }
+        .no-link-icon { font-size: 48px; margin-bottom: 16px; }
+        .no-link-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+        .no-link-sub { font-size: 14px; color: var(--muted); }
+
+        .empty-state { padding: 18px 0; color: var(--muted); font-size: 13px; font-style: italic; }
+    </style>
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+{% set page_header_title = 'My <span>Profile</span>' %}
+{% set page_header_desc = 'Your linked Clash of Clans account summary.' %}
+{% include '_page_header.html' %}
+
+<div class="container">
+
+{% if not player %}
+    <div class="no-link">
+        <div class="no-link-icon">🔗</div>
+        <div class="no-link-title">No player linked yet</div>
+        <div class="no-link-sub">Ask a super admin to link your account to a clan player in the admin panel.</div>
+    </div>
+
+{% else %}
+
+    <!-- Hero -->
+    <div class="hero-card">
+        <div class="hero-avatar">{{ user.username[0] | upper }}</div>
+        <div class="hero-info">
+            <div class="hero-username">{{ user.username }}</div>
+            <div class="hero-name">{{ player.name }}</div>
+            <div class="hero-meta">
+                <span class="meta-pill pill-th">TH{{ player.current_th }}</span>
+                {% if player.league_tier and player.league_tier != 'Unranked' %}
+                <span class="meta-pill pill-league">{{ player.league_tier }}</span>
+                {% endif %}
+                {% if player.in_clan %}
+                <span class="meta-pill pill-in">In Clan</span>
+                {% else %}
+                <span class="meta-pill pill-out">Not in Clan</span>
+                {% endif %}
+            </div>
+            <div class="hero-tag">{{ player.tag }}</div>
+        </div>
+    </div>
+
+    <!-- Top stats row -->
+    <div class="grid-3">
+        <div class="stat-card">
+            <div class="card-label">This Week — Attacks</div>
+            <div class="big-num">{{ attacks_this_week }}</div>
+            <div class="big-sub">{{ defenses_this_week }} defenses recorded</div>
+        </div>
+        <div class="stat-card">
+            <div class="card-label">Ranked Attacks (Season)</div>
+            <div class="big-num">{{ ranked_attacks_done }}</div>
+            <div class="big-sub">
+                {% if ranked_attacks_done > 0 %}
+                {{ ranked_attacks_won }} wins (≥2 stars)
+                {% else %}
+                No attacks yet this season
+                {% endif %}
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="card-label">Raids (last 4 weekends)</div>
+            <div class="big-num">{{ raid_summary.total_attacks }}</div>
+            <div class="big-sub">
+                {% if raid_summary.total_loot > 0 %}
+                {{ '{:,}'.format(raid_summary.total_loot) }} capital gold looted
+                {% else %}
+                No raids recorded
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+
+        <!-- Ranked week card -->
+        <div class="stat-card">
+            <div class="card-label">Current Ranked Season</div>
+            {% if ranked_week %}
+            <div class="ranked-header">
+                <div>
+                    <div class="ranked-trophies">{{ ranked_week.trophies or '—' }}</div>
+                    <div class="ranked-trophies-sub">trophies · Rank #{{ ranked_week.rank or '?' }}</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:12px;color:var(--muted);">{{ ranked_week.league_tier or '—' }}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:3px;">
+                        {{ ranked_week.start_day.strftime('%d %b') if ranked_week.start_day else '' }}
+                        {% if ranked_week.end_day %} – {{ ranked_week.end_day.strftime('%d %b') }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="ranked-attacks-row">
+                <div class="atk-block">
+                    <div class="atk-num">{{ ranked_week.attack_wins or 0 }}</div>
+                    <div class="atk-lbl">Wins</div>
+                </div>
+                <div class="atk-block">
+                    <div class="atk-num">{{ ranked_week.attack_losses or 0 }}</div>
+                    <div class="atk-lbl">Losses</div>
+                </div>
+                <div class="atk-block">
+                    <div class="atk-num">{{ ranked_week.defense_wins or 0 }}</div>
+                    <div class="atk-lbl">Def wins</div>
+                </div>
+                <div class="atk-block">
+                    <div class="atk-num">{{ ranked_week.defense_losses or 0 }}</div>
+                    <div class="atk-lbl">Def losses</div>
+                </div>
+            </div>
+            {% if ranked_week.max_attacks %}
+            <div class="ranked-progress">
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);">
+                    <span>Attacks used</span>
+                    <span>{{ ranked_attacks_done }} / {{ ranked_week.max_attacks }}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width:{{ [[(ranked_attacks_done / ranked_week.max_attacks * 100)|round|int, 0]|max, 100]|min }}%"></div>
+                </div>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="empty-state">Not participating in the current ranked season.</div>
+            {% endif %}
+        </div>
+
+        <!-- Recent battles card -->
+        <div class="stat-card">
+            <div class="card-label">Battles This Week</div>
+            {% if recent_battles %}
+            <div class="battle-list">
+                {% for b in recent_battles[:10] %}
+                <div class="battle-row">
+                    {% if b.attack %}
+                    <span class="badge-atk">ATK</span>
+                    {% else %}
+                    <span class="badge-def">DEF</span>
+                    {% endif %}
+                    <div class="star-row">
+                        {% for i in range(3) %}
+                        <span class="star {% if (b.stars or 0) > i %}star-on{% else %}star-off{% endif %}">★</span>
+                        {% endfor %}
+                    </div>
+                    <span class="battle-pct">{{ b.percentage or 0 }}%</span>
+                    <span class="battle-time">{{ b.time | local_dt('%d.%m %H:%M') if b.time else '' }}</span>
+                </div>
+                {% endfor %}
+                {% if recent_battles | length > 10 %}
+                <div class="empty-state">+{{ (recent_battles | length) - 10 }} more this week</div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="empty-state">No battles recorded this week.</div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <!-- Recent wars -->
+    <div class="stat-card" style="margin-bottom:20px;">
+        <div class="card-label">Recent Wars</div>
+        {% if recent_wars %}
+        {% for entry in recent_wars %}
+        {% set war = entry.war %}
+        {% set attacks = entry.attacks %}
+        <div class="war-row">
+            <div class="war-opp">vs {{ war.opponent_name }}</div>
+            <div class="war-attacks">
+                {% if attacks %}
+                {% for atk in attacks %}
+                {% set cls = 'war-atk-good' if (atk.stars or 0) >= 3 else ('war-atk-mid' if (atk.stars or 0) >= 2 else 'war-atk-bad') %}
+                <span class="war-atk {{ cls }}">{{ atk.stars }}★ {{ atk.destruction_pct | round | int }}%</span>
+                {% endfor %}
+                {% else %}
+                <span class="war-atk war-no-atk">No attacks</span>
+                {% endif %}
+            </div>
+            <div class="war-date">{{ war.start_time | local_dt('%d.%m.%Y') if war.start_time else '—' }}</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">No war participation recorded.</div>
+        {% endif %}
+    </div>
+
+{% endif %}
+</div>
+
+</body>
+</html>

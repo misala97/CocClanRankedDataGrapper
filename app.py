@@ -58,6 +58,7 @@ from features.battles.routes import battles_bp
 from features.player.routes  import player_bp
 from features.pubquiz.routes import pubquiz_bp
 from features.cwl.routes     import cwl_bp
+from features.profile.routes import profile_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
@@ -68,6 +69,7 @@ app.register_blueprint(battles_bp)
 app.register_blueprint(player_bp)
 app.register_blueprint(pubquiz_bp)
 app.register_blueprint(cwl_bp)
+app.register_blueprint(profile_bp)
 
 # ── Template filters ─────────────────────────────────────────────────────────
 

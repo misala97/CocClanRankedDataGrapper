@@ -127,8 +127,9 @@ def admin_hub():
 @admin_bp.route('/admin/users')
 @require_super_admin
 def admin_users():
-    users = AppUser.query.order_by(AppUser.is_approved, AppUser.created_at.desc()).all()
-    return render_template('admin/admin_users.html', users=users)
+    users   = AppUser.query.order_by(AppUser.is_approved, AppUser.created_at.desc()).all()
+    players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
+    return render_template('admin/admin_users.html', users=users, players=players)
 
 
 @admin_bp.route('/admin/users/<int:user_id>/approve', methods=['POST'])
@@ -173,6 +174,20 @@ def admin_user_perms(user_id):
     u = db.get_or_404(AppUser, user_id)
     u.perm_create_reminder_ranked = 'perm_create_reminder_ranked' in request.form
     u.perm_clan_war_edits         = 'perm_clan_war_edits'         in request.form
+    db.session.commit()
+    return redirect(url_for('admin.admin_users'))
+
+
+@admin_bp.route('/admin/users/<int:user_id>/link-player', methods=['POST'])
+@require_super_admin
+def admin_user_link_player(user_id):
+    u = db.get_or_404(AppUser, user_id)
+    tag = request.form.get('linked_player_tag', '').strip() or None
+    if tag is not None:
+        exists = Player.query.filter_by(tag=tag).first()
+        if not exists:
+            tag = None
+    u.linked_player_tag = tag
     db.session.commit()
     return redirect(url_for('admin.admin_users'))
 

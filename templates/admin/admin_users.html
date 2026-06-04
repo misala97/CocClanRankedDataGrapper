@@ -83,6 +83,23 @@
 
         .empty { padding: 24px 16px; color: var(--muted); font-size: 14px; }
 
+        /* ── LINK PLAYER ── */
+        .link-form { display: flex; align-items: center; gap: 6px; }
+        .link-select {
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text); font-size: 12px; padding: 4px 8px; min-width: 140px;
+            font-family: 'DM Sans', sans-serif; cursor: pointer;
+        }
+        .link-select:focus { outline: none; border-color: rgba(88,166,255,0.5); }
+        .linked-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700;
+            background: rgba(88,166,255,0.1); color: var(--blue); border: 1px solid rgba(88,166,255,0.25);
+            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+        .linked-none { font-size: 12px; color: var(--muted); font-style: italic; }
+
         /* ── FOOTER ── */
         .page-footer {
             text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
@@ -160,6 +177,7 @@
                         <th>Registered</th>
                         <th>Super Admin</th>
                         <th>Permissions</th>
+                        <th>Linked Player</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -192,6 +210,21 @@
                             <button type="submit" class="btn btn-save">Save</button>
                         </form>
                         {% endif %}
+                    </td>
+                    <td>
+                        <div class="link-form">
+                            <form method="POST" action="/admin/users/{{ u.id }}/link-player" style="display:flex;align-items:center;gap:6px;">
+                                <select name="linked_player_tag" class="link-select">
+                                    <option value="">— None —</option>
+                                    {% for p in players %}
+                                    <option value="{{ p.tag }}" {% if u.linked_player_tag == p.tag %}selected{% endif %}>
+                                        {{ p.name }} (TH{{ p.current_th }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-save">Link</button>
+                            </form>
+                        </div>
                     </td>
                     <td>
                         <div class="actions">

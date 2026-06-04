@@ -201,6 +201,9 @@ class AppUser(db.Model):
     is_super_admin = db.Column(db.Boolean, default=False, nullable=False)
     perm_create_reminder_ranked = db.Column(db.Boolean, default=False, nullable=False)
     perm_clan_war_edits         = db.Column(db.Boolean, default=False, nullable=False)
+    linked_player_tag = db.Column(db.String(50), db.ForeignKey('player.tag'), nullable=True)
+
+    linked_player = db.relationship('Player', foreign_keys=[linked_player_tag], lazy='joined')
 
 
 class ClanWar(db.Model):

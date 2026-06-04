@@ -72,14 +72,15 @@
     .ntd-inline-none { color: var(--muted); }
     .ntd-sep { width: 2px; height: 15px; background: rgba(224, 224, 224, 0.46); flex-shrink: 0; }
 
-    /* User chip */
+    /* User chip + dropdown */
+    .nav-user-wrap { position: relative; flex-shrink: 0; }
     .nav-user {
         display: flex; align-items: center; gap: 7px;
-        padding: 3px 10px 3px 6px; border-radius: 20px;
-        background: var(--surf2); border: 1px solid var(--border); flex-shrink: 0;
-        transition: border-color .15s;
+        padding: 3px 8px 3px 6px; border-radius: 20px;
+        background: var(--surf2); border: 1px solid var(--border);
+        cursor: pointer; user-select: none; transition: border-color .15s;
     }
-    .nav-user:hover { border-color: rgba(255,255,255,.18); }
+    .nav-user:hover, .nav-user-wrap.open .nav-user { border-color: rgba(255,255,255,.22); }
     .nav-avatar {
         width: 20px; height: 20px; border-radius: 50%;
         background: linear-gradient(135deg, var(--accent), var(--acc2));
@@ -88,12 +89,32 @@
         font-family: 'Rajdhani', sans-serif; flex-shrink: 0;
     }
     .nav-uname { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
-    .nav-signout {
-        font-size: 11px; color: var(--muted); text-decoration: none;
-        padding: 4px 8px; border-radius: 5px; border: 1px solid var(--border);
-        transition: all .12s; white-space: nowrap; flex-shrink: 0;
+    .nav-chevron {
+        width: 12px; height: 12px; color: var(--muted); flex-shrink: 0;
+        transition: transform .18s;
     }
-    .nav-signout:hover { color: var(--red); border-color: rgba(248,81,73,.4); background: rgba(248,81,73,.06); }
+    .nav-user-wrap.open .nav-chevron { transform: rotate(180deg); }
+
+    .nav-dropdown {
+        display: none; position: absolute; top: calc(100% + 8px); right: 0;
+        min-width: 172px; z-index: 400;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 10px; padding: 5px;
+        box-shadow: 0 8px 28px rgba(0,0,0,.55);
+    }
+    .nav-user-wrap.open .nav-dropdown { display: block; }
+    .nav-dd-item {
+        display: flex; align-items: center; gap: 9px;
+        padding: 8px 11px; border-radius: 6px; font-size: 13px;
+        color: var(--text); text-decoration: none; transition: background .1s;
+        white-space: nowrap;
+    }
+    .nav-dd-item:hover { background: rgba(255,255,255,.06); }
+    .nav-dd-item svg { width: 14px; height: 14px; flex-shrink: 0; opacity: .65; }
+    .nav-dd-sep { height: 1px; background: var(--bord2); margin: 4px 0; }
+    .nav-dd-signout { color: var(--muted); }
+    .nav-dd-signout:hover { color: var(--red) !important; background: rgba(248,81,73,.07) !important; }
+
     .nav-login {
         font-size: 12px; font-weight: 600; color: var(--muted);
         padding: 5px 13px; border-radius: 6px; border: 1px solid var(--border);
@@ -148,20 +169,68 @@
             {% endif %}
 
             {% if current_user %}
-            <div class="nav-user">
-                <div class="nav-avatar">{{ current_user.username[0] | upper }}</div>
-                <span class="nav-uname">{{ current_user.username }}</span>
+            <div class="nav-user-wrap" id="navUserWrap">
+                <div class="nav-user" id="navUserBtn">
+                    <div class="nav-avatar">{{ current_user.username[0] | upper }}</div>
+                    <span class="nav-uname">{{ current_user.username }}</span>
+                    <svg class="nav-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 6 8 10 12 6"/>
+                    </svg>
+                </div>
+                <div class="nav-dropdown" id="navDropdown">
+                    {% if current_user.linked_player %}
+                    <a href="/profile" class="nav-dd-item">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+                        </svg>
+                        Linked Ingame Profile
+                    </a>
+                    <div class="nav-dd-sep"></div>
+                    {% endif %}
+                    <a href="/logout" class="nav-dd-item nav-dd-signout">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/><polyline points="11 11 14 8 11 5"/><line x1="14" y1="8" x2="6" y2="8"/>
+                        </svg>
+                        Sign out
+                    </a>
+                </div>
             </div>
-            <a href="/logout" class="nav-signout">Sign out</a>
             {% elif is_env_admin %}
-            <div class="nav-user">
-                <div class="nav-avatar">A</div>
-                <span class="nav-uname">Admin</span>
+            <div class="nav-user-wrap" id="navUserWrap">
+                <div class="nav-user" id="navUserBtn">
+                    <div class="nav-avatar">A</div>
+                    <span class="nav-uname">Admin</span>
+                    <svg class="nav-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 6 8 10 12 6"/>
+                    </svg>
+                </div>
+                <div class="nav-dropdown" id="navDropdown">
+                    <a href="/logout" class="nav-dd-item nav-dd-signout">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/><polyline points="11 11 14 8 11 5"/><line x1="14" y1="8" x2="6" y2="8"/>
+                        </svg>
+                        Sign out
+                    </a>
+                </div>
             </div>
-            <a href="/logout" class="nav-signout">Sign out</a>
             {% else %}
             <a href="/login" class="nav-login">Login</a>
             {% endif %}
         </div>
     </div>
 </nav>
+
+<script>
+(function () {
+    var wrap = document.getElementById('navUserWrap');
+    if (!wrap) return;
+    var btn = document.getElementById('navUserBtn');
+    btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        wrap.classList.toggle('open');
+    });
+    document.addEventListener('click', function () {
+        wrap.classList.remove('open');
+    });
+})();
+</script>
