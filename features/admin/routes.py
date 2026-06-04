@@ -297,8 +297,12 @@ def _player_war_stats(player_tag):
 @admin_bp.route('/admin/war-roster', methods=['POST'])
 @require_super_admin
 def admin_war_roster():
-    war_size = max(5, min(50, request.form.get('war_size', 15, type=int)))
-    fill_ups = max(0, min(war_size, request.form.get('fill_ups', 5, type=int)))
+    import math
+    auto_mode = request.form.get('war_size', '') == 'auto'
+    war_size_raw = request.form.get('war_size', 15)
+    fill_ups_raw = request.form.get('fill_ups', 5)
+    war_size = None if auto_mode else max(5, min(50, int(war_size_raw)))
+    fill_ups = None  # computed below for both modes
 
     players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
 
@@ -315,50 +319,71 @@ def admin_war_roster():
             'league':     p.league_tier or '',
         })
 
-    # Step 1 — fill-ups: x lowest THs
-    sorted_by_th  = sorted(enriched, key=lambda p: (p['th'], p['name']))
-    fill_up_list  = sorted_by_th[:fill_ups]
-    fill_up_tags  = {p['tag'] for p in fill_up_list}
+    def _composite(p):
+        return (p['war_score'] ** 1.5 * p['verdict'] ** 0.6) / (100 ** 1.1)
 
-    remaining = [p for p in enriched if p['tag'] not in fill_up_tags]
+    def _opted_out(p):
+        return p['war_pref'] == 'out'
 
-    selected      = []
-    selected_tags = set(fill_up_tags)
-    spots         = war_size - fill_ups
+    eligible = [p for p in enriched if _composite(p) >= 50 and not _opted_out(p)]
 
-    # Step 2 — war_preference_custom == 'in'
-    for p in remaining:
-        if len(selected) >= spots:
+    if auto_mode:
+        eligible_count = len(eligible)
+        war_size = math.ceil(eligible_count / 5) * 5 + 5
+        fill_ups = war_size - eligible_count
+    else:
+        fill_ups = max(0, min(war_size, int(fill_ups_raw)))
+
+    selected_tags = set()
+    main_spots = war_size - fill_ups
+
+    # Step 1 — pref='in' AND eligible: picked first, capped at main_spots
+    main_roster = []
+    for p in eligible:
+        if len(main_roster) >= main_spots:
             break
-        if p['war_pref'] == 'in' and p['tag'] not in selected_tags:
-            selected.append({**p, 'reason': 'War pref: In'})
+        if p['war_pref'] == 'in':
+            main_roster.append({**p, 'reason': 'War pref: In'})
             selected_tags.add(p['tag'])
 
-    # Step 3 — war activity score == 100
-    for p in remaining:
-        if len(selected) >= spots:
+    # Step 2 — remaining eligible spots by composite DESC, TH DESC
+    main_spots_left = main_spots - len(main_roster)
+    for p in sorted([p for p in eligible if p['tag'] not in selected_tags],
+                    key=lambda p: (-_composite(p), -p['th'])):
+        if main_spots_left <= 0:
             break
-        if p['war_score'] == 100 and p['tag'] not in selected_tags:
-            selected.append({**p, 'reason': 'Activity: 100'})
-            selected_tags.add(p['tag'])
+        main_roster.append({**p, 'reason': f'Score: {round(_composite(p))}'})
+        selected_tags.add(p['tag'])
+        main_spots_left -= 1
 
-    # Step 4 — highest war verdict (fill rest)
-    by_verdict = sorted(
-        [p for p in remaining if p['tag'] not in selected_tags],
-        key=lambda p: -p['verdict']
-    )
-    for p in by_verdict:
-        if len(selected) >= spots:
-            break
-        selected.append({**p, 'reason': f'Verdict: {p["verdict"]}'})
+    # Step 3 — fill-ups: lowest THs from whoever is not yet selected
+    fill_up_list = sorted(
+        [p for p in enriched if p['tag'] not in selected_tags],
+        key=lambda p: (p['th'], p['name'])
+    )[:fill_ups]
+    for p in fill_up_list:
         selected_tags.add(p['tag'])
 
     roster = (
-        [{**p, 'role': 'Fill-up'} for p in fill_up_list] +
-        selected
+        [{**p, 'role': p['reason']} for p in main_roster] +
+        [{**p, 'role': 'Fill-up'}   for p in fill_up_list]
     )
 
-    # players not selected
-    bench = [p for p in enriched if p['tag'] not in selected_tags]
+    bench = sorted(
+        [p for p in enriched if p['tag'] not in selected_tags],
+        key=lambda p: (-p['verdict'], -p['th'])
+    )
 
-    return jsonify(roster=roster, bench=bench, war_size=war_size, fill_ups=fill_ups)
+    pref_in_count  = sum(1 for p in main_roster if p['reason'] == 'War pref: In')
+    score_count    = len(main_roster) - pref_in_count
+    eligible_count = len(eligible)
+
+    return jsonify(
+        roster=roster, bench=bench,
+        war_size=war_size, fill_ups=len(fill_up_list),
+        main_picks=len(main_roster),
+        pref_in_count=pref_in_count,
+        score_count=score_count,
+        eligible_count=eligible_count,
+        auto=auto_mode,
+    )

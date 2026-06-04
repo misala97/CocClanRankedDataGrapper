@@ -503,15 +503,25 @@
 
             <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin:18px 0 22px;">
                 <div>
-                    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">War Size</label>
-                    <input id="war-size" type="number" min="5" max="50" value="15"
-                           style="width:80px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;">
+                    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">Mode</label>
+                    <button id="war-auto-btn" onclick="toggleWarAutoMode()"
+                            style="padding:7px 16px;background:rgba(240,165,0,.12);color:var(--accent);border:1px solid rgba(240,165,0,.35);border-radius:7px;font-weight:700;font-size:13px;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;cursor:pointer;">
+                        Auto
+                    </button>
                 </div>
-                <div>
-                    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">Fill-ups</label>
-                    <input id="war-fill-ups" type="number" min="0" max="50" value="5"
-                           style="width:80px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;">
+                <div id="war-manual-inputs" style="display:none;flex-direction:row;align-items:flex-end;gap:16px;">
+                    <div>
+                        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">War Size</label>
+                        <input id="war-size" type="number" min="5" max="50" value="15"
+                               style="width:80px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">Fill-ups</label>
+                        <input id="war-fill-ups" type="number" min="0" max="50" value="5"
+                               style="width:80px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;">
+                    </div>
                 </div>
+                <div id="war-auto-info" style="font-size:12px;color:var(--muted);font-style:italic;align-self:center;"></div>
                 <button onclick="generateWarRoster()" id="war-gen-btn"
                         style="padding:8px 20px;background:transparent;color:var(--accent);border:1px solid rgba(240,165,0,.35);border-radius:7px;font-weight:700;font-size:13px;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;transition:all .15s;">
                     Generate
@@ -520,6 +530,11 @@
             </div>
 
             <div id="war-roster-result" style="display:none;">
+
+                <!-- Stats summary -->
+                <div id="war-stats-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:12px 16px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:'Rajdhani',sans-serif;">
+                </div>
+
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
 
                     <!-- Roster -->
@@ -816,21 +831,65 @@ function filterMembers() {
     });
 }
 
-// ── CWL Roster ────────────────────────────────────────────────────────────────
+// ── War Roster ────────────────────────────────────────────────────────────────
+var _warAutoMode = true;
+
+function toggleWarAutoMode() {
+    _warAutoMode = !_warAutoMode;
+    const btn     = document.getElementById('war-auto-btn');
+    const manual  = document.getElementById('war-manual-inputs');
+    const info    = document.getElementById('war-auto-info');
+    if (_warAutoMode) {
+        btn.style.background    = 'rgba(240,165,0,.12)';
+        btn.style.color         = 'var(--accent)';
+        btn.textContent         = 'Auto';
+        manual.style.display    = 'none';
+        info.textContent        = '';
+    } else {
+        btn.style.background    = 'var(--surf2)';
+        btn.style.color         = 'var(--muted)';
+        btn.textContent         = 'Manual';
+        manual.style.display    = 'flex';
+        manual.style.flexDirection = 'row';
+    }
+}
+
 function generateWarRoster() {
-    const warSize = parseInt(document.getElementById('war-size').value) || 15;
-    const fillUps = parseInt(document.getElementById('war-fill-ups').value) || 5;
     const btn     = document.getElementById('war-gen-btn');
     const loading = document.getElementById('war-loading');
     btn.disabled = true; loading.style.display = 'inline';
 
     const fd = new FormData();
-    fd.append('war_size', warSize);
-    fd.append('fill_ups', fillUps);
+    if (_warAutoMode) {
+        fd.append('war_size', 'auto');
+        fd.append('fill_ups', 'auto');
+    } else {
+        fd.append('war_size', parseInt(document.getElementById('war-size').value) || 15);
+        fd.append('fill_ups', parseInt(document.getElementById('war-fill-ups').value) || 5);
+    }
 
     fetch('/admin/war-roster', { method: 'POST', body: fd })
         .then(r => r.json())
         .then(data => {
+            if (data.auto) {
+                document.getElementById('war-auto-info').textContent =
+                    `Computed: War size ${data.war_size} · ${data.fill_ups} fill-up${data.fill_ups !== 1 ? 's' : ''}`;
+            }
+
+            const stats = [
+                { label: 'War Size',     value: data.war_size,       color: 'var(--text)' },
+                { label: 'Main Picks',   value: data.main_picks,     color: 'var(--green)' },
+                { label: 'Fill-ups',     value: data.fill_ups,       color: 'var(--muted)' },
+                { label: 'Eligible Pool',value: data.eligible_count, color: 'var(--accent)' },
+                { label: 'Not Selected', value: data.bench.length,   color: 'var(--muted)' },
+            ];
+            document.getElementById('war-stats-bar').innerHTML = stats.map((s, i) =>
+                `${i > 0 ? '<span style="color:var(--border);margin:0 2px;">|</span>' : ''}
+                 <span style="color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase;">${s.label}</span>
+                 <span style="color:${s.color};font-weight:700;font-size:14px;margin-left:4px;">${s.value}</span>`
+            ).join('');
+
+            data.roster.sort((a, b) => b.th - a.th);
             renderWarRoster(data.roster, data.bench);
             document.getElementById('war-roster-result').style.display = '';
         })
@@ -847,9 +906,8 @@ function _scoreColor(v) {
 }
 
 function _roleStyle(role) {
-    if (role === 'Fill-up')       return 'background:rgba(139,148,158,.1);color:var(--muted);border:1px solid rgba(139,148,158,.2);';
-    if (role === 'War pref: In')  return 'background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.25);';
-    if (role === 'Activity: 100') return 'background:rgba(88,166,255,.1);color:var(--blue);border:1px solid rgba(88,166,255,.25);';
+    if (role === 'Fill-up')      return 'background:rgba(139,148,158,.1);color:var(--muted);border:1px solid rgba(139,148,158,.2);';
+    if (role === 'War pref: In') return 'background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.25);';
     return 'background:rgba(240,165,0,.1);color:var(--accent);border:1px solid rgba(240,165,0,.25);';
 }
 
