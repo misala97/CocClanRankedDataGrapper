@@ -210,9 +210,29 @@
         @media (max-width: 640px) { .charts-row { flex-direction: column; } }
 
         /* ── HISTORY SECTION ── */
-        .history-section { padding: 16px; border-top: 1px solid var(--border); background: rgba(13,17,23,0.4); }
-        .history-section h4 { margin-bottom: 12px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
-        .history-chart-wrap { position: relative; height: 180px; margin-bottom: 4px; }
+        .history-section { padding: 20px; border-top: 2px solid var(--border); background: rgba(13,17,23,0.5); }
+        .history-section > .hist-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .history-section > .hist-hdr h4 { margin: 0; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+        .hist-charts-row { display: flex; gap: 14px; margin-bottom: 18px; }
+        .hist-chart-main   { flex: 3; position: relative; height: 200px; }
+        .hist-chart-trophy { flex: 2; position: relative; height: 200px; }
+        @media (max-width: 900px) { .hist-charts-row { flex-direction: column; } .hist-chart-main, .hist-chart-trophy { height: 160px; } }
+
+        /* ── HISTORY SUMMARY CARDS ── */
+        .hist-summary-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+        .hist-stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+        .hist-stat-card-accent { border-color: rgba(240,165,0,0.3); }
+        .hist-stat-label { font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+        .hist-stat-value { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); line-height: 1.15; }
+        .hist-stat-sub { font-size: 13px; color: var(--muted); font-weight: 600; }
+        .hist-stat-meta { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.4; }
+        .hist-prog-bar { height: 4px; background: var(--bord2); border-radius: 2px; margin-top: 7px; overflow: hidden; }
+        .hist-prog-fill { height: 100%; border-radius: 2px; }
+        .hist-trend-up   { color: var(--green); font-weight: 700; }
+        .hist-trend-down { color: var(--red);   font-weight: 700; }
+        .hist-trend-flat { color: var(--muted); }
+        .hist-now-tag { font-size: 9px; padding: 1px 5px; background: rgba(240,165,0,0.18); color: var(--accent); border-radius: 3px; font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: 0.5px; margin-left: 5px; vertical-align: middle; }
+        @media (max-width: 900px) { .hist-summary-cards { grid-template-columns: repeat(2, 1fr); } }
 
         /* ── MOBILE CARDS (base — hidden on desktop) ── */
         #mobileList {
@@ -591,34 +611,149 @@
     function buildHistorySection(playerTag) {
         const history = (window.playerHistory || {})[playerTag] || [];
         if (!history.length) return '';
-        const canvasId = `hist-${playerTag.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        const tableRows = history.map(h => {
+        const tagKey      = playerTag.replace(/[^a-zA-Z0-9]/g, '_');
+        const canvasId    = `hist-${tagKey}`;
+        const trophyCanvasId = `hist-trophy-${tagKey}`;
+
+        // ── Derived stats ──────────────────────────────────────────────────────
+        const totalAtt    = history.reduce((s, h) => s + h.att_count, 0);
+        const totalAttMax = history.reduce((s, h) => s + h.att_max, 0);
+        const totalDef    = history.reduce((s, h) => s + h.def_count, 0);
+        const attPct      = totalAttMax > 0 ? Math.round(totalAtt / totalAttMax * 100) : 0;
+        const attBarColor = attPct >= 90 ? 'var(--green)' : attPct >= 60 ? 'var(--accent)' : 'var(--red)';
+
+        const avgAttOverall = totalAtt > 0
+            ? history.reduce((s, h) => s + h.att_avg * h.att_count, 0) / totalAtt : null;
+        const avgDefOverall = totalDef > 0
+            ? history.reduce((s, h) => s + h.def_avg * h.def_count, 0) / totalDef : null;
+
+        // Consistency: std dev of att_avg across weeks with attacks
+        const attWeeks = history.filter(h => h.att_count > 0);
+        let consistencyHtml = '<span class="hist-trend-flat">–</span>';
+        if (attWeeks.length >= 2 && avgAttOverall != null) {
+            const variance = attWeeks.reduce((s, h) => s + Math.pow(h.att_avg - avgAttOverall, 2), 0) / attWeeks.length;
+            const stdDev = Math.sqrt(variance);
+            const label = stdDev <= 0.12 ? 'Very consistent' : stdDev <= 0.25 ? 'Consistent' : stdDev <= 0.45 ? 'Variable' : 'Erratic';
+            const color = stdDev <= 0.12 ? 'var(--green)' : stdDev <= 0.25 ? 'var(--accent)' : stdDev <= 0.45 ? 'var(--orange)' : 'var(--red)';
+            consistencyHtml = `<span style="color:${color};font-weight:700;">σ ${stdDev.toFixed(2)}</span> <span class="hist-trend-flat">— ${label}</span>`;
+        }
+
+        // Attendance: weeks with full attacks used
+        const fullWeeks  = history.filter(h => h.att_max > 0 && h.att_count === h.att_max).length;
+        const attndPct   = history.length > 0 ? Math.round(fullWeeks / history.length * 100) : 0;
+        const attndColor = attndPct >= 90 ? 'var(--green)' : attndPct >= 60 ? 'var(--accent)' : 'var(--red)';
+
+        // Best week by score_100
+        const scoredWeeks = history.filter(h => (h.score_100 || 0) > 0);
+        const bestWeek    = scoredWeeks.length
+            ? scoredWeeks.reduce((b, h) => h.score_100 > b.score_100 ? h : b, scoredWeeks[0]) : null;
+
+        const _vNames = { 'badge-godlike':'Godlike','badge-dominant':'Dominant','badge-wow':'Very Good','badge-good':'Good','badge-warning':'Bad','badge-suck':'Disaster','badge-useless':'Useless' };
+        const bestWeekMeta = bestWeek
+            ? `<span class="judgment ${bestWeek.badge_class}" style="font-size:10px;padding:1px 7px;">${escapeHTML(_vNames[bestWeek.badge_class]||'–')}</span> · ${escapeHTML(bestWeek.label)}`
+            : 'No scored weeks';
+
+        const summaryCards = `
+            <div class="hist-summary-cards">
+                <div class="hist-stat-card">
+                    <div class="hist-stat-label">Full Attendance</div>
+                    <div class="hist-stat-value" style="color:${attndColor};">${fullWeeks}<span class="hist-stat-sub"> / ${history.length} weeks</span></div>
+                    <div class="hist-prog-bar"><div class="hist-prog-fill" style="width:${attndPct}%;background:${attndColor};"></div></div>
+                    <div class="hist-stat-meta">${attndPct}% of weeks used all attacks</div>
+                </div>
+                <div class="hist-stat-card">
+                    <div class="hist-stat-label">Consistency</div>
+                    <div class="hist-stat-value" style="font-size:15px;margin-top:4px;">${consistencyHtml}</div>
+                    <div class="hist-stat-meta" style="margin-top:6px;">Std dev of avg attack across weeks</div>
+                </div>
+                <div class="hist-stat-card">
+                    <div class="hist-stat-label">Overall Avg Attack</div>
+                    <div class="hist-stat-value" style="color:${avgAttOverall != null ? attAvgColor(avgAttOverall) : 'var(--muted)'};">${avgAttOverall != null ? avgAttOverall.toFixed(2) + ' ★' : '–'}</div>
+                    <div class="hist-stat-meta" style="margin-top:6px;">${totalAtt} attacks · ${avgDefOverall != null ? `Avg def ${avgDefOverall.toFixed(2)}★` : ''}</div>
+                </div>
+                <div class="hist-stat-card">
+                    <div class="hist-stat-label">Best Score</div>
+                    <div class="hist-stat-value" style="color:${bestWeek ? getJudgeColor(bestWeek.badge_class) : 'var(--muted)'};">${bestWeek ? bestWeek.score_100 : '–'}<span class="hist-stat-sub">${bestWeek ? ' / 100' : ''}</span></div>
+                    <div class="hist-stat-meta" style="margin-top:6px;">${bestWeekMeta}</div>
+                </div>
+            </div>`;
+
+        // ── Table rows (newest first) ──────────────────────────────────────────
+        const verdictLabels = {
+            'badge-godlike':'Godlike','badge-dominant':'Dominant','badge-wow':'Very Good',
+            'badge-good':'Good','badge-warning':'Bad','badge-suck':'Disaster',
+            'badge-useless':'Useless','badge-inactive':'Inactive'
+        };
+        const tableHistory = [...history].reverse();
+        const tableRows = tableHistory.map((h, i) => {
             const leagueCell = h.league_icon
-                ? `<img src="${escapeHTML(h.league_icon)}" alt="${escapeHTML(h.league_tier)}" title="${escapeHTML(h.league_tier)}" style="width:22px;height:22px;vertical-align:middle;"> <span style="font-size:11px;color:var(--muted);">${escapeHTML(h.league_tier)}</span>`
+                ? `<img src="${escapeHTML(h.league_icon)}" alt="${escapeHTML(h.league_tier)}" title="${escapeHTML(h.league_tier)}" style="width:22px;height:22px;vertical-align:middle;object-fit:cover;border-radius:3px;"> <span style="font-size:11px;color:var(--muted);">${escapeHTML(h.league_tier)}</span>`
                 : `<span style="color:var(--muted);font-size:12px;">${escapeHTML(h.league_tier) || '–'}</span>`;
-            return `<tr>
-                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(h.label)}</td>
+
+            const rowAttPct   = h.att_max > 0 ? Math.round(h.att_count / h.att_max * 100) : 0;
+            const rowBarColor = rowAttPct >= 90 ? 'var(--green)' : rowAttPct >= 60 ? 'var(--accent)' : 'var(--red)';
+
+            let attTrend = '', defTrend = '', trophyDelta = '', rankDelta = '';
+            const prev = tableHistory[i + 1]; // older week (i+1 in reversed array)
+            if (prev) {
+                const dA = h.att_avg - prev.att_avg;
+                if (dA > 0.05)       attTrend = `<span style="color:var(--green);font-size:10px;"> ▲</span>`;
+                else if (dA < -0.05) attTrend = `<span style="color:var(--red);font-size:10px;"> ▼</span>`;
+                const dD = h.def_avg - prev.def_avg;
+                if (dD > 0.05)       defTrend = `<span style="color:var(--red);font-size:10px;"> ▲</span>`;
+                else if (dD < -0.05) defTrend = `<span style="color:var(--green);font-size:10px;"> ▼</span>`;
+                const dt = h.trophies - prev.trophies;
+                if (dt > 0)      trophyDelta = `<span style="color:var(--green);font-size:10px;"> +${dt}</span>`;
+                else if (dt < 0) trophyDelta = `<span style="color:var(--red);font-size:10px;"> ${dt}</span>`;
+                if (h.rank && prev.rank) {
+                    const dr = h.rank - prev.rank;
+                    if (dr < 0)      rankDelta = `<span style="color:var(--green);font-size:10px;"> ▲${Math.abs(dr)}</span>`;
+                    else if (dr > 0) rankDelta = `<span style="color:var(--red);font-size:10px;"> ▼${dr}</span>`;
+                }
+            }
+
+            const isLatest = i === 0;
+            const rowStyle = isLatest ? 'background:rgba(240,165,0,0.035);' : '';
+            const nowTag   = isLatest ? '<span class="hist-now-tag">NOW</span>' : '';
+            const verdictCell = h.badge_class
+                ? `<span class="judgment ${h.badge_class}" style="font-size:10px;padding:2px 8px;">${escapeHTML(verdictLabels[h.badge_class]||'–')}</span>${h.score_100 > 0 ? ` <span style="color:var(--muted);font-size:11px;font-family:'Rajdhani',sans-serif;">${h.score_100}</span>` : ''}`
+                : '–';
+
+            return `<tr style="${rowStyle}">
+                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
                 <td>${leagueCell}</td>
-                <td style="font-family:'Rajdhani',sans-serif;font-weight:600;">${h.att_count} / ${h.att_max}</td>
-                <td style="color:var(--accent);font-family:'Rajdhani',sans-serif;font-weight:700;">${h.att_avg.toFixed(2)} ★</td>
-                <td style="font-family:'Rajdhani',sans-serif;font-weight:600;">${h.def_count}</td>
-                <td style="color:var(--red);font-family:'Rajdhani',sans-serif;font-weight:700;">${h.def_avg.toFixed(2)} ★</td>
-                <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;">🏆 ${h.trophies}</td>
-                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${h.rank ? '#' + h.rank : '–'}</td>
+                <td>
+                    <div style="display:flex;flex-direction:column;gap:4px;min-width:54px;">
+                        <span style="font-family:'Rajdhani',sans-serif;font-weight:600;">${h.att_count} / ${h.att_max}</span>
+                        <div style="height:3px;background:var(--bord2);border-radius:2px;"><div style="height:3px;background:${rowBarColor};border-radius:2px;width:${rowAttPct}%;"></div></div>
+                    </div>
+                </td>
+                <td style="color:${attAvgColor(h.att_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;">${h.att_avg.toFixed(2)} ★${attTrend}</td>
+                <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);text-align:center;">${h.def_count}</td>
+                <td style="color:${defAvgColor(h.def_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;">${h.def_avg.toFixed(2)} ★${defTrend}</td>
+                <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">🏆 ${h.trophies}${trophyDelta}</td>
+                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${h.rank ? '#' + h.rank : '–'}${rankDelta}</td>
+                <td>${verdictCell}</td>
             </tr>`;
         }).join('');
+
         return `
             <div class="history-section">
-                <h4>History – Last ${history.length} Ranked Weeks</h4>
-                <div class="history-chart-wrap"><canvas id="${canvasId}"></canvas></div>
-                <table class="detail-table" style="margin-top:12px;">
-                    <thead><tr><th>Week</th><th>League</th><th>Attacks</th><th>Avg Att.</th><th>Defs</th><th>Avg Def.</th><th>Trophies</th><th>Rank</th></tr></thead>
+                <div class="hist-hdr"><h4>History – Last ${history.length} Ranked Week${history.length !== 1 ? 's' : ''}</h4></div>
+                ${summaryCards}
+                <div class="hist-charts-row">
+                    <div class="hist-chart-main"><canvas id="${canvasId}"></canvas></div>
+                    <div class="hist-chart-trophy"><canvas id="${trophyCanvasId}"></canvas></div>
+                </div>
+                <table class="detail-table">
+                    <thead><tr><th>Week</th><th>League</th><th>Attacks</th><th>Avg Att.</th><th>Defs</th><th>Avg Def.</th><th>Trophies</th><th>Rank</th><th>Verdict</th></tr></thead>
                     <tbody>${tableRows}</tbody>
                 </table>
             </div>`;
     }
 
     function createHistoryChart(canvas, history) {
+        const pointColors = history.map(h => VERDICT_COLORS[h.badge_class] || '#f0a500');
         return new Chart(canvas, {
             type: 'line',
             data: {
@@ -627,14 +762,20 @@
                     {
                         label: 'Avg Attack',
                         data: history.map(h => h.att_avg),
-                        borderColor: '#f0a500', backgroundColor: 'rgba(240,165,0,0.08)',
-                        tension: 0.35, pointRadius: 5, pointBackgroundColor: '#f0a500', fill: true,
+                        borderColor: '#f0a500', backgroundColor: 'rgba(240,165,0,0.07)',
+                        tension: 0.35, pointRadius: 6, pointHoverRadius: 8,
+                        pointBackgroundColor: pointColors,
+                        pointBorderColor: pointColors,
+                        pointBorderWidth: 2,
+                        fill: true,
                     },
                     {
                         label: 'Avg Defense',
                         data: history.map(h => h.def_avg),
-                        borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.06)',
-                        tension: 0.35, pointRadius: 5, pointBackgroundColor: '#f85149', fill: true,
+                        borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.05)',
+                        tension: 0.35, pointRadius: 4, pointHoverRadius: 6,
+                        pointBackgroundColor: '#f85149',
+                        fill: true,
                     }
                 ]
             },
@@ -653,7 +794,73 @@
                 },
                 plugins: {
                     legend: { labels: { color: '#8b949e', font: { size: 12 }, boxWidth: 12, padding: 12 } },
-                    tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} ★` } }
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const base = ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} ★`;
+                                if (ctx.datasetIndex === 0) {
+                                    const h = history[ctx.dataIndex];
+                                    const vLabel = {'badge-godlike':'Godlike','badge-dominant':'Dominant','badge-wow':'Very Good','badge-good':'Good','badge-warning':'Bad','badge-suck':'Disaster','badge-useless':'Useless'}[h.badge_class] || '';
+                                    return base + (vLabel ? `  ·  ${vLabel} (${h.score_100})` : '');
+                                }
+                                return base;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function createTrophyChart(canvas, history) {
+        const barColors = history.map((h, i) => {
+            if (i === 0) return 'rgba(88,166,255,0.65)';
+            const dt = h.trophies - history[i - 1].trophies;
+            return dt >= 0 ? 'rgba(63,185,80,0.7)' : 'rgba(248,81,73,0.65)';
+        });
+        return new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: history.map(h => h.label),
+                datasets: [{
+                    label: 'Trophies',
+                    data: history.map(h => h.trophies),
+                    backgroundColor: barColors,
+                    borderRadius: 5, borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        ticks: { color: '#8b949e' },
+                        grid: { color: 'rgba(48,54,61,0.6)' }
+                    },
+                    x: {
+                        ticks: { color: '#8b949e', font: { size: 11 } },
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true, text: 'Trophy Progression',
+                        color: '#8b949e', padding: { bottom: 10 },
+                        font: { size: 11, weight: '700', family: "'Rajdhani', sans-serif" }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const base = ` 🏆 ${ctx.parsed.y}`;
+                                const i = ctx.dataIndex;
+                                if (i > 0) {
+                                    const dt = history[i].trophies - history[i-1].trophies;
+                                    return base + (dt >= 0 ? `  (+${dt})` : `  (${dt})`);
+                                }
+                                return base;
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -779,7 +986,7 @@
 
         const tbody = document.getElementById('statsBody');
         tbody.innerHTML = '';
-        historyCharts.forEach(chart => chart.destroy());
+        historyCharts.forEach(charts => charts.forEach(c => c.destroy()));
         historyCharts.clear();
 
         rows.forEach(item => {
@@ -856,15 +1063,17 @@
                     if (expanded) {
                         const history = (window.playerHistory || {})[item.player_tag] || [];
                         if (history.length > 0 && !historyCharts.has(item.player_tag)) {
-                            const canvasId = `hist-${item.player_tag.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                            const canvas = document.getElementById(canvasId);
-                            if (canvas) {
-                                historyCharts.set(item.player_tag, createHistoryChart(canvas, history));
-                            }
+                            const tagKey   = item.player_tag.replace(/[^a-zA-Z0-9]/g, '_');
+                            const canvas1  = document.getElementById(`hist-${tagKey}`);
+                            const canvas2  = document.getElementById(`hist-trophy-${tagKey}`);
+                            const charts   = [];
+                            if (canvas1) charts.push(createHistoryChart(canvas1, history));
+                            if (canvas2) charts.push(createTrophyChart(canvas2, history));
+                            historyCharts.set(item.player_tag, charts);
                         }
                     } else {
                         if (historyCharts.has(item.player_tag)) {
-                            historyCharts.get(item.player_tag).destroy();
+                            historyCharts.get(item.player_tag).forEach(c => c.destroy());
                             historyCharts.delete(item.player_tag);
                         }
                     }

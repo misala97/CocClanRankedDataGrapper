@@ -25,7 +25,7 @@ def ranked_weeks_page():
     if not selected_week_id and distinct_weeks:
         selected_week_id = distinct_weeks[0].league_season_id
 
-    last_10_seasons = [dw.league_season_id for dw in distinct_weeks[:10]]
+    last_10_seasons = [dw.league_season_id for dw in distinct_weeks[:52]]
     season_filter   = set(last_10_seasons)
     if selected_week_id:
         season_filter.add(selected_week_id)
@@ -191,10 +191,31 @@ def ranked_weeks_page():
                 d_stars = [log.stars or 0 for log in rw.battle_logs if not (log.attack is True or log.attack == 1)]
                 att_c = len(a_stars)
                 def_c = len(d_stars)
+
+                player_th_hist = rw.townhall or 0
+                att_max_hist   = rw.max_attacks or 0
+                adj_hist = []
+                for log in rw.battle_logs:
+                    if log.attack is True or log.attack == 1:
+                        try:    opp_th = int(log.opponent_th)
+                        except: opp_th = player_th_hist
+                        adj_hist.append((log.stars or 0) * _calc_th_multiplier(opp_th - player_th_hist, player_th_hist))
+                th_adj_hist   = round(sum(adj_hist) / att_max_hist, 3) if att_max_hist > 0 else 0.0
+                lm_hist       = _league_mult(rw.league_tier or '', player_th_hist)
+                score_100_hist = min(round(th_adj_hist * lm_hist * 100 / 3.45), 100) if att_max_hist > 0 else 0
+                if   score_100_hist >= 87: badge_hist = 'badge-godlike'
+                elif score_100_hist >= 80: badge_hist = 'badge-dominant'
+                elif score_100_hist >= 65: badge_hist = 'badge-wow'
+                elif score_100_hist >= 58: badge_hist = 'badge-good'
+                elif score_100_hist >= 43: badge_hist = 'badge-warning'
+                elif score_100_hist >= 29: badge_hist = 'badge-suck'
+                elif att_c > 0:            badge_hist = 'badge-useless'
+                else:                      badge_hist = 'badge-inactive'
+
                 history.append({
                     'label': dw.start_day.strftime('%d.%m.%y'),
                     'att_count': att_c,
-                    'att_max': rw.max_attacks or 0,
+                    'att_max': att_max_hist,
                     'att_avg': round(sum(a_stars) / att_c, 2) if att_c else 0,
                     'def_count': def_c,
                     'def_avg': round(sum(d_stars) / def_c, 2) if def_c else 0,
@@ -202,6 +223,8 @@ def ranked_weeks_page():
                     'rank': rw.rank,
                     'league_tier': rw.league_tier or '',
                     'league_icon': rw.league_icon or '',
+                    'score_100': score_100_hist,
+                    'badge_class': badge_hist,
                 })
         if history:
             player_history[player.tag] = history
