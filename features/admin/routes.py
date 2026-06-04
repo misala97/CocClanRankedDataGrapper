@@ -336,7 +336,12 @@ def admin_war_roster():
     def _opted_out(p):
         return p['war_pref'] == 'out'
 
-    eligible = [p for p in enriched if _composite(p) >= 50 and not _opted_out(p)]
+    def _is_eligible(p):
+        if _opted_out(p):
+            return False
+        return _composite(p) >= 50 or (p['war_pref'] == 'in' and p['war_count'] < 5)
+
+    eligible = [p for p in enriched if _is_eligible(p)]
 
     if auto_mode:
         eligible_count = len(eligible)
@@ -348,11 +353,10 @@ def admin_war_roster():
     selected_tags = set()
     main_spots = war_size - fill_ups
 
-    # Step 1a — pref='in' AND < 5 wars in timeframe: include regardless of composite
+    # Step 1a — pref='in' AND < 5 wars: sparse override, sorted by composite DESC then TH
     main_roster = []
-    for p in sorted([p for p in enriched if p['war_pref'] == 'in' and p['war_count'] < 5
-                     and not _opted_out(p)],
-                    key=lambda p: -p['th']):
+    for p in sorted([p for p in eligible if p['war_pref'] == 'in' and p['war_count'] < 5],
+                    key=lambda p: (-_composite(p), -p['th'])):
         if len(main_roster) >= main_spots:
             break
         main_roster.append({**p, 'reason': 'Sparse data (<5 wars)'})
