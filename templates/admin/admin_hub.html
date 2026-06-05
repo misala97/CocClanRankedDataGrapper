@@ -581,6 +581,39 @@
         </div><!-- /collapse-body -->
     </div><!-- /collapse-card war-roster -->
 
+    <!-- ── New Member Evaluator ── -->
+    <div class="collapse-card" id="new-member-card">
+        <button class="collapse-header" onclick="toggleSection('new-member')">
+            <span class="collapse-header-icon">🆕</span>
+            <span class="collapse-header-title">New Member Check</span>
+            <span class="collapse-header-meta" id="new-member-meta">evaluate recently joined players</span>
+            <span class="collapse-chevron" id="chevron-new-member">▼</span>
+        </button>
+        <div class="collapse-body hidden" id="body-new-member">
+
+            <!-- Controls -->
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;margin-bottom:20px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;">Joined in last</label>
+                    <select id="nm-days" style="background:var(--surf2);border:1px solid var(--border);border-radius:7px;padding:6px 12px;font-size:13px;color:var(--text);font-family:'DM Sans',sans-serif;cursor:pointer;">
+                        <option value="7" selected>7 days</option>
+                        <option value="14">14 days</option>
+                        <option value="30">30 days</option>
+                    </select>
+                </div>
+                <button onclick="loadNewMembers()" id="nm-btn"
+                        style="padding:7px 18px;background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.35);border-radius:7px;color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;text-transform:uppercase;transition:all .15s;">
+                    Run Evaluation
+                </button>
+                <span id="nm-loading" style="display:none;color:var(--muted);font-size:12px;">Fetching live data…</span>
+            </div>
+
+            <!-- Results -->
+            <div id="nm-result"></div>
+
+        </div>
+    </div>
+
 </div>
 
 <div class="page-footer">{{ op_count.n }}/{{ known_functions|length }} tasks operational · last {{ selected_days }}d</div>
@@ -910,6 +943,171 @@ function _roleStyle(role) {
     if (role === 'War pref: In')          return 'background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.25);';
     if (role && role.startsWith('Sparse')) return 'background:rgba(88,166,255,.1);color:var(--blue);border:1px solid rgba(88,166,255,.25);';
     return 'background:rgba(240,165,0,.1);color:var(--accent);border:1px solid rgba(240,165,0,.25);';
+}
+
+// ── New Member Evaluator ──────────────────────────────────────────────────────
+function loadNewMembers() {
+    const btn     = document.getElementById('nm-btn');
+    const loading = document.getElementById('nm-loading');
+    const result  = document.getElementById('nm-result');
+    const days    = parseInt(document.getElementById('nm-days').value) || 7;
+
+    btn.disabled = true;
+    loading.style.display = 'inline';
+    result.innerHTML = '';
+
+    fetch('/admin/evaluate-new-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        loading.style.display = 'none';
+        document.getElementById('new-member-meta').textContent =
+            `${data.count} player${data.count !== 1 ? 's' : ''} joined in the last ${days} days`;
+        renderNewMembers(data.results);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        loading.style.display = 'none';
+        result.innerHTML = `<div style="color:var(--red);font-size:13px;padding:8px 0;">Error: ${err.message}</div>`;
+    });
+}
+
+function nmStatusIcon(status) {
+    if (status === 'pass') return '<span style="color:var(--green);font-weight:700;">✓</span>';
+    if (status === 'warn') return '<span style="color:var(--yellow);font-weight:700;">⚠</span>';
+    return '<span style="color:var(--red);font-weight:700;">✗</span>';
+}
+
+function nmVerdictStyle(verdict) {
+    if (verdict === 'accept')  return 'background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.3);';
+    if (verdict === 'decline') return 'background:rgba(248,81,73,.12);color:var(--red);border:1px solid rgba(248,81,73,.3);';
+    return 'background:rgba(240,165,0,.12);color:var(--accent);border:1px solid rgba(240,165,0,.3);';
+}
+
+function nmVerdictLabel(verdict) {
+    if (verdict === 'accept')  return '✓ Accept';
+    if (verdict === 'decline') return '✗ Decline';
+    return '? Consider';
+}
+
+function nmHeroBarColor(pct) {
+    if (pct >= 75) return 'var(--green)';
+    if (pct >= 50) return 'var(--yellow)';
+    return 'var(--red)';
+}
+
+function renderNewMembers(results) {
+    const wrap = document.getElementById('nm-result');
+    if (!results.length) {
+        wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0;">No players found who joined in that period.</div>';
+        return;
+    }
+
+    // Summary table
+    let tableRows = results.map(p => {
+        if (p.error) {
+            return `<tr style="border-bottom:1px solid var(--bord2);">
+                <td style="padding:11px 14px;font-weight:600;">${p.name}</td>
+                <td style="padding:11px 14px;color:var(--muted);font-size:11px;">${p.tag}</td>
+                <td style="padding:11px 14px;" colspan="9"><span style="color:var(--red);font-size:12px;">API error: ${p.error}</span></td>
+            </tr>`;
+        }
+
+        const heroBar = `<div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:64px;height:5px;border-radius:3px;background:var(--bord2);overflow:hidden;">
+                <div style="height:100%;width:${p.hero_pct}%;background:${nmHeroBarColor(p.hero_pct)};border-radius:3px;"></div>
+            </div>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:${nmHeroBarColor(p.hero_pct)};">${p.hero_pct}%</span>
+        </div>`;
+
+        const checks = p.checks.map(c =>
+            `<span title="${c.label}: ${c.detail}" style="cursor:default;">${nmStatusIcon(c.status)}</span>`
+        ).join(' ');
+
+        const joinBadge = `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(88,166,255,.1);color:var(--blue);border:1px solid rgba(88,166,255,.2);font-family:'Rajdhani',sans-serif;font-weight:700;">${p.days_ago}d ago</span>`;
+
+        const verdictBadge = `<span style="display:inline-block;padding:3px 10px;border-radius:5px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;${nmVerdictStyle(p.verdict)}">${nmVerdictLabel(p.verdict)}</span>`;
+
+        return `<tr style="border-bottom:1px solid var(--bord2);cursor:pointer;" onclick="nmToggleDetail('nm-detail-${p.tag.replace('#','')}')">
+            <td style="padding:11px 14px;">
+                <div style="font-weight:600;font-size:13.5px;">${p.name}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:1px;">${p.tag}</div>
+            </td>
+            <td style="padding:11px 14px;text-align:center;">${joinBadge}</td>
+            <td style="padding:11px 14px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--accent);">TH${p.th}</td>
+            <td style="padding:11px 14px;">${heroBar}</td>
+            <td style="padding:11px 14px;">${checks}</td>
+            <td style="padding:11px 14px;">${verdictBadge}</td>
+        </tr>
+        <tr id="nm-detail-${p.tag.replace('#','')}" style="display:none;background:var(--bg);">
+            <td colspan="6" style="padding:0;">
+                ${nmDetailPanel(p)}
+            </td>
+        </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+        <div style="overflow-x:auto;border-radius:10px;border:1px solid var(--border);">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead style="background:var(--surf2);border-bottom:1px solid var(--border);">
+                    <tr>
+                        <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
+                        <th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Joined</th>
+                        <th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">TH</th>
+                        <th style="padding:9px 14px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Heroes</th>
+                        <th style="padding:9px 14px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;" title="TH · Heroes · Trophies · War Stars · Donations · Attacks · Clan Games">Checks ↓ detail on click</th>
+                        <th style="padding:9px 14px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Verdict</th>
+                    </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+            </table>
+        </div>`;
+}
+
+function nmDetailPanel(p) {
+    const heroRows = p.heroes.map(h => {
+        const pct = h.max_level > 0 ? Math.round(h.level / h.max_level * 100) : 0;
+        const col = nmHeroBarColor(pct);
+        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">
+            <span style="font-size:12px;color:var(--text);width:130px;flex-shrink:0;">${h.name}</span>
+            <div style="flex:1;height:6px;border-radius:3px;background:var(--bord2);overflow:hidden;max-width:120px;">
+                <div style="height:100%;width:${pct}%;background:${col};border-radius:3px;"></div>
+            </div>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:${col};min-width:50px;">${h.level}/${h.max_level}</span>
+        </div>`;
+    }).join('') || '<span style="color:var(--muted);font-size:12px;">No heroes unlocked</span>';
+
+    const checkRows = p.checks.map(c => `
+        <div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--bord2);">
+            <span style="width:18px;text-align:center;font-size:14px;">${c.status==='pass'?'✓':c.status==='warn'?'⚠':'✗'}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--text);width:120px;flex-shrink:0;">${c.label}</span>
+            <span style="font-size:12px;color:var(--muted);">${c.detail}</span>
+        </div>`).join('');
+
+    const leagueImg = p.league_icon
+        ? `<img src="${p.league_icon}" width="24" height="24" style="vertical-align:middle;margin-right:5px;">`
+        : '';
+
+    return `<div style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Hero Development</div>
+            ${heroRows}
+        </div>
+        <div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Check Details</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${leagueImg}${p.league} · ${p.trophies.toLocaleString()} trophies (best ${p.best_trophies.toLocaleString()})</div>
+            ${checkRows}
+        </div>
+    </div>`;
+}
+
+function nmToggleDetail(id) {
+    const row = document.getElementById(id);
+    if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
 }
 
 function renderWarRoster(roster, bench) {

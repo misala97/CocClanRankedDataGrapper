@@ -284,6 +284,106 @@ def debug_dashboard():
     )
 
 
+# ── New Member Evaluation ─────────────────────────────────────────────────────
+
+def _evaluate_player_data(data):
+    """Given raw CoC API player dict, return evaluation dict (checks + verdict + heroes)."""
+    th_level      = data.get('townHallLevel', 0)
+    trophies      = data.get('trophies', 0)
+    best_trophies = data.get('bestTrophies', 0)
+    league_name   = (data.get('league') or {}).get('name', 'Unranked')
+    league_icon   = ((data.get('league') or {}).get('iconUrls') or {}).get('small', '')
+    donations     = data.get('donations', 0)
+    attack_wins   = data.get('attackWins', 0)
+
+    heroes_raw = [h for h in (data.get('heroes') or []) if h.get('village') == 'home']
+    heroes = [{'name': h['name'], 'level': h.get('level', 0), 'max_level': h.get('maxLevel', 1)}
+              for h in heroes_raw]
+    hero_total = sum(h['level']     for h in heroes)
+    hero_max   = sum(h['max_level'] for h in heroes)
+    hero_pct   = round(hero_total / hero_max * 100) if hero_max else 0
+
+    ach_map = {a['name']: a.get('value', 0) for a in (data.get('achievements') or [])}
+    donations_val   = ach_map.get('Friend in Need', donations)
+    war_stars_val   = ach_map.get('War Hero', data.get('warStars', 0))
+    attack_wins_val = ach_map.get('Conqueror', attack_wins)
+    clan_games_val  = ach_map.get('Games Champion', 0)
+
+    def chk(value, good, warn, label, fmt):
+        status = 'pass' if value >= good else ('warn' if value >= warn else 'fail')
+        return {'status': status, 'label': label, 'detail': fmt(value)}
+
+    checks = [
+        chk(th_level,         14,    12,    'Town Hall',
+            lambda v: f'TH{v}'),
+        chk(hero_pct,         75,    50,    'Heroes',
+            lambda v: f'{v}% of max'),
+        chk(best_trophies,    3500,  2600,  'Peak Trophies',
+            lambda v: f'{v:,}'),
+        chk(war_stars_val,    1000,  200,   'War Stars',
+            lambda v: f'{v:,}'),
+        chk(donations_val,    5000,  1000,  'Donations',
+            lambda v: f'{v:,}'),
+        chk(attack_wins_val,  1000,  300,   'Attack Wins',
+            lambda v: f'{v:,}'),
+        chk(clan_games_val,   50000, 10000, 'Clan Games',
+            lambda v: f'{v:,} pts'),
+    ]
+
+    passes = sum(1 for c in checks if c['status'] == 'pass')
+    fails  = sum(1 for c in checks if c['status'] == 'fail')
+    if fails == 0 and passes >= 5:
+        verdict = 'accept'
+    elif fails >= 3 or (fails >= 2 and passes < 3):
+        verdict = 'decline'
+    else:
+        verdict = 'consider'
+
+    return dict(
+        th=th_level, trophies=trophies, best_trophies=best_trophies,
+        league=league_name, league_icon=league_icon,
+        heroes=heroes, hero_pct=hero_pct,
+        checks=checks, verdict=verdict,
+    )
+
+
+@admin_bp.route('/admin/evaluate-new-members', methods=['POST'])
+@require_admin_login
+def admin_evaluate_new_members():
+    from services.api import api_fetch_player_data
+
+    days = int((request.get_json() or {}).get('days', 7))
+    cutoff = dt.date.today() - dt.timedelta(days=max(1, min(days, 30)))
+
+    new_members = Player.query.filter(
+        Player.in_clan == True,
+        Player.join_date >= cutoff,
+    ).order_by(Player.join_date.desc()).all()
+
+    results = []
+    for player in new_members:
+        try:
+            data = api_fetch_player_data(player.tag)
+            ev   = _evaluate_player_data(data)
+            results.append({
+                'name':      data.get('name', player.name or player.tag),
+                'tag':       player.tag,
+                'join_date': player.join_date.strftime('%d.%m.%Y') if player.join_date else '?',
+                'days_ago':  (dt.date.today() - player.join_date).days if player.join_date else '?',
+                **ev,
+            })
+        except RuntimeError as e:
+            results.append({
+                'name': player.name or player.tag,
+                'tag':  player.tag,
+                'join_date': player.join_date.strftime('%d.%m.%Y') if player.join_date else '?',
+                'days_ago': (dt.date.today() - player.join_date).days if player.join_date else '?',
+                'error': str(e),
+            })
+
+    return jsonify(results=results, count=len(results))
+
+
 # ── CWL Roster Recommendation ─────────────────────────────────────────────────
 
 def _player_war_stats(player_tag):
