@@ -1,0 +1,731 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+{% set page_title = 'Raid Statistics – CoC Analytics' %}
+{% set chartjs = true %}
+{% include '_head.html' %}
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    a { text-decoration: none; color: inherit; }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
+
+    /* ── SUMMARY CARDS ── */
+    .summary-grid {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px;
+    }
+    .summary-card {
+        background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+        padding: 22px 24px; position: relative; overflow: hidden;
+        transition: border-color .2s, box-shadow .2s;
+    }
+    .summary-card:hover { border-color: rgba(255,255,255,.12); box-shadow: 0 4px 24px rgba(0,0,0,.3); }
+    .summary-card::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 12px 12px 0 0;
+    }
+    .sc-raids::before  { background: linear-gradient(90deg, var(--purple), transparent); }
+    .sc-loot::before   { background: linear-gradient(90deg, var(--accent), transparent); }
+    .sc-wipes::before  { background: linear-gradient(90deg, var(--green),  transparent); }
+    .sc-avg::before    { background: linear-gradient(90deg, var(--blue),   transparent); }
+    .sc-icon  { font-size: 22px; margin-bottom: 10px; }
+    .sc-value { font-family: 'Rajdhani', sans-serif; font-size: 36px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+    .sc-raids  .sc-value { color: var(--purple); }
+    .sc-loot   .sc-value { color: var(--accent); }
+    .sc-wipes  .sc-value { color: var(--green);  }
+    .sc-avg    .sc-value { color: var(--blue);   }
+    .sc-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; }
+
+    /* ── INSIGHT CARDS (second row) ── */
+    .insight-grid {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px;
+    }
+    .insight-card {
+        background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+        padding: 18px 22px; display: flex; align-items: center; gap: 18px;
+        transition: border-color .2s, box-shadow .2s;
+    }
+    .insight-card:hover { border-color: rgba(255,255,255,.1); box-shadow: 0 3px 16px rgba(0,0,0,.25); }
+    .insight-icon-wrap {
+        width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center; font-size: 20px;
+    }
+    .ic-wipe-rate  .insight-icon-wrap { background: rgba(63,185,80,.1);  }
+    .ic-part-rate  .insight-icon-wrap { background: rgba(88,166,255,.1); }
+    .ic-trend      .insight-icon-wrap { background: rgba(240,165,0,.1);  }
+    .ic-trend-up   .insight-icon-wrap { background: rgba(63,185,80,.1);  }
+    .ic-trend-down .insight-icon-wrap { background: rgba(248,81,73,.1);  }
+    .insight-body { min-width: 0; }
+    .insight-value {
+        font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 700; line-height: 1; margin-bottom: 3px;
+    }
+    .ic-wipe-rate  .insight-value { color: var(--green);  }
+    .ic-part-rate  .insight-value { color: var(--blue);   }
+    .ic-trend      .insight-value { color: var(--muted);  }
+    .ic-trend-up   .insight-value { color: var(--green);  }
+    .ic-trend-down .insight-value { color: var(--red);    }
+    .insight-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .insight-sub   { font-size: 11px; color: var(--muted); opacity: .65; margin-top: 2px; }
+
+    /* ── PANELS ── */
+    .charts-row { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-bottom: 24px; height: 330px; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+    .panel-hdr {
+        display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+        padding: 13px 18px; border-bottom: 1px solid var(--bord2); background: var(--surf2);
+    }
+    .panel-title {
+        font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
+        color: var(--muted); text-transform: uppercase; letter-spacing: 0.9px;
+    }
+    .panel-sub { font-size: 11px; color: var(--muted); opacity: .65; }
+    .panel-body { padding: 18px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .chart-wrap { position: relative; flex: 1; min-height: 0; }
+    .chart-placeholder {
+        flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 8px; color: var(--muted);
+    }
+    .chart-placeholder-icon { font-size: 28px; opacity: .4; }
+    .chart-placeholder-txt  { font-size: 13px; }
+
+    /* ── DISTRICT TABLE ── */
+    #districtTableWrap { flex: 1; overflow-y: auto; min-height: 0; }
+    #districtTableWrap::-webkit-scrollbar { width: 4px; }
+    #districtTableWrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .dist-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .dist-table tbody tr { border-bottom: 1px solid var(--bord2); transition: background .1s; }
+    .dist-table tbody tr:last-child { border-bottom: none; }
+    .dist-table tbody tr:hover { background: rgba(255,255,255,.03); }
+    .dist-table td { padding: 8px 14px; vertical-align: middle; }
+    .dt-name-cell { display: flex; align-items: center; gap: 6px; }
+    .dt-name { font-weight: 600; color: var(--text); white-space: nowrap; }
+    .dt-lvl {
+        font-size: 10px; font-family: 'Rajdhani', sans-serif; font-weight: 700; flex-shrink: 0;
+        padding: 1px 5px; border-radius: 4px; background: rgba(88,166,255,.1);
+        color: var(--blue); border: 1px solid rgba(88,166,255,.2);
+    }
+    .dt-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .dt-bar-bg   { flex: 1; height: 5px; border-radius: 3px; background: var(--bord2); overflow: hidden; min-width: 40px; }
+    .dt-bar      { height: 100%; border-radius: 3px; }
+    .dt-val      { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; min-width: 30px; text-align: right; }
+    .dt-clears   { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+    /* ── CHAMPIONS STRIP ── */
+    .champions-wrap { margin-bottom: 24px; }
+    .champions-scroll {
+        display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; padding-top: 2px;
+    }
+    .champions-scroll::-webkit-scrollbar { height: 4px; }
+    .champions-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .champ-card {
+        background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+        padding: 12px 14px; flex-shrink: 0; min-width: 155px; max-width: 175px;
+        position: relative; overflow: hidden; transition: border-color .2s, box-shadow .15s;
+    }
+    .champ-card:hover { border-color: rgba(240,165,0,.3); box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+    .champ-card::after {
+        content: '👑'; position: absolute; top: 9px; right: 11px; font-size: 14px; opacity: .5;
+    }
+    .champ-district {
+        font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+        letter-spacing: .6px; margin-bottom: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 20px;
+    }
+    .champ-name {
+        font-weight: 700; font-size: 13.5px; color: var(--text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;
+    }
+    .champ-atk {
+        font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700;
+        line-height: 1; margin-bottom: 2px;
+    }
+    .champ-clears { font-size: 11px; color: var(--muted); }
+
+    /* ── HEATMAP ── */
+    .heatmap-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+    .heatmap-scroll { overflow-x: auto; }
+    .heatmap-scroll::-webkit-scrollbar { height: 5px; }
+    .heatmap-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .hm-table { border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+
+    /* Top-left corner */
+    .hm-th-corner { width: 148px; min-width: 148px; background: var(--surf2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: bottom; padding: 0 12px 10px; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+
+    /* Vertical player column headers */
+    .hm-th-player {
+        width: 48px; min-width: 48px; max-width: 48px;
+        height: 130px; padding: 0;
+        background: var(--surf2);
+        border-bottom: 1px solid var(--border); border-right: 1px solid var(--bord2);
+        overflow: hidden;
+        text-align: center; vertical-align: bottom;
+    }
+    .hm-th-player span {
+        display: inline-block;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        font-size: 11px; font-weight: 600; color: var(--muted);
+        letter-spacing: .3px; white-space: nowrap;
+        max-height: 112px; overflow: hidden; text-overflow: ellipsis;
+        vertical-align: bottom; margin-bottom: 10px;
+    }
+
+    /* District row headers */
+    .hm-district-cell {
+        width: 148px; min-width: 148px; max-width: 148px; height: 38px;
+        padding: 0 12px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--bord2);
+        background: var(--surf2); font-weight: 600; font-size: 12.5px; color: var(--text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+    }
+
+    .hm-cell {
+        width: 48px; min-width: 48px; max-width: 48px; height: 38px;
+        text-align: center; vertical-align: middle;
+        border-right: 1px solid var(--bord2); border-bottom: 1px solid var(--bord2);
+        position: relative; cursor: default; transition: filter .12s;
+    }
+    .hm-cell:hover { filter: brightness(1.3); z-index: 2; }
+    .hm-cell-inner { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 1px; }
+    .hm-avg    { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; line-height: 1; }
+    .hm-clears { font-size: 10px; opacity: .6; line-height: 1; }
+    .hm-empty  { color: var(--muted); opacity: .2; font-size: 13px; }
+    .hm-row:last-child .hm-district-cell,
+    .hm-row:last-child .hm-cell { border-bottom: none; }
+
+    /* Tooltip */
+    .hm-cell[data-tip]:hover::before {
+        content: attr(data-tip);
+        position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+        background: var(--surf2); border: 1px solid var(--border); border-radius: 7px;
+        padding: 6px 10px; font-size: 11px; color: var(--text); white-space: pre; z-index: 200;
+        box-shadow: 0 6px 20px rgba(0,0,0,.5); pointer-events: none; line-height: 1.6;
+        font-family: 'DM Sans', sans-serif; font-weight: 400;
+    }
+
+    /* ── LEADERBOARD ── */
+    .lb-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .lb-hdr {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 13px 18px; border-bottom: 1px solid var(--bord2); background: var(--surf2);
+    }
+    .lb-search {
+        padding: 6px 12px; border: 1px solid var(--border); border-radius: 7px;
+        font-size: 12px; font-family: 'DM Sans', sans-serif;
+        background: var(--bg); color: var(--text); width: 200px;
+        transition: border-color .15s;
+    }
+    .lb-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(240,165,0,.1); }
+    .lb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .lb-table thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
+    .lb-table thead th {
+        padding: 10px 14px; text-align: left; font-weight: 600; color: var(--muted);
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; white-space: nowrap;
+        cursor: pointer; user-select: none; transition: color .12s;
+    }
+    .lb-table thead th:hover { color: var(--text); }
+    .lb-table thead th.sort-asc::after  { content: ' ↑'; font-size: .85em; color: var(--accent); }
+    .lb-table thead th.sort-desc::after { content: ' ↓'; font-size: .85em; color: var(--accent); }
+    .lb-table thead th.sort-asc,
+    .lb-table thead th.sort-desc { color: var(--accent); }
+    .lb-table thead th:first-child { cursor: default; width: 44px; text-align: center; }
+    .lb-table tbody tr { border-bottom: 1px solid var(--bord2); transition: background .1s; }
+    .lb-table tbody tr:last-child { border-bottom: none; }
+    .lb-table tbody tr:hover { background: rgba(255,255,255,.03); }
+    .lb-table tbody td { padding: 11px 14px; vertical-align: middle; }
+    .rank-cell { text-align: center; font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; }
+    .rank-1 { color: #ffd700; }
+    .rank-2 { color: #b0bec5; }
+    .rank-3 { color: #cd7f32; }
+    .rank-n { color: var(--muted); font-size: 13px; }
+    .p-name { font-weight: 600; color: var(--text); font-size: 14px; line-height: 1.2; }
+    .p-tag  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .p-link { color: inherit; transition: color .12s; }
+    .p-link:hover { color: var(--accent); }
+    .p-arrow { font-size: 9px; color: var(--muted); opacity: .4; vertical-align: super; transition: opacity .12s, color .12s; }
+    .p-link:hover .p-arrow { opacity: 1; color: var(--accent); }
+    .num { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; }
+    .c-accent { color: var(--accent); }
+    .c-green  { color: var(--green);  }
+    .c-blue   { color: var(--blue);   }
+    .c-purple { color: var(--purple); }
+    .c-muted  { color: var(--muted);  }
+    .lb-footer {
+        padding: 9px 18px; font-size: 12px; color: var(--muted);
+        border-top: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif;
+        font-weight: 600; letter-spacing: .3px;
+    }
+    .empty-msg { padding: 60px 24px; text-align: center; color: var(--muted); font-size: 14px; }
+
+    /* ── FOOTER ── */
+    .page-footer {
+        text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
+        margin-top: 4px; border-top: 1px solid var(--bord2);
+        font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: .3px;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) { .charts-row { grid-template-columns: 1fr; height: auto; } .chart-wrap { height: 240px; flex: none; } #districtTableWrap { max-height: 320px; flex: none; } }
+    @media (max-width: 900px)  { .container { padding-left: 20px; padding-right: 20px; } .summary-grid { grid-template-columns: repeat(2, 1fr); } .insight-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px)  { .summary-grid { grid-template-columns: 1fr; } .insight-grid { grid-template-columns: 1fr; } .lb-search { width: 130px; } }
+</style>
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+{% set page_header_title = 'Raid <span>Statistics</span>' %}
+{% set page_header_desc = 'All-time performance across every raid weekend' %}
+{% include '_page_header.html' %}
+
+<div class="container">
+
+    <!-- Summary cards -->
+    <div class="summary-grid">
+        <div class="summary-card sc-raids">
+            <div class="sc-icon">🏴</div>
+            <div class="sc-value">{{ total_raids }}</div>
+            <div class="sc-label">Raids Tracked</div>
+        </div>
+        <div class="summary-card sc-loot">
+            <div class="sc-icon">💰</div>
+            <div class="sc-value">{{ '{:,}'.format(total_loot_all) }}</div>
+            <div class="sc-label">All-Time Capital Loot</div>
+        </div>
+        <div class="summary-card sc-wipes">
+            <div class="sc-icon">⚡</div>
+            <div class="sc-value">{{ total_solo_wipes_all }}</div>
+            <div class="sc-label">Total Solo Wipes</div>
+        </div>
+        <div class="summary-card sc-avg">
+            <div class="sc-icon">📈</div>
+            <div class="sc-value">{{ '{:,}'.format(avg_loot_per_raid) }}</div>
+            <div class="sc-label">Avg Loot / Raid</div>
+        </div>
+    </div>
+
+    <!-- Insight cards -->
+    {% set trend_class = 'ic-trend-up' if loot_trend_dir == 'up' else ('ic-trend-down' if loot_trend_dir == 'down' else 'ic-trend') %}
+    {% set trend_icon  = '📈' if loot_trend_dir == 'up' else ('📉' if loot_trend_dir == 'down' else '📊') %}
+    {% if loot_trend_pct is not none %}
+        {% set trend_sign = '+' if loot_trend_pct > 0 else '' %}
+        {% set trend_text = trend_sign ~ loot_trend_pct ~ '%' %}
+    {% else %}
+        {% set trend_text = '—' %}
+    {% endif %}
+    <div class="insight-grid">
+        <div class="insight-card ic-wipe-rate">
+            <div class="insight-icon-wrap">⚡</div>
+            <div class="insight-body">
+                <div class="insight-value">{{ solo_wipe_rate }}%</div>
+                <div class="insight-label">Solo Wipe Rate</div>
+                <div class="insight-sub">of all district encounters</div>
+            </div>
+        </div>
+        <div class="insight-card ic-part-rate">
+            <div class="insight-icon-wrap">👥</div>
+            <div class="insight-body">
+                <div class="insight-value">{{ avg_atk_per_member }} <span style="font-size:16px;opacity:.6;">/ 6</span></div>
+                <div class="insight-label">Avg Attacks / Member</div>
+                <div class="insight-sub">{{ participation_pct }}% participation rate</div>
+            </div>
+        </div>
+        <div class="insight-card {{ trend_class }}">
+            <div class="insight-icon-wrap">{{ trend_icon }}</div>
+            <div class="insight-body">
+                <div class="insight-value">{{ trend_text }}</div>
+                <div class="insight-label">Loot Trend</div>
+                <div class="insight-sub">last 3 raids vs previous 3</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="charts-row">
+        <div class="panel">
+            <div class="panel-hdr">
+                <span class="panel-title">💰 Capital Loot History</span>
+                <span class="panel-sub">finished raids</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-wrap">
+                    <canvas id="lootChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-hdr">
+                <span class="panel-title">⚡ District Efficiency</span>
+                <span class="panel-sub">avg attacks to solo wipe</span>
+            </div>
+            <div id="districtTableWrap">
+                <div class="empty-msg">No data.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Champions strip -->
+    <div class="champions-wrap panel">
+        <div class="panel-hdr">
+            <span class="panel-title">👑 District Champions</span>
+            <span class="panel-sub">most efficient solo wiper per district (all-time)</span>
+        </div>
+        <div style="padding:14px 16px 10px;">
+            <div class="champions-scroll" id="championsScroll">
+                <div style="color:var(--muted);font-size:13px;padding:8px;">No data yet.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Heatmap -->
+    <div class="heatmap-panel">
+        <div class="panel-hdr">
+            <span class="panel-title">⚡ Solo Wipe Heatmap</span>
+            <span class="panel-sub">avg attacks to solo wipe per player × district — green = 1 attack, red = 3+</span>
+        </div>
+        <div class="heatmap-scroll">
+            <div id="heatmapWrap" style="padding:0;">
+                <div style="padding:24px;color:var(--muted);font-size:13px;text-align:center;">No data yet.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player leaderboard -->
+    <div class="lb-panel">
+        <div class="lb-hdr">
+            <span class="panel-title">🏆 Player Leaderboard</span>
+            <input id="lbSearch" class="lb-search" type="search" placeholder="🔍 Search player…" oninput="renderTable()">
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="lb-table" id="lbTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th onclick="sortBy('player_name')">Player</th>
+                        <th onclick="sortBy('raids_participated')">Raids</th>
+                        <th onclick="sortBy('total_attacks')">Attacks</th>
+                        <th onclick="sortBy('total_loot')">Total Loot</th>
+                        <th onclick="sortBy('avg_loot_per_raid')">Avg / Raid</th>
+                        <th onclick="sortBy('total_solo_wipes')">Solo Wipes</th>
+                        <th onclick="sortBy('avg_attacks_per_wipe')">Avg Atk / Wipe</th>
+                        <th onclick="sortBy('avg_pct')">Avg %</th>
+                    </tr>
+                </thead>
+                <tbody id="lbBody"></tbody>
+            </table>
+        </div>
+        <div class="lb-footer" id="lbFooter"></div>
+    </div>
+
+</div>
+
+<div class="page-footer">CoC Analytics · Raid Statistics</div>
+
+<script>
+const playerStats  = {{ player_stats_json  | safe }};
+const districtData = {{ district_data_json | safe }};
+const raidHistory  = {{ raid_history_json  | safe }};
+
+// ── sort state ───────────────────────────────────────────────────────────────
+let sortCol = 'total_solo_wipes', sortDir = 'desc';
+
+function sortBy(col) {
+    if (sortCol === col) {
+        sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+        sortCol = col;
+        sortDir = col === 'player_name' ? 'asc' : 'desc';
+    }
+    renderTable();
+    updateHeaders();
+}
+
+function updateHeaders() {
+    document.querySelectorAll('#lbTable thead th').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        const fn = th.getAttribute('onclick') || '';
+        const m  = fn.match(/'([^']+)'/);
+        if (m && m[1] === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    });
+}
+
+function esc(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function wipeColor(avg) {
+    if (!avg) return 'var(--muted)';
+    const t = Math.min(1, Math.max(0, (avg - 1) / 2));
+    return `hsl(${Math.round(120 * (1 - t))},60%,52%)`;
+}
+
+function renderTable() {
+    const search = (document.getElementById('lbSearch').value || '').toLowerCase();
+    let rows = playerStats.filter(p =>
+        !search || (p.player_name || '').toLowerCase().includes(search) ||
+                   (p.player_tag  || '').toLowerCase().includes(search)
+    );
+    rows.sort((a, b) => {
+        let av = a[sortCol] ?? 0, bv = b[sortCol] ?? 0;
+        if (typeof av === 'string') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+        if (av < bv) return sortDir === 'asc' ? -1 :  1;
+        if (av > bv) return sortDir === 'asc' ?  1 : -1;
+        return 0;
+    });
+
+    const tbody = document.getElementById('lbBody');
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-msg">No players found.</td></tr>`;
+        document.getElementById('lbFooter').textContent = '0 players';
+        return;
+    }
+
+    tbody.innerHTML = rows.map((p, i) => {
+        const rank = i + 1;
+        const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-n';
+        const rankMark  = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+        const profile   = '/player/' + encodeURIComponent((p.player_tag || '').replace('#', ''));
+        const wc        = wipeColor(p.avg_attacks_per_wipe);
+        return `<tr>
+            <td class="rank-cell ${rankClass}">${rankMark}</td>
+            <td>
+                <div class="p-name"><a href="${profile}" class="p-link">${esc(p.player_name)} <span class="p-arrow">↗</span></a></div>
+                <div class="p-tag">${esc(p.player_tag)}</div>
+            </td>
+            <td><span class="num c-purple">${p.raids_participated}</span></td>
+            <td><span class="num c-blue">${p.total_attacks}</span></td>
+            <td><span class="num c-accent">${p.total_loot ? p.total_loot.toLocaleString() : '—'}</span></td>
+            <td><span class="num c-muted">${p.avg_loot_per_raid ? p.avg_loot_per_raid.toLocaleString() : '—'}</span></td>
+            <td><span class="num c-green">${p.total_solo_wipes}</span></td>
+            <td><span class="num" style="color:${wc};">${p.avg_attacks_per_wipe > 0 ? p.avg_attacks_per_wipe.toFixed(2) : '—'}</span></td>
+            <td><span class="num c-blue">${p.avg_pct}%</span></td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('lbFooter').textContent =
+        `${rows.length} player${rows.length !== 1 ? 's' : ''} shown`;
+}
+
+// ── District efficiency table ────────────────────────────────────────────────
+function buildDistrictTable() {
+    if (!districtData.length) return;
+    const maxAvg = Math.max(...districtData.map(d => d.avg_attacks), 1);
+    const html = districtData.map(d => {
+        const pct  = (d.avg_attacks / maxAvg * 100).toFixed(1);
+        const t    = Math.min(1, Math.max(0, (d.avg_attacks - 1) / 2));
+        const col  = `hsl(${Math.round(120 * (1 - t))},60%,48%)`;
+        return `<tr>
+            <td>
+                <div class="dt-name-cell">
+                    <span class="dt-name">${esc(d.name)}</span>
+                    <span class="dt-lvl">Lv${d.level}</span>
+                </div>
+            </td>
+            <td>
+                <div class="dt-bar-wrap">
+                    <div class="dt-bar-bg"><div class="dt-bar" style="width:${pct}%;background:${col};"></div></div>
+                    <span class="dt-val" style="color:${col};">${d.avg_attacks.toFixed(2)}</span>
+                </div>
+            </td>
+            <td><span class="dt-clears">${d.total_clears}×</span></td>
+        </tr>`;
+    }).join('');
+    document.getElementById('districtTableWrap').innerHTML =
+        `<table class="dist-table"><tbody>${html}</tbody></table>`;
+}
+
+// ── Loot history chart ───────────────────────────────────────────────────────
+function buildLootChart() {
+    const wrap = document.querySelector('.chart-wrap');
+    const ctx  = document.getElementById('lootChart');
+    if (!ctx) return;
+    if (raidHistory.length < 2) {
+        wrap.innerHTML = `<div class="chart-placeholder">
+            <div class="chart-placeholder-icon">📊</div>
+            <div class="chart-placeholder-txt">Not enough raids tracked yet to show history</div>
+        </div>`;
+        return;
+    }
+
+    // Rolling average (3-raid window)
+    const loots = raidHistory.map(r => r.loot);
+    const rolling = loots.map((_, i) => {
+        const window = loots.slice(Math.max(0, i - 2), i + 1);
+        return Math.round(window.reduce((s, v) => s + v, 0) / window.length);
+    });
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: raidHistory.map(r => r.label),
+            datasets: [
+                {
+                    label: 'Capital Loot',
+                    data: loots,
+                    backgroundColor: 'rgba(240,165,0,0.3)',
+                    borderColor: 'rgba(240,165,0,0.75)',
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    borderSkipped: false,
+                    maxBarThickness: 52,
+                    order: 2,
+                },
+                {
+                    label: '3-Raid Avg',
+                    data: rolling,
+                    type: 'line',
+                    borderColor: 'rgba(88,166,255,0.8)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.35,
+                    fill: false,
+                    order: 1,
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: { color: '#8b949e', font: { family: 'DM Sans', size: 11 }, boxWidth: 12, padding: 14 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.parsed.y.toLocaleString()}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#8b949e', font: { family: 'Rajdhani', size: 11 }, maxRotation: 45 },
+                    grid: { color: 'rgba(255,255,255,0.04)' }
+                },
+                y: {
+                    ticks: {
+                        color: '#8b949e',
+                        callback: v => v >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : v >= 1000 ? (v / 1000).toFixed(0) + 'K' : v
+                    },
+                    grid: { color: 'rgba(255,255,255,0.06)' }
+                }
+            }
+        }
+    });
+}
+
+// ── Champions strip + Heatmap ────────────────────────────────────────────────
+const histStats = {{ hist_stats_json | safe }};
+
+function heatColor(avg) {
+    const t = Math.min(1, Math.max(0, (avg - 1) / 2)); // 0=green,1=red
+    const h = Math.round(120 * (1 - t));
+    return {
+        bg:   `hsla(${h},65%,40%,0.22)`,
+        text: `hsl(${h},65%,58%)`,
+    };
+}
+
+function buildChampionsAndHeatmap() {
+    if (!histStats.length) return;
+
+    // Aggregate by (player, district) across all levels
+    const pd = {}; // player -> district -> {totalWeighted, clears}
+    histStats.forEach(r => {
+        if (!pd[r.player_name]) pd[r.player_name] = {};
+        if (!pd[r.player_name][r.district]) pd[r.player_name][r.district] = { tw: 0, clears: 0 };
+        pd[r.player_name][r.district].tw     += r.avg_attacks * r.clears;
+        pd[r.player_name][r.district].clears += r.clears;
+    });
+
+    // Resolve avg per (player, district)
+    const cell = {}; // player -> district -> {avg, clears}
+    Object.entries(pd).forEach(([player, dists]) => {
+        cell[player] = {};
+        Object.entries(dists).forEach(([dist, d]) => {
+            cell[player][dist] = { avg: d.clears > 0 ? d.tw / d.clears : 0, clears: d.clears };
+        });
+    });
+
+    // All districts (sorted by avg across all players — easiest first)
+    const districtAvg = {};
+    Object.values(cell).forEach(dists => {
+        Object.entries(dists).forEach(([dist, d]) => {
+            if (!districtAvg[dist]) districtAvg[dist] = { tw: 0, n: 0 };
+            districtAvg[dist].tw += d.avg * d.clears;
+            districtAvg[dist].n  += d.clears;
+        });
+    });
+    const allDistricts = Object.keys(districtAvg)
+        .sort((a, b) => (districtAvg[a].tw / districtAvg[a].n) - (districtAvg[b].tw / districtAvg[b].n));
+
+    // All players sorted by total solo wipes desc
+    const playerWipes = {};
+    Object.entries(cell).forEach(([player, dists]) => {
+        playerWipes[player] = Object.values(dists).reduce((s, d) => s + d.clears, 0);
+    });
+    const allPlayers = Object.keys(cell).sort((a, b) => playerWipes[b] - playerWipes[a]);
+
+    // ── Champions strip ──────────────────────────────────────────────────────
+    const champData = allDistricts.map(dist => {
+        const contenders = allPlayers
+            .filter(p => cell[p][dist])
+            .map(p => ({ name: p, ...cell[p][dist] }))
+            .sort((a, b) => a.avg - b.avg || b.clears - a.clears);
+        return { dist, champ: contenders[0] || null };
+    }).filter(d => d.champ);
+
+    const champHtml = champData.map(({ dist, champ }) => {
+        const c = heatColor(champ.avg);
+        return `<div class="champ-card">
+            <div class="champ-district">${esc(dist)}</div>
+            <div class="champ-name">${esc(champ.name)}</div>
+            <div class="champ-atk" style="color:${c.text};">${champ.avg.toFixed(2)}<span style="font-size:13px;font-weight:500;opacity:.7;"> atk</span></div>
+            <div class="champ-clears">${champ.clears}× solo wipe${champ.clears !== 1 ? 's' : ''}</div>
+        </div>`;
+    }).join('');
+    document.getElementById('championsScroll').innerHTML = champHtml || '<span style="color:var(--muted);font-size:13px;">No data yet.</span>';
+
+    // ── Heatmap ──────────────────────────────────────────────────────────────
+    const thCells = allPlayers.map(p =>
+        `<th class="hm-th-player"><span>${esc(p)}</span></th>`
+    ).join('');
+
+    const bodyRows = allDistricts.map(dist => {
+        const cells = allPlayers.map(player => {
+            const d = cell[player]?.[dist];
+            if (!d) return `<td class="hm-cell"><div class="hm-cell-inner"><span class="hm-empty">—</span></div></td>`;
+            const c   = heatColor(d.avg);
+            const tip = `${player}\n${dist}\nAvg attacks: ${d.avg.toFixed(2)}\nSolo wipes: ${d.clears}×`;
+            return `<td class="hm-cell" style="background:${c.bg};" data-tip="${esc(tip)}">
+                <div class="hm-cell-inner">
+                    <span class="hm-avg" style="color:${c.text};">${d.avg.toFixed(2)}</span>
+                    <span class="hm-clears" style="color:${c.text};">${d.clears}×</span>
+                </div>
+            </td>`;
+        }).join('');
+        return `<tr class="hm-row">
+            <td class="hm-district-cell">${esc(dist)}</td>
+            ${cells}
+        </tr>`;
+    }).join('');
+
+    document.getElementById('heatmapWrap').innerHTML = `
+        <table class="hm-table">
+            <thead>
+                <tr>
+                    <th class="hm-th-corner"></th>
+                    ${thCells}
+                </tr>
+            </thead>
+            <tbody>${bodyRows}</tbody>
+        </table>`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    renderTable();
+    updateHeaders();
+    buildDistrictTable();
+    buildLootChart();
+    buildChampionsAndHeatmap();
+});
+</script>
+
+</body>
+</html>

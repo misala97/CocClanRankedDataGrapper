@@ -121,6 +121,33 @@
         text-decoration: none; transition: all .12s; flex-shrink: 0;
     }
     .nav-login:hover { color: var(--accent); border-color: rgba(240,165,0,.4); background: rgba(240,165,0,.05); }
+
+    /* War link dropdown */
+    .nl-wrap { position: relative; display: inline-flex; }
+    .nl-wrap .nl { display: flex; align-items: center; gap: 4px; }
+    .nl-wrap .nl-caret {
+        width: 10px; height: 10px; color: var(--muted); flex-shrink: 0;
+        transition: transform .15s;
+    }
+    .nl-wrap:hover .nl-caret { transform: rotate(180deg); }
+    .nl-submenu {
+        display: none; position: absolute; top: 100%; left: 0;
+        min-width: 160px; z-index: 400;
+        padding-top: 6px;
+    }
+    .nl-submenu-inner {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 8px; padding: 4px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    }
+    .nl-wrap:hover .nl-submenu { display: block; }
+    .nl-sub-item {
+        display: block; padding: 7px 11px; border-radius: 5px;
+        font-size: 12px; font-weight: 500; color: var(--muted);
+        text-decoration: none; white-space: nowrap; transition: color .1s, background .1s;
+    }
+    .nl-sub-item:hover { color: var(--text); background: rgba(255,255,255,.06); }
+    .nl-sub-item.nl-sub-active { color: var(--text); }
 </style>
 
 {% set _p = request.path %}
@@ -136,10 +163,58 @@
 
         <div class="nav-links">
             <a href="/"        class="nl {% if _p == '/' %}nl-active{% endif %}">Home</a>
-            <a href="/ranked"  class="nl {% if _p.startswith('/ranked') %}nl-active{% endif %}">Ranked</a>
-            <a href="/battles" class="nl {% if _p.startswith('/battles') %}nl-active{% endif %}">Battles</a>
-            <a href="/raid"    class="nl {% if _p.startswith('/raid') %}nl-active{% endif %}">Raids</a>
-            <a href="/war"     class="nl {% if _p.startswith('/war') %}nl-active{% endif %}">War</a>
+            <div class="nl-wrap">
+                <a href="/ranked" class="nl {% if _p.startswith('/ranked') %}nl-active{% endif %}">Ranked
+                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 6 8 10 12 6"/>
+                    </svg>
+                </a>
+                <div class="nl-submenu">
+                    <div class="nl-submenu-inner">
+                        <a href="/ranked"       class="nl-sub-item {% if _p == '/ranked' %}nl-sub-active{% endif %}">Current Season</a>
+                        <a href="/ranked/stats" class="nl-sub-item {% if _p.startswith('/ranked/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
+                    </div>
+                </div>
+            </div>
+            <div class="nl-wrap">
+                <a href="/battles" class="nl {% if _p.startswith('/battles') %}nl-active{% endif %}">Battles
+                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 6 8 10 12 6"/>
+                    </svg>
+                </a>
+                <div class="nl-submenu">
+                    <div class="nl-submenu-inner">
+                        <a href="/battles"       class="nl-sub-item {% if _p == '/battles' %}nl-sub-active{% endif %}">Battle History</a>
+                        <a href="/battles/stats" class="nl-sub-item {% if _p.startswith('/battles/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
+                    </div>
+                </div>
+            </div>
+            <div class="nl-wrap">
+                <a href="/raid" class="nl {% if _p.startswith('/raid') %}nl-active{% endif %}">Raids
+                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 6 8 10 12 6"/>
+                    </svg>
+                </a>
+                <div class="nl-submenu">
+                    <div class="nl-submenu-inner">
+                        <a href="/raid"       class="nl-sub-item {% if _p == '/raid' %}nl-sub-active{% endif %}">Current Weekend</a>
+                        <a href="/raid/stats" class="nl-sub-item {% if _p.startswith('/raid/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
+                    </div>
+                </div>
+            </div>
+            <div class="nl-wrap">
+                <a href="/war" class="nl {% if _p.startswith('/war') %}nl-active{% endif %}">War
+                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 6 8 10 12 6"/>
+                    </svg>
+                </a>
+                <div class="nl-submenu">
+                    <div class="nl-submenu-inner">
+                        <a href="/war"       class="nl-sub-item {% if _p == '/war' %}nl-sub-active{% endif %}">Current War</a>
+                        <a href="/war/stats" class="nl-sub-item {% if _p.startswith('/war/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
+                    </div>
+                </div>
+            </div>
             <a href="/cwl"     class="nl {% if _p.startswith('/cwl') %}nl-active{% endif %}">CWL</a>
             <a href="/clan"    class="nl {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nl-active{% endif %}">Clan</a>
             {% if is_super_admin %}
