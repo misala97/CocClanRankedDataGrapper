@@ -453,9 +453,23 @@
             <td>
                 <div class="clan-col">
                     {% if s.badge_url %}<img src="{{ s.badge_url }}" class="clan-badge-sm" alt="">{% endif %}
-                    <span style="font-weight:600;">{{ s.name }}</span>
-                    {% if is_enemy %}<span class="enemy-pill">⚔ NOW</span>{% endif %}
-                    {% if is_tomorrow %}<span class="tomorrow-pill">⏰ NEXT</span>{% endif %}
+                    <div>
+                        <div style="font-weight:600;line-height:1.3;">{{ s.name }}</div>
+                        {% if not is_ours %}
+                        {% set fc = fought_clans.get(s.tag) %}
+                        {% if is_enemy or is_tomorrow or fc %}
+                        <div style="display:flex;align-items:center;gap:4px;margin-top:4px;flex-wrap:wrap;">
+                            {% if fc %}
+                            <span class="fought-pill fought-{{ fc.result or 'live' }}" style="margin-left:0;">
+                                Day {{ fc.round }}{% if fc.result == 'win' %} · W{% elif fc.result == 'loss' %} · L{% elif fc.result == 'draw' %} · D{% endif %}
+                            </span>
+                            {% endif %}
+                            {% if is_enemy %}<span class="enemy-pill" style="margin-left:0;">⚔ NOW</span>{% endif %}
+                            {% if is_tomorrow %}<span class="tomorrow-pill" style="margin-left:0;">⏰ NEXT</span>{% endif %}
+                        </div>
+                        {% endif %}
+                        {% endif %}
+                    </div>
                 </div>
             </td>
             <td class="mono text-muted" style="text-align:center;">
