@@ -3,10 +3,12 @@ import time
 
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_BATTLE_LOG_DATA
+from tasks import task_lock
 
 battle_logger = setup_task_logger('battle_logs', 'logs/task_battle_logs.log')
 
 
+@task_lock(logger=battle_logger)
 def task_update_battle_logs():
     from app import app
     from extensions import db

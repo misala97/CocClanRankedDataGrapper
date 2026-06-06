@@ -11,9 +11,32 @@ load_dotenv(override=True)
 LOCAL_TZ = ZoneInfo(os.getenv("TIMEZONE", "Europe/Berlin"))
 
 CLEANUP_THRESHOLD = 35
+SKIP_LEAGUES      = {'Unranked', 'Unknown League', None, ''}
+IMPORT_WINDOW     = timedelta(minutes=2)
 
 RAID_DISTRICT_MEDALS     = {1: 135, 2: 225, 3: 350, 4: 405, 5: 460}
 RAID_CAPITAL_PEAK_MEDALS = {2: 180, 3: 360, 4: 585, 5: 810, 6: 1115, 7: 1240, 8: 1260, 9: 1375, 10: 1450}
+
+def _is_attack(log):
+    return log.attack is True or log.attack == 1
+
+
+def filter_import_window(attacks, first_log_time):
+    return [
+        b for b in attacks
+        if not (b.time and first_log_time.get(b.player_tag) and
+                b.time <= first_log_time[b.player_tag] + IMPORT_WINDOW)
+    ]
+
+
+def week_cutoff(now_utc, battle_days):
+    if battle_days == 7:
+        now_local = dt.datetime.now(LOCAL_TZ)
+        week_start_date = (now_local - timedelta(days=now_local.weekday())).date()
+        return dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day,
+                           tzinfo=LOCAL_TZ).astimezone(dt.timezone.utc).replace(tzinfo=None)
+    return now_utc - timedelta(days=battle_days)
+
 
 def raid_district_medal_value(name, level):
     lvl = int(level or 0)
@@ -186,7 +209,7 @@ class JSON_CWL_GROUP_DATA:
     STATE           = JSONPath("state")
     SEASON          = JSONPath("season")
     WAR_LEAGUE      = JSONPath("warLeague")
-    WAR_LEAGUE_NAME = JSONPath("name")
+    WAR_LEAGUE.NAME = JSONPath("name")
     CLANS           = JSONPath("clans")
     CLAN_TAG        = JSONPath("tag")
     CLAN_NAME       = JSONPath("name")
@@ -405,7 +428,7 @@ def league_rank(name: str) -> int:
     return _LEAGUE_NAME_TO_RANK.get(name, 0)
 
 
-_SKIP_LEAGUES = {"Unranked", "Unknown League", None}
+_SKIP_LEAGUES = SKIP_LEAGUES
 
 def avg_league_name(members) -> str | None:
     """Average ranked league across members who have a league, excluding unranked."""
@@ -526,6 +549,24 @@ def _league_mult(league_tier, player_th):
     return mult
 
 
+def _ranked_score_from_adj(adj_scores, max_attacks, league_tier, player_th):
+    lm = _league_mult(league_tier, player_th)
+    if not max_attacks:
+        return 0, 0.0, lm
+    th_adj = sum(adj_scores) / max_attacks
+    return min(round(th_adj * lm * 100 / 3.45), 100), th_adj, lm
+
+
+def _calc_ranked_score(battle_logs, player_th, max_attacks, league_tier):
+    adj = []
+    for l in battle_logs:
+        if _is_attack(l):
+            try: opp_th = int(l.opponent_th)
+            except: opp_th = player_th
+            adj.append((l.stars or 0) * _calc_th_multiplier(opp_th - player_th, player_th))
+    return _ranked_score_from_adj(adj, max_attacks, league_tier, player_th)
+
+
 def _ranked_verdict(score_100, att_count, max_attacks):
     missing = max(0, max_attacks - att_count)
     missing_text = f" ({missing} missing)" if missing else ""
@@ -562,7 +603,31 @@ def _compute_cleanup_ids(logs):
     return cleanup_ids
 
 
+def _raid_level_mult(level):
+    try:
+        level = int(level)
+    except (TypeError, ValueError):
+        level = 5
+    return 1.0 + (level - 4) * (0.10 if level >= 5 else 0.05)
+
+
+def raid_score_verdict(adj_per_attack, solo_wipes, att_count, missing_text=''):
+    adj = adj_per_attack * (1.18 ** solo_wipes)
+    score_100 = min(round(adj * 100 / 90.0), 100)
+    if att_count == 0:
+        return score_100, round(adj, 2), 'badge-inactive', 'Inactive'
+    if score_100 >= 87: return score_100, round(adj, 2), 'badge-godlike',  'Godlike'  + missing_text
+    if score_100 >= 75: return score_100, round(adj, 2), 'badge-dominant', 'Dominant' + missing_text
+    if score_100 >= 62: return score_100, round(adj, 2), 'badge-wow',      'Very Good'+ missing_text
+    if score_100 >= 50: return score_100, round(adj, 2), 'badge-good',     'Good'     + missing_text
+    if score_100 >= 40: return score_100, round(adj, 2), 'badge-warning',  'Bad'      + missing_text
+    if score_100 >= 35: return score_100, round(adj, 2), 'badge-suck',     'Disaster' + missing_text
+    return score_100, round(adj, 2), 'badge-useless', 'Useless' + missing_text
+
+
 def _raid_verdict(logs):
+    if not logs:
+        return 'badge-inactive', 'Skipped', 0
     cleanup_ids, solo_wipe_count = _district_stats(logs)
     non_cleanup_count = sum(1 for l in logs if l.id not in cleanup_ids)
     effective_max = max(1, non_cleanup_count)
@@ -570,19 +635,7 @@ def _raid_verdict(logs):
     for l in logs:
         if l.id in cleanup_ids:
             continue
-        level = l.district_level or 5
-        try: level = int(level)
-        except: level = 5
-        level_mult = 1.0 + (level - 5) * (0.07 if level >= 5 else 0.05)
-        total_adj += (l.percentage or 0) * level_mult
+        total_adj += (l.percentage or 0) * _raid_level_mult(l.district_level or 5)
     adj_per_attack = total_adj / effective_max
-    adj_per_attack = adj_per_attack * (1.10 ** solo_wipe_count)
-    score_100 = min(round(adj_per_attack * 100 / 73.94), 100)
-    if not logs:        return 'badge-inactive', 'Skipped',  score_100
-    if score_100 >= 87: return 'badge-godlike',  'Godlike',  score_100
-    if score_100 >= 80: return 'badge-dominant', 'Dominant', score_100
-    if score_100 >= 65: return 'badge-wow',      'Very Good',score_100
-    if score_100 >= 58: return 'badge-good',     'Good',     score_100
-    if score_100 >= 43: return 'badge-warning',  'Bad',      score_100
-    if score_100 >= 29: return 'badge-suck',     'Disaster', score_100
-    return 'badge-useless', 'Useless', score_100
+    score_100, _, badge_class, label = raid_score_verdict(adj_per_attack, solo_wipe_count, len(logs))
+    return badge_class, label, score_100

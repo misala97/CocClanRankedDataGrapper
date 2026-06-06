@@ -16,6 +16,7 @@ class Player(db.Model):
     war_preference_in_game = db.Column(db.String(20), nullable=True)
     war_preference_custom  = db.Column(db.String(20), nullable=True)
     join_date              = db.Column(db.Date, nullable=True, default=lambda: datetime.now(timezone.utc).date())
+    newbie_check           = db.Column(db.Boolean, default=False, nullable=False)
 
     ranked_weeks = db.relationship('RankedWeek', back_populates='player', lazy=True, cascade="all, delete-orphan")
     battle_logs  = db.relationship('BattleLog',  back_populates='player', lazy=True, cascade="all, delete-orphan")
@@ -24,6 +25,27 @@ class Player(db.Model):
     def league_icon(self) -> str:
         from services.helpers import league_icon_url
         return league_icon_url(self.league_tier)
+
+
+class CWLBonus(db.Model):
+    __tablename__ = 'cwl_bonus'
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    player_tag = db.Column(db.String(50), db.ForeignKey('player.tag'), nullable=False)
+    month      = db.Column(db.String(7), nullable=False)   # YYYY-MM
+
+    player = db.relationship('Player', foreign_keys=[player_tag])
+
+    __table_args__ = (
+        db.UniqueConstraint('player_tag', 'month', name='uq_cwl_bonus'),
+    )
+
+
+class ClanConfig(db.Model):
+    __tablename__ = 'clan_config'
+
+    clan_tag        = db.Column(db.String(30), primary_key=True)
+    cwl_league_name = db.Column(db.String(60), nullable=True)
 
 
 class RankedWeek(db.Model):

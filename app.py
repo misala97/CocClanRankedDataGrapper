@@ -114,6 +114,12 @@ def _nav_task_status():
     except Exception:
         return []
 
+def _newbie_check_count():
+    try:
+        return Player.query.filter_by(in_clan=True, newbie_check=False).count()
+    except Exception:
+        return 0
+
 @app.context_processor
 def inject_auth():
     return {
@@ -123,24 +129,21 @@ def inject_auth():
         'can_create_reminder_ranked': _can_create_reminder_ranked(),
         'can_edit_clan_war': _can_edit_clan_war(),
         'nav_task_status': _nav_task_status(),
+        'newbie_check_count': _newbie_check_count(),
     }
 
 # ── Core routes ───────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
-    import datetime as dt
     from sqlalchemy import func as sa_func
     latest_war = ClanWar.query.order_by(ClanWar.start_time.desc()).first()
     clan_name      = (latest_war.clan_name  if latest_war and latest_war.clan_name  else None) or "Our Clan"
     clan_badge_url = (latest_war.clan_badge if latest_war and latest_war.clan_badge else None)
 
-    from services.helpers import LOCAL_TZ
+    from services.helpers import week_cutoff, filter_import_window
     total_members = Player.query.filter_by(in_clan=True).count()
-    now_local = dt.datetime.now(LOCAL_TZ)
-    week_start_date = (now_local - dt.timedelta(days=now_local.weekday())).date()
-    week_start = dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day, tzinfo=LOCAL_TZ)\
-        .astimezone(dt.timezone.utc).replace(tzinfo=None)
+    week_start = week_cutoff(None, 7)
 
     week_logs = BattleLog.query.join(BattleLog.player).filter(
         BattleLog.time >= week_start,
@@ -152,12 +155,7 @@ def index():
         .group_by(BattleLog.player_tag)
         .all()
     )
-    import_window = dt.timedelta(minutes=2)
-    battle_logs_this_week = sum(
-        1 for b in week_logs
-        if not (b.time and first_log_time_idx.get(b.player_tag) and
-                b.time <= first_log_time_idx[b.player_tag] + import_window)
-    )
+    battle_logs_this_week = len(filter_import_window(week_logs, first_log_time_idx))
     current_season = db.session.query(RankedWeek.league_season_id)\
         .order_by(RankedWeek.league_season_id.desc()).first()
     ranked_battles_this_week = RankedBattleLog.query.join(
@@ -248,6 +246,6 @@ if __name__ == '__main__':
     #task_update_raid_weekend()
     #task_update_ranked_weeks()
     #task_update_clan_war()
-    #task_update_cwl()
+    task_update_cwl()
 
     app.run(debug=True, use_reloader=False)

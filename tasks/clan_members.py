@@ -3,10 +3,12 @@ import time
 
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_CLAN_DATA, JSON_PLAYER_DATA
+from tasks import task_lock
 
 clan_logger = setup_task_logger('clan_members', 'logs/task_clan_members.log')
 
 
+@task_lock(logger=clan_logger)
 def task_update_clan_members():
     from app import app, CLAN_TAG
     from extensions import db
@@ -27,8 +29,16 @@ def task_update_clan_members():
 
     with app.app_context():
         try:
+            from models import ClanConfig
             clan_api = api_fetch_clan_data(CLAN_TAG)
             member_list_api = json_get(clan_api, JSON_CLAN_DATA.MEMBER_LIST)
+
+            cwl_league = json_get(clan_api, JSON_CLAN_DATA.WAR_LEAGUE, raise_on_missing=False)
+            if cwl_league:
+                cfg = db.session.get(ClanConfig, CLAN_TAG) or ClanConfig(clan_tag=CLAN_TAG)
+                cfg.cwl_league_name = cwl_league
+                db.session.merge(cfg)
+                db.session.commit()
 
             db_player_update_all_inactive()
             for player_api in member_list_api:

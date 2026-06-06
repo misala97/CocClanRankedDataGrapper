@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from models import ClanWar, ClanWarMember, Player
 from features.auth.routes import _can_edit_clan_war
-from services.helpers import avg_league_name, league_rank
+from services.helpers import avg_league_name, league_rank, SKIP_LEAGUES
 from features.war.war_combos import classify_attack, get_war_verdict
 
 war_bp = Blueprint('war', __name__)
@@ -42,8 +42,6 @@ def clan_war_page():
         avg_th_opp = round(sum(m.town_hall_level or 0 for m in members_opp) / len(members_opp), 1) if members_opp else 0
         avg_league_our = avg_league_name(members_our)
         avg_league_opp = avg_league_name(members_opp)
-
-        SKIP_LEAGUES = {'Unranked', 'Unknown League', None, ''}
 
         members_our_json = [{'th': m.town_hall_level or 0, 'name': m.player_name or '', 'pos': m.map_position or 0, 'league': m.ranked_league or '', 'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0} for m in members_our]
         members_opp_json = [{'th': m.town_hall_level or 0, 'name': m.player_name or '', 'pos': m.map_position or 0, 'league': m.ranked_league or '', 'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0} for m in members_opp]

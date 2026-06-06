@@ -7,8 +7,9 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from models import Player, RankedWeek
 from services.helpers import (
-    get_league_thresholds, _get_league_rank, _league_mult,
+    get_league_thresholds, _get_league_rank,
     EXPECTED_LEAGUE_RANK, _calc_th_multiplier, to_local,
+    _ranked_verdict, _ranked_score_from_adj, _calc_ranked_score, _is_attack,
 )
 
 ranked_bp = Blueprint('ranked', __name__)
@@ -80,7 +81,7 @@ def ranked_weeks_page():
                     'time': local_time.strftime('%d.%m.%y %H:%M') if local_time else '–',
                     'time_sort': local_time.isoformat() if local_time else '',
                 }
-                if log.attack is True or log.attack == 1:
+                if _is_attack(log):
                     attack_logs = attack_logs + [log.stars or 0]
                     attack_details = attack_details + [detail_entry]
                     try:
@@ -112,26 +113,13 @@ def ranked_weeks_page():
         missing       = max(0, max_attacks - att_count)
         missing_text  = f" ({missing} missing)" if missing > 0 else ""
 
-        th_adj_score = round(sum(adj_attack_scores) / max_attacks, 3) if max_attacks > 0 else 0.0
-        lm = _league_mult(league_tier, player_th or player.current_th or 0)
-        score_100 = min(round(th_adj_score * lm * 100 / 3.45), 100)
+        score_100, th_adj_score, lm = _ranked_score_from_adj(adj_attack_scores, max_attacks, league_tier, player_th or player.current_th or 0)
 
         if not is_active:
             badge_class, judge_label, rank_status = 'badge-inactive', 'Inactive', 'inactive'
-        elif score_100 >= 87:
-            badge_class, judge_label, rank_status = 'badge-godlike',  'Godlike'  + missing_text, 'neutral'
-        elif score_100 >= 80:
-            badge_class, judge_label, rank_status = 'badge-dominant', 'Dominant' + missing_text, 'neutral'
-        elif score_100 >= 65:
-            badge_class, judge_label, rank_status = 'badge-wow',      'Very Good'+ missing_text, 'neutral'
-        elif score_100 >= 58:
-            badge_class, judge_label, rank_status = 'badge-good',     'Good'     + missing_text, 'neutral'
-        elif score_100 >= 43:
-            badge_class, judge_label, rank_status = 'badge-warning',  'Bad'      + missing_text, 'neutral'
-        elif score_100 >= 29:
-            badge_class, judge_label, rank_status = 'badge-suck',     'Disaster' + missing_text, 'neutral'
         else:
-            badge_class, judge_label, rank_status = 'badge-useless',  'Useless'  + missing_text, 'neutral'
+            badge_class, judge_label, _ = _ranked_verdict(score_100, att_count, max_attacks)
+            rank_status = 'neutral'
 
         thresholds = get_league_thresholds(league_tier)
         if is_active and thresholds and rank and rank > 0:
@@ -190,30 +178,15 @@ def ranked_weeks_page():
             if not dw:
                 continue
             if rw:
-                a_stars = [log.stars or 0 for log in rw.battle_logs if log.attack is True or log.attack == 1]
-                d_stars = [log.stars or 0 for log in rw.battle_logs if not (log.attack is True or log.attack == 1)]
+                a_stars = [log.stars or 0 for log in rw.battle_logs if _is_attack(log)]
+                d_stars = [log.stars or 0 for log in rw.battle_logs if not (_is_attack(log))]
                 att_c = len(a_stars)
                 def_c = len(d_stars)
 
                 player_th_hist = rw.townhall or 0
                 att_max_hist   = rw.max_attacks or 0
-                adj_hist = []
-                for log in rw.battle_logs:
-                    if log.attack is True or log.attack == 1:
-                        try:    opp_th = int(log.opponent_th)
-                        except: opp_th = player_th_hist
-                        adj_hist.append((log.stars or 0) * _calc_th_multiplier(opp_th - player_th_hist, player_th_hist))
-                th_adj_hist   = round(sum(adj_hist) / att_max_hist, 3) if att_max_hist > 0 else 0.0
-                lm_hist       = _league_mult(rw.league_tier or '', player_th_hist)
-                score_100_hist = min(round(th_adj_hist * lm_hist * 100 / 3.45), 100) if att_max_hist > 0 else 0
-                if   score_100_hist >= 87: badge_hist = 'badge-godlike'
-                elif score_100_hist >= 80: badge_hist = 'badge-dominant'
-                elif score_100_hist >= 65: badge_hist = 'badge-wow'
-                elif score_100_hist >= 58: badge_hist = 'badge-good'
-                elif score_100_hist >= 43: badge_hist = 'badge-warning'
-                elif score_100_hist >= 29: badge_hist = 'badge-suck'
-                elif att_c > 0:            badge_hist = 'badge-useless'
-                else:                      badge_hist = 'badge-inactive'
+                score_100_hist, _, _ = _calc_ranked_score(rw.battle_logs, player_th_hist, att_max_hist, rw.league_tier or '')
+                badge_hist, _, _ = _ranked_verdict(score_100_hist, att_c, att_max_hist)
 
                 history.append({
                     'label': dw.start_day.strftime('%d.%m.%y'),
@@ -318,7 +291,7 @@ def ranked_stats_page():
             p['best_rank'] = week.rank
 
         for log in week.battle_logs:
-            is_atk = log.attack is True or log.attack == 1
+            is_atk = _is_attack(log)
             stars  = log.stars or 0
             if is_atk:
                 p['total_attacks'] += 1
@@ -339,9 +312,7 @@ def ranked_stats_page():
                     p['def_zero'] += 1
 
         if att_max > 0:
-            th_adj = sum(adj_week) / att_max
-            lm     = _league_mult(week.league_tier or '', player_th)
-            score  = min(round(th_adj * lm * 100 / 3.45), 100) if adj_week else 0
+            score, _, _ = _ranked_score_from_adj(adj_week, att_max, week.league_tier or '', player_th)
             p['weekly_scores'][week.league_season_id] = score
 
     # ── Build result list ─────────────────────────────────────────────────────

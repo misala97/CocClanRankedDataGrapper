@@ -370,7 +370,7 @@
                     <td>
                         {% if r.participated %}
                         <span class="judgment {{ r.badge_class }}">
-                            {{ r.judge_label }}{% if r.score_100 > 0 %} · {{ r.score_100 }}{% endif %}
+                            {{ r.judge_label.split('(')[0].strip() }}{% if r.score_100 > 0 and r.att_count > 0 %} · {{ r.score_100 }}{% endif %}
                         </span>
                         {% else %}
                         <span class="text-muted" style="font-size:12px;">Skipped</span>

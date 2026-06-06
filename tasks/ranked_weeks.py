@@ -3,10 +3,12 @@ import time
 
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_PLAYER_DATA, JSON_RANKED_GROUP_DATA
+from tasks import task_lock
 
 ranked_logger = setup_task_logger('ranked_weeks', 'logs/task_ranked_weeks.log')
 
 
+@task_lock(logger=ranked_logger)
 def task_update_ranked_weeks():
     from app import app
     from extensions import db

@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import RaidWeekend, RaidWeekendLog, Player
-from services.helpers import CLEANUP_THRESHOLD, raid_district_medal_value
+from services.helpers import CLEANUP_THRESHOLD, raid_district_medal_value, raid_score_verdict, _raid_level_mult
 
 raid_bp = Blueprint('raid', __name__)
 
@@ -57,7 +57,7 @@ def raid_weekend_page():
                 level = int(level)
             except (TypeError, ValueError):
                 level = 5
-            level_mult = round(1.0 + (level - 5) * (0.07 if level >= 5 else 0.05), 2)
+            level_mult = round(_raid_level_mult(level), 2)
             pct = log.percentage or 0
             p['attack_logs'].append({
                 'log_id':           log.id,
@@ -101,31 +101,14 @@ def raid_weekend_page():
             effective_max  = max(1, p['att_count'] - p['cleanup_count'])
             total_adj      = sum(l['adj_score'] for l in p['attack_logs'])
             adj_per_attack = total_adj / effective_max
-            adj_per_attack = adj_per_attack * (1.10 ** p['solo_wipes'])
-            score_100      = min(round(adj_per_attack * 100 / 73.94), 100)
-            p['score_100']      = score_100
-            p['adj_per_attack'] = round(adj_per_attack, 2)
-            p['effective_max']  = effective_max
-
             missing = max(0, MAX_ATTACKS - p['att_count'])
             missing_text = f" ({missing} missing)" if missing else ""
-
-            if p['att_count'] == 0:
-                p['badge_class'], p['judge_label'] = 'badge-inactive', 'Inactive'
-            elif score_100 >= 87:
-                p['badge_class'], p['judge_label'] = 'badge-godlike',  'Godlike'  + missing_text
-            elif score_100 >= 80:
-                p['badge_class'], p['judge_label'] = 'badge-dominant', 'Dominant' + missing_text
-            elif score_100 >= 65:
-                p['badge_class'], p['judge_label'] = 'badge-wow',      'Very Good'+ missing_text
-            elif score_100 >= 58:
-                p['badge_class'], p['judge_label'] = 'badge-good',     'Good'     + missing_text
-            elif score_100 >= 43:
-                p['badge_class'], p['judge_label'] = 'badge-warning',  'Bad'      + missing_text
-            elif score_100 >= 29:
-                p['badge_class'], p['judge_label'] = 'badge-suck',     'Disaster' + missing_text
-            else:
-                p['badge_class'], p['judge_label'] = 'badge-useless',  'Useless'  + missing_text
+            score_100, adj_boosted, p['badge_class'], p['judge_label'] = raid_score_verdict(
+                adj_per_attack, p['solo_wipes'], p['att_count'], missing_text
+            )
+            p['score_100']      = score_100
+            p['adj_per_attack'] = adj_boosted
+            p['effective_max']  = effective_max
 
         player_data = sorted(player_map.values(), key=lambda x: x['att_count'], reverse=True)
         total_log_attacks = sum(p['att_count'] for p in player_data)

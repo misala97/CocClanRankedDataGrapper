@@ -3,10 +3,12 @@ import time
 
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_CLAN_WAR_DATA
+from tasks import task_lock
 
 clan_war_logger = setup_task_logger('clan_war', 'logs/clan_war.log')
 
 
+@task_lock(logger=clan_war_logger)
 def task_update_clan_war():
     from app import app, CLAN_TAG
     from extensions import db

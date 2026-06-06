@@ -8,18 +8,13 @@ from extensions import db
 from models import Player, RankedWeek, RankedBattleLog, BattleLog, RaidWeekend, RaidWeekendLog, ClanWar, ClanWarMember, ClanWarAttack
 from services.db import db_player_get
 from services.helpers import (
-    _calc_th_multiplier, _league_mult, _ranked_verdict,
+    _ranked_verdict, _calc_ranked_score,
     _district_stats, _raid_verdict, LOCAL_TZ,
+    _is_attack, week_cutoff, filter_import_window,
 )
 
 
-def _week_cutoff(now_utc, battle_days):
-    if battle_days == 7:
-        now_local = dt.datetime.now(LOCAL_TZ)
-        week_start_date = (now_local - dt.timedelta(days=now_local.weekday())).date()
-        return dt.datetime(week_start_date.year, week_start_date.month, week_start_date.day,
-                           tzinfo=LOCAL_TZ).astimezone(dt.timezone.utc).replace(tzinfo=None)
-    return now_utc - dt.timedelta(days=battle_days)
+
 from features.war.war_combos import classify_attack, get_war_verdict
 
 player_bp = Blueprint('player', __name__)
@@ -107,7 +102,7 @@ def calculate_activity_score(player_tag, period='week'):
 
     ranked_score = min(100, round(100 * total_done / player_total_max)) if player_total_max else 0
 
-    cutoff = _week_cutoff(now, battle_days)
+    cutoff = week_cutoff(now, battle_days)
     weeks  = battle_days / 7
     battles_in_window = (BattleLog.query
                          .filter(BattleLog.player_tag == player_tag,
@@ -208,18 +203,12 @@ def calculate_skill_score(player_tag, period='month'):
 
     ranked_scores = []
     for rw in player_weeks:
-        a_logs      = [l for l in rw.battle_logs if l.attack is True or l.attack == 1]
+        a_logs      = [l for l in rw.battle_logs if _is_attack(l)]
         player_th   = rw.townhall or 0
         max_attacks = rw.max_attacks or 0
         if not max_attacks:
             continue
-        adj = []
-        for l in a_logs:
-            try: opp_th = int(l.opponent_th)
-            except: opp_th = player_th
-            adj.append((l.stars or 0) * _calc_th_multiplier(opp_th - player_th, player_th))
-        lm = _league_mult(rw.league_tier, player_th)
-        score_100 = min(round(sum(adj) / max_attacks * lm * 100 / 3.45), 100)
+        score_100, _, _ = _calc_ranked_score(a_logs, player_th, max_attacks, rw.league_tier)
         ranked_scores.append(score_100)
     avg_ranked   = sum(ranked_scores) / len(ranked_scores) if ranked_scores else 0
     ranked_skill = round(avg_ranked)
@@ -371,20 +360,13 @@ def player_profile(tag):
                       .all())
     ranked_history = []
     for rw in ranked_weeks_q:
-        a_logs    = [l for l in rw.battle_logs if l.attack is True or l.attack == 1]
-        d_logs    = [l for l in rw.battle_logs if not (l.attack is True or l.attack == 1)]
+        a_logs    = [l for l in rw.battle_logs if _is_attack(l)]
+        d_logs    = [l for l in rw.battle_logs if not (_is_attack(l))]
         a_stars   = [l.stars or 0 for l in a_logs]
         d_stars   = [l.stars or 0 for l in d_logs]
         player_th = rw.townhall or player.current_th or 0
         max_attacks = rw.max_attacks or 0
-        adj_scores = []
-        for l in a_logs:
-            try: opp_th = int(l.opponent_th)
-            except: opp_th = player_th
-            adj_scores.append((l.stars or 0) * _calc_th_multiplier(opp_th - player_th, player_th))
-        th_adj    = sum(adj_scores) / max_attacks if max_attacks else 0.0
-        lm        = _league_mult(rw.league_tier, player_th)
-        score_100 = min(round(th_adj * lm * 100 / 3.45), 100)
+        score_100, _, _ = _calc_ranked_score(a_logs, player_th, max_attacks, rw.league_tier)
         badge_class, judge_label, _ = _ranked_verdict(score_100, len(a_logs), max_attacks)
         ranked_history.append({
             'league_season_id': rw.league_season_id,
@@ -562,7 +544,7 @@ def _calculate_scores_bulk(player_tags, period='month'):
         ranked_attack_map = {}
 
     # ── battle stats (bulk) ───────────────────────────────────────────────────
-    cutoff = _week_cutoff(now, battle_days)
+    cutoff = week_cutoff(now, battle_days)
     loot_expr = (func.coalesce(BattleLog.loot_gold, 0) +
                  func.coalesce(BattleLog.loot_elixir, 0) +
                  func.coalesce(BattleLog.loot_dark_elixir, 0))
@@ -684,18 +666,13 @@ def _calculate_scores_bulk(player_tags, period='month'):
         # --- skill ---
         ranked_skill_scores = []
         for rw in player_weeks:
-            a_logs      = [l for l in rw.battle_logs if l.attack is True or l.attack == 1]
+            a_logs      = [l for l in rw.battle_logs if _is_attack(l)]
             player_th   = rw.townhall or 0
             max_attacks = rw.max_attacks or 0
             if not max_attacks:
                 continue
-            adj = []
-            for l in a_logs:
-                try:    opp_th = int(l.opponent_th)
-                except: opp_th = player_th
-                adj.append((l.stars or 0) * _calc_th_multiplier(opp_th - player_th, player_th))
-            lm = _league_mult(rw.league_tier, player_th)
-            ranked_skill_scores.append(min(round(sum(adj) / max_attacks * lm * 100 / 3.45), 100))
+            score_100, _, _ = _calc_ranked_score(a_logs, player_th, max_attacks, rw.league_tier)
+            ranked_skill_scores.append(score_100)
         ranked_skill = round(sum(ranked_skill_scores) / len(ranked_skill_scores)) if ranked_skill_scores else 0
 
         raid_logs_by_id       = raid_logs_by_player.get(tag, {})

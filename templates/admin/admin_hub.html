@@ -243,17 +243,9 @@
 
 {% include '_nav.html' %}
 
-{% set page_header_title = '⚙️ Admin <span>Hub</span>' %}
+{% set page_header_title = 'Admin <span>Hub</span>' %}
 {% set page_header_desc = 'Background task monitoring and system status' %}
-{% set page_controls %}
-<label>Period</label>
-<select class="selector" onchange="window.location='?days='+this.value">
-    <option value="1"  {% if selected_days == 1  %}selected{% endif %}>24 hours</option>
-    <option value="7"  {% if selected_days == 7  %}selected{% endif %}>7 days</option>
-    <option value="14" {% if selected_days == 14 %}selected{% endif %}>14 days</option>
-    <option value="30" {% if selected_days == 30 %}selected{% endif %}>30 days</option>
-</select>
-{% endset %}
+{% set page_controls %}{% endset %}
 {% include '_page_header.html' %}
 
 <div class="container">
@@ -264,6 +256,7 @@
         ['task_update_clan_members', '👥',  'Clan Members'],
         ['task_update_raid_weekend', '🏰',  'Raid Weekend'],
         ['task_update_clan_war',     '⚔️',  'Clan War'],
+        ['task_update_cwl',          '🏅',  'CWL'],
     ] %}
 
     {% set op_count = namespace(n=0) %}
@@ -285,6 +278,17 @@
         </button>
 
         <div class="collapse-body hidden" id="body-uptime">
+
+            <!-- Period selector -->
+            <div style="display:flex;align-items:center;gap:8px;margin:16px 0 4px;">
+                <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Period</label>
+                <select class="selector" onchange="window.location='?days='+this.value" style="padding:5px 10px;font-size:12px;">
+                    <option value="1"  {% if selected_days == 1  %}selected{% endif %}>24 hours</option>
+                    <option value="7"  {% if selected_days == 7  %}selected{% endif %}>7 days</option>
+                    <option value="14" {% if selected_days == 14 %}selected{% endif %}>14 days</option>
+                    <option value="30" {% if selected_days == 30 %}selected{% endif %}>30 days</option>
+                </select>
+            </div>
 
             <!-- Status Cards -->
             <div class="status-grid">
@@ -327,6 +331,9 @@
                     {% if stats.last_status == 'error' and stats.last_error %}
                     <div class="status-error">{{ stats.last_error }}</div>
                     {% endif %}
+                    <button class="task-run-btn" data-task="{{ fn_key }}" onclick="triggerTask(this)" style="margin-top:10px;width:100%;padding:5px 0;border-radius:6px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);transition:all .15s;">
+                        ▶ Run Now
+                    </button>
                 </div>
                 {% endfor %}
             </div>
@@ -356,6 +363,7 @@
                 'task_update_clan_members': ['👥',  'Clan Members'],
                 'task_update_raid_weekend': ['🏰',  'Raid Weekend'],
                 'task_update_clan_war':     ['⚔️',  'Clan War'],
+                'task_update_cwl':          ['🏅',  'CWL'],
             } %}
             <div class="fn-grid">
                 {% for fn, runs in by_function.items() %}
@@ -581,6 +589,34 @@
         </div><!-- /collapse-body -->
     </div><!-- /collapse-card war-roster -->
 
+    <!-- ── CWL Bonus ── -->
+    <div class="collapse-card" id="card-cwl-bonus" style="margin-top:16px">
+        <button class="collapse-header" onclick="toggleSection('cwl-bonus')">
+            <span class="collapse-header-icon">🏅</span>
+            <span class="collapse-header-title">CWL Bonus</span>
+            <span class="collapse-header-meta" id="cwl-bonus-meta">track monthly bonus recipients</span>
+            <span class="collapse-chevron" id="chevron-cwl-bonus">▼</span>
+        </button>
+        <div class="collapse-body hidden" id="body-cwl-bonus">
+
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;margin-bottom:20px;">
+                <button onclick="suggestCWLBonus()" id="cwl-suggest-btn"
+                        style="padding:7px 18px;background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.3);border-radius:7px;color:var(--blue);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;text-transform:uppercase;transition:all .15s;">
+                    ✦ Suggest Bonus
+                </button>
+                <span id="cwl-bonus-loading" style="display:none;color:var(--muted);font-size:12px;">Loading…</span>
+            </div>
+
+            <!-- Suggestion panel -->
+            <div id="cwl-suggestion-panel" style="display:none;margin-bottom:16px;padding:14px 18px;background:var(--surf2);border:1px solid rgba(88,166,255,.25);border-left:3px solid var(--blue);border-radius:10px;">
+                <div id="cwl-suggestion-content"></div>
+            </div>
+
+            <div id="cwl-bonus-result"></div>
+
+        </div>
+    </div>
+
     <!-- ── New Member Evaluator ── -->
     <div class="collapse-card" id="new-member-card">
         <button class="collapse-header" onclick="toggleSection('new-member')">
@@ -593,14 +629,6 @@
 
             <!-- Controls -->
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;margin-bottom:20px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;">Joined in last</label>
-                    <select id="nm-days" style="background:var(--surf2);border:1px solid var(--border);border-radius:7px;padding:6px 12px;font-size:13px;color:var(--text);font-family:'DM Sans',sans-serif;cursor:pointer;">
-                        <option value="7" selected>7 days</option>
-                        <option value="14">14 days</option>
-                        <option value="30">30 days</option>
-                    </select>
-                </div>
                 <button onclick="loadNewMembers()" id="nm-btn"
                         style="padding:7px 18px;background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.35);border-radius:7px;color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;text-transform:uppercase;transition:all .15s;">
                     Run Evaluation
@@ -622,12 +650,63 @@
 const byFunction    = {{ by_function    | tojson | safe }};
 const functionStats = {{ function_stats | tojson | safe }};
 
+// ── Task Trigger ─────────────────────────────────────────────────────────────
+function triggerTask(btn) {
+    const task = btn.dataset.task;
+    btn.disabled = true;
+    btn.textContent = '⏳ Running…';
+    btn.style.color = 'var(--accent)';
+    btn.style.borderColor = 'rgba(240,165,0,.4)';
+
+    fetch('/admin/trigger-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task }),
+    })
+    .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
+    .then(({ ok, status, data }) => {
+        if (status === 409 || data.busy) {
+            btn.textContent = '⚠ Already Running';
+            btn.style.color = 'var(--yellow)';
+            btn.style.borderColor = 'rgba(240,165,0,.4)';
+            alert('This task is currently already running (either scheduled or triggered manually). Please wait for it to finish before running it again.');
+        } else if (ok) {
+            btn.textContent = '✓ Done';
+            btn.style.color = 'var(--green)';
+            btn.style.borderColor = 'rgba(63,185,80,.4)';
+        } else {
+            btn.textContent = '✗ Error';
+            btn.style.color = 'var(--red)';
+            btn.style.borderColor = 'rgba(248,81,73,.4)';
+            alert('Task failed:\n' + (data.error || 'Unknown error'));
+        }
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = '▶ Run Now';
+            btn.style.color = 'var(--muted)';
+            btn.style.borderColor = 'var(--border)';
+        }, 3000);
+    })
+    .catch(() => {
+        btn.textContent = '✗ Error';
+        btn.style.color = 'var(--red)';
+        btn.style.borderColor = 'rgba(248,81,73,.4)';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = '▶ Run Now';
+            btn.style.color = 'var(--muted)';
+            btn.style.borderColor = 'var(--border)';
+        }, 3000);
+    });
+}
+
 const FN_NAMES = {
     'task_update_battle_logs':  'Battle Logs',
     'task_update_ranked_weeks': 'Ranked Weeks',
     'task_update_clan_members': 'Clan Members',
     'task_update_raid_weekend': 'Raid Weekend',
     'task_update_clan_war':     'Clan War',
+    'task_update_cwl':          'CWL',
 };
 const FN_COLORS = {
     'task_update_battle_logs':  '#58a6ff',
@@ -635,6 +714,7 @@ const FN_COLORS = {
     'task_update_clan_members': '#f0a500',
     'task_update_raid_weekend': '#f85149',
     'task_update_clan_war':     '#bc8cff',
+    'task_update_cwl':          '#39d353',
 };
 
 Chart.defaults.color = '#8b949e';
@@ -672,6 +752,7 @@ function toggleSection(id) {
     const hidden  = body.classList.toggle('hidden');
     chevron.classList.toggle('open', !hidden);
     try { localStorage.setItem('section_' + id, hidden ? '0' : '1'); } catch(e) {}
+    if (!hidden && id === 'cwl-bonus') loadCWLBonus();
 }
 
 document.querySelectorAll('.collapse-body').forEach(body => {
@@ -950,7 +1031,6 @@ function loadNewMembers() {
     const btn     = document.getElementById('nm-btn');
     const loading = document.getElementById('nm-loading');
     const result  = document.getElementById('nm-result');
-    const days    = parseInt(document.getElementById('nm-days').value) || 7;
 
     btn.disabled = true;
     loading.style.display = 'inline';
@@ -959,14 +1039,14 @@ function loadNewMembers() {
     fetch('/admin/evaluate-new-members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days }),
+        body: JSON.stringify({}),
     })
     .then(r => r.json())
     .then(data => {
         btn.disabled = false;
         loading.style.display = 'none';
         document.getElementById('new-member-meta').textContent =
-            `${data.count} player${data.count !== 1 ? 's' : ''} joined in the last ${days} days`;
+            `${data.count} unchecked player${data.count !== 1 ? 's' : ''}`;
         renderNewMembers(data.results);
     })
     .catch(err => {
@@ -976,23 +1056,34 @@ function loadNewMembers() {
     });
 }
 
-function nmStatusIcon(status) {
-    if (status === 'pass') return '<span style="color:var(--green);font-weight:700;">✓</span>';
-    if (status === 'warn') return '<span style="color:var(--yellow);font-weight:700;">⚠</span>';
-    return '<span style="color:var(--red);font-weight:700;">✗</span>';
+function nmMarkChecked(tag, rowId) {
+    fetch(`/admin/members/${encodeURIComponent(tag)}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newbie_check: true }),
+    }).then(r => {
+        if (!r.ok) return;
+        const card = document.getElementById(rowId);
+        if (card) card.remove();
+        const meta = document.getElementById('new-member-meta');
+        const m = meta.textContent.match(/(\d+)/);
+        if (m) {
+            const n = Math.max(0, parseInt(m[1]) - 1);
+            meta.textContent = `${n} unchecked player${n !== 1 ? 's' : ''}`;
+        }
+    });
 }
 
-function nmVerdictStyle(verdict) {
-    if (verdict === 'accept')  return 'background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.3);';
-    if (verdict === 'decline') return 'background:rgba(248,81,73,.12);color:var(--red);border:1px solid rgba(248,81,73,.3);';
-    return 'background:rgba(240,165,0,.12);color:var(--accent);border:1px solid rgba(240,165,0,.3);';
-}
-
-function nmVerdictLabel(verdict) {
-    if (verdict === 'accept')  return '✓ Accept';
-    if (verdict === 'decline') return '✗ Decline';
-    return '? Consider';
-}
+const NM_V = {
+    accept:  { color: 'var(--green)',  bg: 'rgba(63,185,80,.12)',  border: 'rgba(63,185,80,.3)',  label: '✓ Accept',  stripe: '#3fb950' },
+    decline: { color: 'var(--red)',    bg: 'rgba(248,81,73,.12)',  border: 'rgba(248,81,73,.3)',  label: '✗ Decline', stripe: '#f85149' },
+    consider:{ color: 'var(--accent)', bg: 'rgba(240,165,0,.12)', border: 'rgba(240,165,0,.3)',  label: '? Consider', stripe: '#f0a500' },
+};
+const NM_C = {
+    pass: { color: 'var(--green)',  bg: 'rgba(63,185,80,.1)',  border: 'rgba(63,185,80,.25)',  icon: '✓' },
+    warn: { color: 'var(--yellow)', bg: 'rgba(240,165,0,.1)', border: 'rgba(240,165,0,.25)', icon: '⚠' },
+    fail: { color: 'var(--red)',    bg: 'rgba(248,81,73,.1)', border: 'rgba(248,81,73,.25)', icon: '✗' },
+};
 
 function nmHeroBarColor(pct) {
     if (pct >= 75) return 'var(--green)';
@@ -1003,111 +1094,392 @@ function nmHeroBarColor(pct) {
 function renderNewMembers(results) {
     const wrap = document.getElementById('nm-result');
     if (!results.length) {
-        wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0;">No players found who joined in that period.</div>';
+        wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center;">All players have been checked — no unchecked members remain.</div>';
         return;
     }
 
-    // Summary table
-    let tableRows = results.map(p => {
+    const cards = results.map(p => {
+        const rowId    = 'nm-row-'    + p.tag.replace('#', '');
+        const detailId = 'nm-detail-' + p.tag.replace('#', '');
+        const vc       = NM_V[p.verdict] || NM_V.consider;
+
         if (p.error) {
-            return `<tr style="border-bottom:1px solid var(--bord2);">
-                <td style="padding:11px 14px;font-weight:600;">${p.name}</td>
-                <td style="padding:11px 14px;color:var(--muted);font-size:11px;">${p.tag}</td>
-                <td style="padding:11px 14px;" colspan="9"><span style="color:var(--red);font-size:12px;">API error: ${p.error}</span></td>
-            </tr>`;
+            return `<div id="${rowId}" style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--red);border-radius:10px;">
+                <div style="flex:1;">
+                    <span style="font-weight:700;font-size:13px;">${p.name}</span>
+                    <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;">${p.tag}</span>
+                    <span style="color:var(--red);font-size:12px;margin-left:12px;">API error: ${p.error}</span>
+                </div>
+                <button ondblclick="nmMarkChecked('${p.tag}','${rowId}')"
+                        style="padding:6px 14px;border-radius:7px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);transition:all .15s;white-space:nowrap;"
+                        onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+                        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">✓ Mark Checked</button>
+            </div>`;
         }
 
-        const heroBar = `<div style="display:flex;align-items:center;gap:6px;">
-            <div style="width:64px;height:5px;border-radius:3px;background:var(--bord2);overflow:hidden;">
-                <div style="height:100%;width:${p.hero_pct}%;background:${nmHeroBarColor(p.hero_pct)};border-radius:3px;"></div>
+        // Hero bar
+        const hc = nmHeroBarColor(p.hero_pct);
+        const heroBar = `<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <div style="width:72px;height:5px;border-radius:3px;background:var(--bord2);overflow:hidden;">
+                <div style="height:100%;width:${Math.min(p.hero_pct,100)}%;background:${hc};border-radius:3px;"></div>
             </div>
-            <span style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:${nmHeroBarColor(p.hero_pct)};">${p.hero_pct}%</span>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:${hc};min-width:36px;">${p.hero_pct}%</span>
         </div>`;
 
-        const checks = p.checks.map(c =>
-            `<span title="${c.label}: ${c.detail}" style="cursor:default;">${nmStatusIcon(c.status)}</span>`
-        ).join(' ');
+        // Check pills — labeled, color-coded
+        const pills = (p.checks || []).map(c => {
+            const cs = NM_C[c.status] || NM_C.warn;
+            return `<span title="${c.detail}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.3px;background:${cs.bg};color:${cs.color};border:1px solid ${cs.border};white-space:nowrap;cursor:default;">${cs.icon} ${c.label}</span>`;
+        }).join('');
 
-        const joinBadge = `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(88,166,255,.1);color:var(--blue);border:1px solid rgba(88,166,255,.2);font-family:'Rajdhani',sans-serif;font-weight:700;">${p.days_ago}d ago</span>`;
+        // Verdict badge
+        const vBadge = `<div style="display:inline-flex;align-items:center;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;background:${vc.bg};color:${vc.color};border:1px solid ${vc.border};white-space:nowrap;">${vc.label}</div>`;
 
-        const verdictBadge = `<span style="display:inline-block;padding:3px 10px;border-radius:5px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;${nmVerdictStyle(p.verdict)}">${nmVerdictLabel(p.verdict)}</span>`;
-
-        return `<tr style="border-bottom:1px solid var(--bord2);cursor:pointer;" onclick="nmToggleDetail('nm-detail-${p.tag.replace('#','')}')">
-            <td style="padding:11px 14px;">
-                <div style="font-weight:600;font-size:13.5px;">${p.name}</div>
-                <div style="font-size:10px;color:var(--muted);margin-top:1px;">${p.tag}</div>
-            </td>
-            <td style="padding:11px 14px;text-align:center;">${joinBadge}</td>
-            <td style="padding:11px 14px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--accent);">TH${p.th}</td>
-            <td style="padding:11px 14px;">${heroBar}</td>
-            <td style="padding:11px 14px;">${checks}</td>
-            <td style="padding:11px 14px;">${verdictBadge}</td>
-        </tr>
-        <tr id="nm-detail-${p.tag.replace('#','')}" style="display:none;background:var(--bg);">
-            <td colspan="6" style="padding:0;">
+        return `<div id="${rowId}"
+                     style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${vc.stripe};border-radius:10px;overflow:hidden;transition:box-shadow .2s;"
+                     onmouseover="this.style.boxShadow='0 4px 24px rgba(0,0,0,.3)'"
+                     onmouseout="this.style.boxShadow=''">
+            <!-- Main row -->
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;cursor:pointer;" onclick="nmToggleDetail('${detailId}')">
+                <!-- TH + name -->
+                <span style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--accent);padding:5px 11px;background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.2);border-radius:7px;flex-shrink:0;">TH${p.th}</span>
+                <div style="min-width:160px;flex-shrink:0;">
+                    <div style="font-weight:700;font-size:14px;line-height:1.25;">${p.name}</div>
+                    <div style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:2px;">${p.tag}</div>
+                </div>
+                <!-- Hero bar -->
+                ${heroBar}
+                <!-- Check pills -->
+                <div style="display:flex;flex-wrap:wrap;gap:5px;flex:1;min-width:0;">${pills}</div>
+                <!-- Verdict + action -->
+                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+                    ${vBadge}
+                    <button ondblclick="event.stopPropagation();nmMarkChecked('${p.tag}','${rowId}')" onclick="event.stopPropagation()"
+                            style="padding:6px 14px;border-radius:7px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);transition:all .15s;white-space:nowrap;"
+                            onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+                            onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+                        ✓ Mark
+                    </button>
+                </div>
+            </div>
+            <!-- Expandable detail -->
+            <div id="${detailId}" style="display:none;border-top:1px solid var(--bord2);background:var(--surf2);">
                 ${nmDetailPanel(p)}
-            </td>
-        </tr>`;
+            </div>
+        </div>`;
     }).join('');
 
-    wrap.innerHTML = `
-        <div style="overflow-x:auto;border-radius:10px;border:1px solid var(--border);">
-            <table style="width:100%;border-collapse:collapse;font-size:13px;">
-                <thead style="background:var(--surf2);border-bottom:1px solid var(--border);">
-                    <tr>
-                        <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
-                        <th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Joined</th>
-                        <th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">TH</th>
-                        <th style="padding:9px 14px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Heroes</th>
-                        <th style="padding:9px 14px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;" title="TH · Heroes · Trophies · War Stars · Donations · Attacks · Clan Games">Checks ↓ detail on click</th>
-                        <th style="padding:9px 14px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Verdict</th>
-                    </tr>
-                </thead>
-                <tbody>${tableRows}</tbody>
-            </table>
-        </div>`;
+    wrap.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${cards}</div>`;
 }
 
 function nmDetailPanel(p) {
-    const heroRows = p.heroes.map(h => {
+    const heroRows = [...p.heroes].sort((a, b) => b.max_level - a.max_level).map(h => {
         const pct = h.max_level > 0 ? Math.round(h.level / h.max_level * 100) : 0;
         const col = nmHeroBarColor(pct);
-        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">
+        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;">
             <span style="font-size:12px;color:var(--text);width:130px;flex-shrink:0;">${h.name}</span>
-            <div style="flex:1;height:6px;border-radius:3px;background:var(--bord2);overflow:hidden;max-width:120px;">
+            <div style="flex:1;height:5px;border-radius:3px;background:var(--bord2);overflow:hidden;max-width:110px;">
                 <div style="height:100%;width:${pct}%;background:${col};border-radius:3px;"></div>
             </div>
-            <span style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:${col};min-width:50px;">${h.level}/${h.max_level}</span>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:${col};min-width:52px;">${h.level}/${h.max_level}</span>
         </div>`;
     }).join('') || '<span style="color:var(--muted);font-size:12px;">No heroes unlocked</span>';
 
-    const checkRows = p.checks.map(c => `
-        <div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--bord2);">
-            <span style="width:18px;text-align:center;font-size:14px;">${c.status==='pass'?'✓':c.status==='warn'?'⚠':'✗'}</span>
-            <span style="font-size:12px;font-weight:600;color:var(--text);width:120px;flex-shrink:0;">${c.label}</span>
+    const checkRows = p.checks.map(c => {
+        const cs = NM_C[c.status] || NM_C.warn;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--bord2);">
+            <span style="width:16px;text-align:center;font-weight:700;font-size:14px;color:${cs.color};flex-shrink:0;">${cs.icon}</span>
+            <span style="font-size:12px;font-weight:600;width:110px;flex-shrink:0;">${c.label}</span>
             <span style="font-size:12px;color:var(--muted);">${c.detail}</span>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 
     const leagueImg = p.league_icon
-        ? `<img src="${p.league_icon}" width="24" height="24" style="vertical-align:middle;margin-right:5px;">`
+        ? `<img src="${p.league_icon}" width="18" height="18" style="vertical-align:middle;margin-right:5px;border-radius:3px;">`
         : '';
 
-    return `<div style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+    return `<div style="padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
         <div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Hero Development</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;">Hero Development</div>
             ${heroRows}
         </div>
         <div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Check Details</div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${leagueImg}${p.league} · ${p.trophies.toLocaleString()} trophies (best ${p.best_trophies.toLocaleString()})</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Checks</div>
             ${checkRows}
         </div>
     </div>`;
 }
 
 function nmToggleDetail(id) {
-    const row = document.getElementById(id);
-    if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+    const el = document.getElementById(id);
+    if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+// ── CWL Bonus ─────────────────────────────────────────────────────────────────
+const _MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _fmtMonth(m) {
+    const [y, mo] = m.split('-');
+    return _MONTH_NAMES[parseInt(mo) - 1] + ' ' + y;
+}
+
+function loadCWLBonus() {
+    const loading = document.getElementById('cwl-bonus-loading');
+    const result  = document.getElementById('cwl-bonus-result');
+    loading.style.display = 'inline';
+    result.innerHTML = '';
+
+    fetch('/admin/cwl-bonus')
+        .then(r => r.json())
+        .then(data => {
+            loading.style.display = 'none';
+            window._cwlCurrentMonth = data.current_month;
+            const cur = data.current_month;
+            const curBonuses = data.members.filter(p => p.by_month[cur]?.has_bonus).length;
+            document.getElementById('cwl-bonus-meta').textContent =
+                `${curBonuses} bonus${curBonuses !== 1 ? 'es' : ''} this month`;
+            renderCWLBonus(data);
+        })
+        .catch(() => {
+            loading.style.display = 'none';
+            result.innerHTML = '<div style="color:var(--red);font-size:13px;padding:8px 0;">Error loading data.</div>';
+        });
+}
+
+function toggleCWLBonus(btn, tag, month) {
+    btn.disabled = true;
+    fetch('/admin/cwl-bonus/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_tag: tag, month }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        if (!data.ok) return;
+        btn.dataset.state = data.added ? 'true' : 'false';
+        btn.className = 'gc-toggle ' + (data.added ? 'gc-yes' : 'gc-no');
+        btn.textContent = data.added ? '✓' : '✗';
+    });
+}
+
+function _cwlAtkColor(done, max) {
+    if (!max) return 'var(--muted)';
+    if (done === max) return 'var(--green)';
+    if (done === 0)   return 'var(--red)';
+    return 'var(--yellow)';
+}
+
+function renderCWLBonus(data) {
+    const { months, current_month, members } = data;
+    const wrap = document.getElementById('cwl-bonus-result');
+    if (!members.length) {
+        wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0;">No active members found.</div>';
+        return;
+    }
+
+    // Sort: current month CWL participants first → by stars desc → name
+    const sorted = [...members].sort((a, b) => {
+        const am = a.by_month[current_month], bm = b.by_month[current_month];
+        if ((bm.in_cwl ? 1 : 0) !== (am.in_cwl ? 1 : 0)) return (bm.in_cwl ? 1 : 0) - (am.in_cwl ? 1 : 0);
+        if ((bm.stars || 0) !== (am.stars || 0)) return (bm.stars || 0) - (am.stars || 0);
+        return a.name.localeCompare(b.name);
+    });
+
+    const SEP = 'border-left:2px solid var(--border);';
+
+    const h1 = months.map((m, i) => {
+        const cur = m === current_month;
+        const sep = i > 0 ? SEP : '';
+        return `<th colspan="3" style="text-align:center;padding:8px 6px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;${sep}${cur ? 'color:var(--accent);background:rgba(240,165,0,.07);' : ''}">${_fmtMonth(m)}${cur ? ' ●' : ''}</th>`;
+    }).join('');
+
+    const h2 = months.map((m, i) => {
+        const bg  = m === current_month ? 'background:rgba(240,165,0,.04);' : '';
+        const sep = i > 0 ? SEP : '';
+        return `<th style="text-align:center;padding:5px 4px;${bg}${sep}font-size:10px;color:var(--muted);">⭐</th>
+                <th style="text-align:center;padding:5px 4px;${bg}font-size:10px;color:var(--muted);">Atk</th>
+                <th style="text-align:center;padding:5px 4px;${bg}font-size:10px;color:var(--muted);">Bonus</th>`;
+    }).join('');
+
+    const rows = sorted.map(p => {
+        const tagId = p.tag.replace('#', '');
+        const cells = months.map((m, i) => {
+            const md  = p.by_month[m];
+            const bg  = m === current_month ? 'background:rgba(240,165,0,.025);' : '';
+            const sep = i > 0 ? SEP : '';
+            const starCell = md.in_cwl
+                ? `<td style="text-align:center;padding:8px 4px;${bg}${sep}font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--yellow);">${md.stars}</td>`
+                : `<td style="text-align:center;padding:8px 4px;${bg}${sep}color:var(--bord2);font-size:12px;">—</td>`;
+            const atkCell = md.in_cwl
+                ? `<td style="text-align:center;padding:8px 4px;${bg}font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${_cwlAtkColor(md.attacks, md.max_attacks)};">${md.attacks}/${md.max_attacks}</td>`
+                : `<td style="text-align:center;padding:8px 4px;${bg}color:var(--bord2);font-size:12px;">—</td>`;
+            const bonusCell = `<td style="text-align:center;padding:8px 4px;${bg}">
+                <button id="cwlb-${tagId}-${m}"
+                        class="gc-toggle ${md.has_bonus ? 'gc-yes' : 'gc-no'}"
+                        data-state="${md.has_bonus}"
+                        ondblclick="toggleCWLBonus(this,'${p.tag}','${m}')"
+                        title="Double-click to toggle"
+                        style="font-size:10px;padding:2px 8px;min-width:28px;">
+                    ${md.has_bonus ? '✓' : '✗'}
+                </button></td>`;
+            return starCell + atkCell + bonusCell;
+        }).join('');
+
+        return `<tr data-name="${(p.name||'').toLowerCase()}" data-tag="${p.tag.toLowerCase()}" style="border-bottom:1px solid var(--bord2);">
+            <td style="padding:8px 14px;white-space:nowrap;">
+                <div style="font-weight:600;font-size:13px;">${p.name}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:1px;">${p.tag}</div>
+            </td>
+            ${cells}
+        </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+        <input type="search" class="m-search" placeholder="🔍 Search player…"
+               oninput="filterCWLBonus(this)" style="margin-bottom:14px;">
+        <div style="overflow-x:auto;">
+        <table class="member-table" id="cwl-bonus-table" style="min-width:700px;">
+            <thead>
+                <tr>
+                    <th rowspan="2" style="vertical-align:middle;padding:8px 14px;">Player</th>
+                    ${h1}
+                </tr>
+                <tr>${h2}</tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+        </div>`;
+}
+
+function filterCWLBonus(input) {
+    const q = input.value.toLowerCase();
+    document.querySelectorAll('#cwl-bonus-table tbody tr').forEach(row => {
+        row.style.display = (!q || row.dataset.name.includes(q) || row.dataset.tag.includes(q)) ? '' : 'none';
+    });
+}
+
+function suggestCWLBonus() {
+    const month = window._cwlCurrentMonth;
+    if (!month) { alert('Load the bonus table first.'); return; }
+    const btn = document.getElementById('cwl-suggest-btn');
+    btn.disabled = true; btn.textContent = '⏳ Calculating…';
+
+    fetch('/admin/cwl-bonus/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false; btn.textContent = '✦ Suggest Bonus';
+        if (!data.ok) { alert('Error: ' + (data.error || 'Unknown')); return; }
+        _applyCWLSuggestion(data);
+    })
+    .catch(err => {
+        btn.disabled = false; btn.textContent = '✦ Suggest Bonus';
+        alert('Error calculating suggestions: ' + err.message);
+    });
+}
+
+function _applyCWLSuggestion(data) {
+    const suggestedSet = new Set(data.suggested_tags.map(t => t.toLowerCase()));
+    const panel   = document.getElementById('cwl-suggestion-panel');
+    const content = document.getElementById('cwl-suggestion-content');
+
+    // Store for apply
+    window._cwlSuggestedTags  = data.suggested_tags;
+    window._cwlTotalBonuses   = data.total_bonuses;
+
+    // Update meta: X/Y slots filled
+    const given = data.already_given;
+    const total = data.total_bonuses;
+    document.getElementById('cwl-bonus-meta').textContent =
+        `${given}/${total} slot${total !== 1 ? 's' : ''} filled · ${data.league} ${data.war_size}v${data.war_size}`;
+
+    panel.style.display = '';
+
+    const detailRows = (data.suggested_details || []).map(p => {
+        const ac = _cwlAtkColor(p.attacks, p.max_attacks);
+        return `<tr style="border-bottom:1px solid var(--bord2);">
+            <td style="padding:5px 10px;font-weight:600;font-size:12px;">${p.name}</td>
+            <td style="padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--yellow);white-space:nowrap;">${p.stars}⭐</td>
+            <td style="padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${ac};white-space:nowrap;">${p.attacks}/${p.max_attacks} atk</td>
+            <td style="padding:5px 10px;font-size:11px;color:var(--muted);">${p.reason}</td>
+        </tr>`;
+    }).join('');
+
+    content.innerHTML = `
+        <div style="margin-bottom:12px;">
+            <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text);">
+                ${data.league} · ${data.war_size}v${data.war_size}
+            </span>
+            <span style="font-size:12px;color:var(--muted);margin-left:14px;">
+                <span style="color:var(--green);">✓ ${data.wins} win${data.wins!==1?'s':''}</span>
+                + <span style="color:var(--blue);">${data.guaranteed} guaranteed</span>
+                = <strong style="color:var(--text);">${total} total slot${total!==1?'s':''}</strong>
+                &nbsp;·&nbsp; ${given} already given
+                &nbsp;·&nbsp; <strong style="color:var(--accent);">${data.available} remaining</strong>
+            </span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+            <thead><tr style="background:var(--surf2);">
+                <th style="padding:5px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
+                <th style="padding:5px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Stars</th>
+                <th style="padding:5px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Attacks</th>
+                <th style="padding:5px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Why</th>
+            </tr></thead>
+            <tbody>${detailRows || '<tr><td colspan="4" style="padding:8px 10px;color:var(--muted);font-size:12px;">No players to suggest.</td></tr>'}</tbody>
+        </table>
+        <button onclick="applyCWLSuggestions()"
+                style="padding:7px 18px;background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:7px;color:var(--green);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap;">
+            ✓ Apply Suggestions
+        </button>`;
+
+    // Highlight suggested rows
+    document.querySelectorAll('#cwl-bonus-table tbody tr').forEach(row => {
+        const isSuggested = suggestedSet.has(row.dataset.tag);
+        row.style.background = isSuggested ? 'rgba(88,166,255,0.07)' : '';
+        row.style.borderLeft = isSuggested ? '3px solid var(--blue)' : '';
+    });
+}
+
+function applyCWLSuggestions() {
+    if (!window._cwlSuggestedTags || !window._cwlCurrentMonth) return;
+    if (!confirm(`Apply bonus to ${window._cwlSuggestedTags.length} suggested player(s)?`)) return;
+
+    fetch('/admin/cwl-bonus/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: window._cwlCurrentMonth, tags: window._cwlSuggestedTags }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) { alert('Error: ' + (data.error || 'Unknown')); return; }
+
+        // Update buttons in-place — no reload needed, highlights stay
+        const cur = window._cwlCurrentMonth;
+        window._cwlSuggestedTags.forEach(tag => {
+            const btn = document.getElementById(`cwlb-${tag.replace('#', '')}-${cur}`);
+            if (btn && btn.dataset.state !== 'true') {
+                btn.className    = 'gc-toggle gc-yes';
+                btn.dataset.state = 'true';
+                btn.textContent  = '✓';
+            }
+        });
+
+        // Update meta count
+        const newGiven = (window._cwlTotalBonuses || 0) - (data.added !== undefined
+            ? (window._cwlTotalBonuses - window._cwlSuggestedTags.length) : 0);
+        const total = window._cwlTotalBonuses || '?';
+        const given = window._cwlSuggestedTags.length + (parseInt(document.getElementById('cwl-bonus-meta').textContent) || 0);
+        // Simpler: just re-count from the buttons
+        const curGiven = document.querySelectorAll(`[id^="cwlb-"][id$="-${cur}"].gc-yes`).length;
+        document.getElementById('cwl-bonus-meta').textContent =
+            `${curGiven}/${total} slot${total !== 1 ? 's' : ''} filled`;
+
+        document.getElementById('cwl-suggestion-panel').style.display = 'none';
+        window._cwlSuggestedTags = null;
+    });
 }
 
 function renderWarRoster(roster, bench) {

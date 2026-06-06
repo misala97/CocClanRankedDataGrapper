@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import BattleLog, Player
-from services.helpers import to_local, LOCAL_TZ
+from services.helpers import to_local, LOCAL_TZ, filter_import_window
 
 battles_bp = Blueprint('battles', __name__)
 
@@ -77,12 +77,7 @@ def battle_history_page():
         .group_by(BattleLog.player_tag)
         .all()
     )
-    import_window = dt.timedelta(minutes=2)
-    attacks = [
-        b for b in attacks
-        if not (b.time and first_log_time.get(b.player_tag) and
-                b.time <= first_log_time[b.player_tag] + import_window)
-    ]
+    attacks = filter_import_window(attacks, first_log_time)
 
     total_attacks = len(attacks)
     total_gold    = sum(b.loot_gold or 0 for b in attacks)
@@ -156,17 +151,11 @@ def battle_stats_page():
         .all()
     )
 
-    # Strip import-window artifacts (same logic as battle_history_page)
     first_log_time = {}
     for b in raw:
         if b.player_tag not in first_log_time or (b.time and b.time < first_log_time[b.player_tag]):
             first_log_time[b.player_tag] = b.time
-    import_window = dt.timedelta(minutes=2)
-    attacks = [
-        b for b in raw
-        if not (b.time and first_log_time.get(b.player_tag) and
-                b.time <= first_log_time[b.player_tag] + import_window)
-    ]
+    attacks = filter_import_window(raw, first_log_time)
 
     # ── Per-player accumulation ───────────────────────────────────────────────
     acc = {}

@@ -3,10 +3,12 @@ import time
 
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_RAID_WEEKEND_DATA
+from tasks import task_lock
 
 raid_weekend_logger = setup_task_logger('raid_weekend', 'logs/raid_weekend.log')
 
 
+@task_lock(logger=raid_weekend_logger)
 def task_update_raid_weekend():
     from app import app, CLAN_TAG
     from extensions import db

@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import AppUser, Player, BattleLog, RankedWeek, UptimeTracker, ClanWar, ClanWarMember, ClanWarAttack
+from models import AppUser, Player, BattleLog, RankedWeek, UptimeTracker, ClanWar, ClanWarMember, ClanWarAttack, CWLBonus
 from features.auth.routes import require_admin_login, require_super_admin
 
 admin_bp = Blueprint('admin', __name__)
@@ -121,6 +121,7 @@ def admin_hub():
         function_stats=function_stats,
         selected_days=days,
         members=members,
+        current_month=dt.date.today().strftime('%Y-%m'),
     )
 
 
@@ -199,6 +200,330 @@ def admin_members():
     return render_template('admin/admin_members.html', players=players)
 
 
+from tasks import _task_locks
+
+_TRIGGERABLE_TASKS = {
+    'task_update_battle_logs':  ('tasks.battle_logs',  'task_update_battle_logs'),
+    'task_update_ranked_weeks': ('tasks.ranked_weeks', 'task_update_ranked_weeks'),
+    'task_update_clan_members': ('tasks.clan_members', 'task_update_clan_members'),
+    'task_update_raid_weekend': ('tasks.raid_weekend', 'task_update_raid_weekend'),
+    'task_update_clan_war':     ('tasks.clan_war',     'task_update_clan_war'),
+    'task_update_cwl':          ('tasks.cwl',          'task_update_cwl'),
+}
+
+
+@admin_bp.route('/admin/trigger-task', methods=['POST'])
+@require_super_admin
+def admin_trigger_task():
+    import importlib
+    task_name = (request.get_json() or {}).get('task')
+    if task_name not in _TRIGGERABLE_TASKS:
+        return jsonify(ok=False, error='Unknown task'), 400
+    lock = _task_locks[task_name]
+    if not lock.acquire(blocking=False):
+        return jsonify(ok=False, busy=True, error='Task is already running — try again in a moment.'), 409
+    try:
+        module_path, fn_name = _TRIGGERABLE_TASKS[task_name]
+        mod = importlib.import_module(module_path)
+        getattr(mod, fn_name)()
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)), 500
+    finally:
+        lock.release()
+
+
+# ── CWL Bonus ─────────────────────────────────────────────────────────────────
+
+def _shift_month(m, delta):
+    y, mo = map(int, m.split('-'))
+    mo += delta
+    while mo > 12: mo -= 12; y += 1
+    while mo < 1:  mo += 12; y -= 1
+    return f'{y}-{mo:02d}'
+
+
+@admin_bp.route('/admin/cwl-bonus', methods=['GET'])
+@require_admin_login
+def admin_cwl_bonus_list():
+    from sqlalchemy import func
+    from models import CWLSeason, CWLWar, CWLMember, CWLAttack
+    from app import CLAN_TAG
+
+    current_month = dt.date.today().strftime('%Y-%m')
+    months = [_shift_month(current_month, i) for i in range(-3, 2)]  # -3,-2,-1,0,+1
+
+    members = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
+
+    # All bonuses for all months in one query
+    all_bonuses = CWLBonus.query.filter(CWLBonus.month.in_(months)).all()
+    bonus_set = {(b.player_tag, b.month) for b in all_bonuses}
+
+    # CWL stats per month
+    month_stats = {}  # month -> { player_tag -> {stars, attacks, max_attacks} }
+    for month in months:
+        season = CWLSeason.query.filter_by(season=month).first()
+        if not season:
+            continue
+        war_ids = [w.id for w in CWLWar.query.filter_by(season_id=season.id).all()
+                   if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
+        if not war_ids:
+            continue
+
+        max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
+                    .filter(CWLMember.war_id.in_(war_ids),
+                            CWLMember.is_opponent == False,
+                            CWLMember.clan_tag == CLAN_TAG)
+                    .group_by(CWLMember.player_tag).all())
+        max_atk_map = {tag: cnt for tag, cnt in max_rows}
+        if not max_atk_map:
+            continue
+
+        atk_rows = (db.session.query(CWLAttack.attacker_tag, func.count(CWLAttack.id))
+                    .filter(CWLAttack.war_id.in_(war_ids),
+                            CWLAttack.attacker_tag.in_(list(max_atk_map)))
+                    .group_by(CWLAttack.attacker_tag).all())
+        atk_map = {tag: cnt for tag, cnt in atk_rows}
+
+        star_rows = (db.session.query(CWLAttack.attacker_tag, func.sum(CWLAttack.stars))
+                     .filter(CWLAttack.war_id.in_(war_ids),
+                             CWLAttack.attacker_tag.in_(list(max_atk_map)))
+                     .group_by(CWLAttack.attacker_tag).all())
+        stars_map = {tag: int(s or 0) for tag, s in star_rows}
+
+        month_stats[month] = {
+            tag: {
+                'stars':       stars_map.get(tag, 0),
+                'attacks':     atk_map.get(tag, 0),
+                'max_attacks': max_atk_map[tag],
+            } for tag in max_atk_map
+        }
+
+    return jsonify(
+        months=months,
+        current_month=current_month,
+        members=[{
+            'tag':  p.tag,
+            'name': p.name or p.tag,
+            'by_month': {
+                m: {
+                    'has_bonus':   (p.tag, m) in bonus_set,
+                    'in_cwl':      p.tag in month_stats.get(m, {}),
+                    'stars':       month_stats.get(m, {}).get(p.tag, {}).get('stars', 0),
+                    'attacks':     month_stats.get(m, {}).get(p.tag, {}).get('attacks', 0),
+                    'max_attacks': month_stats.get(m, {}).get(p.tag, {}).get('max_attacks', 0),
+                } for m in months
+            },
+        } for p in members],
+    )
+
+
+# Guaranteed bonuses by (league_group, war_size) — None = N/A
+_GUARANTEED_BONUSES = {
+    'bronze_silver': {5: 0, 15: 1, 30: 2},
+    'gold_crystal':  {5: 0, 15: 2, 30: 4},
+    'master':        {5: 1, 15: 3, 30: 6},
+    'champion':      {5: None, 15: 4, 30: None},
+}
+
+def _cwl_league_group(league_name):
+    if not league_name:
+        return 'bronze_silver'
+    n = league_name.lower()
+    if 'champion' in n:
+        return 'champion'
+    if 'master' in n:
+        return 'master'
+    if 'crystal' in n or 'gold' in n:
+        return 'gold_crystal'
+    return 'bronze_silver'
+
+def _normalize_war_size(team_size):
+    if not team_size or team_size <= 7:  return 5
+    if team_size <= 20:                   return 15
+    return 30
+
+
+@admin_bp.route('/admin/cwl-bonus/suggest', methods=['POST'])
+@require_admin_login
+def admin_cwl_bonus_suggest():
+    from sqlalchemy import func
+    from models import CWLSeason, CWLWar, CWLMember, CWLAttack
+    from app import CLAN_TAG
+    import traceback
+
+    try:
+        return _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN_TAG)
+    except Exception as e:
+        return jsonify(ok=False, error=f'{type(e).__name__}: {e}', trace=traceback.format_exc()), 500
+
+
+def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN_TAG):
+    data  = request.get_json() or {}
+    month = data.get('month', dt.date.today().strftime('%Y-%m'))
+
+    season = CWLSeason.query.filter_by(season=month).first()
+    if not season:
+        return jsonify(ok=False, error='No CWL season found for this month.'), 404
+
+    wars = [w for w in CWLWar.query.filter_by(season_id=season.id).all()
+            if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
+    if not wars:
+        return jsonify(ok=False, error='No CWL wars found for this clan this month.'), 404
+
+    war_ids  = [w.id for w in wars]
+    war_size = _normalize_war_size(wars[0].team_size)
+
+    # League name: prefer season record, fall back to our clan's war record
+    league_name = season.league_name
+    if not league_name:
+        our_war = next((w for w in wars if w.clan_tag == CLAN_TAG), None) or wars[0]
+        league_name = (our_war.clan_cwl_league if our_war.clan_tag == CLAN_TAG
+                       else our_war.opp_cwl_league) or ''
+
+    league_grp = _cwl_league_group(league_name)
+    guaranteed = _GUARANTEED_BONUSES.get(league_grp, {}).get(war_size)
+    if guaranteed is None:
+        return jsonify(ok=False, error=f'Guaranteed bonus is N/A for {league_name or "unknown league"} {war_size}v{war_size}.'), 400
+
+    # Count wins
+    wins = 0
+    for w in wars:
+        if w.state != 'warEnded':
+            continue
+        if w.clan_tag == CLAN_TAG:
+            our_s, opp_s = w.clan_stars or 0, w.opp_stars or 0
+            our_p, opp_p = float(w.clan_destruction_pct or 0), float(w.opp_destruction_pct or 0)
+        else:
+            our_s, opp_s = w.opp_stars or 0, w.clan_stars or 0
+            our_p, opp_p = float(w.opp_destruction_pct or 0), float(w.clan_destruction_pct or 0)
+        if our_s > opp_s or (our_s == opp_s and our_p > opp_p):
+            wins += 1
+
+    total_bonuses = guaranteed + wins
+
+    # Participants
+    max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
+                .filter(CWLMember.war_id.in_(war_ids),
+                        CWLMember.is_opponent == False,
+                        CWLMember.clan_tag == CLAN_TAG)
+                .group_by(CWLMember.player_tag).all())
+    max_atk_map  = {tag: cnt for tag, cnt in max_rows}
+    participants = list(max_atk_map.keys())
+
+    # Stars + attacks
+    star_rows = (db.session.query(CWLAttack.attacker_tag, func.sum(CWLAttack.stars))
+                 .filter(CWLAttack.war_id.in_(war_ids), CWLAttack.attacker_tag.in_(participants))
+                 .group_by(CWLAttack.attacker_tag).all())
+    stars_map = {tag: int(s or 0) for tag, s in star_rows}
+
+    atk_rows = (db.session.query(CWLAttack.attacker_tag, func.count(CWLAttack.id))
+                .filter(CWLAttack.war_id.in_(war_ids), CWLAttack.attacker_tag.in_(participants))
+                .group_by(CWLAttack.attacker_tag).all())
+    atk_map = {tag: cnt for tag, cnt in atk_rows}
+
+    current_bonuses = {b.player_tag for b in CWLBonus.query.filter_by(month=month).all()}
+    player_map      = {p.tag: p.name or p.tag
+                       for p in Player.query.filter(Player.tag.in_(participants)).all()}
+
+    # Last bonus month per participant (across all time)
+    last_bonus_rows = (db.session.query(CWLBonus.player_tag, func.max(CWLBonus.month))
+                       .filter(CWLBonus.player_tag.in_(participants),
+                               CWLBonus.month != month)   # exclude current month
+                       .group_by(CWLBonus.player_tag).all())
+    last_bonus_map = {tag: m for tag, m in last_bonus_rows}
+
+    def _months_ago(last_month):
+        if not last_month:
+            return None
+        cy, cm = map(int, month.split('-'))
+        py, pm = map(int, last_month.split('-'))
+        return (cy - py) * 12 + (cm - pm)
+
+    participant_list = [{
+        'tag':         tag,
+        'name':        player_map.get(tag, tag),
+        'stars':       stars_map.get(tag, 0),
+        'attacks':     atk_map.get(tag, 0),
+        'max_attacks': max_atk_map.get(tag, 0),
+        'has_bonus':   tag in current_bonuses,
+        'last_bonus':  last_bonus_map.get(tag),
+        'months_ago':  _months_ago(last_bonus_map.get(tag)),
+    } for tag in participants]
+
+    # Sort: eligible first, then by longest without bonus (None = never → oldest date → newest)
+    # Tiebreak: more stars first
+    eligible = [p for p in participant_list if not p['has_bonus']]
+    eligible.sort(key=lambda p: (
+        p['last_bonus'] or '',   # '' sorts before any YYYY-MM → never bonused first
+        -p['stars'],
+    ))
+
+    already   = len(current_bonuses)
+    available = max(0, total_bonuses - already)
+    selected  = eligible[:available]
+
+    def _reason(p):
+        if p['last_bonus'] is None:
+            return 'No bonus on record'
+        ma = p['months_ago']
+        return f"Last bonus {ma} month{'s' if ma != 1 else ''} ago ({p['last_bonus']})"
+
+    suggested_tags    = [p['tag'] for p in selected]
+    suggested_details = [{'tag': p['tag'], 'name': p['name'], 'stars': p['stars'],
+                          'attacks': p['attacks'], 'max_attacks': p['max_attacks'], 'reason': _reason(p)}
+                         for p in selected]
+
+    return jsonify(
+        ok=True,
+        wins=wins,
+        guaranteed=guaranteed,
+        total_bonuses=total_bonuses,
+        already_given=already,
+        available=available,
+        league=league_name or '?',
+        war_size=war_size,
+        suggested_tags=suggested_tags,
+        suggested_details=suggested_details,
+        participants=participant_list,
+    )
+
+
+@admin_bp.route('/admin/cwl-bonus/apply', methods=['POST'])
+@require_admin_login
+def admin_cwl_bonus_apply():
+    data  = request.get_json() or {}
+    month = data.get('month', '')
+    tags  = data.get('tags', [])
+    if not month or not tags:
+        return jsonify(ok=False, error='Missing month or tags'), 400
+    added = 0
+    for tag in tags:
+        if not CWLBonus.query.filter_by(player_tag=tag, month=month).first():
+            db.session.add(CWLBonus(player_tag=tag, month=month))
+            added += 1
+    db.session.commit()
+    return jsonify(ok=True, added=added)
+
+
+@admin_bp.route('/admin/cwl-bonus/toggle', methods=['POST'])
+@require_admin_login
+def admin_cwl_bonus_toggle():
+    data = request.get_json() or {}
+    tag   = data.get('player_tag', '').strip()
+    month = data.get('month', '').strip()
+    if not tag or not month:
+        return jsonify(ok=False, error='Missing player_tag or month'), 400
+    existing = CWLBonus.query.filter_by(player_tag=tag, month=month).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify(ok=True, added=False)
+    db.session.add(CWLBonus(player_tag=tag, month=month))
+    db.session.commit()
+    return jsonify(ok=True, added=True)
+
+
 @admin_bp.route('/admin/members/<path:tag>/update', methods=['POST'])
 @require_admin_login
 def admin_member_update(tag):
@@ -211,6 +536,8 @@ def admin_member_update(tag):
     if 'war_preference_custom' in data:
         v = data['war_preference_custom']
         player.war_preference_custom = v if v in ('in', 'out') else None
+    if 'newbie_check' in data:
+        player.newbie_check = bool(data['newbie_check'])
     db.session.commit()
     return jsonify(ok=True)
 
@@ -286,55 +613,106 @@ def debug_dashboard():
 
 # ── New Member Evaluation ─────────────────────────────────────────────────────
 
+# Max hero level achievable at each TH level (home village heroes only)
+_HERO_TH_MAX = {
+    'Barbarian King': {7: 10, 8: 20, 9: 30, 10: 40, 11: 50, 12: 65, 13: 75, 14: 85, 15: 90, 16: 95, 17: 100, 18: 102},
+    'Archer Queen': { 8: 10, 9: 30, 10: 40, 11: 50, 12: 65, 13: 75, 14: 85, 15: 90, 16: 95, 17: 100, 18: 102},
+    'Minion Prince':  {9: 10, 10: 20, 11:30, 12:40, 13:50, 14:60,15:70,16:80,17:90,18:95},
+    
+    'Grand Warden':   {11: 20, 12: 40, 13: 50, 14: 60, 15: 65, 16: 70, 17: 75, 18: 80},
+    
+    'Royal Champion': {13: 25, 14: 30, 15: 40, 16: 45, 17: 50, 18: 55},
+    'Dragon Duke': { 15: 10, 16: 15, 17: 20, 18: 25},
+    
+}
+
+def _hero_th_max(hero_name, th_level):
+    mapping = _HERO_TH_MAX.get(hero_name)
+    if not mapping:
+        return None
+    for th in sorted(mapping.keys(), reverse=True):
+        if th_level >= th:
+            return mapping[th]
+    return None
+
+# (min_th, pass_threshold, warn_threshold) — evaluated top-down, first match wins
+_WAR_STARS_BRACKETS   = [(18, 2000, 800), (16, 1500, 500), (14, 1000, 300), (12, 500, 150), (10, 250, 75),  (0, 100, 30)]
+_DONATIONS_BRACKETS   = [(18, 10000, 3500), (16, 8000, 2500), (14, 5000, 1500), (12, 3000, 1000), (10, 1500, 500), (0, 500, 150)]
+_ATTACK_WINS_BRACKETS = [(18, 2200, 800), (16, 1800, 600), (14, 1200, 400), (12, 800, 250), (10, 500, 150), (0, 200, 75)]
+
+def _th_threshold(th, brackets):
+    for min_th, good, warn in brackets:
+        if th >= min_th:
+            return good, warn
+    return brackets[-1][1], brackets[-1][2]
+
+
 def _evaluate_player_data(data):
     """Given raw CoC API player dict, return evaluation dict (checks + verdict + heroes)."""
+    from services.helpers import EXPECTED_LEAGUE_RANK, _get_league_rank, get_name_to_id
+
     th_level      = data.get('townHallLevel', 0)
     trophies      = data.get('trophies', 0)
     best_trophies = data.get('bestTrophies', 0)
     league_name   = (data.get('league') or {}).get('name', 'Unranked')
     league_icon   = ((data.get('league') or {}).get('iconUrls') or {}).get('small', '')
-    donations     = data.get('donations', 0)
-    attack_wins   = data.get('attackWins', 0)
 
+    # Heroes — percentage of TH-appropriate max levels
     heroes_raw = [h for h in (data.get('heroes') or []) if h.get('village') == 'home']
-    heroes = [{'name': h['name'], 'level': h.get('level', 0), 'max_level': h.get('maxLevel', 1)}
-              for h in heroes_raw]
-    hero_total = sum(h['level']     for h in heroes)
-    hero_max   = sum(h['max_level'] for h in heroes)
-    hero_pct   = round(hero_total / hero_max * 100) if hero_max else 0
+    heroes = []
+    hero_total = 0
+    hero_max_sum = 0
+    for h in heroes_raw:
+        name   = h.get('name', '')
+        level  = h.get('level', 0)
+        th_max = _hero_th_max(name, th_level) or h.get('maxLevel', 1)
+        heroes.append({'name': name, 'level': level, 'max_level': th_max})
+        hero_total   += level
+        hero_max_sum += th_max
+    hero_pct = round(hero_total / hero_max_sum * 100) if hero_max_sum else 0
 
-    ach_map = {a['name']: a.get('value', 0) for a in (data.get('achievements') or [])}
-    donations_val   = ach_map.get('Friend in Need', donations)
-    war_stars_val   = ach_map.get('War Hero', data.get('warStars', 0))
-    attack_wins_val = ach_map.get('Conqueror', attack_wins)
-    clan_games_val  = ach_map.get('Games Champion', 0)
+    # Lifetime stats from achievements
+    ach_map         = {a['name']: a.get('value', 0) for a in (data.get('achievements') or [])}
+    war_stars_val   = ach_map.get('War Hero',      data.get('warStars', 0))
+    donations_val   = ach_map.get('Friend in Need', data.get('donations', 0))
+    attack_wins_val = ach_map.get('Conqueror',      data.get('attackWins', 0))
+
+    # Ranked league — compare against TH-expected rank
+    league_tier_raw = data.get('leagueTier') or {}
+    league_tier_id  = league_tier_raw.get('id')
+    ranked_name     = get_name_to_id(league_tier_id) if league_tier_id else None
+    player_rank     = _get_league_rank(ranked_name) if ranked_name else 0
+    expected_rank   = EXPECTED_LEAGUE_RANK.get(th_level, 1)
+    expected_name   = get_name_to_id(105000000 + expected_rank)
 
     def chk(value, good, warn, label, fmt):
         status = 'pass' if value >= good else ('warn' if value >= warn else 'fail')
         return {'status': status, 'label': label, 'detail': fmt(value)}
 
+    war_good, war_warn = _th_threshold(th_level, _WAR_STARS_BRACKETS)
+    don_good, don_warn = _th_threshold(th_level, _DONATIONS_BRACKETS)
+    atk_good, atk_warn = _th_threshold(th_level, _ATTACK_WINS_BRACKETS)
+
+    rank_diff   = player_rank - expected_rank
+    rank_status = 'pass' if rank_diff >= 0 else ('warn' if rank_diff >= -2 else 'fail')
+
     checks = [
-        chk(th_level,         14,    12,    'Town Hall',
-            lambda v: f'TH{v}'),
-        chk(hero_pct,         75,    50,    'Heroes',
-            lambda v: f'{v}% of max'),
-        chk(best_trophies,    3500,  2600,  'Peak Trophies',
-            lambda v: f'{v:,}'),
-        chk(war_stars_val,    1000,  200,   'War Stars',
-            lambda v: f'{v:,}'),
-        chk(donations_val,    5000,  1000,  'Donations',
-            lambda v: f'{v:,}'),
-        chk(attack_wins_val,  1000,  300,   'Attack Wins',
-            lambda v: f'{v:,}'),
-        chk(clan_games_val,   50000, 10000, 'Clan Games',
-            lambda v: f'{v:,} pts'),
+        chk(hero_pct,        75,       50,       'Heroes',       lambda v: f'{v}% of TH max'),
+        chk(war_stars_val,   war_good, war_warn,  'War Stars',   lambda v: f'{v:,}'),
+        chk(donations_val,   don_good, don_warn,  'Donations',   lambda v: f'{v:,}'),
+        chk(attack_wins_val, atk_good, atk_warn,  'Attack Wins', lambda v: f'{v:,}'),
+        {
+            'status': rank_status,
+            'label':  'Ranked League',
+            'detail': f'{ranked_name or "Unranked"} (expected ≥ {expected_name})',
+        },
     ]
 
     passes = sum(1 for c in checks if c['status'] == 'pass')
     fails  = sum(1 for c in checks if c['status'] == 'fail')
-    if fails == 0 and passes >= 5:
+    if fails == 0:
         verdict = 'accept'
-    elif fails >= 3 or (fails >= 2 and passes < 3):
+    elif fails >= 3 or (fails >= 2 and passes <= 1):
         verdict = 'decline'
     else:
         verdict = 'consider'
@@ -352,12 +730,9 @@ def _evaluate_player_data(data):
 def admin_evaluate_new_members():
     from services.api import api_fetch_player_data
 
-    days = int((request.get_json() or {}).get('days', 7))
-    cutoff = dt.date.today() - dt.timedelta(days=max(1, min(days, 30)))
-
     new_members = Player.query.filter(
         Player.in_clan == True,
-        Player.join_date >= cutoff,
+        Player.newbie_check == False,
     ).order_by(Player.join_date.desc()).all()
 
     results = []
@@ -380,6 +755,12 @@ def admin_evaluate_new_members():
                 'days_ago': (dt.date.today() - player.join_date).days if player.join_date else '?',
                 'error': str(e),
             })
+
+    _verdict_order = {'decline': 0, 'consider': 1, 'accept': 2}
+    results.sort(key=lambda r: (
+        _verdict_order.get(r.get('verdict'), 1),
+        -sum(1 for c in r.get('checks', []) if c.get('status') == 'fail'),
+    ))
 
     return jsonify(results=results, count=len(results))
 

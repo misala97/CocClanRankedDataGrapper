@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, redirect, url_for
 from extensions import db
 from models import Player, RankedWeek, RankedBattleLog, BattleLog, RaidWeekend, RaidWeekendLog, ClanWarMember, ClanWarAttack, ClanWar
 from features.auth.routes import _current_user, _any_access
-from services.helpers import LOCAL_TZ
+from services.helpers import LOCAL_TZ, week_cutoff
 
 profile_bp = Blueprint('profile', __name__)
 
@@ -46,12 +46,7 @@ def _current_ranked_week(player_tag):
 
 
 def _recent_battles(player_tag, days=7):
-    now_local = dt.datetime.now(LOCAL_TZ)
-    week_start_date = (now_local - dt.timedelta(days=now_local.weekday())).date()
-    cutoff = dt.datetime(
-        week_start_date.year, week_start_date.month, week_start_date.day,
-        tzinfo=LOCAL_TZ
-    ).astimezone(dt.timezone.utc).replace(tzinfo=None)
+    cutoff = week_cutoff(None, 7)
 
     return (
         BattleLog.query

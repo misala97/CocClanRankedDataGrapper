@@ -3,10 +3,12 @@ import time
 
 from logging_config import setup_task_logger
 from services.helpers import json_get, get_name_to_id, JSON_CWL_GROUP_DATA, JSON_CWL_WAR_DATA, JSON_PLAYER_DATA
+from tasks import task_lock
 
 cwl_logger = setup_task_logger('cwl', 'logs/cwl.log')
 
 
+@task_lock(logger=cwl_logger)
 def task_update_cwl():
     from app import app, CLAN_TAG
     from extensions import db
@@ -39,10 +41,9 @@ def task_update_cwl():
 
         state       = json_get(group, JSON_CWL_GROUP_DATA.STATE  ) or 'unknown'
         season_str  = json_get(group, JSON_CWL_GROUP_DATA.SEASON ) or ''
-        league_name = json_get(
-            json_get(group, JSON_CWL_GROUP_DATA.WAR_LEAGUE, default={}, raise_on_missing=False) or {},
-            JSON_CWL_GROUP_DATA.WAR_LEAGUE_NAME, raise_on_missing=False
-        )
+        from models import ClanConfig
+        cfg         = db.session.get(ClanConfig, CLAN_TAG)
+        league_name = cfg.cwl_league_name if cfg else None
 
         if state == 'notInWar' or not season_str:
             cwl_logger.info("Not in CWL — skipping.")

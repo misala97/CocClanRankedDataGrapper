@@ -589,11 +589,16 @@
         {% if is_super_admin %}
         <a href="/admin" class="feature-card active">
             <div class="card-top">
-                <div class="feature-icon">⚙️</div>
+                <div style="position:relative;display:inline-flex;">
+                    <div class="feature-icon">⚙️</div>
+                    {% if newbie_check_count > 0 %}
+                    <span style="position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;line-height:18px;text-align:center;">{{ newbie_check_count }}</span>
+                    {% endif %}
+                </div>
                 <span class="badge badge-active">Active</span>
             </div>
             <h4>Admin Hub</h4>
-            <p>Centralized control panel for managing clan members, data sync, and system configuration.</p>
+            <p>Centralized control panel for managing clan members, data sync, and system configuration.{% if newbie_check_count > 0 %} <strong style="color:var(--red);">{{ newbie_check_count }} unchecked member{{ 's' if newbie_check_count != 1 else '' }}.</strong>{% endif %}</p>
         </a>
         {% endif %}
 
