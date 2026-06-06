@@ -1144,7 +1144,7 @@ function renderNewMembers(results) {
                 <!-- TH + name -->
                 <span style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--accent);padding:5px 11px;background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.2);border-radius:7px;flex-shrink:0;">TH${p.th}</span>
                 <div style="min-width:160px;flex-shrink:0;">
-                    <div style="font-weight:700;font-size:14px;line-height:1.25;">${p.name}</div>
+                    <div style="font-weight:700;font-size:14px;line-height:1.25;"><a href="/player/${encodeURIComponent(p.tag.replace('#',''))}" target="_blank" rel="noopener" onclick="event.stopPropagation();" class="player-link">${esc(p.name)} <span class="player-link-arrow">↗</span></a></div>
                     <div style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:2px;">${p.tag}</div>
                     ${p.days_ago !== '?' && p.days_ago != null ? `<div style="font-size:10px;color:var(--muted);margin-top:1px;">joined ${p.days_ago}d ago</div>` : ''}
                 </div>
