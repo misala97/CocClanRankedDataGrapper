@@ -178,7 +178,7 @@
 {% set page_header_desc = 'No player found with tag ' ~ player_tag %}
 {% else %}
 {% set page_header_title %}{{ player.name | e }}<span>.</span>{% endset %}
-{% set page_header_desc %}<span style="font-family:'Rajdhani',sans-serif;font-weight:600;">{{ player.tag }}</span> <span style="color:var(--border);">·</span> TH{{ player.current_th or '?' }} <span style="color:var(--border);">·</span> {% if player.league_icon %}<img src="{{ player.league_icon }}" alt="" style="width:18px;height:18px;vertical-align:middle;">{% endif %} {{ player.league_tier or 'Unranked' }} <span style="color:var(--border);">·</span> {% if player.in_clan %}<span class="badge badge-in">In Clan</span>{% else %}<span class="badge badge-out">Left Clan</span>{% endif %}{% endset %}
+{% set page_header_desc %}<span style="font-family:'Rajdhani',sans-serif;font-weight:600;">{{ player.tag }}</span> <span style="color:var(--border);">·</span> TH{{ player.current_th or '?' }} <span style="color:var(--border);">·</span> {% if player.league_icon %}<img src="{{ player.league_icon }}" alt="" style="width:18px;height:18px;vertical-align:middle;">{% endif %} {{ player.league_tier or 'Unranked' }} <span style="color:var(--border);">·</span> {% if player.in_clan %}<span class="badge badge-in">In Clan</span>{% else %}<span class="badge badge-out">Left Clan</span>{% endif %}{% if player.join_date %} <span style="color:var(--border);">·</span> <span style="color:var(--muted);font-size:13px;">joined {{ player.join_date.strftime('%d %b %Y') }}</span>{% endif %}{% endset %}
 {% endif %}
 {% include '_page_header.html' %}
 

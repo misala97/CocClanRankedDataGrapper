@@ -180,12 +180,28 @@ def index():
     ).order_by(CWLSeason.id.desc()).first()
 
     active_cwl_war = None
+    cwl_win_status = None
     if active_cwl_season:
         active_cwl_war = CWLWar.query.filter(
             CWLWar.season_id == active_cwl_season.id,
             CWLWar.state.in_(['preparation', 'inWar']),
             db.or_(CWLWar.clan_tag == CLAN_TAG, CWLWar.opp_tag == CLAN_TAG)
         ).first()
+        if active_cwl_war and active_cwl_war.state == 'inWar':
+            our_side = active_cwl_war.clan_tag == CLAN_TAG
+            our_s = (active_cwl_war.clan_stars  if our_side else active_cwl_war.opp_stars)  or 0
+            opp_s = (active_cwl_war.opp_stars   if our_side else active_cwl_war.clan_stars) or 0
+            our_done = (active_cwl_war.clan_attacks if our_side else active_cwl_war.opp_attacks) or 0
+            size = active_cwl_war.team_size or 15
+            our_max = our_s + max(0, size - our_done) * 3
+            opp_done = (active_cwl_war.opp_attacks if our_side else active_cwl_war.clan_attacks) or 0
+            opp_max = opp_s + max(0, size - opp_done) * 3
+            if our_s > opp_max:
+                cwl_win_status = 'safe_win'
+            elif opp_s > our_max:
+                cwl_win_status = 'cant_win'
+            else:
+                cwl_win_status = 'contested'
 
     active_raid_est_medals = None
     if active_raid:
@@ -226,6 +242,7 @@ def index():
         active_raid_est_medals=active_raid_est_medals,
         active_cwl_season=active_cwl_season,
         active_cwl_war=active_cwl_war,
+        cwl_win_status=cwl_win_status,
         CLAN_TAG=CLAN_TAG,
     )
 

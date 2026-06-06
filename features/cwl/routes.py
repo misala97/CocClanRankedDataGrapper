@@ -142,6 +142,23 @@ def _build_war_detail(war, our_tag):
     def _avg_th(members):
         return round(sum(m.town_hall_level or 0 for m in members) / len(members), 1) if members else '—'
 
+    # ── Win reachability for live wars ────────────────────────────────────────
+    win_status = None
+    if war.state == 'inWar':
+        our_stars_now = (war.clan_stars  if our_side else war.opp_stars)  or 0
+        opp_stars_now = (war.opp_stars   if our_side else war.clan_stars) or 0
+        our_done      = (war.clan_attacks if our_side else war.opp_attacks) or 0
+        opp_done      = (war.opp_attacks  if our_side else war.clan_attacks) or 0
+        size          = war.team_size or 15
+        our_max = our_stars_now + max(0, size - our_done) * 3
+        opp_max = opp_stars_now + max(0, size - opp_done) * 3
+        if our_stars_now > opp_max:
+            win_status = 'safe_win'
+        elif opp_stars_now > our_max:
+            win_status = 'cant_win'
+        else:
+            win_status = 'contested'
+
     return {
         'war':              war,
         'our_tag':          our_tag,
@@ -180,6 +197,7 @@ def _build_war_detail(war, our_tag):
         'member_by_tag':    member_by_tag,
         'all_attacks_json': all_attacks_json,
         'war_verdicts':     war_verdicts,
+        'win_status':       win_status,
         'result':           _war_result(war, our_tag) if war.state == 'warEnded' else None,
     }
 

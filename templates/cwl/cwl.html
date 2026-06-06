@@ -86,6 +86,10 @@
         .state-preparation { background: rgba(240,165,0,.12); color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
         .state-inWar       { background: rgba(63,185,80,.12);  color: var(--green); border: 1px solid rgba(63,185,80,.3); }
         .state-warEnded    { background: rgba(139,148,158,.1); color: var(--muted); border: 1px solid rgba(139,148,158,.2); }
+        .win-status-badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; white-space: nowrap; }
+        .ws-safe     { background: rgba(63,185,80,.15);  color: var(--green);  border: 1px solid rgba(63,185,80,.35); }
+        .ws-cant     { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.3); }
+        .ws-contest  { background: rgba(240,165,0,.12);  color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
         .score-times { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; width: 100%; }
         .score-time-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
         .score-time-row .tl { color: var(--muted); } .score-time-row .tv { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; }
@@ -732,6 +736,13 @@
             <span class="state-badge state-{{ war.state }}">
                 {% if war.state == 'preparation' %}Prep{% elif war.state == 'inWar' %}Live{% else %}Ended{% endif %}
             </span>
+            {% if d.win_status == 'safe_win' %}
+            <span class="win-status-badge ws-safe" title="Even if they 3★ every remaining attack, you still win">🔒 Safe Win</span>
+            {% elif d.win_status == 'cant_win' %}
+            <span class="win-status-badge ws-cant" title="Even if you 3★ every remaining attack, you cannot catch them">💀 Out of Reach</span>
+            {% elif d.win_status == 'contested' %}
+            <span class="win-status-badge ws-contest" title="Both sides can still win — outcome is open">⚔️ Contested</span>
+            {% endif %}
             <span class="round-chevron" id="chevron-{{ n }}">▼</span>
         </div>
     </div>
