@@ -178,8 +178,10 @@ def ranked_weeks_page():
             if not dw:
                 continue
             if rw:
-                a_stars = [log.stars or 0 for log in rw.battle_logs if _is_attack(log)]
-                d_stars = [log.stars or 0 for log in rw.battle_logs if not (_is_attack(log))]
+                atk_logs = [log for log in rw.battle_logs if _is_attack(log)]
+                def_logs = [log for log in rw.battle_logs if not _is_attack(log)]
+                a_stars = [log.stars or 0 for log in atk_logs]
+                d_stars = [log.stars or 0 for log in def_logs]
                 att_c = len(a_stars)
                 def_c = len(d_stars)
 
@@ -188,13 +190,19 @@ def ranked_weeks_page():
                 score_100_hist, _, _ = _calc_ranked_score(rw.battle_logs, player_th_hist, att_max_hist, rw.league_tier or '')
                 badge_hist, _, _ = _ranked_verdict(score_100_hist, att_c, att_max_hist)
 
+                att_ths = [int(log.opponent_th) for log in atk_logs if log.opponent_th]
+                def_ths = [int(log.opponent_th) for log in def_logs if log.opponent_th]
+
                 history.append({
                     'label': dw.start_day.strftime('%d.%m.%y'),
                     'att_count': att_c,
                     'att_max': att_max_hist,
                     'att_avg': round(sum(a_stars) / att_c, 2) if att_c else 0,
+                    'att_avg_th': round(sum(att_ths) / len(att_ths), 1) if att_ths else None,
                     'def_count': def_c,
                     'def_avg': round(sum(d_stars) / def_c, 2) if def_c else 0,
+                    'def_avg_th': round(sum(def_ths) / len(def_ths), 1) if def_ths else None,
+                    'player_th': player_th_hist,
                     'trophies': rw.trophies or 0,
                     'rank': rw.rank,
                     'league_tier': rw.league_tier or '',

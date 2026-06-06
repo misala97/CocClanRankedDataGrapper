@@ -452,6 +452,7 @@
 <script>
     window.weekData = {{ week_data|tojson|safe }};
     window.playerHistory = {{ player_history|tojson|safe }};
+    window.myPlayerTag = {{ (current_user.linked_player_tag if current_user and current_user.linked_player_tag else None) | tojson }};
 
     const CHART_COLORS = [
         '#f0a500','#58a6ff','#3fb950','#bc8cff','#f85149',
@@ -730,20 +731,22 @@
                 ? `<span class="judgment ${h.badge_class}" style="font-size:10px;padding:2px 8px;">${escapeHTML(verdictLabels[h.badge_class]||'–')}</span>${h.score_100 > 0 ? ` <span style="color:var(--muted);font-size:11px;font-family:'Rajdhani',sans-serif;">${h.score_100}</span>` : ''}`
                 : '–';
 
+            const attThHtml = h.att_avg_th != null ? `<div style="margin-top:2px;">${formatTHDiff(h.att_avg_th, h.player_th)}</div>` : '';
+            const defThHtml = h.def_avg_th != null ? `<div style="margin-top:2px;">${formatTHDiff(h.def_avg_th, h.player_th, true)}</div>` : '';
             return `<tr style="${rowStyle}">
                 <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
-                <td>${leagueCell}</td>
                 <td>
                     <div style="display:flex;flex-direction:column;gap:4px;min-width:54px;">
                         <span style="font-family:'Rajdhani',sans-serif;font-weight:600;">${h.att_count} / ${h.att_max}</span>
                         <div style="height:3px;background:var(--bord2);border-radius:2px;"><div style="height:3px;background:${rowBarColor};border-radius:2px;width:${rowAttPct}%;"></div></div>
                     </div>
                 </td>
-                <td style="color:${attAvgColor(h.att_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;">${h.att_avg.toFixed(2)} ★${attTrend}</td>
+                <td style="white-space:nowrap;"><span style="color:${attAvgColor(h.att_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;">${h.att_avg.toFixed(2)} ★${attTrend}</span>${attThHtml}</td>
                 <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);text-align:center;">${h.def_count}</td>
-                <td style="color:${defAvgColor(h.def_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;">${h.def_avg.toFixed(2)} ★${defTrend}</td>
+                <td style="white-space:nowrap;"><span style="color:${defAvgColor(h.def_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;">${h.def_avg.toFixed(2)} ★${defTrend}</span>${defThHtml}</td>
                 <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">🏆 ${h.trophies}${trophyDelta}</td>
                 <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${h.rank ? '#' + h.rank : '–'}${rankDelta}</td>
+                <td>${leagueCell}</td>
                 <td>${verdictCell}</td>
             </tr>`;
         }).join('');
@@ -757,7 +760,7 @@
                     <div class="hist-chart-trophy"><canvas id="${trophyCanvasId}"></canvas></div>
                 </div>
                 <table class="detail-table">
-                    <thead><tr><th>Week</th><th>League</th><th>Attacks</th><th>Avg Att.</th><th>Defs</th><th>Avg Def.</th><th>Trophies</th><th>Rank</th><th>Verdict</th></tr></thead>
+                    <thead><tr><th>Week</th><th>Attacks</th><th>Avg Att.</th><th>Defs</th><th>Avg Def.</th><th>Trophies</th><th>Rank</th><th>League</th><th>Verdict</th></tr></thead>
                     <tbody>${tableRows}</tbody>
                 </table>
             </div>`;
@@ -1003,6 +1006,10 @@
         rows.forEach(item => {
             const row = document.createElement('tr');
             row.style.cursor = 'pointer';
+            if (window.myPlayerTag && item.player_tag === window.myPlayerTag) {
+                row.style.background = 'rgba(240,165,0,0.08)';
+                row.style.boxShadow = 'inset 3px 0 0 var(--accent)';
+            }
             const leagueCell = item.league_icon
                 ? `<div class="league-cell"><img src="${escapeHTML(item.league_icon)}" alt="${escapeHTML(item.league_tier||'')}" title="${escapeHTML(item.league_tier||'')}" class="league-icon"></div>`
                 : `<div class="league-cell"><span class="league-badge">${escapeHTML(item.league_tier||'–')}</span></div>`;

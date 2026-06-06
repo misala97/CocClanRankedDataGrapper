@@ -67,6 +67,21 @@
             box-shadow: 0 6px 24px rgba(240,165,0,0.09);
             transform: translateY(-2px);
         }
+        .player-card.card-me {
+            border-color: rgba(240,165,0,0.8);
+            box-shadow: 0 0 0 2px rgba(240,165,0,0.35), 0 6px 32px rgba(240,165,0,0.25);
+            background: rgba(240,165,0,0.05);
+        }
+        .player-card.card-me .player-card-header {
+            background: rgba(240,165,0,0.08);
+        }
+        .you-pill {
+            font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.6px; text-transform: uppercase;
+            padding: 1px 6px; border-radius: 4px;
+            background: rgba(240,165,0,0.15); color: var(--accent);
+            border: 1px solid rgba(240,165,0,0.35); flex-shrink: 0;
+        }
 
         /* ── CARD TOP ACCENT LINE ── */
         .card-accent-line {
@@ -193,6 +208,7 @@
     };
 
     const allPlayers = {{ player_cards | tojson | safe }};
+    const myPlayerTag = {{ (current_user.linked_player_tag if current_user and current_user.linked_player_tag else None) | tojson }};
     let currentSort = 'combined';
     let filtered = [...allPlayers];
 
@@ -214,13 +230,15 @@
         const skColor   = COLOR_MAP[p.skill.label_color]    || COLOR_MAP.muted;
         const actPct    = s => Math.round(s / 100 * 100);
 
-        return `<a href="/player/${escapeHTML(p.tag_url)}" class="player-card">
-            <div class="card-accent-line" style="background:${skColor};"></div>
+        const isMe = myPlayerTag && p.tag === myPlayerTag;
+        return `<a href="/player/${escapeHTML(p.tag_url)}" class="player-card${isMe ? ' card-me' : ''}">
+            <div class="card-accent-line" style="background:${isMe ? 'var(--accent)' : skColor};"></div>
             <div class="player-card-header">
                 <div class="player-name-row">
                     <span class="rank-badge">${rank}</span>
                     ${p.league_icon ? `<img src="${escapeHTML(p.league_icon)}" class="league-icon" alt="">` : ''}
                     <span class="player-name">${escapeHTML(p.name)}</span>
+                    ${isMe ? '<span class="you-pill">You</span>' : ''}
                 </div>
                 <span class="th-badge">TH${p.th || '?'}</span>
             </div>

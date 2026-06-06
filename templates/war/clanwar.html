@@ -211,6 +211,9 @@
             background: rgba(240,165,0,.08) !important;
             box-shadow: inset 3px 0 0 var(--accent);
         }
+        .member-row.row-me {
+            box-shadow: inset 3px 0 0 var(--accent);
+        }
         .member-row.row-tgt-3    { background: rgba(63,185,80,.1)   !important; box-shadow: inset 3px 0 0 #3fb950; }
         .member-row.row-tgt-2    { background: rgba(227,179,65,.1)  !important; box-shadow: inset 3px 0 0 #e3b341; }
         .member-row.row-tgt-1    { background: rgba(240,165,0,.1)   !important; box-shadow: inset 3px 0 0 #f0a500; }
@@ -798,7 +801,7 @@
         {% for m in members_our %}
         {% set my_attacks = attacks_by_attacker.get(m.player_tag, []) %}
         {% set attacks_received = attacks_on_defender.get(m.player_tag, []) %}
-        <div class="member-row" data-tag="{{ m.player_tag }}" data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]' data-defended-by='[{% for a in attacks_received %}{"tag":"{{ a.attacker_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'>
+        <div class="member-row{% if current_user and current_user.linked_player_tag == m.player_tag %} row-me{% endif %}" data-tag="{{ m.player_tag }}" data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]' data-defended-by='[{% for a in attacks_received %}{"tag":"{{ a.attacker_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'>
             <div class="map-pos">#{{ m.map_position }}</div>
             <div class="th-badge">TH{{ m.town_hall_level }}</div>
             <div class="member-info">
@@ -859,7 +862,7 @@
         {% for m in members_opp %}
         {% set my_attacks = attacks_by_attacker.get(m.player_tag, []) %}
         {% set attacks_received = attacks_on_defender.get(m.player_tag, []) %}
-        <div class="member-row" data-tag="{{ m.player_tag }}" data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]' data-defended-by='[{% for a in attacks_received %}{"tag":"{{ a.attacker_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'>
+        <div class="member-row{% if current_user and current_user.linked_player_tag == m.player_tag %} row-me{% endif %}" data-tag="{{ m.player_tag }}" data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]' data-defended-by='[{% for a in attacks_received %}{"tag":"{{ a.attacker_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'>
             <div class="map-pos">#{{ m.map_position }}</div>
             <div class="th-badge">TH{{ m.town_hall_level }}</div>
             <div class="member-info">
@@ -1579,7 +1582,7 @@ function toggleCompare() {
         });
 
         document.querySelectorAll('.member-row').forEach(r => {
-            if (!r.classList.contains('row-sel') && !TGT_CLASSES.some(c => r.classList.contains(c)))
+            if (!r.classList.contains('row-sel') && !r.classList.contains('row-me') && !TGT_CLASSES.some(c => r.classList.contains(c)))
                 r.classList.add('row-dim');
         });
     }

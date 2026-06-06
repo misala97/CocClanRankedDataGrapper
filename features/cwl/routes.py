@@ -149,15 +149,17 @@ def _build_war_detail(war, our_tag):
         opp_stars_now = (war.opp_stars   if our_side else war.clan_stars) or 0
         our_done      = (war.clan_attacks if our_side else war.opp_attacks) or 0
         opp_done      = (war.opp_attacks  if our_side else war.clan_attacks) or 0
+        our_pct       = float((war.clan_destruction_pct if our_side else war.opp_destruction_pct) or 0)
+        opp_pct       = float((war.opp_destruction_pct  if our_side else war.clan_destruction_pct) or 0)
         size          = war.team_size or 15
         our_max = our_stars_now + max(0, size - our_done) * 3
         opp_max = opp_stars_now + max(0, size - opp_done) * 3
-        if our_stars_now > opp_max:
+        if our_stars_now > opp_max or (our_stars_now == opp_max and our_pct > opp_pct):
             win_status = 'safe_win'
-        elif opp_stars_now > our_max:
+        elif opp_stars_now > our_max or (opp_stars_now == our_max and opp_pct > our_pct):
             win_status = 'cant_win'
         else:
-            win_status = 'contested'
+            win_status = 'undecided'
 
     return {
         'war':              war,
@@ -419,6 +421,12 @@ def cwl_page():
 
     sorted_rounds = sorted(rounds.items())
 
+    # ── Clans we already fought this season ───────────────────────────────────
+    fought_clans = {
+        detail['opp_clan_tag']: {'round': rn, 'result': detail['result'], 'state': detail['war'].state}
+        for rn, detail in sorted_rounds
+    }
+
     # ── Extended clan info from first available war per clan ──────────────────
     clan_war_info = {}
     for war in wars:
@@ -459,6 +467,7 @@ def cwl_page():
         clan_rosters=clan_rosters,
         clan_war_info=clan_war_info,
         current_day_attacks=current_day_attacks,
+        fought_clans=fought_clans,
         standings=sorted_standings,
         sorted_rounds=sorted_rounds,
         now=dt.datetime.now(dt.timezone.utc),

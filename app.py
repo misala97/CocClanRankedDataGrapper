@@ -189,19 +189,21 @@ def index():
         ).first()
         if active_cwl_war and active_cwl_war.state == 'inWar':
             our_side = active_cwl_war.clan_tag == CLAN_TAG
-            our_s = (active_cwl_war.clan_stars  if our_side else active_cwl_war.opp_stars)  or 0
-            opp_s = (active_cwl_war.opp_stars   if our_side else active_cwl_war.clan_stars) or 0
+            our_s    = (active_cwl_war.clan_stars  if our_side else active_cwl_war.opp_stars)  or 0
+            opp_s    = (active_cwl_war.opp_stars   if our_side else active_cwl_war.clan_stars) or 0
             our_done = (active_cwl_war.clan_attacks if our_side else active_cwl_war.opp_attacks) or 0
-            size = active_cwl_war.team_size or 15
-            our_max = our_s + max(0, size - our_done) * 3
-            opp_done = (active_cwl_war.opp_attacks if our_side else active_cwl_war.clan_attacks) or 0
-            opp_max = opp_s + max(0, size - opp_done) * 3
-            if our_s > opp_max:
+            opp_done = (active_cwl_war.opp_attacks  if our_side else active_cwl_war.clan_attacks) or 0
+            our_pct  = float((active_cwl_war.clan_destruction_pct if our_side else active_cwl_war.opp_destruction_pct) or 0)
+            opp_pct  = float((active_cwl_war.opp_destruction_pct  if our_side else active_cwl_war.clan_destruction_pct) or 0)
+            size     = active_cwl_war.team_size or 15
+            our_max  = our_s + max(0, size - our_done) * 3
+            opp_max  = opp_s + max(0, size - opp_done) * 3
+            if our_s > opp_max or (our_s == opp_max and our_pct > opp_pct):
                 cwl_win_status = 'safe_win'
-            elif opp_s > our_max:
+            elif opp_s > our_max or (opp_s == our_max and opp_pct > our_pct):
                 cwl_win_status = 'cant_win'
             else:
-                cwl_win_status = 'contested'
+                cwl_win_status = 'undecided'
 
     active_raid_est_medals = None
     if active_raid:
@@ -258,7 +260,7 @@ if __name__ == '__main__':
     from tasks.cwl           import task_update_cwl
 
     # Uncomment to run tasks manually before starting:
-    task_update_clan_members()
+    #task_update_clan_members()
     #task_update_battle_logs()
     #task_update_raid_weekend()
     #task_update_ranked_weeks()

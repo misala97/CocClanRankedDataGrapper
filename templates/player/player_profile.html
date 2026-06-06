@@ -92,6 +92,7 @@
         .score-component-name { font-size: 13px; font-weight: 600; }
         .score-component-pts { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; }
         .score-bar-track { height: 7px; border-radius: 4px; background: var(--bord2); overflow: hidden; }
+        .score-bar-nodata { height: 7px; border-radius: 4px; background: repeating-linear-gradient(-45deg, var(--bord2) 0px, var(--bord2) 3px, var(--bg) 3px, var(--bg) 6px); }
         .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
         .score-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
@@ -193,9 +194,18 @@
     const sharedAvailable = periodOrder.filter(p => activityPeriods[p] || skillPeriods[p]);
     let   sharedPeriod    = sharedAvailable.includes('month') ? 'month' : (sharedAvailable[0] || 'month');
 
-    function renderCard(periodsData, scoreId, labelId, subId, componentsId, componentDefs) {
+    function renderCard(periodsData, scoreId, labelId, subId, componentsId, componentDefs, leftId) {
         const d = periodsData[sharedPeriod];
-        if (!d) return;
+        if (!d) {
+            if (leftId) document.getElementById(leftId).style.display = 'none';
+            document.getElementById(componentsId).innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 0;text-align:center;width:100%;">
+                    <div style="font-size:36px;opacity:0.15;">📊</div>
+                    <div style="font-size:13px;color:var(--muted);">Not enough data for this period</div>
+                </div>`;
+            return;
+        }
+        if (leftId) document.getElementById(leftId).style.display = '';
         const col = `var(--${d.label_color})`;
         document.getElementById(scoreId).textContent = d.score;
         document.getElementById(scoreId).style.color = col;
@@ -212,6 +222,7 @@
                     <span class="score-component-name">${c.name}</span>
                     <span style="font-size:12px;color:var(--muted);font-style:italic;">No data</span>
                 </div>
+                <div class="score-bar-nodata"></div>
             </div>`;
             return `
             <div class="score-component">
@@ -240,14 +251,14 @@
             { name: 'Ranked',       score: d.ranked_score, max: d.ranked_max, detail: d.ranked_detail, color: 'var(--blue)',   pts: 'text-blue' },
             { name: 'Raid',         score: d.raid_score,   max: d.raid_max,   detail: d.raid_detail,   color: 'var(--accent)', pts: 'text-accent' },
             { name: 'Farm Attacks', score: d.battle_score, max: d.battle_max, detail: d.battle_detail, color: 'var(--green)',  pts: 'text-green' },
-            ...(d.war_score_has_data ? [{ name: 'Clan War', score: d.war_score, max: d.war_max, detail: d.war_detail, color: 'var(--red)', pts: 'text-red' }] : []),
+            { name: 'Clan War', score: d.war_score || 0, max: d.war_max || 100, detail: d.war_detail || '', color: 'var(--red)', pts: 'text-red', hasData: d.war_score_has_data },
         ]);
         renderCard(skillPeriods, 'sk-score', 'sk-label', 'sk-sub', 'sk-components', d => [
             { name: 'Ranked',       score: d.ranked_skill, max: d.ranked_max, detail: d.ranked_detail, color: 'var(--blue)',   pts: 'text-blue',   hasData: d.ranked_skill_has_data },
             { name: 'Raid',         score: d.raid_skill,   max: d.raid_max,   detail: d.raid_detail,   color: 'var(--accent)', pts: 'text-accent', hasData: d.raid_skill_has_data },
             { name: 'Farm Attacks', score: d.battle_skill, max: d.battle_max, detail: d.battle_detail, color: 'var(--green)',  pts: 'text-green',  hasData: d.battle_skill_has_data },
             { name: 'Clan War',     score: d.war_skill,    max: d.war_max,    detail: d.war_detail,    color: 'var(--red)',    pts: 'text-red',    hasData: d.war_skill_has_data },
-        ]);
+        ], 'sk-left');
     }
 
     function switchPeriod(p) { sharedPeriod = p; renderAll(); }
@@ -281,7 +292,7 @@
                 <div id="sk-toggle" class="period-toggle"></div>
             </div>
             <div class="score-card-body">
-                <div class="score-left">
+                <div class="score-left" id="sk-left">
                     <div id="sk-score" class="score-number"></div>
                     <div id="sk-label" class="score-label-text"></div>
                     <div class="score-out-of">out of 100</div>

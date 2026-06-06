@@ -48,6 +48,11 @@
         .rp-draw { background: rgba(139,148,158,.1); color: var(--muted);  border: 1px solid rgba(139,148,158,.2); }
         .enemy-pill    { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; background: rgba(248,81,73,.12); color: var(--red);    border: 1px solid rgba(248,81,73,.25);    margin-left: 6px; }
         .tomorrow-pill { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; background: rgba(88,166,255,.12); color: var(--blue);   border: 1px solid rgba(88,166,255,.25);   margin-left: 6px; }
+        .fought-pill     { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase; margin-left: 6px; border: 1px solid; }
+        .fought-win      { background: rgba(63,185,80,.10);  color: var(--green);  border-color: rgba(63,185,80,.25); }
+        .fought-loss     { background: rgba(248,81,73,.10);  color: var(--red);    border-color: rgba(248,81,73,.25); }
+        .fought-draw     { background: rgba(139,148,158,.1); color: var(--muted);  border-color: rgba(139,148,158,.2); }
+        .fought-live     { background: rgba(63,185,80,.08);  color: var(--green);  border-color: rgba(63,185,80,.2); }
         .col-sep { border-left: 1px solid var(--border) !important; }
 
         /* ── ROUND COLLAPSE ── */
@@ -230,6 +235,9 @@
         .member-row:last-child { border-bottom: none; }
         .member-row:hover { background: rgba(255,255,255,.02); }
         .member-row.row-sel    { background: rgba(240,165,0,.08) !important; box-shadow: inset 3px 0 0 var(--accent); }
+        .member-row.row-me     { box-shadow: inset 3px 0 0 var(--accent); }
+        .inner-roster-row.row-me td { background: rgba(240,165,0,.07); }
+        .inner-roster-row.row-me td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
         .member-row.row-tgt-3  { background: rgba(63,185,80,.1)   !important; box-shadow: inset 3px 0 0 #3fb950; }
         .member-row.row-tgt-2  { background: rgba(227,179,65,.1)  !important; box-shadow: inset 3px 0 0 #e3b341; }
         .member-row.row-tgt-1  { background: rgba(240,165,0,.1)   !important; box-shadow: inset 3px 0 0 #f0a500; }
@@ -504,19 +512,10 @@
                     </thead>
                     <tbody id="roster-tbody-{{ tagc }}">
                     {% for m in r.members %}
-                    <tr class="inner-roster-row" data-active="{{ '1' if m.player_tag in r.active_members else '0' }}" data-orig="{{ loop.index0 }}" data-th="{{ m.town_hall_level or 0 }}" data-lr="{{ league_rank(m.ranked_league) if m.ranked_league else 0 }}">
+                    <tr class="inner-roster-row{% if current_user and current_user.linked_player_tag == m.player_tag %} row-me{% endif %}" data-active="{{ '1' if m.player_tag in r.active_members else '0' }}" data-orig="{{ loop.index0 }}" data-th="{{ m.town_hall_level or 0 }}" data-lr="{{ league_rank(m.ranked_league) if m.ranked_league else 0 }}">
                         <td class="mono text-muted roster-rank" style="text-align:center;">{{ loop.index }}</td>
                         <td style="font-weight:500;">
                             <span {% if m.player_tag in r.active_members %}style="color:var(--purple);"{% endif %}>{{ m.player_name or m.player_tag }}</span>
-                            {% if can_edit_clan_war %}
-                            <button class="war-flag {% if m.is_rushed %}flag-on{% else %}flag-off{% endif %}" style="margin-left:4px;"
-                                    onclick="event.stopPropagation()" ondblclick="toggleWarFlag(event, this, '/cwl/api/clan-member/{{ m.id }}/is-rushed')">Rushed</button>
-                            <button class="war-flag {% if m.is_troll %}flag-on{% else %}flag-off{% endif %}"
-                                    onclick="event.stopPropagation()" ondblclick="toggleWarFlag(event, this, '/cwl/api/clan-member/{{ m.id }}/is-troll')">Troll</button>
-                            {% else %}
-                            {% if m.is_rushed %}<span class="war-flag flag-on" style="margin-left:4px;">Rushed</span>{% endif %}
-                            {% if m.is_troll  %}<span class="war-flag flag-on">Troll</span>{% endif %}
-                            {% endif %}
                         </td>
                         <td class="mono" style="text-align:center;color:var(--accent);">{{ m.town_hall_level or '?' }}</td>
                         <td style="font-size:12px;color:var(--blue);">{{ m.ranked_league or '—' }}</td>
@@ -552,10 +551,11 @@
             <tr>
                 <th style="width:36px;text-align:center;">#</th>
                 <th class="sortable" data-col="name"   data-type="str" onclick="sortStandings(this)">Clan <span class="sort-icon">⇅</span></th>
+                <th style="text-align:center;width:80px;white-space:nowrap;">Today</th>
                 <th class="sortable" data-col="wins"   data-type="num" onclick="sortStandings(this)" style="text-align:center;width:110px;">Record <span class="sort-icon">⇅</span></th>
                 <th class="sortable" data-col="score"  data-type="num" onclick="sortStandings(this)" style="text-align:center;width:160px;">Stars <span class="sort-icon">⇅</span></th>
                 <th style="text-align:center;white-space:nowrap;width:110px;">Trend</th>
-                <th class="sortable" data-col="eff"    data-type="num" onclick="sortStandings(this)" style="text-align:center;width:80px;">Eff <span class="sort-icon">⇅</span></th>
+                <th class="sortable" data-col="eff"    data-type="num" onclick="sortStandings(this)" style="text-align:center;width:80px;">Avg ★ <span class="sort-icon">⇅</span></th>
                 <th class="sortable" data-col="dest"   data-type="num" onclick="sortStandings(this)" style="text-align:center;width:120px;">Total Dest <span class="sort-icon">⇅</span></th>
                 <th style="text-align:center;white-space:nowrap;width:90px;">Attacks</th>
                 <th style="width:28px;"></th>
@@ -568,7 +568,7 @@
         {% set is_tomorrow = s.tag == tomorrow_enemy_tag %}
         {% set tagc = s.tag|replace('#','') %}
         {% set da = current_day_attacks.get(s.tag, {}) %}
-        <tr class="standing-row {% if is_ours %}our-row{% endif %} {% if loop.index <= 2 %}zone-promote{% elif loop.last %}zone-relegate{% endif %}"
+        <tr class="standing-row {% if is_ours %}our-row{% endif %} {% if loop.index <= 2 %}zone-promote{% elif loop.revindex <= 2 %}zone-relegate{% endif %}"
             onclick="toggleStanding('{{ tagc }}')" style="cursor:pointer;"
             data-orig="{{ loop.index0 }}"
             data-name="{{ s.name }}"
@@ -580,11 +580,29 @@
             <td>
                 <div class="clan-col">
                     {% if s.badge_url %}<img src="{{ s.badge_url }}" class="clan-badge-sm" alt="">{% endif %}
-                    <span style="font-weight:600;">{{ s.name }}</span>
-                    {% if is_enemy %}<span class="enemy-pill">⚔ NOW</span>{% endif %}
-                    {% if is_tomorrow %}<span class="tomorrow-pill">⏰ NEXT</span>{% endif %}
-                    {% if da and da.total %}<span class="live-atk-badge">{{ da.done }}/{{ da.total }}</span>{% endif %}
+                    <div>
+                        <div style="font-weight:600;line-height:1.3;">{{ s.name }}</div>
+                        {% if not is_ours %}
+                        {% set fc = fought_clans.get(s.tag) %}
+                        {% if is_enemy or is_tomorrow or fc %}
+                        <div style="display:flex;align-items:center;gap:4px;margin-top:4px;flex-wrap:wrap;">
+                            {% if fc %}
+                            <span class="fought-pill fought-{{ fc.result or 'live' }}" style="margin-left:0;">
+                                Day {{ fc.round }}{% if fc.result == 'win' %} · W{% elif fc.result == 'loss' %} · L{% elif fc.result == 'draw' %} · D{% endif %}
+                            </span>
+                            {% endif %}
+                            {% if is_enemy %}<span class="enemy-pill" style="margin-left:0;">⚔ NOW</span>{% endif %}
+                            {% if is_tomorrow %}<span class="tomorrow-pill" style="margin-left:0;">⏰ NEXT</span>{% endif %}
+                        </div>
+                        {% endif %}
+                        {% endif %}
+                    </div>
                 </div>
+            </td>
+            <td style="text-align:center;">
+                {%- if da and da.total -%}
+                <span class="live-atk-badge">{{ da.done }}/{{ da.total }}</span>
+                {%- else -%}<span style="color:var(--muted);font-size:11px;">—</span>{%- endif -%}
             </td>
             <td class="mono" style="text-align:center;font-size:16px;letter-spacing:1px;">
                 <span style="color:var(--green);">{{ s.wins }}</span><span style="color:var(--muted);">-</span><span style="color:var(--red);">{{ s.losses }}</span><span style="color:var(--muted);">-{{ s.draws }}</span>
@@ -622,7 +640,7 @@
             <td style="text-align:center;color:var(--muted);font-size:11px;" id="std-chev-{{ tagc }}">▶</td>
         </tr>
         <tr id="std-detail-{{ tagc }}" style="display:none;">
-            <td colspan="9" style="padding:0;border-bottom:1px solid var(--bord2);">
+            <td colspan="10" style="padding:0;border-bottom:1px solid var(--bord2);">
                 {% if s.rounds %}
                 <table style="width:100%;border-collapse:collapse;">
                     <thead>
@@ -741,7 +759,7 @@
             {% elif d.win_status == 'cant_win' %}
             <span class="win-status-badge ws-cant" title="Even if you 3★ every remaining attack, you cannot catch them">💀 Out of Reach</span>
             {% elif d.win_status == 'contested' %}
-            <span class="win-status-badge ws-contest" title="Both sides can still win — outcome is open">⚔️ Contested</span>
+            <span class="win-status-badge ws-contest" title="Both sides can still win — outcome is open">⚔️ Undecided</span>
             {% endif %}
             <span class="round-chevron" id="chevron-{{ n }}">▼</span>
         </div>
@@ -891,7 +909,7 @@
                 {% for m in d.members_our %}
                 {% set my_attacks = d.attacks_by_attacker.get(m.player_tag, []) %}
                 {% set attacks_received = d.attacks_on_defender.get(m.player_tag, []) %}
-                <div class="member-row"
+                <div class="member-row{% if current_user and current_user.linked_player_tag == m.player_tag %} row-me{% endif %}"
                      data-tag="{{ m.player_tag }}"
                      data-round="{{ n }}"
                      data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'
@@ -954,7 +972,7 @@
                 {% for m in d.members_opp %}
                 {% set my_attacks = d.attacks_by_attacker.get(m.player_tag, []) %}
                 {% set attacks_received = d.attacks_on_defender.get(m.player_tag, []) %}
-                <div class="member-row"
+                <div class="member-row{% if current_user and current_user.linked_player_tag == m.player_tag %} row-me{% endif %}"
                      data-tag="{{ m.player_tag }}"
                      data-round="{{ n }}"
                      data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'
@@ -1621,7 +1639,7 @@ function initRoster(n) {
             }
         });
         grid.querySelectorAll('.member-row').forEach(r=>{
-            if(!r.classList.contains('row-sel')&&!TGT.some(c=>r.classList.contains(c))) r.classList.add('row-dim');
+            if(!r.classList.contains('row-sel')&&!r.classList.contains('row-me')&&!TGT.some(c=>r.classList.contains(c))) r.classList.add('row-dim');
         });
     }
 

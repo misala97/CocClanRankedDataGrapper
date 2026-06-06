@@ -296,6 +296,7 @@
 {% if player_data %}
 <script>
 const playerData = {{ player_data | tojson | safe }};
+const myPlayerTag = {{ (current_user.linked_player_tag if current_user and current_user.linked_player_tag else None) | tojson }};
 
 let currentSort = { column: 'score_100', direction: 'desc' };
 
@@ -466,6 +467,10 @@ function buildTable() {
             ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>'
             : '';
         const row = document.createElement('tr');
+        if (myPlayerTag && p.player_tag === myPlayerTag) {
+            row.style.background = 'rgba(240,165,0,0.08)';
+            row.style.boxShadow = 'inset 3px 0 0 var(--accent)';
+        }
         row.style.cursor = 'pointer';
         row.innerHTML = `
             <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="${profileUrl}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftBadge}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>

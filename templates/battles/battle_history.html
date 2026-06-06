@@ -359,6 +359,7 @@
 
     const topByAttacks = {{ top_by_attacks|tojson|safe }};
     window.playerData  = {{ player_data|tojson|safe }};
+    window.myPlayerTag = {{ (current_user.linked_player_tag if current_user and current_user.linked_player_tag else None) | tojson }};
 
     let currentSort = { column: null, direction: null };
     let resourceChart = null;
@@ -597,6 +598,10 @@
         rows.forEach(p => {
             const row = document.createElement('tr');
             row.style.cursor = 'pointer';
+            if (window.myPlayerTag && p.player_tag === window.myPlayerTag) {
+                row.style.background = 'rgba(240,165,0,0.08)';
+                row.style.boxShadow = 'inset 3px 0 0 var(--accent)';
+            }
             row.innerHTML = `
                 <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${(p.in_clan === false || p.in_clan === 0) ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>' : ''}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
                 <td style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${p.att_count}</td>
