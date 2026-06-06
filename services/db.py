@@ -81,6 +81,18 @@ def db_finalize_uptime(func_name: str, t0: float, status: str = 'success', error
     db.session.commit()
 
 
+def _group_attack_stats(league_members: list, max_attacks: int) -> tuple[int, int]:
+    total = 0
+    full  = 0
+    for m in league_members:
+        done = (json_get(m, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_WIN_COUNT,  default=0, raise_on_missing=False) or 0) + \
+               (json_get(m, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT, default=0, raise_on_missing=False) or 0)
+        total += done
+        if max_attacks > 0 and done >= max_attacks:
+            full += 1
+    return total, full
+
+
 def create_db_ranked_week(league_group_tag, league_season_id, player_data_api, league_group_data_api) -> RankedWeek:
     league_members = json_get(league_group_data_api, JSON_RANKED_GROUP_DATA.MEMBERS)
     player_tag     = json_get(player_data_api, JSON_PLAYER_DATA.TAG)
@@ -89,21 +101,25 @@ def create_db_ranked_week(league_group_tag, league_season_id, player_data_api, l
         raise ValueError(f"Invalid rank {calculated_rank} for player {player_tag}")
     player_group_data = league_members[calculated_rank - 1]
     league_tier_name  = get_name_to_id(json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ID))
+    max_attacks = get_weekly_attacks(league_tier_name)
+    group_total_attacks, group_full_attackers = _group_attack_stats(league_members, max_attacks)
     return RankedWeek(
-        league_group_tag = league_group_tag,
-        league_season_id = league_season_id,
-        player_tag       = json_get(player_data_api, JSON_PLAYER_DATA.TAG),
-        trophies         = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_TROPHIES),
-        rank             = calculated_rank,
-        start_day        = get_last_monday(),
-        end_day          = get_next_monday(),
-        max_attacks      = get_weekly_attacks(league_tier_name),
-        townhall         = json_get(player_data_api, JSON_PLAYER_DATA.TOWN_HALL_LEVEL),
-        attack_wins      = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_WIN_COUNT),
-        attack_losses    = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT),
-        defense_wins     = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_WIN_COUNT),
-        defense_losses   = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_LOSE_COUNT),
-        league_tier      = league_tier_name,
+        league_group_tag     = league_group_tag,
+        league_season_id     = league_season_id,
+        player_tag           = json_get(player_data_api, JSON_PLAYER_DATA.TAG),
+        trophies             = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_TROPHIES),
+        rank                 = calculated_rank,
+        start_day            = get_last_monday(),
+        end_day              = get_next_monday(),
+        max_attacks          = max_attacks,
+        townhall             = json_get(player_data_api, JSON_PLAYER_DATA.TOWN_HALL_LEVEL),
+        attack_wins          = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_WIN_COUNT),
+        attack_losses        = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT),
+        defense_wins         = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_WIN_COUNT),
+        defense_losses       = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_LOSE_COUNT),
+        league_tier          = league_tier_name,
+        group_total_attacks  = group_total_attacks,
+        group_full_attackers = group_full_attackers,
     )
 
 
@@ -114,21 +130,24 @@ def create_db_ranked_week_done(done_week_db : RankedWeek,  league_group_data_api
     if calculated_rank <= 0 or calculated_rank > len(league_members):
         raise ValueError(f"Invalid rank {calculated_rank} for player {player_tag}")
     player_group_data = league_members[calculated_rank - 1]
+    group_total_attacks, group_full_attackers = _group_attack_stats(league_members, done_week_db.max_attacks or 0)
     return RankedWeek(
-        league_group_tag = done_week_db.league_group_tag,
-        league_season_id = done_week_db.league_season_id,
-        player_tag       = done_week_db.player_tag,
-        trophies         = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_TROPHIES),
-        rank             = calculated_rank,
-        start_day        = done_week_db.start_day,
-        end_day          = done_week_db.end_day,
-        max_attacks      = done_week_db.max_attacks,
-        townhall         = done_week_db.townhall,
-        attack_wins      = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_WIN_COUNT),
-        attack_losses    = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT),
-        defense_wins     = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_WIN_COUNT),
-        defense_losses   = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_LOSE_COUNT),
-        league_tier      = done_week_db.league_tier,
+        league_group_tag     = done_week_db.league_group_tag,
+        league_season_id     = done_week_db.league_season_id,
+        player_tag           = done_week_db.player_tag,
+        trophies             = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_TROPHIES),
+        rank                 = calculated_rank,
+        start_day            = done_week_db.start_day,
+        end_day              = done_week_db.end_day,
+        max_attacks          = done_week_db.max_attacks,
+        townhall             = done_week_db.townhall,
+        attack_wins          = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_WIN_COUNT),
+        attack_losses        = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT),
+        defense_wins         = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_WIN_COUNT),
+        defense_losses       = json_get(player_group_data, JSON_RANKED_GROUP_DATA.MEMBERS_DEFENSE_LOSE_COUNT),
+        league_tier          = done_week_db.league_tier,
+        group_total_attacks  = group_total_attacks,
+        group_full_attackers = group_full_attackers,
     )
 
 def create_db_ranked_battle_log(opponent_db: Player, attack_api: dict, player_data_api: dict, is_attack: bool):
@@ -359,18 +378,22 @@ def db_player_update(player: Player, updated_player: Player) -> Player:
     return player
 
 def db_ranked_week_update(ranked_week: RankedWeek, updated: RankedWeek, is_done: bool = False) -> RankedWeek:
-    if (ranked_week.trophies       != updated.trophies or
-            ranked_week.rank       != updated.rank or
-            ranked_week.attack_wins    != updated.attack_wins or
-            ranked_week.attack_losses  != updated.attack_losses or
-            ranked_week.defense_wins   != updated.defense_wins or
-            ranked_week.defense_losses != updated.defense_losses):
-        ranked_week.trophies       = updated.trophies
-        ranked_week.rank           = updated.rank
-        ranked_week.attack_wins    = updated.attack_wins
-        ranked_week.attack_losses  = updated.attack_losses
-        ranked_week.defense_wins   = updated.defense_wins
-        ranked_week.defense_losses = updated.defense_losses
+    if (ranked_week.trophies             != updated.trophies or
+            ranked_week.rank             != updated.rank or
+            ranked_week.attack_wins      != updated.attack_wins or
+            ranked_week.attack_losses    != updated.attack_losses or
+            ranked_week.defense_wins     != updated.defense_wins or
+            ranked_week.defense_losses   != updated.defense_losses or
+            ranked_week.group_total_attacks  != updated.group_total_attacks or
+            ranked_week.group_full_attackers != updated.group_full_attackers):
+        ranked_week.trophies             = updated.trophies
+        ranked_week.rank                 = updated.rank
+        ranked_week.attack_wins          = updated.attack_wins
+        ranked_week.attack_losses        = updated.attack_losses
+        ranked_week.defense_wins         = updated.defense_wins
+        ranked_week.defense_losses       = updated.defense_losses
+        ranked_week.group_total_attacks  = updated.group_total_attacks
+        ranked_week.group_full_attackers = updated.group_full_attackers
         logging.debug(f"Updated ranked week for {ranked_week.player.name}")
     ranked_week.is_done = is_done
     return ranked_week

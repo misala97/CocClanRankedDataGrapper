@@ -1030,7 +1030,7 @@
 
             row.innerHTML = `
                 <td style="text-align:center;">${leagueCell}</td>
-                <td style="text-align:center;"><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span></td>
+                <td style="text-align:center;"><div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span>${item.group_full_attackers != null ? (() => { const f = item.group_full_attackers; const col = f >= 70 ? 'var(--green)' : f >= 40 ? 'var(--accent)' : 'var(--muted)'; return `<div style="font-size:10px;color:${col};font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;" title="${item.group_total_attacks} total attacks in group">👥 ${f}/100</div>`; })() : ''}</div></td>
                 <td><div class="player-cell"><div class="player-info">
                     <div class="player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" class="player-link">${escapeHTML(item.player_name)} <span class="player-link-arrow">↗</span></a>${(item.in_clan === false || item.in_clan === 0) ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>' : ''}</div>
                     <div class="player-trophy" style="gap:6px;">${item.player_th ? `<span style="color:var(--blue);font-weight:700;">TH${item.player_th}</span> ·` : ''} 🏆 ${item.trophies}</div>
@@ -1141,6 +1141,7 @@
                         </div>
                         <div class="mc-right">
                             <span class="rank-badge rank-${item.rank_status}">${rankIcon} ${rankText}</span>
+                            ${item.group_full_attackers != null ? (() => { const f = item.group_full_attackers; const col = f >= 70 ? 'var(--green)' : f >= 40 ? 'var(--accent)' : 'var(--muted)'; return `<div style="font-size:10px;color:${col};font-family:'Rajdhani',sans-serif;font-weight:700;" title="${item.group_total_attacks} total attacks in group">👥 ${f}/100</div>`; })() : ''}
                             <span class="judgment ${item.badge_class}">${escapeHTML(verdictLabel)}${verdictScore}</span>
                         </div>
                     </div>

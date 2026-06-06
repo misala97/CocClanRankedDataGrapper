@@ -282,6 +282,9 @@
         .sv.green  { color: var(--green); }
         .lp-gold { background: rgba(240,165,0,.1); color: var(--accent); border: 1px solid rgba(240,165,0,.25); }
 
+        /* ── STAR DIST ── */
+        .star-dist-item { padding: 2px 6px; background: var(--surf2); border: 1px solid var(--bord2); border-radius: 4px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; }
+
         /* ── ATTACK PILLS ── */
         .atk-pill { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .4px; text-transform: uppercase; border: 1px solid transparent; }
         .ap-clear           { background: rgba(63,185,80,.12);   color: var(--green);  border-color: rgba(63,185,80,.3); }
@@ -734,6 +737,79 @@
     {% endif %}
 </div>
 {% endif %}{% endfor %}
+
+{# ── LEAGUE PERFORMANCE ── #}
+{% if our_player_perf %}
+<div class="recent-card" id="lpCard" style="margin: 0 0 20px;">
+    <div class="recent-header" onclick="toggleLP()">
+        <span class="recent-header-title">📊 League Performance · {{ our_player_perf|length }} players</span>
+        <span class="recent-chevron" id="lpChevron">▼</span>
+    </div>
+    <div class="recent-body" id="lpBody">
+        <div class="table-scroll">
+            <table class="detail-table" id="lpTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortLP('name')" style="cursor:pointer;min-width:160px;">Player <span id="lps-name" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('wars')" style="text-align:center;cursor:pointer;white-space:nowrap;">Wars <span id="lps-wars" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('attacks_used')" style="text-align:center;cursor:pointer;white-space:nowrap;">Attacks <span id="lps-attacks_used" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('avg_stars')" style="text-align:center;cursor:pointer;white-space:nowrap;">Avg ★ <span id="lps-avg_stars" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('three_star_rate')" style="text-align:center;cursor:pointer;white-space:nowrap;">3★ Rate <span id="lps-three_star_rate" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('avg_dest')" style="text-align:center;cursor:pointer;white-space:nowrap;">Avg Dest <span id="lps-avg_dest" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('total_dest')" style="text-align:center;cursor:pointer;white-space:nowrap;">Total Dest <span id="lps-total_dest" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('stars')" style="text-align:center;cursor:pointer;white-space:nowrap;">Total ★ <span id="lps-stars" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('missed')" style="text-align:center;cursor:pointer;white-space:nowrap;">Missed <span id="lps-missed" class="sort-icon">⇅</span></th>
+                        <th onclick="sortLP('avg_score')" style="text-align:center;cursor:pointer;white-space:nowrap;">Avg Score <span id="lps-avg_score" class="sort-icon">⇅</span></th>
+                    </tr>
+                </thead>
+                <tbody id="lpTbody">
+                {% for p in our_player_perf %}
+                <tr
+                    data-name="{{ p.name|lower }}"
+                    data-wars="{{ p.wars }}"
+                    data-attacks_used="{{ p.attacks_used }}"
+                    data-avg_stars="{{ (p.avg_stars * 100)|int }}"
+                    data-three_star_rate="{{ p.three_star_rate }}"
+                    data-avg_dest="{{ (p.avg_dest * 10)|int }}"
+                    data-total_dest="{{ (p.total_dest * 10)|int }}"
+                    data-stars="{{ p.stars }}"
+                    data-missed="{{ p.missed }}"
+                    data-avg_score="{{ (p.avg_score * 10)|int }}">
+                    <td>
+                        <span style="font-weight:600;">{{ p.name }}</span>
+                        <span class="th-badge" style="margin-left:6px;">TH{{ p.th }}</span>
+                    </td>
+                    <td class="mono" style="text-align:center;color:var(--muted);">{{ p.wars }}</td>
+                    <td style="text-align:center;">
+                        {% if p.attacks_used > 0 %}
+                        <div style="display:flex;gap:2px;align-items:center;justify-content:center;margin-bottom:3px;">
+                            <span class="star-dist-item">{{ p.zero_stars }}</span>
+                            <span class="star-dist-item">{{ p.one_stars }}</span>
+                            <span class="star-dist-item">{{ p.two_stars }}</span>
+                            <span class="star-dist-item">{{ p.three_stars }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="mono"><span style="color:var(--{% if p.attacks_used == p.wars %}green{% elif p.attacks_used > 0 %}accent{% else %}red{% endif %});">{{ p.attacks_used }}</span><span style="color:var(--muted);">/{{ p.wars }}</span></div>
+                    </td>
+                    <td style="text-align:center;">
+                        <strong style="font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;color:var(--{% if p.avg_stars >= 2.5 %}green{% elif p.avg_stars >= 2.0 %}accent{% elif p.avg_stars >= 1.5 %}yellow{% elif p.attacks_used %}red{% else %}muted{% endif %});">{{ '%.2f'|format(p.avg_stars) }}</strong>
+                    </td>
+                    <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--{% if p.three_star_rate >= 50 %}green{% elif p.three_star_rate >= 25 %}accent{% else %}muted{% endif %});">{{ p.three_star_rate }}%</td>
+                    <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">{{ p.avg_dest }}%</td>
+                    <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);">{{ p.total_dest }}%</td>
+                    <td class="mono" style="text-align:center;color:var(--accent);">{{ p.stars }}</td>
+                    <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">
+                        {% if p.missed > 0 %}<span style="color:var(--red);">{{ p.missed }}</span>{% else %}<span style="color:var(--green);">—</span>{% endif %}
+                    </td>
+                    <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--{% if p.avg_score >= 80 %}green{% elif p.avg_score >= 50 %}accent{% elif p.avg_score >= 20 %}yellow{% else %}muted{% endif %});">{{ p.avg_score }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 {# ── ROUNDS ── #}
 {% for round_num, d in sorted_rounds %}
@@ -1273,6 +1349,35 @@ function toggleClanRoster(tagClean) {
     row.style.display = open ? 'table-row' : 'none';
     chevron.textContent = open ? '▼' : '▶';
     if (open) applyRosterActiveFilter();
+}
+
+// ── League Performance toggle + sort ─────────────────────────────────────────
+function toggleLP() {
+    const body = document.getElementById('lpBody');
+    const chev = document.getElementById('lpChevron');
+    const open = body.style.display !== 'block';
+    body.style.display = open ? 'block' : 'none';
+    chev.classList.toggle('open', open);
+}
+
+let _lpSort = { col: null, dir: -1 };
+function sortLP(col) {
+    if (_lpSort.col === col) _lpSort.dir *= -1;
+    else { _lpSort.col = col; _lpSort.dir = -1; }
+    const tbody = document.getElementById('lpTbody');
+    const rows  = Array.from(tbody.querySelectorAll('tr'));
+    const isStr = col === 'name';
+    rows.sort((a, b) => {
+        if (isStr) {
+            const av = a.dataset[col] || '', bv = b.dataset[col] || '';
+            return _lpSort.dir * av.localeCompare(bv);
+        }
+        return _lpSort.dir * ((parseFloat(b.dataset[col]) || 0) - (parseFloat(a.dataset[col]) || 0));
+    });
+    rows.forEach(r => tbody.appendChild(r));
+    document.querySelectorAll('[id^="lps-"]').forEach(el => el.textContent = '⇅');
+    const icon = document.getElementById('lps-' + col);
+    if (icon) icon.textContent = _lpSort.dir < 0 ? ' ↓' : ' ↑';
 }
 
 // ── Round toggle ──────────────────────────────────────────────────────────────

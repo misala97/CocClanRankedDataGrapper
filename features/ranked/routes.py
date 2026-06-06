@@ -161,6 +161,8 @@ def ranked_weeks_page():
             'dem_spots': thresholds['dem'] if thresholds else None,
             'in_clan': player.in_clan,
             'in_group_chat': bool(player.in_group_chat),
+            'group_total_attacks':  ranked_week.group_total_attacks  if ranked_week else None,
+            'group_full_attackers': ranked_week.group_full_attackers if ranked_week else None,
         })
 
     week_data.sort(key=lambda item: (item['rank'] or 9999, item['player_name'] or ''))

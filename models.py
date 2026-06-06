@@ -66,8 +66,10 @@ class RankedWeek(db.Model):
     defense_wins   = db.Column(db.Integer)
     defense_losses = db.Column(db.Integer)
     league_tier    = db.Column(db.String(50))
-    is_done        = db.Column(db.Boolean, default=False)
-    last_updated   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    is_done              = db.Column(db.Boolean, default=False)
+    group_total_attacks  = db.Column(db.Integer, nullable=True)
+    group_full_attackers = db.Column(db.Integer, nullable=True)
+    last_updated         = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     player      = db.relationship('Player', back_populates='ranked_weeks')
     battle_logs = db.relationship('RankedBattleLog', back_populates='ranked_week', lazy=True, cascade="all, delete-orphan")

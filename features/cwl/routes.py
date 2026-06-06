@@ -421,6 +421,55 @@ def cwl_page():
 
     sorted_rounds = sorted(rounds.items())
 
+    # ── Per-player CWL performance aggregate (all finished/live rounds) ───────
+    _perf = {}
+    for _, d in sorted_rounds:
+        for v in d['war_verdicts']:
+            tag = v['player_tag']
+            if tag not in _perf:
+                _perf[tag] = {
+                    'name': v['player_name'], 'th': v['player_th'],
+                    'wars': 0, 'attacks_used': 0,
+                    'stars': 0, 'destruction': 0.0,
+                    'zero_stars': 0, 'one_stars': 0, 'two_stars': 0, 'three_stars': 0,
+                    'verdict_scores': [],
+                }
+            p = _perf[tag]
+            p['wars'] += 1
+            for atk in v['attack_details']:
+                p['attacks_used'] += 1
+                p['stars']        += atk['stars']
+                p['destruction']  += atk['pct']
+                s = atk['stars']
+                if s == 3:   p['three_stars'] += 1
+                elif s == 2: p['two_stars']   += 1
+                elif s == 1: p['one_stars']   += 1
+                else:        p['zero_stars']  += 1
+            p['verdict_scores'].append(v['score'])
+
+    our_player_perf = []
+    for p in _perf.values():
+        used = p['attacks_used']
+        vs   = p['verdict_scores']
+        our_player_perf.append({
+            'name':            p['name'],
+            'th':              p['th'],
+            'wars':            p['wars'],
+            'attacks_used':    used,
+            'missed':          p['wars'] - used,
+            'stars':           p['stars'],
+            'total_dest':      round(p['destruction'], 1),
+            'avg_stars':       round(p['stars'] / used, 2) if used else 0.0,
+            'avg_dest':        round(p['destruction'] / used, 1) if used else 0.0,
+            'three_star_rate': round(p['three_stars'] / used * 100) if used else 0,
+            'avg_score':       round(sum(vs) / len(vs), 1) if vs else 0.0,
+            'zero_stars':      p['zero_stars'],
+            'one_stars':       p['one_stars'],
+            'two_stars':       p['two_stars'],
+            'three_stars':     p['three_stars'],
+        })
+    our_player_perf.sort(key=lambda p: (-p['avg_stars'], -p['wars']))
+
     # ── Clans we already fought this season ───────────────────────────────────
     fought_clans = {
         detail['opp_clan_tag']: {'round': rn, 'result': detail['result'], 'state': detail['war'].state}
@@ -470,6 +519,7 @@ def cwl_page():
         fought_clans=fought_clans,
         standings=sorted_standings,
         sorted_rounds=sorted_rounds,
+        our_player_perf=our_player_perf,
         now=dt.datetime.now(dt.timezone.utc),
         league_rank=league_rank,
     )
