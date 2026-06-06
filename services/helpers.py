@@ -571,7 +571,7 @@ def _ranked_verdict(score_100, att_count, max_attacks):
     missing = max(0, max_attacks - att_count)
     missing_text = f" ({missing} missing)" if missing else ""
     if att_count == 0:
-        return 'badge-useless', f'No Attacks ({max_attacks} missed)', score_100
+        return 'badge-useless', 'No Attacks', score_100
     if score_100 >= 87: return 'badge-godlike',  'Godlike'  + missing_text, score_100
     if score_100 >= 80: return 'badge-dominant', 'Dominant' + missing_text, score_100
     if score_100 >= 65: return 'badge-wow',      'Very Good'+ missing_text, score_100
