@@ -272,7 +272,6 @@ def admin_cwl_bonus_list():
 
         max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
                     .filter(CWLMember.war_id.in_(war_ids),
-                            CWLMember.is_opponent == False,
                             CWLMember.clan_tag == CLAN_TAG)
                     .group_by(CWLMember.player_tag).all())
         max_atk_map = {tag: cnt for tag, cnt in max_rows}
@@ -618,12 +617,9 @@ _HERO_TH_MAX = {
     'Barbarian King': {7: 10, 8: 20, 9: 30, 10: 40, 11: 50, 12: 65, 13: 75, 14: 85, 15: 90, 16: 95, 17: 100, 18: 102},
     'Archer Queen': { 8: 10, 9: 30, 10: 40, 11: 50, 12: 65, 13: 75, 14: 85, 15: 90, 16: 95, 17: 100, 18: 102},
     'Minion Prince':  {9: 10, 10: 20, 11:30, 12:40, 13:50, 14:60,15:70,16:80,17:90,18:95},
-    
     'Grand Warden':   {11: 20, 12: 40, 13: 50, 14: 60, 15: 65, 16: 70, 17: 75, 18: 80},
-    
     'Royal Champion': {13: 25, 14: 30, 15: 40, 16: 45, 17: 50, 18: 55},
     'Dragon Duke': { 15: 10, 16: 15, 17: 20, 18: 25},
-    
 }
 
 def _hero_th_max(hero_name, th_level):
@@ -636,9 +632,9 @@ def _hero_th_max(hero_name, th_level):
     return None
 
 # (min_th, pass_threshold, warn_threshold) — evaluated top-down, first match wins
-_WAR_STARS_BRACKETS   = [(18, 2000, 800), (16, 1500, 500), (14, 1000, 300), (12, 500, 150), (10, 250, 75),  (0, 100, 30)]
-_DONATIONS_BRACKETS   = [(18, 10000, 3500), (16, 8000, 2500), (14, 5000, 1500), (12, 3000, 1000), (10, 1500, 500), (0, 500, 150)]
-_ATTACK_WINS_BRACKETS = [(18, 2200, 800), (16, 1800, 600), (14, 1200, 400), (12, 800, 250), (10, 500, 150), (0, 200, 75)]
+_WAR_STARS_BRACKETS   = [(18, 300, 200), (17, 250, 150), (16, 150, 75), (15, 100, 50), (13, 50, 10) , (0, 50, 10)]
+_DONATIONS_BRACKETS   = [(14, 2000, 500), (13, 1000, 200), (0, 0, 0)]
+_ATTACK_WINS_BRACKETS = [(18, 3000, 2000), (17, 2000, 1000), (15, 1000, 400), (13, 500, 200), (0, 500, 200)]
 
 def _th_threshold(th, brackets):
     for min_th, good, warn in brackets:
@@ -651,11 +647,8 @@ def _evaluate_player_data(data):
     """Given raw CoC API player dict, return evaluation dict (checks + verdict + heroes)."""
     from services.helpers import EXPECTED_LEAGUE_RANK, _get_league_rank, get_name_to_id
 
-    th_level      = data.get('townHallLevel', 0)
-    trophies      = data.get('trophies', 0)
-    best_trophies = data.get('bestTrophies', 0)
-    league_name   = (data.get('league') or {}).get('name', 'Unranked')
-    league_icon   = ((data.get('league') or {}).get('iconUrls') or {}).get('small', '')
+    th_level    = data.get('townHallLevel', 0)
+    league_icon = ((data.get('league') or {}).get('iconUrls') or {}).get('small', '')
 
     # Heroes — percentage of TH-appropriate max levels
     heroes_raw = [h for h in (data.get('heroes') or []) if h.get('village') == 'home']
@@ -694,13 +687,13 @@ def _evaluate_player_data(data):
     atk_good, atk_warn = _th_threshold(th_level, _ATTACK_WINS_BRACKETS)
 
     rank_diff   = player_rank - expected_rank
-    rank_status = 'pass' if rank_diff >= 0 else ('warn' if rank_diff >= -2 else 'fail')
+    rank_status = 'pass' if rank_diff >= 3 else ('warn' if rank_diff >= 0 else 'fail')
 
     checks = [
         chk(hero_pct,        75,       50,       'Heroes',       lambda v: f'{v}% of TH max'),
-        chk(war_stars_val,   war_good, war_warn,  'War Stars',   lambda v: f'{v:,}'),
-        chk(donations_val,   don_good, don_warn,  'Donations',   lambda v: f'{v:,}'),
-        chk(attack_wins_val, atk_good, atk_warn,  'Attack Wins', lambda v: f'{v:,}'),
+        chk(war_stars_val,   war_good, war_warn,  'War Stars',   lambda v: f'{v:,} (need {war_good})'),
+        chk(donations_val,   don_good, don_warn,  'Donations',   lambda v: f'{v:,} (need {don_good})'),
+        chk(attack_wins_val, atk_good, atk_warn,  'Attack Wins', lambda v: f'{v:,} (need {atk_good})'),
         {
             'status': rank_status,
             'label':  'Ranked League',
@@ -712,14 +705,17 @@ def _evaluate_player_data(data):
     fails  = sum(1 for c in checks if c['status'] == 'fail')
     if fails == 0:
         verdict = 'accept'
-    elif fails >= 3 or (fails >= 2 and passes <= 1):
+    elif fails >= 2:
+        verdict = 'decline'
+    elif passes <= 1:
         verdict = 'decline'
     else:
         verdict = 'consider'
 
     return dict(
-        th=th_level, trophies=trophies, best_trophies=best_trophies,
-        league=league_name, league_icon=league_icon,
+        th=th_level,
+        ranked_league=ranked_name,
+        league_icon=league_icon,
         heroes=heroes, hero_pct=hero_pct,
         checks=checks, verdict=verdict,
     )
