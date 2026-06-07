@@ -52,7 +52,7 @@ def create_db_raid_weekend_from_api(current_raid_weekend: dict):
     )
 
 
-def create_db_raid_weekend_log(raid_weekend, player_tag, district_name, loot, percentage, percentage_total, stars, defender_tag, defender_name, district_level, total_loot_all_attacks) -> RaidWeekendLog:
+def create_db_raid_weekend_log(raid_weekend, player_tag, district_name, loot, percentage, percentage_total, stars, defender_tag, defender_name, district_level, total_loot_all_attacks, defender_badge=None) -> RaidWeekendLog:
     if not isinstance(raid_weekend, RaidWeekend):
         raise TypeError(f"Expected RaidWeekend object, got {type(raid_weekend).__name__}")
     return RaidWeekendLog(
@@ -60,6 +60,7 @@ def create_db_raid_weekend_log(raid_weekend, player_tag, district_name, loot, pe
         player_tag             = player_tag,
         defender_name          = defender_name,
         defender_tag           = defender_tag,
+        defender_badge         = defender_badge,
         district_level         = district_level,
         total_loot_all_attacks = total_loot_all_attacks,
         district_name          = district_name,

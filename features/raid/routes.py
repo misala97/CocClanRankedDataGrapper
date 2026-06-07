@@ -69,8 +69,11 @@ def raid_weekend_page():
                 'adj_score':        0.0,
                 'percentage_total': log.percentage_total or 0,
                 'is_clean_up':      False,
-                'defender_name':    log.defender_name or '—',
-                'defender_tag':     log.defender_tag or '—',
+                'defender_name':         log.defender_name or '—',
+                'defender_tag':          log.defender_tag or '—',
+                'defender_badge':        log.defender_badge or None,
+                'defender_league':       log.defender_league or None,
+                'defender_league_badge': log.defender_league_badge or None,
             })
 
         MAX_ATTACKS = 6

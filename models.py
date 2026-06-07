@@ -163,6 +163,9 @@ class RaidWeekendLog(db.Model):
     raid_weekend_id       = db.Column(db.Integer, db.ForeignKey('raid_weekend.id'))
     defender_name         = db.Column(db.String(30))    # fix #5: was defenderName
     defender_tag          = db.Column(db.String(30))    # fix #5: was defenderTag
+    defender_badge        = db.Column(db.String(255), nullable=True)
+    defender_league       = db.Column(db.String(50),  nullable=True)
+    defender_league_badge = db.Column(db.String(255), nullable=True)
     district_name         = db.Column(db.String(30))    # fix #5: was districtName
     district_level        = db.Column(db.Integer)       # fix #2+#5: was districLevel (typo)
     total_loot_all_attacks = db.Column(db.Integer)      # fix #5: was totalLootAllAttacks

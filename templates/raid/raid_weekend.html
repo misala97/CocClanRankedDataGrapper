@@ -163,6 +163,26 @@
         .recent-chevron.open { transform: rotate(180deg); }
         .recent-body { border-top: 1px solid var(--border); }
 
+        /* ── ENEMY OVERVIEW ── */
+        .enemy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; padding: 16px; }
+        .enemy-card { background: var(--surf2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .enemy-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 14px; border-bottom: 1px solid var(--border);
+            background: rgba(255,255,255,0.02);
+        }
+        .enemy-card-name { font-weight: 700; font-size: 13px; color: var(--text); }
+        .enemy-card-meta { font-size: 11px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+        .enemy-district-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .enemy-district-table td { padding: 6px 14px; border-bottom: 1px solid var(--bord2); vertical-align: middle; }
+        .enemy-district-table tr:last-child td { border-bottom: none; }
+        .enemy-district-name { font-weight: 600; color: var(--text); }
+        .enemy-atk-pips { display: flex; gap: 3px; align-items: center; }
+        .atk-pip { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+        .atk-pip.empty { background: var(--bord2); border: 1px solid var(--border); }
+        .enemy-destroyed { color: var(--green); font-weight: 700; font-size: 11px; font-family: 'Rajdhani', sans-serif; }
+        .enemy-not-destroyed { color: var(--muted); font-size: 11px; font-family: 'Rajdhani', sans-serif; }
+
         /* ── RESPONSIVE ── */
         @media (max-width: 1024px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 900px) {
@@ -249,6 +269,17 @@
             <span class="recent-chevron" id="recentChevron">▼</span>
         </div>
         <div class="recent-body" id="recentBody" style="display:none;"></div>
+    </div>
+    {% endif %}
+
+    <!-- Enemy Overview -->
+    {% if player_data %}
+    <div class="recent-card" id="enemyCard">
+        <div class="recent-header" onclick="toggleEnemy()">
+            <span class="recent-header-title">🏰 Enemy Clans Overview</span>
+            <span class="recent-chevron" id="enemyChevron">▼</span>
+        </div>
+        <div class="recent-body" id="enemyBody" style="display:none;"></div>
     </div>
     {% endif %}
 
@@ -577,6 +608,85 @@ function toggleRecent() {
     chevron.classList.toggle('open', open);
 }
 
+function buildEnemyOverview() {
+    // Group all attacks by enemy clan → district
+    const clans = {};
+    playerData.forEach(p => {
+        (p.attack_logs || []).forEach(l => {
+            const cKey = l.defender_tag || l.defender_name || '—';
+            if (!clans[cKey]) clans[cKey] = { name: l.defender_name || '—', tag: l.defender_tag || '', badge: l.defender_badge || null, league: l.defender_league || null, leagueBadge: l.defender_league_badge || null, districts: {}, firstLogId: l.log_id ?? Infinity };
+            if ((l.log_id ?? Infinity) < clans[cKey].firstLogId) clans[cKey].firstLogId = l.log_id;
+            const dKey = l.district_name || '—';
+            if (!clans[cKey].districts[dKey]) {
+                clans[cKey].districts[dKey] = {
+                    name: dKey, level: l.district_level || 0,
+                    attacks: 0, destroyed: false, last_pct_total: 0,
+                };
+            }
+            const d = clans[cKey].districts[dKey];
+            d.attacks++;
+            if ((l.percentage_total || 0) >= 100) d.destroyed = true;
+            if ((l.percentage_total || 0) > d.last_pct_total) d.last_pct_total = l.percentage_total || 0;
+        });
+    });
+
+    const clanList = Object.values(clans).sort((a, b) => a.firstLogId - b.firstLogId);
+    if (!clanList.length) {
+        document.getElementById('enemyBody').innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No enemy data recorded.</div>';
+        return;
+    }
+
+    const MAX_PIPS = 6;
+    const cards = clanList.map(clan => {
+        const districts = Object.values(clan.districts).sort((a, b) => {
+            if (a.name === 'Capital Peak' || a.name === 'Capital Peaks') return -1;
+            if (b.name === 'Capital Peak' || b.name === 'Capital Peaks') return 1;
+            return a.name.localeCompare(b.name);
+        });
+        const totalAtk = districts.reduce((s, d) => s + d.attacks, 0);
+        const destroyed = districts.filter(d => d.destroyed).length;
+        const avgAtk = districts.length ? (totalAtk / districts.length).toFixed(1) : '—';
+
+        const rows = districts.map(d => {
+            const pips = Array.from({ length: MAX_PIPS }, (_, i) =>
+                `<div class="atk-pip${i < d.attacks ? '' : ' empty'}"></div>`
+            ).join('');
+            const statusHtml = d.destroyed
+                ? `<span class="enemy-destroyed">✓ Destroyed</span>`
+                : `<span class="enemy-not-destroyed">${d.last_pct_total}%</span>`;
+            return `<tr>
+                <td class="enemy-district-name">${escapeHTML(d.name)} <span style="color:var(--muted);font-size:11px;font-family:'Rajdhani',sans-serif;">Lvl ${d.level}</span></td>
+                <td><div class="enemy-atk-pips">${pips}<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;margin-left:5px;">${d.attacks}</span></div></td>
+                <td>${statusHtml}</td>
+            </tr>`;
+        }).join('');
+
+        const badgeHtml = clan.badge
+            ? `<img src="${escapeHTML(clan.badge)}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0;" alt="">`
+            : '';
+        const leagueHtml = clan.league
+            ? `<span style="font-size:10px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;">${escapeHTML(clan.league)}</span>`
+            : '';
+        return `<div class="enemy-card">
+            <div class="enemy-card-header">
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">${badgeHtml}<div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span class="enemy-card-name">${escapeHTML(clan.name)}</span>${leagueHtml}</div></div>
+                <span class="enemy-card-meta" style="flex-shrink:0;">avg ${avgAtk} · ${totalAtk} atk · ${destroyed}/${districts.length} districts</span>
+            </div>
+            <table class="enemy-district-table"><tbody>${rows}</tbody></table>
+        </div>`;
+    }).join('');
+
+    document.getElementById('enemyBody').innerHTML = `<div class="enemy-grid">${cards}</div>`;
+}
+
+function toggleEnemy() {
+    const body = document.getElementById('enemyBody');
+    const chevron = document.getElementById('enemyChevron');
+    const open = body.style.display === 'none';
+    if (open && !body.dataset.built) { buildEnemyOverview(); body.dataset.built = '1'; }
+    body.style.display = open ? '' : 'none';
+    chevron.classList.toggle('open', open);
+}
 
 document.addEventListener('DOMContentLoaded', buildTable);
 </script>

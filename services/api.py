@@ -53,6 +53,7 @@ def api_fetch_clan_data(clan_tag: str):
     return api_call(f"https://api.clashofclans.com/v1/clans/%23{clean_tag(clan_tag)}")
 
 
+
 def api_fetch_clan_war(clan_tag: str):
     return api_call(f"https://api.clashofclans.com/v1/clans/%23{clean_tag(clan_tag)}/currentwar")
 

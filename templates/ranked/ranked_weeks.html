@@ -67,9 +67,12 @@
         tbody td { padding: 12px 8px; vertical-align: middle; overflow: hidden; }
 
         /* ── GROUP SEPARATORS: after Player(3), Avg Att(5), Avg Def(7) ── */
-        thead th:nth-child(3), tbody td:nth-child(3),
-        thead th:nth-child(5), tbody td:nth-child(5),
-        thead th:nth-child(7), tbody td:nth-child(7) {
+        #statsTable > thead > tr > th:nth-child(3),
+        #statsTable > tbody > tr > td:nth-child(3),
+        #statsTable > thead > tr > th:nth-child(5),
+        #statsTable > tbody > tr > td:nth-child(5),
+        #statsTable > thead > tr > th:nth-child(7),
+        #statsTable > tbody > tr > td:nth-child(7) {
             border-right: 3px solid var(--border);
         }
 
@@ -205,7 +208,7 @@
         .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; flex: 1; min-width: 0; }
         .chart-card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
         .chart-card h3 { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
-        .chart-wrap { position: relative; height: 200px; }
+        .chart-wrap { position: relative; height: 280px; }
         .chart-wrap-donut { position: relative; height: 200px; display: flex; align-items: center; justify-content: center; }
         @media (max-width: 640px) { .charts-row { flex-direction: column; } }
 
@@ -216,7 +219,8 @@
         .hist-charts-row { display: flex; gap: 14px; margin-bottom: 18px; }
         .hist-chart-main   { flex: 3; position: relative; height: 200px; }
         .hist-chart-trophy { flex: 2; position: relative; height: 200px; }
-        @media (max-width: 900px) { .hist-charts-row { flex-direction: column; } .hist-chart-main, .hist-chart-trophy { height: 160px; } }
+        .hist-chart-league { flex: 2; position: relative; height: 200px; }
+        @media (max-width: 900px) { .hist-charts-row { flex-direction: column; } .hist-chart-main, .hist-chart-trophy, .hist-chart-league { height: 160px; } }
 
         /* ── HISTORY SUMMARY CARDS ── */
         .hist-summary-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
@@ -615,6 +619,7 @@
         const tagKey      = playerTag.replace(/[^a-zA-Z0-9]/g, '_');
         const canvasId    = `hist-${tagKey}`;
         const trophyCanvasId = `hist-trophy-${tagKey}`;
+        const leagueCanvasId = `hist-league-${tagKey}`;
 
         // ── Derived stats ──────────────────────────────────────────────────────
         const totalAtt    = history.reduce((s, h) => s + h.att_count, 0);
@@ -687,9 +692,17 @@
         };
         const tableHistory = [...history].reverse();
         const tableRows = tableHistory.map((h, i) => {
+            const prevActive = tableHistory.slice(i + 1).find(w => !w.is_inactive);
+            let histLeagueArrow = '';
+            if (!h.is_inactive && prevActive && prevActive.league_tier && h.league_tier && h.league_tier !== prevActive.league_tier) {
+                const curr = leagueSortKey(h.league_tier);
+                const prev = leagueSortKey(prevActive.league_tier);
+                if (curr > prev)      histLeagueArrow = `<span style="color:var(--green);font-size:11px;font-weight:700;margin-left:3px;" title="Promoted from ${escapeHTML(prevActive.league_tier)}">▲</span>`;
+                else if (curr < prev) histLeagueArrow = `<span style="color:var(--red);font-size:11px;font-weight:700;margin-left:3px;" title="Relegated from ${escapeHTML(prevActive.league_tier)}">▼</span>`;
+            }
             const leagueCell = h.league_icon
-                ? `<img src="${escapeHTML(h.league_icon)}" alt="${escapeHTML(h.league_tier)}" title="${escapeHTML(h.league_tier)}" style="width:22px;height:22px;vertical-align:middle;object-fit:cover;border-radius:3px;"> <span style="font-size:11px;color:var(--muted);">${escapeHTML(h.league_tier)}</span>`
-                : `<span style="color:var(--muted);font-size:12px;">${escapeHTML(h.league_tier) || '–'}</span>`;
+                ? `<div style="display:inline-flex;align-items:center;gap:5px;"><img src="${escapeHTML(h.league_icon)}" alt="${escapeHTML(h.league_tier)}" title="${escapeHTML(h.league_tier)}" style="width:22px;height:22px;vertical-align:middle;object-fit:cover;border-radius:3px;"> <span style="font-size:11px;color:var(--muted);">${escapeHTML(h.league_tier)}</span>${histLeagueArrow}</div>`
+                : `<span style="color:var(--muted);font-size:12px;">${escapeHTML(h.league_tier) || '–'}</span>${histLeagueArrow}`;
 
             const rowAttPct   = h.att_max > 0 ? Math.round(h.att_count / h.att_max * 100) : 0;
             const rowBarColor = rowAttPct >= 90 ? 'var(--green)' : rowAttPct >= 60 ? 'var(--accent)' : 'var(--red)';
@@ -699,7 +712,7 @@
 
             if (h.is_inactive) {
                 return `<tr style="opacity:0.38;">
-                    <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
+                    <td style="border-right:2px solid var(--border);color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
                     <td colspan="8" style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.6px;text-transform:uppercase;">
                         <span style="padding:2px 8px;border:1px solid rgba(139,148,158,0.2);border-radius:4px;background:rgba(139,148,158,0.06);">Inactive</span>
                     </td>
@@ -708,7 +721,6 @@
 
             // Compare trends against previous active week (skip inactive ones)
             let attTrend = '', defTrend = '', trophyDelta = '', rankDelta = '';
-            const prevActive = tableHistory.slice(i + 1).find(w => !w.is_inactive);
             if (prevActive) {
                 const dA = h.att_avg - prevActive.att_avg;
                 if (dA > 0.05)       attTrend = `<span style="color:var(--green);font-size:10px;"> ▲</span>`;
@@ -733,20 +745,21 @@
 
             const attThHtml = h.att_avg_th != null ? `<div style="margin-top:2px;">${formatTHDiff(h.att_avg_th, h.player_th)}</div>` : '';
             const defThHtml = h.def_avg_th != null ? `<div style="margin-top:2px;">${formatTHDiff(h.def_avg_th, h.player_th, true)}</div>` : '';
+            const sep = 'border-right:2px solid var(--border);';
             return `<tr style="${rowStyle}">
-                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
+                <td style="${sep}color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
+                <td>${leagueCell}</td>
+                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${h.rank ? '#' + h.rank : '–'}${rankDelta}</td>
+                <td style="${sep}color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">🏆 ${h.trophies}${trophyDelta}</td>
                 <td>
                     <div style="display:flex;flex-direction:column;gap:4px;min-width:54px;">
                         <span style="font-family:'Rajdhani',sans-serif;font-weight:600;">${h.att_count} / ${h.att_max}</span>
                         <div style="height:3px;background:var(--bord2);border-radius:2px;"><div style="height:3px;background:${rowBarColor};border-radius:2px;width:${rowAttPct}%;"></div></div>
                     </div>
                 </td>
-                <td style="white-space:nowrap;"><span style="color:${attAvgColor(h.att_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;">${h.att_avg.toFixed(2)} ★${attTrend}</span>${attThHtml}</td>
+                <td style="${sep}white-space:nowrap;"><span style="color:${attAvgColor(h.att_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;">${h.att_avg.toFixed(2)} ★${attTrend}</span>${attThHtml}</td>
                 <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);text-align:center;">${h.def_count}</td>
-                <td style="white-space:nowrap;"><span style="color:${defAvgColor(h.def_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;">${h.def_avg.toFixed(2)} ★${defTrend}</span>${defThHtml}</td>
-                <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">🏆 ${h.trophies}${trophyDelta}</td>
-                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${h.rank ? '#' + h.rank : '–'}${rankDelta}</td>
-                <td>${leagueCell}</td>
+                <td style="${sep}white-space:nowrap;"><span style="color:${defAvgColor(h.def_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;">${h.def_avg.toFixed(2)} ★${defTrend}</span>${defThHtml}</td>
                 <td>${verdictCell}</td>
             </tr>`;
         }).join('');
@@ -757,10 +770,20 @@
                 ${summaryCards}
                 <div class="hist-charts-row">
                     <div class="hist-chart-main"><canvas id="${canvasId}"></canvas></div>
-                    <div class="hist-chart-trophy"><canvas id="${trophyCanvasId}"></canvas></div>
+                    <div class="hist-chart-league"><canvas id="${leagueCanvasId}"></canvas></div>
                 </div>
                 <table class="detail-table">
-                    <thead><tr><th>Week</th><th>Attacks</th><th>Avg Att.</th><th>Defs</th><th>Avg Def.</th><th>Trophies</th><th>Rank</th><th>League</th><th>Verdict</th></tr></thead>
+                    <thead><tr>
+                        <th style="border-right:2px solid var(--border);">Week</th>
+                        <th>League</th>
+                        <th>Rank</th>
+                        <th style="border-right:2px solid var(--border);">Trophies</th>
+                        <th>Attacks</th>
+                        <th style="border-right:2px solid var(--border);">Avg Att.</th>
+                        <th>Defs</th>
+                        <th style="border-right:2px solid var(--border);">Avg Def.</th>
+                        <th>Verdict</th>
+                    </tr></thead>
                     <tbody>${tableRows}</tbody>
                 </table>
             </div>`;
@@ -872,6 +895,72 @@
                                     return base + (dt >= 0 ? `  (+${dt})` : `  (${dt})`);
                                 }
                                 return base;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function createLeagueChart(canvas, history) {
+        const keyToName = {};
+        history.forEach(h => {
+            if (!h.is_inactive && h.league_tier) keyToName[leagueSortKey(h.league_tier)] = h.league_tier;
+        });
+        const data = history.map(h => (!h.is_inactive && h.league_tier) ? leagueSortKey(h.league_tier) : null);
+        const validVals = data.filter(v => v != null);
+        if (!validVals.length) return null;
+        const minV = Math.min(...validVals) - 1;
+        const maxV = Math.max(...validVals) + 1;
+        const pointColors = data.map((v, i) => {
+            if (v == null) return 'transparent';
+            const prev = data.slice(0, i).reverse().find(p => p != null);
+            if (prev == null) return '#58a6ff';
+            return v > prev ? '#3fb950' : v < prev ? '#f85149' : '#58a6ff';
+        });
+        return new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: history.map(h => h.label),
+                datasets: [{
+                    label: 'League',
+                    data,
+                    borderColor: '#58a6ff',
+                    backgroundColor: 'rgba(88,166,255,0.07)',
+                    tension: 0.4, spanGaps: true,
+                    pointRadius: data.map(v => v != null ? 5 : 0),
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: pointColors,
+                    pointBorderColor: pointColors,
+                    fill: true,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        min: minV, max: maxV,
+                        ticks: { color: '#8b949e', callback: val => keyToName[val] || '', stepSize: 1 },
+                        grid: { color: 'rgba(48,54,61,0.6)' }
+                    },
+                    x: {
+                        ticks: { color: '#8b949e', font: { size: 11 } },
+                        grid: { color: 'rgba(48,54,61,0.6)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true, text: 'League Progression',
+                        color: '#8b949e', padding: { bottom: 10 },
+                        font: { size: 11, weight: '700', family: "'Rajdhani', sans-serif" }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const h = history[ctx.dataIndex];
+                                return h && !h.is_inactive ? ` ${h.league_tier || '–'}` : ' Inactive';
                             }
                         }
                     }
@@ -1010,8 +1099,15 @@
                 row.style.background = 'rgba(240,165,0,0.08)';
                 row.style.boxShadow = 'inset 3px 0 0 var(--accent)';
             }
+            let leagueArrow = '';
+            if (item.league_tier_prev && item.league_tier_prev !== item.league_tier) {
+                const prev = leagueSortKey(item.league_tier_prev);
+                const curr = leagueSortKey(item.league_tier);
+                if (curr > prev)      leagueArrow = `<span style="color:var(--green);font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);" title="Promoted from ${escapeHTML(item.league_tier_prev)}">▲</span>`;
+                else if (curr < prev) leagueArrow = `<span style="color:var(--red);font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);" title="Relegated from ${escapeHTML(item.league_tier_prev)}">▼</span>`;
+            }
             const leagueCell = item.league_icon
-                ? `<div class="league-cell"><img src="${escapeHTML(item.league_icon)}" alt="${escapeHTML(item.league_tier||'')}" title="${escapeHTML(item.league_tier||'')}" class="league-icon"></div>`
+                ? `<div class="league-cell"><div style="position:relative;display:inline-flex;"><img src="${escapeHTML(item.league_icon)}" alt="${escapeHTML(item.league_tier||'')}" title="${escapeHTML(item.league_tier||'')}" class="league-icon">${leagueArrow}</div></div>`
                 : `<div class="league-cell"><span class="league-badge">${escapeHTML(item.league_tier||'–')}</span></div>`;
             const rankIcon = item.rank_status === 'up' ? '⬆️' : item.rank_status === 'down' ? '⬇️' : item.rank_status === 'inactive' ? '💤' : '➖';
             const rankText = item.rank ? `#${item.rank}` : '-';
@@ -1083,10 +1179,10 @@
                         if (history.length > 0 && !historyCharts.has(item.player_tag)) {
                             const tagKey   = item.player_tag.replace(/[^a-zA-Z0-9]/g, '_');
                             const canvas1  = document.getElementById(`hist-${tagKey}`);
-                            const canvas2  = document.getElementById(`hist-trophy-${tagKey}`);
+                            const canvas3  = document.getElementById(`hist-league-${tagKey}`);
                             const charts   = [];
                             if (canvas1) charts.push(createHistoryChart(canvas1, history));
-                            if (canvas2) charts.push(createTrophyChart(canvas2, history));
+                            if (canvas3) { const lc = createLeagueChart(canvas3, history); if (lc) charts.push(lc); }
                             historyCharts.set(item.player_tag, charts);
                         }
                     } else {
@@ -1107,8 +1203,15 @@
         if (mobileList) {
             mobileList.innerHTML = '';
             rows.forEach(item => {
+                let leagueArrow = '';
+                if (item.league_tier_prev && item.league_tier_prev !== item.league_tier) {
+                    const prev = leagueSortKey(item.league_tier_prev);
+                    const curr = leagueSortKey(item.league_tier);
+                    if (curr > prev)      leagueArrow = `<span style="color:var(--green);font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);" title="Promoted from ${escapeHTML(item.league_tier_prev)}">▲</span>`;
+                    else if (curr < prev) leagueArrow = `<span style="color:var(--red);font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);" title="Relegated from ${escapeHTML(item.league_tier_prev)}">▼</span>`;
+                }
                 const leagueImg = item.league_icon
-                    ? `<img src="${escapeHTML(item.league_icon)}" class="league-icon" style="width:36px;height:36px;" title="${escapeHTML(item.league_tier||'')}">`
+                    ? `<div style="position:relative;flex-shrink:0;display:inline-flex;"><img src="${escapeHTML(item.league_icon)}" class="league-icon" style="width:36px;height:36px;" title="${escapeHTML(item.league_tier||'')}">${leagueArrow}</div>`
                     : `<span class="league-badge" style="font-size:10px;">${escapeHTML(item.league_tier||'–')}</span>`;
                 const rankIcon = item.rank_status === 'up' ? '⬆️' : item.rank_status === 'down' ? '⬇️' : item.rank_status === 'inactive' ? '💤' : '➖';
                 const rankText = item.rank ? `#${item.rank}` : '-';
@@ -1220,25 +1323,26 @@
                     label: 'Score',
                     data: top10.map(p => p.score_100),
                     backgroundColor: top10.map(p => VERDICT_COLORS[p.badge_class] || '#8b949e'),
-                    borderRadius: 5, borderSkipped: false,
+                    borderRadius: 4, borderSkipped: false,
                 }]
             },
             options: {
+                indexAxis: 'y',
                 responsive: true, maintainAspectRatio: false,
                 scales: {
-                    y: {
+                    x: {
                         min: 50, max: 100,
                         ticks: { color: '#8b949e', stepSize: 10 },
                         grid: { color: 'rgba(48,54,61,0.6)' }
                     },
-                    x: {
+                    y: {
                         ticks: { color: '#e6edf3', font: { size: 13 } },
                         grid: { display: false }
                     }
                 },
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: ctx => ` Score: ${ctx.parsed.y}` } }
+                    tooltip: { callbacks: { label: ctx => ` Score: ${ctx.parsed.x}` } }
                 }
             }
         });

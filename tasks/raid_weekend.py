@@ -78,6 +78,7 @@ def task_update_raid_weekend():
                         stars           = json_get(attack_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_ATTACKS_DESTRUCTION_STARS)
                         defender_name   = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DEFENDER.NAME)
                         defender_tag    = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DEFENDER.TAG)
+                        defender_badge  = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DEFENDER.BADGE, raise_on_missing=False)
                         district_level  = json_get(district_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_HALLLEVEL)
 
                         member = next((m for m in json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS) if json_get(m, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS_TAG) == player_tag), None)
@@ -95,7 +96,7 @@ def task_update_raid_weekend():
                                 continue
 
                         previous_percent = current_percent
-                        tmp_log = create_db_raid_weekend_log(raid_weekend, player_tag, district_name, 0, percentage_done, current_percent, stars, defender_tag, defender_name, district_level, total_loot_all_attacks)
+                        tmp_log = create_db_raid_weekend_log(raid_weekend, player_tag, district_name, 0, percentage_done, current_percent, stars, defender_tag, defender_name, district_level, total_loot_all_attacks, defender_badge)
                         if not db_raid_weekend_log_get(raid_weekend, defender_tag, district_name, percentage_done, current_percent):
                             db_raid_weekend_log_create_new(tmp_log)
                             logs_added += 1
@@ -105,6 +106,30 @@ def task_update_raid_weekend():
             status = 'error'
             error_msg = str(e)
         db.session.commit()
+
+        # ── Enrich logs with capital league info (one clan call per unique defender) ──
+        try:
+            from services.api import api_fetch_clan_data
+            from models import RaidWeekendLog
+            defender_tags = db.session.query(RaidWeekendLog.defender_tag).filter(
+                RaidWeekendLog.raid_weekend_id == raid_weekend.id,
+                RaidWeekendLog.defender_tag.isnot(None),
+                RaidWeekendLog.defender_league.is_(None),
+            ).distinct().all()
+            for (dtag,) in defender_tags:
+                try:
+                    clan_data = api_fetch_clan_data(dtag)
+                    league_name = ((clan_data.get('capitalLeague') or {}).get('name'))
+                    db.session.query(RaidWeekendLog).filter(
+                        RaidWeekendLog.raid_weekend_id == raid_weekend.id,
+                        RaidWeekendLog.defender_tag == dtag,
+                    ).update({'defender_league': league_name})
+                except Exception as e:
+                    raid_weekend_logger.warning(f"Could not fetch league for defender {dtag}: {e}")
+            db.session.commit()
+        except Exception as e:
+            raid_weekend_logger.warning(f"League enrichment failed: {e}")
+            db.session.rollback()
 
         db_finalize_uptime(
             task_update_raid_weekend.__name__, t0, status, error_msg,

@@ -32,6 +32,11 @@ def ranked_weeks_page():
     if selected_week_id:
         season_filter.add(selected_week_id)
 
+    selected_idx = next((i for i, dw in enumerate(distinct_weeks) if dw.league_season_id == selected_week_id), None)
+    prev_week_id = distinct_weeks[selected_idx + 1].league_season_id if (selected_idx is not None and selected_idx + 1 < len(distinct_weeks)) else None
+    if prev_week_id:
+        season_filter.add(prev_week_id)
+
     all_weeks = (RankedWeek.query
                  .filter(RankedWeek.league_season_id.in_(season_filter))
                  .options(selectinload(RankedWeek.battle_logs))
@@ -52,6 +57,11 @@ def ranked_weeks_page():
                 (rw for rw in weeks_by_player.get(player.tag, []) if rw.league_season_id == selected_week_id),
                 None
             )
+        prev_ranked_week = next(
+            (rw for rw in weeks_by_player.get(player.tag, []) if rw.league_season_id == prev_week_id),
+            None
+        ) if prev_week_id else None
+        rank_prev = prev_ranked_week.rank if prev_ranked_week else None
 
         league_tier  = player.league_tier
         league_icon  = player.league_icon
@@ -163,6 +173,7 @@ def ranked_weeks_page():
             'in_group_chat': bool(player.in_group_chat),
             'group_total_attacks':  ranked_week.group_total_attacks  if ranked_week else None,
             'group_full_attackers': ranked_week.group_full_attackers if ranked_week else None,
+            'league_tier_prev': prev_ranked_week.league_tier if prev_ranked_week else None,
         })
 
     week_data.sort(key=lambda item: (item['rank'] or 9999, item['player_name'] or ''))
