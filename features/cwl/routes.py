@@ -563,6 +563,42 @@ def cwl_page():
         s = max(0, min(3, int(row.stars or 0)))
         player_all_time_perf[ptag]['by_matchup'][key][s] += 1
 
+    # ── Global TH matchup rates across all clans/seasons (fallback model) ────
+    _GAttM = aliased(CWLMember)
+    _GDefM = aliased(CWLMember)
+    _global_hist = (
+        db.session.query(
+            _GAttM.town_hall_level.label('atk_th'),
+            _GDefM.town_hall_level.label('def_th'),
+            CWLAttack.stars,
+            db.func.count(CWLAttack.id).label('cnt'),
+        )
+        .join(CWLWar, CWLAttack.war_id == CWLWar.id)
+        .join(_GAttM, db.and_(
+            _GAttM.war_id == CWLAttack.war_id,
+            _GAttM.player_tag == CWLAttack.attacker_tag,
+        ))
+        .join(_GDefM, db.and_(
+            _GDefM.war_id == CWLAttack.war_id,
+            _GDefM.player_tag == CWLAttack.defender_tag,
+        ))
+        .filter(CWLWar.state.in_(['inWar', 'warEnded']))
+        .group_by(_GAttM.town_hall_level, _GDefM.town_hall_level, CWLAttack.stars)
+        .all()
+    )
+    _raw = {}
+    for row in _global_hist:
+        key = f"{row.atk_th or 0}_{row.def_th or 0}"
+        if key not in _raw:
+            _raw[key] = [0, 0, 0, 0]
+        s = max(0, min(3, int(row.stars or 0)))
+        _raw[key][s] += row.cnt
+    th_matchup_rates = {
+        k: [c / sum(v) for c in v]
+        for k, v in _raw.items()
+        if sum(v) >= 5
+    }
+
     # ── Clans we already fought this season ───────────────────────────────────
     fought_clans = {
         detail['opp_clan_tag']: {'round': rn, 'result': detail['result'], 'state': detail['war'].state}
@@ -614,6 +650,7 @@ def cwl_page():
         sorted_rounds=sorted_rounds,
         our_player_perf=our_player_perf,
         player_all_time_perf=player_all_time_perf,
+        th_matchup_rates=th_matchup_rates,
         now=dt.datetime.now(dt.timezone.utc),
         league_rank=league_rank,
     )
