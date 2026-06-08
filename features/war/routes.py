@@ -136,6 +136,7 @@ def clan_war_page():
 
             war_verdicts.append({
                 'player_name':    m.player_name or m.player_tag,
+                'player_tag':     m.player_tag or '',
                 'player_th':      atk_th,
                 'map_pos':        atk_pos,
                 'league':         m.ranked_league or '',

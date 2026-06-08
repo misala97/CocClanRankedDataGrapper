@@ -150,6 +150,10 @@
 
         .member-info {}
         .member-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .player-link { color: inherit; text-decoration: none; transition: color 0.15s; }
+        .player-link:hover { color: var(--accent); }
+        .player-link-arrow { font-size: 10px; color: var(--muted); opacity: 0.4; transition: opacity 0.15s, color 0.15s; vertical-align: super; }
+        .player-link:hover .player-link-arrow { opacity: 1; color: var(--accent); }
         .member-sub-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
         .member-sub  { font-size: 10px; color: var(--muted); font-family: 'Rajdhani', sans-serif; line-height: 1.4; white-space: nowrap; }
 
@@ -319,14 +323,21 @@
         .lg-sum-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
         .lg-sum-dot  { width: 8px; height: 8px; border-radius: 50%; }
 
-        .lg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .lg-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
         .lg-table th { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--bord2); }
         .lg-table td { padding: 6px 6px; border-bottom: 1px solid var(--bord2); }
         .lg-table tr:last-child td { border-bottom: none; }
         .lg-table .lgt-pos  { color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 700; text-align: center; width: 32px; }
-        .lg-table .lgt-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .lg-table .lgt-lg   { font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; }
+        .lg-table .lgt-name { width: 120px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lg-table .lgt-lg   { width: 80px; max-width: 80px; font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .lg-table .lgt-diff { text-align: center; font-family: 'Rajdhani', sans-serif; font-weight: 700; width: 48px; }
+        .lg-table th:nth-child(1), .lg-table td:nth-child(1) { width: 32px; }
+        .lg-table th:nth-child(2), .lg-table td:nth-child(2) { width: 120px; }
+        .lg-table th:nth-child(3), .lg-table td:nth-child(3) { width: 80px; }
+        .lg-table th:nth-child(4), .lg-table td:nth-child(4) { width: 48px; }
+        .lg-table th:nth-child(5), .lg-table td:nth-child(5) { width: 80px; }
+        .lg-table th:nth-child(6), .lg-table td:nth-child(6) { width: 152px; }
+        .lg-table thead th:nth-child(4) { text-align: center; }
         .lg-adv  { color: var(--green); background: rgba(63,185,80,.05); }
         .lg-dis  { color: var(--red);   background: rgba(248,81,73,.05); }
         .lg-even { color: var(--muted); }
@@ -481,6 +492,11 @@
         button.war-flag.flag-on:hover  { border-color: var(--red); }
 
         /* ── ATTACK LOG ── */
+        .log-scroll { max-height: 420px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        .log-scroll::-webkit-scrollbar { width: 4px; }
+        .log-scroll::-webkit-scrollbar-track { background: transparent; }
+        .log-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .log-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
         .recent-card {
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 10px; margin-bottom: 24px; overflow: hidden;
@@ -537,9 +553,7 @@
         {% endfor %}
     </select>
 </form>
-<div class="ctrl-divider"></div>
 {% endif %}
-<a href="/war/stats" class="action-btn">📊 Long-term Stats</a>
 {% endset %}
 {% include '_page_header.html' %}
 
@@ -611,6 +625,16 @@
                 <span class="sv muted">🧊 0</span>
                 {% endif %}
             </div>
+            {% if war.war_log_public is not none %}
+            <div class="stat-entry">
+                <span class="sk">War Log</span>
+                {% if war.war_log_public %}
+                <span class="sv green">Public</span>
+                {% else %}
+                <span class="sv muted">Private</span>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -724,6 +748,16 @@
                 <span class="sv muted">🧊 0</span>
                 {% endif %}
             </div>
+            {% if war.opponent_war_log_public is not none %}
+            <div class="stat-entry">
+                <span class="sk">War Log</span>
+                {% if war.opponent_war_log_public %}
+                <span class="sv green">Public</span>
+                {% else %}
+                <span class="sv muted">Private</span>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -753,10 +787,11 @@
                 <thead>
                     <tr>
                         <th class="vt-sortable" onclick="sortWarVerdict('player_name')">Player</th>
-                        <th class="vt-sortable" onclick="sortWarVerdict('attacks_used')" style="text-align:center;">Attacks</th>
-                        <th class="vt-sortable" onclick="sortWarVerdict('score')" style="text-align:center;">Score</th>
-                        <th style="text-align:center;">Verdict</th>
-                        <th></th>
+                <th class="vt-sortable" onclick="sortWarVerdict('league')">League</th>
+                <th class="vt-sortable" onclick="sortWarVerdict('attacks_used')" style="text-align:center;">Attacks</th>
+                <th class="vt-sortable" onclick="sortWarVerdict('score')" style="text-align:center;">Score</th>
+                <th style="text-align:center;">Verdict</th>
+                <th></th>
                     </tr>
                 </thead>
                 <tbody id="warVerdictTbody"></tbody>
@@ -805,7 +840,7 @@
             <div class="map-pos">#{{ m.map_position }}</div>
             <div class="th-badge">TH{{ m.town_hall_level }}</div>
             <div class="member-info">
-                <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
+                <div class="member-name" title="{{ m.player_name }}"><a href="/player/{{ m.player_tag | replace('#','') }}" class="player-link" onclick="event.stopPropagation();">{{ m.player_name }} <span class="player-link-arrow">↗</span></a></div>
                 {% if m.ranked_league %}<div class="member-sub-row"><span class="member-sub">{{ m.ranked_league }}</span></div>{% endif %}
             </div>
             <div class="def-col">
@@ -1006,7 +1041,19 @@ function buildCompare() {
     }
     const posScore = (thBetter - thWorse) / len;
 
-    const rawScore = thDiffAvg * 0.45 + posScore * 0.25 + leagueDiff * 2 * 0.20 + warsScore * 0.05 + streakScore * 0.05;
+    let lgBetter = 0, lgEven = 0, lgWorse = 0;
+    for (let i = 0; i < len; i++) {
+        const o = OUR[i], p = OPP[i];
+        if (o.lr > 0 && p.lr > 0) {
+            const d = o.lr - p.lr;
+            if (d > 0) lgBetter++; else if (d < 0) lgWorse++; else lgEven++;
+        } else if (o.lr > 0) { lgBetter++;
+        } else if (p.lr > 0) { lgWorse++;
+        } else { lgEven++; }
+    }
+    const lgPosScore = (lgBetter - lgWorse) / Math.max(len, 1);
+
+    const rawScore = thDiffAvg * 0.40 + posScore * 0.22 + leagueDiff * 2 * 0.18 + lgPosScore * 0.10 + warsScore * 0.05 + streakScore * 0.05;
     let prob = sigmoid(rawScore * 1.8);
     prob = clamp(prob, 0.25, 0.75);
     const ourPct = Math.round(prob * 100);
@@ -1046,6 +1093,7 @@ function buildCompare() {
             ${factorCard('Avg TH', avgThOur.toFixed(1), avgThOpp.toFixed(1), thDiffAvg)}
             ${factorCard('Avg League Rank', avgLrOur > 0 ? avgLrOur.toFixed(1) : '—', avgLrOpp > 0 ? avgLrOpp.toFixed(1) : '—', leagueDiff)}
             ${factorCard('Position Edge', `+${thBetter} ahead`, `+${thWorse} ahead`, posScore)}
+            ${factorCard('League Edge', `+${lgBetter} ahead`, `+${lgWorse} ahead`, lgPosScore)}
             ${factorCard('Wars Won', WAR.warsWonOur, WAR.warsWonOpp, warsScore)}
             ${factorCard('Win Streak', WAR.streakOur || '—', WAR.streakOpp || '—', streakScore)}
         </div>
@@ -1075,6 +1123,7 @@ function buildCompare() {
         ${statRow('WARS WON', WAR.warsWonOur, WAR.warsWonOpp)}
         ${statRow('WIN STREAK', WAR.streakOur, WAR.streakOpp)}
         ${statRow('TH POSITIONS AHEAD', thBetter, thWorse)}
+        ${lgBetter + lgWorse > 0 ? statRow('LEAGUE POSITIONS AHEAD', lgBetter, lgWorse) : ''}
     `;
 
     // ── 3. TH DISTRIBUTION ────────────────────────────────────────────────────
@@ -1108,20 +1157,18 @@ function buildCompare() {
     `;
 
     // ── 4. LEAGUE COMPARISON (per player) ─────────────────────────────────────
-    let lgBetter = 0, lgEven = 0, lgWorse = 0;
     const lgRows = Array.from({length: len}, (_, i) => {
         const o = OUR[i], p = OPP[i];
         const hasO = o.lr > 0, hasP = p.lr > 0;
-        const diff  = hasO && hasP ? o.lr - p.lr : null;
         let rowCls = '', diffLabel = '—';
-        if (diff !== null) {
-            if (diff > 0)  { rowCls = 'lg-adv'; diffLabel = `+${diff}`; lgBetter++; }
-            else if (diff < 0) { rowCls = 'lg-dis'; diffLabel = `${diff}`; lgWorse++; }
-            else { rowCls = 'lg-even'; diffLabel = '='; lgEven++; }
-        } else {
-            rowCls = 'lg-even';
-            if (!hasO && !hasP) lgEven++;
-        }
+        if (hasO && hasP) {
+            const diff = o.lr - p.lr;
+            if (diff > 0)      { rowCls = 'lg-adv'; diffLabel = `+${diff}`; }
+            else if (diff < 0) { rowCls = 'lg-dis'; diffLabel = `${diff}`; }
+            else               { rowCls = 'lg-even'; diffLabel = '='; }
+        } else if (hasO) { rowCls = 'lg-adv'; diffLabel = '+';
+        } else if (hasP) { rowCls = 'lg-dis'; diffLabel = '−';
+        } else           { rowCls = 'lg-even'; }
         const oLg = hasO ? o.league : '<span class="no-data-lg">—</span>';
         const pLg = hasP ? p.league : '<span class="no-data-lg">—</span>';
         return `<tr class="${rowCls}">
@@ -1146,7 +1193,7 @@ function buildCompare() {
                 <th>#</th>
                 <th style="text-align:left">${WAR.ourName}</th>
                 <th style="text-align:left">League</th>
-                <th>Diff</th>
+                <th style="text-align:center">Diff</th>
                 <th style="text-align:right">League</th>
                 <th style="text-align:right">${WAR.oppName}</th>
             </tr></thead>
@@ -1183,7 +1230,7 @@ function buildCompare() {
                 <th>#</th>
                 <th style="text-align:left">${WAR.ourName}</th>
                 <th style="text-align:left">TH</th>
-                <th>Diff</th>
+                <th style="text-align:center">Diff</th>
                 <th style="text-align:right">TH</th>
                 <th style="text-align:right">${WAR.oppName}</th>
             </tr></thead>
@@ -1215,7 +1262,7 @@ function buildWarAttackLog() {
         body.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded yet.</div>';
         return;
     }
-    const rows = attacks.slice(0, 20).map(a => {
+    const rows = attacks.map(a => {
         const nameColor = a.attacker_side === 'our' ? 'var(--green)' : 'var(--red)';
         const starScore = a.stars === 3 ? 'var(--green)' : a.stars === 2 ? 'var(--yellow)' : a.stars === 1 ? 'var(--accent)' : 'var(--muted)';
         const pills = a.label ? renderAttackLabel(a.label) : '';
@@ -1232,13 +1279,13 @@ function buildWarAttackLog() {
             <td>${pills}</td>
         </tr>`;
     }).join('');
-    body.innerHTML = `<div class="table-scroll"><table class="detail-table">
+    body.innerHTML = `<div class="log-scroll"><div class="table-scroll"><table class="detail-table">
         <thead><tr>
             <th>#</th><th>Attacker</th><th>TH</th><th></th>
             <th>#</th><th>Defender</th><th>TH</th><th>Stars</th><th>Dest %</th><th>Tags</th>
         </tr></thead>
         <tbody>${rows}</tbody>
-    </table></div>`;
+    </table></div></div>`;
 }
 
 {% if war_verdicts %}
@@ -1351,11 +1398,25 @@ function buildWVDetails(v) {
     </div></div>`;
 }
 
+function leagueSortKey(tier) {
+    if (!tier || tier === 'Unranked' || tier === 'Unknown League') return 0;
+    if (/ III$/.test(tier)) return 34;
+    if (/ II$/.test(tier)) return 35;
+    if (/ I$/.test(tier)) return 36;
+    const m = tier.match(/(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+}
+
 function buildWarVerdictTable() {
     const sorted = [...WAR_VERDICTS].sort((a, b) => {
         let av = a[wvSort.col] ?? 0, bv = b[wvSort.col] ?? 0;
-        if (typeof av === 'string') av = av.toLowerCase();
-        if (typeof bv === 'string') bv = bv.toLowerCase();
+        if (wvSort.col === 'league') {
+            av = leagueSortKey(av);
+            bv = leagueSortKey(bv);
+        } else {
+            if (typeof av === 'string') av = av.toLowerCase();
+            if (typeof bv === 'string') bv = bv.toLowerCase();
+        }
         if (av < bv) return wvSort.dir === 'asc' ? -1 : 1;
         if (av > bv) return wvSort.dir === 'asc' ?  1 : -1;
         return 0;
@@ -1371,18 +1432,19 @@ function buildWarVerdictTable() {
 
         row.innerHTML = `
             <td>
-                <div style="font-weight:600;font-size:13.5px;">${escapeHTML(v.player_name)}</div>
-                <div style="font-size:11px;color:var(--muted);margin-top:1px;">${v.league ? escapeHTML(v.league) + ' · ' : ''}TH${v.player_th} · #${v.map_pos}</div>
+                <div style="font-weight:600;font-size:13.5px;"><a href="/player/${encodeURIComponent((v.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(v.player_name)} <span class="player-link-arrow">↗</span></a></div>
+                <div style="font-size:11px;color:var(--muted);margin-top:1px;">TH${v.player_th} · #${v.map_pos}</div>
             </td>
+            <td style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.league ? escapeHTML(v.league) : '—'}</td>
             <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${v.attacks_used}<span style="font-size:12px;color:var(--muted);font-weight:400;">/2</span></td>
             <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;">${v.score}</td>
             <td style="text-align:center;"><span class="judgment ${v.badge}" title="${v.badge === 'badge-undefined' ? v.label : ''}">${v.badge === 'badge-undefined' ? '?' : v.label}</span></td>
-            <td><button type="button" class="action-btn details-toggle" onclick="event.stopPropagation()">Details</button></td>
+            <td><button type="button" class="action-btn details-toggle" onclick="event.stopPropagation(); toggleWarVerdictDetails(this)">Details</button></td>
         `;
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'vd-row';
-        detailRow.innerHTML = `<td class="vd-cell" colspan="5">${buildWVDetails(v)}</td>`;
+        detailRow.innerHTML = `<td class="vd-cell" colspan="6">${buildWVDetails(v)}</td>`;
 
         row.addEventListener('click', () => {
             const open = detailRow.classList.toggle('expanded');
@@ -1400,9 +1462,21 @@ function buildWarVerdictTable() {
     });
 }
 
+function toggleWarVerdictDetails(btn) {
+    const row = btn.closest('tr');
+    if (!row) return;
+    const detailRow = row.nextElementSibling;
+    if (!detailRow || !detailRow.classList.contains('vd-row')) return;
+    const open = detailRow.classList.toggle('expanded');
+    btn.textContent = open ? 'Close' : 'Details';
+}
+
 function sortWarVerdict(col) {
     if (wvSort.col === col) wvSort.dir = wvSort.dir === 'asc' ? 'desc' : 'asc';
-    else { wvSort.col = col; wvSort.dir = col === 'player_name' ? 'asc' : 'desc'; }
+    else {
+        wvSort.col = col;
+        wvSort.dir = col === 'score' || col === 'attacks_used' ? 'desc' : 'asc';
+    }
     buildWarVerdictTable();
 }
 
@@ -1582,7 +1656,7 @@ function toggleCompare() {
         });
 
         document.querySelectorAll('.member-row').forEach(r => {
-            if (!r.classList.contains('row-sel') && !r.classList.contains('row-me') && !TGT_CLASSES.some(c => r.classList.contains(c)))
+            if (!r.classList.contains('row-sel') && !TGT_CLASSES.some(c => r.classList.contains(c)))
                 r.classList.add('row-dim');
         });
     }

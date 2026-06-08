@@ -259,6 +259,8 @@ class ClanWar(db.Model):
     opponent_wars_won        = db.Column(db.Integer,     nullable=True)
     opponent_war_frequency   = db.Column(db.String(50),  nullable=True)
     opponent_win_streak      = db.Column(db.Integer,     nullable=True)
+    war_log_public           = db.Column(db.Boolean,     nullable=True)
+    opponent_war_log_public  = db.Column(db.Boolean,     nullable=True)
     clan_stars               = db.Column(db.Integer, default=0)
     clan_attacks             = db.Column(db.Integer, default=0)
     clan_destruction_pct     = db.Column(db.Float, default=0.0)
@@ -369,6 +371,8 @@ class CWLWar(db.Model):
     opp_attacks           = db.Column(db.Integer, default=0)
     opp_destruction_pct   = db.Column(db.Float, default=0.0)
     castle_empty          = db.Column(db.Boolean, default=False, nullable=False)
+    war_log_public        = db.Column(db.Boolean, nullable=True)
+    opponent_war_log_public = db.Column(db.Boolean, nullable=True)
 
     season  = db.relationship('CWLSeason', back_populates='wars')
     members = db.relationship('CWLMember', back_populates='war', lazy=True, cascade='all, delete-orphan')

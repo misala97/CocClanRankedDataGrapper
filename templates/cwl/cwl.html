@@ -144,14 +144,21 @@
         .lg-summary { display: flex; gap: 20px; margin-bottom: 16px; }
         .lg-sum-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
         .lg-sum-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .lg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .lg-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
         .lg-table th { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--bord2); }
         .lg-table td { padding: 6px 6px; border-bottom: 1px solid var(--bord2); }
         .lg-table tr:last-child td { border-bottom: none; }
         .lg-table .lgt-pos { color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 700; text-align: center; width: 32px; }
-        .lg-table .lgt-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .lg-table .lgt-lg { font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; }
+        .lg-table .lgt-name { width: 120px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lg-table .lgt-lg { width: 80px; max-width: 80px; font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .lg-table .lgt-diff { text-align: center; font-family: 'Rajdhani', sans-serif; font-weight: 700; width: 48px; }
+        .lg-table th:nth-child(1), .lg-table td:nth-child(1) { width: 32px; }
+        .lg-table th:nth-child(2), .lg-table td:nth-child(2) { width: 120px; }
+        .lg-table th:nth-child(3), .lg-table td:nth-child(3) { width: 80px; }
+        .lg-table th:nth-child(4), .lg-table td:nth-child(4) { width: 48px; }
+        .lg-table th:nth-child(5), .lg-table td:nth-child(5) { width: 80px; }
+        .lg-table th:nth-child(6), .lg-table td:nth-child(6) { width: 152px; }
+        .lg-table thead th:nth-child(4) { text-align: center; }
         .lg-adv  { color: var(--green); background: rgba(63,185,80,.05); }
         .lg-dis  { color: var(--red);   background: rgba(248,81,73,.05); }
         .lg-even { color: var(--muted); }
@@ -249,8 +256,19 @@
         .th-badge { display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif; background: rgba(88,166,255,.1); color: var(--blue); border: 1px solid rgba(88,166,255,.2); }
         .member-info {}
         .member-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .player-link { color: inherit; text-decoration: none; transition: color 0.15s; }
+        .player-link:hover { color: var(--accent); }
+        .player-link-arrow { font-size: 10px; color: var(--muted); opacity: 0.4; transition: opacity 0.15s, color 0.15s; vertical-align: super; }
+        .player-link:hover .player-link-arrow { opacity: 1; color: var(--accent); }
         .member-sub-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
         .member-sub { font-size: 10px; color: var(--muted); font-family: 'Rajdhani', sans-serif; line-height: 1.4; white-space: nowrap; }
+
+        /* ── ATTACK LOG ── */
+        .log-scroll { max-height: 420px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        .log-scroll::-webkit-scrollbar { width: 4px; }
+        .log-scroll::-webkit-scrollbar-track { background: transparent; }
+        .log-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .log-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
         .attacks-col { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 90px; }
         .attack-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: 'Rajdhani', sans-serif; white-space: nowrap; letter-spacing: .2px; }
         .attack-3 { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
@@ -532,7 +550,12 @@
                     <tr class="inner-roster-row{% if current_user and current_user.linked_player_tag == m.player_tag %} row-me{% endif %}" data-active="{{ '1' if m.player_tag in r.active_members else '0' }}" data-orig="{{ loop.index0 }}" data-th="{{ m.town_hall_level or 0 }}" data-lr="{{ league_rank(m.ranked_league) if m.ranked_league else 0 }}">
                         <td class="mono text-muted roster-rank" style="text-align:center;">{{ loop.index }}</td>
                         <td style="font-weight:500;">
+                            {% set last_round = r.last_rounds.get(m.player_tag) if r.last_rounds else None %}
+                            {% set participated_days = r.active_members[m.player_tag].wars_selected if m.player_tag in r.active_members else 0 %}
                             <span {% if m.player_tag in r.active_members %}style="color:var(--purple);"{% endif %}>{{ m.player_name or m.player_tag }}</span>
+                            {% if last_round and participated_days != r.war_round_count %}
+                                <div style="font-size:11px;color:var(--muted);margin-top:2px;">Last active: Day {{ last_round }}</div>
+                            {% endif %}
                         </td>
                         <td class="mono" style="text-align:center;color:var(--accent);">{{ m.town_hall_level or '?' }}</td>
                         <td style="font-size:12px;color:var(--blue);">{{ m.ranked_league or '—' }}</td>
@@ -540,7 +563,23 @@
                             {%- if m.player_tag in r.active_members -%}
                             {%- set am = r.active_members[m.player_tag] -%}
                             <span style="color:var(--{% if am.attacks_done == am.wars_selected %}green{% elif am.attacks_done > 0 %}accent{% else %}red{% endif %});">{{ am.attacks_done }}</span><span style="color:var(--muted);">/{{ am.wars_selected }}</span>
-                            {%- else -%}<span style="color:var(--muted);">—</span>{%- endif -%}
+                            {%- set missed = am.wars_selected - am.attacks_done -%}
+                            {%- if missed > 0 -%}
+                                <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+                                    {%- if am.selected_in_current -%}
+                                        {%- if missed == 1 -%}
+                                            Pending today
+                                        {%- else -%}
+                                            Missed {{ missed }} (incl. today)
+                                        {%- endif -%}
+                                    {%- else -%}
+                                        Missed {{ missed }}
+                                    {%- endif -%}
+                                </div>
+                            {%- endif -%}
+                            {%- else -%}
+                                <span style="color:var(--muted);">—</span>
+                            {%- endif -%}
                         </td>
                     </tr>
                     {% endfor %}
@@ -765,6 +804,9 @@
                 <tbody id="lpTbody">
                 {% for p in our_player_perf %}
                 <tr
+                    id="lpRow-{{ loop.index0 }}"
+                    data-role="parent"
+                    data-index="{{ loop.index0 }}"
                     data-name="{{ p.name|lower }}"
                     data-wars="{{ p.wars }}"
                     data-attacks_used="{{ p.attacks_used }}"
@@ -774,7 +816,9 @@
                     data-total_dest="{{ (p.total_dest * 10)|int }}"
                     data-stars="{{ p.stars }}"
                     data-missed="{{ p.missed }}"
-                    data-avg_score="{{ (p.avg_score * 10)|int }}">
+                    data-avg_score="{{ (p.avg_score * 10)|int }}"
+                    onclick="toggleLPDetails({{ loop.index0 }})"
+                    style="cursor:pointer;">
                     <td>
                         <span style="font-weight:600;">{{ p.name }}</span>
                         <span class="th-badge" style="margin-left:6px;">TH{{ p.th }}</span>
@@ -801,7 +845,48 @@
                     <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">
                         {% if p.missed > 0 %}<span style="color:var(--red);">{{ p.missed }}</span>{% else %}<span style="color:var(--green);">—</span>{% endif %}
                     </td>
-                    <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--{% if p.avg_score >= 80 %}green{% elif p.avg_score >= 50 %}accent{% elif p.avg_score >= 20 %}yellow{% else %}muted{% endif %});">{{ p.avg_score }}</td>
+                    <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--{% if p.avg_score >= 80 %}green{% elif p.avg_score >= 50 %}accent{% elif p.avg_score >= 20 %}yellow{% else %}muted{% endif %});">
+                        <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
+                            <span>{{ p.avg_score }}</span>
+                            <button id="lpDetailBtn-{{ loop.index0 }}" type="button" class="action-btn details-toggle" style="padding:4px 8px;font-size:11px;" onclick="event.stopPropagation(); toggleLPDetails({{ loop.index0 }})">Show</button>
+                        </div>
+                    </td>
+                </tr>
+                <tr id="lpDetailRow-{{ loop.index0 }}" class="lp-detail-row" style="display:none;">
+                    <td colspan="10" style="padding:0;border:none;">
+                        <div style="padding:12px 14px;background:var(--surface-alt);border-top:1px solid var(--border);">
+                            <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Daily performance breakdown</div>
+                            <div class="table-scroll">
+                                <table class="detail-table" style="margin:0;">
+                                    <thead>
+                                        <tr>
+                                            <th style="min-width:60px;">Day</th>
+                                            <th style="min-width:120px;">Target</th>
+                                            <th style="text-align:center;min-width:60px;">Stars</th>
+                                            <th style="text-align:center;min-width:80px;">Expected</th>
+                                            <th style="text-align:center;min-width:60px;">Δ</th>
+                                            <th style="text-align:center;min-width:80px;">Score</th>
+                                            <th style="text-align:center;min-width:120px;">Verdict</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for d in p.daily_details %}
+                                        <tr>
+                                            <td style="text-align:center;">{{ d.round }}</td>
+                                            <td>{{ d.defender_name }} TH{{ d.defender_th }}</td>
+                                            <td style="text-align:center;">{{ d.stars }}★</td>
+                                            <td style="text-align:center;">{{ d.expected_stars }}★</td>
+                                            <td style="text-align:center;">{{ '%.1f'|format(d.stars - d.expected_stars) }}</td>
+                                            <td style="text-align:center;">{{ d.score }}</td>
+                                            <td style="text-align:center;"><span class="judgment {{ d.badge }}" style="font-size:11px;padding:2px 8px;">{{ d.label }}</span></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div style="margin-top:10px;font-size:12px;color:var(--muted);">Overall average score is calculated from each day’s score: sum(scores) / {{ p.daily_details|length }} = {{ p.avg_score }}.</div>
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -875,6 +960,7 @@
                     {% if d.our_wars_won is not none %}<div class="stat-entry"><span class="sk">Wars Won</span><span class="sv">{{ d.our_wars_won }}</span></div>{% endif %}
                     {% if d.our_war_frequency %}<div class="stat-entry"><span class="sk">Frequency</span><span class="sv muted">{{ d.our_war_frequency }}</span></div>{% endif %}
                     <div class="stat-entry"><span class="sk">Streak</span>{% if d.our_win_streak %}<span class="sv green">🔥 {{ d.our_win_streak }}</span>{% else %}<span class="sv muted">🧊 0</span>{% endif %}</div>
+                    {% if d.our_war_log_public is not none %}<div class="stat-entry"><span class="sk">War Log</span><span class="sv {% if d.our_war_log_public %}green{% else %}muted{% endif %}">{% if d.our_war_log_public %}Public{% else %}Private{% endif %}</span></div>{% endif %}
                 </div>
             </div>
             {# Score center #}
@@ -923,6 +1009,7 @@
                     {% if d.opp_wars_won is not none %}<div class="stat-entry"><span class="sk">Wars Won</span><span class="sv">{{ d.opp_wars_won }}</span></div>{% endif %}
                     {% if d.opp_war_frequency %}<div class="stat-entry"><span class="sk">Frequency</span><span class="sv muted">{{ d.opp_war_frequency }}</span></div>{% endif %}
                     <div class="stat-entry"><span class="sk">Streak</span>{% if d.opp_win_streak %}<span class="sv green">🔥 {{ d.opp_win_streak }}</span>{% else %}<span class="sv muted">🧊 0</span>{% endif %}</div>
+                    {% if d.opp_war_log_public is not none %}<div class="stat-entry"><span class="sk">War Log</span><span class="sv {% if d.opp_war_log_public %}green{% else %}muted{% endif %}">{% if d.opp_war_log_public %}Public{% else %}Private{% endif %}</span></div>{% endif %}
                 </div>
             </div>
         </div>
@@ -940,7 +1027,7 @@
 
         {# ── WAR VERDICTS ── #}
         {% if d.war_verdicts %}
-        <div class="recent-card" id="wvCard-{{ n }}">
+        <div class="recent-card" id="wvCard-{{ n }}" style="margin-top:20px;">
             <div class="recent-header" onclick="toggleVerdicts({{ n }})">
                 <span class="recent-header-title">⚔ War Performance · {{ d.war_verdicts|length }} players</span>
                 <span class="recent-chevron" id="wvChevron-{{ n }}">▼</span>
@@ -1007,7 +1094,7 @@
                     <div class="map-pos">#{{ m.map_position }}</div>
                     <div class="th-badge">TH{{ m.town_hall_level }}</div>
                     <div class="member-info">
-                        <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
+                        <div class="member-name" title="{{ m.player_name }}"><a href="/player/{{ m.player_tag | replace('#','') }}" class="player-link" onclick="event.stopPropagation();">{{ m.player_name }} <span class="player-link-arrow">↗</span></a></div>
                         {% if m.league_tier %}<div class="member-sub-row"><span class="member-sub">{{ m.league_tier }}</span></div>{% endif %}
                     </div>
                     <div class="def-col">
@@ -1052,6 +1139,7 @@
                         <span class="rh-meta">{{ d.members_opp|length }} members</span>
                         {% if d.opp_avg_th %}<span class="rh-meta">· Ø TH {{ d.opp_avg_th }}</span>{% endif %}
                         {% if d.opp_avg_league %}<span class="league-pill lp-gold" style="font-size:10px;">{{ d.opp_avg_league }}</span>{% endif %}
+                        <button class="toggle-all-btn" onclick="toggleAllSide(this,event,{{ n }})">Select All</button>
                     </div>
                 </div>
                 <div class="roster-col-hdr">
@@ -1365,7 +1453,7 @@ function sortLP(col) {
     if (_lpSort.col === col) _lpSort.dir *= -1;
     else { _lpSort.col = col; _lpSort.dir = -1; }
     const tbody = document.getElementById('lpTbody');
-    const rows  = Array.from(tbody.querySelectorAll('tr'));
+    const rows  = Array.from(tbody.querySelectorAll('tr[data-role="parent"]'));
     const isStr = col === 'name';
     rows.sort((a, b) => {
         if (isStr) {
@@ -1374,10 +1462,23 @@ function sortLP(col) {
         }
         return _lpSort.dir * ((parseFloat(b.dataset[col]) || 0) - (parseFloat(a.dataset[col]) || 0));
     });
-    rows.forEach(r => tbody.appendChild(r));
+    rows.forEach(parent => {
+        tbody.appendChild(parent);
+        const detail = document.getElementById('lpDetailRow-' + parent.dataset.index);
+        if (detail) tbody.appendChild(detail);
+    });
     document.querySelectorAll('[id^="lps-"]').forEach(el => el.textContent = '⇅');
     const icon = document.getElementById('lps-' + col);
     if (icon) icon.textContent = _lpSort.dir < 0 ? ' ↓' : ' ↑';
+}
+
+function toggleLPDetails(index) {
+    const detailRow = document.getElementById('lpDetailRow-' + index);
+    const button = document.getElementById('lpDetailBtn-' + index);
+    if (!detailRow) return;
+    const open = detailRow.style.display !== 'table-row';
+    detailRow.style.display = open ? 'table-row' : 'none';
+    if (button) button.textContent = open ? 'Hide' : 'Show';
 }
 
 // ── Round toggle ──────────────────────────────────────────────────────────────
@@ -1391,55 +1492,87 @@ function toggleRound(n) {
 
 // ── Verdict table ─────────────────────────────────────────────────────────────
 function buildVerdictDetails(v) {
-    let cards = '';
     if (!v.attacks_used) {
-        cards = `<div style="padding:10px 0;color:var(--muted);font-style:italic;opacity:.6">No attacks used this war.</div>`;
-    } else {
-        (v.attack_details || []).forEach(a => {
-            const d = a.th_diff;
-            const diffColor = d > 0 ? 'var(--red)' : d < 0 ? 'var(--green)' : 'var(--muted)';
-            const dir       = d > 0 ? '↑' : d < 0 ? '↓' : '=';
-            const diffMag   = d !== 0 ? `<div class="atk-th-diff" style="color:${diffColor}">${d>0?'+':''}${d}</div>` : '';
-            const p = a.pos_diff;
-            const posColor = p > 0 ? 'var(--green)' : p < 0 ? 'var(--red)' : 'var(--muted)';
-            const posDir   = p > 0 ? '↓' : p < 0 ? '↑' : '=';
-            const posMag   = p !== 0 ? `<div class="atk-th-diff" style="color:${posColor}">${p>0?'+':''}${p}</div>` : '';
-            const stateHtml = a.target_state === 'cleared'
-                ? `<span class="atk-state-dead">Cleared</span>`
-                : a.target_state === 'partial'
-                ? `${renderStars(a.stars_before ?? 0, false)}`
-                : `<span class="atk-state-fresh">Fresh</span>`;
-            cards += `<div class="atk-card">
-                <div class="atk-card-th">
-                    <div class="atk-th-row"><span>TH${v.player_th}</span><span class="atk-th-sep" style="color:${diffColor}">${dir}</span><span>TH${a.defender_th}</span></div>
-                    ${diffMag}<div class="atk-th-divider"></div>
-                    <div class="atk-th-row"><span>#${v.map_pos}</span><span class="atk-th-sep" style="color:${posColor}">${posDir}</span><span>#${a.defender_pos}</span></div>
-                    ${posMag}
-                </div>
-                <div class="atk-card-target">
-                    <div class="atk-target-name">${escapeHTML(a.defender_name)}</div>
-                    <div class="atk-target-meta"><span class="atk-target-pos">#${a.defender_pos}</span></div>
-                    <div>${stateHtml}</div>
-                </div>
-                <div class="atk-card-result">
-                    ${renderStars(a.stars, true)}
-                    <span class="atk-result-pct">${a.pct}%</span>
-                    ${renderLabel(a.label)}
-                </div>
-            </div>`;
-        });
+        return `<div class="vd-inner"><div class="vd-section">
+            <div style="padding:12px;color:var(--muted);font-style:italic;">No attack used this war.</div>
+        </div></div>`;
     }
-    const combo = (v.atk_labels || []).map(l => (LABEL_MAP[l] || [l])[0]).join(' + ');
+
+    const atk = v.attack_details?.[0];
+    if (!atk) {
+        return `<div class="vd-inner"><div class="vd-section">
+            <div style="padding:12px;color:var(--muted);">No attack details available.</div>
+        </div></div>`;
+    }
+
+    const actual = atk.stars;
+    const expected = v.expected_stars || 0;
+    const delta = actual - expected;
+    
+    // Expectation reasoning based on TH diff
+    let verdict_reasoning = '';
+    const th_diff = atk.th_diff;
+    
+    if (th_diff <= 0) {
+        verdict_reasoning = `Expected 3★ vs equal/lower TH. Got ${actual}★.`;
+    } else if (th_diff === 1) {
+        verdict_reasoning = `Expected 2★ vs +1 TH. Got ${actual}★.`;
+    } else {
+        verdict_reasoning = `Expected 1★ vs +${th_diff} TH. Got ${actual}★.`;
+    }
+
+    const performanceColor = actual > expected ? 'var(--green)' : actual === expected ? 'var(--accent)' : 'var(--yellow)';
+    const diffColor = th_diff > 0 ? 'var(--red)' : th_diff < 0 ? 'var(--green)' : 'var(--muted)';
+
     return `<div class="vd-inner"><div class="vd-section">
-        <div class="vd-meta">
-            <span>Attacks: <strong style="color:var(--text)">${v.attacks_used} / 1</strong></span>
-            <span>Combo: <strong style="color:var(--text)">${combo}</strong></span>
-            <span>Score: <strong style="color:var(--accent)">${v.score}</strong></span>
-            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${v.label}</span></span>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;padding:12px;background:var(--surface-alt);border-radius:6px;">
+            <div style="text-align:center;">
+                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Attacker</div>
+                <div style="font-weight:700;color:var(--text)">${v.player_name}</div>
+                <div style="font-size:12px;color:var(--muted);">TH${v.player_th}</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Target</div>
+                <div style="font-weight:700;color:var(--text)">${escapeHTML(atk.defender_name)}</div>
+                <div style="font-size:12px;color:var(--muted);">TH${atk.defender_th}</div>
+                <div style="font-size:11px;color:${diffColor};margin-top:2px;">${th_diff > 0 ? '↑' : th_diff < 0 ? '↓' : '='} ${Math.abs(th_diff)} TH</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Result</div>
+                <div style="font-size:20px;font-weight:700;color:${performanceColor}">${renderStars(actual, false)}</div>
+                <div style="font-size:12px;color:var(--muted);">${atk.pct}%</div>
+            </div>
         </div>
-        <div class="atk-cards">${cards}</div>
+
+        <div style="padding:12px;background:var(--surface-alt);border-radius:6px;margin-bottom:12px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Expectation Analysis</div>
+            <div style="color:var(--text);font-size:13px;margin-bottom:6px;">${verdict_reasoning}</div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;flex-wrap:wrap;">
+                <span style="color:var(--muted);">Expected:</span>
+                <strong style="color:var(--accent);">${expected}★</strong>
+                <span style="color:var(--muted);">·</span>
+                <span style="color:var(--muted);">Actual:</span>
+                <strong style="color:${performanceColor}">${actual}★</strong>
+                <span style="color:var(--muted);">·</span>
+                <span style="color:var(--muted);">Δ:</span>
+                <strong style="color:${performanceColor};">${delta >= 0 ? '+' : ''}${delta.toFixed(1)}</strong>
+            </div>
+        </div>
+
+        <div style="padding:12px;background:var(--surface-alt);border-radius:6px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Verdict</div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span class="judgment ${v.badge}" style="font-size:12px;padding:4px 12px;">${v.label}</span>
+                <div style="text-align:right;flex:1;">
+                    <div style="font-size:24px;font-weight:700;color:var(--accent);">${v.score}</div>
+                    <div style="font-size:10px;color:var(--muted);">/ 100</div>
+                </div>
+            </div>
+        </div>
     </div></div>`;
 }
+
+
 
 function buildVerdictTable(n) {
     const r = CWL[n]; if (!r) return;
@@ -1456,17 +1589,28 @@ function buildVerdictTable(n) {
     tbody.innerHTML = '';
     sorted.forEach(v => {
         const row = document.createElement('tr');
-        const atkSum = v.attack_details.map(a =>
-            `${renderStars(a.stars,false)} ${renderLabel(a.label)} <span style="font-size:11px;color:var(--muted);">→ ${escapeHTML(a.defender_name)} TH${a.defender_th}</span>`
-        ).join('<br>') || `<span style="color:var(--muted);opacity:.45;">—</span>`;
+        const atk = v.attack_details?.[0];
+        
+        // Build target info line
+        let targetLine = '';
+        if (v.attacks_used === 0) {
+            targetLine = '<div style="font-size:11px;color:var(--muted);margin-top:2px;opacity:0.5;">—</div>';
+        } else if (atk) {
+            targetLine = `<div style="font-size:11px;color:var(--muted);margin-top:2px;">→ ${escapeHTML(atk.defender_name)} TH${atk.defender_th}</div>`;
+        }
+        
         row.innerHTML = `
             <td>
-                <div style="font-weight:600;font-size:13.5px;">${escapeHTML(v.player_name)}</div>
+                <div style="font-weight:600;font-size:13.5px;"><a href="/player/${encodeURIComponent((v.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(v.player_name)} <span class="player-link-arrow">↗</span></a></div>
                 <div style="font-size:11px;color:var(--muted);margin-top:1px;">${v.league ? escapeHTML(v.league)+' · ' : ''}TH${v.player_th} · #${v.map_pos}</div>
+                ${targetLine}
             </td>
             <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${v.attacks_used}<span style="font-size:12px;color:var(--muted);font-weight:400;">/1</span></td>
-            <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;">${v.score}</td>
-            <td style="text-align:center;"><span class="judgment ${v.badge}">${v.badge==='badge-undefined'?'?':v.label}</span></td>
+            <td style="text-align:center;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent);">${v.score}</div>
+                <div style="font-size:10px;color:var(--muted);">/ 100</div>
+            </td>
+            <td style="text-align:center;"><span class="judgment ${v.badge}">${v.label}</span></td>
             <td><button type="button" class="action-btn details-toggle" onclick="event.stopPropagation()">Details</button></td>`;
         const detailRow = document.createElement('tr');
         detailRow.className = 'vd-row';
@@ -1484,6 +1628,7 @@ function buildVerdictTable(n) {
         if (col === r.wvSort.col) th.classList.add('vt-sort-active', r.wvSort.dir);
     });
 }
+
 
 function sortVerdicts(n, col) {
     const r = CWL[n]; if (!r) return;
@@ -1523,10 +1668,10 @@ function buildAttackLog(n) {
             <td>${a.label?renderLabel(a.label):''}</td>
         </tr>`;
     }).join('');
-    body.innerHTML = `<div class="table-scroll"><table class="detail-table">
+    body.innerHTML = `<div class="log-scroll"><div class="table-scroll"><table class="detail-table">
         <thead><tr><th>#</th><th>Attacker</th><th>TH</th><th></th><th>#</th><th>Defender</th><th>TH</th><th>Stars</th><th>Dest%</th><th>Tags</th></tr></thead>
         <tbody>${rows}</tbody>
-    </table></div>`;
+    </table></div></div>`;
 }
 
 function toggleLog(n) {
@@ -1559,7 +1704,10 @@ function buildCompare(n) {
     const warsScore = (Math.log(r.warsWonOur+1) - Math.log(r.warsWonOpp+1)) / Math.log(maxWins+1);
     const maxStreak = Math.max(r.streakOur, r.streakOpp, 1);
     const streakScore = (r.streakOur - r.streakOpp) / maxStreak;
-    const prob = clamp(sigmoid((thDiffAvg*0.45+posScore*0.25+leagueDiff*2*0.20+warsScore*0.05+streakScore*0.05)*1.8),0.25,0.75);
+    let lgBetter=0,lgEven=0,lgWorse=0;
+    for(let i=0;i<len;i++){const o=OUR[i],p=OPP[i];if(o.lr>0&&p.lr>0){const d=o.lr-p.lr;if(d>0)lgBetter++;else if(d<0)lgWorse++;else lgEven++;}else if(o.lr>0)lgBetter++;else if(p.lr>0)lgWorse++;else lgEven++;}
+    const lgPosScore=(lgBetter-lgWorse)/Math.max(len,1);
+    const prob = clamp(sigmoid((thDiffAvg*0.40+posScore*0.22+leagueDiff*2*0.18+lgPosScore*0.10+warsScore*0.05+streakScore*0.05)*1.8),0.25,0.75);
     const ourPct = Math.round(prob*100), oppPct = 100-ourPct;
     const verdict = ourPct>54?`${r.ourName} have a statistical edge.`:ourPct<46?`${r.oppName} have a statistical edge.`:'This looks like an even matchup.';
 
@@ -1578,6 +1726,7 @@ function buildCompare(n) {
             ${fc('Avg TH',avgThOur.toFixed(1),avgThOpp.toFixed(1),thDiffAvg)}
             ${fc('Avg League Rank',avgLrOur>0?avgLrOur.toFixed(1):'—',avgLrOpp>0?avgLrOpp.toFixed(1):'—',leagueDiff)}
             ${fc('Position Edge',`+${thBetter} ahead`,`+${thWorse} ahead`,posScore)}
+            ${fc('League Edge',`+${lgBetter} ahead`,`+${lgWorse} ahead`,lgPosScore)}
             ${fc('Wars Won',r.warsWonOur,r.warsWonOpp,warsScore)}
             ${fc('Win Streak',r.streakOur||'—',r.streakOpp||'—',streakScore)}
         </div>`;
@@ -1597,7 +1746,8 @@ function buildCompare(n) {
         ${avgLrOur>0||avgLrOpp>0?sr('AVG LEAGUE RANK',avgLrOur>0?avgLrOur.toFixed(1):'—',avgLrOpp>0?avgLrOpp.toFixed(1):'—'):''}
         ${sr('WARS WON',r.warsWonOur??'—',r.warsWonOpp??'—')}
         ${sr('WIN STREAK',r.streakOur??'—',r.streakOpp??'—')}
-        ${sr('TH POSITIONS AHEAD',thBetter,thWorse)}`;
+        ${sr('TH POSITIONS AHEAD',thBetter,thWorse)}
+        ${lgBetter+lgWorse>0?sr('LEAGUE POSITIONS AHEAD',lgBetter,lgWorse):''}`;
 
     const thOur={},thOpp={};
     OUR.forEach(m=>{thOur[m.th]=(thOur[m.th]||0)+1;});
@@ -1610,14 +1760,14 @@ function buildCompare(n) {
         ${allThs.map(th=>{const o=thOur[th]||0,p=thOpp[th]||0;const ow=Math.round(o/maxC*130),pw=Math.round(p/maxC*130);
         return `<div class="dist-row"><span class="dist-count-our">${o||''}</span><div style="display:flex;justify-content:flex-end"><div class="dist-bar-our" style="width:${ow}px"></div></div><span class="dist-lbl">TH${th}</span><div><div class="dist-bar-opp" style="width:${pw}px"></div></div><span class="dist-count-opp">${p||''}</span></div>`;}).join('')}`;
 
-    let lgBetter=0,lgEven=0,lgWorse=0;
     const lgRows=Array.from({length:len},(_,i)=>{
         const o=OUR[i],p=OPP[i];
         const hasO=o.lr>0,hasP=p.lr>0;
-        const diff=hasO&&hasP?o.lr-p.lr:null;
         let rowCls='',diffLabel='—';
-        if(diff!==null){if(diff>0){rowCls='lg-adv';diffLabel=`+${diff}`;lgBetter++;}else if(diff<0){rowCls='lg-dis';diffLabel=`${diff}`;lgWorse++;}else{rowCls='lg-even';diffLabel='=';lgEven++;}}
-        else{rowCls='lg-even';if(!hasO&&!hasP)lgEven++;}
+        if(hasO&&hasP){const diff=o.lr-p.lr;if(diff>0){rowCls='lg-adv';diffLabel=`+${diff}`;}else if(diff<0){rowCls='lg-dis';diffLabel=`${diff}`;}else{rowCls='lg-even';diffLabel='=';}}
+        else if(hasO){rowCls='lg-adv';diffLabel='+';}
+        else if(hasP){rowCls='lg-dis';diffLabel='−';}
+        else{rowCls='lg-even';}
         const oLg=hasO?o.league:'<span class="no-data-lg">—</span>';
         const pLg=hasP?p.league:'<span class="no-data-lg">—</span>';
         return `<tr class="${rowCls}"><td class="lgt-pos">#${o.pos}</td><td class="lgt-name">${escapeHTML(o.name)}</td><td class="lgt-lg">${oLg}</td><td class="lgt-diff">${diffLabel}</td><td class="lgt-lg" style="text-align:right">${pLg}</td><td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td></tr>`;
@@ -1758,7 +1908,7 @@ function initRoster(n) {
             }
         });
         grid.querySelectorAll('.member-row').forEach(r=>{
-            if(!r.classList.contains('row-sel')&&!r.classList.contains('row-me')&&!TGT.some(c=>r.classList.contains(c))) r.classList.add('row-dim');
+            if(!r.classList.contains('row-sel') && !TGT.some(c=>r.classList.contains(c))) r.classList.add('row-dim');
         });
     }
 

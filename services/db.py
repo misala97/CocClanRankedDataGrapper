@@ -210,6 +210,8 @@ def create_db_clan_war(war_data: dict, clan_full_api: dict = None, opp_full_api:
         opponent_wars_won        = json_get(opp_full_api,   JSON_CLAN_DATA.WAR_WINS,             raise_on_missing=False) if opp_full_api else None,
         opponent_war_frequency   = json_get(opp_full_api,   JSON_CLAN_DATA.WAR_FREQUENCY,        raise_on_missing=False) if opp_full_api else None,
         opponent_win_streak      = json_get(opp_full_api,   JSON_CLAN_DATA.WIN_STREAK,           raise_on_missing=False) if opp_full_api else None,
+        war_log_public           = json_get(clan_full_api,  JSON_CLAN_DATA.WAR_LOG_PUBLIC,       raise_on_missing=False) if clan_full_api else None,
+        opponent_war_log_public  = json_get(opp_full_api,   JSON_CLAN_DATA.WAR_LOG_PUBLIC,       raise_on_missing=False) if opp_full_api else None,
         clan_stars               = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_STARS,           default=0,   raise_on_missing=False),
         clan_attacks             = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_ATTACKS,         default=0,   raise_on_missing=False),
         clan_destruction_pct     = json_get(clan_data, JSON_CLAN_WAR_DATA.SIDE_DESTRUCTION_PCT, default=0.0, raise_on_missing=False),
@@ -427,6 +429,8 @@ def db_clan_war_update(existing: ClanWar, updated: ClanWar):
     existing.opponent_stars           = updated.opponent_stars
     existing.opponent_attacks         = updated.opponent_attacks
     existing.opponent_destruction_pct = updated.opponent_destruction_pct
+    if updated.war_log_public          is not None: existing.war_log_public          = updated.war_log_public
+    if updated.opponent_war_log_public is not None: existing.opponent_war_log_public = updated.opponent_war_log_public
     logging.debug(f"Updated clan war {existing.start_time}")
     return existing
 
@@ -487,6 +491,8 @@ def create_db_cwl_war(season_id: int, round_number: int, war_tag: str, war_data:
         opp_stars            = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_STARS,       default=0, raise_on_missing=False) or 0,
         opp_attacks          = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_ATTACKS,     default=0, raise_on_missing=False) or 0,
         opp_destruction_pct  = json_get(opp,  JSON_CWL_WAR_DATA.SIDE_DESTRUCTION, default=0.0, raise_on_missing=False) or 0.0,
+        war_log_public           = json_get(clan_api, JSON_CLAN_DATA.WAR_LOG_PUBLIC, raise_on_missing=False) if clan_api else None,
+        opponent_war_log_public  = json_get(opp_api,  JSON_CLAN_DATA.WAR_LOG_PUBLIC, raise_on_missing=False) if opp_api else None,
     )
 
 def db_cwl_war_update(existing: CWLWar, war_data: dict):

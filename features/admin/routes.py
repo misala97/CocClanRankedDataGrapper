@@ -304,6 +304,8 @@ def admin_cwl_bonus_list():
         members=[{
             'tag':  p.tag,
             'name': p.name or p.tag,
+            'ranked_league': p.league_tier,
+            'league': p.league_tier,
             'by_month': {
                 m: {
                     'has_bonus':   (p.tag, m) in bonus_set,

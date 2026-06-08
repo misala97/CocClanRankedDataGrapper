@@ -555,6 +555,7 @@
                                 <tr style="background:var(--surf2);">
                                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">#</th>
                                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
+                                    <th class="sortable" data-col="league" data-type="league" onclick="sortWarRoster(this)" style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;cursor:pointer;">League <span class="sort-icon">⇅</span></th>
                                     <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">TH</th>
                                     <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">War Act.</th>
                                     <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Verdict</th>
@@ -574,6 +575,7 @@
                             <thead>
                                 <tr style="background:var(--surf2);">
                                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
+                                    <th class="sortable" data-col="league" data-type="league" onclick="sortWarRoster(this)" style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;cursor:pointer;">League <span class="sort-icon">⇅</span></th>
                                     <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">TH</th>
                                     <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">War Act.</th>
                                     <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Verdict</th>
@@ -1341,11 +1343,12 @@ function renderCWLBonus(data) {
             return starCell + atkCell + bonusCell;
         }).join('');
 
-        return `<tr data-name="${(p.name||'').toLowerCase()}" data-tag="${p.tag.toLowerCase()}" style="border-bottom:1px solid var(--bord2);">
-            <td style="padding:8px 14px;white-space:nowrap;">
+        return `<tr data-name="${(p.name||'').toLowerCase()}" data-tag="${p.tag.toLowerCase()}" data-league="${(p.ranked_league||p.league||'').toLowerCase()}" style="border-bottom:1px solid var(--bord2);">
+                <td style="padding:8px 14px;white-space:nowrap;">
                 <div style="font-weight:600;font-size:13px;">${p.name}</div>
                 <div style="font-size:10px;color:var(--muted);margin-top:1px;">${p.tag}</div>
             </td>
+                <td style="padding:8px 10px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${p.ranked_league||p.league||'—'}</td>
             ${cells}
         </tr>`;
     }).join('');
@@ -1358,6 +1361,7 @@ function renderCWLBonus(data) {
             <thead>
                 <tr>
                     <th rowspan="2" style="vertical-align:middle;padding:8px 14px;">Player</th>
+                    <th rowspan="2" class="sortable" data-col="league" data-type="league" onclick="sortCwlBonus(this)" style="vertical-align:middle;padding:8px 10px;text-align:center;cursor:pointer;">League <span class="sort-icon">⇅</span></th>
                     ${h1}
                 </tr>
                 <tr>${h2}</tr>
@@ -1505,9 +1509,10 @@ function renderWarRoster(roster, bench) {
     document.getElementById('cwl-bench-count').textContent  = `(${bench.length})`;
 
     rTbody.innerHTML = roster.map((p, i) => `
-        <tr style="border-bottom:1px solid var(--bord2);">
+        <tr data-league="${(p.ranked_league||p.league||'').toLowerCase()}" data-th="${p.th}" data-waract="${p.war_score}" data-verdict="${p.verdict}" style="border-bottom:1px solid var(--bord2);">
             <td style="padding:9px 12px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);">${i+1}</td>
             <td style="padding:9px 12px;font-weight:600;">${p.name}</td>
+            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${p.ranked_league||p.league||'—'}</td>
             <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);">TH${p.th}</td>
             <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:${_scoreColor(p.war_score)};">${p.war_score}</td>
             <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:${_scoreColor(p.verdict)};">${p.verdict}</td>
@@ -1515,12 +1520,71 @@ function renderWarRoster(roster, bench) {
         </tr>`).join('');
 
     bTbody.innerHTML = bench.map(p => `
-        <tr style="border-bottom:1px solid var(--bord2);opacity:.6;">
+        <tr data-league="${(p.ranked_league||p.league||'').toLowerCase()}" data-th="${p.th}" data-waract="${p.war_score}" data-verdict="${p.verdict}" style="border-bottom:1px solid var(--bord2);opacity:.6;">
             <td style="padding:9px 12px;font-weight:500;">${p.name}</td>
+            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${p.ranked_league||p.league||'—'}</td>
             <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);">TH${p.th}</td>
             <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:${_scoreColor(p.war_score)};">${p.war_score}</td>
             <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:${_scoreColor(p.verdict)};">${p.verdict}</td>
         </tr>`).join('');
+}
+
+// ── War roster table sorting (by data-col) ─────────────────────────────────
+const _warTableSort = { 'war-roster-table': { col: null, asc: true }, 'cwl-bench-table': { col: null, asc: true }, 'cwl-bonus-table': { col: null, asc: true } };
+
+function leagueSortKey(tier) {
+    if (!tier) return 0;
+    const t = ('' + tier).trim().toLowerCase();
+    if (t === 'unranked' || t === 'unknown league') return 0;
+    if (/ iii$/.test(t)) return 34;
+    if (/ ii$/.test(t)) return 35;
+    if (/ i$/.test(t)) return 36;
+    const m = t.match(/(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+}
+
+function sortWarRoster(th) {
+    const col = th.dataset.col;
+    const type = th.dataset.type || 'str';
+    sortTableByCol('war-roster-table', col, type);
+    sortTableByCol('cwl-bench-table', col, type);
+    // update header indicators
+    document.querySelectorAll('#war-roster-table th.sortable, #cwl-bench-table th.sortable, #cwl-bonus-table th.sortable').forEach(el => {
+        el.querySelector('.sort-icon') && (el.querySelector('.sort-icon').textContent = (el.dataset.col === col) ? (_warTableSort['war-roster-table'].asc ? '▲' : '▼') : '⇅');
+    });
+}
+
+function sortCwlBonus(th) {
+    const col = th.dataset.col;
+    const type = th.dataset.type || 'str';
+    sortTableByCol('cwl-bonus-table', col, type);
+    document.querySelectorAll('#cwl-bonus-table th.sortable').forEach(el => {
+        el.querySelector('.sort-icon') && (el.querySelector('.sort-icon').textContent = (el.dataset.col === col) ? (_warTableSort['cwl-bonus-table'].asc ? '▲' : '▼') : '⇅');
+    });
+}
+
+function sortTableByCol(tableId, col, type) {
+    const state = _warTableSort[tableId] || { col: null, asc: true };
+    state.asc = (state.col === col) ? !state.asc : true;
+    state.col = col;
+    _warTableSort[tableId] = state;
+
+    const tbody = document.getElementById(tableId)?.querySelector('tbody');
+    if (!tbody) return;
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+        let av = (a.dataset[col] !== undefined) ? a.dataset[col] : (a.cells && a.cells.length ? a.cells[Array.from(a.parentNode.parentNode.querySelectorAll('th')).findIndex(h=>h.dataset.col===col)].textContent : '');
+        let bv = (b.dataset[col] !== undefined) ? b.dataset[col] : (b.cells && b.cells.length ? b.cells[Array.from(b.parentNode.parentNode.querySelectorAll('th')).findIndex(h=>h.dataset.col===col)].textContent : '');
+        if (type === 'num') { av = parseFloat(av)||0; bv = parseFloat(bv)||0; }
+        else if (type === 'league') { av = leagueSortKey(av); bv = leagueSortKey(bv); }
+        else { av = (av||'').toString().toLowerCase(); bv = (bv||'').toString().toLowerCase(); }
+        if (av < bv) return state.asc ? -1 : 1;
+        if (av > bv) return state.asc ? 1 : -1;
+        return 0;
+    });
+    // re-append rows
+    tbody.innerHTML = '';
+    rows.forEach(r => tbody.appendChild(r));
 }
 </script>
 

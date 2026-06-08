@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import CWLSeason, CWLClan, CWLClanMember, CWLWar, CWLMember, CWLAttack
-from features.war.war_combos import classify_attack, get_war_verdict
+from features.war.war_combos import classify_attack, get_war_verdict, get_cwl_verdict
 from features.auth.routes import _can_edit_clan_war
 from services.helpers import league_rank, avg_league_name, SKIP_LEAGUES
 
@@ -121,8 +121,37 @@ def _build_war_detail(war, our_tag):
             while len(labels) < 1:
                 labels.append('no_attack')
 
-            score, verdict_label, badge = get_war_verdict(labels[0], labels[1] if len(labels) > 1 else 'no_attack')
+            # For CWL, use single-attack verdict based on TH matchup expectation
+            if atk_list:
+                atk = atk_list[0]
+                dfn = member_by_tag.get(atk.defender_tag)
+                dfn_th = (dfn.town_hall_level or 0) if dfn else atk_th
+                dfn_is_rushed = dfn.is_rushed if dfn else False
+                dfn_is_troll = dfn.is_troll if dfn else False
+                score, verdict_label, badge = get_cwl_verdict(
+                    atk.stars or 0,
+                    atk_th,
+                    dfn_th,
+                    atk.destruction_pct or 0,
+                    dfn_is_rushed,
+                    dfn_is_troll
+                )
+                # Calculate expected stars for display
+                th_diff = dfn_th - atk_th
+                if dfn_is_rushed or dfn_is_troll:
+                    th_diff = max(th_diff - 1, 0)
+                if th_diff <= 0:
+                    expected = 3.0
+                elif th_diff == 1:
+                    expected = 2.0
+                else:
+                    expected = 1.0
+            else:
+                score, verdict_label, badge = 0, 'No Attack', 'badge-suck'
+                expected = 0.0
+            
             war_verdicts.append({
+                'round_number':   war.round_number,
                 'player_name':    m.player_name or m.player_tag,
                 'player_tag':     m.player_tag,
                 'player_th':      atk_th,
@@ -134,6 +163,7 @@ def _build_war_detail(war, our_tag):
                 'badge':          badge,
                 'label':          verdict_label,
                 'atk_labels':     labels,
+                'expected_stars': round(expected, 1),
             })
         war_verdicts.sort(key=lambda x: -x['score'])
 
@@ -177,6 +207,7 @@ def _build_war_detail(war, our_tag):
         'our_wars_won':     war.clan_wars_won      if our_side else war.opp_wars_won,
         'our_war_frequency':war.clan_war_frequency if our_side else war.opp_war_frequency,
         'our_win_streak':   war.clan_win_streak    if our_side else war.opp_win_streak,
+        'our_war_log_public': war.war_log_public        if our_side else war.opponent_war_log_public,
         'opp_clan_tag':     war.opp_tag     if our_side else war.clan_tag,
         'opp_clan_name':    war.opp_name    if our_side else war.clan_name,
         'opp_clan_badge':   war.opp_badge   if our_side else war.clan_badge,
@@ -190,6 +221,7 @@ def _build_war_detail(war, our_tag):
         'opp_wars_won':     war.opp_wars_won       if our_side else war.clan_wars_won,
         'opp_war_frequency':war.opp_war_frequency  if our_side else war.clan_war_frequency,
         'opp_win_streak':   war.opp_win_streak     if our_side else war.clan_win_streak,
+        'opp_war_log_public': war.opponent_war_log_public if our_side else war.war_log_public,
         'members_our':      members_our,
         'members_opp':      members_opp,
         'members_our_json': members_our_json,
@@ -254,6 +286,8 @@ def cwl_page():
             'top15_league_lr':    league_rank(top15_al) if top15_al else 0,
             'top15_unranked':     sum(1 for m in top15 if m.ranked_league in SKIP_LEAGUES),
             'active_members':     {},  # filled below after wars are processed
+            'last_rounds':        {},
+            'war_round_count':    0,
         }
 
     # ── Standings ─────────────────────────────────────────────────────────────
@@ -338,6 +372,10 @@ def cwl_page():
     for war in wars:
         if war.state not in ('inWar', 'warEnded'):
             continue
+        for tag in (war.clan_tag, war.opp_tag):
+            r = clan_rosters.get(tag)
+            if r is not None:
+                r['war_round_count'] += 1
         attack_counts = {}
         for a in war.attacks:
             attack_counts[a.attacker_tag] = attack_counts.get(a.attacker_tag, 0) + 1
@@ -346,15 +384,20 @@ def cwl_page():
             if r is None:
                 continue
             tag = member.player_tag
+            if tag not in r['last_rounds'] or (war.round_number or 0) > r['last_rounds'][tag]:
+                r['last_rounds'][tag] = war.round_number
             if tag not in r['active_members']:
                 r['active_members'][tag] = {
                     'th': member.town_hall_level or 0,
                     'league': member.ranked_league,
                     'wars_selected': 0,
                     'attacks_done': 0,
+                    'selected_in_current': False,
                 }
             r['active_members'][tag]['wars_selected'] += 1
             r['active_members'][tag]['attacks_done'] += attack_counts.get(tag, 0)
+            if war.state == 'inWar':
+                r['active_members'][tag]['selected_in_current'] = True
 
     for r in clan_rosters.values():
         active = r['active_members']
@@ -433,6 +476,7 @@ def cwl_page():
                     'stars': 0, 'destruction': 0.0,
                     'zero_stars': 0, 'one_stars': 0, 'two_stars': 0, 'three_stars': 0,
                     'verdict_scores': [],
+                    'daily_details': [],
                 }
             p = _perf[tag]
             p['wars'] += 1
@@ -446,6 +490,17 @@ def cwl_page():
                 elif s == 1: p['one_stars']   += 1
                 else:        p['zero_stars']  += 1
             p['verdict_scores'].append(v['score'])
+            p['daily_details'].append({
+                'round':          v.get('round_number') or 0,
+                'score':          v['score'],
+                'label':          v['label'],
+                'badge':          v['badge'],
+                'stars':          v['attack_details'][0]['stars'] if v['attack_details'] else 0,
+                'expected_stars': v.get('expected_stars', 0),
+                'pct':            v['attack_details'][0]['pct'] if v['attack_details'] else 0,
+                'defender_name':  v['attack_details'][0]['defender_name'] if v['attack_details'] else '',
+                'defender_th':    v['attack_details'][0]['defender_th'] if v['attack_details'] else 0,
+            })
 
     our_player_perf = []
     for p in _perf.values():
@@ -467,6 +522,7 @@ def cwl_page():
             'one_stars':       p['one_stars'],
             'two_stars':       p['two_stars'],
             'three_stars':     p['three_stars'],
+            'daily_details':   p['daily_details'],
         })
     our_player_perf.sort(key=lambda p: (-p['avg_stars'], -p['wars']))
 
@@ -724,10 +780,23 @@ def cwl_stats_page():
                 elif stars == 1: ps['one_stars']   += 1
                 else:            ps['zero_stars']  += 1
 
-            lbl1 = classify_attack(atk_list[0].stars or 0, atk_th,
-                                   (member_by_tag.get(atk_list[0].defender_tag) or member).town_hall_level or atk_th,
-                                   False, False) if atk_list else 'no_attack'
-            score, _, _ = get_war_verdict(lbl1, 'no_attack')
+            # For CWL stats, use single-attack verdict based on TH matchup
+            if atk_list:
+                atk = atk_list[0]
+                dfn = member_by_tag.get(atk.defender_tag)
+                dfn_th = (dfn.town_hall_level or 0) if dfn else atk_th
+                dfn_is_rushed = dfn.is_rushed if dfn else False
+                dfn_is_troll = dfn.is_troll if dfn else False
+                score, _, _ = get_cwl_verdict(
+                    atk.stars or 0,
+                    atk_th,
+                    dfn_th,
+                    atk.destruction_pct or 0,
+                    dfn_is_rushed,
+                    dfn_is_troll
+                )
+            else:
+                score = 0
             ps['verdict_scores'].append(score)
 
     all_szn_ids = [s['season_id'] for s in seasons_data]

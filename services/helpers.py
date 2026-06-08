@@ -107,9 +107,10 @@ class JSON_CLAN_DATA:
     BADGE_LARGE   = JSONPath("badgeUrls.large")
     WAR_LEAGUE    = JSONPath("warLeague.name")
     LOCATION      = JSONPath("location.name")
-    WAR_WINS      = JSONPath("warWins")
-    WAR_FREQUENCY = JSONPath("warFrequency")
-    WIN_STREAK    = JSONPath("warWinStreak")
+    WAR_WINS       = JSONPath("warWins")
+    WAR_FREQUENCY  = JSONPath("warFrequency")
+    WIN_STREAK     = JSONPath("warWinStreak")
+    WAR_LOG_PUBLIC = JSONPath("isWarLogPublic")
 
 
 class JSON_BATTLE_LOG_DATA:

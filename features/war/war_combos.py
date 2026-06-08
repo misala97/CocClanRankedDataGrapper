@@ -91,3 +91,73 @@ def get_war_verdict(label_a, label_b):
         badge = 'badge-suck'
 
     return score, label, badge
+
+
+def get_cwl_verdict(stars, attacker_th, defender_th, destruction_pct=0, defender_is_rushed=False, defender_is_troll=False):
+    """
+    Evaluate CWL performance based on expected vs actual performance.
+    
+    Expectation logic:
+    - 3 stars always expected against same TH or lower
+    - 2 stars always expected against anyone
+    - Against +1 TH: 3 stars is really good (unless defender is rushed/trolled, then treat as same TH)
+    - Against +2+ TH: 3 stars is amazing (unless defender is rushed/trolled, then treat as +1 TH)
+    
+    Returns (score_0_to_100, verdict_label, badge_class)
+    """
+    th_diff = defender_th - attacker_th  # positive = attacking up
+    is_weak_target = defender_is_rushed or defender_is_troll
+    
+    # Adjust th_diff if target is weak (rushed/trolled)
+    if is_weak_target:
+        th_diff = max(th_diff - 1, 0)  # reduce difficulty by 1
+    
+    # If no attack, score is 0
+    if stars == 0:
+        return 0, 'No Attack', 'badge-suck'
+    
+    # Calculate expected stars based on adjusted TH difference
+    if th_diff <= 0:  # same or lower TH
+        expected_stars = 3.0  # 3 stars expected
+    elif th_diff == 1:  # up 1 TH
+        expected_stars = 2.0  # 2 stars expected, 3 is really good
+    else:  # th_diff >= 2, up 2+ TH
+        expected_stars = 1.0  # 2 stars is bonus, 3 is amazing
+    
+    # Calculate performance delta
+    delta = stars - expected_stars
+
+    # 1 star is never acceptable in CWL, even against a +2+ target.
+    if stars == 1:
+        if expected_stars == 3.0:
+            score, label = 10, 'Poor'
+            badge = 'badge-warning'
+        else:
+            score, label = 25, 'Below Expected'
+            badge = 'badge-warning'
+        return score, label, badge
+    
+    # Map delta to score and label
+    if delta >= 2.0:
+        score, label = 100, 'Godlike'
+        badge = 'badge-godlike'
+    elif delta >= 1.0:
+        score, label = 85, 'Dominant'
+        badge = 'badge-dominant'
+    elif delta >= 0.5:
+        score, label = 75, 'Excellent'
+        badge = 'badge-wow'
+    elif delta >= 0.0:
+        score, label = 55, 'Solid'
+        badge = 'badge-good'
+    elif delta >= -0.5:
+        score, label = 40, 'Good'
+        badge = 'badge-good'
+    elif delta >= -1.0:
+        score, label = 25, 'Below Expected'
+        badge = 'badge-warning'
+    else:
+        score, label = 10, 'Poor'
+        badge = 'badge-warning'
+    
+    return score, label, badge
