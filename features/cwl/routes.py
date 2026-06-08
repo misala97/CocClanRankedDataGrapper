@@ -2,7 +2,7 @@ import calendar as _cal
 import datetime as dt
 
 from flask import Blueprint, render_template, request, jsonify
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, aliased
 
 from extensions import db
 from models import CWLSeason, CWLClan, CWLClanMember, CWLWar, CWLMember, CWLAttack
@@ -77,11 +77,13 @@ def _build_war_detail(war, our_tag):
 
     members_our_json = [{'th': m.town_hall_level or 0, 'name': m.player_name or '',
                          'pos': m.map_position or 0, 'league': m.ranked_league or '',
-                         'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0}
+                         'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0,
+                         'tag': m.player_tag or ''}
                         for m in members_our]
     members_opp_json = [{'th': m.town_hall_level or 0, 'name': m.player_name or '',
                          'pos': m.map_position or 0, 'league': m.ranked_league or '',
-                         'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0}
+                         'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0,
+                         'tag': m.player_tag or ''}
                         for m in members_opp]
 
     war_verdicts = []
@@ -526,6 +528,41 @@ def cwl_page():
         })
     our_player_perf.sort(key=lambda p: (-p['avg_stars'], -p['wars']))
 
+    # ── All-time per-player attack history by TH matchup (all CWL seasons) ────
+    _AttM = aliased(CWLMember)
+    _DefM = aliased(CWLMember)
+    _hist = (
+        db.session.query(
+            CWLAttack.attacker_tag,
+            _AttM.player_name,
+            _AttM.town_hall_level.label('atk_th'),
+            _DefM.town_hall_level.label('def_th'),
+            CWLAttack.stars,
+        )
+        .join(CWLWar, CWLAttack.war_id == CWLWar.id)
+        .join(_AttM, db.and_(
+            _AttM.war_id == CWLAttack.war_id,
+            _AttM.player_tag == CWLAttack.attacker_tag,
+            _AttM.clan_tag == our_tag,
+        ))
+        .join(_DefM, db.and_(
+            _DefM.war_id == CWLAttack.war_id,
+            _DefM.player_tag == CWLAttack.defender_tag,
+        ))
+        .filter(CWLWar.state.in_(['inWar', 'warEnded']))
+        .all()
+    )
+    player_all_time_perf = {}
+    for row in _hist:
+        ptag = row.attacker_tag
+        if ptag not in player_all_time_perf:
+            player_all_time_perf[ptag] = {'name': row.player_name or '', 'by_matchup': {}}
+        key = f"{row.atk_th or 0}_{row.def_th or 0}"
+        if key not in player_all_time_perf[ptag]['by_matchup']:
+            player_all_time_perf[ptag]['by_matchup'][key] = [0, 0, 0, 0]
+        s = max(0, min(3, int(row.stars or 0)))
+        player_all_time_perf[ptag]['by_matchup'][key][s] += 1
+
     # ── Clans we already fought this season ───────────────────────────────────
     fought_clans = {
         detail['opp_clan_tag']: {'round': rn, 'result': detail['result'], 'state': detail['war'].state}
@@ -576,6 +613,7 @@ def cwl_page():
         standings=sorted_standings,
         sorted_rounds=sorted_rounds,
         our_player_perf=our_player_perf,
+        player_all_time_perf=player_all_time_perf,
         now=dt.datetime.now(dt.timezone.utc),
         league_rank=league_rank,
     )
