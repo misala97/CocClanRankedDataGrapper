@@ -543,7 +543,6 @@ def cwl_page():
         .join(_AttM, db.and_(
             _AttM.war_id == CWLAttack.war_id,
             _AttM.player_tag == CWLAttack.attacker_tag,
-            _AttM.clan_tag == our_tag,
         ))
         .join(_DefM, db.and_(
             _DefM.war_id == CWLAttack.war_id,
