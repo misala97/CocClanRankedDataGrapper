@@ -35,7 +35,7 @@ def _war_result(war, our_tag):
     return 'draw'
 
 
-def _build_war_detail(war, our_tag):
+def _build_war_detail(war, our_tag, matchup_rates=None):
     """Build the member/attack/verdict data for one CWL war, mirroring clan war page logic."""
     members_our = sorted([m for m in war.members if m.clan_tag == our_tag],  key=lambda m: m.map_position or 999)
     members_opp = sorted([m for m in war.members if m.clan_tag != our_tag],  key=lambda m: m.map_position or 999)
@@ -60,6 +60,12 @@ def _build_war_detail(war, our_tag):
         already_3star      = any(x.stars >= 3 for x in prior)
         partially_attacked = len(prior) > 0 and not already_3star
         label = classify_attack(int(a.stars or 0), atk_th, dfn_th, already_3star, partially_attacked) if atk_th and dfn_th else 'unknown'
+        dfn_is_rushed = dfn.is_rushed if dfn else False
+        dfn_is_troll  = dfn.is_troll  if dfn else False
+        lookup_dfn = max(dfn_th - 1, atk_th) if (dfn_is_rushed or dfn_is_troll) else dfn_th
+        rates = (matchup_rates or {}).get(f"{atk_th}_{lookup_dfn}")
+        atk_matchup_avg = round(sum(i * p for i, p in enumerate(rates)), 2) if rates else None
+        v_score, v_label, v_badge = get_cwl_verdict(int(a.stars or 0), atk_matchup_avg)
         all_attacks_json.append({
             'order':         int(a.attack_order or 0),
             'attacker_name': atk.player_name or '?' if atk else '?',
@@ -72,6 +78,9 @@ def _build_war_detail(war, our_tag):
             'stars':         int(a.stars or 0),
             'pct':           int(a.destruction_pct or 0),
             'label':         label,
+            'v_score':       v_score,
+            'v_label':       v_label,
+            'v_badge':       v_badge,
         })
 
 
@@ -123,35 +132,24 @@ def _build_war_detail(war, our_tag):
             while len(labels) < 1:
                 labels.append('no_attack')
 
-            # For CWL, use single-attack verdict based on TH matchup expectation
+            # For CWL, use single-attack verdict scored against matchup average
             if atk_list:
                 atk = atk_list[0]
                 dfn = member_by_tag.get(atk.defender_tag)
                 dfn_th = (dfn.town_hall_level or 0) if dfn else atk_th
                 dfn_is_rushed = dfn.is_rushed if dfn else False
                 dfn_is_troll = dfn.is_troll if dfn else False
-                score, verdict_label, badge = get_cwl_verdict(
-                    atk.stars or 0,
-                    atk_th,
-                    dfn_th,
-                    atk.destruction_pct or 0,
-                    dfn_is_rushed,
-                    dfn_is_troll
-                )
-                # Calculate expected stars for display
-                th_diff = dfn_th - atk_th
-                if dfn_is_rushed or dfn_is_troll:
-                    th_diff = max(th_diff - 1, 0)
-                if th_diff <= 0:
-                    expected = 3.0
-                elif th_diff == 1:
-                    expected = 2.0
-                else:
-                    expected = 1.0
+                # If defender is rushed/troll, look up rates for one TH lower
+                lookup_dfn = max(dfn_th - 1, atk_th) if (dfn_is_rushed or dfn_is_troll) else dfn_th
+                rates = (matchup_rates or {}).get(f"{atk_th}_{lookup_dfn}")
+                matchup_avg = round(sum(i * p for i, p in enumerate(rates)), 2) if rates else None
+                score, verdict_label, badge = get_cwl_verdict(atk.stars or 0, matchup_avg)
+                atk_stars = int(atk.stars or 0)
             else:
                 score, verdict_label, badge = 0, 'No Attack', 'badge-suck'
-                expected = 0.0
-            
+                matchup_avg = None
+                atk_stars = 0
+
             war_verdicts.append({
                 'round_number':   war.round_number,
                 'player_name':    m.player_name or m.player_tag,
@@ -165,7 +163,8 @@ def _build_war_detail(war, our_tag):
                 'badge':          badge,
                 'label':          verdict_label,
                 'atk_labels':     labels,
-                'expected_stars': round(expected, 1),
+                'atk_stars':      atk_stars,
+                'matchup_avg':    matchup_avg,
             })
         war_verdicts.sort(key=lambda x: -x['score'])
 
@@ -289,6 +288,7 @@ def cwl_page():
             'top15_unranked':     sum(1 for m in top15 if m.ranked_league in SKIP_LEAGUES),
             'active_members':     {},  # filled below after wars are processed
             'last_rounds':        {},
+            'first_rounds':       {},
             'war_round_count':    0,
         }
 
@@ -388,6 +388,8 @@ def cwl_page():
             tag = member.player_tag
             if tag not in r['last_rounds'] or (war.round_number or 0) > r['last_rounds'][tag]:
                 r['last_rounds'][tag] = war.round_number
+            if tag not in r['first_rounds'] or (war.round_number or 0) < r['first_rounds'][tag]:
+                r['first_rounds'][tag] = war.round_number
             if tag not in r['active_members']:
                 r['active_members'][tag] = {
                     'th': member.town_hall_level or 0,
@@ -456,12 +458,49 @@ def cwl_page():
         elif war.state == 'preparation' and not tomorrow_enemy_tag:
             tomorrow_enemy_tag = opp
 
+    # ── Global TH matchup rates (used for scoring verdicts) ──────────────────
+    _GAttM = aliased(CWLMember)
+    _GDefM = aliased(CWLMember)
+    _global_hist = (
+        db.session.query(
+            _GAttM.town_hall_level.label('atk_th'),
+            _GDefM.town_hall_level.label('def_th'),
+            CWLAttack.stars,
+            db.func.count(CWLAttack.id).label('cnt'),
+        )
+        .join(CWLWar, CWLAttack.war_id == CWLWar.id)
+        .join(_GAttM, db.and_(
+            _GAttM.war_id == CWLAttack.war_id,
+            _GAttM.player_tag == CWLAttack.attacker_tag,
+        ))
+        .join(_GDefM, db.and_(
+            _GDefM.war_id == CWLAttack.war_id,
+            _GDefM.player_tag == CWLAttack.defender_tag,
+        ))
+        .filter(CWLWar.state.in_(['inWar', 'warEnded']))
+        .group_by(_GAttM.town_hall_level, _GDefM.town_hall_level, CWLAttack.stars)
+        .all()
+    )
+    _raw = {}
+    for row in _global_hist:
+        key = f"{row.atk_th or 0}_{row.def_th or 0}"
+        if key not in _raw:
+            _raw[key] = [0, 0, 0, 0]
+        s = max(0, min(3, int(row.stars or 0)))
+        _raw[key][s] += row.cnt
+    th_matchup_rates = {
+        k: [c / sum(v) for c in v]
+        for k, v in _raw.items()
+        if sum(v) >= 5
+    }
+    th_matchup_counts = {k: sum(v) for k, v in _raw.items() if sum(v) >= 5}
+
     # ── Per-round war details (our clan only) ─────────────────────────────────
     rounds = {}
     for war in wars:
         if war.clan_tag != our_tag and war.opp_tag != our_tag:
             continue
-        detail = _build_war_detail(war, our_tag)
+        detail = _build_war_detail(war, our_tag, matchup_rates=th_matchup_rates)
         rounds[war.round_number] = detail
 
     sorted_rounds = sorted(rounds.items())
@@ -493,15 +532,15 @@ def cwl_page():
                 else:        p['zero_stars']  += 1
             p['verdict_scores'].append(v['score'])
             p['daily_details'].append({
-                'round':          v.get('round_number') or 0,
-                'score':          v['score'],
-                'label':          v['label'],
-                'badge':          v['badge'],
-                'stars':          v['attack_details'][0]['stars'] if v['attack_details'] else 0,
-                'expected_stars': v.get('expected_stars', 0),
-                'pct':            v['attack_details'][0]['pct'] if v['attack_details'] else 0,
-                'defender_name':  v['attack_details'][0]['defender_name'] if v['attack_details'] else '',
-                'defender_th':    v['attack_details'][0]['defender_th'] if v['attack_details'] else 0,
+                'round':         v.get('round_number') or 0,
+                'score':         v['score'],
+                'label':         v['label'],
+                'badge':         v['badge'],
+                'stars':         v['attack_details'][0]['stars'] if v['attack_details'] else 0,
+                'matchup_avg':   v.get('matchup_avg'),
+                'pct':           v['attack_details'][0]['pct'] if v['attack_details'] else 0,
+                'defender_name': v['attack_details'][0]['defender_name'] if v['attack_details'] else '',
+                'defender_th':   v['attack_details'][0]['defender_th'] if v['attack_details'] else 0,
             })
 
     our_player_perf = []
@@ -562,42 +601,6 @@ def cwl_page():
         s = max(0, min(3, int(row.stars or 0)))
         player_all_time_perf[ptag]['by_matchup'][key][s] += 1
 
-    # ── Global TH matchup rates across all clans/seasons (fallback model) ────
-    _GAttM = aliased(CWLMember)
-    _GDefM = aliased(CWLMember)
-    _global_hist = (
-        db.session.query(
-            _GAttM.town_hall_level.label('atk_th'),
-            _GDefM.town_hall_level.label('def_th'),
-            CWLAttack.stars,
-            db.func.count(CWLAttack.id).label('cnt'),
-        )
-        .join(CWLWar, CWLAttack.war_id == CWLWar.id)
-        .join(_GAttM, db.and_(
-            _GAttM.war_id == CWLAttack.war_id,
-            _GAttM.player_tag == CWLAttack.attacker_tag,
-        ))
-        .join(_GDefM, db.and_(
-            _GDefM.war_id == CWLAttack.war_id,
-            _GDefM.player_tag == CWLAttack.defender_tag,
-        ))
-        .filter(CWLWar.state.in_(['inWar', 'warEnded']))
-        .group_by(_GAttM.town_hall_level, _GDefM.town_hall_level, CWLAttack.stars)
-        .all()
-    )
-    _raw = {}
-    for row in _global_hist:
-        key = f"{row.atk_th or 0}_{row.def_th or 0}"
-        if key not in _raw:
-            _raw[key] = [0, 0, 0, 0]
-        s = max(0, min(3, int(row.stars or 0)))
-        _raw[key][s] += row.cnt
-    th_matchup_rates = {
-        k: [c / sum(v) for c in v]
-        for k, v in _raw.items()
-        if sum(v) >= 5
-    }
-
     # ── Clans we already fought this season ───────────────────────────────────
     fought_clans = {
         detail['opp_clan_tag']: {'round': rn, 'result': detail['result'], 'state': detail['war'].state}
@@ -650,6 +653,7 @@ def cwl_page():
         our_player_perf=our_player_perf,
         player_all_time_perf=player_all_time_perf,
         th_matchup_rates=th_matchup_rates,
+        th_matchup_counts=th_matchup_counts,
         now=dt.datetime.now(dt.timezone.utc),
         league_rank=league_rank,
     )
@@ -694,6 +698,28 @@ def cwl_stats_page():
     our_ended_wars = [w for w in all_wars
                       if (w.clan_tag == our_tag or w.opp_tag == our_tag)
                       and w.state == 'warEnded']
+
+    # ── Global TH matchup rates for verdict scoring ───────────────────────────
+    _SAttM = aliased(CWLMember)
+    _SDefM = aliased(CWLMember)
+    _sraw = {}
+    for row in (
+        db.session.query(
+            _SAttM.town_hall_level.label('atk_th'),
+            _SDefM.town_hall_level.label('def_th'),
+            CWLAttack.stars,
+            db.func.count(CWLAttack.id).label('cnt'),
+        )
+        .join(CWLWar, CWLAttack.war_id == CWLWar.id)
+        .join(_SAttM, db.and_(_SAttM.war_id == CWLAttack.war_id, _SAttM.player_tag == CWLAttack.attacker_tag))
+        .join(_SDefM, db.and_(_SDefM.war_id == CWLAttack.war_id, _SDefM.player_tag == CWLAttack.defender_tag))
+        .filter(CWLWar.state.in_(['inWar', 'warEnded']))
+        .group_by(_SAttM.town_hall_level, _SDefM.town_hall_level, CWLAttack.stars)
+        .all()
+    ):
+        k = f"{row.atk_th or 0}_{row.def_th or 0}"
+        _sraw.setdefault(k, [0, 0, 0, 0])[max(0, min(3, int(row.stars or 0)))] += row.cnt
+    stats_matchup_rates = {k: [c / sum(v) for c in v] for k, v in _sraw.items() if sum(v) >= 5}
 
     # ── Per-season summary ────────────────────────────────────────────────────
     seasons_data = []
@@ -854,21 +880,17 @@ def cwl_stats_page():
                 elif stars == 1: ps['one_stars']   += 1
                 else:            ps['zero_stars']  += 1
 
-            # For CWL stats, use single-attack verdict based on TH matchup
+            # For CWL stats, use single-attack verdict scored against matchup average
             if atk_list:
                 atk = atk_list[0]
                 dfn = member_by_tag.get(atk.defender_tag)
                 dfn_th = (dfn.town_hall_level or 0) if dfn else atk_th
                 dfn_is_rushed = dfn.is_rushed if dfn else False
                 dfn_is_troll = dfn.is_troll if dfn else False
-                score, _, _ = get_cwl_verdict(
-                    atk.stars or 0,
-                    atk_th,
-                    dfn_th,
-                    atk.destruction_pct or 0,
-                    dfn_is_rushed,
-                    dfn_is_troll
-                )
+                lookup_dfn = max(dfn_th - 1, atk_th) if (dfn_is_rushed or dfn_is_troll) else dfn_th
+                s_rates = stats_matchup_rates.get(f"{atk_th}_{lookup_dfn}")
+                s_avg = sum(i * p for i, p in enumerate(s_rates)) if s_rates else None
+                score, _, _ = get_cwl_verdict(atk.stars or 0, s_avg)
             else:
                 score = 0
             ps['verdict_scores'].append(score)
