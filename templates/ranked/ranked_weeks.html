@@ -1447,6 +1447,14 @@
 </script>
 {% endif %}
 
+<!-- ── Week Overview Modal ── -->
+<div id="weekOverviewBackdrop" onclick="closeWeekOverview()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;backdrop-filter:blur(4px);"></div>
+<div id="weekOverviewModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(720px,94vw);max-height:88vh;overflow-y:auto;
+    box-shadow:0 28px 72px rgba(0,0,0,0.7);">
+    <div id="weekOverviewContent"></div>
+</div>
+
 <!-- ── Reminder Modal ── -->
 <div id="reminderBackdrop" onclick="closeReminder()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;backdrop-filter:blur(4px);"></div>
 <div id="reminderModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
@@ -1537,7 +1545,155 @@ function copyReminder() {
     });
 }
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeReminder(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeReminder(); closeWeekOverview(); } });
+
+// ── Week Overview ──────────────────────────────────────────────────────────
+function openWeekOverview() {
+    document.getElementById('weekOverviewContent').innerHTML = buildWeekOverviewHTML();
+    document.getElementById('weekOverviewBackdrop').style.display = 'block';
+    document.getElementById('weekOverviewModal').style.display   = 'block';
+}
+
+function closeWeekOverview() {
+    document.getElementById('weekOverviewBackdrop').style.display = 'none';
+    document.getElementById('weekOverviewModal').style.display   = 'none';
+}
+
+function buildWeekOverviewHTML() {
+    const data = (window.weekData || []).filter(p => p.in_clan !== false && p.in_clan !== 0);
+    const active = data.filter(p => p.is_active);
+    const weekLabel = document.querySelector('#week-select option:checked')?.textContent?.trim() || 'Past Week';
+
+    // ── Clan attack stats ──
+    const totalAttUsed = data.reduce((s, p) => s + (p.att_count || 0), 0);
+    const totalAttMax  = data.reduce((s, p) => s + (p.att_max  || 0), 0);
+    const attPct       = totalAttMax > 0 ? Math.round(totalAttUsed / totalAttMax * 100) : 0;
+    const attPctColor  = attPct >= 90 ? 'var(--green)' : attPct >= 70 ? 'var(--accent)' : 'var(--red)';
+
+    const activeWithAtk = active.filter(p => p.att_count > 0);
+    const avgAtk  = activeWithAtk.length ? (activeWithAtk.reduce((s, p) => s + p.att_avg  * p.att_count, 0) / activeWithAtk.reduce((s, p) => s + p.att_count, 0)) : null;
+    const activeWithDef = active.filter(p => p.def_count > 0);
+    const avgDef  = activeWithDef.length ? (activeWithDef.reduce((s, p) => s + p.def_avg  * p.def_count, 0) / activeWithDef.reduce((s, p) => s + p.def_count, 0)) : null;
+    const fullAtt = data.filter(p => p.att_max > 0 && p.att_count === p.att_max).length;
+
+    // ── Rank movements ──
+    const promo   = data.filter(p => p.rank_status === 'up').length;
+    const demote  = data.filter(p => p.rank_status === 'down').length;
+    const neutral = data.filter(p => p.rank_status === 'neutral').length;
+
+    // ── Verdict distribution ──
+    const verdictOrder = [
+        { key: 'badge-godlike',  label: 'Godlike',   color: '#bc8cff' },
+        { key: 'badge-dominant', label: 'Dominant',  color: '#f0a500' },
+        { key: 'badge-wow',      label: 'Very Good', color: '#3fb950' },
+        { key: 'badge-good',     label: 'Good',      color: '#58a6ff' },
+        { key: 'badge-warning',  label: 'Bad',       color: '#e8793a' },
+        { key: 'badge-suck',     label: 'Disaster',  color: '#f85149' },
+        { key: 'badge-useless',  label: 'Useless',   color: '#8b949e' },
+        { key: 'badge-inactive', label: 'Inactive',  color: '#3d4f66' },
+    ];
+    const verdictCounts = verdictOrder.map(v => ({ ...v, count: data.filter(p => p.badge_class === v.key).length })).filter(v => v.count > 0);
+
+    // ── Top 3 performers ──
+    const top3 = [...active].filter(p => p.score_100 > 0).sort((a, b) => b.score_100 - a.score_100).slice(0, 3);
+    const medals = ['🥇', '🥈', '🥉'];
+
+    // ── Missed attacks (active, in-clan players who didn't use all) ──
+    const missed = active.filter(p => p.att_max > 0 && p.att_count < p.att_max)
+        .sort((a, b) => (b.att_max - b.att_count) - (a.att_max - a.att_count));
+
+    // ── Build HTML ──
+    const statCard = (label, val, sub, color = 'var(--text)') => `
+        <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:10px;padding:14px 16px;flex:1;min-width:0;">
+            <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">${label}</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;color:${color};line-height:1.1;">${val}</div>
+            ${sub ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;">${sub}</div>` : ''}
+        </div>`;
+
+    const verdictBar = verdictCounts.map(v => {
+        const pct = Math.round(v.count / data.length * 100);
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:${v.count};">
+            <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:${v.color};">${v.count}</div>
+            <div style="height:18px;width:100%;min-width:8px;background:${v.color};border-radius:3px;opacity:0.85;" title="${v.label}: ${v.count}"></div>
+            <div style="font-size:9px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${v.label}</div>
+        </div>`;
+    }).join('');
+
+    const topRows = top3.map((p, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;${i < top3.length - 1 ? 'border-bottom:1px solid var(--bord2);' : ''}">
+            <span style="font-size:20px;width:28px;text-align:center;">${medals[i]}</span>
+            <div style="flex:1;">
+                <div style="font-weight:600;font-size:13px;">${escapeHTML(p.player_name)}</div>
+                <div style="font-size:11px;color:var(--muted);">${p.league_tier || ''}</div>
+            </div>
+            <span class="judgment ${p.badge_class}" style="font-size:11px;padding:2px 8px;">${escapeHTML((p.judge_label||'').split('(')[0].trim())}</span>
+            <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;color:var(--accent);">${p.score_100}</span>
+        </div>`).join('');
+
+    const missedRows = missed.map(p => {
+        const left = p.att_max - p.att_count;
+        const zoneColor = p.rank_status === 'down' ? 'var(--red)' : p.rank_status === 'up' ? 'var(--green)' : 'var(--muted)';
+        const zoneLabel = p.rank_status === 'down' ? ' · ⚠️ relegation zone' : p.rank_status === 'up' ? ' · 🚀 promotion zone' : '';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bord2);">
+            <span style="font-weight:600;font-size:13px;">${escapeHTML(p.player_name)}</span>
+            <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${zoneColor};">${p.att_count}/${p.att_max} atk${zoneLabel}</span>
+        </div>`;
+    }).join('');
+
+    return `
+        <div style="padding:22px 26px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+            <div>
+                <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;letter-spacing:.5px;">📊 Week Overview</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:3px;">${escapeHTML(weekLabel)}</div>
+            </div>
+            <button onclick="closeWeekOverview()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px 6px;">✕</button>
+        </div>
+
+        <div style="padding:20px 26px;display:flex;flex-direction:column;gap:20px;">
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                ${statCard('Attacks Used', `${totalAttUsed}/${totalAttMax}`, `${attPct}% usage · ${fullAtt} full attendance`, attPctColor)}
+                ${avgAtk != null ? statCard('Clan Avg Attack', avgAtk.toFixed(2) + ' ★', `across ${totalAttUsed} attacks`, attAvgColor(avgAtk)) : ''}
+                ${avgDef != null ? statCard('Clan Avg Defense', avgDef.toFixed(2) + ' ★', `conceded avg`, defAvgColor(avgDef)) : ''}
+            </div>
+
+            <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:10px;padding:14px 16px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;">Rank Movements</div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                    <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--green);">⬆️ ${promo} promoted</span>
+                    <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--muted);">➖ ${neutral} staying</span>
+                    <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--red);">⬇️ ${demote} relegated</span>
+                </div>
+            </div>
+
+            <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:10px;padding:14px 16px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;">Verdict Distribution</div>
+                <div style="display:flex;gap:4px;align-items:flex-end;">${verdictBar}</div>
+            </div>
+
+            ${top3.length ? `
+            <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:10px;padding:14px 16px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Top Performers</div>
+                ${topRows}
+            </div>` : ''}
+
+            ${missed.length ? `
+            <div style="background:rgba(248,81,73,0.05);border:1px solid rgba(248,81,73,0.2);border-radius:10px;padding:14px 16px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">⚠️ Missed Attacks (${missed.length})</div>
+                ${missedRows}
+            </div>` : `
+            <div style="text-align:center;padding:8px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--green);font-size:14px;">✅ Everyone used all their attacks this week!</div>`}
+
+        </div>`;
+}
+
+(function autoOpenWeekOverview() {
+    const sel = document.getElementById('week-select');
+    if (!sel) return;
+    const opt = sel.options[sel.selectedIndex];
+    const isDone = opt && !opt.textContent.trim().startsWith('⭐');
+    if (isDone) openWeekOverview();
+})();
 </script>
 
 </body>
