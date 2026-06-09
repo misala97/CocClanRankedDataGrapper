@@ -406,7 +406,6 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
     # Participants
     max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
                 .filter(CWLMember.war_id.in_(war_ids),
-                        CWLMember.is_opponent == False,
                         CWLMember.clan_tag == CLAN_TAG)
                 .group_by(CWLMember.player_tag).all())
     max_atk_map  = {tag: cnt for tag, cnt in max_rows}
@@ -454,7 +453,7 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
 
     # Sort: eligible first, then by longest without bonus (None = never → oldest date → newest)
     # Tiebreak: more stars first
-    eligible = [p for p in participant_list if not p['has_bonus']]
+    eligible = [p for p in participant_list if not p['has_bonus'] and p['attacks'] >= p['max_attacks']]
     eligible.sort(key=lambda p: (
         p['last_bonus'] or '',   # '' sorts before any YYYY-MM → never bonused first
         -p['stars'],
