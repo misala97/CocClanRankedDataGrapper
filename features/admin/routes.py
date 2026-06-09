@@ -412,15 +412,19 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
     participants = list(max_atk_map.keys())
 
     # Stars + attacks
-    star_rows = (db.session.query(CWLAttack.attacker_tag, func.sum(CWLAttack.stars))
+    perf_rows = (db.session.query(
+                     CWLAttack.attacker_tag,
+                     func.sum(CWLAttack.stars),
+                     func.sum(CWLAttack.destruction_pct),
+                     func.count(CWLAttack.id),
+                 )
                  .filter(CWLAttack.war_id.in_(war_ids), CWLAttack.attacker_tag.in_(participants))
                  .group_by(CWLAttack.attacker_tag).all())
-    stars_map = {tag: int(s or 0) for tag, s in star_rows}
-
-    atk_rows = (db.session.query(CWLAttack.attacker_tag, func.count(CWLAttack.id))
-                .filter(CWLAttack.war_id.in_(war_ids), CWLAttack.attacker_tag.in_(participants))
-                .group_by(CWLAttack.attacker_tag).all())
-    atk_map = {tag: cnt for tag, cnt in atk_rows}
+    stars_map, destruction_map, atk_map = {}, {}, {}
+    for tag, s, d, c in perf_rows:
+        stars_map[tag]       = int(s or 0)
+        destruction_map[tag] = float(d or 0)
+        atk_map[tag]         = c
 
     current_bonuses = {b.player_tag for b in CWLBonus.query.filter_by(month=month).all()}
     player_map      = {p.tag: p.name or p.tag
@@ -444,6 +448,7 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
         'tag':         tag,
         'name':        player_map.get(tag, tag),
         'stars':       stars_map.get(tag, 0),
+        'destruction': round(destruction_map.get(tag, 0), 1),
         'attacks':     atk_map.get(tag, 0),
         'max_attacks': max_atk_map.get(tag, 0),
         'has_bonus':   tag in current_bonuses,
@@ -457,6 +462,7 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
     eligible.sort(key=lambda p: (
         p['last_bonus'] or '',   # '' sorts before any YYYY-MM → never bonused first
         -p['stars'],
+        -p['destruction'],
     ))
 
     already   = len(current_bonuses)

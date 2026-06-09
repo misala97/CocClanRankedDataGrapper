@@ -1514,56 +1514,87 @@ function copyCWLBonusReport(btn) {
     const participants = data.participants || [];
     const available = data.available || 0;
 
-    // Rebuild priority queue exactly as the backend: never-bonused first, then longest wait, tiebreak by stars
+    function fmtMonth(m) {
+        if (!m) return m;
+        const [y, mo] = m.split('-');
+        const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        return `${names[parseInt(mo) - 1]} ${y}`;
+    }
+    function waitDesc(p) {
+        if (!p.last_bonus) return 'never had a bonus';
+        return `${p.months_ago} month${p.months_ago !== 1 ? 's' : ''} without bonus`;
+    }
+
+    // Rebuild priority queue exactly as backend
     const queue = participants
         .filter(p => !p.has_bonus && p.attacks >= p.max_attacks)
         .sort((a, b) => {
             const la = a.last_bonus || '', lb = b.last_bonus || '';
             if (la !== lb) return la < lb ? -1 : 1;
-            return b.stars - a.stars;
+            if (b.stars !== a.stars) return b.stars - a.stars;
+            return (b.destruction || 0) - (a.destruction || 0);
         });
-    const queueRank = {};
-    queue.forEach((p, i) => { queueRank[p.tag] = i + 1; });
 
-    const cutoff = queue[available - 1]; // last player who gets a bonus
-
-    function noReason(p) {
-        if (p.has_bonus) return 'already received this month';
-        if (p.attacks < p.max_attacks) return `missed attack – only ${p.attacks}/${p.max_attacks} attacks done`;
-        const rank = queueRank[p.tag];
-        if (!cutoff) return `rank #${rank}/${queue.length}, no slots left`;
-        const myBonus = p.last_bonus || '', cutoffBonus = cutoff.last_bonus || '';
-        if (myBonus > cutoffBonus) {
-            const ago = p.months_ago != null ? `${p.months_ago}mo ago` : 'never';
-            const cutoffAgo = cutoff.months_ago != null ? `${cutoff.months_ago}mo ago` : 'never';
-            return `rank #${rank}/${queue.length} – others waited longer (you: last bonus ${ago}, cutoff: ${cutoffAgo})`;
-        }
-        if (myBonus === cutoffBonus && p.stars < cutoff.stars) {
-            return `rank #${rank}/${queue.length} – tied on wait time, fewer stars than cutoff (${p.stars}⭐ vs ${cutoff.stars}⭐)`;
-        }
-        return `rank #${rank}/${queue.length}, only ${available} slot${available !== 1 ? 's' : ''} available`;
-    }
+    const selected     = queue.slice(0, available);
+    const notSelected  = queue.slice(available);
+    const cutoff       = queue[available - 1];
+    const firstMissed  = queue[available];
+    const selectedTags = new Set(selected.map(p => p.tag));
 
     function bonusReason(p) {
-        if (p.has_bonus && !queueRank[p.tag]) return 'already had bonus before this suggestion';
-        if (!p.last_bonus) return 'never received a bonus before → highest priority';
-        return `last bonus ${p.months_ago} month${p.months_ago !== 1 ? 's' : ''} ago`;
+        if (p.has_bonus && !selectedTags.has(p.tag)) return 'already had bonus this month';
+        if (!p.last_bonus) return 'first ever bonus';
+        const base = waitDesc(p);
+        if (cutoff && p.tag === cutoff.tag && firstMissed && (firstMissed.last_bonus || '') === (cutoff.last_bonus || '')) {
+            if (firstMissed.stars === cutoff.stars)
+                return `${base} (most destruction among equal stars)`;
+            return `${base} (most stars among equal wait)`;
+        }
+        return base;
     }
 
-    const getsBonus = tag => (queueRank[tag] && queueRank[tag] <= available) || participants.find(p => p.tag === tag)?.has_bonus;
-    const bonusPlayers   = participants.filter(p => getsBonus(p.tag));
-    const noBonusPlayers = participants.filter(p => !getsBonus(p.tag));
+    function noSlotReason(p) {
+        if (!cutoff) return 'no slots available';
+        const myBonus = p.last_bonus || '', cutoffBonus = cutoff.last_bonus || '';
+        if (myBonus > cutoffBonus) {
+            const cutoffWait = cutoff.last_bonus ? `${cutoff.months_ago} month${cutoff.months_ago !== 1 ? 's' : ''}` : 'never bonused';
+            return `last bonus more recently than others – last slot went to ${cutoff.name} (${cutoffWait} without bonus)`;
+        }
+        if (p.stars !== cutoff.stars)
+            return `${waitDesc(p)}, fewer stars than ${cutoff.name} (${p.stars}⭐ vs ${cutoff.stars}⭐)`;
+        return `${waitDesc(p)}, less destruction than ${cutoff.name} (${(p.destruction||0).toFixed(1)}% vs ${(cutoff.destruction||0).toFixed(1)}%)`;
+    }
+
+    // Bonus group sorted by priority (never bonused first, then longest wait, then most stars, then most destruction)
+    const bonusGroup = [
+        ...selected,
+        ...participants.filter(p => p.has_bonus && !selectedTags.has(p.tag)),
+    ].sort((a, b) => {
+        const la = a.last_bonus || '', lb = b.last_bonus || '';
+        if (la !== lb) return la < lb ? -1 : 1;
+        if (b.stars !== a.stars) return b.stars - a.stars;
+        return (b.destruction || 0) - (a.destruction || 0);
+    });
+
+    const missedAtk = participants.filter(p => !p.has_bonus && p.attacks < p.max_attacks);
 
     const lines = [
-        `CWL Bonus · ${month} · ${data.league} ${data.war_size}v${data.war_size}`,
+        `CWL Bonus · ${fmtMonth(month)} · ${data.league} ${data.war_size}v${data.war_size}`,
         `${data.wins} win${data.wins !== 1 ? 's' : ''} + ${data.guaranteed} guaranteed = ${data.total_bonuses} slots`,
         '',
-        `✅ Bonus (${bonusPlayers.length}):`,
-        ...bonusPlayers.map(p => `• ${p.name} – ${p.stars}⭐, ${p.attacks}/${p.max_attacks} atk – ${bonusReason(p)}`),
-        '',
-        `❌ No bonus (${noBonusPlayers.length}):`,
-        ...noBonusPlayers.map(p => `• ${p.name} – ${p.stars}⭐, ${p.attacks}/${p.max_attacks} atk – ${noReason(p)}`),
+        `✅ Got bonus (${bonusGroup.length}):`,
+        ...bonusGroup.map(p => `• ${p.name} – ${p.stars}⭐ – ${bonusReason(p)}`),
     ];
+
+    if (notSelected.length) {
+        lines.push('', `❌ Not enough slots (${notSelected.length}):`);
+        lines.push(...notSelected.map(p => `• ${p.name} – ${p.stars}⭐ – ${noSlotReason(p)}`));
+    }
+
+    if (missedAtk.length) {
+        lines.push('', `❌ Missed an attack (${missedAtk.length}):`);
+        lines.push(...missedAtk.map(p => `• ${p.name} – ${p.stars}⭐, ${p.attacks}/${p.max_attacks} atk`));
+    }
 
     navigator.clipboard.writeText(lines.join('\n')).then(() => {
         const orig = btn.textContent;
