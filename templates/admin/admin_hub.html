@@ -1583,17 +1583,17 @@ function copyCWLBonusReport(btn) {
         `${data.wins} win${data.wins !== 1 ? 's' : ''} + ${data.guaranteed} guaranteed = ${data.total_bonuses} slots`,
         '',
         `✅ Got bonus (${bonusGroup.length}):`,
-        ...bonusGroup.map(p => `• ${p.name} – ${p.stars}⭐ – ${bonusReason(p)}`),
+        ...bonusGroup.map(p => `• ${p.name} – ${p.stars}⭐ ${(p.destruction||0).toFixed(1)}% – ${bonusReason(p)}`),
     ];
 
     if (notSelected.length) {
         lines.push('', `❌ Not enough slots (${notSelected.length}):`);
-        lines.push(...notSelected.map(p => `• ${p.name} – ${p.stars}⭐ – ${noSlotReason(p)}`));
+        lines.push(...notSelected.map(p => `• ${p.name} – ${p.stars}⭐ ${(p.destruction||0).toFixed(1)}% – ${noSlotReason(p)}`));
     }
 
     if (missedAtk.length) {
         lines.push('', `❌ Missed an attack (${missedAtk.length}):`);
-        lines.push(...missedAtk.map(p => `• ${p.name} – ${p.stars}⭐, ${p.attacks}/${p.max_attacks} atk`));
+        lines.push(...missedAtk.map(p => `• ${p.name} – ${p.stars}⭐ ${(p.destruction||0).toFixed(1)}%, ${p.attacks}/${p.max_attacks} atk`));
     }
 
     navigator.clipboard.writeText(lines.join('\n')).then(() => {
