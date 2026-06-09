@@ -2006,7 +2006,7 @@ function wcAtkDist(atkTH, defTH) {
     const data = TH_MATCHUP_RATES[`${atkTH}_${defTH}`];
     if (data) return data;
     const thDiff = atkTH - defTH;
-    if (thDiff >= 2)   return [0.01, 0.02, 0.03, 0.95];
+    if (thDiff >= 2)   return [0.01, 0.02, 0.03, 0.94];
     if (thDiff === 1)  return [0.01, 0.09, 0.10, 0.80];
     if (thDiff === 0)  return [0.01, 0.10, 0.24, 0.65];
     if (thDiff === -1) return [0.05, 0.25, 0.55, 0.15];
@@ -2028,31 +2028,23 @@ function wcConvolve(dists) {
 }
 
 // Returns {dist, count, quality} or null — dist is [p0,p1,p2,p3]
-function wcPlayerInfo(tag, atkTH, avgDefTH) {
+// histK = prior strength: weight = count/(count+histK), so at count=5 you're 50/50
+function wcPlayerInfo(tag, atkTH, avgDefTH, histK) {
     const pp = PLAYER_ALL_TIME[tag];
     if (!pp) return null;
     const roundDef = Math.round(avgDefTH);
-    for (const [defTHs, quality] of [
-        [[roundDef], 'exact TH'],
-        [[roundDef - 1, roundDef, roundDef + 1], '±1 TH'],
-        [null, 'any TH'],
-    ]) {
-        const combined = [0, 0, 0, 0];
-        let total = 0;
-        for (const [key, counts] of Object.entries(pp.by_matchup)) {
-            const [kAtk, kDef] = key.split('_').map(Number);
-            if (kAtk !== atkTH) continue;
-            if (defTHs !== null && !defTHs.includes(kDef)) continue;
-            counts.forEach((c, i) => { combined[i] += c; total += c; });
-        }
-        if (total >= 2) {
-            const personal = combined.map(c => c / total);
-            if (total >= 10) return { dist: personal, count: total, quality, blended: false };
-            // Few attacks — blend with global DB rates (weight = count / (count + 10))
-            const global = wcAtkDist(atkTH, roundDef);
-            const w = total / (total + 10);
-            return { dist: personal.map((p, i) => w * p + (1 - w) * global[i]), count: total, quality, blended: true };
-        }
+    const combined = [0, 0, 0, 0];
+    let total = 0;
+    for (const [key, counts] of Object.entries(pp.by_matchup)) {
+        const [kAtk, kDef] = key.split('_').map(Number);
+        if (kAtk !== atkTH || kDef !== roundDef) continue;
+        counts.forEach((c, i) => { combined[i] += c; total += c; });
+    }
+    if (total >= 1) {
+        const personal = combined.map(c => c / total);
+        const global = wcAtkDist(atkTH, roundDef);
+        const w = total / (total + histK);
+        return { dist: personal.map((p, i) => w * p + (1 - w) * global[i]), count: total, blended: true };
     }
     return null;
 }
@@ -2089,8 +2081,8 @@ function computeWinCalc(n) {
 
     const ourRemAtk   = (r.our || []).filter(m => !usedOurPos.has(m.pos));
     const oppRemAtk   = (r.opp || []).filter(m => !usedOppPos.has(m.pos));
-    const oppLiveTHs  = (r.opp || []).filter(m => (oppDefStars[m.pos] || 0) < 3).map(m => m.th);
-    const ourLiveTHs  = (r.our || []).filter(m => (ourDefStars[m.pos] || 0) < 3).map(m => m.th);
+    const oppLiveTHs  = (r.opp || []).filter(m => !(m.pos in oppDefStars)).map(m => m.th);
+    const ourLiveTHs  = (r.our || []).filter(m => !(m.pos in ourDefStars)).map(m => m.th);
 
     const avgOurTH     = avg((r.our || []).map(m => m.th));
     const avgOppTH     = avg((r.opp || []).map(m => m.th));
@@ -2108,58 +2100,92 @@ function computeWinCalc(n) {
     }
 
     const oppLiveTotal = oppOverall.reduce((s, c) => s + c, 0);
-    const fallbackOpp = oppLiveTotal >= 3
-        ? oppOverall.map(c => c / oppLiveTotal)
-        : wcAtkDist(Math.round(avgOppRemTH), Math.round(avgOurLiveTH));
+    // K scales with team size: ~teamSize/3 so a fully-completed war gives ~75% trust to live data
+    const liveK = Math.max(2, Math.round(teamSize / 3));
+    const _fbGlobal = wcAtkDist(Math.round(avgOppRemTH), Math.round(avgOurLiveTH));
+    const fallbackOpp = (() => {
+        if (oppLiveTotal < 1) return _fbGlobal;
+        const personal = oppOverall.map(c => c / oppLiveTotal);
+        const w = oppLiveTotal / (oppLiveTotal + liveK);
+        return personal.map((p, i) => w * p + (1 - w) * _fbGlobal[i]);
+    })();
+    const _oppTeamPct = Math.round(oppLiveTotal / (oppLiveTotal + liveK) * 100);
+    const fallbackOppLabel = oppLiveTotal >= 1
+        ? `${oppLiveTotal} team atks · ${_oppTeamPct}% live`
+        : 'DB avg';
+
+    // Mirror-position + rank-fallback matching for defender TH assignment
+    const openEnemyBases = (r.opp || []).filter(m => !(m.pos in oppDefStars)).sort((a, b) => a.pos - b.pos);
+    const openOurBases   = (r.our || []).filter(m => !(m.pos in ourDefStars)).sort((a, b) => a.pos - b.pos);
+
+    function matchDef(remAtk, openBases, fallbackTH) {
+        const sorted = [...remAtk].sort((a, b) => a.pos - b.pos);
+        const defMap = {};
+        for (let i = 0; i < sorted.length; i++)
+            defMap[sorted[i].pos] = { th: openBases[i]?.th ?? fallbackTH, name: openBases[i]?.name ?? '?' };
+        return defMap;
+    }
+
+    const ourAtkDef = matchDef(ourRemAtk, openEnemyBases, Math.round(avgOppLiveTH));
+    const oppAtkDef = matchDef(oppRemAtk, openOurBases,   Math.round(avgOurLiveTH));
 
     // Build per-attacker arrays with source metadata
     const ourBreakdown = [], oppBreakdown = [], ourDists = [], oppDists = [];
 
     for (const m of ourRemAtk.slice(0, ourRem)) {
-        const info = wcPlayerInfo(m.tag, m.th, avgOppLiveTH);
+        const def   = ourAtkDef[m.pos] ?? { th: Math.round(avgOppLiveTH), name: '?' };
+        const defTH = def.th;
+        const info  = wcPlayerInfo(m.tag, m.th, defTH, 5);
         let dist, srcLabel;
         if (info) {
             dist = info.dist;
-            srcLabel = info.blended ? `${info.count}× history + DB avg` : `${info.count}× all-time`;
+            const pct = Math.round(info.count / (info.count + 5) * 100);
+            srcLabel = `${info.count} fights · ${pct}% own`;
         } else {
-            dist = wcAtkDist(m.th, Math.round(avgOppLiveTH));
-            srcLabel = 'TH model';
+            dist = wcAtkDist(m.th, defTH);
+            srcLabel = 'DB avg · 0% own';
         }
         ourDists.push(dist);
-        ourBreakdown.push({ name: m.name, th: m.th, defTH: Math.round(avgOppLiveTH), dist, expStars: dist.reduce((s,p,k)=>s+p*k,0), srcLabel });
+        ourBreakdown.push({ name: m.name, th: m.th, pos: m.pos, defTH, defName: def.name, dist, expStars: dist.reduce((s,p,k)=>s+p*k,0), srcLabel });
     }
     const fallbackOur = wcAtkDist(Math.round(avgOurRemTH), Math.round(avgOppLiveTH));
     while (ourDists.length < ourRem) {
         ourDists.push(fallbackOur);
-        ourBreakdown.push({ name: '?', th: Math.round(avgOurRemTH), defTH: Math.round(avgOppLiveTH), dist: fallbackOur, expStars: fallbackOur.reduce((s,p,k)=>s+p*k,0), srcLabel: 'TH model' });
+        ourBreakdown.push({ name: '?', th: Math.round(avgOurRemTH), defTH: Math.round(avgOppLiveTH), dist: fallbackOur, expStars: fallbackOur.reduce((s,p,k)=>s+p*k,0), srcLabel: 'DB avg · 0% own' });
     }
 
     for (const m of oppRemAtk.slice(0, oppRem)) {
-        const info = wcPlayerInfo(m.tag, m.th, avgOurLiveTH);
+        const def   = oppAtkDef[m.pos] ?? { th: Math.round(avgOurLiveTH), name: '?' };
+        const defTH = def.th;
+        const info  = wcPlayerInfo(m.tag, m.th, defTH, 5);
         let dist, srcLabel;
         if (info) {
             dist = info.dist;
-            srcLabel = info.blended ? `${info.count}× history + DB avg` : `${info.count}× all-time`;
+            const pct = Math.round(info.count / (info.count + 5) * 100);
+            srcLabel = `${info.count} fights · ${pct}% own`;
         } else {
             const thData = oppAtksByTH[m.th];
             const thTotal = thData ? thData.reduce((s,c)=>s+c,0) : 0;
-            if (thTotal >= 2) {
-                dist = thData.map(c => c / thTotal);
-                srcLabel = `${thTotal}× live`;
-            } else if (oppLiveTotal >= 3) {
+            const global = wcAtkDist(m.th, defTH);
+            if (thTotal >= 1) {
+                const personal = thData.map(c => c / thTotal);
+                const w = thTotal / (thTotal + liveK);
+                dist = personal.map((p, i) => w * p + (1 - w) * global[i]);
+                srcLabel = `${thTotal} live atks · ${Math.round(w * 100)}% live`;
+            } else if (oppLiveTotal >= 1) {
                 dist = fallbackOpp;
-                srcLabel = `${oppLiveTotal}× live (team)`;
+                srcLabel = fallbackOppLabel;
             } else {
-                dist = wcAtkDist(m.th, Math.round(avgOurLiveTH));
-                srcLabel = 'TH model';
+                dist = global;
+                srcLabel = 'DB avg · 0% live';
             }
         }
         oppDists.push(dist);
-        oppBreakdown.push({ name: m.name, th: m.th, defTH: Math.round(avgOurLiveTH), dist, expStars: dist.reduce((s,p,k)=>s+p*k,0), srcLabel });
+        oppBreakdown.push({ name: m.name, th: m.th, pos: m.pos, defTH, defName: def.name, dist, expStars: dist.reduce((s,p,k)=>s+p*k,0), srcLabel });
     }
     while (oppDists.length < oppRem) {
         oppDists.push(fallbackOpp);
-        oppBreakdown.push({ name: '?', th: Math.round(avgOppRemTH), defTH: Math.round(avgOurLiveTH), dist: fallbackOpp, expStars: fallbackOpp.reduce((s,p,k)=>s+p*k,0), srcLabel: oppLiveTotal >= 3 ? `${oppLiveTotal}× live (team)` : 'TH model' });
+        oppBreakdown.push({ name: '?', th: Math.round(avgOppRemTH), defTH: Math.round(avgOurLiveTH), dist: fallbackOpp, expStars: fallbackOpp.reduce((s,p,k)=>s+p*k,0), srcLabel: fallbackOppLabel });
     }
 
     const dpOur = wcConvolve(ourDists.slice(0, ourRem));
@@ -2257,7 +2283,7 @@ function wcDistChart(wc, ourName, oppName) {
 function wcAttackerTable(breakdown, side) {
     if (!breakdown.length) return '<div style="padding:8px 20px 12px;font-size:12px;color:var(--muted);">No remaining attacks.</div>';
     const clr = side === 'our' ? 'var(--green)' : 'var(--red)';
-    const sorted = [...breakdown].sort((a, b) => b.expStars - a.expStars);
+    const sorted = [...breakdown].sort((a, b) => a.pos - b.pos);
     const rows = sorted.map(p => {
         const [p0, p1, p2, p3] = p.dist;
         const seg = `<div style="display:flex;height:8px;border-radius:2px;overflow:hidden;width:72px;">
@@ -2275,7 +2301,10 @@ function wcAttackerTable(breakdown, side) {
         return `<tr style="border-bottom:1px solid var(--bord2);">
             <td style="padding:7px 8px 7px 16px;font-weight:600;font-size:12px;white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(p.name)}</td>
             <td style="padding:7px 8px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--blue);">TH${p.th}</td>
-            <td style="padding:7px 8px;text-align:center;font-size:11px;color:var(--muted);">TH${p.defTH}</td>
+            <td style="padding:7px 8px;text-align:center;font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHTML(p.defName)} (TH${p.defTH})">
+                <span style="color:var(--fg);font-weight:600;">${escapeHTML(p.defName)}</span>
+                <span style="color:var(--muted);font-size:10px;"> TH${p.defTH}</span>
+            </td>
             <td style="padding:7px 12px;">${seg}</td>
             <td style="padding:7px 16px 7px 8px;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:${clr};">${p.expStars.toFixed(1)}★</td>
             <td style="padding:7px 12px 7px 4px;font-size:10px;color:var(--muted);white-space:nowrap;">${escapeHTML(p.srcLabel)}</td>
@@ -2285,7 +2314,7 @@ function wcAttackerTable(breakdown, side) {
         <thead><tr style="background:var(--surf2);">
             <th style="padding:5px 8px 5px 16px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Player</th>
             <th style="padding:5px 8px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">TH</th>
-            <th style="padding:5px 8px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">vs</th>
+            <th style="padding:5px 8px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Defender</th>
             <th style="padding:5px 12px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">0★ · 1★ · 2★ · 3★</th>
             <th style="padding:5px 16px 5px 8px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Exp.★</th>
             <th style="padding:5px 12px 5px 4px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Source</th>
