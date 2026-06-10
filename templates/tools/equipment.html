@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+{% set page_title = 'Equipment Calculator – CoC Analytics' %}
+{% include '_head.html' %}
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        a { text-decoration: none; color: inherit; }
+
+        .container { max-width: 100%; margin: 0 auto; padding: 28px 32px; }
+
+        .no-link {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+            padding: 48px 32px; text-align: center; margin-top: 12px;
+        }
+        .no-link-icon { font-size: 40px; margin-bottom: 12px; }
+        .no-link-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+        .no-link-sub { font-size: 14px; color: var(--muted); }
+
+        .error-box {
+            background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.3);
+            border-radius: 10px; padding: 16px 20px; margin-bottom: 20px;
+            font-size: 13px; color: var(--red);
+        }
+
+        .section-label {
+            font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+            margin-bottom: 12px; margin-top: 24px;
+        }
+
+        .equip-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .equip-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
+            transition: border-color .15s;
+        }
+        .equip-card:hover { border-color: var(--accent); }
+        .equip-card.has-upgrade { border-color: rgba(240,165,0,.4); }
+
+        .equip-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
+
+        .equip-level-row {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        }
+        .equip-level {
+            font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700;
+            color: var(--accent); line-height: 1;
+        }
+        .equip-max { font-family: 'Rajdhani', sans-serif; font-size: 11px; color: var(--muted); }
+
+        .equip-bar-wrap {
+            height: 4px; background: var(--bord2, rgba(255,255,255,.08)); border-radius: 2px; overflow: hidden;
+        }
+        .equip-bar {
+            height: 100%; border-radius: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--acc2, #e8912b));
+            transition: width .3s;
+        }
+        .equip-bar.equip-bar-max { background: linear-gradient(90deg, #3fb950, #27c26e); }
+
+        .equip-range-header {
+            display: flex; justify-content: space-between; align-items: baseline;
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            margin-top: 4px;
+        }
+        .equip-range-header .rh-cur { color: var(--muted); }
+        .equip-range-header .rh-tgt { color: var(--accent); }
+
+        .equip-target-range {
+            -webkit-appearance: none; appearance: none;
+            width: 100%; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+            background: var(--bord2, rgba(255,255,255,.08));
+        }
+        .equip-target-range::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 16px; height: 16px; border-radius: 50%;
+            background: var(--accent); border: 2px solid var(--bg);
+            box-shadow: 0 0 0 2px var(--accent);
+            cursor: pointer; transition: transform .1s;
+        }
+        .equip-target-range::-webkit-slider-thumb:hover { transform: scale(1.2); }
+        .equip-target-range::-moz-range-thumb {
+            width: 16px; height: 16px; border-radius: 50%;
+            background: var(--accent); border: 2px solid var(--bg);
+            box-shadow: 0 0 0 2px var(--accent); cursor: pointer;
+        }
+        .equip-range-maxed {
+            background: linear-gradient(to right, #3fb950 100%, #3fb950 100%) !important;
+            opacity: .35; cursor: default; pointer-events: none;
+        }
+        .equip-range-maxed::-webkit-slider-thumb { background: #3fb950; box-shadow: 0 0 0 2px #3fb950; }
+        .equip-range-maxed::-moz-range-thumb     { background: #3fb950; box-shadow: 0 0 0 2px #3fb950; }
+
+        .equip-upgrade-cost {
+            display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px;
+        }
+        .ore-pill {
+            display: inline-flex; align-items: center; gap: 3px;
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            padding: 2px 7px; border-radius: 5px;
+        }
+        .ore-shiny  { background: rgba(240,165,0,.12);  border: 1px solid rgba(240,165,0,.25); }
+        .ore-glowy  { background: rgba(63,185,80,.12);  border: 1px solid rgba(63,185,80,.25); }
+        .ore-starry { background: rgba(130,80,255,.12); border: 1px solid rgba(130,80,255,.25); }
+        .ore-img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+
+        /* ── Summary bar ── */
+        #upgrade-summary {
+            display: flex;
+            position: sticky; top: 64px; z-index: 50;
+            background: var(--surface); border: 1px solid rgba(240,165,0,.35);
+            border-radius: 12px; padding: 14px 20px;
+            margin-bottom: 20px;
+            align-items: center; gap: 16px; flex-wrap: wrap;
+            box-shadow: 0 4px 20px rgba(0,0,0,.3);
+        }
+        #upgrade-summary .sum-label {
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .8px; color: var(--accent);
+            white-space: nowrap;
+        }
+        #upgrade-summary .sum-ores {
+            display: flex; gap: 10px; flex-wrap: wrap; flex: 1;
+        }
+        #upgrade-summary .sum-count {
+            margin-left: auto; font-size: 11px; color: var(--muted);
+            font-family: 'Rajdhani', sans-serif; font-weight: 600; white-space: nowrap;
+        }
+        .sum-ore-big {
+            display: flex; align-items: center; gap: 6px;
+            font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700;
+        }
+        #sum-reset {
+            background: none; border: 1px solid var(--border); border-radius: 6px;
+            color: var(--muted); font-size: 11px; padding: 4px 10px; cursor: pointer;
+            font-family: 'Rajdhani', sans-serif; font-weight: 700;
+            transition: border-color .12s, color .12s;
+        }
+        #sum-reset:hover { border-color: var(--red); color: var(--red); }
+
+    </style>
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+{% set page_header_title = '🛡️ Equipment <span>Calculator</span>' %}
+{% set page_header_desc = 'Hero equipment levels for your linked account.' %}
+{% include '_page_header.html' %}
+
+<div class="container">
+
+{% if not player %}
+    <div class="no-link">
+        <div class="no-link-icon">🔗</div>
+        <div class="no-link-title">No player linked</div>
+        <div class="no-link-sub">Ask a super admin to link your account to a Clash of Clans player in the admin panel.</div>
+    </div>
+
+{% elif error %}
+    <div class="error-box">⚠️ Could not load player data: {{ error }}</div>
+
+{% elif equipment is not none %}
+
+    <!-- Summary bar -->
+    <div id="upgrade-summary">
+        <div class="sum-label">Total Upgrade Cost</div>
+        <div class="sum-ores">
+            <div class="sum-ore-big" id="sum-shiny"><img src="/static/img/ores/shiny.png" class="ore-img"> <span id="sum-shiny-val" style="color:#f0a500;">0</span></div>
+            <div class="sum-ore-big" id="sum-glowy"><img src="/static/img/ores/glowy.png" class="ore-img"> <span id="sum-glowy-val" style="color:#3fb950;">0</span></div>
+            <div class="sum-ore-big" id="sum-starry" style="display:none;"><img src="/static/img/ores/starry.png" class="ore-img"> <span id="sum-starry-val" style="color:#a78bfa;">0</span></div>
+        </div>
+        <div class="sum-count" id="sum-count">No upgrades selected</div>
+        <button id="sum-reset" onclick="resetAll()">Reset</button>
+    </div>
+
+    {% macro equip_card(e, idx) %}
+    {% set lvl = e.level %}
+    {% set maxlvl = e.maxLevel %}
+    {% set pct = ((lvl / maxlvl) * 100) | round | int if maxlvl else 0 %}
+    {% set cid = 'eq-' ~ idx %}
+    <div class="equip-card" id="card-{{ cid }}">
+        <div class="equip-name">{{ e.name }}</div>
+        <div class="equip-level-row">
+            <span class="equip-level">{{ lvl }}</span>
+            <span class="equip-max">/ {{ maxlvl }}</span>
+        </div>
+        <div class="equip-bar-wrap">
+            <div class="equip-bar {% if lvl == maxlvl %}equip-bar-max{% endif %}" style="width:{{ pct }}%;"></div>
+        </div>
+        {% if e.equipped_on %}
+        <div style="font-size:10px;color:var(--accent);font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">⚔️ Equipped</div>
+        {% endif %}
+        <div class="equip-range-header">
+            <span class="rh-cur">Lv {{ lvl }}</span>
+            {% if lvl == maxlvl %}
+            <span style="color:#3fb950;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;">✓ MAX</span>
+            {% else %}
+            <span class="rh-tgt" id="tgt-{{ cid }}">→ {{ lvl }}</span>
+            {% endif %}
+        </div>
+        <input type="range"
+               {% if lvl < maxlvl %}class="equip-target-range"
+               data-cid="{{ cid }}"
+               data-current="{{ lvl }}"
+               data-max="{{ maxlvl }}"
+               oninput="onTargetChange(this)"{% else %}class="equip-target-range equip-range-maxed" disabled{% endif %}
+               min="{{ lvl }}"
+               max="{{ maxlvl }}"
+               value="{{ lvl }}">
+        <div class="equip-upgrade-cost" id="cost-{{ cid }}" style="min-height:22px;"></div>
+    </div>
+    {% endmacro %}
+
+    {% if equipment %}
+        {% set villages = [('home', 'Home Village'), ('builderBase', 'Builder Base')] %}
+        {% set card_idx = namespace(val=0) %}
+
+        {% for village_key, village_label in villages %}
+            {% set vil_equip = equipment | selectattr('village', 'equalto', village_key) | list %}
+            {% if vil_equip %}
+            <div class="section-label">{{ village_label }}</div>
+
+            {# Collect ordered hero list for this village #}
+            {% set heroes_seen = namespace(val=[]) %}
+            {% for e in vil_equip %}
+                {% if e.equipped_on and e.equipped_on not in heroes_seen.val %}
+                    {% set heroes_seen.val = heroes_seen.val + [e.equipped_on] %}
+                {% endif %}
+            {% endfor %}
+            {% set unequipped = vil_equip | rejectattr('equipped_on') | list %}
+
+            {# Hero columns — one per hero, fill all available width #}
+            <div style="display:flex; align-items:flex-start; gap:0;">
+                {% for hero in heroes_seen.val %}
+                {% set hero_items = vil_equip | selectattr('equipped_on', 'equalto', hero) | list %}
+                {% if not loop.first %}
+                <div style="width:3px; background:var(--border); align-self:stretch; margin:0 14px; flex-shrink:0; border-radius:2px;"></div>
+                {% endif %}
+                <div style="flex:1; min-width:0;">
+                    <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
+                                text-transform:uppercase;letter-spacing:.8px;color:var(--accent);
+                                padding:6px 0 8px; border-bottom:1px solid var(--border); margin-bottom:8px;">
+                        {{ hero }}
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                    {% for e2 in hero_items %}
+                        {{ equip_card(e2, card_idx.val) }}
+                        {% set card_idx.val = card_idx.val + 1 %}
+                    {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {# Unequipped items below the hero table #}
+            {% if unequipped %}
+            <div style="margin-top:20px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
+                            text-transform:uppercase;letter-spacing:1px;color:var(--muted);
+                            margin-bottom:10px;">Not Equipped</div>
+                <div class="equip-grid">
+                {% for e in unequipped %}
+                    {{ equip_card(e, card_idx.val) }}
+                    {% set card_idx.val = card_idx.val + 1 %}
+                {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+        {% endfor %}
+
+        {% set other_equip = equipment | rejectattr('village', 'in', ['home', 'builderBase']) | list %}
+        {% if other_equip %}
+        <div class="section-label">Other</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            {% for e in other_equip %}
+                {{ equip_card(e, card_idx.val) }}
+                {% set card_idx.val = card_idx.val + 1 %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+    {% else %}
+        <div class="no-link">
+            <div class="no-link-icon">⚙️</div>
+            <div class="no-link-title">No equipment found</div>
+            <div class="no-link-sub">The API returned no equipment data for this player.</div>
+        </div>
+    {% endif %}
+
+{% endif %}
+
+</div>
+
+<script>
+// Cost to upgrade TO level N (index = target level)
+// [shiny, glowy, starry]
+const COMMON_COSTS = [
+    null,
+    [0,    0,   0],   // 1
+    [120,  0,   0],   // 2
+    [240,  20,  0],   // 3
+    [400,  0,   0],   // 4
+    [600,  0,   0],   // 5
+    [840,  100, 0],   // 6
+    [1120, 0,   0],   // 7
+    [1440, 0,   0],   // 8
+    [1800, 200, 0],   // 9
+    [1900, 0,   0],   // 10
+    [2000, 0,   0],   // 11
+    [2100, 400, 0],   // 12
+    [2200, 0,   0],   // 13
+    [2300, 0,   0],   // 14
+    [2400, 600, 0],   // 15
+    [2500, 0,   0],   // 16
+    [2600, 0,   0],   // 17
+    [2700, 600, 0],   // 18
+];
+
+const EPIC_COSTS = [
+    null,
+    [0,    0,   0],   // 1
+    [120,  0,   0],   // 2
+    [240,  20,  0],   // 3
+    [400,  0,   0],   // 4
+    [600,  0,   0],   // 5
+    [840,  100, 0],   // 6
+    [1120, 0,   0],   // 7
+    [1440, 0,   0],   // 8
+    [1800, 200, 10],  // 9
+    [1900, 0,   0],   // 10
+    [2000, 0,   0],   // 11
+    [2100, 400, 20],  // 12
+    [2200, 0,   0],   // 13
+    [2300, 0,   0],   // 14
+    [2400, 600, 30],  // 15
+    [2500, 0,   0],   // 16
+    [2600, 0,   0],   // 17
+    [2700, 600, 50],  // 18
+    [2800, 0,   0],   // 19
+    [2900, 0,   0],   // 20
+    [3000, 600, 100], // 21
+    [3100, 0,   0],   // 22
+    [3200, 0,   0],   // 23
+    [3300, 600, 120], // 24
+    [3400, 0,   0],   // 25
+    [3500, 0,   0],   // 26
+    [3600, 600, 150], // 27
+];
+
+function calcCost(from, to, maxLevel) {
+    const table = maxLevel > 18 ? EPIC_COSTS : COMMON_COSTS;
+    let shiny = 0, glowy = 0, starry = 0;
+    for (let lvl = from + 1; lvl <= to; lvl++) {
+        const row = table[lvl];
+        if (row) { shiny += row[0]; glowy += row[1]; starry += row[2]; }
+    }
+    return { shiny, glowy, starry };
+}
+
+function fmt(n) { return n.toLocaleString(); }
+
+function onTargetChange(slider) {
+    const cid     = slider.dataset.cid;
+    const current = parseInt(slider.dataset.current);
+    const max     = parseInt(slider.dataset.max);
+    const target  = parseInt(slider.value);
+    const costDiv = document.getElementById('cost-' + cid);
+    const card    = document.getElementById('card-' + cid);
+    const tgtLbl  = document.getElementById('tgt-' + cid);
+
+    // Update track fill
+    const pct = ((target - current) / (max - current)) * 100;
+    slider.style.background = target > current
+        ? `linear-gradient(to right, var(--accent) ${pct}%, var(--bord2, rgba(255,255,255,.08)) ${pct}%)`
+        : 'var(--bord2, rgba(255,255,255,.08))';
+
+    if (target <= current) {
+        tgtLbl.textContent = `→ ${current}`;
+        tgtLbl.style.color = 'var(--muted)';
+        costDiv.innerHTML = '';
+        card.classList.remove('has-upgrade');
+    } else {
+        tgtLbl.textContent = `→ ${target}${target === max ? ' ★' : ''}`;
+        tgtLbl.style.color = 'var(--accent)';
+        const { shiny, glowy, starry } = calcCost(current, target, max);
+        let html = '';
+        if (shiny  > 0) html += `<span class="ore-pill ore-shiny"><img src="/static/img/ores/shiny.png" class="ore-img"> <span style="color:#f0a500;">${fmt(shiny)}</span></span>`;
+        if (glowy  > 0) html += `<span class="ore-pill ore-glowy"><img src="/static/img/ores/glowy.png" class="ore-img"> <span style="color:#3fb950;">${fmt(glowy)}</span></span>`;
+        if (starry > 0) html += `<span class="ore-pill ore-starry"><img src="/static/img/ores/starry.png" class="ore-img"> <span style="color:#a78bfa;">${fmt(starry)}</span></span>`;
+        costDiv.innerHTML = html;
+        card.classList.add('has-upgrade');
+    }
+
+    updateSummary();
+}
+
+function updateSummary() {
+    let totalShiny = 0, totalGlowy = 0, totalStarry = 0, count = 0;
+
+    document.querySelectorAll('.equip-target-range').forEach(slider => {
+        const current = parseInt(slider.dataset.current);
+        const max     = parseInt(slider.dataset.max);
+        const target  = parseInt(slider.value);
+        if (target > current) {
+            const { shiny, glowy, starry } = calcCost(current, target, max);
+            totalShiny += shiny; totalGlowy += glowy; totalStarry += starry;
+            count++;
+        }
+    });
+
+    document.getElementById('sum-shiny').style.display  = 'flex';
+    document.getElementById('sum-glowy').style.display  = 'flex';
+    document.getElementById('sum-starry').style.display = totalStarry > 0 ? 'flex' : 'none';
+    document.getElementById('sum-shiny-val').textContent  = fmt(totalShiny);
+    document.getElementById('sum-glowy-val').textContent  = fmt(totalGlowy);
+    document.getElementById('sum-starry-val').textContent = fmt(totalStarry);
+
+    document.getElementById('sum-count').textContent =
+        count === 0 ? 'No upgrades selected' :
+        count === 1 ? '1 piece selected' : `${count} pieces selected`;
+}
+
+function resetAll() {
+    document.querySelectorAll('.equip-target-range').forEach(slider => {
+        slider.value = slider.dataset.current;
+        slider.style.background = 'var(--bord2, rgba(255,255,255,.08))';
+        const cid = slider.dataset.cid;
+        const tgtLbl = document.getElementById('tgt-' + cid);
+        if (tgtLbl) { tgtLbl.textContent = `→ ${slider.dataset.current}`; tgtLbl.style.color = 'var(--muted)'; }
+        const costDiv = document.getElementById('cost-' + cid);
+        if (costDiv) costDiv.innerHTML = '';
+        const card = document.getElementById('card-' + cid);
+        if (card) card.classList.remove('has-upgrade');
+    });
+    updateSummary();
+}
+</script>
+
+</body>
+</html>

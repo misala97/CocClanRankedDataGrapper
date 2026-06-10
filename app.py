@@ -17,7 +17,7 @@ ADMIN_PASS = os.getenv("ADMIN_PASS", "")
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 DB_USER = os.getenv("DB_USER", "root")
 DB_PASS = os.getenv("DB_PASS", "")
@@ -60,6 +60,7 @@ from features.pubquiz.routes import pubquiz_bp
 from features.cwl.routes     import cwl_bp
 from features.profile.routes import profile_bp
 from features.compare.routes import compare_bp
+from features.tools.routes   import tools_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
@@ -72,6 +73,7 @@ app.register_blueprint(pubquiz_bp)
 app.register_blueprint(cwl_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(compare_bp)
+app.register_blueprint(tools_bp)
 
 # ── Template filters ─────────────────────────────────────────────────────────
 
@@ -265,6 +267,6 @@ if __name__ == '__main__':
     #task_update_raid_weekend()
     #task_update_ranked_weeks()
     #task_update_clan_war()
-    task_update_cwl()
+    #task_update_cwl()
 
     app.run(debug=True, use_reloader=False)

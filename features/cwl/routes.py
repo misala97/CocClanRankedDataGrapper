@@ -567,6 +567,70 @@ def cwl_page():
         })
     our_player_perf.sort(key=lambda p: (-p['avg_stars'], -p['wars']))
 
+    # ── Season overview aggregate stats (our clan vs whole group) ─────────────
+    def _overview_agg(wars_list, filter_tag=None):
+        atk_done = atk_poss = missed = 0
+        stars = [0, 0, 0, 0]
+        th_diff_sum = th_diff_n = 0
+        def_sum = def_n = def_th_sum = 0
+        player_rec = {}   # tag -> {'poss': N, 'three': M} for flawless tracking
+        for w in wars_list:
+            if w.state not in ('inWar', 'warEnded'):
+                continue
+            by_tag = {m.player_tag: m for m in w.members}
+            by_att = {}
+            for a in w.attacks:
+                by_att.setdefault(a.attacker_tag, []).append(a)
+            for m in w.members:
+                if filter_tag and m.clan_tag != filter_tag:
+                    continue
+                atk_th = m.town_hall_level or 0
+                al     = by_att.get(m.player_tag, [])
+                atk_poss += 1
+                atk_done += len(al)
+                if not al:
+                    missed += 1
+                rec = player_rec.setdefault(m.player_tag, {'poss': 0, 'three': 0})
+                rec['poss'] += 1
+                for a in al:
+                    dfn    = by_tag.get(a.defender_tag)
+                    dfn_th = (dfn.town_hall_level or 0) if dfn else atk_th
+                    s      = max(0, min(3, int(a.stars or 0)))
+                    stars[s] += 1
+                    th_diff_sum += dfn_th - atk_th
+                    th_diff_n   += 1
+                    if s == 3:
+                        rec['three'] += 1
+            for a in w.attacks:
+                dfn = by_tag.get(a.defender_tag)
+                att = by_tag.get(a.attacker_tag)
+                if not dfn or not att:
+                    continue
+                if filter_tag and dfn.clan_tag != filter_tag:
+                    continue
+                if filter_tag and att.clan_tag == filter_tag:
+                    continue
+                def_sum    += int(a.stars or 0)
+                def_n      += 1
+                def_th_sum += (att.town_hall_level or 0) - (dfn.town_hall_level or 0)
+        total    = sum(stars)
+        flawless = sum(1 for r in player_rec.values() if r['poss'] > 0 and r['three'] == r['poss'])
+        return {
+            'attacks_done':     atk_done,
+            'attacks_possible': atk_poss,
+            'stars_0': stars[0], 'stars_1': stars[1], 'stars_2': stars[2], 'stars_3': stars[3],
+            'avg_stars':        round(sum(i * stars[i] for i in range(4)) / total, 2) if total else 0.0,
+            'three_star_rate':  round(stars[3] / total * 100) if total else 0,
+            'avg_th_diff':      round(th_diff_sum / th_diff_n, 2) if th_diff_n else None,
+            'avg_def_stars':    round(def_sum / def_n, 2) if def_n else None,
+            'avg_def_th_diff':  round(def_th_sum / def_n, 2) if def_n else None,
+            'missed':           missed,
+            'flawless':         flawless,
+        }
+
+    season_overview_our = _overview_agg(wars, filter_tag=our_tag)
+    season_overview_all = _overview_agg(wars)
+
     # ── All-time per-player attack history by TH matchup (all CWL seasons) ────
     _AttM = aliased(CWLMember)
     _DefM = aliased(CWLMember)
@@ -651,6 +715,8 @@ def cwl_page():
         standings=sorted_standings,
         sorted_rounds=sorted_rounds,
         our_player_perf=our_player_perf,
+        season_overview_our=season_overview_our,
+        season_overview_all=season_overview_all,
         player_all_time_perf=player_all_time_perf,
         th_matchup_rates=th_matchup_rates,
         th_matchup_counts=th_matchup_counts,

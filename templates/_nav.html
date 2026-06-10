@@ -228,6 +228,18 @@
                     </div>
                 </div>
             </div>
+            <div class="nl-wrap">
+                <a href="/tools/equipment" class="nl {% if _p.startswith('/tools') %}nl-active{% endif %}">Tools
+                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 6 8 10 12 6"/>
+                    </svg>
+                </a>
+                <div class="nl-submenu">
+                    <div class="nl-submenu-inner">
+                        <a href="/tools/equipment" class="nl-sub-item {% if _p == '/tools/equipment' %}nl-sub-active{% endif %}">Equipment Calculator</a>
+                    </div>
+                </div>
+            </div>
             <a href="/clan"    class="nl {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nl-active{% endif %}">Clan</a>
             {% if is_super_admin %}
             <a href="/admin" class="nl {% if _p.startswith('/admin') %}nl-active{% endif %}" style="position:relative;">

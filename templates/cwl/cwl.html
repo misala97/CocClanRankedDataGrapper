@@ -442,7 +442,9 @@
     </select>
 </form>
 {% endif %}
-<button class="compare-btn" onclick="openMatchupRates()" style="margin-left:auto;">📊 TH Matchup Rates</button>
+{% if season and season.state == 'ended' %}<button class="compare-btn" onclick="openCWLOverview()" style="margin-left:auto;">🏆 Season Overview</button>
+<button class="compare-btn" onclick="openMatchupRates()">📊 TH Matchup Rates</button>{% else %}<button class="compare-btn" onclick="openCWLOverview()" style="margin-left:auto;">🏆 Season Overview [TEST]</button>
+<button class="compare-btn" onclick="openMatchupRates()">📊 TH Matchup Rates</button>{% endif %}
 {% endset %}
 {% include '_page_header.html' %}
 
@@ -1282,6 +1284,37 @@ const PLAYER_ALL_TIME   = {{ player_all_time_perf  | tojson | safe }};
 const TH_MATCHUP_RATES  = {{ th_matchup_rates     | tojson | safe }};
 // {"atkTH_defTH": total_attack_count}
 const TH_MATCHUP_COUNTS = {{ th_matchup_counts    | tojson | safe }};
+
+// ── CWL season overview data ──────────────────────────────────────────────────
+{% if our_player_perf is defined %}
+const CWL_PLAYER_PERF = {{ our_player_perf | tojson | safe }};
+{% else %}
+const CWL_PLAYER_PERF = [];
+{% endif %}
+{% if season %}
+{% set ns = namespace(rank=none, wins=0, losses=0, draws=0) %}
+{% for s in standings %}{% if s.tag == our_tag %}{% set ns.rank = loop.index %}{% set ns.wins = s.wins %}{% set ns.losses = s.losses %}{% set ns.draws = s.draws %}{% endif %}{% endfor %}
+const CWL_SEASON_INFO = {
+    state:     {{ season.state       | tojson | safe }},
+    season:    {{ season.season      | tojson | safe }},
+    league:    {{ (season.league_name or '') | tojson | safe }},
+    wins:      {{ ns.wins }},
+    losses:    {{ ns.losses }},
+    draws:     {{ ns.draws }},
+    rank:      {{ ns.rank | tojson }},
+    groupSize: {{ standings | length }},
+};
+{% else %}
+const CWL_SEASON_INFO = { state: 'none', season: '', league: '', wins: 0, losses: 0, draws: 0, rank: null, groupSize: 0 };
+{% endif %}
+{% if season_overview_our is defined %}
+const CWL_OVERVIEW = {
+    our: {{ season_overview_our | tojson | safe }},
+    all: {{ season_overview_all | tojson | safe }},
+};
+{% else %}
+const CWL_OVERVIEW = { our: {}, all: {} };
+{% endif %}
 
 // ── Per-round data ────────────────────────────────────────────────────────────
 const CWL = {
@@ -2824,6 +2857,257 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="cmpModal-league" class="cmp-sec"></div>
     <div id="cmpModal-matchup" class="cmp-sec"></div>
 </div>
+
+<!-- ── CWL Season Overview Modal ── -->
+<div id="cwlOverviewBackdrop" onclick="closeCWLOverview()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;backdrop-filter:blur(4px);"></div>
+<div id="cwlOverviewModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(720px,94vw);max-height:88vh;overflow-y:auto;
+    box-shadow:0 28px 72px rgba(0,0,0,0.7);">
+    <div id="cwlOverviewContent"></div>
+</div>
+
+<script>
+function openCWLOverview() {
+    document.getElementById('cwlOverviewContent').innerHTML = buildCWLOverviewHTML();
+    document.getElementById('cwlOverviewBackdrop').style.display = 'block';
+    document.getElementById('cwlOverviewModal').style.display   = 'block';
+}
+
+function closeCWLOverview() {
+    document.getElementById('cwlOverviewBackdrop').style.display = 'none';
+    document.getElementById('cwlOverviewModal').style.display   = 'none';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCWLOverview(); });
+
+function toggleCWLOvrSec(id) {
+    const body = document.getElementById(id);
+    const chev = document.getElementById(id + '-chev');
+    const open = body.style.display === 'none';
+    body.style.display = open ? '' : 'none';
+    if (chev) chev.textContent = open ? '▼' : '▶';
+}
+
+function buildCWLOverviewHTML() {
+    const perf = CWL_PLAYER_PERF || [];
+    const info = CWL_SEASON_INFO;
+    const our  = (CWL_OVERVIEW || {}).our || {};
+    const all  = (CWL_OVERVIEW || {}).all || {};
+
+    const seasonLabel = info.league ? `${info.season} · ${info.league}` : info.season;
+
+    // ── Rank ──
+    const rankStr   = info.rank != null ? `#${info.rank} / ${info.groupSize}` : '—';
+    const rankColor = info.rank == null ? 'var(--text)'
+        : info.rank <= 2                  ? 'var(--green)'
+        : info.rank >= info.groupSize - 1 ? 'var(--red)'
+        : 'var(--accent)';
+    const rankSub   = info.rank == null ? ''
+        : info.rank <= 2                  ? ' · 🚀 Promoted'
+        : info.rank >= info.groupSize - 1 ? ' · ⬇️ Relegated'
+        : ' · ➖ Stayed';
+
+    // ── Flawless (our clan, from perf data) ──
+    const flawless = perf.filter(p => p.wars > 0 && p.three_stars === p.wars && p.missed === 0);
+
+    // ── Verdict distribution ──
+    const VERDICT_ORDER = [
+        { key: 'badge-godlike',  label: 'Godlike',   color: '#bc8cff' },
+        { key: 'badge-dominant', label: 'Dominant',  color: '#f0a500' },
+        { key: 'badge-wow',      label: 'Very Good', color: '#3fb950' },
+        { key: 'badge-good',     label: 'Good',      color: '#58a6ff' },
+        { key: 'badge-warning',  label: 'Bad',       color: '#e8793a' },
+        { key: 'badge-suck',     label: 'Disaster',  color: '#f85149' },
+        { key: 'badge-useless',  label: 'Useless',   color: '#8b949e' },
+        { key: 'badge-inactive', label: 'Inactive',  color: '#3d4f66' },
+    ];
+    const allDaily      = perf.flatMap(p => p.daily_details || []);
+    const verdictCounts = VERDICT_ORDER
+        .map(v => ({ ...v, count: allDaily.filter(d => d.badge === v.key).length }))
+        .filter(v => v.count > 0);
+
+    // ── Top 3 performers ──
+    const top3   = [...perf].filter(p => p.attacks_used > 0)
+        .sort((a, b) => (b.avg_score - a.avg_score) || (b.avg_stars - a.avg_stars))
+        .slice(0, 3);
+    const medals = ['🥇', '🥈', '🥉'];
+
+    // ── Missed players ──
+    const missedPlayers = perf.filter(p => p.missed > 0).sort((a, b) => b.missed - a.missed);
+
+    // ── Formatting helpers ──
+    function fmtAtk(done, poss) {
+        if (done == null || !poss) return '—';
+        const p = Math.round(done / poss * 100);
+        const c = p >= 90 ? 'var(--green)' : p >= 70 ? 'var(--accent)' : 'var(--red)';
+        return `<b style="color:${c};">${done}/${poss}</b> <span style="color:var(--muted);font-size:11px;">(${p}%)</span>`;
+    }
+    function fmtStarAvg(val, isDefense) {
+        if (val == null) return '—';
+        let c;
+        if (isDefense) c = val <= 1.5 ? 'var(--green)' : val <= 2.0 ? 'var(--accent)' : val <= 2.5 ? 'var(--yellow)' : 'var(--red)';
+        else           c = val >= 2.5 ? 'var(--green)' : val >= 2.0 ? 'var(--accent)' : val >= 1.5 ? 'var(--yellow)' : 'var(--red)';
+        return `<b style="color:${c};">${val.toFixed(2)} ★</b>`;
+    }
+    function fmtRate(pct) {
+        if (pct == null) return '—';
+        const c = pct >= 50 ? 'var(--green)' : pct >= 30 ? 'var(--accent)' : 'var(--red)';
+        return `<b style="color:${c};">${pct}%</b>`;
+    }
+    function fmtThDiff(val) {
+        if (val == null) return '—';
+        const sign = val > 0 ? '+' : '';
+        const c    = Math.abs(val) < 0.05 ? 'var(--muted)' : val > 0 ? 'var(--yellow)' : 'var(--blue)';
+        return `<b style="color:${c};">${sign}${val.toFixed(2)}</b>`;
+    }
+    function fmtMissed(n) {
+        if (n == null) return '—';
+        return `<b style="color:${n === 0 ? 'var(--green)' : 'var(--red)'};">${n}</b>`;
+    }
+    function fmtFlawless(n) {
+        if (n == null) return '—';
+        return `<b style="color:${n > 0 ? 'var(--green)' : 'var(--muted)'};">${n} player${n !== 1 ? 's' : ''}</b>`;
+    }
+    function starsBreakdown(s0, s1, s2, s3) {
+        if ((s0 + s1 + s2 + s3) === 0) return '—';
+        return [
+            [s0, 'var(--red)',    '0★'],
+            [s1, 'var(--yellow)', '1★'],
+            [s2, 'var(--accent)', '2★'],
+            [s3, 'var(--green)',  '3★'],
+        ].filter(([n]) => n > 0).map(([n, c, l]) =>
+            `<span style="color:${c};font-weight:700;font-family:'Rajdhani',sans-serif;">${n}<span style="font-size:10px;opacity:.7;">${l}</span></span>`
+        ).join('<span style="color:var(--bord2);margin:0 3px;">·</span>');
+    }
+
+    // ── Verdict bar ──
+    function buildVerdictBar(counts) {
+        return counts.map(v => `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:${v.count};">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:${v.color};">${v.count}</div>
+                <div style="height:18px;width:100%;min-width:8px;background:${v.color};border-radius:3px;opacity:.85;" title="${v.label}: ${v.count}"></div>
+                <div style="font-size:9px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${v.label}</div>
+            </div>`).join('');
+    }
+
+    // ── Build full section body ──
+    function buildSectionBody(o, isOurs) {
+        const statRows = [
+            ['Record',         isOurs ? `<b style="color:var(--green);">${info.wins}W</b> / <b style="color:var(--red);">${info.losses}L</b> / <b style="color:var(--muted);">${info.draws}D</b>` : '<span style="color:var(--muted);">—</span>'],
+            ['Rank',           isOurs ? `<b style="color:${rankColor};">${rankStr}</b><span style="color:var(--muted);font-size:11px;">${rankSub}</span>` : '<span style="color:var(--muted);">—</span>'],
+            ['Attacks Done',   fmtAtk(o.attacks_done, o.attacks_possible)],
+            ['Attacks Missed', fmtMissed(o.missed)],
+            ['Stars',          starsBreakdown(o.stars_0, o.stars_1, o.stars_2, o.stars_3)],
+            ['Avg Stars',      fmtStarAvg(o.avg_stars, false)],
+            ['3★ Rate',        fmtRate(o.three_star_rate)],
+            ['Avg TH Diff',    fmtThDiff(o.avg_th_diff)],
+            ['Def Avg Stars',  fmtStarAvg(o.avg_def_stars, true)],
+            ['Def TH Diff',    fmtThDiff(o.avg_def_th_diff)],
+            ['Flawless',       fmtFlawless(isOurs ? flawless.length : o.flawless)],
+        ].map(([label, val]) => `
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+                padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);">
+                <span style="font-size:12px;color:var(--muted);white-space:nowrap;">${label}</span>
+                <span style="font-size:13px;text-align:right;">${val}</span>
+            </div>`).join('');
+
+        // Verdict distribution
+        const vBar = isOurs && verdictCounts.length ? `
+            <div style="margin-top:14px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Verdict Distribution</div>
+                <div style="display:flex;gap:4px;align-items:flex-end;">${buildVerdictBar(verdictCounts)}</div>
+            </div>` : '';
+
+        // Top performers
+        const topSection = isOurs && top3.length ? `
+            <div style="margin-top:14px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Top Performers</div>
+                ${top3.map((p, i) => `
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;${i < top3.length - 1 ? 'border-bottom:1px solid var(--bord2);' : ''}">
+                        <span style="font-size:20px;width:28px;text-align:center;">${medals[i]}</span>
+                        <div style="flex:1;">
+                            <div style="font-weight:600;font-size:13px;">${escapeHTML(p.name)}</div>
+                            <div style="font-size:11px;color:var(--muted);">TH${p.th} · ${p.wars} wars</div>
+                        </div>
+                        <span style="font-family:'Rajdhani',sans-serif;color:var(--muted);font-size:13px;margin-right:4px;">Ø${p.avg_stars.toFixed(2)}★</span>
+                        <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;color:var(--accent);">${p.avg_score.toFixed(1)}</span>
+                    </div>`).join('')}
+            </div>` : '';
+
+        // Flawless
+        const flawlessSection = `
+            <div style="margin-top:14px;background:rgba(63,185,80,0.04);border:1px solid rgba(63,185,80,.2);border-radius:8px;padding:10px 14px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">
+                    🌟 Flawless — all rounds attacked &amp; 3-starred
+                </div>
+                ${isOurs
+                    ? (flawless.length
+                        ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${flawless.map(p =>
+                            `<span style="background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.3);color:var(--green);padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600;">${escapeHTML(p.name)}</span>`
+                          ).join('')}</div>`
+                        : `<span style="color:var(--muted);font-size:12px;font-style:italic;">None this season</span>`)
+                    : `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${(o.flawless||0)>0?'var(--green)':'var(--muted)'};">${o.flawless||0} player${(o.flawless||0)!==1?'s':''} across the group</span>`
+                }
+            </div>`;
+
+        // Missed attacks
+        const missedSection = `
+            <div style="margin-top:10px;background:rgba(248,81,73,0.04);border:1px solid rgba(248,81,73,.18);border-radius:8px;padding:10px 14px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">⚠️ Missed Attacks</div>
+                ${isOurs
+                    ? (missedPlayers.length
+                        ? missedPlayers.map(p => `
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bord2);">
+                                <span style="font-weight:600;font-size:13px;">${escapeHTML(p.name)}</span>
+                                <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:var(--red);">${p.attacks_used}/${p.wars} used · ${p.missed} missed</span>
+                            </div>`).join('')
+                        : `<span style="color:var(--green);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;">✅ Everyone attacked every round!</span>`)
+                    : `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${(o.missed||0)===0?'var(--green)':'var(--red)'};">${o.missed||0} missed across the group</span>`
+                }
+            </div>`;
+
+        return statRows + vBar + topSection + flawlessSection + missedSection;
+    }
+
+    function collapsibleSection(id, title, bodyHTML) {
+        return `
+            <div style="border:1px solid var(--bord2);border-radius:10px;overflow:hidden;">
+                <div onclick="toggleCWLOvrSec('${id}')"
+                    style="display:flex;align-items:center;justify-content:space-between;
+                        padding:11px 16px;cursor:pointer;user-select:none;
+                        background:var(--surf2);transition:background .12s;"
+                    onmouseover="this.style.background='rgba(255,255,255,.05)'"
+                    onmouseout="this.style.background='var(--surf2)'">
+                    <span style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
+                        text-transform:uppercase;letter-spacing:1px;color:var(--accent);">${title}</span>
+                    <span id="${id}-chev" style="font-size:10px;color:var(--muted);">▶</span>
+                </div>
+                <div id="${id}" style="display:none;padding:10px 16px 16px;">
+                    ${bodyHTML}
+                </div>
+            </div>`;
+    }
+
+    return `
+        <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;
+            justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;">
+            <div>
+                <div style="font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:700;letter-spacing:.5px;">🏆 Season Overview</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHTML(seasonLabel)}</div>
+            </div>
+            <button onclick="closeCWLOverview()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;">✕</button>
+        </div>
+
+        <div style="padding:18px 24px;display:flex;flex-direction:column;gap:10px;">
+            ${collapsibleSection('cwl-ovr-our', '⚔️ Our Clan', buildSectionBody(our, true))}
+            ${collapsibleSection('cwl-ovr-all', '🌐 Whole CWL', buildSectionBody(all, false))}
+        </div>`;
+}
+
+{% if season and season.state == 'ended' %}
+document.addEventListener('DOMContentLoaded', openCWLOverview);
+{% endif %}
+</script>
 
 </body>
 </html>
