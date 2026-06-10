@@ -913,8 +913,8 @@ def admin_war_roster():
 
     if auto_mode:
         eligible_count = len(eligible)
-        war_size = math.ceil(eligible_count / 5) * 5 + 5
-        fill_ups = war_size - eligible_count
+        war_size = min(50, math.floor(eligible_count / 5) * 5)
+        fill_ups = 0
     else:
         fill_ups = max(0, min(war_size, int(fill_ups_raw)))
 
