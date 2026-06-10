@@ -1770,13 +1770,13 @@ function renderSkillCorr(data) {
         : Math.abs(r) >= 0.15 ? 'Weak link'
         : 'No meaningful link';
 
-    const withBoth  = players.filter(p => p.win_rate !== null && p.raid_avg_pct !== null).length;
-    const withRanked = players.filter(p => p.win_rate !== null).length;
-    const withRaid   = players.filter(p => p.raid_avg_pct !== null).length;
+    const withBoth  = players.filter(p => p.ranked_score !== null && p.raid_score !== null).length;
+    const withRanked = players.filter(p => p.ranked_score !== null).length;
+    const withRaid   = players.filter(p => p.raid_score !== null).length;
 
     document.getElementById('skill-corr-summary').innerHTML = [
         { label: 'Pearson r', val: rLabel, color: rColor, sub: rDesc },
-        { label: 'Data Points', val: n_correlated, color: 'var(--text)', sub: '≥5 ranked + ≥3 raids' },
+        { label: 'Data Points', val: n_correlated, color: 'var(--text)', sub: '≥3 ranked weeks + ≥3 raid weekends' },
         { label: 'Has Ranked Data', val: withRanked, color: 'var(--accent)', sub: `of ${players.length} members` },
         { label: 'Has Raid Data',   val: withRaid,   color: 'var(--accent)', sub: `of ${players.length} members` },
     ].map(s => `
@@ -1787,7 +1787,7 @@ function renderSkillCorr(data) {
         </div>`).join('');
 
     // ── Scatter plot ──
-    const plotPlayers = players.filter(p => p.win_rate !== null && p.raid_avg_pct !== null);
+    const plotPlayers = players.filter(p => p.ranked_score !== null && p.raid_score !== null);
     buildScatterPlot(plotPlayers, pearson_r);
 
     // ── Table ──
@@ -1805,7 +1805,7 @@ function buildScatterPlot(pts, r) {
     const ml = 52, mr = 14, mt = 14, mb = 46;
     const iw = W - ml - mr, ih = H - mt - mb;
 
-    const xs = pts.map(p => p.win_rate), ys = pts.map(p => p.raid_avg_pct);
+    const xs = pts.map(p => p.ranked_score), ys = pts.map(p => p.raid_score);
     const xmin = xs.length ? Math.max(0,  Math.min(...xs) - 5) : 0;
     const xmax = xs.length ? Math.min(100, Math.max(...xs) + 5) : 100;
     const ymin = ys.length ? Math.max(0,  Math.min(...ys) - 5) : 0;
@@ -1833,14 +1833,14 @@ function buildScatterPlot(pts, r) {
     const gridTicks = n => Array.from({length: n+1}, (_,i) => i*(100/n));
     const vGrids = gridTicks(4).filter(v => v >= xmin && v <= xmax)
         .map(v => `<line x1="${px(v)}" y1="${mt}" x2="${px(v)}" y2="${mt+ih}" stroke="var(--bord2)" stroke-width="1"/>
-                   <text x="${px(v)}" y="${mt+ih+14}" text-anchor="middle" font-size="10" fill="var(--muted)">${v}%</text>`).join('');
+                   <text x="${px(v)}" y="${mt+ih+14}" text-anchor="middle" font-size="10" fill="var(--muted)">${v}</text>`).join('');
     const hGrids = gridTicks(4).filter(v => v >= ymin && v <= ymax)
         .map(v => `<line x1="${ml}" y1="${py(v)}" x2="${ml+iw}" y2="${py(v)}" stroke="var(--bord2)" stroke-width="1"/>
-                   <text x="${ml-8}" y="${py(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}%</text>`).join('');
+                   <text x="${ml-8}" y="${py(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`).join('');
 
     // Dots
     const dots = pts.map((p, i) => {
-        const cx = px(p.win_rate), cy = py(p.raid_avg_pct);
+        const cx = px(p.ranked_score), cy = py(p.raid_score);
         const col = TH_COLORS[p.th] || '#8b949e';
         return `<circle cx="${cx}" cy="${cy}" r="7" fill="${col}" fill-opacity=".85" stroke="${col}" stroke-width="1.5"
             data-idx="${i}" class="sc-dot" style="cursor:pointer;"/>`;
@@ -1848,7 +1848,7 @@ function buildScatterPlot(pts, r) {
 
     // Labels for dots (abbreviated, non-overlapping — just always show)
     const labels = pts.map(p => {
-        const cx = px(p.win_rate), cy = py(p.raid_avg_pct);
+        const cx = px(p.ranked_score), cy = py(p.raid_score);
         const short = p.name.split(' ')[0].substring(0,8);
         return `<text x="${cx}" y="${cy - 10}" text-anchor="middle" font-size="9" fill="var(--muted)" style="pointer-events:none;">${short}</text>`;
     }).join('');
@@ -1860,8 +1860,8 @@ function buildScatterPlot(pts, r) {
         ${regLine}
         ${dots}
         ${labels}
-        <text x="${ml + iw/2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="DM Sans,sans-serif">Ranked Win Rate →</text>
-        <text x="12" y="${mt + ih/2}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="DM Sans,sans-serif" transform="rotate(-90,12,${mt+ih/2})">Raid Avg Dmg% →</text>
+        <text x="${ml + iw/2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="DM Sans,sans-serif">Ranked Score →</text>
+        <text x="12" y="${mt + ih/2}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="DM Sans,sans-serif" transform="rotate(-90,12,${mt+ih/2})">Raid Score →</text>
         ${r !== null ? `<text x="${ml+iw-4}" y="${mt+12}" text-anchor="end" font-size="10" fill="var(--muted)">r = ${(r>0?'+':'')+r.toFixed(2)}</text>` : ''}
     </svg>`;
 
@@ -1877,8 +1877,8 @@ function buildScatterPlot(pts, r) {
             tooltip.style.display = 'block';
             tooltip.innerHTML = `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;margin-bottom:4px;">${p.name} · TH${p.th}</div>
                 <div style="color:var(--muted);line-height:1.8;">
-                    🏆 Ranked win rate: <strong style="color:var(--text);">${p.win_rate}%</strong> <span style="color:var(--muted);font-size:10px;">(${p.ranked_games} games)</span><br>
-                    💥 Raid avg dmg: <strong style="color:var(--text);">${p.raid_avg_pct}%</strong> <span style="color:var(--muted);font-size:10px;">(${p.raid_attacks} attacks)</span>
+                    🏆 Ranked score: <strong style="color:var(--text);">${p.ranked_score}/100</strong> <span style="color:var(--muted);font-size:10px;">(${p.ranked_weeks} weeks · ${p.ranked_games} battles)</span><br>
+                    💥 Raid score: <strong style="color:var(--text);">${p.raid_score}/100</strong> <span style="color:var(--muted);font-size:10px;">(${p.raid_weekends} weekends · ${p.raid_attacks} attacks)</span>
                 </div>`;
         });
         el.addEventListener('mousemove', e => {
@@ -1891,17 +1891,17 @@ function buildScatterPlot(pts, r) {
 
 function buildCorrTable(players) {
     const sorted = [...players].sort((a, b) => {
-        const sa = (a.win_rate ?? -1) + (a.raid_avg_pct ?? -1);
-        const sb = (b.win_rate ?? -1) + (b.raid_avg_pct ?? -1);
+        const sa = (a.ranked_score ?? -1) + (a.raid_score ?? -1);
+        const sb = (b.ranked_score ?? -1) + (b.raid_score ?? -1);
         return sb - sa;
     });
 
     const rows = sorted.map(p => {
-        const wr  = p.win_rate    !== null ? `${p.win_rate}%`    : '<span style="color:var(--muted);font-size:10px;">no data</span>';
-        const rd  = p.raid_avg_pct !== null ? `${p.raid_avg_pct}%` : '<span style="color:var(--muted);font-size:10px;">no data</span>';
+        const wr  = p.ranked_score !== null ? `${p.ranked_score}` : '<span style="color:var(--muted);font-size:10px;">no data</span>';
+        const rd  = p.raid_score   !== null ? `${p.raid_score}`   : '<span style="color:var(--muted);font-size:10px;">no data</span>';
         const col = TH_COLORS[p.th] || '#8b949e';
-        const hasB = p.win_rate !== null && p.raid_avg_pct !== null;
-        const diff = hasB ? (p.win_rate - p.raid_avg_pct).toFixed(1) : null;
+        const hasB = p.ranked_score !== null && p.raid_score !== null;
+        const diff = hasB ? (p.ranked_score - p.raid_score).toFixed(1) : null;
         const diffCell = diff !== null
             ? `<span style="font-family:'Rajdhani',sans-serif;font-size:12px;color:${diff > 5 ? 'var(--green)' : diff < -5 ? 'var(--red)' : 'var(--muted)'};">${diff > 0 ? '+' : ''}${diff}</span>`
             : '—';
@@ -1911,8 +1911,8 @@ function buildCorrTable(players) {
             <td style="padding:7px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">${wr}</td>
             <td style="padding:7px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">${rd}</td>
             <td style="padding:7px 12px;text-align:center;">${diffCell}</td>
-            <td style="padding:7px 12px;text-align:center;color:var(--muted);font-size:11px;">${p.ranked_games || '—'}</td>
-            <td style="padding:7px 12px;text-align:center;color:var(--muted);font-size:11px;">${p.raid_attacks || '—'}</td>
+            <td style="padding:7px 12px;text-align:center;color:var(--muted);font-size:11px;">${p.ranked_weeks || '—'}</td>
+            <td style="padding:7px 12px;text-align:center;color:var(--muted);font-size:11px;">${p.raid_weekends || '—'}</td>
         </tr>`;
     }).join('');
 
@@ -1922,11 +1922,11 @@ function buildCorrTable(players) {
                 <tr>
                     <th style="padding:7px 12px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">TH</th>
                     <th style="padding:7px 12px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Player</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Ranked W%</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Raid Dmg%</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;" title="Ranked W% minus Raid Dmg%">Δ</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Rnk Games</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Raid Atks</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Ranked Score</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Raid Score</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;" title="Ranked score minus Raid score">Δ</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Rnk Weeks</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Raid Wknds</th>
                 </tr>
             </thead>
             <tbody style="font-size:12px;">${rows}</tbody>
@@ -1935,12 +1935,12 @@ function buildCorrTable(players) {
 
 function buildQuadrants(pts) {
     if (!pts.length) return;
-    const mx = pts.reduce((s,p)=>s+p.win_rate,0)/pts.length;
-    const my = pts.reduce((s,p)=>s+p.raid_avg_pct,0)/pts.length;
+    const mx = pts.reduce((s,p)=>s+p.ranked_score,0)/pts.length;
+    const my = pts.reduce((s,p)=>s+p.raid_score,0)/pts.length;
 
     const q = { tr: [], tl: [], br: [], bl: [] };
     pts.forEach(p => {
-        const key = (p.win_rate >= mx ? 'r' : 'l') + (p.raid_avg_pct >= my ? 't' : 'b');
+        const key = (p.ranked_score >= mx ? 'r' : 'l') + (p.raid_score >= my ? 't' : 'b');
         if (q[key[1]+key[0]]) q[key[1]+key[0]].push(p.name);
     });
 

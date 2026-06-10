@@ -2500,7 +2500,13 @@ function buildWinCalc(n) {
     } else if (winAdjPct >= 100) {
         guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot reach your destruction% even with ${wc.oppRem} perfect attack${wc.oppRem !== 1 ? 's' : ''}</div>`;
     } else if (lossAdjPct >= 100) {
-        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — you cannot reach their destruction% even with ${wc.ourRem} perfect attack${wc.ourRem !== 1 ? 's' : ''}</div>`;
+        if (ourMaxFinalPct < oppPct) {
+            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — you cannot reach their destruction% even with ${wc.ourRem} perfect attack${wc.ourRem !== 1 ? 's' : ''}</div>`;
+        } else if (drawSplitOur <= 0.0) {
+            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — trailing on destruction% (all ties go to them) · unfavorable star matchup</div>`;
+        } else {
+            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — very unfavorable matchup</div>`;
+        }
     } else {
         const ourNeeded = Math.max(0, wc.oppMax - wc.ourStars + 1);
         const oppNeeded = Math.max(0, wc.ourMax - wc.oppStars + 1);

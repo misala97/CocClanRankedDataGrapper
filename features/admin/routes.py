@@ -773,59 +773,48 @@ def admin_evaluate_new_members():
 @admin_bp.route('/admin/skill-correlation')
 @require_admin_login
 def admin_skill_correlation():
-    from sqlalchemy import func
+    from collections import defaultdict
     from models import RankedWeek, RaidWeekendLog
+    from services.helpers import _calc_ranked_score, _raid_verdict
 
     players = Player.query.filter_by(in_clan=True).all()
     tags    = [p.tag for p in players]
     pmap    = {p.tag: p for p in players}
 
-    ranked_rows = (db.session.query(
-        RankedWeek.player_tag,
-        func.sum(RankedWeek.attack_wins).label('wins'),
-        func.sum(RankedWeek.attack_losses).label('losses'),
-        func.avg(RankedWeek.trophies).label('avg_trophies'),
-        func.count(RankedWeek.league_group_tag).label('seasons'),
-    ).filter(RankedWeek.player_tag.in_(tags))
-     .group_by(RankedWeek.player_tag).all())
+    # Ranked verdict score per completed active week
+    weeks = (RankedWeek.query
+             .filter(RankedWeek.player_tag.in_(tags), RankedWeek.is_done == True)
+             .options(db.joinedload(RankedWeek.battle_logs))
+             .all())
 
-    raid_rows = (db.session.query(
-        RaidWeekendLog.player_tag,
-        func.avg(RaidWeekendLog.percentage).label('avg_pct'),
-        func.sum(RaidWeekendLog.total_loot_all_attacks).label('total_loot'),
-        func.count(RaidWeekendLog.id).label('attacks'),
-    ).filter(RaidWeekendLog.player_tag.in_(tags))
-     .group_by(RaidWeekendLog.player_tag).all())
+    ranked_scores_map = defaultdict(list)
+    ranked_games_map  = defaultdict(int)
+    for week in weeks:
+        tag       = week.player_tag
+        att_count = sum(1 for l in week.battle_logs if l.attack)
+        if att_count == 0:
+            continue
+        score_100, _, _ = _calc_ranked_score(
+            week.battle_logs, week.townhall or 0,
+            week.max_attacks or att_count, week.league_tier or ''
+        )
+        ranked_scores_map[tag].append(score_100)
+        ranked_games_map[tag] += att_count
 
-    rk_map = {r.player_tag: r for r in ranked_rows}
-    rd_map = {r.player_tag: r for r in raid_rows}
+    # Raid verdict score per raid weekend
+    raid_logs = RaidWeekendLog.query.filter(RaidWeekendLog.player_tag.in_(tags)).all()
+    raid_by_player_wknd = defaultdict(list)
+    for log in raid_logs:
+        raid_by_player_wknd[(log.player_tag, log.raid_weekend_id)].append(log)
 
-    result, xs, ys = [], [], []
-    for tag in tags:
-        p  = pmap[tag]
-        rk = rk_map.get(tag)
-        rd = rd_map.get(tag)
-
-        total_games = int((rk.wins or 0) + (rk.losses or 0)) if rk else 0
-        win_rate    = round(int(rk.wins or 0) / total_games * 100, 1) if total_games >= 5 else None
-        avg_trophies = round(float(rk.avg_trophies or 0)) if rk else None
-        seasons      = int(rk.seasons or 0) if rk else 0
-
-        raid_attacks = int(rd.attacks or 0) if rd else 0
-        raid_avg_pct = round(float(rd.avg_pct or 0), 1) if rd and raid_attacks >= 1 else None
-        raid_loot    = int(rd.total_loot or 0) if rd else 0
-
-        entry = {
-            'tag': tag, 'name': p.name or tag, 'th': p.current_th or 0,
-            'win_rate': win_rate, 'avg_trophies': avg_trophies,
-            'ranked_games': total_games, 'seasons': seasons,
-            'raid_avg_pct': raid_avg_pct, 'raid_attacks': raid_attacks,
-            'raid_loot': raid_loot,
-        }
-        result.append(entry)
-        if win_rate is not None and raid_avg_pct is not None and total_games >= 5 and raid_attacks >= 3:
-            xs.append(win_rate)
-            ys.append(raid_avg_pct)
+    raid_scores_map  = defaultdict(list)
+    raid_attacks_map = defaultdict(int)
+    for (tag, _), logs in raid_by_player_wknd.items():
+        if not logs:
+            continue
+        _, _, score_100 = _raid_verdict(logs)
+        raid_scores_map[tag].append(score_100)
+        raid_attacks_map[tag] += len(logs)
 
     def pearson_r(xs, ys):
         n = len(xs)
@@ -836,7 +825,30 @@ def admin_skill_correlation():
         den = (sum((x-mx)**2 for x in xs) * sum((y-my)**2 for y in ys)) ** 0.5
         return round(num/den, 3) if den else None
 
-    result.sort(key=lambda e: (-(e['win_rate'] or -1)))
+    result, xs, ys = [], [], []
+    for tag in tags:
+        p = pmap[tag]
+        rk_scores = ranked_scores_map.get(tag, [])
+        rd_scores = raid_scores_map.get(tag, [])
+
+        n_ranked_weeks  = len(rk_scores)
+        n_raid_weekends = len(rd_scores)
+        ranked_score = round(sum(rk_scores) / n_ranked_weeks, 1) if n_ranked_weeks >= 3 else None
+        raid_score   = round(sum(rd_scores) / n_raid_weekends, 1) if n_raid_weekends >= 3 else None
+
+        entry = {
+            'tag': tag, 'name': p.name or tag, 'th': p.current_th or 0,
+            'ranked_score': ranked_score, 'ranked_weeks': n_ranked_weeks,
+            'ranked_games': ranked_games_map.get(tag, 0),
+            'raid_score': raid_score, 'raid_weekends': n_raid_weekends,
+            'raid_attacks': raid_attacks_map.get(tag, 0),
+        }
+        result.append(entry)
+        if ranked_score is not None and raid_score is not None:
+            xs.append(ranked_score)
+            ys.append(raid_score)
+
+    result.sort(key=lambda e: (-(e['ranked_score'] or -1)))
     return jsonify(players=result, pearson_r=pearson_r(xs, ys), n_correlated=len(xs))
 
 
