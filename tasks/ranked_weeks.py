@@ -49,6 +49,7 @@ def task_update_ranked_weeks():
                 war_pref = json_get(player_api, JSON_PLAYER_DATA.WAR_PREFERENCE, default="out", raise_on_missing=False)
                 if war_pref and db_player.war_preference_in_game != war_pref:
                     db_player.war_preference_in_game = war_pref
+                    db_player.war_preference_custom = war_pref
             except Exception as e:
                 ranked_logger.warning(f"Could not update war preference for {db_player.name}: {e}")
             db.session.commit()
