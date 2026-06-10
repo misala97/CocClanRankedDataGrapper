@@ -913,7 +913,7 @@ def admin_war_roster():
 
     if auto_mode:
         eligible_count = len(eligible)
-        non_eligible   = [p for p in enriched if not _is_eligible(p) and not _opted_out(p)]
+        non_eligible   = [p for p in enriched if not _is_eligible(p)]
         ceil_size      = min(50, math.ceil(eligible_count / 5) * 5)
         fill_needed    = ceil_size - eligible_count
         if fill_needed <= len(non_eligible):
