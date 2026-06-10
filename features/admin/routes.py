@@ -768,6 +768,78 @@ def admin_evaluate_new_members():
     return jsonify(results=results, count=len(results))
 
 
+# ── Ranked × Raid Skill Correlation ──────────────────────────────────────────
+
+@admin_bp.route('/admin/skill-correlation')
+@require_admin_login
+def admin_skill_correlation():
+    from sqlalchemy import func
+    from models import RankedWeek, RaidWeekendLog
+
+    players = Player.query.filter_by(in_clan=True).all()
+    tags    = [p.tag for p in players]
+    pmap    = {p.tag: p for p in players}
+
+    ranked_rows = (db.session.query(
+        RankedWeek.player_tag,
+        func.sum(RankedWeek.attack_wins).label('wins'),
+        func.sum(RankedWeek.attack_losses).label('losses'),
+        func.avg(RankedWeek.trophies).label('avg_trophies'),
+        func.count(RankedWeek.league_group_tag).label('seasons'),
+    ).filter(RankedWeek.player_tag.in_(tags))
+     .group_by(RankedWeek.player_tag).all())
+
+    raid_rows = (db.session.query(
+        RaidWeekendLog.player_tag,
+        func.avg(RaidWeekendLog.percentage).label('avg_pct'),
+        func.sum(RaidWeekendLog.total_loot_all_attacks).label('total_loot'),
+        func.count(RaidWeekendLog.id).label('attacks'),
+    ).filter(RaidWeekendLog.player_tag.in_(tags))
+     .group_by(RaidWeekendLog.player_tag).all())
+
+    rk_map = {r.player_tag: r for r in ranked_rows}
+    rd_map = {r.player_tag: r for r in raid_rows}
+
+    result, xs, ys = [], [], []
+    for tag in tags:
+        p  = pmap[tag]
+        rk = rk_map.get(tag)
+        rd = rd_map.get(tag)
+
+        total_games = int((rk.wins or 0) + (rk.losses or 0)) if rk else 0
+        win_rate    = round(int(rk.wins or 0) / total_games * 100, 1) if total_games >= 5 else None
+        avg_trophies = round(float(rk.avg_trophies or 0)) if rk else None
+        seasons      = int(rk.seasons or 0) if rk else 0
+
+        raid_attacks = int(rd.attacks or 0) if rd else 0
+        raid_avg_pct = round(float(rd.avg_pct or 0), 1) if rd and raid_attacks >= 1 else None
+        raid_loot    = int(rd.total_loot or 0) if rd else 0
+
+        entry = {
+            'tag': tag, 'name': p.name or tag, 'th': p.current_th or 0,
+            'win_rate': win_rate, 'avg_trophies': avg_trophies,
+            'ranked_games': total_games, 'seasons': seasons,
+            'raid_avg_pct': raid_avg_pct, 'raid_attacks': raid_attacks,
+            'raid_loot': raid_loot,
+        }
+        result.append(entry)
+        if win_rate is not None and raid_avg_pct is not None and total_games >= 5 and raid_attacks >= 3:
+            xs.append(win_rate)
+            ys.append(raid_avg_pct)
+
+    def pearson_r(xs, ys):
+        n = len(xs)
+        if n < 3:
+            return None
+        mx, my = sum(xs)/n, sum(ys)/n
+        num = sum((x-mx)*(y-my) for x, y in zip(xs, ys))
+        den = (sum((x-mx)**2 for x in xs) * sum((y-my)**2 for y in ys)) ** 0.5
+        return round(num/den, 3) if den else None
+
+    result.sort(key=lambda e: (-(e['win_rate'] or -1)))
+    return jsonify(players=result, pearson_r=pearson_r(xs, ys), n_correlated=len(xs))
+
+
 # ── CWL Roster Recommendation ─────────────────────────────────────────────────
 
 def _player_war_stats(player_tag):

@@ -477,6 +477,38 @@
         .no-war-icon { font-size: 48px; margin-bottom: 12px; }
         .no-war h2 { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); }
 
+        /* ── WIN PROBABILITY ── */
+        .wc-prob-bar { display: grid; height: 50px; border-radius: 8px; overflow: hidden; margin: 16px 20px 8px; }
+        .wc-half-win  { background: linear-gradient(90deg, rgba(63,185,80,.45) 0%, rgba(63,185,80,.2) 100%); display: flex; align-items: center; padding: 0 16px; gap: 8px; min-width: 0; }
+        .wc-half-draw { background: rgba(139,148,158,.15); display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
+        .wc-half-loss { background: linear-gradient(270deg, rgba(248,81,73,.45) 0%, rgba(248,81,73,.2) 100%); display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; gap: 8px; min-width: 0; }
+        .wc-prob-pct  { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; }
+        .wc-half-win  .wc-prob-pct { color: var(--green); }
+        .wc-half-draw .wc-prob-pct { color: var(--muted); font-size: 16px; }
+        .wc-half-loss .wc-prob-pct { color: var(--red); }
+        .wc-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 4px 20px 16px; }
+        .wc-stat-box  { background: var(--surf2); border: 1px solid var(--bord2); border-radius: 8px; padding: 10px 14px; text-align: center; }
+        .wc-stat-val  { font-family: 'Rajdhani', sans-serif; font-size: 24px; font-weight: 700; line-height: 1.1; }
+        .wc-stat-lbl  { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
+        .wc-details   { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 20px 16px; }
+        .wc-detail-box { background: var(--surf2); border: 1px solid var(--bord2); border-radius: 8px; padding: 12px 14px; }
+        .wc-detail-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 8px; font-family: 'Rajdhani', sans-serif; }
+        .wc-detail-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--bord2); }
+        .wc-detail-row:last-child { border-bottom: none; }
+        .wc-detail-key { color: var(--muted); }
+        .wc-detail-val { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; }
+        .wc-guarantee  { padding: 4px 20px 12px; font-size: 12px; font-weight: 600; }
+        @media (max-width: 900px) { .wc-details { grid-template-columns: 1fr; } }
+
+        /* ── CMP MODAL (war) ── */
+        .war-cmp-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200; }
+        .war-cmp-modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            width: min(760px, 96vw); max-height: 88vh; overflow-y: auto;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+            z-index: 201; scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+        }
+
         /* ── WAR FLAGS ── */
         .war-flag {
             display: inline-flex; align-items: center;
@@ -553,6 +585,9 @@
         {% endfor %}
     </select>
 </form>
+{% endif %}
+{% if war and members_our and members_opp %}
+<button class="compare-btn" onclick="openWarMatchupRates()" style="margin-left:auto;">📊 TH Matchup Rates</button>
 {% endif %}
 {% endset %}
 {% include '_page_header.html' %}
@@ -763,14 +798,20 @@
 
 </div>
 
-{# ── COMPARE ── #}
+{# ── WIN PROBABILITY CARD ── #}
 {% if members_our and members_opp %}
-<div class="compare-card" id="compareCard">
-    <div class="cmp-sec" id="cmp-prediction"></div>
-    <div class="cmp-sec" id="cmp-stats"></div>
-    <div class="cmp-sec" id="cmp-th"></div>
-    <div class="cmp-sec" id="cmp-league"></div>
-    <div class="cmp-sec" id="cmp-matchup"></div>
+<div class="recent-card" id="warWinProbCard">
+    <div class="recent-header" onclick="toggleWarWinProb()">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span class="recent-header-title">🎲 Win Probability</span>
+            {% if war.state == 'inWar' %}<span class="state-badge state-inWar" style="padding:2px 8px;font-size:9px;">Live</span>{% endif %}
+        </div>
+        <span class="recent-chevron" id="warWpChev">▼</span>
+    </div>
+    <div id="warWpBarPreview" onclick="toggleWarWinProb()" style="padding:0 16px 14px;display:none;cursor:pointer;"></div>
+    <div class="recent-body" id="warWpBody">
+        <div id="warWinCalc"></div>
+    </div>
 </div>
 {% endif %}
 
@@ -1006,7 +1047,509 @@ const WAR  = {
     streakOpp:    {{ war.opponent_win_streak | default(0) | int }},
     cwlOur:       {{ (war.cwl_league or '') | tojson | safe }},
     cwlOpp:       {{ (war.opponent_cwl_league or '') | tojson | safe }},
+    state:        {{ war.state | tojson | safe }},
+    teamSize:     {{ war.team_size or 0 }},
+    ourStars:     {{ war.clan_stars or 0 }},
+    oppStars:     {{ war.opponent_stars or 0 }},
+    ourAtks:      {{ war.clan_attacks or 0 }},
+    oppAtks:      {{ war.opponent_attacks or 0 }},
+    ourPct:       {{ war.clan_destruction_pct or 0 }},
+    oppPct:       {{ war.opponent_destruction_pct or 0 }},
 };
+
+const WAR_MATCHUP_RATES     = {{ war_matchup_rates     | tojson | safe }};
+const WAR_MATCHUP_COUNTS    = {{ war_matchup_counts    | tojson | safe }};
+const WAR_TOTAL_ATK_COUNT   = {{ war_total_atk_count   | tojson | safe }};
+const WAR_PLAYER_HISTORY    = {{ war_player_history    | tojson | safe }};
+
+// ── Win Probability Engine ────────────────────────────────────────────────────
+
+function warConvolve(dists) {
+    let dp = [1.0];
+    for (const dist of dists) {
+        const next = new Array(dp.length + 3).fill(0);
+        for (let k = 0; k < dp.length; k++) {
+            if (!dp[k]) continue;
+            for (let s = 0; s <= 3; s++) next[k + s] += dp[k] * dist[s];
+        }
+        dp = next;
+    }
+    return dp;
+}
+
+function warAtkDist(atkTH, defTH) {
+    const d = WAR_MATCHUP_RATES[atkTH + '_' + defTH];
+    if (d) return d;
+    // fallback: rough distribution when no data
+    return [0.05, 0.20, 0.45, 0.30];
+}
+
+function warPlayerInfo(tag, atkTH, defTH, histK) {
+    const pp = WAR_PLAYER_HISTORY[tag];
+    if (!pp) return null;
+    const ph = pp[atkTH + '_' + defTH];
+    if (!ph || ph.total < 1) return null;
+    const personal = ph.counts.map(c => c / ph.total);
+    const global   = warAtkDist(atkTH, defTH);
+    const w        = ph.total / (ph.total + histK);
+    return { dist: personal.map((p, i) => w * p + (1 - w) * global[i]), count: ph.total };
+}
+
+// Greedy assignment: highest attacker → highest uncleared defender (no repeat pairs).
+// attacks = array of attack objects with attacker_tag, attacker_side, defender_pos, stars
+function computeWarAssignment(attacks) {
+    const oppDefStars = {}, ourAtkUsed = {};
+    const ourAtkPairs = new Set();
+    const ourDefStars = {}, oppAtkUsed = {};
+    const oppAtkPairs = new Set();
+
+    for (const atk of attacks) {
+        if (atk.attacker_side === 'our') {
+            ourAtkUsed[atk.attacker_tag] = (ourAtkUsed[atk.attacker_tag] || 0) + 1;
+            ourAtkPairs.add(atk.attacker_tag + '_' + atk.defender_pos);
+            oppDefStars[atk.defender_pos] = Math.max(oppDefStars[atk.defender_pos] || 0, atk.stars);
+        } else {
+            oppAtkUsed[atk.attacker_tag] = (oppAtkUsed[atk.attacker_tag] || 0) + 1;
+            oppAtkPairs.add(atk.attacker_tag + '_' + atk.defender_pos);
+            ourDefStars[atk.defender_pos] = Math.max(ourDefStars[atk.defender_pos] || 0, atk.stars);
+        }
+    }
+
+    function assignSide(attackers, defenders, defStars, atkUsed, atkPairs) {
+        const uncleared = defenders
+            .filter(m => (defStars[m.pos] || 0) < 3)
+            .sort((a, b) => a.pos - b.pos);
+
+        const slots = [];
+        for (const m of [...attackers].sort((a, b) => a.pos - b.pos)) {
+            const used = atkUsed[m.tag] || 0;
+            for (let i = 0; i < 2 - used; i++) slots.push(m);
+        }
+
+        const assignments = [], slotUsed = new Array(slots.length).fill(false);
+        for (const def of uncleared) {
+            for (let i = 0; i < slots.length; i++) {
+                if (slotUsed[i]) continue;
+                if (!atkPairs.has(slots[i].tag + '_' + def.pos)) {
+                    assignments.push({ attacker: slots[i], defender: def });
+                    slotUsed[i] = true;
+                    break;
+                }
+            }
+        }
+        return assignments;
+    }
+
+    return {
+        ourAssignments: assignSide(OUR, OPP, oppDefStars, ourAtkUsed, ourAtkPairs),
+        oppAssignments: assignSide(OPP, OUR, ourDefStars, oppAtkUsed, oppAtkPairs),
+    };
+}
+
+function _calcWarProb(ourAssignments, oppAssignments, ourCurrentStars, oppCurrentStars) {
+    const ourBreakdown = [], oppBreakdown = [], ourDists = [], oppDists = [];
+
+    for (const a of ourAssignments) {
+        const info = warPlayerInfo(a.attacker.tag, a.attacker.th, a.defender.th, 5);
+        const dist = info ? info.dist : warAtkDist(a.attacker.th, a.defender.th);
+        const src  = info ? `${info.count} fights · ${Math.round(info.count/(info.count+5)*100)}% own` : 'DB avg · 0% own';
+        ourDists.push(dist);
+        ourBreakdown.push({ name: a.attacker.name, th: a.attacker.th, pos: a.attacker.pos,
+            defTH: a.defender.th, defName: a.defender.name, defPos: a.defender.pos,
+            dist, expStars: dist.reduce((s,p,k)=>s+p*k,0), srcLabel: src });
+    }
+    for (const a of oppAssignments) {
+        const info = warPlayerInfo(a.attacker.tag, a.attacker.th, a.defender.th, 5);
+        const dist = info ? info.dist : warAtkDist(a.attacker.th, a.defender.th);
+        const src  = info ? `${info.count} fights · ${Math.round(info.count/(info.count+5)*100)}% own` : 'DB avg · 0% own';
+        oppDists.push(dist);
+        oppBreakdown.push({ name: a.attacker.name, th: a.attacker.th, pos: a.attacker.pos,
+            defTH: a.defender.th, defName: a.defender.name, defPos: a.defender.pos,
+            dist, expStars: dist.reduce((s,p,k)=>s+p*k,0), srcLabel: src });
+    }
+
+    const dpOur = warConvolve(ourDists);
+    const dpOpp = warConvolve(oppDists);
+    const maxPossible = WAR.teamSize * 3;
+    let pWin = 0, pDraw = 0, pLoss = 0;
+    for (let i = 0; i < dpOur.length; i++) {
+        if (!dpOur[i]) continue;
+        for (let j = 0; j < dpOpp.length; j++) {
+            if (!dpOpp[j]) continue;
+            const ot = Math.min(ourCurrentStars + i, maxPossible);
+            const op = Math.min(oppCurrentStars + j, maxPossible);
+            const p = dpOur[i] * dpOpp[j];
+            if (ot > op) pWin += p; else if (ot === op) pDraw += p; else pLoss += p;
+        }
+    }
+    const expOurAdd = ourBreakdown.reduce((s,a)=>s+a.expStars,0);
+    const expOppAdd = oppBreakdown.reduce((s,a)=>s+a.expStars,0);
+    const avgTH = arr => arr.length ? (arr.reduce((s,a)=>s+a.th,0)/arr.length).toFixed(1) : '—';
+
+    return {
+        pWin, pDraw, pLoss,
+        ourStars: ourCurrentStars, oppStars: oppCurrentStars,
+        ourRem: ourAssignments.length, oppRem: oppAssignments.length,
+        ourMax: Math.min(ourCurrentStars + ourAssignments.length * 3, maxPossible),
+        oppMax: Math.min(oppCurrentStars + oppAssignments.length * 3, maxPossible),
+        expOurFinal: Math.min(ourCurrentStars + expOurAdd, maxPossible),
+        expOppFinal: Math.min(oppCurrentStars + expOppAdd, maxPossible),
+        teamSize: WAR.teamSize,
+        maxPossible,
+        avgOurRemTH: avgTH(ourBreakdown),
+        avgOppRemTH: avgTH(oppBreakdown),
+        dpOur, dpOpp, ourBreakdown, oppBreakdown,
+    };
+}
+
+function computeWarWinCalc() {
+    if (!WAR.teamSize) return null;
+    const { ourAssignments, oppAssignments } = computeWarAssignment(WAR_ATTACKS);
+    return _calcWarProb(ourAssignments, oppAssignments, WAR.ourStars, WAR.oppStars);
+}
+
+function computeWarPrediction() {
+    if (!WAR.teamSize) return null;
+    const { ourAssignments, oppAssignments } = computeWarAssignment([]);
+    return _calcWarProb(ourAssignments, oppAssignments, 0, 0);
+}
+
+// ── War attacker breakdown table (mirrors CWL wcAttackerTable) ────────────────
+function warAttackerTable(breakdown, side) {
+    if (!breakdown.length) return '<div style="padding:8px 20px 12px;font-size:12px;color:var(--muted);">No remaining attacks assigned.</div>';
+    const clr = side === 'our' ? 'var(--green)' : 'var(--red)';
+    const rows = breakdown.map(a => {
+        const exp = a.expStars.toFixed(2);
+        const bars = [0,1,2,3].map(s => {
+            const pct = Math.round(a.dist[s] * 100);
+            const col = s===3?'var(--green)':s===2?'var(--yellow)':s===1?'var(--accent)':'var(--red)';
+            return pct > 0 ? `<span style="display:inline-block;background:${col};opacity:.7;width:${Math.max(pct,2)}px;height:8px;border-radius:2px;margin-right:1px;" title="${s}★: ${pct}%"></span>` : '';
+        }).join('');
+        return `<tr style="border-bottom:1px solid var(--bord2);">
+            <td style="padding:7px 10px;font-size:12px;font-weight:600;color:${clr};">#${a.pos} ${escapeHTML(a.name)}</td>
+            <td style="padding:7px 10px;font-size:11px;color:var(--muted);">TH${a.th} → TH${a.defTH} <span style="color:var(--muted);font-size:10px;">#${a.defPos} ${escapeHTML(a.defName)}</span></td>
+            <td style="padding:7px 10px;">${bars}</td>
+            <td style="padding:7px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${clr};">+${exp}★</td>
+            <td style="padding:7px 10px;font-size:10px;color:var(--muted);">${escapeHTML(a.srcLabel)}</td>
+        </tr>`;
+    }).join('');
+    return `<table style="width:100%;border-collapse:collapse;"><tbody>${rows}</tbody></table>`;
+}
+
+function warToggleBreakdown(id, hdr) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const open = el.style.display === 'none' || !el.style.display;
+    el.style.display = open ? 'block' : 'none';
+    const arrow = hdr.querySelector('span');
+    if (arrow) arrow.textContent = open ? '▾' : '▸';
+}
+
+// ── buildWarWinCalc — renders the live win probability card ───────────────────
+function buildWarWinCalc() {
+    const el = document.getElementById('warWinCalc');
+    const prevEl = document.getElementById('warWpBarPreview');
+    if (!el) return;
+
+    const wc = computeWarWinCalc();
+    if (!wc) { el.innerHTML = '<div style="padding:16px 20px;color:var(--muted);font-size:13px;">Not enough data.</div>'; return; }
+
+    // Destruction tiebreaker (same logic as CWL)
+    const ourPct = WAR.ourPct || 0, oppPct = WAR.oppPct || 0;
+    const maxPerAtk = WAR.teamSize > 0 ? 100 / WAR.teamSize : 5;
+    const oppMaxFinal = oppPct + wc.oppRem * maxPerAtk;
+    const ourMaxFinal = ourPct + wc.ourRem * maxPerAtk;
+    let drawSplitOur;
+    if (oppMaxFinal < ourPct)      drawSplitOur = 1.0;
+    else if (ourMaxFinal < oppPct) drawSplitOur = 0.0;
+    else                           drawSplitOur = ourPct > oppPct ? 1.0 : ourPct < oppPct ? 0.0 : 0.5;
+
+    const pWinAdj  = wc.pWin + wc.pDraw * drawSplitOur;
+    const pLossAdj = wc.pLoss + wc.pDraw * (1 - drawSplitOur);
+    const winPct     = Math.round(wc.pWin  * 100);
+    const drawPct    = Math.round(wc.pDraw * 100);
+    const lossPct    = Math.max(0, 100 - winPct - drawPct);
+    const winAdjPct  = Math.round(pWinAdj  * 100);
+    const lossAdjPct = 100 - winAdjPct;
+
+    const drawBg = drawSplitOur >= 1.0
+        ? 'linear-gradient(90deg,rgba(63,185,80,.35) 0%,rgba(63,185,80,.15) 100%)'
+        : drawSplitOur <= 0.0
+        ? 'linear-gradient(270deg,rgba(248,81,73,.35) 0%,rgba(248,81,73,.15) 100%)'
+        : 'rgba(139,148,158,.15)';
+    const drawTextColor = drawSplitOur >= 1.0 ? 'var(--green)' : drawSplitOur <= 0.0 ? 'var(--red)' : 'var(--muted)';
+    const drawStatLabel = drawSplitOur >= 1.0 ? 'Via dest. (us)' : drawSplitOur <= 0.0 ? 'Via dest. (them)' : 'Via dest.';
+
+    const barCols = drawPct > 0
+        ? `${Math.max(winPct,5)}fr ${Math.max(drawPct,2)}fr ${Math.max(lossPct,5)}fr`
+        : `${Math.max(winAdjPct,5)}fr 0fr ${Math.max(lossAdjPct,5)}fr`;
+
+    if (prevEl) {
+        prevEl.style.display = 'block';
+        prevEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;padding:0 4px 6px;">
+            <span style="font-size:12px;font-weight:600;color:var(--green);">${escapeHTML(WAR.ourName)}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--red);">${escapeHTML(WAR.oppName)}</span>
+        </div>
+        <div class="wc-prob-bar" style="margin:0;height:40px;grid-template-columns:${barCols};">
+            <div class="wc-half-win"><span class="wc-prob-pct">${winAdjPct}%</span></div>
+            <div class="wc-half-draw" style="background:${drawBg};">${drawPct>=6?`<span class="wc-prob-pct" style="color:${drawTextColor};font-size:12px;">${drawPct}%</span>`:''}</div>
+            <div class="wc-half-loss"><span class="wc-prob-pct">${lossAdjPct}%</span></div>
+        </div>`;
+    }
+
+    let guaranteeHtml = '';
+    if (wc.ourStars > wc.oppMax) {
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot bridge the ${wc.ourStars - wc.oppMax}★ gap</div>`;
+    } else if (wc.oppStars > wc.ourMax) {
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — even with all 3★ you trail by ${wc.oppStars - wc.ourMax}★</div>`;
+    } else if (winAdjPct >= 100) {
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot reach your destruction% with ${wc.oppRem} attack${wc.oppRem!==1?'s':''} left</div>`;
+    } else if (lossAdjPct >= 100) {
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — you cannot reach their destruction% with ${wc.ourRem} attack${wc.ourRem!==1?'s':''} left</div>`;
+    } else {
+        const ourNeed = Math.max(0, wc.oppMax - wc.ourStars + 1);
+        const oppNeed = Math.max(0, wc.ourMax - wc.oppStars + 1);
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--muted);">Need <strong style="color:var(--green)">${ourNeed}★</strong> more to lock win · Opp needs <strong style="color:var(--red)">${oppNeed}★</strong> more to lock win</div>`;
+    }
+
+    const ourId = 'warWcOur', oppId = 'warWcOpp';
+    el.innerHTML = `
+        ${guaranteeHtml}
+        <div class="wc-stats-row">
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--green);">${winAdjPct}%</div><div class="wc-stat-lbl">Win</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:${drawTextColor};">${drawPct}%</div><div class="wc-stat-lbl">${drawStatLabel}</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--red);">${lossAdjPct}%</div><div class="wc-stat-lbl">Loss</div></div>
+        </div>
+        <div class="wc-details">
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Current Score</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourStars}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppStars}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Lead</span><span class="wc-detail-val" style="color:${wc.ourStars>=wc.oppStars?'var(--green)':'var(--red)'};">${wc.ourStars>wc.oppStars?'+':''}${wc.ourStars-wc.oppStars}★</span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Assigned Attacks</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourRem}</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppRem}</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Avg TH (assigned)</span><span class="wc-detail-val"><span style="color:var(--green);">${wc.avgOurRemTH}</span><span style="color:var(--muted);"> vs </span><span style="color:var(--red);">${wc.avgOppRemTH}</span></span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Star Range</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val">${wc.ourStars}→<span style="color:var(--green);">${wc.ourMax}</span>★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val">${wc.oppStars}→<span style="color:var(--red);">${wc.oppMax}</span>★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Max possible</span><span class="wc-detail-val" style="color:var(--muted);">${wc.maxPossible}★</span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Expected Final</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.expOurFinal.toFixed(1)}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.expOppFinal.toFixed(1)}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Exp. lead</span><span class="wc-detail-val" style="color:${wc.expOurFinal>=wc.expOppFinal?'var(--green)':'var(--red)'};">${wc.expOurFinal>wc.expOppFinal?'+':''}${(wc.expOurFinal-wc.expOppFinal).toFixed(1)}★</span></div>
+            </div>
+        </div>
+        <div style="border-top:1px solid var(--bord2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="warToggleBreakdown('${ourId}',this)">
+                <span style="font-size:12px;font-weight:600;color:var(--green);">▸ Our ${wc.ourRem} assigned attack${wc.ourRem!==1?'s':''}</span>
+                <span style="font-size:10px;color:var(--muted);">Exp. +${wc.ourBreakdown.reduce((s,a)=>s+a.expStars,0).toFixed(1)}★ → ${wc.expOurFinal.toFixed(1)}★ total</span>
+            </div>
+            <div id="${ourId}" style="display:none;">${warAttackerTable(wc.ourBreakdown,'our')}</div>
+        </div>
+        <div style="border-top:1px solid var(--bord2);border-bottom:1px solid var(--bord2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="warToggleBreakdown('${oppId}',this)">
+                <span style="font-size:12px;font-weight:600;color:var(--red);">▸ Their ${wc.oppRem} assigned attack${wc.oppRem!==1?'s':''}</span>
+                <span style="font-size:10px;color:var(--muted);">Exp. +${wc.oppBreakdown.reduce((s,a)=>s+a.expStars,0).toFixed(1)}★ → ${wc.expOppFinal.toFixed(1)}★ total</span>
+            </div>
+            <div id="${oppId}" style="display:none;">${warAttackerTable(wc.oppBreakdown,'opp')}</div>
+        </div>`;
+}
+
+function toggleWarWinProb() {
+    const body = document.getElementById('warWpBody');
+    const chev = document.getElementById('warWpChev');
+    if (!body) return;
+    const open = body.style.display !== 'block';
+    body.style.display = open ? 'block' : 'none';
+    if (chev) chev.classList.toggle('open', open);
+    if (open && !document.getElementById('warWinCalc').innerHTML.trim()) buildWarWinCalc();
+}
+
+// ── Compare & Predict Modal ───────────────────────────────────────────────────
+function openWarCmpModal() {
+    document.getElementById('warCmpBackdrop').style.display = 'block';
+    document.getElementById('warCmpModal').style.display    = 'block';
+    ['prediction','winprob-bar','winprob-body','stats','th','league','matchup'].forEach(s => {
+        const el = document.getElementById('warCmp-' + s);
+        if (el) el.innerHTML = '';
+    });
+    const wpBody = document.getElementById('warCmp-winprob-body');
+    if (wpBody) wpBody.style.display = 'none';
+    buildCompare();
+    buildWarCmpWinProb();
+}
+
+function closeWarCmpModal() {
+    document.getElementById('warCmpBackdrop').style.display = 'none';
+    document.getElementById('warCmpModal').style.display    = 'none';
+}
+
+// ── TH Matchup Rates Modal ────────────────────────────────────────────────────
+function openWarMatchupRates() {
+    const el = document.getElementById('warMrContent');
+    if (!el.innerHTML.trim()) {
+        const rates  = WAR_MATCHUP_RATES;
+        const counts = WAR_MATCHUP_COUNTS;
+        // Use all keys from counts (not just rates) so sub-5 matchups also appear
+        const allKeys = Object.keys(counts);
+        const atkTHs = [...new Set(allKeys.map(k => +k.split('_')[0]))].sort((a,b) => b-a);
+        const defTHs = [...new Set(allKeys.map(k => +k.split('_')[1]))].sort((a,b) => b-a);
+
+        let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:18px;">
+            Total attacks in DB: <strong style="color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:15px;">${WAR_TOTAL_ATK_COUNT.toLocaleString()}</strong>
+            &nbsp;·&nbsp; ${allKeys.length} matchup combinations
+            &nbsp;·&nbsp; <span style="color:var(--muted);font-size:11px;">★ distribution shown for ≥5 attacks</span>
+        </div><div style="overflow-x:auto;">`;
+
+        for (const atkTH of atkTHs) {
+            const rows = defTHs.map(defTH => {
+                const key = `${atkTH}_${defTH}`;
+                const cnt = counts[key] || 0;
+                if (!cnt) return null;
+                const d = rates[key];
+                const lowSample = !d;
+                let avgCell, barCell;
+                if (d) {
+                    const [p0,p1,p2,p3] = d;
+                    const avgS = (p1+p2*2+p3*3).toFixed(2);
+                    avgCell = `<td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:${avgS>=2.5?'var(--green)':avgS>=1.8?'var(--yellow)':avgS>=1.2?'var(--accent)':'var(--red)'};">Ø ${avgS}★</td>`;
+                    barCell = `<td style="padding:8px 20px 8px 4px;">
+                        <div style="display:flex;height:8px;border-radius:2px;overflow:hidden;min-width:80px;">
+                            <div style="flex:${p0||0.001};background:rgba(248,81,73,.8);"></div>
+                            <div style="flex:${p1||0.001};background:rgba(230,140,30,.8);"></div>
+                            <div style="flex:${p2||0.001};background:rgba(210,185,40,.8);"></div>
+                            <div style="flex:${p3||0.001};background:rgba(63,185,80,.8);"></div>
+                        </div>
+                        <div style="font-size:9px;color:var(--muted);display:flex;gap:2px;margin-top:2px;">
+                            <span style="color:rgba(248,81,73,.9);">${(p0*100).toFixed(0)}%</span>·
+                            <span style="color:rgba(230,140,30,.9);">${(p1*100).toFixed(0)}%</span>·
+                            <span style="color:rgba(210,185,40,.9);">${(p2*100).toFixed(0)}%</span>·
+                            <span style="color:rgba(63,185,80,.9);">${(p3*100).toFixed(0)}%</span>
+                        </div></td>`;
+                } else {
+                    avgCell = `<td style="padding:8px 14px;font-size:11px;color:var(--muted);font-style:italic;">low sample</td>`;
+                    barCell = `<td style="padding:8px 20px 8px 4px;"><div style="height:8px;border-radius:2px;background:var(--bord2);min-width:80px;"></div></td>`;
+                }
+                const rowOpacity = lowSample ? 'opacity:.5;' : '';
+                return `<tr style="${rowOpacity}">
+                    <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--accent);">TH${atkTH}</td>
+                    <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--muted);">vs TH${defTH}</td>
+                    ${avgCell}
+                    <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-size:12px;color:var(--muted);">${cnt.toLocaleString()} atks</td>
+                    ${barCell}
+                </tr>`;
+            }).filter(Boolean);
+            if (!rows.length) continue;
+            const groupTotal = defTHs.reduce((s, defTH) => s + (counts[`${atkTH}_${defTH}`] || 0), 0);
+            html += `
+            <div style="margin-bottom:20px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--bord2);display:flex;justify-content:space-between;">
+                    <span>TH${atkTH} Attacking</span>
+                    <span style="font-weight:400;">${groupTotal.toLocaleString()} attacks</span>
+                </div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead><tr style="background:var(--surf2);">
+                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Attacker</th>
+                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Defender</th>
+                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Avg ★</th>
+                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Attacks</th>
+                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">0★ · 1★ · 2★ · 3★</th>
+                    </tr></thead>
+                    <tbody>${rows.join('')}</tbody>
+                </table>
+            </div>`;
+        }
+        html += `</div>`;
+        el.innerHTML = html;
+    }
+    document.getElementById('warMrBackdrop').style.display = 'block';
+    document.getElementById('warMrModal').style.display    = 'block';
+}
+
+function closeWarMatchupRates() {
+    document.getElementById('warMrBackdrop').style.display = 'none';
+    document.getElementById('warMrModal').style.display    = 'none';
+}
+
+function toggleWarCmpWinProb() {
+    const body = document.getElementById('warCmp-winprob-body');
+    const chev = document.getElementById('warCmpWpChev');
+    if (!body) return;
+    const open = body.style.display !== 'block';
+    body.style.display = open ? 'block' : 'none';
+    if (chev) chev.textContent = open ? '▲' : '▼';
+}
+
+function buildWarCmpWinProb() {
+    const barEl  = document.getElementById('warCmp-winprob-bar');
+    const bodyEl = document.getElementById('warCmp-winprob-body');
+    if (!barEl || !bodyEl) return;
+
+    const wc = computeWarPrediction();
+    if (!wc) return;
+
+    const winPct  = Math.round(wc.pWin  * 100);
+    const drawPct = Math.round(wc.pDraw * 100);
+    const lossPct = Math.max(0, 100 - winPct - drawPct);
+
+    barEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 4px 6px;">
+            <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;">🎲 Win Probability (0 attacks assumed)</span>
+            <span class="recent-chevron" id="warCmpWpChev" onclick="toggleWarCmpWinProb()" style="cursor:pointer;">▼</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:0 4px 6px;" onclick="toggleWarCmpWinProb()" style="cursor:pointer;">
+            <span style="font-size:12px;font-weight:600;color:var(--green);">${escapeHTML(WAR.ourName)}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--red);">${escapeHTML(WAR.oppName)}</span>
+        </div>
+        <div class="wc-prob-bar" style="margin:0;height:40px;grid-template-columns:${Math.max(winPct,5)}fr ${Math.max(drawPct,2)}fr ${Math.max(lossPct,5)}fr;" onclick="toggleWarCmpWinProb()" style="cursor:pointer;">
+            <div class="wc-half-win"><span class="wc-prob-pct">${winPct}%</span></div>
+            <div class="wc-half-draw">${drawPct>=8?`<span class="wc-prob-pct">${drawPct}%</span>`:''}</div>
+            <div class="wc-half-loss"><span class="wc-prob-pct">${lossPct}%</span></div>
+        </div>`;
+
+    const expOurAdd = wc.ourBreakdown.reduce((s,a)=>s+a.expStars,0);
+    const expOppAdd = wc.oppBreakdown.reduce((s,a)=>s+a.expStars,0);
+    bodyEl.innerHTML = `
+        <div class="wc-stats-row">
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--green);">${winPct}%</div><div class="wc-stat-lbl">Win</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--muted);">${drawPct}%</div><div class="wc-stat-lbl">Draw</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--red);">${lossPct}%</div><div class="wc-stat-lbl">Loss</div></div>
+        </div>
+        <div class="wc-details">
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Assigned Attacks</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourRem}</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppRem}</span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Expected Stars</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${expOurAdd.toFixed(1)}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${expOppAdd.toFixed(1)}★</span></div>
+            </div>
+        </div>
+        <div style="border-top:1px solid var(--bord2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="warToggleBreakdown('warCmpOurAtk',this)">
+                <span style="font-size:12px;font-weight:600;color:var(--green);">▸ Our ${wc.ourRem} planned attacks</span>
+                <span style="font-size:10px;color:var(--muted);">Exp. ${expOurAdd.toFixed(1)}★ total</span>
+            </div>
+            <div id="warCmpOurAtk" style="display:none;">${warAttackerTable(wc.ourBreakdown,'our')}</div>
+        </div>
+        <div style="border-top:1px solid var(--bord2);border-bottom:1px solid var(--bord2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="warToggleBreakdown('warCmpOppAtk',this)">
+                <span style="font-size:12px;font-weight:600;color:var(--red);">▸ Their ${wc.oppRem} planned attacks</span>
+                <span style="font-size:10px;color:var(--muted);">Exp. ${expOppAdd.toFixed(1)}★ total</span>
+            </div>
+            <div id="warCmpOppAtk" style="display:none;">${warAttackerTable(wc.oppBreakdown,'opp')}</div>
+        </div>`;
+}
 
 const SKIP = new Set(['Unranked', 'Unknown League', '']);
 
@@ -1076,19 +1619,9 @@ function buildCompare() {
         </div>`;
     }
 
-    document.getElementById('cmp-prediction').innerHTML = `
+    document.getElementById('warCmp-prediction').innerHTML = `
         <div class="cmp-title">📊 War Prediction</div>
-        <div class="pred-split" style="grid-template-columns: ${ourPct}fr ${oppPct}fr">
-            <div class="pred-half-our">
-                <span class="pred-pct">${ourPct}%</span>
-                <span class="pred-pct-name">${WAR.ourName}</span>
-            </div>
-            <div class="pred-half-opp">
-                <span class="pred-pct-name">${WAR.oppName}</span>
-                <span class="pred-pct">${oppPct}%</span>
-            </div>
-        </div>
-        <div class="pred-verdict">${verdict}</div>
+        <div class="pred-verdict" style="margin-bottom:16px;">${verdict}</div>
         <div class="pred-factors-grid">
             ${factorCard('Avg TH', avgThOur.toFixed(1), avgThOpp.toFixed(1), thDiffAvg)}
             ${factorCard('Avg League Rank', avgLrOur > 0 ? avgLrOur.toFixed(1) : '—', avgLrOpp > 0 ? avgLrOpp.toFixed(1) : '—', leagueDiff)}
@@ -1111,7 +1644,7 @@ function buildCompare() {
         </div>`;
     }
 
-    document.getElementById('cmp-stats').innerHTML = `
+    document.getElementById('warCmp-stats').innerHTML = `
         <div class="cmp-title">📋 Key Statistics</div>
         <div style="display:grid;grid-template-columns:1fr 140px 1fr;margin-bottom:8px;">
             <span style="font-size:11px;font-weight:600;color:var(--green)">${WAR.ourName}</span>
@@ -1146,7 +1679,7 @@ function buildCompare() {
         </div>`;
     }).join('');
 
-    document.getElementById('cmp-th').innerHTML = `
+    document.getElementById('warCmp-th').innerHTML = `
         <div class="cmp-title">🏰 TH Distribution</div>
         <div class="dist-header">
             <span class="dist-our-lbl">${WAR.ourName}</span>
@@ -1181,7 +1714,7 @@ function buildCompare() {
         </tr>`;
     }).join('');
 
-    document.getElementById('cmp-league').innerHTML = `
+    document.getElementById('warCmp-league').innerHTML = `
         <div class="cmp-title">🎯 League Comparison</div>
         <div class="matchup-summary">
             <div class="matchup-stat"><div class="mn mn-green">${lgBetter}</div><div class="ml">Ahead</div></div>
@@ -1218,7 +1751,7 @@ function buildCompare() {
         </tr>`;
     }).join('');
 
-    document.getElementById('cmp-matchup').innerHTML = `
+    document.getElementById('warCmp-matchup').innerHTML = `
         <div class="cmp-title">⚔️ TH Matchup by Position</div>
         <div class="matchup-summary">
             <div class="matchup-stat"><div class="mn mn-green">${thBetter}</div><div class="ml">Ahead</div></div>
@@ -1499,14 +2032,15 @@ function toggleWarAttackLog() {
     if (opening && !body.innerHTML.trim()) buildWarAttackLog();
 }
 
-function toggleCompare() {
-    const card = document.getElementById('compareCard');
-    const btn  = document.getElementById('compareBtn');
-    const open = card.classList.toggle('open');
-    btn.classList.toggle('open', open);
-    btn.textContent = open ? '✕ Close Comparison' : '📊 Compare & Predict';
-    if (open) buildCompare();
-}
+function toggleCompare() { openWarCmpModal(); }
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeWarCmpModal(); closeWarMatchupRates(); } });
+
+document.addEventListener('DOMContentLoaded', () => {
+    {% if war and war.state == 'inWar' %}
+    toggleWarWinProb();
+    {% endif %}
+});
 </script>
 {% endif %}
 
@@ -1688,6 +2222,40 @@ function toggleCompare() {
     document.addEventListener('click', clearAll);
 })();
 </script>
+{% endif %}
+
+{% if war and members_our and members_opp %}
+<!-- ── TH Matchup Rates Modal ── -->
+<div id="warMrBackdrop" onclick="closeWarMatchupRates()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;backdrop-filter:blur(4px);"></div>
+<div id="warMrModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(900px,94vw);max-height:88vh;overflow-y:auto;
+    box-shadow:0 28px 72px rgba(0,0,0,0.7);scrollbar-width:thin;scrollbar-color:var(--border) transparent;">
+    <div style="padding:20px 26px 16px;border-bottom:1px solid var(--bord2);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;">
+        <div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:700;letter-spacing:.5px;">📊 TH Matchup Rates</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Global attack outcome probabilities per TH matchup · from all recorded clan war attacks</div>
+        </div>
+        <button onclick="closeWarMatchupRates()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;">✕</button>
+    </div>
+    <div id="warMrContent" style="padding:20px 24px;"></div>
+</div>
+
+<div id="warCmpBackdrop" onclick="closeWarCmpModal()" style="display:none;" class="war-cmp-backdrop"></div>
+<div id="warCmpModal" style="display:none;" class="war-cmp-modal">
+    <div style="position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;z-index:1;">
+        <span style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:.5px;">📊 Compare &amp; Predict · {{ war.clan_name or 'Our Clan' }} vs {{ war.opponent_name or 'Opponent' }}</span>
+        <button onclick="closeWarCmpModal()" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <div id="warCmp-prediction" class="cmp-sec"></div>
+    <div class="cmp-sec" style="padding:0;">
+        <div id="warCmp-winprob-bar" style="padding:0 16px 14px;cursor:pointer;" onclick="toggleWarCmpWinProb()"></div>
+        <div id="warCmp-winprob-body" style="display:none;"></div>
+    </div>
+    <div id="warCmp-stats"   class="cmp-sec"></div>
+    <div id="warCmp-th"      class="cmp-sec"></div>
+    <div id="warCmp-league"  class="cmp-sec"></div>
+    <div id="warCmp-matchup" class="cmp-sec"></div>
+</div>
 {% endif %}
 
 </body>

@@ -619,6 +619,50 @@
         </div>
     </div>
 
+    <!-- ── Ranked × Raid Skill Correlation ── -->
+    <div class="collapse-card" id="card-skill-corr" style="margin-top:16px">
+        <button class="collapse-header" onclick="toggleSection('skill-corr')">
+            <span class="collapse-header-icon">📈</span>
+            <span class="collapse-header-title">Ranked × Raid Skill Correlation</span>
+            <span class="collapse-header-meta" id="skill-corr-meta">does ranked skill predict raid weekend performance?</span>
+            <span class="collapse-chevron" id="chevron-skill-corr">▼</span>
+        </button>
+        <div class="collapse-body hidden" id="body-skill-corr">
+            <div style="margin:18px 0 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+                <button onclick="loadSkillCorr()" id="skill-corr-btn"
+                    style="padding:8px 20px;background:var(--accent);color:#000;border:none;border-radius:8px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.4px;">
+                    ▶ Run Analysis
+                </button>
+                <span id="skill-corr-loading" style="display:none;font-size:12px;color:var(--muted);">Analysing…</span>
+            </div>
+
+            <div id="skill-corr-result" style="display:none;">
+                <!-- Summary row -->
+                <div id="skill-corr-summary" style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px;"></div>
+
+                <!-- Scatter + Table side by side -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+                    <div>
+                        <div style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">
+                            Scatter Plot — Ranked Win Rate vs Raid Avg Dmg%
+                        </div>
+                        <div id="skill-corr-scatter" style="position:relative;background:var(--surf2);border:1px solid var(--border);border-radius:10px;overflow:hidden;"></div>
+                        <div id="skill-corr-tooltip" style="display:none;position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;pointer-events:none;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.4);"></div>
+                    </div>
+                    <div>
+                        <div style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">
+                            Per-Player Breakdown
+                        </div>
+                        <div id="skill-corr-table-wrap" style="overflow-y:auto;max-height:360px;border:1px solid var(--border);border-radius:10px;"></div>
+                    </div>
+                </div>
+
+                <!-- Quadrant legend -->
+                <div id="skill-corr-quadrants" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-top:16px;"></div>
+            </div>
+        </div>
+    </div><!-- /collapse-card skill-corr -->
+
     <!-- ── New Member Evaluator ── -->
     <div class="collapse-card" id="new-member-card">
         <button class="collapse-header" onclick="toggleSection('new-member')">
@@ -1686,6 +1730,237 @@ function sortTableByCol(tableId, col, type) {
     // re-append rows
     tbody.innerHTML = '';
     rows.forEach(r => tbody.appendChild(r));
+}
+
+// ── Ranked × Raid Skill Correlation ──────────────────────────────────────────
+
+const TH_COLORS = {
+    8:'#a0a0a0',9:'#8ba7c4',10:'#7ac47a',11:'#e8c84a',12:'#e87a4a',
+    13:'#d44ad4',14:'#4ad4d4',15:'#4a7ad4',16:'#e84a4a',17:'#e8a44a',18:'#63b950',
+};
+
+function loadSkillCorr() {
+    document.getElementById('skill-corr-btn').disabled = true;
+    document.getElementById('skill-corr-loading').style.display = 'inline';
+    fetch('/admin/skill-correlation')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('skill-corr-loading').style.display = 'none';
+            document.getElementById('skill-corr-result').style.display  = 'block';
+            renderSkillCorr(data);
+        })
+        .catch(() => {
+            document.getElementById('skill-corr-loading').textContent = 'Error loading data.';
+        });
+}
+
+function renderSkillCorr(data) {
+    const { players, pearson_r, n_correlated } = data;
+
+    // ── Summary pills ──
+    const r = pearson_r;
+    const rLabel = r === null ? 'N/A' : (r > 0 ? '+' : '') + r.toFixed(2);
+    const rColor = r === null ? 'var(--muted)'
+        : Math.abs(r) >= 0.5 ? 'var(--green)'
+        : Math.abs(r) >= 0.25 ? 'var(--yellow)'
+        : 'var(--muted)';
+    const rDesc  = r === null ? 'Not enough data'
+        : Math.abs(r) >= 0.6 ? (r > 0 ? 'Strong positive link' : 'Strong negative link')
+        : Math.abs(r) >= 0.35 ? (r > 0 ? 'Moderate positive link' : 'Moderate negative link')
+        : Math.abs(r) >= 0.15 ? 'Weak link'
+        : 'No meaningful link';
+
+    const withBoth  = players.filter(p => p.win_rate !== null && p.raid_avg_pct !== null).length;
+    const withRanked = players.filter(p => p.win_rate !== null).length;
+    const withRaid   = players.filter(p => p.raid_avg_pct !== null).length;
+
+    document.getElementById('skill-corr-summary').innerHTML = [
+        { label: 'Pearson r', val: rLabel, color: rColor, sub: rDesc },
+        { label: 'Data Points', val: n_correlated, color: 'var(--text)', sub: '≥5 ranked + ≥3 raids' },
+        { label: 'Has Ranked Data', val: withRanked, color: 'var(--accent)', sub: `of ${players.length} members` },
+        { label: 'Has Raid Data',   val: withRaid,   color: 'var(--accent)', sub: `of ${players.length} members` },
+    ].map(s => `
+        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:130px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${s.label}</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;color:${s.color};line-height:1;">${s.val}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px;">${s.sub}</div>
+        </div>`).join('');
+
+    // ── Scatter plot ──
+    const plotPlayers = players.filter(p => p.win_rate !== null && p.raid_avg_pct !== null);
+    buildScatterPlot(plotPlayers, pearson_r);
+
+    // ── Table ──
+    buildCorrTable(players);
+
+    // ── Quadrant breakdown ──
+    buildQuadrants(plotPlayers);
+
+    document.getElementById('skill-corr-meta').textContent =
+        `r = ${rLabel} · ${n_correlated} data points`;
+}
+
+function buildScatterPlot(pts, r) {
+    const W = 480, H = 320;
+    const ml = 52, mr = 14, mt = 14, mb = 46;
+    const iw = W - ml - mr, ih = H - mt - mb;
+
+    const xs = pts.map(p => p.win_rate), ys = pts.map(p => p.raid_avg_pct);
+    const xmin = xs.length ? Math.max(0,  Math.min(...xs) - 5) : 0;
+    const xmax = xs.length ? Math.min(100, Math.max(...xs) + 5) : 100;
+    const ymin = ys.length ? Math.max(0,  Math.min(...ys) - 5) : 0;
+    const ymax = ys.length ? Math.min(100, Math.max(...ys) + 5) : 100;
+
+    const px = x => ml + (x - xmin) / (xmax - xmin) * iw;
+    const py = y => mt + ih - (y - ymin) / (ymax - ymin) * ih;
+
+    // Regression line
+    let regLine = '';
+    if (pts.length >= 3 && r !== null) {
+        const n = pts.length, mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+        const num = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0);
+        const den = xs.reduce((s,x)=>s+(x-mx)**2,0);
+        if (den) {
+            const slope = num/den, intercept = my - slope*mx;
+            const x0 = xmin, x1 = xmax;
+            const y0 = slope*x0+intercept, y1 = slope*x1+intercept;
+            const rColor = Math.abs(r)>=0.4 ? 'rgba(63,185,80,.5)' : 'rgba(139,148,158,.3)';
+            regLine = `<line x1="${px(x0)}" y1="${py(y0)}" x2="${px(x1)}" y2="${py(y1)}" stroke="${rColor}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+        }
+    }
+
+    // Grid lines
+    const gridTicks = n => Array.from({length: n+1}, (_,i) => i*(100/n));
+    const vGrids = gridTicks(4).filter(v => v >= xmin && v <= xmax)
+        .map(v => `<line x1="${px(v)}" y1="${mt}" x2="${px(v)}" y2="${mt+ih}" stroke="var(--bord2)" stroke-width="1"/>
+                   <text x="${px(v)}" y="${mt+ih+14}" text-anchor="middle" font-size="10" fill="var(--muted)">${v}%</text>`).join('');
+    const hGrids = gridTicks(4).filter(v => v >= ymin && v <= ymax)
+        .map(v => `<line x1="${ml}" y1="${py(v)}" x2="${ml+iw}" y2="${py(v)}" stroke="var(--bord2)" stroke-width="1"/>
+                   <text x="${ml-8}" y="${py(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}%</text>`).join('');
+
+    // Dots
+    const dots = pts.map((p, i) => {
+        const cx = px(p.win_rate), cy = py(p.raid_avg_pct);
+        const col = TH_COLORS[p.th] || '#8b949e';
+        return `<circle cx="${cx}" cy="${cy}" r="7" fill="${col}" fill-opacity=".85" stroke="${col}" stroke-width="1.5"
+            data-idx="${i}" class="sc-dot" style="cursor:pointer;"/>`;
+    }).join('');
+
+    // Labels for dots (abbreviated, non-overlapping — just always show)
+    const labels = pts.map(p => {
+        const cx = px(p.win_rate), cy = py(p.raid_avg_pct);
+        const short = p.name.split(' ')[0].substring(0,8);
+        return `<text x="${cx}" y="${cy - 10}" text-anchor="middle" font-size="9" fill="var(--muted)" style="pointer-events:none;">${short}</text>`;
+    }).join('');
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block;width:100%;height:auto;">
+        ${vGrids}${hGrids}
+        <line x1="${ml}" y1="${mt}" x2="${ml}" y2="${mt+ih}" stroke="var(--border)" stroke-width="1"/>
+        <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="var(--border)" stroke-width="1"/>
+        ${regLine}
+        ${dots}
+        ${labels}
+        <text x="${ml + iw/2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="DM Sans,sans-serif">Ranked Win Rate →</text>
+        <text x="12" y="${mt + ih/2}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="DM Sans,sans-serif" transform="rotate(-90,12,${mt+ih/2})">Raid Avg Dmg% →</text>
+        ${r !== null ? `<text x="${ml+iw-4}" y="${mt+12}" text-anchor="end" font-size="10" fill="var(--muted)">r = ${(r>0?'+':'')+r.toFixed(2)}</text>` : ''}
+    </svg>`;
+
+    const wrap = document.getElementById('skill-corr-scatter');
+    wrap.innerHTML = svg;
+
+    // Tooltip on hover
+    const tooltip = document.getElementById('skill-corr-tooltip');
+    wrap.querySelectorAll('.sc-dot').forEach(el => {
+        const i = +el.dataset.idx;
+        const p = pts[i];
+        el.addEventListener('mouseenter', e => {
+            tooltip.style.display = 'block';
+            tooltip.innerHTML = `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;margin-bottom:4px;">${p.name} · TH${p.th}</div>
+                <div style="color:var(--muted);line-height:1.8;">
+                    🏆 Ranked win rate: <strong style="color:var(--text);">${p.win_rate}%</strong> <span style="color:var(--muted);font-size:10px;">(${p.ranked_games} games)</span><br>
+                    💥 Raid avg dmg: <strong style="color:var(--text);">${p.raid_avg_pct}%</strong> <span style="color:var(--muted);font-size:10px;">(${p.raid_attacks} attacks)</span>
+                </div>`;
+        });
+        el.addEventListener('mousemove', e => {
+            tooltip.style.left = (e.clientX + 14) + 'px';
+            tooltip.style.top  = (e.clientY - 10) + 'px';
+        });
+        el.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+    });
+}
+
+function buildCorrTable(players) {
+    const sorted = [...players].sort((a, b) => {
+        const sa = (a.win_rate ?? -1) + (a.raid_avg_pct ?? -1);
+        const sb = (b.win_rate ?? -1) + (b.raid_avg_pct ?? -1);
+        return sb - sa;
+    });
+
+    const rows = sorted.map(p => {
+        const wr  = p.win_rate    !== null ? `${p.win_rate}%`    : '<span style="color:var(--muted);font-size:10px;">no data</span>';
+        const rd  = p.raid_avg_pct !== null ? `${p.raid_avg_pct}%` : '<span style="color:var(--muted);font-size:10px;">no data</span>';
+        const col = TH_COLORS[p.th] || '#8b949e';
+        const hasB = p.win_rate !== null && p.raid_avg_pct !== null;
+        const diff = hasB ? (p.win_rate - p.raid_avg_pct).toFixed(1) : null;
+        const diffCell = diff !== null
+            ? `<span style="font-family:'Rajdhani',sans-serif;font-size:12px;color:${diff > 5 ? 'var(--green)' : diff < -5 ? 'var(--red)' : 'var(--muted)'};">${diff > 0 ? '+' : ''}${diff}</span>`
+            : '—';
+        return `<tr>
+            <td style="padding:7px 12px;"><span style="font-family:'Rajdhani',sans-serif;font-weight:700;color:${col};">TH${p.th}</span></td>
+            <td style="padding:7px 12px;font-weight:600;">${p.name}</td>
+            <td style="padding:7px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">${wr}</td>
+            <td style="padding:7px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">${rd}</td>
+            <td style="padding:7px 12px;text-align:center;">${diffCell}</td>
+            <td style="padding:7px 12px;text-align:center;color:var(--muted);font-size:11px;">${p.ranked_games || '—'}</td>
+            <td style="padding:7px 12px;text-align:center;color:var(--muted);font-size:11px;">${p.raid_attacks || '—'}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('skill-corr-table-wrap').innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead style="background:var(--surf2);position:sticky;top:0;z-index:1;">
+                <tr>
+                    <th style="padding:7px 12px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">TH</th>
+                    <th style="padding:7px 12px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Player</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Ranked W%</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Raid Dmg%</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;" title="Ranked W% minus Raid Dmg%">Δ</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Rnk Games</th>
+                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Raid Atks</th>
+                </tr>
+            </thead>
+            <tbody style="font-size:12px;">${rows}</tbody>
+        </table>`;
+}
+
+function buildQuadrants(pts) {
+    if (!pts.length) return;
+    const mx = pts.reduce((s,p)=>s+p.win_rate,0)/pts.length;
+    const my = pts.reduce((s,p)=>s+p.raid_avg_pct,0)/pts.length;
+
+    const q = { tr: [], tl: [], br: [], bl: [] };
+    pts.forEach(p => {
+        const key = (p.win_rate >= mx ? 'r' : 'l') + (p.raid_avg_pct >= my ? 't' : 'b');
+        if (q[key[1]+key[0]]) q[key[1]+key[0]].push(p.name);
+    });
+
+    const qdefs = [
+        { key:'tr', icon:'⭐', label:'Elite', desc:'High ranked + high raid', color:'var(--green)' },
+        { key:'tl', icon:'🏰', label:'Raid Specialist', desc:'Lower ranked, strong raid', color:'var(--accent)' },
+        { key:'br', icon:'⚔️', label:'Ranked Specialist', desc:'Strong ranked, lower raid', color:'#4a7ad4' },
+        { key:'bl', icon:'📉', label:'Needs Growth', desc:'Lower on both metrics', color:'var(--muted)' },
+    ];
+
+    document.getElementById('skill-corr-quadrants').innerHTML = qdefs.map(qd => {
+        const names = q[qd.key] || [];
+        return `<div style="background:var(--surf2);border:1px solid var(--border);border-left:3px solid ${qd.color};border-radius:10px;padding:12px 14px;">
+            <div style="font-size:16px;margin-bottom:4px;">${qd.icon}</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${qd.color};margin-bottom:2px;">${qd.label}</div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">${qd.desc}</div>
+            <div style="font-size:11px;color:var(--text);line-height:1.8;">${names.length ? names.join(', ') : '<span style="color:var(--muted);">—</span>'}</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:${qd.color};margin-top:6px;">${names.length}</div>
+        </div>`;
+    }).join('');
 }
 </script>
 

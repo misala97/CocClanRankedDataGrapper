@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, jsonify
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import ClanWar, ClanWarMember, Player
+from models import ClanWar, ClanWarMember, ClanWarAttack, Player
 from features.auth.routes import _can_edit_clan_war
 from services.helpers import avg_league_name, league_rank, SKIP_LEAGUES
 from features.war.war_combos import classify_attack, get_war_verdict
@@ -43,8 +43,8 @@ def clan_war_page():
         avg_league_our = avg_league_name(members_our)
         avg_league_opp = avg_league_name(members_opp)
 
-        members_our_json = [{'th': m.town_hall_level or 0, 'name': m.player_name or '', 'pos': m.map_position or 0, 'league': m.ranked_league or '', 'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0} for m in members_our]
-        members_opp_json = [{'th': m.town_hall_level or 0, 'name': m.player_name or '', 'pos': m.map_position or 0, 'league': m.ranked_league or '', 'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0} for m in members_opp]
+        members_our_json = [{'tag': m.player_tag or '', 'th': m.town_hall_level or 0, 'name': m.player_name or '', 'pos': m.map_position or 0, 'league': m.ranked_league or '', 'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0} for m in members_our]
+        members_opp_json = [{'tag': m.player_tag or '', 'th': m.town_hall_level or 0, 'name': m.player_name or '', 'pos': m.map_position or 0, 'league': m.ranked_league or '', 'lr': league_rank(m.ranked_league) if m.ranked_league not in SKIP_LEAGUES else 0} for m in members_opp]
 
         for a in selected_war.attacks:
             attacks_by_attacker.setdefault(a.attacker_tag, []).append(a)
@@ -70,6 +70,7 @@ def clan_war_page():
             ) if atk_th and dfn_th else 'unknown'
             all_attacks_json.append({
                 'order':         int(a.attack_order or 0),
+                'attacker_tag':  str(atk.player_tag or '') if atk else '',
                 'attacker_name': str(atk.player_name or '?') if atk else '?',
                 'attacker_pos':  atk_pos,
                 'attacker_th':   atk_th,
@@ -150,6 +151,46 @@ def clan_war_page():
 
         war_verdicts.sort(key=lambda x: -x['score'])
 
+    # ── War matchup rates from all completed wars ─────────────────────────────
+    _hist = (ClanWar.query
+             .options(selectinload(ClanWar.members), selectinload(ClanWar.attacks))
+             .filter(ClanWar.state == 'warEnded')
+             .all())
+    _raw_war, _player_war = {}, {}
+    for hw in _hist:
+        _mb = {m.player_tag: m for m in hw.members}
+        for atk in hw.attacks:
+            am = _mb.get(atk.attacker_tag)
+            dm = _mb.get(atk.defender_tag)
+            if not am or not dm:
+                continue
+            ath = am.town_hall_level or 0
+            dth = dm.town_hall_level or 0
+            if ath < 5 or dth < 5:
+                continue
+            s = min(atk.stars or 0, 3)
+            k = (ath, dth)
+            _raw_war.setdefault(k, [0, 0, 0, 0])[s] += 1
+            _player_war.setdefault(am.player_tag, {}).setdefault(k, [0, 0, 0, 0])[s] += 1
+
+    war_matchup_rates, war_matchup_counts = {}, {}
+    war_total_atk_count = sum(sum(v) for v in _raw_war.values())
+    for (ath, dth), counts in _raw_war.items():
+        total = sum(counts)
+        k = f'{ath}_{dth}'
+        war_matchup_counts[k] = total
+        if total >= 5:
+            war_matchup_rates[k] = [round(c / total, 4) for c in counts]
+
+    war_player_history = {}
+    for tag, matchups in _player_war.items():
+        ph = {}
+        for (ath, dth), counts in matchups.items():
+            if sum(counts) >= 1:
+                ph[f'{ath}_{dth}'] = {'counts': counts, 'total': sum(counts)}
+        if ph:
+            war_player_history[tag] = ph
+
     war_options = []
     for w in wars:
         if w.state == 'preparation':
@@ -179,6 +220,10 @@ def clan_war_page():
         members_opp_json=members_opp_json,
         all_attacks_json=all_attacks_json,
         war_verdicts=war_verdicts,
+        war_matchup_rates=war_matchup_rates,
+        war_matchup_counts=war_matchup_counts,
+        war_total_atk_count=war_total_atk_count,
+        war_player_history=war_player_history,
         now=dt.datetime.now(dt.timezone.utc),
     )
 
