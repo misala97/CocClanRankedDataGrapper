@@ -1,0 +1,14 @@
+{# requires: matchup_source — must be {% set %} by the including template before this include #}
+<div id="pmrBackdrop" onclick="closePlayerMatchupRatesModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;backdrop-filter:blur(4px);"></div>
+<div id="pmrModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(1000px,96vw);max-height:88vh;overflow-y:auto;
+    box-shadow:0 28px 72px rgba(0,0,0,0.7);scrollbar-width:thin;scrollbar-color:var(--border) transparent;">
+    <div style="padding:20px 26px 16px;border-bottom:1px solid var(--bord2);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;">
+        <div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:700;letter-spacing:.5px;">👤 Player Matchup History</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Individual attack performance per TH matchup · from all recorded {{ matchup_source | default('') }} attacks</div>
+        </div>
+        <button onclick="closePlayerMatchupRatesModal()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;">✕</button>
+    </div>
+    <div id="pmrContent" style="padding:20px 24px;"></div>
+</div>

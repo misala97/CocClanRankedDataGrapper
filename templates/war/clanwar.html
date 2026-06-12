@@ -569,6 +569,7 @@
 {% endif %}
 {% if war and members_our and members_opp %}
 <button class="compare-btn" onclick="openWarMatchupRates()" style="margin-left:auto;">📊 TH Matchup Rates</button>
+<button class="compare-btn" onclick="openWarPlayerRates()">👤 Player Rates</button>
 {% endif %}
 {% endset %}
 {% include '_page_header.html' %}
@@ -706,7 +707,7 @@
         {% endif %}
         <div class="score-size">{{ war.team_size }}v{{ war.team_size }}</div>
         {% if members_our and members_opp %}
-        <button class="compare-btn" id="compareBtn" onclick="toggleCompare()">📊 Compare &amp; Predict</button>
+        <button class="compare-btn" id="compareBtn" onclick="openWarCmpModal()">📊 Compare &amp; Predict</button>
         {% endif %}
     </div>
 
@@ -877,12 +878,12 @@
                 {% endif %}
             </div>
             <div class="attacks-col">
-                {% set used = my_attacks | length %}
+                {% set war_atks_per = 2 %}{% set used = my_attacks | length %}
                 {% if war.state == 'preparation' %}
-                <span class="atk-count atk-prep">{{ 2 - used }} left</span>
-                {% elif used == 2 %}<span class="atk-count atk-full">2/2</span>
-                {% elif used == 1 %}<span class="atk-count atk-partial">1/2</span>
-                {% else %}<span class="atk-count atk-none">0/2</span>
+                <span class="atk-count atk-prep">{{ war_atks_per - used }} left</span>
+                {% elif used == war_atks_per %}<span class="atk-count atk-full">{{ war_atks_per }}/{{ war_atks_per }}</span>
+                {% elif used > 0 %}<span class="atk-count atk-partial">{{ used }}/{{ war_atks_per }}</span>
+                {% else %}<span class="atk-count atk-none">0/{{ war_atks_per }}</span>
                 {% endif %}
                 <div class="atk-pills">
                     {% for a in my_attacks %}
@@ -997,21 +998,7 @@ function toggleWarFlag(event, btn, url) {
         });
 }
 
-function equalizeRosterRows() {
-    const cards = document.querySelectorAll('#rosterGrid .roster-card');
-    if (cards.length < 2) return;
-    const leftRows  = cards[0].querySelectorAll('.member-row');
-    const rightRows = cards[1].querySelectorAll('.member-row');
-    leftRows.forEach(r  => r.style.height = '');
-    rightRows.forEach(r => r.style.height = '');
-    const n = Math.min(leftRows.length, rightRows.length);
-    for (let i = 0; i < n; i++) {
-        const h = Math.max(leftRows[i].offsetHeight, rightRows[i].offsetHeight);
-        leftRows[i].style.height  = h + 'px';
-        rightRows[i].style.height = h + 'px';
-    }
-}
-document.addEventListener('DOMContentLoaded', equalizeRosterRows);
+document.addEventListener('DOMContentLoaded', () => equalizeRoster(document.getElementById('rosterGrid')));
 </script>
 {% endif %}
 
@@ -1041,17 +1028,12 @@ const WAR  = {
 const WAR_MATCHUP_RATES     = {{ war_matchup_rates     | tojson | safe }};
 const WAR_MATCHUP_COUNTS    = {{ war_matchup_counts    | tojson | safe }};
 const WAR_TOTAL_ATK_COUNT   = {{ war_total_atk_count   | tojson | safe }};
+const ATTACKS_PER_PLAYER    = 2;
 const WAR_PLAYER_HISTORY    = {{ war_player_history    | tojson | safe }};
 
 // ── Win Probability Engine ────────────────────────────────────────────────────
 
-function warPlayerInfo(tag, atkTH, defTH, histK) {
-    const pp = WAR_PLAYER_HISTORY[tag];
-    if (!pp) return null;
-    const ph = pp[atkTH + '_' + defTH];
-    if (!ph || ph.total < 1) return null;
-    return blendPlayerDist(ph.counts, ph.total, atkDist(WAR_MATCHUP_RATES, atkTH, defTH), histK);
-}
+const warPlayerInfo = (tag, atkTH, defTH, histK) => playerInfo(WAR_PLAYER_HISTORY, WAR_MATCHUP_RATES, tag, atkTH, defTH, histK);
 
 // Greedy assignment: highest attacker → highest uncleared defender (no repeat pairs).
 // attacks = array of attack objects with attacker_tag, attacker_side, defender_pos, stars
@@ -1079,7 +1061,7 @@ function computeWarAssignment(attacks) {
             .sort((a, b) => a.pos - b.pos);
 
         const slotsLeft = {};
-        for (const m of attackers) slotsLeft[m.tag] = 2 - (atkUsed[m.tag] || 0);
+        for (const m of attackers) slotsLeft[m.tag] = ATTACKS_PER_PLAYER - (atkUsed[m.tag] || 0);
 
         const assignments = [];
         for (const def of uncleared) {
@@ -1094,7 +1076,7 @@ function computeWarAssignment(attacks) {
                 if (exp > bestExp) { bestExp = exp; bestAtk = atk; }
             }
             if (bestAtk) {
-                assignments.push({ attacker: bestAtk, defender: def });
+                assignments.push({ attacker: bestAtk, defender: def, defBestStars: defStars[def.pos] || 0 });
                 slotsLeft[bestAtk.tag]--;
             }
         }
@@ -1109,10 +1091,11 @@ function computeWarAssignment(attacks) {
 
 function _calcWarProb(ourAssignments, oppAssignments, ourStars, oppStars) {
     const toPair = a => ({ tag: a.attacker.tag, atkTH: a.attacker.th, name: a.attacker.name, pos: a.attacker.pos,
-                           defTH: a.defender.th, defName: a.defender.name, defPos: a.defender.pos });
+                            defTH: a.defender.th, defName: a.defender.name, defPos: a.defender.pos,
+                            defBestStars: a.defBestStars || 0 });
     return calcWinProb(ourAssignments.map(toPair), oppAssignments.map(toPair),
                        ourStars, oppStars, WAR.teamSize * 3,
-                       warPlayerInfo, (a,d) => atkDist(WAR_MATCHUP_RATES, a, d), WAR_MATCHUP_COUNTS);
+                        warPlayerInfo, (a,d) => atkDist(WAR_MATCHUP_RATES, a, d), WAR_MATCHUP_COUNTS);
 }
 
 function computeWarWinCalc() {
@@ -1127,174 +1110,16 @@ function computeWarPrediction() {
     return _calcWarProb(ourAssignments, oppAssignments, 0, 0);
 }
 
-// ── War attacker breakdown table (mirrors CWL wcAttackerTable) ────────────────
-function warAttackerTable(breakdown, side) {
-    if (!breakdown.length) return '<div style="padding:8px 20px 12px;font-size:12px;color:var(--muted);">No remaining attacks assigned.</div>';
-    const clr = side === 'our' ? 'var(--green)' : 'var(--red)';
-    const rows = breakdown.map(a => {
-        const exp = a.expStars.toFixed(2);
-        const bars = [0,1,2,3].map(s => {
-            const pct = Math.round(a.dist[s] * 100);
-            const col = s===3?'var(--green)':s===2?'var(--yellow)':s===1?'var(--accent)':'var(--red)';
-            return pct > 0 ? `<span style="display:inline-block;background:${col};opacity:.7;width:${Math.max(pct,2)}px;height:8px;border-radius:2px;margin-right:1px;" title="${s}★: ${pct}%"></span>` : '';
-        }).join('');
-        return `<tr style="border-bottom:1px solid var(--bord2);">
-            <td style="padding:7px 10px;font-size:12px;font-weight:600;color:${clr};">#${a.pos} ${escapeHTML(a.name)}</td>
-            <td style="padding:7px 10px;font-size:11px;color:var(--muted);">TH${a.th} → TH${a.defTH} <span style="color:var(--muted);font-size:10px;">#${a.defPos} ${escapeHTML(a.defName)}</span></td>
-            <td style="padding:7px 10px;">${bars}</td>
-            <td style="padding:7px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${clr};">+${exp}★</td>
-            <td style="padding:7px 10px;font-size:10px;color:var(--muted);">${escapeHTML(a.srcLabel)}</td>
-        </tr>`;
-    }).join('');
-    return `<table style="width:100%;border-collapse:collapse;"><tbody>${rows}</tbody></table>`;
-}
 
-function warToggleBreakdown(id, hdr) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const open = el.style.display === 'none' || !el.style.display;
-    el.style.display = open ? 'block' : 'none';
-    const arrow = hdr.querySelector('span');
-    if (arrow) arrow.textContent = open ? '▾' : '▸';
-}
-
-// ── buildWarWinCalc — mirrors CWL buildWinCalc exactly ───────────────────────
 function buildWarWinCalc() {
     const el = document.getElementById('warWinCalc');
     const prevEl = document.getElementById('warWpBarPreview');
     if (!el) return;
-
     const wc = computeWarWinCalc();
     if (!wc) { el.innerHTML = '<div style="padding:20px;color:var(--muted);">Not enough data to compute.</div>'; return; }
-
-    const ourPct = WAR.ourPct || 0, oppPct = WAR.oppPct || 0;
-    const maxPerAtk = wc.teamSize > 0 ? 100 / wc.teamSize : 6.67;
-    const oppMaxFinalPct = oppPct + wc.oppRem * maxPerAtk;
-    const ourMaxFinalPct = ourPct + wc.ourRem * maxPerAtk;
-    let drawSplitOur;
-    if (oppMaxFinalPct < ourPct) {
-        drawSplitOur = 1.0;
-    } else if (ourMaxFinalPct < oppPct) {
-        drawSplitOur = 0.0;
-    } else {
-        drawSplitOur = ourPct > oppPct ? 1.0 : ourPct < oppPct ? 0.0 : 0.5;
-    }
-    const pWinAdj  = wc.pWin  + wc.pDraw * drawSplitOur;
-    const pLossAdj = wc.pLoss + wc.pDraw * (1 - drawSplitOur);
-
-    const winPct     = Math.round(wc.pWin  * 100);
-    const drawPct    = Math.round(wc.pDraw * 100);
-    const lossPct    = Math.max(0, 100 - winPct - drawPct);
-    const winAdjPct  = Math.round(pWinAdj  * 100);
-    const lossAdjPct = 100 - winAdjPct;
-
-    const drawBg = drawSplitOur >= 1.0
-        ? 'linear-gradient(90deg,rgba(63,185,80,.35) 0%,rgba(63,185,80,.15) 100%)'
-        : drawSplitOur <= 0.0
-        ? 'linear-gradient(270deg,rgba(248,81,73,.35) 0%,rgba(248,81,73,.15) 100%)'
-        : 'rgba(139,148,158,.15)';
-    const drawTextColor = drawSplitOur >= 1.0 ? 'var(--green)' : drawSplitOur <= 0.0 ? 'var(--red)' : 'var(--muted)';
-    const drawStatLabel = drawSplitOur >= 1.0 ? 'Via dest. (us)' : drawSplitOur <= 0.0 ? 'Via dest. (them)' : 'Via dest.';
-
-    if (prevEl) {
-        prevEl.style.display = 'block';
-        const barCols = drawPct > 0
-            ? `${Math.max(winPct,5)}fr ${Math.max(drawPct,2)}fr ${Math.max(lossPct,5)}fr`
-            : `${Math.max(winAdjPct,5)}fr 0fr ${Math.max(lossAdjPct,5)}fr`;
-        prevEl.innerHTML = `
-        <div style="display:flex;justify-content:space-between;padding:0 4px 6px;">
-            <span style="font-size:12px;font-weight:600;color:var(--green);">${escapeHTML(WAR.ourName)}</span>
-            <span style="font-size:12px;font-weight:600;color:var(--red);">${escapeHTML(WAR.oppName)}</span>
-        </div>
-        <div class="wc-prob-bar" style="margin:0;height:40px;grid-template-columns:${barCols};">
-            <div class="wc-half-win"><span class="wc-prob-pct">${winAdjPct}%</span></div>
-            <div class="wc-half-draw" style="background:${drawBg};">${drawPct >= 6 ? `<span class="wc-prob-pct" style="color:${drawTextColor};font-size:12px;">${drawPct}%</span>` : ''}</div>
-            <div class="wc-half-loss"><span class="wc-prob-pct">${lossAdjPct}%</span></div>
-        </div>`;
-    }
-
-    let guaranteeHtml = '';
-    if (wc.ourStars > wc.oppMax) {
-        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot bridge the ${wc.ourStars - wc.oppMax}★ gap even with all 3★</div>`;
-    } else if (wc.oppStars > wc.ourMax) {
-        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — even with all remaining 3★ you still trail by ${wc.oppStars - wc.ourMax}★</div>`;
-    } else if (winAdjPct >= 100) {
-        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot reach your destruction% even with ${wc.oppRem} perfect attack${wc.oppRem !== 1 ? 's' : ''}</div>`;
-    } else if (lossAdjPct >= 100) {
-        if (ourMaxFinalPct < oppPct) {
-            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — you cannot reach their destruction% even with ${wc.ourRem} perfect attack${wc.ourRem !== 1 ? 's' : ''}</div>`;
-        } else if (drawSplitOur <= 0.0) {
-            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — trailing on destruction% (all ties go to them) · unfavorable star matchup</div>`;
-        } else {
-            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — very unfavorable matchup</div>`;
-        }
-    } else {
-        const ourNeeded = Math.max(0, wc.oppMax - wc.ourStars + 1);
-        const oppNeeded = Math.max(0, wc.ourMax - wc.oppStars + 1);
-        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--muted);">Need <strong style="color:var(--green)">${ourNeeded}★</strong> more to lock win · Opp needs <strong style="color:var(--red)">${oppNeeded}★</strong> more to lock win</div>`;
-    }
-
-    const ourAtkId = 'warWcOur', oppAtkId = 'warWcOpp';
-    const ourExpAdd = wc.ourBreakdown.reduce((s,a) => s + a.expStars, 0);
-    const oppExpAdd = wc.oppBreakdown.reduce((s,a) => s + a.expStars, 0);
-
-    el.innerHTML = `
-        ${guaranteeHtml}
-        <div class="wc-stats-row">
-            <div class="wc-stat-box">
-                <div class="wc-stat-val" style="color:var(--green);">${winAdjPct}%</div>
-                <div class="wc-stat-lbl">Win</div>
-            </div>
-            <div class="wc-stat-box">
-                <div class="wc-stat-val" style="color:${drawTextColor};">${drawPct}%</div>
-                <div class="wc-stat-lbl">${drawStatLabel}</div>
-            </div>
-            <div class="wc-stat-box">
-                <div class="wc-stat-val" style="color:var(--red);">${lossAdjPct}%</div>
-                <div class="wc-stat-lbl">Loss</div>
-            </div>
-        </div>
-        <div class="wc-details">
-            <div class="wc-detail-box">
-                <div class="wc-detail-title">Current Score</div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourStars}★</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppStars}★</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">Lead</span><span class="wc-detail-val" style="color:${wc.ourStars >= wc.oppStars ? 'var(--green)' : 'var(--red)'};">${wc.ourStars > wc.oppStars ? '+' : ''}${wc.ourStars - wc.oppStars}★</span></div>
-            </div>
-            <div class="wc-detail-box">
-                <div class="wc-detail-title">Remaining Attacks</div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourRem}</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppRem}</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">Avg TH (rem.)</span><span class="wc-detail-val"><span style="color:var(--green);">${wc.avgOurRemTH}</span><span style="color:var(--muted);"> vs </span><span style="color:var(--red);">${wc.avgOppRemTH}</span></span></div>
-            </div>
-            <div class="wc-detail-box">
-                <div class="wc-detail-title">Star Range</div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val">${wc.ourStars}→<span style="color:var(--green);">${wc.ourMax}</span>★</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val">${wc.oppStars}→<span style="color:var(--red);">${wc.oppMax}</span>★</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">Max possible</span><span class="wc-detail-val" style="color:var(--muted);">${wc.maxPossible}★</span></div>
-            </div>
-            <div class="wc-detail-box">
-                <div class="wc-detail-title">Expected Final</div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.expOurFinal.toFixed(1)}★</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.expOppFinal.toFixed(1)}★</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">Exp. lead</span><span class="wc-detail-val" style="color:${wc.expOurFinal >= wc.expOppFinal ? 'var(--green)' : 'var(--red)'};">${wc.expOurFinal > wc.expOppFinal ? '+' : ''}${(wc.expOurFinal - wc.expOppFinal).toFixed(1)}★</span></div>
-            </div>
-        </div>
-        ${buildStarDistChart(wc, WAR.ourName, WAR.oppName)}
-        <div style="border-top:1px solid var(--bord2);">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="warToggleBreakdown('${ourAtkId}', this)">
-                <span style="font-size:12px;font-weight:600;color:var(--green);">▸ Our ${wc.ourRem} remaining attack${wc.ourRem !== 1 ? 's' : ''}</span>
-                <span style="font-size:10px;color:var(--muted);">Exp. +${ourExpAdd.toFixed(1)}★ → ${wc.expOurFinal.toFixed(1)}★ total</span>
-            </div>
-            <div id="${ourAtkId}" style="display:none;">${warAttackerTable(wc.ourBreakdown,'our')}</div>
-        </div>
-        <div style="border-top:1px solid var(--bord2);border-bottom:1px solid var(--bord2);">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="warToggleBreakdown('${oppAtkId}', this)">
-                <span style="font-size:12px;font-weight:600;color:var(--red);">▸ Their ${wc.oppRem} remaining attack${wc.oppRem !== 1 ? 's' : ''}</span>
-                <span style="font-size:10px;color:var(--muted);">Exp. +${oppExpAdd.toFixed(1)}★ → ${wc.expOppFinal.toFixed(1)}★ total</span>
-            </div>
-            <div id="${oppAtkId}" style="display:none;">${warAttackerTable(wc.oppBreakdown,'opp')}</div>
-        </div>`;
+    const { barHtml, bodyHtml } = buildWinCalcHTML(wc, WAR.ourName, WAR.oppName, WAR.ourPct || 0, WAR.oppPct || 0, 'warWcOur', 'warWcOpp', 'toggleBreakdown');
+    if (prevEl) { prevEl.style.display = 'block'; prevEl.innerHTML = barHtml; }
+    el.innerHTML = bodyHtml;
 }
 
 function toggleWarWinProb() {
@@ -1328,11 +1153,12 @@ function closeWarCmpModal() {
 
 // ── TH Matchup Rates Modal ────────────────────────────────────────────────────
 function openWarMatchupRates() {
-    openMatchupRatesModal(WAR_MATCHUP_RATES, WAR_MATCHUP_COUNTS, WAR_TOTAL_ATK_COUNT, 'warMrContent', 'warMrBackdrop', 'warMrModal');
+    openMatchupRatesModal(WAR_MATCHUP_RATES, WAR_MATCHUP_COUNTS, WAR_TOTAL_ATK_COUNT, 'mrContent', 'mrBackdrop', 'mrModal');
 }
-function closeWarMatchupRates() {
-    document.getElementById('warMrBackdrop').style.display = 'none';
-    document.getElementById('warMrModal').style.display    = 'none';
+function openWarPlayerRates() {
+    const nameMap = {};
+    for (const m of OUR) nameMap[m.tag] = { name: m.name, th: m.th };
+    openPlayerMatchupRatesModal(WAR_PLAYER_HISTORY, nameMap);
 }
 
 function toggleWarCmpWinProb() {
@@ -1348,71 +1174,16 @@ function buildWarCmpWinProb() {
     const barEl  = document.getElementById('warCmp-winprob-bar');
     const bodyEl = document.getElementById('warCmp-winprob-body');
     if (!barEl || !bodyEl) return;
-
     const wc = computeWarPrediction();
     if (!wc) return;
-
-    const winPct  = Math.round(wc.pWin  * 100);
-    const drawPct = Math.round(wc.pDraw * 100);
-    const lossPct = Math.max(0, 100 - winPct - drawPct);
-
+    const { probBarHtml, bodyHtml } = buildPredictionBodyHTML(wc, WAR.ourName, WAR.oppName, 'warCmpOurAtk', 'warCmpOppAtk', 'toggleBreakdown');
     barEl.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 4px 6px;">
             <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;">🎲 Win Probability (0 attacks assumed)</span>
             <span class="recent-chevron" id="warCmpWpChev" onclick="toggleWarCmpWinProb()" style="cursor:pointer;">▼</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:0 4px 6px;" onclick="toggleWarCmpWinProb()" style="cursor:pointer;">
-            <span style="font-size:12px;font-weight:600;color:var(--green);">${escapeHTML(WAR.ourName)}</span>
-            <span style="font-size:12px;font-weight:600;color:var(--red);">${escapeHTML(WAR.oppName)}</span>
-        </div>
-        <div class="wc-prob-bar" style="margin:0;height:40px;grid-template-columns:${Math.max(winPct,5)}fr ${Math.max(drawPct,2)}fr ${Math.max(lossPct,5)}fr;" onclick="toggleWarCmpWinProb()" style="cursor:pointer;">
-            <div class="wc-half-win"><span class="wc-prob-pct">${winPct}%</span></div>
-            <div class="wc-half-draw">${drawPct>=8?`<span class="wc-prob-pct">${drawPct}%</span>`:''}</div>
-            <div class="wc-half-loss"><span class="wc-prob-pct">${lossPct}%</span></div>
-        </div>`;
-
-    const expOurAdd = wc.ourBreakdown.reduce((s,a)=>s+a.expStars,0);
-    const expOppAdd = wc.oppBreakdown.reduce((s,a)=>s+a.expStars,0);
-    bodyEl.innerHTML = `
-        <div class="wc-stats-row">
-            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--green);">${winPct}%</div><div class="wc-stat-lbl">Win</div></div>
-            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--muted);">${drawPct}%</div><div class="wc-stat-lbl">Draw</div></div>
-            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--red);">${lossPct}%</div><div class="wc-stat-lbl">Loss</div></div>
-        </div>
-        <div class="wc-details">
-            <div class="wc-detail-box">
-                <div class="wc-detail-title">Assigned Attacks</div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourRem}</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppRem}</span></div>
-            </div>
-            <div class="wc-detail-box">
-                <div class="wc-detail-title">Expected Stars</div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${expOurAdd.toFixed(1)}★</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(WAR.oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${expOppAdd.toFixed(1)}★</span></div>
-            </div>
-        </div>
-        ${buildStarDistChart(wc, WAR.ourName, WAR.oppName)}
-        <div style="border-top:1px solid var(--bord2);">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="warToggleBreakdown('warCmpOurAtk',this)">
-                <span style="font-size:12px;font-weight:600;color:var(--green);">▸ Our ${wc.ourRem} planned attacks</span>
-                <span style="font-size:10px;color:var(--muted);">Exp. ${expOurAdd.toFixed(1)}★ total</span>
-            </div>
-            <div id="warCmpOurAtk" style="display:none;">${warAttackerTable(wc.ourBreakdown,'our')}</div>
-        </div>
-        <div style="border-top:1px solid var(--bord2);border-bottom:1px solid var(--bord2);">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="warToggleBreakdown('warCmpOppAtk',this)">
-                <span style="font-size:12px;font-weight:600;color:var(--red);">▸ Their ${wc.oppRem} planned attacks</span>
-                <span style="font-size:10px;color:var(--muted);">Exp. ${expOppAdd.toFixed(1)}★ total</span>
-            </div>
-            <div id="warCmpOppAtk" style="display:none;">${warAttackerTable(wc.oppBreakdown,'opp')}</div>
-        </div>`;
+        </div>${probBarHtml}`;
+    bodyEl.innerHTML = bodyHtml;
 }
-
-const SKIP = new Set(['Unranked', 'Unknown League', '']);
-
-function avg(arr) { return arr.length ? arr.reduce((a,b) => a+b,0) / arr.length : 0; }
-function clamp(v,lo,hi) { return Math.max(lo, Math.min(hi, v)); }
-function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 
 function buildCompare() {
     const len = Math.min(OUR.length, OPP.length);
@@ -1632,50 +1403,10 @@ function buildCompare() {
 // ── ATTACK LOG ──────────────────────────────────────────────────────────────
 const WAR_ATTACKS = {{ all_attacks_json | default([]) | tojson | safe }};
 
-function escapeHTML(s) {
-    return String(s || '').replace(/[&<>"']/g, c =>
-        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
-    );
-}
-
-function renderStars(n) {
-    n = parseInt(n) || 0;
-    return `<span style="font-size:1.18em;letter-spacing:1px;color:var(--yellow)">${'★'.repeat(n)}</span>`
-         + `<span style="font-size:1.18em;letter-spacing:1px;color:var(--muted);opacity:.4">${'☆'.repeat(3-n)}</span>`;
-}
-
 function buildWarAttackLog() {
     const body = document.getElementById('warLogBody');
     if (!body) return;
-    const attacks = [...WAR_ATTACKS].reverse();
-    if (!attacks.length) {
-        body.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded yet.</div>';
-        return;
-    }
-    const rows = attacks.map(a => {
-        const nameColor = a.attacker_side === 'our' ? 'var(--green)' : 'var(--red)';
-        const starScore = a.stars === 3 ? 'var(--green)' : a.stars === 2 ? 'var(--yellow)' : a.stars === 1 ? 'var(--accent)' : 'var(--muted)';
-        const pills = a.label ? renderAttackLabel(a.label) : '';
-        return `<tr>
-            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.attacker_pos}</td>
-            <td style="font-weight:600;color:${nameColor}">${escapeHTML(a.attacker_name)}</td>
-            <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.attacker_th}</td>
-            <td style="color:var(--muted);text-align:center;font-size:13px">→</td>
-            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.defender_pos}</td>
-            <td style="font-weight:600">${escapeHTML(a.defender_name)}</td>
-            <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.defender_th}</td>
-            <td>${renderStars(a.stars)}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-weight:700;color:${starScore}">${a.pct}%</td>
-            <td>${pills}</td>
-        </tr>`;
-    }).join('');
-    body.innerHTML = `<div class="log-scroll"><div class="table-scroll"><table class="detail-table">
-        <thead><tr>
-            <th>#</th><th>Attacker</th><th>TH</th><th></th>
-            <th>#</th><th>Defender</th><th>TH</th><th>Stars</th><th>Dest %</th><th>Tags</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-    </table></div></div>`;
+    body.innerHTML = buildAttackLogHTML(WAR_ATTACKS);
 }
 
 {% if war_verdicts %}
@@ -1699,26 +1430,6 @@ function renderBeforeStars(n) {
     const filled = `<span style="color:var(--yellow);opacity:.7;">${'★'.repeat(n)}</span>`;
     const empty  = `<span style="color:var(--muted);opacity:0.3;">${'☆'.repeat(3 - n)}</span>`;
     return `<span style="font-size:1.0em;letter-spacing:1px;">${filled}${empty}</span>`;
-}
-
-const ATTACK_LABEL_MAP = {
-    'clear':           ['Clear',          'ap-clear'],
-    'failed_clear':    ['Failed Clear',    'ap-failed-clear'],
-    'high_clear':      ['High Clear',      'ap-high-clear'],
-    'farm':            ['Farm',            'ap-farm'],
-    'failed_farm':     ['Failed Farm',     'ap-failed-farm'],
-    'low_clear':       ['Low Clear',       'ap-low-clear'],
-    'low_clear_fail':  ['Low Clear Fail',  'ap-low-clear-fail'],
-    'clean_up':        ['Clean Up',        'ap-clean-up'],
-    'failed_clean_up': ['Failed Clean Up', 'ap-failed-clean-up'],
-    'wasted':          ['Wasted',          'ap-wasted'],
-    'no_attack':       ['No Attack',       'ap-no-attack'],
-};
-
-function renderAttackLabel(label) {
-    const entry = ATTACK_LABEL_MAP[label];
-    if (!entry) return `<span class="atk-pill ap-wasted">${label}</span>`;
-    return `<span class="atk-pill ${entry[1]}">${entry[0]}</span>`;
 }
 
 function buildWVDetails(v) {
@@ -1889,9 +1600,7 @@ function toggleWarAttackLog() {
     if (opening && !body.innerHTML.trim()) buildWarAttackLog();
 }
 
-function toggleCompare() { openWarCmpModal(); }
-
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeWarCmpModal(); closeWarMatchupRates(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeWarCmpModal(); closeMatchupRatesModal(); closePlayerMatchupRatesModal(); } });
 
 document.addEventListener('DOMContentLoaded', () => {
     {% if war and war.state == 'inWar' %}
@@ -1916,61 +1625,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const rr = row.getBoundingClientRect();
         return { left: rr.left - gr.left, right: rr.right - gr.left,
                  y: rr.top - gr.top + rr.height / 2 };
-    }
-
-    function starColor(s) {
-        return s === 3 ? '#3fb950' : s === 2 ? '#e3b341' : s === 1 ? '#f0a500' : '#8b949e';
-    }
-
-    function drawPotentialLine(x1, y1, x2, y2) {
-        const cx = (x1 + x2) / 2;
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`);
-        path.setAttribute('stroke', '#58a6ff');
-        path.setAttribute('stroke-width', '1.5');
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke-opacity', '0.35');
-        path.setAttribute('stroke-dasharray', '4 5');
-        path.style.opacity = '0';
-        path.style.transition = 'opacity 0.3s ease';
-        svg.appendChild(path);
-        requestAnimationFrame(() => { path.style.opacity = '1'; });
-    }
-
-    function drawCurve(x1, y1, x2, y2, stars, incoming = false) {
-        const color = starColor(stars);
-        const cx = (x1 + x2) / 2;
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`);
-        path.setAttribute('stroke', color);
-        path.setAttribute('stroke-width', incoming ? '1.5' : '2');
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke-opacity', incoming ? '0.5' : '0.9');
-        if (incoming) path.setAttribute('stroke-dasharray', '6 4');
-        const len = path.getTotalLength ? path.getTotalLength() : 200;
-        if (!incoming) {
-            path.style.strokeDasharray = len;
-            path.style.strokeDashoffset = len;
-            svg.appendChild(path);
-            requestAnimationFrame(() => {
-                path.style.transition = 'stroke-dashoffset 0.4s ease';
-                path.style.strokeDashoffset = '0';
-            });
-        } else {
-            path.style.opacity = '0';
-            path.style.transition = 'opacity 0.3s ease';
-            svg.appendChild(path);
-            requestAnimationFrame(() => { path.style.opacity = '1'; });
-        }
-
-        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        dot.setAttribute('cx', x2); dot.setAttribute('cy', y2); dot.setAttribute('r', incoming ? '4' : '5');
-        dot.setAttribute('fill', incoming ? 'none' : color);
-        if (incoming) { dot.setAttribute('stroke', color); dot.setAttribute('stroke-width', '1.5'); }
-        dot.style.opacity = '0'; dot.style.transition = 'opacity 0.2s ease 0.38s';
-        svg.appendChild(dot);
-        requestAnimationFrame(() => { dot.style.opacity = incoming ? '0.7' : '0.9'; });
     }
 
     function syncButtons() {
@@ -2010,7 +1664,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dstPos = getPos(defRow);
                 const x1 = isLeft ? srcPos.right + 2 : srcPos.left  - 2;
                 const x2 = isLeft ? dstPos.left  - 2 : dstPos.right + 2;
-                drawCurve(x1, srcPos.y, x2, dstPos.y, atk.stars, false);
+                drawSVGCurve(svg, x1, srcPos.y, x2, dstPos.y, atk.stars, false);
             });
 
             // incoming attacks (dashed)
@@ -2023,7 +1677,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // line goes FROM attacker TO selected player (incoming direction)
                 const x1 = isLeft ? atkPos.left  - 2 : atkPos.right + 2;
                 const x2 = isLeft ? srcPos.right + 2 : srcPos.left  - 2;
-                drawCurve(x1, atkPos.y, x2, srcPos.y, atk.stars, true);
+                drawSVGCurve(svg, x1, atkPos.y, x2, srcPos.y, atk.stars, true);
             });
 
             // potential targets: remaining attacks → opponent rows not yet 3-starred
@@ -2039,7 +1693,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const dstPos = getPos(oppRow);
                             const x1 = isLeft ? srcPos.right + 2 : srcPos.left  - 2;
                             const x2 = isLeft ? dstPos.left  - 2 : dstPos.right + 2;
-                            drawPotentialLine(x1, srcPos.y, x2, dstPos.y);
+                            drawSVGPotential(svg, x1, srcPos.y, x2, dstPos.y);
                         }
                     });
                 }
@@ -2083,19 +1737,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 {% if war and members_our and members_opp %}
 <!-- ── TH Matchup Rates Modal ── -->
-<div id="warMrBackdrop" onclick="closeWarMatchupRates()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;backdrop-filter:blur(4px);"></div>
-<div id="warMrModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
-    background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(900px,94vw);max-height:88vh;overflow-y:auto;
-    box-shadow:0 28px 72px rgba(0,0,0,0.7);scrollbar-width:thin;scrollbar-color:var(--border) transparent;">
-    <div style="padding:20px 26px 16px;border-bottom:1px solid var(--bord2);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;">
-        <div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:700;letter-spacing:.5px;">📊 TH Matchup Rates</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Global attack outcome probabilities per TH matchup · from all recorded clan war attacks</div>
-        </div>
-        <button onclick="closeWarMatchupRates()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;">✕</button>
-    </div>
-    <div id="warMrContent" style="padding:20px 24px;"></div>
-</div>
+{# matchup_source consumed by both modal includes below — keep this set before both #}
+{% set matchup_source = "clan war" %}
+{% include '_matchup_rates_modal.html' %}
+<!-- ── Player Matchup History Modal ── -->
+{% include '_player_matchup_modal.html' %}
 
 <div id="warCmpBackdrop" onclick="closeWarCmpModal()" style="display:none;" class="war-cmp-backdrop"></div>
 <div id="warCmpModal" style="display:none;" class="war-cmp-modal">

@@ -150,7 +150,7 @@ def clan_war_page():
     # ── War matchup rates from all completed wars ─────────────────────────────
     _hist = (ClanWar.query
              .options(selectinload(ClanWar.members), selectinload(ClanWar.attacks))
-             .filter(ClanWar.state == 'warEnded')
+             .filter(ClanWar.state.in_(['inWar', 'warEnded']))
              .all())
     _raw_war, _player_war = {}, {}
     for hw in _hist:

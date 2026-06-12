@@ -54,18 +54,31 @@ function resolveAtkDist(playerInfoFn, atkDistFn, tag, atkTH, defTH, matchupCount
     return { dist, srcLabel: 'DB avg · 0% own' };
 }
 
+// Adjust a raw [p0,p1,p2,p3] star distribution to account for a base that is already starred.
+// Only the incremental stars above the current best count toward the war total.
+// E.g. attacking a 2-starred base: getting 3★ adds 1, getting ≤2★ adds 0.
+function adjustDistForStarred(dist, best) {
+    if (!best) return dist;
+    const adj = [0, 0, 0, 0];
+    for (let k = 0; k <= 3; k++) adj[Math.max(0, k - best)] += dist[k];
+    return adj;
+}
+
 // Full win-probability calculation given pre-built attacker→defender pair lists.
-// Each pair: { tag, atkTH, name, pos, defTH, defName, defPos? }
+// Each pair: { tag, atkTH, name, pos, defTH, defName, defPos?, defBestStars? }
+// defBestStars: current best stars on the target base — limits the incremental contribution.
 // The attack→defender mapping is the only thing callers differ on — everything else is shared.
 function calcWinProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible, playerInfoFn, atkDistFn, matchupCounts) {
     function buildSide(pairs) {
         const dists = [], breakdown = [];
         for (const p of pairs) {
-            const { dist, srcLabel } = resolveAtkDist(playerInfoFn, atkDistFn, p.tag, p.atkTH, p.defTH, matchupCounts);
+            const { dist: rawDist, srcLabel } = resolveAtkDist(playerInfoFn, atkDistFn, p.tag, p.atkTH, p.defTH, matchupCounts);
+            const dist = adjustDistForStarred(rawDist, p.defBestStars || 0);
             dists.push(dist);
             const entry = { name: p.name, th: p.atkTH, pos: p.pos, defTH: p.defTH, defName: p.defName,
                             dist, expStars: dist.reduce((s, q, k) => s + q * k, 0), srcLabel };
             if (p.defPos !== undefined) entry.defPos = p.defPos;
+            if (p.defBestStars) entry.defBestStars = p.defBestStars;
             breakdown.push(entry);
         }
         return { dists, breakdown };
@@ -84,17 +97,18 @@ function calcWinProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible, player
             if (fo > fe) pWin += p; else if (fo === fe) pDraw += p; else pLoss += p;
         }
     }
-    const expOurAdd = ourBreakdown.reduce((s, a) => s + a.expStars, 0);
-    const expOppAdd = oppBreakdown.reduce((s, a) => s + a.expStars, 0);
     const avgTHfn   = arr => arr.length ? (arr.reduce((s, a) => s + a.th, 0) / arr.length).toFixed(1) : '—';
+    // True expected final: integrate over the convolution so the cap is applied per-outcome, not to the mean.
+    // E[min(X, cap)] != min(E[X], cap) when the distribution spreads across the cap boundary.
+    const expOurFinal = dpOur.reduce((s, p, i) => s + p * Math.min(ourStars + i, maxPossible), 0);
+    const expOppFinal = dpOpp.reduce((s, p, i) => s + p * Math.min(oppStars + i, maxPossible), 0);
     return {
         pWin, pDraw, pLoss,
         ourStars, oppStars,
         ourRem: ourPairs.length, oppRem: oppPairs.length,
         ourMax: Math.min(ourStars + ourPairs.length * 3, maxPossible),
         oppMax: Math.min(oppStars + oppPairs.length * 3, maxPossible),
-        expOurFinal: Math.min(ourStars + expOurAdd, maxPossible),
-        expOppFinal: Math.min(oppStars + expOppAdd, maxPossible),
+        expOurFinal, expOppFinal,
         teamSize: Math.round(maxPossible / 3), maxPossible,
         avgOurRemTH: avgTHfn(ourBreakdown),
         avgOppRemTH: avgTHfn(oppBreakdown),
@@ -109,6 +123,17 @@ function blendPlayerDist(counts, total, globalDist, histK) {
     const personal = counts.map(c => c / total);
     const w = total / (total + histK);
     return { dist: personal.map((p, i) => w * p + (1 - w) * globalDist[i]), count: total };
+}
+
+// Look up a player's star history for one matchup, blended with global rates.
+// history shape: { tag: { "atkTH_defTH": { counts: [c0,c1,c2,c3], total: N } } }
+// Same structure for both WAR_PLAYER_HISTORY and PLAYER_ALL_TIME.
+function playerInfo(history, rates, tag, atkTH, defTH, histK) {
+    const pp = history[tag];
+    if (!pp) return null;
+    const ph = pp[atkTH + '_' + defTH];
+    if (!ph || ph.total < 1) return null;
+    return blendPlayerDist(ph.counts, ph.total, atkDist(rates, atkTH, defTH), histK);
 }
 
 // SVG final-star-distribution histogram used in win-probability panels.
@@ -168,6 +193,50 @@ function buildStarDistChart(wc, ourName, oppName) {
     </div>`;
 }
 
+// Attacker breakdown table — shared between war and CWL win-probability panels.
+function buildAttackerTable(breakdown, side) {
+    if (!breakdown.length) return '<div style="padding:8px 20px 12px;font-size:12px;color:var(--muted);">No remaining attacks.</div>';
+    const clr = side === 'our' ? 'var(--green)' : 'var(--red)';
+    const sorted = [...breakdown].sort((a, b) => a.pos - b.pos);
+    const rows = sorted.map(p => {
+        const [p0, p1, p2, p3] = p.dist;
+        const seg = `<div style="display:flex;height:8px;border-radius:2px;overflow:hidden;width:72px;">
+            <div style="flex:${p0||0.001};background:rgba(248,81,73,.8);"></div>
+            <div style="flex:${p1||0.001};background:rgba(230,140,30,.8);"></div>
+            <div style="flex:${p2||0.001};background:rgba(210,185,40,.8);"></div>
+            <div style="flex:${p3||0.001};background:rgba(63,185,80,.8);"></div>
+        </div>
+        <div style="font-size:9px;color:var(--muted);display:flex;gap:3px;margin-top:2px;width:72px;justify-content:space-between;">
+            <span title="0★">${(p0*100).toFixed(0)}%</span>
+            <span title="1★">${(p1*100).toFixed(0)}%</span>
+            <span title="2★">${(p2*100).toFixed(0)}%</span>
+            <span title="3★">${(p3*100).toFixed(0)}%</span>
+        </div>`;
+        return `<tr style="border-bottom:1px solid var(--bord2);">
+            <td style="padding:7px 8px 7px 16px;font-weight:600;font-size:12px;white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(p.name)}</td>
+            <td style="padding:7px 8px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--blue);">TH${p.th}</td>
+            <td style="padding:7px 8px;text-align:center;font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHTML(p.defName)} (TH${p.defTH})">
+                <span style="color:var(--fg);font-weight:600;">${escapeHTML(p.defName)}</span>
+                <span style="color:var(--muted);font-size:10px;"> TH${p.defTH}</span>
+            </td>
+            <td style="padding:7px 12px;">${seg}</td>
+            <td style="padding:7px 16px 7px 8px;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:${clr};">${p.expStars.toFixed(1)}★</td>
+            <td style="padding:7px 12px 7px 4px;font-size:10px;color:var(--muted);white-space:nowrap;">${escapeHTML(p.srcLabel)}</td>
+        </tr>`;
+    }).join('');
+    return `<table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:var(--surf2);">
+            <th style="padding:5px 8px 5px 16px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Player</th>
+            <th style="padding:5px 8px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">TH</th>
+            <th style="padding:5px 8px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Defender</th>
+            <th style="padding:5px 12px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">0★ · 1★ · 2★ · 3★</th>
+            <th style="padding:5px 16px 5px 8px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Exp.★</th>
+            <th style="padding:5px 12px 5px 4px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Source</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
 // TH Matchup Rates modal — renders into any page's matchup modal elements.
 // rates:  {"atkTH_defTH": [p0,p1,p2,p3]}
 // counts: {"atkTH_defTH": n}  (includes sub-5-sample matchups)
@@ -181,10 +250,12 @@ function openMatchupRatesModal(rates, counts, totalAtks, contentId, backdropId, 
         const atkTHs = [...new Set(allKeys.map(k => +k.split('_')[0]))].sort((a,b) => b-a);
         const defTHs = [...new Set(allKeys.map(k => +k.split('_')[1]))].sort((a,b) => b-a);
 
+        const _ts = new Date().toLocaleTimeString();
         let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:18px;">
             Total attacks in DB: <strong style="color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:15px;">${totalAtks.toLocaleString()}</strong>
             &nbsp;&#183;&nbsp; ${allKeys.length} matchup combinations
             &nbsp;&#183;&nbsp; <span style="color:var(--muted);font-size:11px;">&#9733; distribution shown for &#8805;5 attacks</span>
+            &nbsp;&#183;&nbsp; <span style="color:var(--muted);font-size:10px;">snapshotted ${_ts}</span>
         </div><div style="overflow-x:auto;">`;
 
         for (const atkTH of atkTHs) {
@@ -310,4 +381,427 @@ function openMatchupRatesModal(rates, counts, totalAtks, contentId, backdropId, 
     }
     document.getElementById(backdropId).style.display = 'block';
     document.getElementById(modalId).style.display    = 'block';
+}
+
+// Live win-probability panel renderer — shared between war and CWL.
+// Returns { barHtml, bodyHtml, winAdjPct }.
+// barHtml  → names + adjusted prob bar for the always-visible preview element.
+// bodyHtml → full panel: guarantee banner, stats, details, chart, breakdown toggles.
+function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtkId, toggleFn) {
+    const maxPerAtk = wc.teamSize > 0 ? 100 / wc.teamSize : 6.67;
+    const oppMaxFinalPct = oppPct + wc.oppRem * maxPerAtk;
+    const ourMaxFinalPct = ourPct + wc.ourRem * maxPerAtk;
+    let drawSplitOur;
+    if      (oppMaxFinalPct < ourPct) drawSplitOur = 1.0;
+    else if (ourMaxFinalPct < oppPct) drawSplitOur = 0.0;
+    else drawSplitOur = ourPct > oppPct ? 1.0 : ourPct < oppPct ? 0.0 : 0.5;
+
+    const pWinAdj    = wc.pWin  + wc.pDraw * drawSplitOur;
+    const winPct     = Math.round(wc.pWin  * 100);
+    const drawPct    = Math.round(wc.pDraw * 100);
+    const lossPct    = Math.max(0, 100 - winPct - drawPct);
+    const winAdjPct  = Math.round(pWinAdj * 100);
+    const lossAdjPct = 100 - winAdjPct;
+
+    const drawBg = drawSplitOur >= 1.0
+        ? 'linear-gradient(90deg,rgba(63,185,80,.35) 0%,rgba(63,185,80,.15) 100%)'
+        : drawSplitOur <= 0.0
+        ? 'linear-gradient(270deg,rgba(248,81,73,.35) 0%,rgba(248,81,73,.15) 100%)'
+        : 'rgba(139,148,158,.15)';
+    const drawTextColor = drawSplitOur >= 1.0 ? 'var(--green)' : drawSplitOur <= 0.0 ? 'var(--red)' : 'var(--muted)';
+    const drawStatLabel = drawSplitOur >= 1.0 ? 'Via dest. (us)' : drawSplitOur <= 0.0 ? 'Via dest. (them)' : 'Via dest.';
+    const barCols = drawPct > 0
+        ? `${Math.max(winPct,5)}fr ${Math.max(drawPct,2)}fr ${Math.max(lossPct,5)}fr`
+        : `${Math.max(winAdjPct,5)}fr 0fr ${Math.max(lossAdjPct,5)}fr`;
+    const drawSpan = drawPct >= 6 ? `<span class="wc-prob-pct" style="color:${drawTextColor};font-size:12px;">${drawPct}%</span>` : '';
+    const barHtml = `
+        <div style="display:flex;justify-content:space-between;padding:0 4px 6px;">
+            <span style="font-size:12px;font-weight:600;color:var(--green);">${escapeHTML(ourName)}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--red);">${escapeHTML(oppName)}</span>
+        </div>
+        <div class="wc-prob-bar" style="margin:0;height:40px;grid-template-columns:${barCols};">
+            <div class="wc-half-win"><span class="wc-prob-pct">${winAdjPct}%</span></div>
+            <div class="wc-half-draw" style="background:${drawBg};">${drawSpan}</div>
+            <div class="wc-half-loss"><span class="wc-prob-pct">${lossAdjPct}%</span></div>
+        </div>`;
+
+    let guaranteeHtml = '';
+    if (wc.ourStars > wc.oppMax) {
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot bridge the ${wc.ourStars - wc.oppMax}★ gap even with all 3★</div>`;
+    } else if (wc.oppStars > wc.ourMax) {
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — even with all remaining 3★ you still trail by ${wc.oppStars - wc.ourMax}★</div>`;
+    } else if (winAdjPct >= 100) {
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot reach your destruction% even with ${wc.oppRem} perfect attack${wc.oppRem !== 1 ? 's' : ''}</div>`;
+    } else if (lossAdjPct >= 100) {
+        if (ourMaxFinalPct < oppPct)
+            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — you cannot reach their destruction% even with ${wc.ourRem} perfect attack${wc.ourRem !== 1 ? 's' : ''}</div>`;
+        else if (drawSplitOur <= 0.0)
+            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — trailing on destruction% (all ties go to them) · unfavorable star matchup</div>`;
+        else
+            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — very unfavorable matchup</div>`;
+    } else {
+        const ourNeeded = Math.max(0, wc.oppMax - wc.ourStars + 1);
+        const oppNeeded = Math.max(0, wc.ourMax - wc.oppStars + 1);
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--muted);">Need <strong style="color:var(--green)">${ourNeeded}★</strong> more to lock win · Opp needs <strong style="color:var(--red)">${oppNeeded}★</strong> more to lock win</div>`;
+    }
+
+    const ourExpAdd = wc.ourBreakdown.reduce((s, a) => s + a.expStars, 0);
+    const oppExpAdd = wc.oppBreakdown.reduce((s, a) => s + a.expStars, 0);
+    const bodyHtml = `
+        ${guaranteeHtml}
+        <div class="wc-stats-row">
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--green);">${winAdjPct}%</div><div class="wc-stat-lbl">Win</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:${drawTextColor};">${drawPct}%</div><div class="wc-stat-lbl">${drawStatLabel}</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--red);">${lossAdjPct}%</div><div class="wc-stat-lbl">Loss</div></div>
+        </div>
+        <div class="wc-details">
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Current Score</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourStars}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppStars}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Lead</span><span class="wc-detail-val" style="color:${wc.ourStars >= wc.oppStars ? 'var(--green)' : 'var(--red)'};">${wc.ourStars > wc.oppStars ? '+' : ''}${wc.ourStars - wc.oppStars}★</span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Remaining Attacks</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourRem}</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppRem}</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Avg TH (rem.)</span><span class="wc-detail-val"><span style="color:var(--green);">${wc.avgOurRemTH}</span><span style="color:var(--muted);"> vs </span><span style="color:var(--red);">${wc.avgOppRemTH}</span></span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Star Range</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val">${wc.ourStars}→<span style="color:var(--green);">${wc.ourMax}</span>★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val">${wc.oppStars}→<span style="color:var(--red);">${wc.oppMax}</span>★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Max possible</span><span class="wc-detail-val" style="color:var(--muted);">${wc.maxPossible}★</span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Expected Final</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.expOurFinal.toFixed(1)}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.expOppFinal.toFixed(1)}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Exp. lead</span><span class="wc-detail-val" style="color:${wc.expOurFinal >= wc.expOppFinal ? 'var(--green)' : 'var(--red)'};">${wc.expOurFinal > wc.expOppFinal ? '+' : ''}${(wc.expOurFinal - wc.expOppFinal).toFixed(1)}★</span></div>
+            </div>
+        </div>
+        ${buildStarDistChart(wc, ourName, oppName)}
+        <div style="border-top:1px solid var(--bord2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="${toggleFn}('${ourAtkId}', this)">
+                <span style="font-size:12px;font-weight:600;color:var(--green);">▸ Our ${wc.ourRem} remaining attack${wc.ourRem !== 1 ? 's' : ''}</span>
+                <span style="font-size:10px;color:var(--muted);">Exp. +${ourExpAdd.toFixed(1)}★ → ${wc.expOurFinal.toFixed(1)}★ total</span>
+            </div>
+            <div id="${ourAtkId}" style="display:none;">${buildAttackerTable(wc.ourBreakdown, 'our')}</div>
+        </div>
+        <div style="border-top:1px solid var(--bord2);border-bottom:1px solid var(--bord2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="${toggleFn}('${oppAtkId}', this)">
+                <span style="font-size:12px;font-weight:600;color:var(--red);">▸ Their ${wc.oppRem} remaining attack${wc.oppRem !== 1 ? 's' : ''}</span>
+                <span style="font-size:10px;color:var(--muted);">Exp. +${oppExpAdd.toFixed(1)}★ → ${wc.expOppFinal.toFixed(1)}★ total</span>
+            </div>
+            <div id="${oppAtkId}" style="display:none;">${buildAttackerTable(wc.oppBreakdown, 'opp')}</div>
+        </div>`;
+    return { barHtml, bodyHtml, winAdjPct };
+}
+
+// Pre-war prediction panel renderer — shared between war and CWL compare modals.
+// Returns { probBarHtml, bodyHtml, winPct }.
+// probBarHtml → names + raw prob bar (callers prepend their own page-specific header to barEl).
+// bodyHtml    → stats, details, chart, breakdown toggles.
+function buildPredictionBodyHTML(wc, ourName, oppName, ourAtkId, oppAtkId, toggleFn) {
+    const winPct  = Math.round(wc.pWin  * 100);
+    const drawPct = Math.round(wc.pDraw * 100);
+    const lossPct = Math.max(0, 100 - winPct - drawPct);
+    const expOurAdd = wc.ourBreakdown.reduce((s, p) => s + p.expStars, 0);
+    const expOppAdd = wc.oppBreakdown.reduce((s, p) => s + p.expStars, 0);
+    const drawSpan = drawPct >= 8 ? `<span class="wc-prob-pct">${drawPct}%</span>` : '';
+
+    const probBarHtml = `
+        <div style="display:flex;justify-content:space-between;padding:0 4px 6px;">
+            <span style="font-size:12px;font-weight:600;color:var(--green);">${escapeHTML(ourName)}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--red);">${escapeHTML(oppName)}</span>
+        </div>
+        <div class="wc-prob-bar" style="margin:0;height:40px;grid-template-columns:${Math.max(winPct,5)}fr ${Math.max(drawPct,2)}fr ${Math.max(lossPct,5)}fr;">
+            <div class="wc-half-win"><span class="wc-prob-pct">${winPct}%</span></div>
+            <div class="wc-half-draw">${drawSpan}</div>
+            <div class="wc-half-loss"><span class="wc-prob-pct">${lossPct}%</span></div>
+        </div>`;
+
+    const drawNote = drawPct > 1 ? `<div style="text-align:center;font-size:11px;color:var(--muted);margin:10px 0 4px;">Draw: ${drawPct}% · destruction tiebreaker not modeled</div>` : '';
+    const bodyHtml = `
+        ${drawNote}
+        <div class="wc-stats-row">
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--green);">${winPct}%</div><div class="wc-stat-lbl">Win</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--muted);">${drawPct}%</div><div class="wc-stat-lbl">Draw</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--red);">${lossPct}%</div><div class="wc-stat-lbl">Loss</div></div>
+        </div>
+        <div class="wc-details">
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Expected Final</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.expOurFinal.toFixed(1)}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.expOppFinal.toFixed(1)}★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Exp. lead</span><span class="wc-detail-val" style="color:${wc.expOurFinal >= wc.expOppFinal ? 'var(--green)' : 'var(--red)'};">${wc.expOurFinal > wc.expOppFinal ? '+' : ''}${(wc.expOurFinal - wc.expOppFinal).toFixed(1)}★</span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Star Range</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val">0→<span style="color:var(--green);">${wc.ourMax}</span>★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val">0→<span style="color:var(--red);">${wc.oppMax}</span>★</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Max possible</span><span class="wc-detail-val" style="color:var(--muted);">${wc.maxPossible}★</span></div>
+            </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Avg TH</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.avgOurRemTH}</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.avgOppRemTH}</span></div>
+            </div>
+        </div>
+        ${buildStarDistChart(wc, ourName, oppName)}
+        <div style="border-top:1px solid var(--bord2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="${toggleFn}('${ourAtkId}', this)">
+                <span style="font-size:12px;font-weight:600;color:var(--green);">▸ Our ${wc.ourRem} attack${wc.ourRem !== 1 ? 's' : ''}</span>
+                <span style="font-size:10px;color:var(--muted);">Exp. ${expOurAdd.toFixed(1)}★ total</span>
+            </div>
+            <div id="${ourAtkId}" style="display:none;">${buildAttackerTable(wc.ourBreakdown, 'our')}</div>
+        </div>
+        <div style="border-top:1px solid var(--bord2);border-bottom:1px solid var(--bord2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="${toggleFn}('${oppAtkId}', this)">
+                <span style="font-size:12px;font-weight:600;color:var(--red);">▸ Their ${wc.oppRem} attack${wc.oppRem !== 1 ? 's' : ''}</span>
+                <span style="font-size:10px;color:var(--muted);">Exp. ${expOppAdd.toFixed(1)}★ total</span>
+            </div>
+            <div id="${oppAtkId}" style="display:none;">${buildAttackerTable(wc.oppBreakdown, 'opp')}</div>
+        </div>`;
+    return { probBarHtml, bodyHtml, winPct };
+}
+
+function escapeHTML(s) {
+    return String(s || '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function avg(arr) { return arr.length ? arr.reduce((a,b) => a+b,0) / arr.length : 0; }
+function clamp(v,lo,hi) { return Math.max(lo, Math.min(hi, v)); }
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+
+function renderStars(n, big) {
+    n = parseInt(n) || 0;
+    const sz = big ? '1.18em' : '1.0em';
+    return `<span style="font-size:${sz};letter-spacing:1px;color:var(--yellow)">${'★'.repeat(n)}</span>`
+         + `<span style="font-size:${sz};letter-spacing:1px;color:var(--muted);opacity:.4">${'☆'.repeat(3-n)}</span>`;
+}
+
+const ATTACK_LABEL_MAP = {
+    'clear':           ['Clear',          'ap-clear'],
+    'failed_clear':    ['Failed Clear',    'ap-failed-clear'],
+    'high_clear':      ['High Clear',      'ap-high-clear'],
+    'farm':            ['Farm',            'ap-farm'],
+    'failed_farm':     ['Failed Farm',     'ap-failed-farm'],
+    'low_clear':       ['Low Clear',       'ap-low-clear'],
+    'low_clear_fail':  ['Low Clear Fail',  'ap-low-clear-fail'],
+    'clean_up':        ['Clean Up',        'ap-clean-up'],
+    'failed_clean_up': ['Failed Clean Up', 'ap-failed-clean-up'],
+    'wasted':          ['Wasted',          'ap-wasted'],
+    'no_attack':       ['No Attack',       'ap-no-attack'],
+};
+function renderAttackLabel(label) {
+    const e = ATTACK_LABEL_MAP[label];
+    return e ? `<span class="atk-pill ${e[1]}">${e[0]}</span>` : `<span class="atk-pill ap-wasted">${label}</span>`;
+}
+
+// Toggle a collapsible breakdown section; replaces the leading arrow in the first span.
+function toggleBreakdown(id, hdr) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const opening = el.style.display !== 'block';
+    el.style.display = opening ? 'block' : 'none';
+    const span = hdr ? hdr.querySelector('span:first-child') : null;
+    if (span) span.textContent = span.textContent.replace(/^[▸▾]\s*/, opening ? '▾ ' : '▸ ');
+}
+
+// Equalize heights of paired member rows between left/right roster cards in a grid element.
+function equalizeRoster(gridEl) {
+    if (!gridEl) return;
+    const cards = gridEl.querySelectorAll('.roster-card');
+    if (cards.length < 2) return;
+    const L = cards[0].querySelectorAll('.member-row');
+    const R = cards[1].querySelectorAll('.member-row');
+    L.forEach(r => r.style.height = '');
+    R.forEach(r => r.style.height = '');
+    const n = Math.min(L.length, R.length);
+    for (let i = 0; i < n; i++) {
+        const h = Math.max(L[i].offsetHeight, R[i].offsetHeight);
+        L[i].style.height = R[i].style.height = h + 'px';
+    }
+}
+
+// Build attack log table HTML from an attacks array.
+function buildAttackLogHTML(attacks) {
+    if (!attacks.length) return '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded yet.</div>';
+    const rows = [...attacks].reverse().map(a => {
+        const nc = a.attacker_side === 'our' ? 'var(--green)' : 'var(--red)';
+        const sc = a.stars===3?'var(--green)':a.stars===2?'var(--yellow)':a.stars===1?'var(--accent)':'var(--muted)';
+        return `<tr>
+            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.attacker_pos}</td>
+            <td style="font-weight:600;color:${nc}">${escapeHTML(a.attacker_name)}</td>
+            <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.attacker_th}</td>
+            <td style="color:var(--muted);text-align:center;font-size:13px">→</td>
+            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.defender_pos}</td>
+            <td style="font-weight:600">${escapeHTML(a.defender_name)}</td>
+            <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.defender_th}</td>
+            <td>${renderStars(a.stars)}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-weight:700;color:${sc}">${a.pct}%</td>
+            <td>${renderAttackLabel(a.label)}</td>
+        </tr>`;
+    }).join('');
+    return `<div class="log-scroll"><div class="table-scroll"><table class="detail-table">
+        <thead><tr><th>#</th><th>Attacker</th><th>TH</th><th></th><th>#</th><th>Defender</th><th>TH</th><th>Stars</th><th>Dest%</th><th>Verdict</th></tr></thead>
+        <tbody>${rows}</tbody>
+    </table></div></div>`;
+}
+
+// SVG roster connection drawing helpers — used by both war IIFE and CWL initRoster.
+function starColor(s) { return s===3?'#3fb950':s===2?'#e3b341':s===1?'#f0a500':'#8b949e'; }
+
+function drawSVGCurve(svg, x1, y1, x2, y2, stars, dashed) {
+    const color = starColor(stars), cx = (x1+x2)/2;
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',`M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`);
+    path.setAttribute('stroke',color); path.setAttribute('stroke-width',dashed?'1.5':'2');
+    path.setAttribute('fill','none'); path.setAttribute('stroke-opacity',dashed?'0.5':'0.9');
+    if (dashed) path.setAttribute('stroke-dasharray','6 4');
+    if (!dashed) {
+        const len = 200;
+        path.style.strokeDasharray = len; path.style.strokeDashoffset = len;
+        svg.appendChild(path);
+        requestAnimationFrame(()=>{ path.style.transition='stroke-dashoffset 0.4s ease'; path.style.strokeDashoffset='0'; });
+    } else {
+        path.style.opacity='0'; path.style.transition='opacity 0.3s ease';
+        svg.appendChild(path);
+        requestAnimationFrame(()=>{ path.style.opacity='1'; });
+    }
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx',x2); dot.setAttribute('cy',y2); dot.setAttribute('r',dashed?'4':'5');
+    dot.setAttribute('fill',dashed?'none':color);
+    if (dashed) { dot.setAttribute('stroke',color); dot.setAttribute('stroke-width','1.5'); }
+    dot.style.opacity='0'; dot.style.transition='opacity 0.2s ease 0.38s';
+    svg.appendChild(dot);
+    requestAnimationFrame(()=>{ dot.style.opacity=dashed?'0.7':'0.9'; });
+}
+
+function drawSVGPotential(svg, x1, y1, x2, y2) {
+    const cx = (x1+x2)/2;
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',`M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`);
+    path.setAttribute('stroke','#58a6ff'); path.setAttribute('stroke-width','1.5');
+    path.setAttribute('fill','none'); path.setAttribute('stroke-opacity','0.35');
+    path.setAttribute('stroke-dasharray','4 5');
+    path.style.opacity='0'; path.style.transition='opacity 0.3s ease';
+    svg.appendChild(path);
+    requestAnimationFrame(()=>{ path.style.opacity='1'; });
+}
+
+function closeMatchupRatesModal() {
+    document.getElementById('mrBackdrop').style.display = 'none';
+    document.getElementById('mrModal').style.display    = 'none';
+}
+
+function closePlayerMatchupRatesModal() {
+    document.getElementById('pmrBackdrop').style.display = 'none';
+    document.getElementById('pmrModal').style.display    = 'none';
+}
+
+// Open the player matchup history modal.
+// history: {tag: {"atkTH_defTH": {counts:[c0,c1,c2,c3], total:N}}}
+// nameMap: {tag: {name, th}}  — used for display; tags absent from nameMap show raw tag.
+function openPlayerMatchupRatesModal(history, nameMap) {
+    const bd = document.getElementById('pmrBackdrop');
+    const modal = document.getElementById('pmrModal');
+    if (!bd || !modal) return;
+    const el = document.getElementById('pmrContent');
+    if (el && !el.innerHTML.trim()) {
+        const pct = v => `${Math.round(v * 100)}%`;
+        const bar = d => {
+            const s = d.reduce((a, b) => a + b, 0) || 1;
+            return `<div style="display:flex;height:8px;width:110px;border-radius:3px;overflow:hidden;gap:1px;">
+                <div style="flex:${d[0]/s||0.001};background:#8b949e;" title="0★: ${pct(d[0]/s)}"></div>
+                <div style="flex:${d[1]/s||0.001};background:#f0a500;" title="1★: ${pct(d[1]/s)}"></div>
+                <div style="flex:${d[2]/s||0.001};background:#e3b341;" title="2★: ${pct(d[2]/s)}"></div>
+                <div style="flex:${d[3]/s||0.001};background:#3fb950;" title="3★: ${pct(d[3]/s)}"></div>
+            </div>`;
+        };
+
+        // Only show players in the nameMap (our clan members), sorted by total attacks desc.
+        const players = Object.entries(history)
+            .filter(([tag]) => nameMap[tag])
+            .map(([tag, matchups]) => {
+                const info = nameMap[tag];
+                const rows = Object.entries(matchups)
+                    .map(([key, {counts, total}]) => {
+                        if (!total) return null;
+                        const [atkTH, defTH] = key.split('_').map(Number);
+                        const avg = counts.reduce((s, c, k) => s + c * k, 0) / total;
+                        return { atkTH, defTH, counts, total, avg };
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => b.atkTH - a.atkTH || b.defTH - a.defTH);
+                const totalAtks = rows.reduce((s, r) => s + r.total, 0);
+                return { tag, name: info.name, th: info.th, rows, totalAtks };
+            })
+            .filter(p => p.totalAtks > 0)
+            .sort((a, b) => b.totalAtks - a.totalAtks);
+
+        if (!players.length) {
+            el.innerHTML = '<div style="padding:20px;color:var(--muted);">No player history recorded yet.</div>';
+        } else {
+            const grandTotal = players.reduce((s, p) => s + p.totalAtks, 0);
+            const _ts = new Date().toLocaleTimeString();
+            let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:18px;">
+                ${players.length} players &nbsp;&#183;&nbsp;
+                <strong style="color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:15px;">${grandTotal.toLocaleString()}</strong> total attacks recorded
+                &nbsp;&#183;&nbsp; <span style="font-size:10px;">snapshotted ${_ts}</span>
+            </div><div style="overflow-x:auto;"><table class="detail-table" style="width:100%;">
+            <thead><tr>
+                <th style="text-align:center;">ATK TH</th>
+                <th style="text-align:center;">DEF TH</th>
+                <th>★ DISTRIBUTION</th>
+                <th style="text-align:center;color:#8b949e;">0★</th>
+                <th style="text-align:center;color:#f0a500;">1★</th>
+                <th style="text-align:center;color:#e3b341;">2★</th>
+                <th style="text-align:center;color:#3fb950;">3★</th>
+                <th style="text-align:right;">ATKS</th>
+                <th style="text-align:right;">AVG★</th>
+            </tr></thead><tbody>`;
+
+            for (const p of players) {
+                // Player header row — full-width separator with name, current TH, total attacks.
+                html += `<tr style="background:var(--bord2);">
+                    <td colspan="9" style="padding:7px 12px;font-weight:700;font-size:13px;">
+                        ${escapeHTML(p.name)}
+                        ${p.th ? `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);margin-left:6px;">TH${p.th}</span>` : ''}
+                        <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:10px;">${p.totalAtks} attack${p.totalAtks !== 1 ? 's' : ''}</span>
+                    </td>
+                </tr>`;
+                let lastAtkTH = null;
+                for (const r of p.rows) {
+                    if (r.atkTH !== lastAtkTH) {
+                        lastAtkTH = r.atkTH;
+                        html += `<tr style="background:var(--bg);">
+                            <td colspan="9" style="padding:4px 12px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;">
+                                ATTACKING AS TH${r.atkTH}
+                            </td>
+                        </tr>`;
+                    }
+                    const s = r.total || 1;
+                    const avgColor = r.avg >= 2.7 ? 'var(--green)' : r.avg >= 2.0 ? 'var(--accent)' : 'var(--red)';
+                    html += `<tr>
+                        <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);">TH${r.atkTH}</td>
+                        <td style="text-align:center;font-size:12px;color:var(--muted);">TH${r.defTH}</td>
+                        <td>${bar(r.counts)}</td>
+                        <td style="text-align:center;font-size:11px;color:#8b949e;">${pct(r.counts[0]/s)}</td>
+                        <td style="text-align:center;font-size:11px;color:#f0a500;">${pct(r.counts[1]/s)}</td>
+                        <td style="text-align:center;font-size:11px;color:#e3b341;">${pct(r.counts[2]/s)}</td>
+                        <td style="text-align:center;font-size:11px;color:#3fb950;">${pct(r.counts[3]/s)}</td>
+                        <td style="text-align:right;font-size:11px;color:var(--muted);">${r.total}</td>
+                        <td style="text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;color:${avgColor};">${r.avg.toFixed(2)}★</td>
+                    </tr>`;
+                }
+            }
+            html += '</tbody></table></div>';
+            el.innerHTML = html;
+        }
+    }
+    bd.style.display = 'block';
+    modal.style.display = 'block';
 }

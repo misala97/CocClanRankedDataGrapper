@@ -56,9 +56,10 @@ def _build_cwl_matchup_rates():
     ):
         k = f"{row.atk_th or 0}_{row.def_th or 0}"
         _raw.setdefault(k, [0, 0, 0, 0])[max(0, min(3, int(row.stars or 0)))] += row.cnt
-    rates  = {k: [c / sum(v) for c in v] for k, v in _raw.items() if sum(v) >= 5}
-    counts = {k: sum(v) for k, v in _raw.items() if sum(v) >= 5}
-    return rates, counts
+    rates       = {k: [c / sum(v) for c in v] for k, v in _raw.items() if sum(v) >= 5}
+    counts      = {k: sum(v) for k, v in _raw.items() if sum(v) >= 5}
+    total_with_th = sum(sum(v) for v in _raw.values())  # all attacks that joined to member records
+    return rates, counts, total_with_th
 
 
 def _build_war_detail(war, our_tag, matchup_rates=None):
@@ -465,7 +466,7 @@ def cwl_page():
             tomorrow_enemy_tag = opp
 
     # ── Global TH matchup rates (used for scoring verdicts) ──────────────────
-    cwl_matchup_rates, cwl_matchup_counts = _build_cwl_matchup_rates()
+    cwl_matchup_rates, cwl_matchup_counts, cwl_total_atk_count = _build_cwl_matchup_rates()
 
     # ── Per-round war details (our clan only) ─────────────────────────────────
     rounds = {}
@@ -682,13 +683,14 @@ def cwl_page():
     player_all_time_perf = {}
     for row in _hist:
         ptag = row.attacker_tag
-        if ptag not in player_all_time_perf:
-            player_all_time_perf[ptag] = {'name': row.player_name or '', 'by_matchup': {}}
         key = f"{row.atk_th or 0}_{row.def_th or 0}"
-        if key not in player_all_time_perf[ptag]['by_matchup']:
-            player_all_time_perf[ptag]['by_matchup'][key] = [0, 0, 0, 0]
         s = max(0, min(3, int(row.stars or 0)))
-        player_all_time_perf[ptag]['by_matchup'][key][s] += 1
+        if ptag not in player_all_time_perf:
+            player_all_time_perf[ptag] = {}
+        if key not in player_all_time_perf[ptag]:
+            player_all_time_perf[ptag][key] = {'counts': [0, 0, 0, 0], 'total': 0}
+        player_all_time_perf[ptag][key]['counts'][s] += 1
+        player_all_time_perf[ptag][key]['total'] += 1
 
     # ── Clans we already fought this season ───────────────────────────────────
     fought_clans = {
@@ -746,6 +748,7 @@ def cwl_page():
         player_all_time_perf=player_all_time_perf,
         cwl_matchup_rates=cwl_matchup_rates,
         cwl_matchup_counts=cwl_matchup_counts,
+        cwl_total_atk_count=cwl_total_atk_count,
         now=dt.datetime.now(dt.timezone.utc),
         league_rank=league_rank,
     )
@@ -792,7 +795,7 @@ def cwl_stats_page():
                       and w.state == 'warEnded']
 
     # ── Global TH matchup rates for verdict scoring ───────────────────────────
-    stats_matchup_rates, _ = _build_cwl_matchup_rates()
+    stats_matchup_rates, *_ = _build_cwl_matchup_rates()
 
     # ── Per-season summary ────────────────────────────────────────────────────
     seasons_data = []
