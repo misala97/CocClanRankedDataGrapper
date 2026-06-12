@@ -4,11 +4,6 @@
 {% set chartjs = true %}
 {% include '_head.html' %}
 
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    a { text-decoration: none; color: inherit; }
-    .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
-
     /* ── SUMMARY CARDS ── */
     .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
     .sc {
@@ -164,27 +159,27 @@
     <!-- Summary cards -->
     <div class="summary-grid">
         <div class="sc sc-blue">
-            <div class="sc-icon">⚔️</div>
+            <div class="sc-icon"><img src="/static/img/battle.png" style="width:64px;height:64px;"></div>
             <div class="sc-value">{{ '{:,}'.format(total_attacks_all) }}</div>
             <div class="sc-label">All-Time Attacks</div>
         </div>
         <div class="sc sc-gold">
-            <div class="sc-icon">🪙</div>
+            <div class="sc-icon"><img src="/static/img/gold.png" style="width:64px;height:64px;"></div>
             <div class="sc-value">{{ '{:,.0f}'.format(total_gold_all / 1000000) }}M</div>
             <div class="sc-label">Gold Looted</div>
         </div>
         <div class="sc sc-elixir">
-            <div class="sc-icon">⚗️</div>
+            <div class="sc-icon"><img src="/static/img/elixir.png" style="width:64px;height:64px;"></div>
             <div class="sc-value">{{ '{:,.0f}'.format(total_elixir_all / 1000000) }}M</div>
             <div class="sc-label">Elixir Looted</div>
         </div>
         <div class="sc sc-dark">
-            <div class="sc-icon">🌑</div>
+            <div class="sc-icon"><img src="/static/img/darkElixir.png" style="width:64px;height:64px;"></div>
             <div class="sc-value">{{ '{:,}'.format(total_dark_all) }}</div>
             <div class="sc-label">Dark Elixir Looted</div>
         </div>
         <div class="sc sc-green">
-            <div class="sc-icon">⭐</div>
+            <div class="sc-icon"><img src="/static/img/star.png" style="width:64px;height:64px;"></div>
             <div class="sc-value">{{ clan_3star_rate }}%</div>
             <div class="sc-label">Clan 3★ Rate</div>
         </div>
@@ -350,7 +345,7 @@ function buildSpotlight() {
     const by3    = [...active].sort((a,b) => b.three_rate - a.three_rate)[0];
     document.getElementById('spotlightGrid').innerHTML = [
         { icon:'⚔️',  role:'Most Active',        p: byAtt,  stat: `${byAtt.total_attacks.toLocaleString()} all-time attacks` },
-        { icon:'💰',  role:'Loot King',           p: byLoot, stat: `${byLoot.total_loot.toLocaleString()} total loot` },
+        { icon:'<img src="/static/img/gold.png" style="width:28px;height:28px;">',  role:'Loot King',           p: byLoot, stat: `${byLoot.total_loot.toLocaleString()} total loot` },
         { icon:'⭐',  role:'Precision Attacker',  p: by3,   stat: `${by3.three_rate}% 3★ rate` },
     ].map(c => `<div class="spotlight-card">
         <div class="spl-icon">${c.icon}</div>

@@ -7,7 +7,8 @@ from extensions import db
 from models import ClanWar, ClanWarMember, ClanWarAttack, Player
 from features.auth.routes import _can_edit_clan_war
 from services.helpers import avg_league_name, league_rank, SKIP_LEAGUES
-from features.war.war_combos import classify_attack, get_war_verdict
+from features.war.war_combos import classify_attack, get_war_verdict, get_attack_context
+from services.helpers import inc_star_bucket
 
 war_bp = Blueprint('war', __name__)
 
@@ -61,10 +62,7 @@ def clan_war_page():
             atk_pos = int(atk.map_position or 0)    if atk else 0
             dfn_th  = int(dfn.town_hall_level or 0) if dfn else 0
             dfn_pos = int(dfn.map_position or 0)    if dfn else 0
-            prior   = [x for x in attacks_on_defender.get(a.defender_tag, [])
-                       if (x.attack_order or 0) < (a.attack_order or 0)]
-            already_3star      = any(x.stars >= 3 for x in prior)
-            partially_attacked = len(prior) > 0 and not already_3star
+            already_3star, partially_attacked = get_attack_context(a, attacks_on_defender)
             atk_label = classify_attack(
                 int(a.stars or 0), atk_th, dfn_th, already_3star, partially_attacked
             ) if atk_th and dfn_th else 'unknown'
@@ -100,14 +98,12 @@ def clan_war_page():
                 dfn_pos  = (dfn.map_position or 0)    if dfn else 0
                 stars    = atk.stars or 0
 
-                prior = [a for a in attacks_on_defender.get(atk.defender_tag, [])
-                         if (a.attack_order or 0) < (atk.attack_order or 0)]
-                already_3star      = any(a.stars >= 3 for a in prior)
-                partially_attacked = len(prior) > 0 and not already_3star
-
+                already_3star, partially_attacked = get_attack_context(atk, attacks_on_defender)
                 label = classify_attack(stars, atk_th, dfn_th, already_3star, partially_attacked)
                 labels.append(label)
 
+                prior        = [a for a in attacks_on_defender.get(atk.defender_tag, [])
+                                if (a.attack_order or 0) < (atk.attack_order or 0)]
                 stars_before = max((a.stars for a in prior), default=0)
 
                 if already_3star:
@@ -307,19 +303,13 @@ def war_stats_page():
                 dfn = member_by_tag.get(atk.defender_tag)
                 dfn_th = (dfn.town_hall_level or 0) if dfn else atk_th
                 stars  = atk.stars or 0
-                prior  = [a for a in attacks_on_defender.get(atk.defender_tag, [])
-                          if (a.attack_order or 0) < (atk.attack_order or 0)]
-                already_3star      = any(a.stars >= 3 for a in prior)
-                partially_attacked = len(prior) > 0 and not already_3star
+                already_3star, partially_attacked = get_attack_context(atk, attacks_on_defender)
                 lbl = classify_attack(stars, atk_th, dfn_th, already_3star, partially_attacked)
                 war_labels.append(lbl)
                 ps['stars'] += stars
                 ps['destruction_sum'] += float(atk.destruction_pct or 0)
                 ps['dfn_th_sum'] += dfn_th
-                if stars == 3:   ps['three_stars'] += 1
-                elif stars == 2: ps['two_stars']   += 1
-                elif stars == 1: ps['one_stars']   += 1
-                else:            ps['zero_stars']  += 1
+                inc_star_bucket(ps, stars)
                 if lbl in ps['labels']: ps['labels'][lbl] += 1
                 if dfn_th > 0:
                     thb = ps['th_breakdown'].setdefault(dfn_th, {
@@ -331,26 +321,17 @@ def war_stats_page():
                     })
                     thb['attacks'] += 1
                     thb['stars'] += stars
-                    if stars == 3:   thb['three_stars'] += 1
-                    elif stars == 2: thb['two_stars']   += 1
-                    elif stars == 1: thb['one_stars']   += 1
-                    else:            thb['zero_stars']  += 1
+                    inc_star_bucket(thb, stars)
                     if lbl not in FARM_LABELS:
                         thb['attacks_nf'] += 1
                         thb['stars_nf'] += stars
-                        if stars == 3:   thb['three_stars_nf'] += 1
-                        elif stars == 2: thb['two_stars_nf']   += 1
-                        elif stars == 1: thb['one_stars_nf']   += 1
-                        else:            thb['zero_stars_nf']  += 1
+                        inc_star_bucket(thb, stars, '_nf')
                 if lbl not in FARM_LABELS:
                     ps['stars_nf'] += stars
                     ps['destruction_sum_nf'] += float(atk.destruction_pct or 0)
                     ps['dfn_th_sum_nf'] += dfn_th
                     ps['attacks_used_nf'] += 1
-                    if stars == 3:   ps['three_stars_nf'] += 1
-                    elif stars == 2: ps['two_stars_nf']   += 1
-                    elif stars == 1: ps['one_stars_nf']   += 1
-                    else:            ps['zero_stars_nf']  += 1
+                    inc_star_bucket(ps, stars, '_nf')
                     if lbl in ps['labels_nf']: ps['labels_nf'][lbl] += 1
 
             while len(war_labels) < 2:

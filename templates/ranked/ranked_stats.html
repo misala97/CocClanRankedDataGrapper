@@ -4,11 +4,6 @@
 {% set chartjs = true %}
 {% include '_head.html' %}
 
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    a { text-decoration: none; color: inherit; }
-    .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
-
     /* ── SUMMARY CARDS ── */
     .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
     .sc {
@@ -130,14 +125,6 @@
         display: inline-block; padding: 2px 8px; border-radius: 5px; font-family: 'Rajdhani', sans-serif;
         font-size: 12px; font-weight: 700; letter-spacing: .3px;
     }
-    .badge-godlike  { background: rgba(188,140,255,.15); color: var(--purple); border: 1px solid rgba(188,140,255,.3); }
-    .badge-dominant { background: rgba(240,165,0,.15);   color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
-    .badge-wow      { background: rgba(63,185,80,.12);   color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
-    .badge-good     { background: rgba(88,166,255,.12);  color: var(--blue);   border: 1px solid rgba(88,166,255,.25); }
-    .badge-warning  { background: rgba(210,153,34,.12);  color: var(--orange); border: 1px solid rgba(210,153,34,.25); }
-    .badge-suck     { background: rgba(248,81,73,.12);   color: var(--red);    border: 1px solid rgba(248,81,73,.25); }
-    .badge-useless  { background: rgba(139,148,158,.08); color: var(--muted);  border: 1px solid rgba(139,148,158,.2); }
-    .badge-inactive { background: rgba(139,148,158,.06); color: var(--muted);  border: 1px solid rgba(139,148,158,.15); }
     .lb-footer { padding: 9px 18px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
 
     /* ── HEATMAP ── */
@@ -186,8 +173,8 @@
     <!-- Summary cards -->
     <div class="summary-grid">
         <div class="sc sc-purple"><div class="sc-icon">📅</div><div class="sc-value">{{ total_weeks }}</div><div class="sc-label">Seasons Tracked</div></div>
-        <div class="sc sc-gold"><div class="sc-icon">⚔️</div><div class="sc-value">{{ '{:,}'.format(all_attacks_total) }}</div><div class="sc-label">All-Time Attacks</div></div>
-        <div class="sc sc-green"><div class="sc-icon">⭐</div><div class="sc-value">{{ clan_three_star_rate }}%</div><div class="sc-label">Clan 3★ Rate</div></div>
+        <div class="sc sc-gold"><div class="sc-icon"><img src="/static/img/battle.png" style="width:22px;height:22px;"></div><div class="sc-value">{{ '{:,}'.format(all_attacks_total) }}</div><div class="sc-label">All-Time Attacks</div></div>
+        <div class="sc sc-green"><div class="sc-icon"><img src="/static/img/star.png" style="width:22px;height:22px;"></div><div class="sc-value">{{ clan_three_star_rate }}%</div><div class="sc-label">Clan 3★ Rate</div></div>
         <div class="sc sc-blue"><div class="sc-icon">📊</div><div class="sc-value">{{ avg_clan_score }}</div><div class="sc-label">Avg Clan Score</div></div>
     </div>
 
@@ -207,7 +194,7 @@
         </div>
         <div class="panel">
             <div class="panel-hdr">
-                <span class="panel-title">⭐ 3★ Rate by Player</span>
+                <span class="panel-title"><img src="/static/img/star.png" style="width:14px;height:14px;vertical-align:middle;"> 3★ Rate by Player</span>
                 <span class="panel-sub">sorted highest to lowest</span>
             </div>
             <div class="panel-body" style="padding:14px 16px;">

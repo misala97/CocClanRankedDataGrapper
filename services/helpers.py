@@ -627,6 +627,34 @@ def raid_score_verdict(adj_per_attack, solo_wipes, att_count, missing_text=''):
     return score_100, round(adj, 2), 'badge-useless', 'Useless' + missing_text
 
 
+_STAR_KEYS = ('zero_stars', 'one_stars', 'two_stars', 'three_stars')
+
+def inc_star_bucket(d, stars, suffix=''):
+    """Increment the zero/one/two/three_stars counter in dict d for the given star count."""
+    d[_STAR_KEYS[max(0, min(3, stars))] + suffix] += 1
+
+
+def compute_cwl_win_status(war, our_tag):
+    """Return 'safe_win', 'cant_win', 'undecided', or None if war is not inWar."""
+    if war.state != 'inWar':
+        return None
+    our_side = war.clan_tag == our_tag
+    our_s    = (war.clan_stars  if our_side else war.opp_stars)  or 0
+    opp_s    = (war.opp_stars   if our_side else war.clan_stars) or 0
+    our_done = (war.clan_attacks if our_side else war.opp_attacks) or 0
+    opp_done = (war.opp_attacks  if our_side else war.clan_attacks) or 0
+    our_pct  = float((war.clan_destruction_pct if our_side else war.opp_destruction_pct) or 0)
+    opp_pct  = float((war.opp_destruction_pct  if our_side else war.clan_destruction_pct) or 0)
+    size     = war.team_size or 15
+    our_max  = our_s + max(0, size - our_done) * 3
+    opp_max  = opp_s + max(0, size - opp_done) * 3
+    if our_s > opp_max or (our_s == opp_max and our_pct > opp_pct):
+        return 'safe_win'
+    if opp_s > our_max or (opp_s == our_max and opp_pct > our_pct):
+        return 'cant_win'
+    return 'undecided'
+
+
 def _raid_verdict(logs):
     if not logs:
         return 'badge-inactive', 'Skipped', 0

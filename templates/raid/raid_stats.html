@@ -4,11 +4,6 @@
 {% set chartjs = true %}
 {% include '_head.html' %}
 
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    a { text-decoration: none; color: inherit; }
-
-    .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
 
     /* ── SUMMARY CARDS ── */
     .summary-grid {
@@ -285,12 +280,12 @@
             <div class="sc-label">Raids Tracked</div>
         </div>
         <div class="summary-card sc-loot">
-            <div class="sc-icon">💰</div>
+            <div class="sc-icon"><img src="/static/img/gold.png" style="width:64px;height:64px;"></div>
             <div class="sc-value">{{ '{:,}'.format(total_loot_all) }}</div>
             <div class="sc-label">All-Time Capital Loot</div>
         </div>
         <div class="summary-card sc-wipes">
-            <div class="sc-icon">⚡</div>
+            <div class="sc-icon"><img src="/static/img/raidCapitalGold.png" style="width:64px;height:64px;"></div>
             <div class="sc-value">{{ total_solo_wipes_all }}</div>
             <div class="sc-label">Total Solo Wipes</div>
         </div>
@@ -312,7 +307,7 @@
     {% endif %}
     <div class="insight-grid">
         <div class="insight-card ic-wipe-rate">
-            <div class="insight-icon-wrap">⚡</div>
+            <div class="insight-icon-wrap"><img src="/static/img/raidCapitalGold.png" style="width:28px;height:28px;"></div>
             <div class="insight-body">
                 <div class="insight-value">{{ solo_wipe_rate }}%</div>
                 <div class="insight-label">Solo Wipe Rate</div>
@@ -341,7 +336,7 @@
     <div class="charts-row">
         <div class="panel">
             <div class="panel-hdr">
-                <span class="panel-title">💰 Capital Loot History</span>
+                <span class="panel-title"><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Capital Loot History</span>
                 <span class="panel-sub">finished raids</span>
             </div>
             <div class="panel-body">
@@ -352,7 +347,7 @@
         </div>
         <div class="panel">
             <div class="panel-hdr">
-                <span class="panel-title">⚡ District Efficiency</span>
+                <span class="panel-title"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;"> District Efficiency</span>
                 <span class="panel-sub">avg attacks to solo wipe</span>
             </div>
             <div id="districtTableWrap">
@@ -364,7 +359,7 @@
     <!-- Champions strip -->
     <div class="champions-wrap panel">
         <div class="panel-hdr">
-            <span class="panel-title">👑 District Champions</span>
+            <span class="panel-title"><img src="/static/img/crown.png" style="width:14px;height:14px;vertical-align:middle;"> District Champions</span>
             <span class="panel-sub">most efficient solo wiper per district (all-time)</span>
         </div>
         <div style="padding:14px 16px 10px;">
@@ -377,7 +372,7 @@
     <!-- Heatmap -->
     <div class="heatmap-panel">
         <div class="panel-hdr">
-            <span class="panel-title">⚡ Solo Wipe Heatmap</span>
+            <span class="panel-title"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;"> Solo Wipe Heatmap</span>
             <span class="panel-sub">avg attacks to solo wipe per player × district — green = 1 attack, red = 3+</span>
         </div>
         <div class="heatmap-scroll">

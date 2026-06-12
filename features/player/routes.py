@@ -15,7 +15,7 @@ from services.helpers import (
 
 
 
-from features.war.war_combos import classify_attack, get_war_verdict
+from features.war.war_combos import classify_attack, get_war_verdict, get_attack_context
 
 player_bp = Blueprint('player', __name__)
 
@@ -29,10 +29,7 @@ def _war_player_verdict(player_tag, player_th, player_attacks, all_attacks_in_wa
     labels = []
     for atk in sorted(player_attacks, key=lambda a: a.attack_order or 0):
         opp_th = opp_th_lookup.get(atk.defender_tag, player_th)
-        prior  = [a for a in atk_on_def.get(atk.defender_tag, [])
-                  if (a.attack_order or 0) < (atk.attack_order or 0)]
-        already_3star = any(a.stars >= 3 for a in prior)
-        partially     = len(prior) > 0 and not already_3star
+        already_3star, partially = get_attack_context(atk, atk_on_def)
         labels.append(classify_attack(atk.stars or 0, player_th, opp_th, already_3star, partially))
 
     while len(labels) < 2:
@@ -49,14 +46,15 @@ def _fmt_loot(n):
     return str(n)
 
 
+def _period_limits(period):
+    if period == 'week':  return 1,  1,   7,  2
+    if period == 'month': return 4,  4,  30,  8
+    return                       16, 20, 180, 30
+
+
 def calculate_activity_score(player_tag, period='week'):
     now = dt.datetime.now(dt.timezone.utc)
-    if period == 'week':
-        season_limit, raid_limit, battle_days, war_limit = 1, 1, 7, 2
-    elif period == 'month':
-        season_limit, raid_limit, battle_days, war_limit = 4, 4, 30, 8
-    else:
-        season_limit, raid_limit, battle_days, war_limit = 16, 20, 180, 30
+    season_limit, raid_limit, battle_days, war_limit = _period_limits(period)
 
     player_obj = Player.query.filter_by(tag=player_tag).first()
     join_date  = player_obj.join_date if player_obj else None
@@ -183,12 +181,7 @@ def calculate_activity_score(player_tag, period='week'):
 
 def calculate_skill_score(player_tag, period='month'):
     now = dt.datetime.now(dt.timezone.utc)
-    if period == 'week':
-        season_limit, raid_limit, battle_days, war_limit = 1, 1, 7, 2
-    elif period == 'month':
-        season_limit, raid_limit, battle_days, war_limit = 4, 4, 30, 8
-    else:
-        season_limit, raid_limit, battle_days, war_limit = 16, 20, 180, 30
+    season_limit, raid_limit, battle_days, war_limit = _period_limits(period)
 
     last_seasons = (db.session.query(RankedWeek.league_season_id)
                     .distinct().order_by(RankedWeek.league_season_id.desc())
@@ -495,12 +488,7 @@ def _calculate_scores_bulk(player_tags, period='month'):
         return {}
 
     now = dt.datetime.now(dt.timezone.utc)
-    if period == 'week':
-        season_limit, raid_limit, battle_days, war_limit = 1, 1, 7, 2
-    elif period == 'month':
-        season_limit, raid_limit, battle_days, war_limit = 4, 4, 30, 8
-    else:
-        season_limit, raid_limit, battle_days, war_limit = 16, 20, 180, 30
+    season_limit, raid_limit, battle_days, war_limit = _period_limits(period)
 
     weeks_float = battle_days / 7
 

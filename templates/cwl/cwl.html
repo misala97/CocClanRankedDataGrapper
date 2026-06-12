@@ -2,10 +2,6 @@
 <html lang="en">
 {% set page_title = 'Clan War League – CoC Analytics' %}
 {% include '_head.html' %}
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        a { text-decoration: none; color: inherit; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
         .controls {
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
             background: var(--surface); padding: 12px 18px;
@@ -324,17 +320,6 @@
         .ap-wasted          { background: rgba(139,148,158,.08); color: var(--muted);  border-color: rgba(139,148,158,.2); opacity:.75; }
         .ap-no-attack       { background: rgba(139,148,158,.05); color: var(--muted);  border-color: rgba(139,148,158,.15); opacity:.6; }
 
-        /* ── JUDGMENT BADGES ── */
-        .judgment { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid; white-space: nowrap; letter-spacing: .4px; font-family: 'Rajdhani', sans-serif; text-transform: uppercase; }
-        .badge-godlike   { background: rgba(188,140,255,.15); color: var(--purple); border-color: rgba(188,140,255,.4); }
-        .badge-dominant  { background: rgba(240,165,0,.15);   color: var(--accent); border-color: rgba(240,165,0,.35); }
-        .badge-wow       { background: rgba(63,185,80,.12);   color: var(--green);  border-color: rgba(63,185,80,.3); }
-        .badge-good      { background: rgba(88,166,255,.12);  color: var(--blue);   border-color: rgba(88,166,255,.25); }
-        .badge-warning   { background: rgba(210,153,34,.12);  color: var(--orange); border-color: rgba(210,153,34,.3); }
-        .badge-suck      { background: rgba(248,81,73,.12);   color: var(--red);    border-color: rgba(248,81,73,.3); }
-        .badge-inactive  { background: rgba(139,148,158,.08); color: var(--muted);  border-color: rgba(139,148,158,.2); }
-        .badge-undefined { background: rgba(139,148,158,.06); color: var(--muted);  border-color: rgba(139,148,158,.2); border-style: dashed; }
-
         /* ── WAR FLAGS ── */
         .war-flag {
             display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px;
@@ -422,6 +407,7 @@
             .page-header h1 { font-size: 36px; letter-spacing: 1.5px; }
         }
     </style>
+    <script src="/static/js/war_shared.js"></script>
 </head>
 <body>
 
@@ -1281,15 +1267,21 @@
 // {tag: {name, by_matchup: {"atkTH_defTH": [0★,1★,2★,3★], ...}}}
 const PLAYER_ALL_TIME   = {{ player_all_time_perf  | tojson | safe }};
 // {"atkTH_defTH": [p0★, p1★, p2★, p3★]} — aggregated from all recorded wars
-const TH_MATCHUP_RATES  = {{ th_matchup_rates     | tojson | safe }};
+const CWL_MATCHUP_RATES  = {{ cwl_matchup_rates     | tojson | safe }};
 // {"atkTH_defTH": total_attack_count}
-const TH_MATCHUP_COUNTS = {{ th_matchup_counts    | tojson | safe }};
+const CWL_MATCHUP_COUNTS    = {{ cwl_matchup_counts    | tojson | safe }};
+const CWL_TOTAL_ATK_COUNT   = Object.values(CWL_MATCHUP_COUNTS).reduce((s,c) => s+c, 0);
 
 // ── CWL season overview data ──────────────────────────────────────────────────
 {% if our_player_perf is defined %}
 const CWL_PLAYER_PERF = {{ our_player_perf | tojson | safe }};
 {% else %}
 const CWL_PLAYER_PERF = [];
+{% endif %}
+{% if all_player_perf is defined %}
+const CWL_ALL_PLAYER_PERF = {{ all_player_perf | tojson | safe }};
+{% else %}
+const CWL_ALL_PLAYER_PERF = [];
 {% endif %}
 {% if season %}
 {% set ns = namespace(rank=none, wins=0, losses=0, draws=0) %}
@@ -1836,59 +1828,10 @@ function computePrediction(n) {
     const OUR = r.our || [], OPP = r.opp || [];
     const len = Math.min(OUR.length, OPP.length);
     if (!len) return null;
-
-    const ourDists = [], oppDists = [], ourBreakdown = [], oppBreakdown = [];
-
-    for (let i = 0; i < len; i++) {
-        const o = OUR[i], p = OPP[i];
-        const info = wcPlayerInfo(o.tag, o.th, p.th, 5);
-        const ourDist = info ? info.dist : wcAtkDist(o.th, p.th);
-        const srcLabel = info
-            ? `${info.count} fights · ${Math.round(info.count / (info.count + 5) * 100)}% own`
-            : 'DB avg · 0% own';
-        ourDists.push(ourDist);
-        ourBreakdown.push({ name: o.name, th: o.th, pos: o.pos, defTH: p.th, defName: p.name, dist: ourDist, expStars: ourDist.reduce((s,q,k)=>s+q*k,0), srcLabel });
-
-        const oppInfo = wcPlayerInfo(p.tag, p.th, o.th, 5);
-        const oppDist = oppInfo ? oppInfo.dist : wcAtkDist(p.th, o.th);
-        const oppSrcLabel = oppInfo
-            ? `${oppInfo.count} fights · ${Math.round(oppInfo.count / (oppInfo.count + 5) * 100)}% own`
-            : 'DB avg · 0% own';
-        oppDists.push(oppDist);
-        oppBreakdown.push({ name: p.name, th: p.th, pos: p.pos, defTH: o.th, defName: o.name, dist: oppDist, expStars: oppDist.reduce((s,q,k)=>s+q*k,0), srcLabel: oppSrcLabel });
-    }
-
-    const dpOur = wcConvolve(ourDists);
-    const dpOpp = wcConvolve(oppDists);
-    const maxP  = len * 3;
-
-    let pWin = 0, pDraw = 0, pLoss = 0;
-    for (let i = 0; i < dpOur.length; i++) {
-        if (!dpOur[i]) continue;
-        for (let j = 0; j < dpOpp.length; j++) {
-            if (!dpOpp[j]) continue;
-            const fo = Math.min(i, maxP), fe = Math.min(j, maxP);
-            const pp = dpOur[i] * dpOpp[j];
-            if      (fo > fe) pWin  += pp;
-            else if (fo === fe) pDraw += pp;
-            else               pLoss += pp;
-        }
-    }
-
-    const expOurFinal = dpOur.reduce((s,p,i)=>s+p*i, 0);
-    const expOppFinal = dpOpp.reduce((s,p,i)=>s+p*i, 0);
-
-    return {
-        pWin, pDraw, pLoss,
-        ourStars: 0, oppStars: 0,
-        ourRem: len, oppRem: len,
-        ourMax: maxP, oppMax: maxP,
-        expOurFinal, expOppFinal,
-        teamSize: len, maxPossible: maxP,
-        avgOurRemTH: avg(OUR.map(m => m.th)).toFixed(1),
-        avgOppRemTH: avg(OPP.map(m => m.th)).toFixed(1),
-        dpOur, dpOpp, ourBreakdown, oppBreakdown,
-    };
+    // Positional pairing: rank-i attacker vs rank-i defender
+    const ourPairs = OUR.slice(0, len).map((o, i) => ({ tag: o.tag, atkTH: o.th, name: o.name, pos: o.pos, defTH: OPP[i].th, defName: OPP[i].name }));
+    const oppPairs = OPP.slice(0, len).map((p, i) => ({ tag: p.tag, atkTH: p.th, name: p.name, pos: p.pos, defTH: OUR[i].th, defName: OUR[i].name }));
+    return calcWinProb(ourPairs, oppPairs, 0, 0, len * 3, wcPlayerInfo, (a,d) => atkDist(CWL_MATCHUP_RATES, a, d));
 }
 function clamp(v,lo,hi) { return Math.max(lo,Math.min(hi,v)); }
 function sigmoid(x) { return 1/(1+Math.exp(-x)); }
@@ -1965,7 +1908,7 @@ function buildCompare(n) {
     const allThs=[...new Set([...Object.keys(thOur),...Object.keys(thOpp)].map(Number))].sort((a,b)=>b-a);
     const maxC=Math.max(...allThs.map(t=>Math.max(thOur[t]||0,thOpp[t]||0)),1);
     document.getElementById(`cmpModal-th`).innerHTML = `
-        <div class="cmp-title">🏰 TH Distribution</div>
+        <div class="cmp-title"><img src="/static/img/townHall.png" style="width:14px;height:14px;vertical-align:middle;"> TH Distribution</div>
         <div class="dist-header"><span class="dist-our-lbl">${r.ourName}</span><span></span><span class="dist-opp-lbl">${r.oppName}</span></div>
         ${allThs.map(th=>{const o=thOur[th]||0,p=thOpp[th]||0;const ow=Math.round(o/maxC*130),pw=Math.round(p/maxC*130);
         return `<div class="dist-row"><span class="dist-count-our">${o||''}</span><div style="display:flex;justify-content:flex-end"><div class="dist-bar-our" style="width:${ow}px"></div></div><span class="dist-lbl">TH${th}</span><div><div class="dist-bar-opp" style="width:${pw}px"></div></div><span class="dist-count-opp">${p||''}</span></div>`;}).join('')}`;
@@ -1997,7 +1940,7 @@ function buildCompare(n) {
         return `<tr class="${rc}"><td class="lgt-pos">#${o.pos}</td><td class="lgt-name">${escapeHTML(o.name)}</td><td class="lgt-lg">TH${o.th}</td><td class="lgt-diff ${dc}">${d>0?'+':''}${d||'='}</td><td class="lgt-lg" style="text-align:right">TH${p.th}</td><td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td></tr>`;
     }).join('');
     document.getElementById(`cmpModal-matchup`).innerHTML = `
-        <div class="cmp-title">⚔️ TH Matchup by Position</div>
+        <div class="cmp-title"><img src="/static/img/battle.png" style="width:14px;height:14px;vertical-align:middle;"> TH Matchup by Position</div>
         <div class="matchup-summary">
             <div class="matchup-stat"><div class="mn mn-green">${thBetter}</div><div class="ml">Ahead</div></div>
             <div class="matchup-stat"><div class="mn mn-muted">${thEven}</div><div class="ml">Even</div></div>
@@ -2158,33 +2101,6 @@ function initRoster(n) {
 
 // ── Win Probability Calculator ────────────────────────────────────────────────
 
-// Fallback distribution [p0★, p1★, p2★, p3★] — real DB rates when available
-function wcAtkDist(atkTH, defTH) {
-    const data = TH_MATCHUP_RATES[`${atkTH}_${defTH}`];
-    if (data) return data;
-    const thDiff = atkTH - defTH;
-    if (thDiff >= 2)   return [0.01, 0.02, 0.03, 0.94];
-    if (thDiff === 1)  return [0.01, 0.09, 0.10, 0.80];
-    if (thDiff === 0)  return [0.01, 0.10, 0.24, 0.65];
-    if (thDiff === -1) return [0.05, 0.25, 0.55, 0.15];
-    return [0.20, 0.32, 0.32, 0.16];
-}
-
-// Convolve independent per-attack probability distributions via DP
-function wcConvolve(dists) {
-    let dp = [1.0];
-    for (const dist of dists) {
-        const next = new Array(dp.length + 3).fill(0);
-        for (let k = 0; k < dp.length; k++) {
-            if (!dp[k]) continue;
-            for (let s = 0; s <= 3; s++) next[k + s] += dp[k] * dist[s];
-        }
-        dp = next;
-    }
-    return dp;
-}
-
-// Returns {dist, count, quality} or null — dist is [p0,p1,p2,p3]
 // histK = prior strength: weight = count/(count+histK), so at count=5 you're 50/50
 function wcPlayerInfo(tag, atkTH, avgDefTH, histK) {
     const pp = PLAYER_ALL_TIME[tag];
@@ -2197,210 +2113,74 @@ function wcPlayerInfo(tag, atkTH, avgDefTH, histK) {
         if (kAtk !== atkTH || kDef !== roundDef) continue;
         counts.forEach((c, i) => { combined[i] += c; total += c; });
     }
-    if (total >= 1) {
-        const personal = combined.map(c => c / total);
-        const global = wcAtkDist(atkTH, roundDef);
-        const w = total / (total + histK);
-        return { dist: personal.map((p, i) => w * p + (1 - w) * global[i]), count: total, blended: true };
-    }
-    return null;
+    if (total < 1) return null;
+    return blendPlayerDist(combined, total, atkDist(CWL_MATCHUP_RATES, atkTH, roundDef), histK);
 }
 
 function computeWinCalc(n) {
     const r = CWL[n];
     if (!r || !r.teamSize) return null;
 
-    const ourStars   = r.ourStars   || 0;
-    const oppStars   = r.oppStars   || 0;
-    const ourAttacks = r.ourAttacks || 0;
-    const oppAttacks = r.oppAttacks || 0;
-    const teamSize   = r.teamSize;
-    const maxPossible = teamSize * 3;
-    const ourRem = Math.max(0, teamSize - ourAttacks);
-    const oppRem = Math.max(0, teamSize - oppAttacks);
+    const ourStars    = r.ourStars   || 0;
+    const oppStars    = r.oppStars   || 0;
+    const ourRem      = Math.max(0, r.teamSize - (r.ourAttacks || 0));
+    const oppRem      = Math.max(0, r.teamSize - (r.oppAttacks || 0));
+    const maxPossible = r.teamSize * 3;
 
-    // Track used attack positions and best stars per base
+    // Track which positions have already attacked and best stars per defended base
     const usedOurPos = new Set(), usedOppPos = new Set();
     const oppDefStars = {}, ourDefStars = {};
-    const ourAttacksData = [], oppAttacksData = [];
-
     for (const atk of (r.attacks || [])) {
         if (atk.attacker_side === 'our') {
             usedOurPos.add(atk.attacker_pos);
-            ourAttacksData.push(atk);
             oppDefStars[atk.defender_pos] = Math.max(oppDefStars[atk.defender_pos] || 0, atk.stars);
         } else {
             usedOppPos.add(atk.attacker_pos);
-            oppAttacksData.push(atk);
             ourDefStars[atk.defender_pos] = Math.max(ourDefStars[atk.defender_pos] || 0, atk.stars);
         }
     }
 
-    const ourRemAtk   = (r.our || []).filter(m => !usedOurPos.has(m.pos));
-    const oppRemAtk   = (r.opp || []).filter(m => !usedOppPos.has(m.pos));
-    const oppLiveTHs  = (r.opp || []).filter(m => !(m.pos in oppDefStars)).map(m => m.th);
-    const ourLiveTHs  = (r.our || []).filter(m => !(m.pos in ourDefStars)).map(m => m.th);
-
-    const avgOurTH     = avg((r.our || []).map(m => m.th));
-    const avgOppTH     = avg((r.opp || []).map(m => m.th));
+    const ourRemAtk  = (r.our || []).filter(m => !usedOurPos.has(m.pos));
+    const oppRemAtk  = (r.opp || []).filter(m => !usedOppPos.has(m.pos));
+    const avgOurTH   = avg((r.our || []).map(m => m.th));
+    const avgOppTH   = avg((r.opp || []).map(m => m.th));
     const avgOurRemTH  = ourRemAtk.length ? avg(ourRemAtk.map(m => m.th)) : avgOurTH;
     const avgOppRemTH  = oppRemAtk.length ? avg(oppRemAtk.map(m => m.th)) : avgOppTH;
-    const avgOppLiveTH = oppLiveTHs.length ? avg(oppLiveTHs) : avgOppTH;
-    const avgOurLiveTH = ourLiveTHs.length ? avg(ourLiveTHs) : avgOurTH;
+    const avgOppLiveTH = avg((r.opp || []).filter(m => !(m.pos in oppDefStars)).map(m => m.th)) || avgOppTH;
+    const avgOurLiveTH = avg((r.our || []).filter(m => !(m.pos in ourDefStars)).map(m => m.th)) || avgOurTH;
 
-
-    // Mirror-position + rank-fallback matching for defender TH assignment
+    // Mirror-position matching: rank-i attacker → rank-i open base
     const openEnemyBases = (r.opp || []).filter(m => !(m.pos in oppDefStars)).sort((a, b) => a.pos - b.pos);
     const openOurBases   = (r.our || []).filter(m => !(m.pos in ourDefStars)).sort((a, b) => a.pos - b.pos);
-
     function matchDef(remAtk, openBases, fallbackTH) {
         const sorted = [...remAtk].sort((a, b) => a.pos - b.pos);
-        const defMap = {};
+        const m = {};
         for (let i = 0; i < sorted.length; i++)
-            defMap[sorted[i].pos] = { th: openBases[i]?.th ?? fallbackTH, name: openBases[i]?.name ?? '?' };
-        return defMap;
+            m[sorted[i].pos] = { th: openBases[i]?.th ?? fallbackTH, name: openBases[i]?.name ?? '?' };
+        return m;
     }
-
     const ourAtkDef = matchDef(ourRemAtk, openEnemyBases, Math.round(avgOppLiveTH));
     const oppAtkDef = matchDef(oppRemAtk, openOurBases,   Math.round(avgOurLiveTH));
 
-    // Build per-attacker arrays with source metadata
-    const ourBreakdown = [], oppBreakdown = [], ourDists = [], oppDists = [];
+    // Build pair lists — fill with anonymous fallback if more attacks remain than known members
+    const ourPairs = ourRemAtk.slice(0, ourRem).map(m => {
+        const def = ourAtkDef[m.pos] ?? { th: Math.round(avgOppLiveTH), name: '?' };
+        return { tag: m.tag, atkTH: m.th, name: m.name, pos: m.pos, defTH: def.th, defName: def.name };
+    });
+    while (ourPairs.length < ourRem)
+        ourPairs.push({ tag: null, atkTH: Math.round(avgOurRemTH), name: '?', pos: -1, defTH: Math.round(avgOppLiveTH), defName: '?' });
 
-    for (const m of ourRemAtk.slice(0, ourRem)) {
-        const def   = ourAtkDef[m.pos] ?? { th: Math.round(avgOppLiveTH), name: '?' };
-        const defTH = def.th;
-        const info  = wcPlayerInfo(m.tag, m.th, defTH, 5);
-        let dist, srcLabel;
-        if (info) {
-            dist = info.dist;
-            const pct = Math.round(info.count / (info.count + 5) * 100);
-            srcLabel = `${info.count} fights · ${pct}% own`;
-        } else {
-            dist = wcAtkDist(m.th, defTH);
-            srcLabel = 'DB avg · 0% own';
-        }
-        ourDists.push(dist);
-        ourBreakdown.push({ name: m.name, th: m.th, pos: m.pos, defTH, defName: def.name, dist, expStars: dist.reduce((s,p,k)=>s+p*k,0), srcLabel });
-    }
-    const fallbackOur = wcAtkDist(Math.round(avgOurRemTH), Math.round(avgOppLiveTH));
-    while (ourDists.length < ourRem) {
-        ourDists.push(fallbackOur);
-        ourBreakdown.push({ name: '?', th: Math.round(avgOurRemTH), defTH: Math.round(avgOppLiveTH), dist: fallbackOur, expStars: fallbackOur.reduce((s,p,k)=>s+p*k,0), srcLabel: 'DB avg · 0% own' });
-    }
+    const oppPairs = oppRemAtk.slice(0, oppRem).map(m => {
+        const def = oppAtkDef[m.pos] ?? { th: Math.round(avgOurLiveTH), name: '?' };
+        return { tag: m.tag, atkTH: m.th, name: m.name, pos: m.pos, defTH: def.th, defName: def.name };
+    });
+    while (oppPairs.length < oppRem)
+        oppPairs.push({ tag: null, atkTH: Math.round(avgOppRemTH), name: '?', pos: -1, defTH: Math.round(avgOurLiveTH), defName: '?' });
 
-    const fallbackOpp = wcAtkDist(Math.round(avgOppRemTH), Math.round(avgOurLiveTH));
-    for (const m of oppRemAtk.slice(0, oppRem)) {
-        const def   = oppAtkDef[m.pos] ?? { th: Math.round(avgOurLiveTH), name: '?' };
-        const defTH = def.th;
-        const info  = wcPlayerInfo(m.tag, m.th, defTH, 5);
-        let dist, srcLabel;
-        if (info) {
-            dist = info.dist;
-            const pct = Math.round(info.count / (info.count + 5) * 100);
-            srcLabel = `${info.count} fights · ${pct}% own`;
-        } else {
-            dist = wcAtkDist(m.th, defTH);
-            srcLabel = 'DB avg · 0% own';
-        }
-        oppDists.push(dist);
-        oppBreakdown.push({ name: m.name, th: m.th, pos: m.pos, defTH, defName: def.name, dist, expStars: dist.reduce((s,p,k)=>s+p*k,0), srcLabel });
-    }
-    while (oppDists.length < oppRem) {
-        oppDists.push(fallbackOpp);
-        oppBreakdown.push({ name: '?', th: Math.round(avgOppRemTH), defTH: Math.round(avgOurLiveTH), dist: fallbackOpp, expStars: fallbackOpp.reduce((s,p,k)=>s+p*k,0), srcLabel: 'DB avg · 0% own' });
-    }
-
-    const dpOur = wcConvolve(ourDists.slice(0, ourRem));
-    const dpOpp = wcConvolve(oppDists.slice(0, oppRem));
-
-    let pWin = 0, pDraw = 0, pLoss = 0;
-    for (let i = 0; i < dpOur.length; i++) {
-        if (!dpOur[i]) continue;
-        for (let j = 0; j < dpOpp.length; j++) {
-            if (!dpOpp[j]) continue;
-            const fo = Math.min(ourStars + i, maxPossible);
-            const fe = Math.min(oppStars + j, maxPossible);
-            const p  = dpOur[i] * dpOpp[j];
-            if      (fo > fe) pWin  += p;
-            else if (fo === fe) pDraw += p;
-            else              pLoss += p;
-        }
-    }
-
-    const expOurAdd = dpOur.reduce((s, p, i) => s + p * i, 0);
-    const expOppAdd = dpOpp.reduce((s, p, i) => s + p * i, 0);
-
-    return {
-        pWin, pDraw, pLoss,
-        ourRem, oppRem, ourStars, oppStars,
-        ourMax: Math.min(ourStars + ourRem * 3, maxPossible),
-        oppMax: Math.min(oppStars + oppRem * 3, maxPossible),
-        expOurFinal: ourStars + expOurAdd,
-        expOppFinal: oppStars + expOppAdd,
-        teamSize, maxPossible,
-        avgOurRemTH: avgOurRemTH.toFixed(1),
-        avgOppRemTH: avgOppRemTH.toFixed(1),
-        dpOur, dpOpp, ourBreakdown, oppBreakdown,
-    };
+    return calcWinProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible, wcPlayerInfo, (a,d) => atkDist(CWL_MATCHUP_RATES, a, d));
 }
 
-// SVG final-star probability distribution chart
-function wcDistChart(wc, ourName, oppName) {
-    const { ourStars, oppStars, dpOur, dpOpp, maxPossible } = wc;
-    const minStar = Math.min(ourStars, oppStars);
-    const range = maxPossible - minStar + 1;
-    if (range <= 0) return '';
-
-    const ourFinal = new Array(range).fill(0);
-    const oppFinal = new Array(range).fill(0);
-    for (let i = 0; i < dpOur.length; i++) {
-        const idx = Math.min(ourStars + i, maxPossible) - minStar;
-        if (idx >= 0 && idx < range) ourFinal[idx] += dpOur[i];
-    }
-    for (let j = 0; j < dpOpp.length; j++) {
-        const idx = Math.min(oppStars + j, maxPossible) - minStar;
-        if (idx >= 0 && idx < range) oppFinal[idx] += dpOpp[j];
-    }
-
-    const maxProb = Math.max(...ourFinal, ...oppFinal, 0.001);
-    const svgH = 72, barAreaH = svgH - 16;
-    const barW = Math.max(5, Math.min(24, Math.floor(560 / range)));
-    const svgW = range * barW;
-
-    let elems = '';
-    for (let i = 0; i < range; i++) {
-        const x = i * barW, star = minStar + i;
-        const oH = Math.round((oppFinal[i] / maxProb) * barAreaH);
-        const uH = Math.round((ourFinal[i] / maxProb) * barAreaH);
-        if (oH > 0) elems += `<rect x="${x}" y="${barAreaH-oH}" width="${barW-1}" height="${oH}" fill="rgba(248,81,73,.55)" rx="1"/>`;
-        if (uH > 0) elems += `<rect x="${x}" y="${barAreaH-uH}" width="${barW-1}" height="${uH}" fill="rgba(63,185,80,.55)" rx="1"/>`;
-        if (range <= 20 || star % 3 === 0)
-            elems += `<text x="${x+barW/2}" y="${svgH-2}" text-anchor="middle" font-size="8" fill="#8b949e">${star}</text>`;
-    }
-    const expUidx = Math.round(wc.expOurFinal) - minStar;
-    const expOidx = Math.round(wc.expOppFinal) - minStar;
-    if (expUidx >= 0 && expUidx < range) {
-        const x = expUidx * barW + barW / 2;
-        elems += `<line x1="${x}" y1="0" x2="${x}" y2="${barAreaH}" stroke="rgba(63,185,80,.8)" stroke-width="1.5" stroke-dasharray="3,2"/>`;
-    }
-    if (expOidx >= 0 && expOidx < range) {
-        const x = expOidx * barW + barW / 2;
-        elems += `<line x1="${x}" y1="0" x2="${x}" y2="${barAreaH}" stroke="rgba(248,81,73,.8)" stroke-width="1.5" stroke-dasharray="3,2"/>`;
-    }
-
-    return `<div style="border-top:1px solid var(--bord2);padding:12px 20px 8px;">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-            <span style="font-weight:600;">Final star distribution</span>
-            <span><span style="color:rgba(63,185,80,.9);">■</span> ${escapeHTML(ourName)}</span>
-            <span><span style="color:rgba(248,81,73,.9);">■</span> ${escapeHTML(oppName)}</span>
-            <span style="font-style:italic;margin-left:auto;">dashed = expected</span>
-        </div>
-        <div style="overflow-x:auto;">
-            <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${svgW}px;height:${svgH}px;display:block;">${elems}</svg>
-        </div>
-    </div>`;
-}
+const wcDistChart = buildStarDistChart;
 
 // Per-attacker breakdown table
 function wcAttackerTable(breakdown, side) {
@@ -2729,75 +2509,8 @@ function initStickyMyClan() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 // ── TH Matchup Rates Modal ────────────────────────────────────────────────────
 function openMatchupRates() {
-    const el = document.getElementById('mrContent');
-    if (!el.innerHTML.trim()) {
-        const rates  = TH_MATCHUP_RATES;
-        const counts = TH_MATCHUP_COUNTS;
-        const keys   = Object.keys(rates);
-        const totalAtks = Object.values(counts).reduce((s,c) => s+c, 0);
-        const atkTHs = [...new Set(keys.map(k => +k.split('_')[0]))].sort((a,b) => b-a);
-        const defTHs = [...new Set(keys.map(k => +k.split('_')[1]))].sort((a,b) => b-a);
-
-        let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:18px;">
-            Total attacks in DB: <strong style="color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:15px;">${totalAtks.toLocaleString()}</strong>
-            &nbsp;·&nbsp; ${keys.length} matchup combinations
-        </div><div style="overflow-x:auto;">`;
-
-        for (const atkTH of atkTHs) {
-            const rows = defTHs.map(defTH => {
-                const key = `${atkTH}_${defTH}`;
-                const d = rates[key];
-                if (!d) return null;
-                const cnt = counts[key] || 0;
-                const [p0,p1,p2,p3] = d;
-                const avgS = (p1+p2*2+p3*3).toFixed(2);
-                const bar = `<div style="display:flex;height:8px;border-radius:2px;overflow:hidden;min-width:80px;">
-                    <div style="flex:${p0||0.001};background:rgba(248,81,73,.8);"></div>
-                    <div style="flex:${p1||0.001};background:rgba(230,140,30,.8);"></div>
-                    <div style="flex:${p2||0.001};background:rgba(210,185,40,.8);"></div>
-                    <div style="flex:${p3||0.001};background:rgba(63,185,80,.8);"></div>
-                </div>
-                <div style="font-size:9px;color:var(--muted);display:flex;gap:2px;margin-top:2px;">
-                    <span style="color:rgba(248,81,73,.9);">${(p0*100).toFixed(0)}%</span>·
-                    <span style="color:rgba(230,140,30,.9);">${(p1*100).toFixed(0)}%</span>·
-                    <span style="color:rgba(210,185,40,.9);">${(p2*100).toFixed(0)}%</span>·
-                    <span style="color:rgba(63,185,80,.9);">${(p3*100).toFixed(0)}%</span>
-                </div>`;
-                return `<tr>
-                    <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--accent);">TH${atkTH}</td>
-                    <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--muted);">vs TH${defTH}</td>
-                    <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:${avgS>=2.5?'var(--green)':avgS>=1.8?'var(--yellow)':avgS>=1.2?'var(--accent)':'var(--red)'};">Ø ${avgS}★</td>
-                    <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-size:12px;color:var(--muted);">${cnt.toLocaleString()} atks</td>
-                    <td style="padding:8px 20px 8px 4px;">${bar}</td>
-                </tr>`;
-            }).filter(Boolean);
-            if (!rows.length) continue;
-            const groupTotal = defTHs.reduce((s, defTH) => s + (counts[`${atkTH}_${defTH}`] || 0), 0);
-            html += `
-            <div style="margin-bottom:20px;">
-                <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--bord2);display:flex;justify-content:space-between;">
-                    <span>TH${atkTH} Attacking</span>
-                    <span style="font-weight:400;">${groupTotal.toLocaleString()} attacks</span>
-                </div>
-                <table style="width:100%;border-collapse:collapse;">
-                    <thead><tr style="background:var(--surf2);">
-                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Attacker</th>
-                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Defender</th>
-                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Avg ★</th>
-                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Attacks</th>
-                        <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">0★ · 1★ · 2★ · 3★</th>
-                    </tr></thead>
-                    <tbody>${rows.join('')}</tbody>
-                </table>
-            </div>`;
-        }
-        html += `</div>`;
-        el.innerHTML = html;
-    }
-    document.getElementById('mrBackdrop').style.display = 'block';
-    document.getElementById('mrModal').style.display   = 'block';
+    openMatchupRatesModal(CWL_MATCHUP_RATES, CWL_MATCHUP_COUNTS, CWL_TOTAL_ATK_COUNT, 'mrContent', 'mrBackdrop', 'mrModal');
 }
-
 function closeMatchupRates() {
     document.getElementById('mrBackdrop').style.display = 'none';
     document.getElementById('mrModal').style.display   = 'none';
@@ -2861,7 +2574,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <!-- ── CWL Season Overview Modal ── -->
 <div id="cwlOverviewBackdrop" onclick="closeCWLOverview()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;backdrop-filter:blur(4px);"></div>
 <div id="cwlOverviewModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
-    background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(720px,94vw);max-height:88vh;overflow-y:auto;
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(960px,96vw);max-height:92vh;overflow-y:auto;
     box-shadow:0 28px 72px rgba(0,0,0,0.7);">
     <div id="cwlOverviewContent"></div>
 </div>
@@ -2888,6 +2601,19 @@ function toggleCWLOvrSec(id) {
     if (chev) chev.textContent = open ? '▼' : '▶';
 }
 
+function setCWLPerfView(view) {
+    const oursTable = document.getElementById('cwlPerfOursTable');
+    const allTable  = document.getElementById('cwlPerfAllTable');
+    const oursBtn   = document.getElementById('cwlPerfBtnOurs');
+    const allBtn    = document.getElementById('cwlPerfBtnAll');
+    if (!oursTable || !allTable) return;
+    const showAll = view === 'all';
+    oursTable.style.display = showAll ? 'none' : '';
+    allTable.style.display  = showAll ? '' : 'none';
+    if (oursBtn) { oursBtn.style.background = showAll ? 'transparent' : 'var(--accent)'; oursBtn.style.color = showAll ? 'var(--muted)' : '#fff'; oursBtn.style.borderColor = showAll ? 'var(--bord2)' : 'var(--accent)'; }
+    if (allBtn)  { allBtn.style.background  = showAll ? 'var(--accent)' : 'transparent'; allBtn.style.color  = showAll ? '#fff' : 'var(--muted)'; allBtn.style.borderColor  = showAll ? 'var(--accent)' : 'var(--bord2)'; }
+}
+
 function buildCWLOverviewHTML() {
     const perf = CWL_PLAYER_PERF || [];
     const info = CWL_SEASON_INFO;
@@ -2896,197 +2622,135 @@ function buildCWLOverviewHTML() {
 
     const seasonLabel = info.league ? `${info.season} · ${info.league}` : info.season;
 
-    // ── Rank ──
-    const rankStr   = info.rank != null ? `#${info.rank} / ${info.groupSize}` : '—';
-    const rankColor = info.rank == null ? 'var(--text)'
-        : info.rank <= 2                  ? 'var(--green)'
-        : info.rank >= info.groupSize - 1 ? 'var(--red)'
-        : 'var(--accent)';
-    const rankSub   = info.rank == null ? ''
-        : info.rank <= 2                  ? ' · 🚀 Promoted'
-        : info.rank >= info.groupSize - 1 ? ' · ⬇️ Relegated'
-        : ' · ➖ Stayed';
+    // Rank / outcome
+    const hasRank      = info.rank != null && info.groupSize;
+    const rankStr      = hasRank ? `#${info.rank} / ${info.groupSize}` : '—';
+    const promoted     = hasRank && info.rank <= 2;
+    const relegated    = hasRank && info.rank >= info.groupSize - 1;
+    const outcomeLabel = promoted ? '🚀 Promoted' : relegated ? '⬇️ Relegated' : '➖ Stayed';
+    const outcomeColor = promoted ? 'var(--green)' : relegated ? 'var(--red)' : 'var(--muted)';
+    const outcomeBord  = promoted ? 'rgba(63,185,80,.3)' : relegated ? 'rgba(248,81,73,.3)' : 'var(--bord2)';
+    const rankColor    = promoted ? 'var(--green)' : relegated ? 'var(--red)' : 'var(--accent)';
 
-    // ── Flawless (our clan, from perf data) ──
-    const flawless = perf.filter(p => p.wars > 0 && p.three_stars === p.wars && p.missed === 0);
+    const wins   = info.wins   ?? 0;
+    const losses = info.losses ?? 0;
+    const draws  = info.draws  ?? 0;
 
-    // ── Verdict distribution ──
-    const VERDICT_ORDER = [
-        { key: 'badge-godlike',  label: 'Godlike',   color: '#bc8cff' },
-        { key: 'badge-dominant', label: 'Dominant',  color: '#f0a500' },
-        { key: 'badge-wow',      label: 'Very Good', color: '#3fb950' },
-        { key: 'badge-good',     label: 'Good',      color: '#58a6ff' },
-        { key: 'badge-warning',  label: 'Bad',       color: '#e8793a' },
-        { key: 'badge-suck',     label: 'Disaster',  color: '#f85149' },
-        { key: 'badge-useless',  label: 'Useless',   color: '#8b949e' },
-        { key: 'badge-inactive', label: 'Inactive',  color: '#3d4f66' },
-    ];
-    const allDaily      = perf.flatMap(p => p.daily_details || []);
-    const verdictCounts = VERDICT_ORDER
-        .map(v => ({ ...v, count: allDaily.filter(d => d.badge === v.key).length }))
-        .filter(v => v.count > 0);
-
-    // ── Top 3 performers ──
-    const top3   = [...perf].filter(p => p.attacks_used > 0)
-        .sort((a, b) => (b.avg_score - a.avg_score) || (b.avg_stars - a.avg_stars))
-        .slice(0, 3);
-    const medals = ['🥇', '🥈', '🥉'];
-
-    // ── Missed players ──
+    const flawless      = perf.filter(p => p.wars > 0 && p.three_stars === p.wars && p.missed === 0);
     const missedPlayers = perf.filter(p => p.missed > 0).sort((a, b) => b.missed - a.missed);
 
-    // ── Formatting helpers ──
-    function fmtAtk(done, poss) {
-        if (done == null || !poss) return '—';
-        const p = Math.round(done / poss * 100);
-        const c = p >= 90 ? 'var(--green)' : p >= 70 ? 'var(--accent)' : 'var(--red)';
-        return `<b style="color:${c};">${done}/${poss}</b> <span style="color:var(--muted);font-size:11px;">(${p}%)</span>`;
+    // Comparison table helper — colors our value vs group if higherBetter is true/false, null = no color
+    // tolerance: min absolute difference required before applying color
+    function cmpColor(ourVal, allVal, higherBetter, tolerance) {
+        if (higherBetter === null || ourVal == null || allVal == null) return 'var(--text)';
+        if (tolerance != null && Math.abs(ourVal - allVal) < tolerance) return 'var(--text)';
+        return (higherBetter ? ourVal >= allVal : ourVal <= allVal) ? 'var(--green)' : 'var(--red)';
     }
-    function fmtStarAvg(val, isDefense) {
-        if (val == null) return '—';
-        let c;
-        if (isDefense) c = val <= 1.5 ? 'var(--green)' : val <= 2.0 ? 'var(--accent)' : val <= 2.5 ? 'var(--yellow)' : 'var(--red)';
-        else           c = val >= 2.5 ? 'var(--green)' : val >= 2.0 ? 'var(--accent)' : val >= 1.5 ? 'var(--yellow)' : 'var(--red)';
-        return `<b style="color:${c};">${val.toFixed(2)} ★</b>`;
-    }
-    function fmtRate(pct) {
-        if (pct == null) return '—';
-        const c = pct >= 50 ? 'var(--green)' : pct >= 30 ? 'var(--accent)' : 'var(--red)';
-        return `<b style="color:${c};">${pct}%</b>`;
-    }
-    function fmtThDiff(val) {
-        if (val == null) return '—';
-        const sign = val > 0 ? '+' : '';
-        const c    = Math.abs(val) < 0.05 ? 'var(--muted)' : val > 0 ? 'var(--yellow)' : 'var(--blue)';
-        return `<b style="color:${c};">${sign}${val.toFixed(2)}</b>`;
-    }
-    function fmtMissed(n) {
-        if (n == null) return '—';
-        return `<b style="color:${n === 0 ? 'var(--green)' : 'var(--red)'};">${n}</b>`;
-    }
-    function fmtFlawless(n) {
-        if (n == null) return '—';
-        return `<b style="color:${n > 0 ? 'var(--green)' : 'var(--muted)'};">${n} player${n !== 1 ? 's' : ''}</b>`;
-    }
-    function starsBreakdown(s0, s1, s2, s3) {
-        if ((s0 + s1 + s2 + s3) === 0) return '—';
-        return [
-            [s0, 'var(--red)',    '0★'],
-            [s1, 'var(--yellow)', '1★'],
-            [s2, 'var(--accent)', '2★'],
-            [s3, 'var(--green)',  '3★'],
-        ].filter(([n]) => n > 0).map(([n, c, l]) =>
-            `<span style="color:${c};font-weight:700;font-family:'Rajdhani',sans-serif;">${n}<span style="font-size:10px;opacity:.7;">${l}</span></span>`
-        ).join('<span style="color:var(--bord2);margin:0 3px;">·</span>');
+    function statRow(label, ourText, allText, color) {
+        return `<tr>
+            <td style="padding:7px 0;font-size:12px;color:var(--muted);white-space:nowrap;">${label}</td>
+            <td style="padding:7px 12px 7px 0;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:${color || 'var(--text)'};">${ourText}</td>
+            <td style="padding:7px 0;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:13px;color:var(--muted);">${allText}</td>
+        </tr>`;
     }
 
-    // ── Verdict bar ──
-    function buildVerdictBar(counts) {
-        return counts.map(v => `
-            <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:${v.count};">
-                <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:${v.color};">${v.count}</div>
-                <div style="height:18px;width:100%;min-width:8px;background:${v.color};border-radius:3px;opacity:.85;" title="${v.label}: ${v.count}"></div>
-                <div style="font-size:9px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${v.label}</div>
-            </div>`).join('');
+    function atkPct(done, poss) { return poss ? Math.round(done / poss * 100) : null; }
+    const atkPctOur = atkPct(our.attacks_done, our.attacks_possible);
+    const atkPctAll = atkPct(all.attacks_done, all.attacks_possible);
+
+    // Normalize missed/flawless as rates so group totals don't dwarf our numbers
+    const missRateOur = our.attacks_possible ? +(our.missed / our.attacks_possible * 100).toFixed(1) : null;
+    const missRateAll = all.attacks_possible ? +(all.missed / all.attacks_possible * 100).toFixed(1) : null;
+
+    const compRows = [
+        statRow('Participation',
+            atkPctOur != null ? `${atkPctOur}%` : '—',
+            atkPctAll != null ? `${atkPctAll}%` : '—',
+            cmpColor(atkPctOur, atkPctAll, true, 2)),
+        statRow('Attacks Used',
+            our.attacks_done != null ? `${our.attacks_done} / ${our.attacks_possible}` : '—',
+            all.attacks_done != null ? `${all.attacks_done} / ${all.attacks_possible}` : '—',
+            'var(--text)'),
+        statRow('Avg Stars',
+            our.avg_stars != null ? `${our.avg_stars.toFixed(2)} ★` : '—',
+            all.avg_stars != null ? `${all.avg_stars.toFixed(2)} ★` : '—',
+            cmpColor(our.avg_stars, all.avg_stars, true, 0.05)),
+        statRow('3★ Rate',
+            our.three_star_rate != null ? `${our.three_star_rate}%` : '—',
+            all.three_star_rate != null ? `${all.three_star_rate}%` : '—',
+            cmpColor(our.three_star_rate, all.three_star_rate, true, 2)),
+        statRow('Def Avg Stars',
+            our.avg_def_stars != null ? `${our.avg_def_stars.toFixed(2)} ★` : '—',
+            all.avg_def_stars != null ? `${all.avg_def_stars.toFixed(2)} ★` : '—',
+            cmpColor(our.avg_def_stars, all.avg_def_stars, false, 0.05)),
+        statRow('Atk TH Diff',
+            our.avg_th_diff != null ? `${our.avg_th_diff > 0 ? '+' : ''}${our.avg_th_diff.toFixed(2)}` : '—',
+            all.avg_th_diff != null ? `${all.avg_th_diff > 0 ? '+' : ''}${all.avg_th_diff.toFixed(2)}` : '—',
+            'var(--text)'),
+        statRow('Miss Rate',
+            missRateOur != null ? `${missRateOur}%` : '—',
+            missRateAll != null ? `${missRateAll}%` : '—',
+            cmpColor(missRateOur, missRateAll, false, 1)),
+        statRow('Flawless',
+            our.flawless != null ? `${our.flawless} player${our.flawless !== 1 ? 's' : ''}` : '—',
+            '—',
+            'var(--text)'),
+    ].join('');
+
+    // Player performance tables
+    function buildOurRows(players) {
+        return [...players].sort((a, b) => (b.avg_score - a.avg_score) || (b.avg_stars - a.avg_stars))
+        .map((p, i) => {
+            const used      = p.attacks_used || 0;
+            const starC     = p.avg_stars >= 2.5 ? 'var(--green)' : p.avg_stars >= 2.0 ? 'var(--accent)' : p.avg_stars >= 1.5 ? 'var(--yellow)' : 'var(--red)';
+            const threeC    = p.three_star_rate >= 50 ? 'var(--green)' : p.three_star_rate >= 30 ? 'var(--accent)' : 'var(--red)';
+            const missC     = p.missed === 0 ? 'var(--muted)' : 'var(--red)';
+            const isFlawl   = p.wars > 0 && p.three_stars === p.wars && p.missed === 0;
+            const rowBg     = i % 2 === 1 ? 'rgba(255,255,255,.018)' : 'transparent';
+            const destText  = used > 0 && p.avg_dest != null ? `${p.avg_dest.toFixed(0)}%` : '—';
+            const starText  = used > 0 ? p.avg_stars.toFixed(2) : '—';
+            const threeText = used > 0 ? `${p.three_star_rate}%` : '—';
+            return `<tr style="background:${rowBg};">
+                <td style="padding:7px 0 7px 4px;font-size:13px;font-weight:600;white-space:nowrap;">
+                    ${escapeHTML(p.name)}${isFlawl ? '<span style="color:var(--green);font-size:10px;margin-left:4px;" title="Flawless season">★</span>' : ''}
+                </td>
+                <td style="padding:7px 4px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:var(--muted);">TH${p.th}</td>
+                <td style="padding:7px 4px;text-align:center;font-family:'Rajdhani',sans-serif;font-size:12px;color:var(--muted);">${p.wars}</td>
+                <td style="padding:7px 4px;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:${starC};">${starText}</td>
+                <td style="padding:7px 4px;text-align:right;font-family:'Rajdhani',sans-serif;font-size:12px;color:${threeC};">${threeText}</td>
+                <td style="padding:7px 4px;text-align:right;font-family:'Rajdhani',sans-serif;font-size:12px;color:var(--muted);">${destText}</td>
+                <td style="padding:7px 4px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${missC};">${p.missed > 0 ? p.missed : '—'}</td>
+                <td style="padding:7px 4px 7px 0;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--accent);">${p.avg_score.toFixed(1)}</td>
+            </tr>`;
+        }).join('');
     }
 
-    // ── Build full section body ──
-    function buildSectionBody(o, isOurs) {
-        const statRows = [
-            ['Record',         isOurs ? `<b style="color:var(--green);">${info.wins}W</b> / <b style="color:var(--red);">${info.losses}L</b> / <b style="color:var(--muted);">${info.draws}D</b>` : '<span style="color:var(--muted);">—</span>'],
-            ['Rank',           isOurs ? `<b style="color:${rankColor};">${rankStr}</b><span style="color:var(--muted);font-size:11px;">${rankSub}</span>` : '<span style="color:var(--muted);">—</span>'],
-            ['Attacks Done',   fmtAtk(o.attacks_done, o.attacks_possible)],
-            ['Attacks Missed', fmtMissed(o.missed)],
-            ['Stars',          starsBreakdown(o.stars_0, o.stars_1, o.stars_2, o.stars_3)],
-            ['Avg Stars',      fmtStarAvg(o.avg_stars, false)],
-            ['3★ Rate',        fmtRate(o.three_star_rate)],
-            ['Avg TH Diff',    fmtThDiff(o.avg_th_diff)],
-            ['Def Avg Stars',  fmtStarAvg(o.avg_def_stars, true)],
-            ['Def TH Diff',    fmtThDiff(o.avg_def_th_diff)],
-            ['Flawless',       fmtFlawless(isOurs ? flawless.length : o.flawless)],
-        ].map(([label, val]) => `
-            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-                padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);">
-                <span style="font-size:12px;color:var(--muted);white-space:nowrap;">${label}</span>
-                <span style="font-size:13px;text-align:right;">${val}</span>
-            </div>`).join('');
-
-        // Verdict distribution
-        const vBar = isOurs && verdictCounts.length ? `
-            <div style="margin-top:14px;">
-                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Verdict Distribution</div>
-                <div style="display:flex;gap:4px;align-items:flex-end;">${buildVerdictBar(verdictCounts)}</div>
-            </div>` : '';
-
-        // Top performers
-        const topSection = isOurs && top3.length ? `
-            <div style="margin-top:14px;">
-                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Top Performers</div>
-                ${top3.map((p, i) => `
-                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;${i < top3.length - 1 ? 'border-bottom:1px solid var(--bord2);' : ''}">
-                        <span style="font-size:20px;width:28px;text-align:center;">${medals[i]}</span>
-                        <div style="flex:1;">
-                            <div style="font-weight:600;font-size:13px;">${escapeHTML(p.name)}</div>
-                            <div style="font-size:11px;color:var(--muted);">TH${p.th} · ${p.wars} wars</div>
-                        </div>
-                        <span style="font-family:'Rajdhani',sans-serif;color:var(--muted);font-size:13px;margin-right:4px;">Ø${p.avg_stars.toFixed(2)}★</span>
-                        <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;color:var(--accent);">${p.avg_score.toFixed(1)}</span>
-                    </div>`).join('')}
-            </div>` : '';
-
-        // Flawless
-        const flawlessSection = `
-            <div style="margin-top:14px;background:rgba(63,185,80,0.04);border:1px solid rgba(63,185,80,.2);border-radius:8px;padding:10px 14px;">
-                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">
-                    🌟 Flawless — all rounds attacked &amp; 3-starred
-                </div>
-                ${isOurs
-                    ? (flawless.length
-                        ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${flawless.map(p =>
-                            `<span style="background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.3);color:var(--green);padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600;">${escapeHTML(p.name)}</span>`
-                          ).join('')}</div>`
-                        : `<span style="color:var(--muted);font-size:12px;font-style:italic;">None this season</span>`)
-                    : `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${(o.flawless||0)>0?'var(--green)':'var(--muted)'};">${o.flawless||0} player${(o.flawless||0)!==1?'s':''} across the group</span>`
-                }
-            </div>`;
-
-        // Missed attacks
-        const missedSection = `
-            <div style="margin-top:10px;background:rgba(248,81,73,0.04);border:1px solid rgba(248,81,73,.18);border-radius:8px;padding:10px 14px;">
-                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">⚠️ Missed Attacks</div>
-                ${isOurs
-                    ? (missedPlayers.length
-                        ? missedPlayers.map(p => `
-                            <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bord2);">
-                                <span style="font-weight:600;font-size:13px;">${escapeHTML(p.name)}</span>
-                                <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:var(--red);">${p.attacks_used}/${p.wars} used · ${p.missed} missed</span>
-                            </div>`).join('')
-                        : `<span style="color:var(--green);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;">✅ Everyone attacked every round!</span>`)
-                    : `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${(o.missed||0)===0?'var(--green)':'var(--red)'};">${o.missed||0} missed across the group</span>`
-                }
-            </div>`;
-
-        return statRows + vBar + topSection + flawlessSection + missedSection;
+    function buildAllRows(players) {
+        return players.map((p, i) => {
+            const used     = p.attacks_used || 0;
+            const starC    = p.avg_stars >= 2.5 ? 'var(--green)' : p.avg_stars >= 2.0 ? 'var(--accent)' : p.avg_stars >= 1.5 ? 'var(--yellow)' : 'var(--red)';
+            const threeC   = p.three_star_rate >= 50 ? 'var(--green)' : p.three_star_rate >= 30 ? 'var(--accent)' : 'var(--red)';
+            const missC    = p.missed === 0 ? 'var(--muted)' : 'var(--red)';
+            const rowBg    = p.is_our_clan ? 'rgba(88,166,255,.06)' : (i % 2 === 1 ? 'rgba(255,255,255,.012)' : 'transparent');
+            const nameStyle = p.is_our_clan ? 'font-weight:700;color:var(--accent);' : 'font-weight:500;color:var(--text);';
+            const destText = used > 0 && p.avg_dest != null ? `${p.avg_dest.toFixed(0)}%` : '—';
+            const starText = used > 0 ? p.avg_stars.toFixed(2) : '—';
+            const threeText = used > 0 ? `${p.three_star_rate}%` : '—';
+            return `<tr style="background:${rowBg};">
+                <td style="padding:6px 0 6px 4px;font-size:12px;${nameStyle}white-space:nowrap;">${escapeHTML(p.name)}</td>
+                <td style="padding:6px 4px;font-size:11px;color:var(--muted);white-space:nowrap;max-width:100px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHTML(p.clan_name)}">${escapeHTML(p.clan_name)}</td>
+                <td style="padding:6px 4px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:var(--muted);">TH${p.th}</td>
+                <td style="padding:6px 4px;text-align:center;font-family:'Rajdhani',sans-serif;font-size:12px;color:var(--muted);">${p.wars}</td>
+                <td style="padding:6px 4px;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${starC};">${starText}</td>
+                <td style="padding:6px 4px;text-align:right;font-family:'Rajdhani',sans-serif;font-size:11px;color:${threeC};">${threeText}</td>
+                <td style="padding:6px 4px;text-align:right;font-family:'Rajdhani',sans-serif;font-size:11px;color:var(--muted);">${destText}</td>
+                <td style="padding:6px 4px 6px 0;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${missC};">${p.missed > 0 ? p.missed : '—'}</td>
+            </tr>`;
+        }).join('');
     }
 
-    function collapsibleSection(id, title, bodyHTML) {
-        return `
-            <div style="border:1px solid var(--bord2);border-radius:10px;overflow:hidden;">
-                <div onclick="toggleCWLOvrSec('${id}')"
-                    style="display:flex;align-items:center;justify-content:space-between;
-                        padding:11px 16px;cursor:pointer;user-select:none;
-                        background:var(--surf2);transition:background .12s;"
-                    onmouseover="this.style.background='rgba(255,255,255,.05)'"
-                    onmouseout="this.style.background='var(--surf2)'">
-                    <span style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
-                        text-transform:uppercase;letter-spacing:1px;color:var(--accent);">${title}</span>
-                    <span id="${id}-chev" style="font-size:10px;color:var(--muted);">▶</span>
-                </div>
-                <div id="${id}" style="display:none;padding:10px 16px 16px;">
-                    ${bodyHTML}
-                </div>
-            </div>`;
-    }
+    const playerRows    = buildOurRows(perf);
+    const allPlayerRows = buildAllRows(CWL_ALL_PLAYER_PERF || []);
 
     return `
         <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;
@@ -3098,9 +2762,125 @@ function buildCWLOverviewHTML() {
             <button onclick="closeCWLOverview()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;">✕</button>
         </div>
 
-        <div style="padding:18px 24px;display:flex;flex-direction:column;gap:10px;">
-            ${collapsibleSection('cwl-ovr-our', '⚔️ Our Clan', buildSectionBody(our, true))}
-            ${collapsibleSection('cwl-ovr-all', '🌐 Whole CWL', buildSectionBody(all, false))}
+        <div style="padding:18px 24px;display:flex;flex-direction:column;gap:14px;">
+
+            <!-- Hero cards -->
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:12px;padding:14px 20px;display:flex;flex-direction:column;align-items:center;min-width:90px;">
+                    <div style="font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:800;color:${rankColor};line-height:1;">${rankStr}</div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px;">Rank</div>
+                </div>
+                <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:12px;padding:14px 20px;display:flex;flex-direction:column;align-items:center;min-width:110px;">
+                    <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:800;line-height:1;">
+                        <span style="color:var(--green);">${wins}W</span>
+                        <span style="color:var(--muted);font-size:16px;margin:0 2px;">/</span>
+                        <span style="color:var(--red);">${losses}L</span>
+                        ${draws > 0 ? `<span style="color:var(--muted);font-size:16px;margin:0 2px;">/</span><span style="color:var(--muted);">${draws}D</span>` : ''}
+                    </div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px;">Record</div>
+                </div>
+                <div style="background:var(--surf2);border:1px solid ${outcomeBord};border-radius:12px;padding:14px 20px;display:flex;flex-direction:column;align-items:center;min-width:110px;">
+                    <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:800;color:${outcomeColor};line-height:1;">${outcomeLabel}</div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px;">Outcome</div>
+                </div>
+                ${our.avg_stars != null ? `
+                <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:12px;padding:14px 20px;display:flex;flex-direction:column;align-items:center;min-width:90px;">
+                    <div style="font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:800;color:var(--accent);line-height:1;">${our.avg_stars.toFixed(2)}★</div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px;">Avg Stars</div>
+                </div>` : ''}
+                ${our.three_star_rate != null ? `
+                <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:12px;padding:14px 20px;display:flex;flex-direction:column;align-items:center;min-width:90px;">
+                    <div style="font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:800;color:var(--green);line-height:1;">${our.three_star_rate}%</div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px;">3★ Rate</div>
+                </div>` : ''}
+            </div>
+
+            <!-- Stats comparison -->
+            <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:10px;padding:14px 18px;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;padding-bottom:8px;"></th>
+                            <th style="text-align:right;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.8px;padding-bottom:8px;padding-right:12px;">Our Clan</th>
+                            <th style="text-align:right;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;padding-bottom:8px;">Group</th>
+                        </tr>
+                    </thead>
+                    <tbody style="border-top:1px solid var(--bord2);">${compRows}</tbody>
+                </table>
+            </div>
+
+            <!-- Player performance -->
+            ${(perf.length || (CWL_ALL_PLAYER_PERF || []).length) ? `
+            <div style="background:var(--surf2);border:1px solid var(--bord2);border-radius:10px;padding:14px 18px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                    <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;">Player Performance</div>
+                    <div style="display:flex;gap:4px;">
+                        <button id="cwlPerfBtnOurs" onclick="setCWLPerfView('ours')"
+                            style="padding:4px 10px;font-size:11px;font-family:'Rajdhani',sans-serif;font-weight:700;border-radius:5px;cursor:pointer;transition:all .12s;
+                            background:var(--accent);color:#fff;border:1px solid var(--accent);">Our Clan</button>
+                        <button id="cwlPerfBtnAll" onclick="setCWLPerfView('all')"
+                            style="padding:4px 10px;font-size:11px;font-family:'Rajdhani',sans-serif;font-weight:700;border-radius:5px;cursor:pointer;transition:all .12s;
+                            background:transparent;color:var(--muted);border:1px solid var(--bord2);">All Players</button>
+                    </div>
+                </div>
+                <div id="cwlPerfOursTable" style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;min-width:460px;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--bord2);">
+                                <th style="text-align:left;padding:0 0 8px 4px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Name</th>
+                                <th style="text-align:center;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">TH</th>
+                                <th style="text-align:center;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Wars</th>
+                                <th style="text-align:right;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Avg★</th>
+                                <th style="text-align:right;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">3★%</th>
+                                <th style="text-align:right;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Dest</th>
+                                <th style="text-align:center;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Miss</th>
+                                <th style="text-align:right;padding:0 0 8px 4px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.7px;">Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>${playerRows}</tbody>
+                    </table>
+                </div>
+                <div id="cwlPerfAllTable" style="display:none;overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;min-width:500px;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--bord2);">
+                                <th style="text-align:left;padding:0 0 8px 4px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Name</th>
+                                <th style="text-align:left;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Clan</th>
+                                <th style="text-align:center;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">TH</th>
+                                <th style="text-align:center;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Wars</th>
+                                <th style="text-align:right;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Avg★</th>
+                                <th style="text-align:right;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">3★%</th>
+                                <th style="text-align:right;padding:0 4px 8px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Dest</th>
+                                <th style="text-align:center;padding:0 0 8px 4px;font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Miss</th>
+                            </tr>
+                        </thead>
+                        <tbody>${allPlayerRows}</tbody>
+                    </table>
+                </div>
+            </div>` : ''}
+
+            ${flawless.length ? `
+            <!-- Flawless -->
+            <div style="background:rgba(63,185,80,0.04);border:1px solid rgba(63,185,80,.2);border-radius:10px;padding:14px 18px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">🌟 Flawless Season — attacked every round &amp; 3-starred</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    ${flawless.map(p => `<span style="background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.3);color:var(--green);padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;">${escapeHTML(p.name)}</span>`).join('')}
+                </div>
+            </div>` : ''}
+
+            ${missedPlayers.length ? `
+            <!-- Missed attacks -->
+            <div style="background:rgba(248,81,73,0.04);border:1px solid rgba(248,81,73,.18);border-radius:10px;padding:14px 18px;">
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">⚠️ Missed Attacks</div>
+                <div style="display:flex;flex-direction:column;gap:0;">
+                    ${missedPlayers.map(p => `
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(248,81,73,.08);">
+                        <span style="font-weight:600;font-size:13px;">${escapeHTML(p.name)}</span>
+                        <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:var(--red);">${p.missed} missed · ${p.attacks_used}/${p.wars} used</span>
+                    </div>`).join('')}
+                </div>
+            </div>` : ''}
+
         </div>`;
 }
 

@@ -3,10 +3,7 @@
 {% set page_title = clan_name ~ ' – Clash of Clans Analytics' %}
 {% include '_head.html' %}
 
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
-        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        a { text-decoration: none; color: inherit; }
 
         /* ── NAV: see _nav.html ── */
 
@@ -377,7 +374,7 @@
                 <div class="lc-content">
                     <div class="lc-header">
                         <div class="lc-title-row">
-                            <div class="lc-icon">🛡️</div>
+                            <div class="lc-icon"><img src="/static/img/defense.png" style="width:22px;height:22px;"></div>
                             <span class="lc-name">Clan War</span>
                         </div>
                         <span class="lc-state {% if active_war.state == 'inWar' %}lcs-war{% else %}lcs-prep{% endif %}">
@@ -424,7 +421,7 @@
                 <div class="lc-content">
                     <div class="lc-header">
                         <div class="lc-title-row">
-                            <div class="lc-icon">🏅</div>
+                            <div class="lc-icon"><img src="/static/img/raidMedal.png" style="width:22px;height:22px;"></div>
                             <span class="lc-name">Clan War League</span>
                         </div>
                         <span class="lc-state {% if active_cwl_war and active_cwl_war.state == 'inWar' %}lcs-war{% else %}lcs-prep{% endif %}">
@@ -550,7 +547,7 @@
 
         <a href="/battles" class="feature-card active">
             <div class="card-top">
-                <div class="feature-icon">⚔️</div>
+                <div class="feature-icon"><img src="/static/img/battle.png" style="width:24px;height:24px;"></div>
                 <span class="badge badge-active">Active</span>
             </div>
             <h4>Battle History</h4>
@@ -568,7 +565,7 @@
 
         <a href="/war" class="feature-card active">
             <div class="card-top">
-                <div class="feature-icon">🛡️</div>
+                <div class="feature-icon"><img src="/static/img/defense.png" style="width:24px;height:24px;"></div>
                 <span class="badge badge-active">Active</span>
             </div>
             <h4>Clan War</h4>
@@ -577,7 +574,7 @@
 
         <a href="/cwl" class="feature-card active">
             <div class="card-top">
-                <div class="feature-icon">🏅</div>
+                <div class="feature-icon"><img src="/static/img/raidMedal.png" style="width:24px;height:24px;"></div>
                 <span class="badge badge-active">Active</span>
             </div>
             <h4>Clan War League</h4>

@@ -47,14 +47,6 @@ def _can_edit_clan_war():
     u = _current_user()
     return bool(u and u.is_approved and u.perm_clan_war_edits)
 
-def require_admin_login(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not _is_super_admin():
-            return redirect(url_for('auth.login'))
-        return f(*args, **kwargs)
-    return decorated
-
 def require_super_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):

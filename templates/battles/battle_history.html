@@ -4,14 +4,7 @@
 {% set chartjs = true %}
 {% include '_head.html' %}
 
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        a { text-decoration: none; color: inherit; }
-
         /* ── NAV: see _nav.html ── */
-
-        /* ── CONTAINER ── */
-        .container { max-width: 1400px; margin: 0 auto; padding: 28px 32px; }
 
         /* ── CONTROLS ── */
         .controls {
@@ -43,7 +36,8 @@
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         .stat-card:hover { border-color: rgba(240,165,0,0.3); box-shadow: 0 4px 24px rgba(0,0,0,0.25); }
-        .stat-icon { font-size: 20px; margin-bottom: 4px; }
+        .stat-icon { font-size: 64px; line-height: 1; margin-bottom: 4px; }
+        .stat-icon img { width: 64px; height: 64px; }
         .stat-value { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; color: var(--accent); line-height: 1; }
         .stat-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 
@@ -250,12 +244,12 @@
     <!-- Stats -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-icon">⚔️</div>
+            <div class="stat-icon"><img src="/static/img/battle.png" style="width:64px;height:64px;"></div>
             <div class="stat-value">{{ total_attacks }}</div>
             <div class="stat-label">Total Attacks</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon">💰</div>
+            <div class="stat-icon"><img src="/static/img/gold.png"></div>
             <div class="stat-value" style="color:var(--yellow);" title="{{ '{:,}'.format(total_gold) }}">
                 {%- if total_gold >= 1000000000 %}{{ '%.1fB' | format(total_gold / 1000000000) }}
                 {%- elif total_gold >= 1000000 %}{{ '%.1fM' | format(total_gold / 1000000) }}
@@ -265,7 +259,7 @@
             <div class="stat-label">Gold Farmed</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon">⚗️</div>
+            <div class="stat-icon"><img src="/static/img/elixir.png"></div>
             <div class="stat-value" style="color:var(--purple);" title="{{ '{:,}'.format(total_elixir) }}">
                 {%- if total_elixir >= 1000000000 %}{{ '%.1fB' | format(total_elixir / 1000000000) }}
                 {%- elif total_elixir >= 1000000 %}{{ '%.1fM' | format(total_elixir / 1000000) }}
@@ -275,7 +269,7 @@
             <div class="stat-label">Elixir Farmed</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon">🔴</div>
+            <div class="stat-icon"><img src="/static/img/darkElixir.png"></div>
             <div class="stat-value" style="color:var(--red);" title="{{ '{:,}'.format(total_dark) }}">
                 {%- if total_dark >= 1000000 %}{{ '%.1fM' | format(total_dark / 1000000) }}
                 {%- elif total_dark >= 1000 %}{{ '%.1fK' | format(total_dark / 1000) }}
@@ -298,9 +292,9 @@
             <div class="chart-card-hdr">
                 <h3>Top 10 – Most Resources</h3>
                 <div class="res-toggle">
-                    <button class="res-btn active" onclick="switchResourceChart('total_gold', this)">💰</button>
-                    <button class="res-btn" onclick="switchResourceChart('total_elixir', this)">⚗️</button>
-                    <button class="res-btn" onclick="switchResourceChart('total_dark', this)">🔴</button>
+                    <button class="res-btn active" onclick="switchResourceChart('total_gold', this)"><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"></button>
+                    <button class="res-btn" onclick="switchResourceChart('total_elixir', this)"><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"></button>
+                    <button class="res-btn" onclick="switchResourceChart('total_dark', this)"><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"></button>
                 </div>
             </div>
             <div class="chart-wrap"><canvas id="chartResources"></canvas></div>
@@ -312,7 +306,7 @@
     {% if player_data %}
     <div class="recent-card" id="recentCard">
         <div class="recent-header" onclick="toggleRecent()">
-            <span class="recent-header-title">⚡ 20 Most Recent Attacks</span>
+            <span class="recent-header-title"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;"> 20 Most Recent Attacks</span>
             <span class="recent-chevron" id="recentChevron">▼</span>
         </div>
         <div class="recent-body" id="recentBody" style="display:none;"></div>
@@ -328,9 +322,9 @@
                     <tr>
                         <th class="sortable" onclick="sortTable('player')">Player</th>
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
-                        <th class="sortable" onclick="sortTable('total_gold')">💰 Gold</th>
-                        <th class="sortable" onclick="sortTable('total_elixir')">⚗️ Elixir</th>
-                        <th class="sortable" onclick="sortTable('total_dark')">🔴 Dark</th>
+                        <th class="sortable" onclick="sortTable('total_gold')"><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th>
+                        <th class="sortable" onclick="sortTable('total_elixir')"><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th>
+                        <th class="sortable" onclick="sortTable('total_dark')"><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th>
                         <th>Details</th>
                     </tr>
                 </thead>
@@ -536,7 +530,7 @@
         const sorted = [...logs].sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
         return `<div class="detail-top">${buildHeatmap(logs)}${buildDetailStats(logs)}</div>
         <table class="detail-table">
-            <thead><tr><th>Time</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th>💰 Gold</th><th>⚗️ Elixir</th><th>🔴 Dark</th></tr></thead>
+            <thead><tr><th>Time</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th><th><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th><th><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th></tr></thead>
             <tbody>${sorted.map(attackLogRow).join('')}</tbody>
         </table>`;
     }
@@ -551,7 +545,7 @@
         const body = document.getElementById('recentBody');
         if (!top5.length) { body.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded.</div>'; return; }
         body.innerHTML = `<table class="detail-table">
-            <thead><tr><th>Time</th><th>Player</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th>💰 Gold</th><th>⚗️ Elixir</th><th>🔴 Dark</th></tr></thead>
+            <thead><tr><th>Time</th><th>Player</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th><th><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th><th><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th></tr></thead>
             <tbody>${top5.map(l => `<tr>
                 <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(l.time)}</td>
                 <td style="font-weight:600;">${escapeHTML(l.player_name)}</td>

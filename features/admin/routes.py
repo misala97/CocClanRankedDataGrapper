@@ -7,13 +7,13 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import AppUser, Player, BattleLog, RankedWeek, UptimeTracker, ClanWar, ClanWarMember, ClanWarAttack, CWLBonus
-from features.auth.routes import require_admin_login, require_super_admin
+from features.auth.routes import require_super_admin
 
 admin_bp = Blueprint('admin', __name__)
 
 
 @admin_bp.route('/admin')
-@require_admin_login
+@require_super_admin
 def admin_hub():
     days = request.args.get('days', 7, type=int)
     if days not in [1, 7, 14, 30]:
@@ -194,7 +194,7 @@ def admin_user_link_player(user_id):
 
 
 @admin_bp.route('/admin/members')
-@require_admin_login
+@require_super_admin
 def admin_members():
     players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
     return render_template('admin/admin_members.html', players=players)
@@ -244,7 +244,7 @@ def _shift_month(m, delta):
 
 
 @admin_bp.route('/admin/cwl-bonus', methods=['GET'])
-@require_admin_login
+@require_super_admin
 def admin_cwl_bonus_list():
     from sqlalchemy import func
     from models import CWLSeason, CWLWar, CWLMember, CWLAttack
@@ -346,7 +346,7 @@ def _normalize_war_size(team_size):
 
 
 @admin_bp.route('/admin/cwl-bonus/suggest', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def admin_cwl_bonus_suggest():
     from sqlalchemy import func
     from models import CWLSeason, CWLWar, CWLMember, CWLAttack
@@ -496,7 +496,7 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
 
 
 @admin_bp.route('/admin/cwl-bonus/apply', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def admin_cwl_bonus_apply():
     data  = request.get_json() or {}
     month = data.get('month', '')
@@ -513,7 +513,7 @@ def admin_cwl_bonus_apply():
 
 
 @admin_bp.route('/admin/cwl-bonus/toggle', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def admin_cwl_bonus_toggle():
     data = request.get_json() or {}
     tag   = data.get('player_tag', '').strip()
@@ -531,7 +531,7 @@ def admin_cwl_bonus_toggle():
 
 
 @admin_bp.route('/admin/members/<path:tag>/update', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def admin_member_update(tag):
     player = db.get_or_404(Player, tag)
     data = request.get_json()
@@ -729,7 +729,7 @@ def _evaluate_player_data(data):
 
 
 @admin_bp.route('/admin/evaluate-new-members', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def admin_evaluate_new_members():
     from services.api import api_fetch_player_data
 
@@ -771,7 +771,7 @@ def admin_evaluate_new_members():
 # ── Ranked × Raid Skill Correlation ──────────────────────────────────────────
 
 @admin_bp.route('/admin/skill-correlation')
-@require_admin_login
+@require_super_admin
 def admin_skill_correlation():
     from collections import defaultdict
     from models import RankedWeek, RaidWeekendLog

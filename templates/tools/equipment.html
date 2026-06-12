@@ -3,11 +3,7 @@
 {% set page_title = 'Equipment Calculator – CoC Analytics' %}
 {% include '_head.html' %}
 
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        a { text-decoration: none; color: inherit; }
-
-        .container { max-width: 100%; margin: 0 auto; padding: 28px 32px; }
+        .container { max-width: 100%; }
 
         .no-link {
             background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
@@ -110,6 +106,13 @@
         .ore-starry { background: rgba(130,80,255,.12); border: 1px solid rgba(130,80,255,.25); }
         .ore-img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
 
+        /* ── Equipment image ── */
+        .equip-img-wrap {
+            display: flex; justify-content: center; align-items: center;
+            min-height: 60px; margin-bottom: 2px;
+        }
+        .equip-img-wrap img { width: 60px; height: 60px; object-fit: contain; }
+
         /* ── Summary bar ── */
         #upgrade-summary {
             display: flex;
@@ -172,9 +175,9 @@
     <div id="upgrade-summary">
         <div class="sum-label">Total Upgrade Cost</div>
         <div class="sum-ores">
-            <div class="sum-ore-big" id="sum-shiny"><img src="/static/img/ores/shiny.png" class="ore-img"> <span id="sum-shiny-val" style="color:#f0a500;">0</span></div>
-            <div class="sum-ore-big" id="sum-glowy"><img src="/static/img/ores/glowy.png" class="ore-img"> <span id="sum-glowy-val" style="color:#3fb950;">0</span></div>
-            <div class="sum-ore-big" id="sum-starry" style="display:none;"><img src="/static/img/ores/starry.png" class="ore-img"> <span id="sum-starry-val" style="color:#a78bfa;">0</span></div>
+            <div class="sum-ore-big" id="sum-shiny"><img src="/static/img/shiny.png" class="ore-img"> <span id="sum-shiny-val" style="color:#f0a500;">0</span></div>
+            <div class="sum-ore-big" id="sum-glowy"><img src="/static/img/glowy.png" class="ore-img"> <span id="sum-glowy-val" style="color:#3fb950;">0</span></div>
+            <div class="sum-ore-big" id="sum-starry" style="display:none;"><img src="/static/img/starry.png" class="ore-img"> <span id="sum-starry-val" style="color:#a78bfa;">0</span></div>
         </div>
         <div class="sum-count" id="sum-count">No upgrades selected</div>
         <button id="sum-reset" onclick="resetAll()">Reset</button>
@@ -185,7 +188,8 @@
     {% set maxlvl = e.maxLevel %}
     {% set pct = ((lvl / maxlvl) * 100) | round | int if maxlvl else 0 %}
     {% set cid = 'eq-' ~ idx %}
-    <div class="equip-card" id="card-{{ cid }}">
+    <div class="equip-card" id="card-{{ cid }}" data-equip="{{ e.name }}">
+        <div class="equip-img-wrap"></div>
         <div class="equip-name">{{ e.name }}</div>
         <div class="equip-level-row">
             <span class="equip-level">{{ lvl }}</span>
@@ -392,9 +396,9 @@ function onTargetChange(slider) {
         tgtLbl.style.color = 'var(--accent)';
         const { shiny, glowy, starry } = calcCost(current, target, max);
         let html = '';
-        if (shiny  > 0) html += `<span class="ore-pill ore-shiny"><img src="/static/img/ores/shiny.png" class="ore-img"> <span style="color:#f0a500;">${fmt(shiny)}</span></span>`;
-        if (glowy  > 0) html += `<span class="ore-pill ore-glowy"><img src="/static/img/ores/glowy.png" class="ore-img"> <span style="color:#3fb950;">${fmt(glowy)}</span></span>`;
-        if (starry > 0) html += `<span class="ore-pill ore-starry"><img src="/static/img/ores/starry.png" class="ore-img"> <span style="color:#a78bfa;">${fmt(starry)}</span></span>`;
+        if (shiny  > 0) html += `<span class="ore-pill ore-shiny"><img src="/static/img/shiny.png" class="ore-img"> <span style="color:#f0a500;">${fmt(shiny)}</span></span>`;
+        if (glowy  > 0) html += `<span class="ore-pill ore-glowy"><img src="/static/img/glowy.png" class="ore-img"> <span style="color:#3fb950;">${fmt(glowy)}</span></span>`;
+        if (starry > 0) html += `<span class="ore-pill ore-starry"><img src="/static/img/starry.png" class="ore-img"> <span style="color:#a78bfa;">${fmt(starry)}</span></span>`;
         costDiv.innerHTML = html;
         card.classList.add('has-upgrade');
     }
@@ -427,6 +431,69 @@ function updateSummary() {
         count === 0 ? 'No upgrades selected' :
         count === 1 ? '1 piece selected' : `${count} pieces selected`;
 }
+
+// ── Equipment images ──
+const EQUIP_IMAGES = {
+    // Barbarian King
+    'Barbarian Puppet':  'Hero_Equipment_BK_Barbarian_Puppet.png',
+    'Earthquake Boots':  'Hero_Equipment_BK_Earthquake_Boots.png',
+    'Rage Vial':         'Hero_Equipment_BK_Rage_Vial.png',
+    'Snake Bracelet':    'Hero_Equipment_BK_SnakeBracelet.png',
+    'Vampstache':        'Hero_Equipment_BK_Vampstache.png',
+    'Giant Gauntlet':    'Hero_Equipment_BQ_Giant_Gauntlet.png',
+    'Spiky Ball':        'HeroGear_BK_StickFireHorse.png',
+    // Archer Queen
+    'Archer Puppet':     'Hero_Equipment_AQ_Archer_Puppet.png',
+    'Frozen Arrow':      'Hero_Equipment_AQ_Frozen_Arrow.png',
+    'Giant Arrow':       'Hero_Equipment_AQ_Giant_Arrow.png',
+    'Healer Puppet':     'Hero_Equipment_AQ_Healer_Puppet.png',
+    'Invisibility Vial': 'Hero_Equipment_AQ_Invisibility_Vial.png',
+    'Magic Mirror':      'Hero_Equipment_AQ_Magic_Mirror.png',
+    'Monolith Arrow':    'Hero_Equipment_AQ_MonolithArrow.png',
+    'WWE Action Figure': 'Hero_Equipment_AQ_WWEActionFigure.png',
+    'Action Figure':     'Hero_Equipment_AQ_WWEActionFigure.png',
+    // Grand Warden
+    'Eternal Tome':      'Hero_Equipment_GW_Eternal_Tome.png',
+    'Fireball':          'Hero_Equipment_GW_Fireball.png',
+    'Healing Tome':      'Hero_Equipment_GW_Healing_Tome.png',
+    'Life Gem':          'Hero_Equipment_GW_Life_Gem.png',
+    'Rage Gem':          'Hero_Equipment_GW_Rage_Gem.png',
+    'Lavaloon Puppet':   'icon_gear_GW_LavaloonPuppet.png',
+    // Royal Champion
+    'Electro Boots':     'Hero_Equipment_RC_ElectroBoots.png',
+    'Haste Vial':        'Hero_Equipment_RC_Haste_Vial.png',
+    'Hog Rider Puppet':  'Hero_Equipment_RC_Hog_Rider_Doll.png',
+    'Royal Gem':         'Hero_Equipment_RC_Royal_Gem.png',
+    'Seeking Shield':    'Hero_Equipment_RC_Seeking_Shield.png',
+    'Frost Flake':       'Hero_Equipment_rc_frost_flake.png',
+    'Rocket Spear':      'HeroGear_RoyalChampion_RocketSpear_Equipment_02.png',
+    // Minion Prince
+    'Dark Crown':        'HeroGear_MP_DarkCrown_2k.png',
+    'Dark Orb':          'Hero_Equipment_MP_DarkOrb.png',
+    'Henchmen Puppet':   'Hero_Equipment_MP_Henchman.png',
+    'Power Pump':        'Hero_Equipment_MP_PowerPump.png',
+    'Noble Iron':        'Hero_Equipment_MP_PowerPump.png',
+    'Meteor Staff':      'HeroGear_MP_MeteoriteSceptre.png',
+    'Iron Pants':        'HeroEquipment_MP_IronPants.png',
+    'Metal Pants':       'HeroEquipment_MP_IronPants.png',
+    // Dark Prince (DD)
+    'Electro Fangs':     'HG_DD_Electro_Fangs.png',
+    'Fire Heart':        'HG_DD_Fire Heart.png',
+    'Flame Blower':      'HG_DD_Flame Blower.png',
+    'Rocket Backpack':   'HG_DD_Rocket_BackPack.png',
+    'Stun Blast':        'HG_DD_StunBlast.png',
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.equip-card[data-equip]').forEach(card => {
+        const name = card.dataset.equip;
+        const file = EQUIP_IMAGES[name];
+        const wrap = card.querySelector('.equip-img-wrap');
+        if (file && wrap) {
+            wrap.innerHTML = `<img src="/static/img/equipment/${encodeURIComponent(file)}" alt="${name}">`;
+        }
+    });
+});
 
 function resetAll() {
     document.querySelectorAll('.equip-target-range').forEach(slider => {

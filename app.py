@@ -77,7 +77,7 @@ app.register_blueprint(tools_bp)
 
 # ── Template filters ─────────────────────────────────────────────────────────
 
-from services.helpers import to_local as _to_local
+from services.helpers import to_local as _to_local, compute_cwl_win_status
 
 @app.template_filter('local_dt')
 def local_dt_filter(value, fmt='%d.%m.%Y %H:%M'):
@@ -189,23 +189,8 @@ def index():
             CWLWar.state.in_(['preparation', 'inWar']),
             db.or_(CWLWar.clan_tag == CLAN_TAG, CWLWar.opp_tag == CLAN_TAG)
         ).first()
-        if active_cwl_war and active_cwl_war.state == 'inWar':
-            our_side = active_cwl_war.clan_tag == CLAN_TAG
-            our_s    = (active_cwl_war.clan_stars  if our_side else active_cwl_war.opp_stars)  or 0
-            opp_s    = (active_cwl_war.opp_stars   if our_side else active_cwl_war.clan_stars) or 0
-            our_done = (active_cwl_war.clan_attacks if our_side else active_cwl_war.opp_attacks) or 0
-            opp_done = (active_cwl_war.opp_attacks  if our_side else active_cwl_war.clan_attacks) or 0
-            our_pct  = float((active_cwl_war.clan_destruction_pct if our_side else active_cwl_war.opp_destruction_pct) or 0)
-            opp_pct  = float((active_cwl_war.opp_destruction_pct  if our_side else active_cwl_war.clan_destruction_pct) or 0)
-            size     = active_cwl_war.team_size or 15
-            our_max  = our_s + max(0, size - our_done) * 3
-            opp_max  = opp_s + max(0, size - opp_done) * 3
-            if our_s > opp_max or (our_s == opp_max and our_pct > opp_pct):
-                cwl_win_status = 'safe_win'
-            elif opp_s > our_max or (opp_s == our_max and opp_pct > our_pct):
-                cwl_win_status = 'cant_win'
-            else:
-                cwl_win_status = 'undecided'
+        if active_cwl_war:
+            cwl_win_status = compute_cwl_win_status(active_cwl_war, CLAN_TAG)
 
     active_raid_est_medals = None
     if active_raid:

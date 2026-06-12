@@ -95,6 +95,15 @@ def get_war_verdict(label_a, label_b):
     return score, label, badge
 
 
+def get_attack_context(attack, attacks_on_defender):
+    """Return (already_3star, partially_attacked) for an attack given prior attacks on the same defender."""
+    prior = [x for x in attacks_on_defender.get(attack.defender_tag, [])
+             if (x.attack_order or 0) < (attack.attack_order or 0)]
+    already_3star = any(x.stars >= 3 for x in prior)
+    partially_attacked = len(prior) > 0 and not already_3star
+    return already_3star, partially_attacked
+
+
 def get_cwl_verdict(stars, avg_stars=None):
     """
     Score a CWL attack vs the global average for this TH matchup.

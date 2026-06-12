@@ -4,12 +4,7 @@
 {% set favicon_icon = '🏆' %}
 {% set chartjs = true %}
 {% include '_head.html' %}
-        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
-        a { text-decoration:none; color:inherit; }
-
         /* ── LAYOUT ── */
-        .container { max-width:1400px; margin:0 auto; padding:28px 32px; }
         .section { margin-bottom:28px; }
         .section-title { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin-bottom:14px; display:flex; align-items:center; gap:10px; }
         .section-title::after { content:''; flex:1; height:1px; background:var(--bord2); }
@@ -330,7 +325,7 @@
             {% if mvp.league != '—' %}
             <span class="mvp-league-tag {{ mvp.lc }}">{{ mvp.league }}</span>
             {% endif %}
-            <div class="mvp-crown">👑</div>
+            <div class="mvp-crown"><img src="/static/img/crown.png" style="width:22px;height:22px;"></div>
             <div class="mvp-name" title="{{ mvp.name }}">{{ mvp.name }}</div>
             <div class="mvp-th"><span class="th-chip">TH{{ mvp.th }}</span>{% if mvp.rank %}#{{ mvp.rank }} finish{% endif %}</div>
             <div class="mvp-stars">{{ mvp.stars }}★</div>
@@ -358,7 +353,7 @@
         </div>
 
         <div class="hof-section">
-            <div class="hof-header"><span style="font-size:16px">⭐</span><span class="hof-header-title">Star Factory</span><span style="font-size:10px;color:var(--muted);margin-left:auto;font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Most Stars</span></div>
+            <div class="hof-header"><img src="/static/img/star.png" style="width:16px;height:16px;vertical-align:middle;"><span class="hof-header-title">Star Factory</span><span style="font-size:10px;color:var(--muted);margin-left:auto;font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Most Stars</span></div>
             <div class="hof-list" id="hofStars"></div>
         </div>
 

@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, session, redirect, url_fo
 
 from extensions import db
 from models import PubQuizRounds, PubQuizTeams
-from features.auth.routes import require_admin_login
+from features.auth.routes import require_super_admin
 
 pubquiz_bp = Blueprint('pubquiz', __name__)
 
@@ -83,7 +83,7 @@ def pubquiz_admin_logout():
 
 
 @pubquiz_bp.route('/pubquiz/admin')
-@require_admin_login
+@require_super_admin
 def pubquiz_admin():
     rounds      = PubQuizRounds.query.order_by(PubQuizRounds.datum.desc()).all()
     selected_id = request.args.get('round_id', type=int)
@@ -97,7 +97,7 @@ def pubquiz_admin():
 
 
 @pubquiz_bp.route('/pubquiz/admin/round/create', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def pubquiz_create_round():
     datum_str   = request.form.get('datum', '').strip()
     bilderrunde = request.form.get('bilderrunde', '').strip() or None
@@ -113,7 +113,7 @@ def pubquiz_create_round():
 
 
 @pubquiz_bp.route('/pubquiz/admin/round/<int:round_id>/delete', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def pubquiz_delete_round(round_id):
     r = db.get_or_404(PubQuizRounds,round_id)
     db.session.delete(r)
@@ -122,7 +122,7 @@ def pubquiz_delete_round(round_id):
 
 
 @pubquiz_bp.route('/pubquiz/admin/round/<int:round_id>/update', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def pubquiz_update_round(round_id):
     r         = db.get_or_404(PubQuizRounds,round_id)
     datum_str = request.form.get('datum', '').strip()
@@ -138,7 +138,7 @@ def pubquiz_update_round(round_id):
 
 
 @pubquiz_bp.route('/pubquiz/admin/team/add', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def pubquiz_add_team():
     round_id = request.form.get('round_id', type=int)
     name     = request.form.get('name', '').strip()
@@ -153,7 +153,7 @@ def pubquiz_add_team():
 
 
 @pubquiz_bp.route('/pubquiz/admin/round/<int:round_id>/scores/<int:round_num>', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def pubquiz_save_round_scores(round_id, round_num):
     if round_num not in (1, 2, 3, 4):
         return redirect(url_for('pubquiz.pubquiz_admin', round_id=round_id))
@@ -175,7 +175,7 @@ def pubquiz_save_round_scores(round_id, round_num):
 
 
 @pubquiz_bp.route('/pubquiz/admin/team/<int:team_id>/update', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def pubquiz_update_team(team_id):
     team = db.get_or_404(PubQuizTeams,team_id)
     team.name = request.form.get('name', team.name).strip()
@@ -200,7 +200,7 @@ def pubquiz_update_team(team_id):
 
 
 @pubquiz_bp.route('/pubquiz/admin/team/<int:team_id>/delete', methods=['POST'])
-@require_admin_login
+@require_super_admin
 def pubquiz_delete_team(team_id):
     team     = db.get_or_404(PubQuizTeams,team_id)
     round_id = team.round_id
