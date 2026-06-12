@@ -137,7 +137,9 @@ def task_update_raid_weekend():
             logger=raid_weekend_logger,
         )
 
+        
         import extensions
+        raid_weekend_logger.error(f"state: {raid_weekend.state}, ext: {extensions.scheduler == None}")
         if extensions.scheduler:
             if raid_weekend.state == 'ended' and raid_weekend.end_time:
                 next_run = raid_weekend.end_time + dt.timedelta(days=4)
