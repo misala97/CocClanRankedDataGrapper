@@ -2,16 +2,18 @@
 // Included by clanwar.html and cwl.html. Do not add page-specific code here.
 
 // Fallback star distributions by TH diff (attacker - defender), clamped [-4, +4]
-const _DIFF_FALLBACK = {
-     4: [0.00, 0.01, 0.04, 0.95],
-     3: [0.00, 0.02, 0.08, 0.90],
-     2: [0.01, 0.02, 0.12, 0.85],
-     1: [0.01, 0.03, 0.16, 0.80],
-     0: [0.01, 0.04, 0.20, 0.75],
-    '-1': [0.02, 0.08, 0.30, 0.60],
-    '-2': [0.05, 0.15, 0.35, 0.45],
-    '-3': [0.10, 0.25, 0.38, 0.27],
-    '-4': [0.18, 0.35, 0.32, 0.15],
+// Base prior — recalibrated to ~67% 3★ at even matchup (observed DB average).
+// Overwritten at page load by initDiffFallback() once real data is available.
+let _DIFF_FALLBACK = {
+     4: [0.00, 0.01, 0.05, 0.94],
+     3: [0.00, 0.02, 0.11, 0.87],
+     2: [0.01, 0.03, 0.17, 0.79],
+     1: [0.02, 0.05, 0.20, 0.73],
+     0: [0.03, 0.07, 0.23, 0.67],
+    '-1': [0.05, 0.13, 0.28, 0.54],
+    '-2': [0.09, 0.19, 0.33, 0.39],
+    '-3': [0.15, 0.28, 0.35, 0.22],
+    '-4': [0.23, 0.37, 0.28, 0.12],
 };
 
 // Return [p0,p1,p2,p3] for an attacker TH vs defender TH from the given rates dict.
@@ -21,6 +23,29 @@ function atkDist(rates, atkTH, defTH) {
     if (d) return d;
     const diff = Math.max(-4, Math.min(4, atkTH - defTH));
     return _DIFF_FALLBACK[String(diff)] || _DIFF_FALLBACK['0'];
+}
+
+// Aggregate all recorded attacks by TH diff, weighted by sample count, and use
+// those empirical distributions as the per-diff fallback. For diffs with no recorded
+// data at all (e.g. brand-new TH pairings), the base constants above remain.
+function buildDiffFallback(rates, counts) {
+    const totals = {}, weighted = {};
+    for (const [key, d] of Object.entries(rates)) {
+        const [atkTH, defTH] = key.split('_').map(Number);
+        const diff = String(Math.max(-4, Math.min(4, atkTH - defTH)));
+        const n = counts[key] || 0;
+        if (!totals[diff]) { totals[diff] = 0; weighted[diff] = [0, 0, 0, 0]; }
+        totals[diff] += n;
+        d.forEach((p, i) => { weighted[diff][i] += p * n; });
+    }
+    const out = { ..._DIFF_FALLBACK };
+    for (const [diff, n] of Object.entries(totals))
+        if (n > 0) out[diff] = weighted[diff].map(w => w / n);
+    return out;
+}
+
+function initDiffFallback(rates, counts) {
+    _DIFF_FALLBACK = buildDiffFallback(rates, counts);
 }
 
 // Convolve independent per-attack probability distributions via DP.
@@ -73,10 +98,10 @@ function calcWinProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible, player
         const dists = [], breakdown = [];
         for (const p of pairs) {
             const { dist: rawDist, srcLabel } = resolveAtkDist(playerInfoFn, atkDistFn, p.tag, p.atkTH, p.defTH, matchupCounts);
-            const dist = adjustDistForStarred(rawDist, p.defBestStars || 0);
-            dists.push(dist);
+            const adjustedDist = adjustDistForStarred(rawDist, p.defBestStars || 0);
+            dists.push(adjustedDist);  // incremental — used for convolution only
             const entry = { name: p.name, th: p.atkTH, pos: p.pos, defTH: p.defTH, defName: p.defName,
-                            dist, expStars: dist.reduce((s, q, k) => s + q * k, 0), srcLabel };
+                            dist: rawDist, expStars: rawDist.reduce((s, q, k) => s + q * k, 0), srcLabel };
             if (p.defPos !== undefined) entry.defPos = p.defPos;
             if (p.defBestStars) entry.defBestStars = p.defBestStars;
             breakdown.push(entry);
@@ -212,12 +237,13 @@ function buildAttackerTable(breakdown, side) {
             <span title="2★">${(p2*100).toFixed(0)}%</span>
             <span title="3★">${(p3*100).toFixed(0)}%</span>
         </div>`;
+        const defStarBadge = p.defBestStars ? ` <span style="color:#f0a500;font-size:9px;" title="${p.defBestStars}★ already scored">${'★'.repeat(p.defBestStars)}</span>` : '';
         return `<tr style="border-bottom:1px solid var(--bord2);">
             <td style="padding:7px 8px 7px 16px;font-weight:600;font-size:12px;white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(p.name)}</td>
             <td style="padding:7px 8px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--blue);">TH${p.th}</td>
             <td style="padding:7px 8px;text-align:center;font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHTML(p.defName)} (TH${p.defTH})">
                 <span style="color:var(--fg);font-weight:600;">${escapeHTML(p.defName)}</span>
-                <span style="color:var(--muted);font-size:10px;"> TH${p.defTH}</span>
+                <span style="color:var(--muted);font-size:10px;"> TH${p.defTH}</span>${defStarBadge}
             </td>
             <td style="padding:7px 12px;">${seg}</td>
             <td style="padding:7px 16px 7px 8px;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:${clr};">${p.expStars.toFixed(1)}★</td>

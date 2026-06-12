@@ -1030,6 +1030,7 @@ const WAR_MATCHUP_COUNTS    = {{ war_matchup_counts    | tojson | safe }};
 const WAR_TOTAL_ATK_COUNT   = {{ war_total_atk_count   | tojson | safe }};
 const ATTACKS_PER_PLAYER    = 2;
 const WAR_PLAYER_HISTORY    = {{ war_player_history    | tojson | safe }};
+initDiffFallback(WAR_MATCHUP_RATES, WAR_MATCHUP_COUNTS);
 
 // ── Win Probability Engine ────────────────────────────────────────────────────
 
@@ -1187,6 +1188,8 @@ function buildWarCmpWinProb() {
 
 function buildCompare() {
     const len = Math.min(OUR.length, OPP.length);
+    const ourNameSafe = escapeHTML(WAR.ourName);
+    const oppNameSafe = escapeHTML(WAR.oppName);
 
     // ── Analysis ──────────────────────────────────────────────────────────────
     const avgThOur = avg(OUR.map(m => m.th));
@@ -1275,9 +1278,9 @@ function buildCompare() {
     document.getElementById('warCmp-stats').innerHTML = `
         <div class="cmp-title">📋 Key Statistics</div>
         <div style="display:grid;grid-template-columns:1fr 140px 1fr;margin-bottom:8px;">
-            <span style="font-size:11px;font-weight:600;color:var(--green)">${WAR.ourName}</span>
+            <span style="font-size:11px;font-weight:600;color:var(--green)">${ourNameSafe}</span>
             <span></span>
-            <span style="font-size:11px;font-weight:600;color:var(--red)">${WAR.oppName}</span>
+            <span style="font-size:11px;font-weight:600;color:var(--red)">${oppNameSafe}</span>
         </div>
         ${statRow('AVG TH', avgThOur.toFixed(1), avgThOpp.toFixed(1))}
         ${avgLrOur > 0 || avgLrOpp > 0 ? statRow('AVG LEAGUE RANK', avgLrOur > 0 ? avgLrOur.toFixed(1) : '—', avgLrOpp > 0 ? avgLrOpp.toFixed(1) : '—') : ''}
@@ -1310,9 +1313,9 @@ function buildCompare() {
     document.getElementById('warCmp-th').innerHTML = `
         <div class="cmp-title"><img src="/static/img/townHall.png" style="width:14px;height:14px;vertical-align:middle;"> TH Distribution</div>
         <div class="dist-header">
-            <span class="dist-our-lbl">${WAR.ourName}</span>
+            <span class="dist-our-lbl">${ourNameSafe}</span>
             <span></span>
-            <span class="dist-opp-lbl">${WAR.oppName}</span>
+            <span class="dist-opp-lbl">${oppNameSafe}</span>
         </div>
         ${thRows}
     `;
@@ -1330,15 +1333,15 @@ function buildCompare() {
         } else if (hasO) { rowCls = 'lg-adv'; diffLabel = '+';
         } else if (hasP) { rowCls = 'lg-dis'; diffLabel = '−';
         } else           { rowCls = 'lg-even'; }
-        const oLg = hasO ? o.league : '<span class="no-data-lg">—</span>';
-        const pLg = hasP ? p.league : '<span class="no-data-lg">—</span>';
+        const oLg = hasO ? escapeHTML(o.league) : '<span class="no-data-lg">—</span>';
+        const pLg = hasP ? escapeHTML(p.league) : '<span class="no-data-lg">—</span>';
         return `<tr class="${rowCls}">
             <td class="lgt-pos">#${o.pos}</td>
-            <td class="lgt-name">${o.name}</td>
+            <td class="lgt-name">${escapeHTML(o.name)}</td>
             <td class="lgt-lg">${oLg}</td>
             <td class="lgt-diff">${diffLabel}</td>
             <td class="lgt-lg" style="text-align:right">${pLg}</td>
-            <td class="lgt-name" style="text-align:right">${p.name}</td>
+            <td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td>
         </tr>`;
     }).join('');
 
@@ -1352,11 +1355,11 @@ function buildCompare() {
         <table class="lg-table">
             <thead><tr>
                 <th>#</th>
-                <th style="text-align:left">${WAR.ourName}</th>
+                <th style="text-align:left">${ourNameSafe}</th>
                 <th style="text-align:left">League</th>
                 <th style="text-align:center">Diff</th>
                 <th style="text-align:right">League</th>
-                <th style="text-align:right">${WAR.oppName}</th>
+                <th style="text-align:right">${oppNameSafe}</th>
             </tr></thead>
             <tbody>${lgRows}</tbody>
         </table>
@@ -1371,11 +1374,11 @@ function buildCompare() {
         const diffCls = diff > 0 ? 'mt-adv' : diff < 0 ? 'mt-dis' : 'mt-even';
         return `<tr class="${rowCls}">
             <td class="lgt-pos">#${o.pos}</td>
-            <td class="lgt-name">${o.name}</td>
+            <td class="lgt-name">${escapeHTML(o.name)}</td>
             <td class="lgt-lg">TH${o.th}</td>
             <td class="lgt-diff ${diffCls}">${note}</td>
             <td class="lgt-lg" style="text-align:right">TH${p.th}</td>
-            <td class="lgt-name" style="text-align:right">${p.name}</td>
+            <td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td>
         </tr>`;
     }).join('');
 
@@ -1389,11 +1392,11 @@ function buildCompare() {
         <table class="lg-table">
             <thead><tr>
                 <th>#</th>
-                <th style="text-align:left">${WAR.ourName}</th>
+                <th style="text-align:left">${ourNameSafe}</th>
                 <th style="text-align:left">TH</th>
                 <th style="text-align:center">Diff</th>
                 <th style="text-align:right">TH</th>
-                <th style="text-align:right">${WAR.oppName}</th>
+                <th style="text-align:right">${oppNameSafe}</th>
             </tr></thead>
             <tbody>${matchupRows}</tbody>
         </table>

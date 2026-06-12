@@ -1271,6 +1271,7 @@ const CWL_MATCHUP_RATES  = {{ cwl_matchup_rates     | tojson | safe }};
 // {"atkTH_defTH": total_attack_count}
 const CWL_MATCHUP_COUNTS    = {{ cwl_matchup_counts    | tojson | safe }};
 const CWL_TOTAL_ATK_COUNT   = {{ cwl_total_atk_count | tojson | safe }};  // attacks with TH data; excludes attacks missing member records
+initDiffFallback(CWL_MATCHUP_RATES, CWL_MATCHUP_COUNTS);
 
 // ── CWL season overview data ──────────────────────────────────────────────────
 {% if our_player_perf is defined %}
