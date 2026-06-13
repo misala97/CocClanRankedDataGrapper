@@ -206,7 +206,7 @@
     {% if selected_raid %}
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-icon"><img src="/static/img/gold.png" style="width:64px;height:64px;"></div>
+            <div class="stat-icon"><img src="/static/img/raidCapitalGold.png" style="width:64px;height:64px;"></div>
             <div class="stat-value" style="color:var(--accent);">{{ '{:,}'.format(selected_raid.capital_total_loot or 0) }}</div>
             <div class="stat-label">Capital Loot</div>
         </div>
@@ -270,7 +270,7 @@
                     <tr>
                         <th class="sortable" onclick="sortTable('player')">Player</th>
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
-                        <th class="sortable" onclick="sortTable('capital_loot')"><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Loot</th>
+                        <th class="sortable" onclick="sortTable('capital_loot')"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;"> Loot</th>
                         <th class="sortable" onclick="sortTable('avg_loot')">Avg Loot</th>
                         <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
                         <th class="sortable" onclick="sortTable('solo_wipes')">Solo Wipes</th>

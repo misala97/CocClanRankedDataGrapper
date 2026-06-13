@@ -38,11 +38,18 @@ def task_update_clan_war():
             clan_war_logger.warning(f"Could not fetch clan war: {e}", exc_info=True)
             db_finalize_uptime(task_update_clan_war.__name__, t0, 'error', str(e), logger=clan_war_logger)
             return
-
+        
+        
         if state == 'notInWar':
+            if extensions.scheduler:
+                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', hours=1)
             clan_war_logger.info("No active war — skipping.")
             db_finalize_uptime(task_update_clan_war.__name__, t0, 'skipped', summary='notInWar', logger=clan_war_logger)
             return
+        else:
+            if extensions.scheduler:
+                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', minutes=3)
+
 
         opp_tag = json_get(
             json_get(war_data, JSON_CLAN_WAR_DATA.OPPONENT, default={}, raise_on_missing=False) or {},
@@ -86,7 +93,7 @@ def task_update_clan_war():
                     (json_get(war_data, JSON_CLAN_WAR_DATA.CLAN),     False),
                     (json_get(war_data, JSON_CLAN_WAR_DATA.OPPONENT), True),
                 ):
-                    for member in json_get(side_data, JSON_CLAN_WAR_DATA.SIDE_MEMBERS):
+                    for member in (json_get(side_data, JSON_CLAN_WAR_DATA.SIDE_MEMBERS, raise_on_missing=False) or []):
                         player_tag = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_TAG)
                         ranked_league = None
                         try:
@@ -103,28 +110,13 @@ def task_update_clan_war():
                 return
             db.session.commit()
 
-        if state not in ('inWar', 'warEnded'):
-            if extensions.scheduler and state == 'preparation' and clan_war.start_time:
-                war_start_utc = clan_war.start_time.replace(tzinfo=dt.timezone.utc)
-                now_utc = dt.datetime.now(dt.timezone.utc)
-                if war_start_utc > now_utc:
-                    extensions.scheduler.reschedule_job('clan_war_update', trigger='date', run_date=war_start_utc)
-                    clan_war_logger.info(f"Rescheduled to fire at war start: {war_start_utc}")
-                else:
-                    extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', minutes=3)
-            elif extensions.scheduler:
-                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', hours=1)
-            summary = f"state={state} war={war_action} members_added={members_added}"
-            db_finalize_uptime(task_update_clan_war.__name__, t0, status, summary=summary, logger=clan_war_logger)
-            return
-
         try:
             existing_orders = {a.attack_order for a in clan_war.attacks}
             for side_data, is_opponent in (
                 (json_get(war_data, JSON_CLAN_WAR_DATA.CLAN),     False),
                 (json_get(war_data, JSON_CLAN_WAR_DATA.OPPONENT), True),
             ):
-                for member in json_get(side_data, JSON_CLAN_WAR_DATA.SIDE_MEMBERS):
+                for member in (json_get(side_data, JSON_CLAN_WAR_DATA.SIDE_MEMBERS, raise_on_missing=False) or []):
                     attacks = json_get(member, JSON_CLAN_WAR_DATA.MEMBER_ATTACKS, raise_on_missing=False)
                     if not attacks:
                         continue
@@ -174,9 +166,5 @@ def task_update_clan_war():
         summary = f"state={state} war={war_action} members_added={members_added} attacks_added={attacks_added} pref_out={pref_updated}"
         db_finalize_uptime(task_update_clan_war.__name__, t0, status, error_msg, summary, logger=clan_war_logger)
 
-        if extensions.scheduler:
-            if state == 'inWar':
-                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', minutes=3)
-            else:
-                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', hours=1)
+        
         

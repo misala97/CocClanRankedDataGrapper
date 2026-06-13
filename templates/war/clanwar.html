@@ -481,13 +481,18 @@
         @media (max-width: 900px) { .wc-details { grid-template-columns: 1fr; } }
 
         /* ── CMP MODAL (war) ── */
-        .war-cmp-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200; }
+        .war-cmp-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 500; backdrop-filter: blur(4px); }
         .war-cmp-modal {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
-            width: min(1100px, 96vw); max-height: 88vh; overflow-y: auto;
+            width: min(860px, 94vw); max-height: 88vh; overflow-y: auto;
             background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-            z-index: 201; scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+            box-shadow: 0 28px 72px rgba(0,0,0,0.7);
+            z-index: 501; scrollbar-width: thin; scrollbar-color: var(--border) transparent;
         }
+        .war-cmp-modal::-webkit-scrollbar { width: 4px; }
+        .war-cmp-modal::-webkit-scrollbar-track { background: transparent; }
+        .war-cmp-modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .war-cmp-modal::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
         /* ── WAR FLAGS ── */
         .war-flag {
@@ -785,14 +790,16 @@
 {# ── WIN PROBABILITY CARD ── #}
 {% if members_our and members_opp and war.state == 'inWar' %}
 <div class="recent-card" id="wcWrap-0">
-    <div class="recent-header" onclick="toggleWinCalc(0)">
-        <div style="display:flex;align-items:center;gap:10px;">
-            <span class="recent-header-title">🎲 Win Probability</span>
-            <div class="live-atk-badge" style="margin-left:0;">Live</div>
+    <div onclick="toggleWinCalc(0)" style="cursor:pointer;transition:background .15s;border-radius:10px 10px 0 0;" onmouseenter="this.style.background='var(--surf2)'" onmouseleave="this.style.background=''">
+        <div class="recent-header" style="pointer-events:none;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span class="recent-header-title">🎲 Win Probability</span>
+                <div class="live-atk-badge" style="margin-left:0;">Live</div>
+            </div>
+            <span class="recent-chevron" id="wcChev-0">▼</span>
         </div>
-        <span class="recent-chevron" id="wcChev-0">▼</span>
+        <div id="wcBarPreview-0" style="padding:0 16px 14px;display:none;"></div>
     </div>
-    <div id="wcBarPreview-0" onclick="toggleWinCalc(0)" style="padding:0 16px 14px;display:none;cursor:pointer;"></div>
     <div class="recent-body" id="wcBody-0">
         <div id="winCalc-0"></div>
     </div>
@@ -1132,7 +1139,7 @@ function buildWinCalc(n) {
 function openWarCmpModal() {
     document.getElementById('warCmpBackdrop').style.display = 'block';
     document.getElementById('warCmpModal').style.display    = 'block';
-    ['prediction','winprob-bar','winprob-body','stats','th','league','matchup'].forEach(s => {
+    ['prediction','winprob-bar','winprob-body','stats','th','league','lgdist','matchup'].forEach(s => {
         const el = document.getElementById('warCmp-' + s);
         if (el) el.innerHTML = '';
     });
@@ -1153,7 +1160,7 @@ function openWarMatchupRates() {
 }
 function openWarPlayerRates() {
     const nameMap = {};
-    for (const m of OUR) nameMap[m.tag] = { name: m.name, th: m.th };
+    for (const m of OUR) nameMap[m.tag] = { name: m.name, th: m.th, pos: m.pos, league: m.league, lr: m.lr };
     openPlayerMatchupRatesModal(WAR_PLAYER_HISTORY, nameMap);
 }
 
@@ -1174,9 +1181,9 @@ function buildWarCmpWinProb() {
     if (!wc) return;
     const { probBarHtml, bodyHtml } = buildPredictionBodyHTML(wc, WAR.ourName, WAR.oppName, 'warCmpOurAtk', 'warCmpOppAtk', 'toggleBreakdown');
     barEl.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 4px 6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 4px 6px;pointer-events:none;">
             <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;">🎲 Win Probability (0 attacks assumed)</span>
-            <span class="recent-chevron" id="warCmpWpChev" onclick="toggleWarCmpWinProb()" style="cursor:pointer;">▼</span>
+            <span class="recent-chevron" id="warCmpWpChev">▼</span>
         </div>${probBarHtml}`;
     bodyEl.innerHTML = bodyHtml;
 }
@@ -1191,6 +1198,7 @@ function buildCompare() {
     document.getElementById('warCmp-stats').innerHTML      = html.stats;
     document.getElementById('warCmp-th').innerHTML         = html.th;
     document.getElementById('warCmp-league').innerHTML     = html.league;
+    document.getElementById('warCmp-lgdist').innerHTML     = html.lgDist;
     document.getElementById('warCmp-matchup').innerHTML    = html.matchup;
 }
 
@@ -1402,19 +1410,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <div id="warCmpBackdrop" onclick="closeWarCmpModal()" style="display:none;" class="war-cmp-backdrop"></div>
 <div id="warCmpModal" style="display:none;" class="war-cmp-modal">
-    <div style="position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;z-index:1;">
-        <span style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:.5px;">📊 Compare &amp; Predict · {{ war.clan_name or 'Our Clan' }} vs {{ war.opponent_name or 'Opponent' }}</span>
-        <button onclick="closeWarCmpModal()" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    <div style="position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--bord2);padding:20px 26px 16px;display:flex;justify-content:space-between;align-items:center;z-index:1;">
+        <span style="font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:700;letter-spacing:.5px;">📊 Compare &amp; Predict · {{ war.clan_name or 'Our Clan' }} vs {{ war.opponent_name or 'Opponent' }}</span>
+        <button onclick="closeWarCmpModal()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;">✕</button>
     </div>
     <div id="warCmp-prediction" class="cmp-sec"></div>
     <div class="cmp-sec" style="padding:0;">
-        <div id="warCmp-winprob-bar" style="padding:0 16px 14px;cursor:pointer;" onclick="toggleWarCmpWinProb()"></div>
+        <div id="warCmp-winprob-bar" style="padding:0 16px 14px;cursor:pointer;transition:background .15s;" onclick="toggleWarCmpWinProb()" onmouseenter="this.style.background='var(--surf2)'" onmouseleave="this.style.background=''"></div>
         <div id="warCmp-winprob-body" style="display:none;"></div>
     </div>
     <div id="warCmp-stats"   class="cmp-sec"></div>
-    <div id="warCmp-th"      class="cmp-sec"></div>
     <div id="warCmp-league"  class="cmp-sec"></div>
+    <div id="warCmp-lgdist"  class="cmp-sec"></div>
     <div id="warCmp-matchup" class="cmp-sec"></div>
+    <div id="warCmp-th"      class="cmp-sec"></div>
 </div>
 {% endif %}
 

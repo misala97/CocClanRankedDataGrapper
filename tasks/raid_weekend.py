@@ -12,6 +12,7 @@ raid_weekend_logger = setup_task_logger('raid_weekend', 'logs/raid_weekend.log')
 def task_update_raid_weekend():
     from app import app, CLAN_TAG
     from extensions import db
+    import extensions
     from services.db import (
         create_db_raid_weekend_from_api, db_raid_weekend_get,
         db_raid_weekend_create_new, db_raid_weekend_update,
@@ -52,9 +53,22 @@ def task_update_raid_weekend():
             db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'error', str(e), logger=raid_weekend_logger)
             return
         db.session.commit()
+        
+        
+        if raid_weekend.state not in ('ongoing', 'ended'):
+            if extensions.scheduler:
+                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', hours=1)
+            raid_weekend_logger.info("No active raid weekend — skipping.")
+            db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'skipped', summary='not ongoing', logger=raid_weekend_logger)
+            return
+        elif raid_weekend.state == 'ongoing':
+            if extensions.scheduler:
+                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', minutes=3)
+        
 
         try:
             attack_logs_api = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG)
+            members_api     = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS, raise_on_missing=False) or []
         except Exception as e:
             raid_weekend_logger.warning(f"Could not get attack log for raid weekend: {e}", exc_info=True)
             db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'error', str(e), logger=raid_weekend_logger)
@@ -81,7 +95,7 @@ def task_update_raid_weekend():
                         defender_badge  = json_get(attack_log_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DEFENDER.BADGE, raise_on_missing=False)
                         district_level  = json_get(district_api, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG_DISTRICTS_HALLLEVEL)
 
-                        member = next((m for m in json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS) if json_get(m, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS_TAG) == player_tag), None)
+                        member = next((m for m in members_api if json_get(m, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS_TAG) == player_tag), None)
                         total_loot_all_attacks = member["capitalResourcesLooted"] if member else None
 
                         if not Player.query.filter_by(tag=player_tag).first():
@@ -137,24 +151,7 @@ def task_update_raid_weekend():
             logger=raid_weekend_logger,
         )
 
-        
-        import extensions
-        raid_weekend_logger.info(f"state: {raid_weekend.state}, ext: {extensions.scheduler == None}")
-        if extensions.scheduler:
-            if raid_weekend.state == 'ended' and raid_weekend.end_time:
-                next_run = raid_weekend.end_time + dt.timedelta(days=4)
-                next_run = next_run.replace(tzinfo=dt.timezone.utc)
-                now = dt.datetime.now(dt.timezone.utc)
-                if next_run > now:
-                    extensions.scheduler.reschedule_job('raid_weekend_update', trigger='date', run_date=next_run)
-                    raid_weekend_logger.info(f"Raid ended — rescheduled to {next_run} UTC")
-                else:
-                    # Past the expected start window — raid hasn't been manually started yet, poll until it does
-                    extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', minutes=30)
-                    raid_weekend_logger.info("Waiting for new raid to be started — polling every 30 minutes")
-            elif raid_weekend.state == 'ongoing':
-                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', minutes=3)
-                raid_weekend_logger.info("Raid ongoing — keeping 3-minute interval")
+
 
             
             

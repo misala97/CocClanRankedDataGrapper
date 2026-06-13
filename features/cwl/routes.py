@@ -393,10 +393,10 @@ def cwl_page():
             if r is None:
                 continue
             tag = member.player_tag
-            if tag not in r['last_rounds'] or (war.round_number or 0) > r['last_rounds'][tag]:
-                r['last_rounds'][tag] = war.round_number
-            if tag not in r['first_rounds'] or (war.round_number or 0) < r['first_rounds'][tag]:
-                r['first_rounds'][tag] = war.round_number
+            if tag not in r['last_rounds'] or (war.round_number or 0) > (r['last_rounds'].get(tag) or 0):
+                r['last_rounds'][tag] = war.round_number or 0
+            if tag not in r['first_rounds'] or (war.round_number or 0) < (r['first_rounds'].get(tag) or 0):
+                r['first_rounds'][tag] = war.round_number or 0
             if tag not in r['active_members']:
                 r['active_members'][tag] = {
                     'th': member.town_hall_level or 0,
@@ -536,6 +536,8 @@ def cwl_page():
                 'pct':           v['attack_details'][0]['pct'] if v['attack_details'] else 0,
                 'defender_name': v['attack_details'][0]['defender_name'] if v['attack_details'] else '',
                 'defender_th':   v['attack_details'][0]['defender_th'] if v['attack_details'] else 0,
+                'th_diff':       v['attack_details'][0]['th_diff'] if v['attack_details'] else 0,
+                'target_state':  v['attack_details'][0]['target_state'] if v['attack_details'] else 'fresh',
             })
 
     our_player_perf = []
@@ -625,11 +627,12 @@ def cwl_page():
             'wars':            pp['wars'],
             'attacks_used':    used,
             'missed':          pp['wars'] - used,
+            'three_stars':     pp['three_stars'],
             'avg_stars':       round(pp['stars'] / used, 2) if used else 0.0,
             'avg_dest':        round(pp['destruction'] / used, 1) if used else 0.0,
             'three_star_rate': round(pp['three_stars'] / used * 100) if used else 0,
         })
-    all_player_perf.sort(key=lambda pp: (-(pp['avg_stars'] if pp['attacks_used'] else 0), -pp['wars']))
+    all_player_perf.sort(key=lambda pp: (-pp['attacks_used'], pp['missed'], -(pp['avg_stars'] if pp['attacks_used'] else 0)))
 
     # ── Season overview aggregate stats (our clan vs whole group) ─────────────
     def _overview_agg(wars_list, filter_tag=None):

@@ -54,11 +54,13 @@ WAR_COMBOS = {
     
     (LOW_CLEAR, CLEAN_UP):             (90,  'War Crimes'),
     (CLEAR, LOW_CLEAR):                (90, 'Scaredy Cat'),
+    (CLEAR, CLEAN_UP):                  (90, 'Missing Confidence'),
     
     (LOW_CLEAR, FARM):                 (75,  'Lazy Farmer'),
     
     (CLEAR, FAILED_CLEAR):              (50,  'Fumble'),
     (FARM, FARM):                      (50,  'Farmer'),
+    (LOW_CLEAR, FAILED_CLEAR):         (50,  'Fumble'),
     
     
     (FAILED_FARM, FARM):                (25,  'Inconsitend Farmer'),

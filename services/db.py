@@ -87,7 +87,7 @@ def _group_attack_stats(league_members: list, max_attacks: int) -> tuple[int, in
     full  = 0
     for m in league_members:
         done = (json_get(m, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_WIN_COUNT,  default=0, raise_on_missing=False) or 0) + \
-               (json_get(m, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT, default=0, raise_on_missing=False) or 0)
+                (json_get(m, JSON_RANKED_GROUP_DATA.MEMBERS_ATTACK_LOSE_COUNT, default=0, raise_on_missing=False) or 0)
         total += done
         if max_attacks > 0 and done >= max_attacks:
             full += 1

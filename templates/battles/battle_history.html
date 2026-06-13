@@ -106,12 +106,19 @@
         .detail-cell { padding: 0; border: none; background: var(--bg); border-bottom: 1px solid var(--border) !important; }
         .detail-inner { padding: 16px; }
         .detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .detail-table-scroll { max-height: 324px; overflow-y: auto; border: 1px solid var(--bord2); border-radius: 6px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        .detail-table-scroll::-webkit-scrollbar { width: 4px; }
+        .detail-table-scroll::-webkit-scrollbar-track { background: transparent; }
+        .detail-table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .detail-table-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+        .detail-table-scroll table { border-radius: 0; }
         .detail-table th, .detail-table td { padding: 7px 10px; border-bottom: 1px solid var(--bord2); text-align: center; }
         .detail-table th:first-child, .detail-table td:first-child { text-align: left; }
         .detail-table tbody tr:last-child td { border-bottom: none; }
         .detail-table th {
             font-size: 11px; font-weight: 700; color: var(--muted);
             text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Rajdhani', sans-serif;
+            position: sticky; top: 0; background: var(--surf2); z-index: 1;
         }
         .detail-table td { color: var(--text); }
         .type-badge {
@@ -234,6 +241,8 @@
     </select>
 </form>
 <div class="ctrl-divider" style="margin-left:auto;"></div>
+<button type="button" id="toggleLeftBtn" class="action-btn" onclick="toggleLeftFilter()" style="white-space:nowrap;">Show Left</button>
+<div class="ctrl-divider"></div>
 <input id="searchInput" class="selector" type="search" placeholder="🔍 Search player…" oninput="buildTable()" style="min-width:180px;">
 {% endset %}
 {% include '_page_header.html' %}
@@ -357,6 +366,16 @@
     let currentSort = { column: null, direction: null };
     let resourceChart = null;
     let attacksChart = null;
+    let showLeft = false;
+
+    function toggleLeftFilter() {
+        showLeft = !showLeft;
+        const btn = document.getElementById('toggleLeftBtn');
+        btn.textContent = showLeft ? 'Hide Left' : 'Show Left';
+        btn.style.background = showLeft ? 'rgba(240,165,0,0.1)' : '';
+        btn.style.borderColor = showLeft ? 'var(--accent)' : '';
+        buildTable();
+    }
 
     function fmt(n) { return Number(n).toLocaleString(); }
 
@@ -528,10 +547,12 @@
         const sorted = [...logs].sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
         const metrics = computeLogMetrics(logs);
         return `<div class="detail-top">${buildHeatmap(metrics.grid)}${buildDetailStats(metrics, logs.length)}</div>
+        <div class="detail-table-scroll">
         <table class="detail-table">
             <thead><tr><th>Time</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th><th><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th><th><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th></tr></thead>
             <tbody>${sorted.map(attackLogRow).join('')}</tbody>
-        </table>`;
+        </table>
+        </div>`;
     }
 
     function buildRecentAttacks() {
@@ -576,9 +597,10 @@
         );
 
         const search = (document.getElementById('searchInput').value || '').toLowerCase();
-        let rows = window.playerData.filter(p =>
-            !search || (p.player_name||'').toLowerCase().includes(search) || (p.player_tag||'').toLowerCase().includes(search)
-        );
+        let rows = window.playerData.filter(p => {
+            if (!showLeft && (p.in_clan === false || p.in_clan === 0)) return false;
+            return !search || (p.player_name||'').toLowerCase().includes(search) || (p.player_tag||'').toLowerCase().includes(search);
+        });
 
         if (currentSort.column && currentSort.direction) {
             const colKey = currentSort.column === 'player' ? 'player_name' : currentSort.column;

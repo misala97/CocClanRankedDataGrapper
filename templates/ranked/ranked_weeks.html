@@ -43,9 +43,9 @@
         col.col-league   { width: 52px; }
         col.col-rank     { width: 78px; }
         col.col-player   { width: 150px; }
-        col.col-attacks  { width: 80px; }
+        col.col-attacks  { width: 120px; }
         col.col-avgatt   { width: 80px; }
-        col.col-defenses { width: 80px; }
+        col.col-defenses { width: 120px; }
         col.col-avgdef   { width: 80px; }
         col.col-verdict  { width: 130px; }
         col.col-action   { width: 68px; }
@@ -54,7 +54,7 @@
             padding: 11px 8px; text-align: left; font-weight: 600; color: var(--muted);
             font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; white-space: nowrap; overflow: hidden;
         }
-        tbody tr { border-bottom: 1px solid var(--bord2); transition: background 0.12s; }
+        tbody tr { border-bottom: 2px solid var(--border); transition: background 0.12s; }
         tbody tr:last-child { border-bottom: none; }
         tbody tr:hover { background: rgba(255,255,255,0.03); }
         tbody td { padding: 12px 8px; vertical-align: middle; overflow: hidden; }
@@ -144,6 +144,13 @@
             text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Rajdhani', sans-serif;
         }
         .detail-table td { color: var(--text); }
+        .breakdown-details { border-bottom: 1px solid var(--border); flex: 1; }
+        .breakdown-summary { cursor: pointer; padding: 10px 16px; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: 0.4px; color: var(--muted); list-style: none; display: flex; align-items: center; gap: 6px; user-select: none; }
+        .breakdown-summary::-webkit-details-marker { display: none; }
+        .breakdown-summary:hover { background: rgba(139,148,158,0.08); color: var(--text); }
+        .breakdown-details[open] > .breakdown-summary { color: var(--text); }
+        .breakdown-arrow { font-size: 9px; display: inline-block; transition: transform 0.15s; }
+        .breakdown-details[open] .breakdown-arrow { transform: rotate(90deg); }
         .detail-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
 
         /* ── RECENT ATTACKS ── */
@@ -401,10 +408,10 @@
                         <th class="sortable" onclick="sortTable('league')" style="text-align:center;">League</th>
                         <th class="sortable" onclick="sortTable('rank')" style="text-align:center;">Rank</th>
                         <th class="sortable" onclick="sortTable('player')">Player</th>
-                        <th class="sortable" onclick="sortTable('att_count')" style="text-align:center;">Attacks</th>
-                        <th class="sortable" onclick="sortTable('att_avg')" style="text-align:center;">Avg Att.</th>
-                        <th class="sortable" onclick="sortTable('def_count')" style="text-align:center;">Defenses</th>
-                        <th class="sortable" onclick="sortTable('def_avg')" style="text-align:center;">Avg Def.</th>
+                        <th class="sortable" onclick="sortTable('att_avg')" style="text-align:center;">Attacks · Avg ★<div style="font-size:9px;font-weight:600;display:flex;justify-content:center;gap:3px;margin-top:4px;letter-spacing:0;"><span style="color:#8b949e;">0★</span><span style="color:var(--bord2);">·</span><span style="color:#f85149;">1★</span><span style="color:var(--bord2);">·</span><span style="color:#f0a500;">2★</span><span style="color:var(--bord2);">·</span><span style="color:#3fb950;">3★</span></div></th>
+                        <th class="sortable" onclick="sortTable('att_th_diff')" style="text-align:center;">Avg Attack TH</th>
+                        <th class="sortable" onclick="sortTable('def_avg')" style="text-align:center;">Defenses · Avg ★<div style="font-size:9px;font-weight:600;display:flex;justify-content:center;gap:3px;margin-top:4px;letter-spacing:0;"><span style="color:#8b949e;">0★</span><span style="color:var(--bord2);">·</span><span style="color:#f85149;">1★</span><span style="color:var(--bord2);">·</span><span style="color:#f0a500;">2★</span><span style="color:var(--bord2);">·</span><span style="color:#3fb950;">3★</span></div></th>
+                        <th class="sortable" onclick="sortTable('def_th_diff')" style="text-align:center;">Avg Def TH</th>
                         <th class="sortable" onclick="sortTable('judge')" style="text-align:center;">Verdict</th>
                         <th style="text-align:center;">Action</th>
                     </tr>
@@ -524,7 +531,7 @@
     }
 
     function buildStarDist(s0, s1, s2, s3, style = '') {
-        return `<div class="star-dist"${style ? ` style="${style}"` : ''}><span class="star-dist-item">${s0}</span><span class="star-dist-item">${s1}</span><span class="star-dist-item">${s2}</span><span class="star-dist-item">${s3}</span></div>`;
+        return `<div class="star-dist"${style ? ` style="${style}"` : ''}><span class="star-dist-item" title="0★">${s0}</span><span class="star-dist-item" title="1★">${s1}</span><span class="star-dist-item" title="2★">${s2}</span><span class="star-dist-item" title="3★">${s3}</span></div>`;
     }
 
     function attCompletionColor(count, max) {
@@ -552,11 +559,12 @@
     function formatTHDiff(avgTH, playerTH, higherIsBad = false) {
         if (avgTH == null || !playerTH) return '';
         const diff = avgTH - playerTH;
+        if (Math.abs(diff) < 0.1) return '';
         const sign = diff > 0 ? '+' : '';
-        const arrow = diff > 0.05 ? ' ↑' : diff < -0.05 ? ' ↓' : ' →';
-        let color = 'var(--muted)';
-        if (diff > 0.05)  color = higherIsBad ? 'var(--red)'   : 'var(--green)';
-        if (diff < -0.05) color = higherIsBad ? 'var(--green)' : 'var(--red)';
+        const arrow = diff > 0 ? ' ↑' : ' ↓';
+        const color = diff > 0
+            ? (higherIsBad ? 'var(--red)'   : 'var(--green)')
+            : (higherIsBad ? 'var(--green)' : 'var(--red)');
         return `<span style="color:${color};font-family:'Rajdhani',sans-serif;font-weight:700;">TH${sign}${diff.toFixed(1)}${arrow}</span>`;
     }
 
@@ -686,9 +694,10 @@
             const histLeagueArrow = (!h.is_inactive && prevActive && prevActive.league_tier && h.league_tier && h.league_tier !== prevActive.league_tier)
                 ? buildLeagueArrow(h.league_tier, prevActive.league_tier, { inline: true })
                 : '';
+            const leagueTierShort = (h.league_tier || '').replace(' League', '');
             const leagueCell = h.league_icon
-                ? `<div style="display:inline-flex;align-items:center;gap:5px;"><img src="${escapeHTML(h.league_icon)}" alt="${escapeHTML(h.league_tier)}" title="${escapeHTML(h.league_tier)}" style="width:22px;height:22px;vertical-align:middle;object-fit:cover;border-radius:3px;"> <span style="font-size:11px;color:var(--muted);">${escapeHTML(h.league_tier)}</span>${histLeagueArrow}</div>`
-                : `<span style="color:var(--muted);font-size:12px;">${escapeHTML(h.league_tier) || '–'}</span>${histLeagueArrow}`;
+                ? `<div style="display:inline-flex;align-items:center;gap:5px;"><img src="${escapeHTML(h.league_icon)}" alt="${escapeHTML(h.league_tier)}" title="${escapeHTML(h.league_tier)}" style="width:22px;height:22px;vertical-align:middle;object-fit:cover;border-radius:3px;"> <span style="font-size:11px;color:var(--muted);">${escapeHTML(leagueTierShort)}</span>${histLeagueArrow}</div>`
+                : `<span style="color:var(--muted);font-size:12px;">${escapeHTML(leagueTierShort) || '–'}</span>${histLeagueArrow}`;
 
             const rowAttPct   = h.att_max > 0 ? Math.round(h.att_count / h.att_max * 100) : 0;
             const rowBarColor = rowAttPct >= 90 ? 'var(--green)' : rowAttPct >= 60 ? 'var(--accent)' : 'var(--red)';
@@ -729,8 +738,10 @@
                 ? `<span class="judgment ${h.badge_class}" style="font-size:10px;padding:2px 8px;">${escapeHTML(VERDICT_LABELS[h.badge_class]||'–')}${h.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${h.score_100}` : ''}</span>`
                 : '–';
 
-            const attThHtml = h.att_avg_th != null ? `<div style="margin-top:2px;">${formatTHDiff(h.att_avg_th, h.player_th)}</div>` : '';
-            const defThHtml = h.def_avg_th != null ? `<div style="margin-top:2px;">${formatTHDiff(h.def_avg_th, h.player_th, true)}</div>` : '';
+            const attTHDiff = formatTHDiff(h.att_avg_th, h.player_th);
+            const defTHDiff = formatTHDiff(h.def_avg_th, h.player_th, true);
+            const histAttCountColor = attCompletionColor(h.att_count, h.att_max);
+            const histDefCountColor = attCompletionColor(h.def_count, h.att_max);
             const sep = 'border-right:2px solid var(--border);';
             return `<tr style="${rowStyle}">
                 <td style="${sep}color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
@@ -742,15 +753,10 @@
                     </div>
                 </td>
                 <td style="${sep}color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">🏆 ${h.trophies}${trophyDelta}</td>
-                <td>
-                    <div style="display:flex;flex-direction:column;gap:4px;min-width:54px;">
-                        <span style="font-family:'Rajdhani',sans-serif;font-weight:600;">${h.att_count} / ${h.att_max}</span>
-                        <div style="height:3px;background:var(--bord2);border-radius:2px;"><div style="height:3px;background:${rowBarColor};border-radius:2px;width:${rowAttPct}%;"></div></div>
-                    </div>
-                </td>
-                <td style="${sep}white-space:nowrap;"><span style="color:${attAvgColor(h.att_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;">${h.att_avg.toFixed(2)} ★${attTrend}</span>${attThHtml}</td>
-                <td style="font-family:'Rajdhani',sans-serif;font-weight:600;color:var(--muted);text-align:center;">${h.def_count}</td>
-                <td style="${sep}white-space:nowrap;"><span style="color:${defAvgColor(h.def_avg)};font-family:'Rajdhani',sans-serif;font-weight:700;">${h.def_avg.toFixed(2)} ★${defTrend}</span>${defThHtml}</td>
+                <td style="text-align:center;">${h.att_count > 0 ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:${attAvgColor(h.att_avg)};">Ø ${h.att_avg.toFixed(2)}${attTrend} <span style="color:${histAttCountColor};font-size:12px;font-weight:600;">· ${h.att_count}/${h.att_max}</span></div><div class="star-dist" style="justify-content:center;margin:3px 0 2px;"><span class="star-dist-item" title="0★" style="color:#8b949e;border-color:rgba(139,148,158,0.3);">${h.att_0star}</span><span class="star-dist-item" title="1★" style="color:#f85149;border-color:rgba(248,81,73,0.3);">${h.att_1star}</span><span class="star-dist-item" title="2★" style="color:#f0a500;border-color:rgba(240,165,0,0.3);">${h.att_2star}</span><span class="star-dist-item" title="3★" style="color:#3fb950;border-color:rgba(63,185,80,0.3);">${h.att_3star}</span></div><div style="display:flex;height:5px;border-radius:3px;overflow:hidden;margin:0 22px 2px;"><div style="flex:${h.att_0star||0};background:#8b949e;"></div><div style="flex:${h.att_1star||0};background:#f85149;"></div><div style="flex:${h.att_2star||0};background:#f0a500;"></div><div style="flex:${h.att_3star||0};background:#3fb950;"></div></div><div style="font-size:10px;font-family:'Rajdhani',sans-serif;display:flex;justify-content:center;gap:4px;"><span style="color:#8b949e;">${Math.round((h.att_0star||0)/h.att_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#f85149;">${Math.round((h.att_1star||0)/h.att_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#f0a500;">${Math.round((h.att_2star||0)/h.att_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#3fb950;">${Math.round((h.att_3star||0)/h.att_count*100)}%</span></div>` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td style="${sep}text-align:center;">${h.att_avg_th != null ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--muted);">${h.att_avg_th.toFixed(1)}</div>${attTHDiff ? `<div style="margin-top:2px;">${attTHDiff}</div>` : ''}` : `<span style="color:var(--muted);">—</span>`}</td>
+                <td style="text-align:center;">${h.def_count > 0 ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:${defAvgColor(h.def_avg)};">Ø ${h.def_avg.toFixed(2)}${defTrend} <span style="color:${histDefCountColor};font-size:12px;font-weight:600;">· ${h.def_count}</span></div><div class="star-dist" style="justify-content:center;margin:3px 0 2px;"><span class="star-dist-item" title="0★" style="color:#8b949e;border-color:rgba(139,148,158,0.3);">${h.def_0star}</span><span class="star-dist-item" title="1★" style="color:#f85149;border-color:rgba(248,81,73,0.3);">${h.def_1star}</span><span class="star-dist-item" title="2★" style="color:#f0a500;border-color:rgba(240,165,0,0.3);">${h.def_2star}</span><span class="star-dist-item" title="3★" style="color:#3fb950;border-color:rgba(63,185,80,0.3);">${h.def_3star}</span></div><div style="display:flex;height:5px;border-radius:3px;overflow:hidden;margin:0 22px 2px;"><div style="flex:${h.def_0star||0};background:#8b949e;"></div><div style="flex:${h.def_1star||0};background:#f85149;"></div><div style="flex:${h.def_2star||0};background:#f0a500;"></div><div style="flex:${h.def_3star||0};background:#3fb950;"></div></div><div style="font-size:10px;font-family:'Rajdhani',sans-serif;display:flex;justify-content:center;gap:4px;"><span style="color:#8b949e;">${Math.round((h.def_0star||0)/h.def_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#f85149;">${Math.round((h.def_1star||0)/h.def_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#f0a500;">${Math.round((h.def_2star||0)/h.def_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#3fb950;">${Math.round((h.def_3star||0)/h.def_count*100)}%</span></div>` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td style="${sep}text-align:center;">${h.def_avg_th != null ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--muted);">${h.def_avg_th.toFixed(1)}</div>${defTHDiff ? `<div style="margin-top:2px;">${defTHDiff}</div>` : ''}` : `<span style="color:var(--muted);">—</span>`}</td>
                 <td>${verdictCell}</td>
             </tr>`;
         }).join('');
@@ -769,10 +775,10 @@
                         <th>League</th>
                         <th>Rank</th>
                         <th style="border-right:2px solid var(--border);">Trophies</th>
-                        <th>Attacks</th>
-                        <th style="border-right:2px solid var(--border);">Avg Att.</th>
-                        <th>Defs</th>
-                        <th style="border-right:2px solid var(--border);">Avg Def.</th>
+                        <th style="text-align:center;">Attacks · Avg ★<div style="font-size:9px;font-weight:600;display:flex;justify-content:center;gap:3px;margin-top:4px;letter-spacing:0;"><span style="color:#8b949e;">0★</span><span style="color:var(--bord2);">·</span><span style="color:#f85149;">1★</span><span style="color:var(--bord2);">·</span><span style="color:#f0a500;">2★</span><span style="color:var(--bord2);">·</span><span style="color:#3fb950;">3★</span></div></th>
+                        <th style="border-right:2px solid var(--border);text-align:center;">Avg Attack TH</th>
+                        <th style="text-align:center;">Defenses · Avg ★<div style="font-size:9px;font-weight:600;display:flex;justify-content:center;gap:3px;margin-top:4px;letter-spacing:0;"><span style="color:#8b949e;">0★</span><span style="color:var(--bord2);">·</span><span style="color:#f85149;">1★</span><span style="color:var(--bord2);">·</span><span style="color:#f0a500;">2★</span><span style="color:var(--bord2);">·</span><span style="color:#3fb950;">3★</span></div></th>
+                        <th style="border-right:2px solid var(--border);text-align:center;">Avg Def TH</th>
                         <th>Verdict</th>
                     </tr></thead>
                     <tbody>${tableRows}</tbody>
@@ -1003,7 +1009,19 @@
                 let aValue = a[columnKey];
                 let bValue = b[columnKey];
                 if (columnKey === 'rank') { aValue = aValue == null ? 9999 : aValue; bValue = bValue == null ? 9999 : bValue; }
-                if (columnKey === 'league_tier') {
+                if (columnKey === 'att_th_diff') {
+                    const aM = a.att_avg_th == null || !a.player_th;
+                    const bM = b.att_avg_th == null || !b.player_th;
+                    if (aM !== bM) return aM ? 1 : -1;
+                    aValue = aM ? 0 : a.att_avg_th - a.player_th;
+                    bValue = bM ? 0 : b.att_avg_th - b.player_th;
+                } else if (columnKey === 'def_th_diff') {
+                    const aM = a.def_avg_th == null || !a.player_th;
+                    const bM = b.def_avg_th == null || !b.player_th;
+                    if (aM !== bM) return aM ? 1 : -1;
+                    aValue = aM ? 0 : a.def_avg_th - a.player_th;
+                    bValue = bM ? 0 : b.def_avg_th - b.player_th;
+                } else if (columnKey === 'league_tier') {
                     aValue = leagueSortKey(aValue);
                     bValue = leagueSortKey(bValue);
                 } else if (['player_name', 'judge_label'].includes(columnKey)) {
@@ -1036,9 +1054,10 @@
             const leagueArrow = (item.league_tier_prev && item.league_tier_prev !== item.league_tier)
                 ? buildLeagueArrow(item.league_tier, item.league_tier_prev)
                 : '';
+            const itemLeagueTierShort = (item.league_tier || '').replace(' League', '');
             const leagueCell = item.league_icon
                 ? `<div class="league-cell"><div style="position:relative;display:inline-flex;"><img src="${escapeHTML(item.league_icon)}" alt="${escapeHTML(item.league_tier||'')}" title="${escapeHTML(item.league_tier||'')}" class="league-icon">${leagueArrow}</div></div>`
-                : `<div class="league-cell"><span class="league-badge">${escapeHTML(item.league_tier||'–')}</span></div>`;
+                : `<div class="league-cell"><span class="league-badge">${escapeHTML(itemLeagueTierShort||'–')}</span></div>`;
             const rankIcon = item.rank_status === 'up' ? '⬆️' : item.rank_status === 'down' ? '⬇️' : item.rank_status === 'inactive' ? '💤' : '➖';
             const rankText = item.rank ? `#${item.rank}` : '-';
             const pro = item.promo_spots, dem = item.dem_spots;
@@ -1053,6 +1072,8 @@
                 ? `Inactive\n${zoneInfo}`
                 : `Staying\n${zoneInfo}`;
             const attCountColor = attCompletionColor(item.att_count, item.att_max);
+            const attTHDiff = formatTHDiff(item.att_avg_th, item.player_th);
+            const defTHDiff = formatTHDiff(item.def_avg_th, item.player_th, true);
 
             row.innerHTML = `
                 <td style="text-align:center;">${leagueCell}</td>
@@ -1061,10 +1082,10 @@
                     <div class="player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" class="player-link">${escapeHTML(item.player_name)} <span class="player-link-arrow">↗</span></a>${(item.in_clan === false || item.in_clan === 0) ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>' : ''}</div>
                     <div class="player-trophy" style="gap:6px;">${item.player_th ? `<span style="color:var(--blue);font-weight:700;">TH${item.player_th}</span> ·` : ''} 🏆 ${item.trophies}</div>
                 </div></div></td>
-                <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.att_count > 0 ? buildStarDist(item.att_0star, item.att_1star, item.att_2star, item.att_3star) : ''}<div class="attacks-cell" style="font-size:12px;color:${attCountColor};">${item.att_count} / ${item.att_max}</div></div></td>
-                <td style="text-align:center;">${item.att_count > 0 ? `<strong style="color:${attAvgColor(item.att_avg)};">Ø ${item.att_avg.toFixed(2)}</strong><br>${formatTHDiff(item.att_avg_th, item.player_th)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
-                <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.def_count > 0 ? buildStarDist(item.def_0star, item.def_1star, item.def_2star, item.def_3star) : ''}<div class="defenses-cell" style="font-size:12px;">${item.def_count} / ${item.def_max}</div></div></td>
-                <td style="text-align:center;">${item.def_count > 0 ? `<strong style="color:${defAvgColor(item.def_avg)};">Ø ${item.def_avg.toFixed(2)}</strong><br>${formatTHDiff(item.def_avg_th, item.player_th, true)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td style="text-align:center;">${item.att_count > 0 ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:${attAvgColor(item.att_avg)};">Ø ${item.att_avg.toFixed(2)} <span style="color:${attCountColor};font-size:12px;font-weight:600;">· ${item.att_count}/${item.att_max}</span></div><div class="star-dist" style="justify-content:center;margin:3px 0 2px;"><span class="star-dist-item" title="0★" style="color:#8b949e;border-color:rgba(139,148,158,0.3);">${item.att_0star}</span><span class="star-dist-item" title="1★" style="color:#f85149;border-color:rgba(248,81,73,0.3);">${item.att_1star}</span><span class="star-dist-item" title="2★" style="color:#f0a500;border-color:rgba(240,165,0,0.3);">${item.att_2star}</span><span class="star-dist-item" title="3★" style="color:#3fb950;border-color:rgba(63,185,80,0.3);">${item.att_3star}</span></div><div style="display:flex;height:5px;border-radius:3px;overflow:hidden;margin:0 22px 2px;"><div style="flex:${item.att_0star||0};background:#8b949e;"></div><div style="flex:${item.att_1star||0};background:#f85149;"></div><div style="flex:${item.att_2star||0};background:#f0a500;"></div><div style="flex:${item.att_3star||0};background:#3fb950;"></div></div><div style="font-size:10px;font-family:'Rajdhani',sans-serif;display:flex;justify-content:center;gap:4px;"><span style="color:#8b949e;">${Math.round((item.att_0star||0)/item.att_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#f85149;">${Math.round((item.att_1star||0)/item.att_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#f0a500;">${Math.round((item.att_2star||0)/item.att_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#3fb950;">${Math.round((item.att_3star||0)/item.att_count*100)}%</span></div>` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td style="text-align:center;">${item.att_avg_th != null ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--muted);">${item.att_avg_th.toFixed(1)}</div>${attTHDiff ? `<div style="margin-top:2px;">${attTHDiff}</div>` : ''}` : `<span style="color:var(--muted);">—</span>`}</td>
+                <td style="text-align:center;">${item.def_count > 0 ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:${defAvgColor(item.def_avg)};">Ø ${item.def_avg.toFixed(2)} <span style="color:var(--muted);font-size:12px;font-weight:600;">· ${item.def_count}/${item.def_max}</span></div><div class="star-dist" style="justify-content:center;margin:3px 0 2px;"><span class="star-dist-item" title="0★" style="color:#8b949e;border-color:rgba(139,148,158,0.3);">${item.def_0star}</span><span class="star-dist-item" title="1★" style="color:#f85149;border-color:rgba(248,81,73,0.3);">${item.def_1star}</span><span class="star-dist-item" title="2★" style="color:#f0a500;border-color:rgba(240,165,0,0.3);">${item.def_2star}</span><span class="star-dist-item" title="3★" style="color:#3fb950;border-color:rgba(63,185,80,0.3);">${item.def_3star}</span></div><div style="display:flex;height:5px;border-radius:3px;overflow:hidden;margin:0 22px 2px;"><div style="flex:${item.def_0star||0};background:#8b949e;"></div><div style="flex:${item.def_1star||0};background:#f85149;"></div><div style="flex:${item.def_2star||0};background:#f0a500;"></div><div style="flex:${item.def_3star||0};background:#3fb950;"></div></div><div style="font-size:10px;font-family:'Rajdhani',sans-serif;display:flex;justify-content:center;gap:4px;"><span style="color:#8b949e;">${Math.round((item.def_0star||0)/item.def_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#f85149;">${Math.round((item.def_1star||0)/item.def_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#f0a500;">${Math.round((item.def_2star||0)/item.def_count*100)}%</span><span style="color:var(--bord2);">·</span><span style="color:#3fb950;">${Math.round((item.def_3star||0)/item.def_count*100)}%</span></div>` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
+                <td style="text-align:center;">${item.def_avg_th != null ? `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--muted);">${item.def_avg_th.toFixed(1)}</div>${defTHDiff ? `<div style="margin-top:2px;">${defTHDiff}</div>` : ''}` : `<span style="color:var(--muted);">—</span>`}</td>
                 <td style="text-align:center;"><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}${item.is_active && item.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${item.score_100}` : ''}</span></td>
                 <td style="text-align:center;"><button type="button" class="action-btn details-toggle">Details</button></td>
             `;
@@ -1074,44 +1095,35 @@
             detailRow.dataset.playerTag = item.player_tag;
             const verdictHtml = buildVerdictDetails(item);
             const hasDefenses = item.defense_details && item.defense_details.length > 0;
-            const defSection = hasDefenses
-                ? `<div style="height:100%;box-sizing:border-box;padding:0 16px 16px;"><div class="detail-section" style="height:100%;box-sizing:border-box;"><h4>Defenses</h4>${buildDetailTable(item.defense_details)}</div></div>`
-                : '';
-            let bottomHtml = '';
-            if (verdictHtml && defSection) {
-                bottomHtml = `<div style="display:grid;grid-template-columns:65fr 35fr;">
-                    <div>${verdictHtml}</div>
-                    <div style="border-left:1px solid var(--bord2);">${defSection}</div>
-                </div>`;
+            const defInner = hasDefenses ? `<div style="padding:0 16px 16px;"><div class="detail-section"><h4>Defenses</h4>${buildDetailTable(item.defense_details)}</div></div>` : '';
+            let breakdownHtml = '';
+            if (verdictHtml && defInner) {
+                breakdownHtml = `<details class="breakdown-details"><summary class="breakdown-summary"><span class="breakdown-arrow">▶</span> Verdict &amp; Defense Breakdown</summary><div style="display:grid;grid-template-columns:65fr 35fr;border-top:1px solid var(--bord2);"><div style="border-right:1px solid var(--bord2);">${verdictHtml}</div><div>${defInner}</div></div></details>`;
             } else if (verdictHtml) {
-                bottomHtml = verdictHtml;
-            } else if (defSection) {
-                bottomHtml = defSection;
+                breakdownHtml = `<details class="breakdown-details"><summary class="breakdown-summary"><span class="breakdown-arrow">▶</span> Verdict Breakdown</summary>${verdictHtml}</details>`;
+            } else if (defInner) {
+                breakdownHtml = `<details class="breakdown-details"><summary class="breakdown-summary"><span class="breakdown-arrow">▶</span> Defense Breakdown</summary>${defInner}</details>`;
             }
             detailRow.innerHTML = `
                 <td class="detail-cell" colspan="9">
-                    ${buildHistorySection(item.player_tag)}
-                    ${bottomHtml}
+                    ${breakdownHtml}
+                    <details class="breakdown-details history-details-toggle">
+                        <summary class="breakdown-summary"><span class="breakdown-arrow">▶</span> Week History</summary>
+                        ${buildHistorySection(item.player_tag)}
+                    </details>
                 </td>
             `;
 
-            row.querySelectorAll('a').forEach(a => a.addEventListener('click', e => e.stopPropagation()));
-
-            const toggleButton = row.querySelector('.details-toggle');
-            if (!item.is_active) {
-                row.style.cursor = 'default';
-                if (toggleButton) toggleButton.style.display = 'none';
-            } else {
-                row.addEventListener('click', () => {
-                    const expanded = detailRow.classList.toggle('expanded');
-                    toggleButton.textContent = expanded ? 'Close' : 'Details';
-                    if (expanded) {
+            const histDetailsEl = detailRow.querySelector('.history-details-toggle');
+            if (histDetailsEl) {
+                histDetailsEl.addEventListener('toggle', () => {
+                    if (histDetailsEl.open) {
                         const history = (window.playerHistory || {})[item.player_tag] || [];
                         if (history.length > 0 && !historyCharts.has(item.player_tag)) {
-                            const tagKey   = item.player_tag.replace(/[^a-zA-Z0-9]/g, '_');
-                            const canvas1  = document.getElementById(`hist-${tagKey}`);
-                            const canvas3  = document.getElementById(`hist-league-${tagKey}`);
-                            const charts   = [];
+                            const tagKey  = item.player_tag.replace(/[^a-zA-Z0-9]/g, '_');
+                            const canvas1 = document.getElementById(`hist-${tagKey}`);
+                            const canvas3 = document.getElementById(`hist-league-${tagKey}`);
+                            const charts  = [];
                             if (canvas1) charts.push(createHistoryChart(canvas1, history));
                             if (canvas3) { const lc = createLeagueChart(canvas3, history); if (lc) charts.push(lc); }
                             historyCharts.set(item.player_tag, charts);
@@ -1124,6 +1136,21 @@
                     }
                 });
             }
+
+            row.querySelectorAll('a').forEach(a => a.addEventListener('click', e => e.stopPropagation()));
+
+            const toggleButton = row.querySelector('.details-toggle');
+            row.addEventListener('click', () => {
+                const expanded = detailRow.classList.toggle('expanded');
+                toggleButton.textContent = expanded ? 'Close' : 'Details';
+                if (!expanded) {
+                    if (histDetailsEl) histDetailsEl.open = false;
+                    if (historyCharts.has(item.player_tag)) {
+                        historyCharts.get(item.player_tag).forEach(c => c.destroy());
+                        historyCharts.delete(item.player_tag);
+                    }
+                }
+            });
 
             tbody.appendChild(row);
             tbody.appendChild(detailRow);

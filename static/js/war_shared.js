@@ -491,7 +491,7 @@ function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtk
                 <div class="wc-detail-title">Remaining Attacks</div>
                 <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.ourRem}</span></div>
                 <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.oppRem}</span></div>
-                <div class="wc-detail-row"><span class="wc-detail-key">Avg TH (rem.)</span><span class="wc-detail-val"><span style="color:var(--green);">${wc.avgOurRemTH}</span><span style="color:var(--muted);"> vs </span><span style="color:var(--red);">${wc.avgOppRemTH}</span></span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Avg TH <span style="font-size:9px;font-weight:400;opacity:.7;">remaining</span></span><span class="wc-detail-val"><span style="color:var(--green);">${wc.avgOurRemTH}</span><span style="color:var(--muted);"> vs </span><span style="color:var(--red);">${wc.avgOppRemTH}</span></span></div>
             </div>
             <div class="wc-detail-box">
                 <div class="wc-detail-title">Star Range</div>
@@ -569,7 +569,7 @@ function buildPredictionBodyHTML(wc, ourName, oppName, ourAtkId, oppAtkId, toggl
                 <div class="wc-detail-row"><span class="wc-detail-key">Max possible</span><span class="wc-detail-val" style="color:var(--muted);">${wc.maxPossible}★</span></div>
             </div>
             <div class="wc-detail-box">
-                <div class="wc-detail-title">Avg TH</div>
+                <div class="wc-detail-title">Avg TH <span style="font-size:9px;font-weight:400;color:var(--muted);letter-spacing:.3px;text-transform:none;">remaining attackers</span></div>
                 <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val" style="color:var(--green);">${wc.avgOurRemTH}</span></div>
                 <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.avgOppRemTH}</span></div>
             </div>
@@ -851,6 +851,101 @@ function closePlayerMatchupRatesModal() {
     document.getElementById('pmrModal').style.display    = 'none';
 }
 
+function pmrRenderList() {
+    const el = document.getElementById('pmrContent');
+    if (!el || !el._pmrPlayers) return;
+    const { _pmrPlayers: players, _pmrSortKey: sortKey, _pmrBar: bar, _pmrPct: pct, _pmrThead: thead } = el;
+
+    const sorted = [...players].sort((a, b) => {
+        if (sortKey === 'th')      return b.th - a.th || b.totalAtks - a.totalAtks;
+        if (sortKey === 'league')  return b.lr - a.lr || b.th - a.th;
+        if (sortKey === 'pos')     return a.pos - b.pos;
+        return b.totalAtks - a.totalAtks;
+    });
+
+    document.querySelectorAll('#pmrContent button[id^="pmr-sort-"]').forEach(btn => {
+        const active = btn.id === `pmr-sort-${sortKey}`;
+        btn.style.background = active ? 'rgba(240,165,0,0.1)' : 'transparent';
+        btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+        btn.style.color = active ? 'var(--accent)' : 'var(--muted)';
+    });
+
+    let html = '';
+    sorted.forEach((p, pIdx) => {
+        const meta = [];
+        if (p.th) meta.push(`<span style="font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);">TH${p.th}</span>`);
+        if (p.league) meta.push(`<span style="font-size:11px;color:var(--muted);">${escapeHTML(p.league)}</span>`);
+        if (p.pos && p.pos < 999) meta.push(`<span style="font-size:11px;color:var(--muted);">#${p.pos}</span>`);
+        html += `<div style="border:1px solid var(--bord2);border-radius:8px;margin-bottom:6px;overflow:hidden;">
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surf2);cursor:pointer;font-weight:700;font-size:13px;transition:background .15s;" onclick="pmrTogglePlayer(${pIdx})" onmouseenter="this.style.background='var(--bord2)'" onmouseleave="this.style.background='var(--surf2)'">
+                <span id="pmr-cp-${pIdx}" style="font-family:monospace;color:var(--muted);font-size:11px;">▸</span>
+                ${escapeHTML(p.name)}
+                ${meta.join(' ')}
+                <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:4px;">${p.totalAtks} attack${p.totalAtks !== 1 ? 's' : ''}</span>
+            </div>
+            <div id="pmr-pb-${pIdx}" style="display:none;">`;
+
+        let lastAtkTH = null;
+        for (const r of p.rows) {
+            if (r.atkTH !== lastAtkTH) {
+                if (lastAtkTH !== null) html += `</tbody></table></div></div>`;
+                lastAtkTH = r.atkTH;
+                const thKey = `${pIdx}-${r.atkTH}`;
+                html += `<div style="border-top:1px solid var(--bord2);">
+                    <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg);cursor:pointer;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;transition:background .15s;" onclick="pmrToggleATH('${thKey}')" onmouseenter="this.style.background='var(--surf2)'" onmouseleave="this.style.background='var(--bg)'">
+                        <span id="pmr-ct-${thKey}" style="font-family:monospace;font-size:10px;">▸</span>
+                        ATTACKING AS TH${r.atkTH}
+                    </div>
+                    <div id="pmr-tb-${thKey}" style="display:none;overflow-x:auto;">
+                    <table class="detail-table" style="width:100%;">${thead}<tbody>`;
+            }
+            const thKey = `${pIdx}-${r.atkTH}`;
+            const s = r.total || 1;
+            const avgColor = r.avg >= 2.7 ? 'var(--green)' : r.avg >= 2.0 ? 'var(--accent)' : 'var(--red)';
+            html += `<tr>
+                <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);">TH${r.atkTH}</td>
+                <td style="text-align:center;font-size:12px;color:var(--muted);">TH${r.defTH}</td>
+                <td>${bar(r.counts)}</td>
+                <td style="text-align:center;font-size:11px;color:#8b949e;">${pct(r.counts[0]/s)}</td>
+                <td style="text-align:center;font-size:11px;color:#f0a500;">${pct(r.counts[1]/s)}</td>
+                <td style="text-align:center;font-size:11px;color:#e3b341;">${pct(r.counts[2]/s)}</td>
+                <td style="text-align:center;font-size:11px;color:#3fb950;">${pct(r.counts[3]/s)}</td>
+                <td style="text-align:right;font-size:11px;color:var(--muted);">${r.total}</td>
+                <td style="text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;color:${avgColor};">${r.avg.toFixed(2)}★</td>
+            </tr>`;
+        }
+        if (lastAtkTH !== null) html += `</tbody></table></div></div>`;
+        html += `</div></div>`;
+    });
+
+    document.getElementById('pmr-list').innerHTML = html;
+}
+
+function pmrSortBy(key) {
+    const el = document.getElementById('pmrContent');
+    if (!el) return;
+    el._pmrSortKey = key;
+    pmrRenderList();
+}
+
+function pmrTogglePlayer(pIdx) {
+    const body = document.getElementById(`pmr-pb-${pIdx}`);
+    const chevron = document.getElementById(`pmr-cp-${pIdx}`);
+    if (!body) return;
+    const open = body.style.display === 'none';
+    body.style.display = open ? '' : 'none';
+    if (chevron) chevron.textContent = open ? '▾' : '▸';
+}
+
+function pmrToggleATH(thKey) {
+    const body = document.getElementById(`pmr-tb-${thKey}`);
+    const chevron = document.getElementById(`pmr-ct-${thKey}`);
+    if (!body) return;
+    const open = body.style.display === 'none';
+    body.style.display = open ? '' : 'none';
+    if (chevron) chevron.textContent = open ? '▾' : '▸';
+}
+
 // Open the player matchup history modal.
 // history: {tag: {"atkTH_defTH": {counts:[c0,c1,c2,c3], total:N}}}
 // nameMap: {tag: {name, th}}  — used for display; tags absent from nameMap show raw tag.
@@ -859,7 +954,7 @@ function openPlayerMatchupRatesModal(history, nameMap) {
     const modal = document.getElementById('pmrModal');
     if (!bd || !modal) return;
     const el = document.getElementById('pmrContent');
-    if (el && !el.innerHTML.trim()) {
+    if (el) {
         const pct = v => `${Math.round(v * 100)}%`;
         const bar = d => {
             const s = d.reduce((a, b) => a + b, 0) || 1;
@@ -870,8 +965,18 @@ function openPlayerMatchupRatesModal(history, nameMap) {
                 <div style="flex:${d[3]/s||0.001};background:#3fb950;" title="3★: ${pct(d[3]/s)}"></div>
             </div>`;
         };
+        const thead = `<thead><tr>
+            <th style="text-align:center;">ATK TH</th>
+            <th style="text-align:center;">DEF TH</th>
+            <th>★ DISTRIBUTION</th>
+            <th style="text-align:center;color:#8b949e;">0★</th>
+            <th style="text-align:center;color:#f0a500;">1★</th>
+            <th style="text-align:center;color:#e3b341;">2★</th>
+            <th style="text-align:center;color:#3fb950;">3★</th>
+            <th style="text-align:right;">ATKS</th>
+            <th style="text-align:right;">AVG★</th>
+        </tr></thead>`;
 
-        // Only show players in the nameMap (our clan members), sorted by total attacks desc.
         const players = Object.entries(history)
             .filter(([tag]) => nameMap[tag])
             .map(([tag, matchups]) => {
@@ -886,7 +991,7 @@ function openPlayerMatchupRatesModal(history, nameMap) {
                     .filter(Boolean)
                     .sort((a, b) => b.atkTH - a.atkTH || b.defTH - a.defTH);
                 const totalAtks = rows.reduce((s, r) => s + r.total, 0);
-                return { tag, name: info.name, th: info.th, rows, totalAtks };
+                return { tag, name: info.name, th: info.th || 0, pos: info.pos || 999, league: info.league || '', lr: info.lr || 0, rows, totalAtks };
             })
             .filter(p => p.totalAtks > 0)
             .sort((a, b) => b.totalAtks - a.totalAtks);
@@ -896,59 +1001,30 @@ function openPlayerMatchupRatesModal(history, nameMap) {
         } else {
             const grandTotal = players.reduce((s, p) => s + p.totalAtks, 0);
             const _ts = new Date().toLocaleTimeString();
-            let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:18px;">
-                ${players.length} players &nbsp;&#183;&nbsp;
-                <strong style="color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:15px;">${grandTotal.toLocaleString()}</strong> total attacks recorded
-                &nbsp;&#183;&nbsp; <span style="font-size:10px;">snapshotted ${_ts}</span>
-            </div><div style="overflow-x:auto;"><table class="detail-table" style="width:100%;">
-            <thead><tr>
-                <th style="text-align:center;">ATK TH</th>
-                <th style="text-align:center;">DEF TH</th>
-                <th>★ DISTRIBUTION</th>
-                <th style="text-align:center;color:#8b949e;">0★</th>
-                <th style="text-align:center;color:#f0a500;">1★</th>
-                <th style="text-align:center;color:#e3b341;">2★</th>
-                <th style="text-align:center;color:#3fb950;">3★</th>
-                <th style="text-align:right;">ATKS</th>
-                <th style="text-align:right;">AVG★</th>
-            </tr></thead><tbody>`;
+            el._pmrPlayers = players;
+            el._pmrSortKey = 'attacks';
+            el._pmrBar = bar;
+            el._pmrPct = pct;
+            el._pmrThead = thead;
+            el._pmrGrandTotal = grandTotal;
 
-            for (const p of players) {
-                // Player header row — full-width separator with name, current TH, total attacks.
-                html += `<tr style="background:var(--bord2);">
-                    <td colspan="9" style="padding:7px 12px;font-weight:700;font-size:13px;">
-                        ${escapeHTML(p.name)}
-                        ${p.th ? `<span style="font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);margin-left:6px;">TH${p.th}</span>` : ''}
-                        <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:10px;">${p.totalAtks} attack${p.totalAtks !== 1 ? 's' : ''}</span>
-                    </td>
-                </tr>`;
-                let lastAtkTH = null;
-                for (const r of p.rows) {
-                    if (r.atkTH !== lastAtkTH) {
-                        lastAtkTH = r.atkTH;
-                        html += `<tr style="background:var(--bg);">
-                            <td colspan="9" style="padding:4px 12px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;">
-                                ATTACKING AS TH${r.atkTH}
-                            </td>
-                        </tr>`;
-                    }
-                    const s = r.total || 1;
-                    const avgColor = r.avg >= 2.7 ? 'var(--green)' : r.avg >= 2.0 ? 'var(--accent)' : 'var(--red)';
-                    html += `<tr>
-                        <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);">TH${r.atkTH}</td>
-                        <td style="text-align:center;font-size:12px;color:var(--muted);">TH${r.defTH}</td>
-                        <td>${bar(r.counts)}</td>
-                        <td style="text-align:center;font-size:11px;color:#8b949e;">${pct(r.counts[0]/s)}</td>
-                        <td style="text-align:center;font-size:11px;color:#f0a500;">${pct(r.counts[1]/s)}</td>
-                        <td style="text-align:center;font-size:11px;color:#e3b341;">${pct(r.counts[2]/s)}</td>
-                        <td style="text-align:center;font-size:11px;color:#3fb950;">${pct(r.counts[3]/s)}</td>
-                        <td style="text-align:right;font-size:11px;color:var(--muted);">${r.total}</td>
-                        <td style="text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;color:${avgColor};">${r.avg.toFixed(2)}★</td>
-                    </tr>`;
-                }
-            }
-            html += '</tbody></table></div>';
-            el.innerHTML = html;
+            const sortBtnStyle = (key) => `padding:5px 11px;border-radius:6px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;`;
+            el.innerHTML = `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+                <div style="font-size:12px;color:var(--muted);">
+                    ${players.length} players &nbsp;&#183;&nbsp;
+                    <strong style="color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:15px;">${grandTotal.toLocaleString()}</strong> total attacks
+                    &nbsp;&#183;&nbsp; <span style="font-size:10px;">snapshotted ${_ts}</span>
+                </div>
+                <div style="display:flex;gap:5px;margin-left:auto;">
+                    <button id="pmr-sort-attacks" style="${sortBtnStyle()}" onclick="pmrSortBy('attacks')">Attacks</button>
+                    <button id="pmr-sort-th"      style="${sortBtnStyle()}" onclick="pmrSortBy('th')">TH Level</button>
+                    <button id="pmr-sort-league"  style="${sortBtnStyle()}" onclick="pmrSortBy('league')">League</button>
+                    <button id="pmr-sort-pos"     style="${sortBtnStyle()}" onclick="pmrSortBy('pos')">War Position</button>
+                </div>
+            </div>
+            <div id="pmr-list"></div>`;
+
+            pmrRenderList();
         }
     }
     bd.style.display = 'block';
@@ -960,7 +1036,20 @@ function openPlayerMatchupRatesModal(history, nameMap) {
 // meta: { ourName, oppName, warsWonOur, warsWonOpp, streakOur, streakOpp,
 //         winPct?, lossPct? }
 // winPct/lossPct are optional — if omitted a simple sigmoid is used as fallback.
+let _cmpUid = 0;
+function cmpCollapsible(titleHtml, bodyHtml, id) {
+    return `<div style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin-bottom:0;border-radius:6px;padding:2px 4px;margin:-2px -4px;transition:background .15s;" class="cmp-title"
+        onmouseenter="this.style.background='var(--surf2)'" onmouseleave="this.style.background=''"
+        onclick="(function(b,c){b.style.display=b.style.display==='none'?'':b.style.display='none';c.textContent=b.style.display===''?'▾':'▸';})(document.getElementById('${id}'),document.getElementById('${id}-ch'))">
+        <span>${titleHtml}</span><span id="${id}-ch" style="font-size:11px;color:var(--muted);font-family:monospace;">▸</span>
+    </div>
+    <div id="${id}" style="display:none;">
+        ${bodyHtml}
+    </div>`;
+}
+
 function buildCompareHTML(our, opp, meta) {
+    const uid = ++_cmpUid;
     const len = Math.min(our.length, opp.length);
     const ourNameSafe = escapeHTML(meta.ourName);
     const oppNameSafe = escapeHTML(meta.oppName);
@@ -1058,14 +1147,16 @@ function buildCompareHTML(our, opp, meta) {
     const allThs    = [...new Set([...Object.keys(thOur), ...Object.keys(thOpp)].map(Number))].sort((a, b) => b - a);
     const maxCount  = Math.max(...allThs.map(t => Math.max(thOur[t] || 0, thOpp[t] || 0)), 1);
 
-    const th = `
-        <div class="cmp-title"><img src="/static/img/townHall.png" style="width:14px;height:14px;vertical-align:middle;"> TH Distribution</div>
-        <div class="dist-header"><span class="dist-our-lbl">${ourNameSafe}</span><span></span><span class="dist-opp-lbl">${oppNameSafe}</span></div>
+    const th = cmpCollapsible(
+        `<span><img src="/static/img/townHall.png" style="width:14px;height:14px;vertical-align:middle;"> TH Distribution</span>`,
+        `<div class="dist-header"><span class="dist-our-lbl">${ourNameSafe}</span><span></span><span class="dist-opp-lbl">${oppNameSafe}</span></div>
         ${allThs.map(t => {
             const o = thOur[t] || 0, p = thOpp[t] || 0;
             const ow = Math.round(o / maxCount * 130), pw = Math.round(p / maxCount * 130);
             return `<div class="dist-row"><span class="dist-count-our">${o || ''}</span><div style="display:flex;justify-content:flex-end"><div class="dist-bar-our" style="width:${ow}px"></div></div><span class="dist-lbl">TH${t}</span><div><div class="dist-bar-opp" style="width:${pw}px"></div></div><span class="dist-count-opp">${p || ''}</span></div>`;
-        }).join('')}`;
+        }).join('')}`,
+        `cmp-th-${uid}`
+    );
 
     // ── 4. League Comparison ──────────────────────────────────────────────────
     const lgRowsHtml = Array.from({length: len}, (_, i) => {
@@ -1085,16 +1176,44 @@ function buildCompareHTML(our, opp, meta) {
         return `<tr class="${rowCls}"><td class="lgt-pos">#${o.pos}</td><td class="lgt-name">${escapeHTML(o.name)}</td><td class="lgt-lg">${oLg}</td><td class="lgt-diff">${diffLabel}</td><td class="lgt-lg" style="text-align:right">${pLg}</td><td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td></tr>`;
     }).join('');
 
-    const league = `
-        <div class="cmp-title">🎯 League Comparison</div>
-        <div class="matchup-summary">
+    const league = cmpCollapsible(
+        '🎯 League Comparison',
+        `<div class="matchup-summary">
             <div class="matchup-stat"><div class="mn mn-green">${lgBetter}</div><div class="ml">Ahead</div></div>
             <div class="matchup-stat"><div class="mn mn-muted">${lgEven}</div><div class="ml">Even</div></div>
             <div class="matchup-stat"><div class="mn mn-red">${lgWorse}</div><div class="ml">Behind</div></div>
         </div>
-        <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${ourNameSafe}</th><th style="text-align:left">League</th><th style="text-align:center">Diff</th><th style="text-align:right">League</th><th style="text-align:right">${oppNameSafe}</th></tr></thead><tbody>${lgRowsHtml}</tbody></table>`;
+        <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${ourNameSafe}</th><th style="text-align:left">League</th><th style="text-align:center">Diff</th><th style="text-align:right">League</th><th style="text-align:right">${oppNameSafe}</th></tr></thead><tbody>${lgRowsHtml}</tbody></table>`,
+        `cmp-league-${uid}`
+    );
 
-    // ── 5. TH Matchup by Position ─────────────────────────────────────────────
+    // ── 5. League Distribution ───────────────────────────────────────────────
+    const lgDistOur = {}, lgDistOpp = {}, lgRankMap = {};
+    our.forEach(m => { if (m.lr > 0 && m.league) { lgDistOur[m.league] = (lgDistOur[m.league] || 0) + 1; lgRankMap[m.league] = m.lr; } });
+    opp.forEach(m => { if (m.lr > 0 && m.league) { lgDistOpp[m.league] = (lgDistOpp[m.league] || 0) + 1; lgRankMap[m.league] = m.lr; } });
+    const allLeagues  = [...new Set([...Object.keys(lgDistOur), ...Object.keys(lgDistOpp)])].sort((a, b) => (lgRankMap[b] || 0) - (lgRankMap[a] || 0));
+    const lgDistMax   = Math.max(...allLeagues.map(l => Math.max(lgDistOur[l] || 0, lgDistOpp[l] || 0)), 1);
+
+    const lgDist = cmpCollapsible(
+        '🏅 League Distribution',
+        `<div style="display:grid;grid-template-columns:1fr 170px 1fr;margin-bottom:10px;">
+            <span class="dist-our-lbl">${ourNameSafe}</span><span></span><span class="dist-opp-lbl">${oppNameSafe}</span>
+         </div>
+        ${allLeagues.map(l => {
+            const o = lgDistOur[l] || 0, p = lgDistOpp[l] || 0;
+            const ow = Math.round(o / lgDistMax * 80), pw = Math.round(p / lgDistMax * 80);
+            return `<div style="display:grid;grid-template-columns:24px 1fr 170px 1fr 24px;gap:6px;align-items:center;margin-bottom:5px;">
+                <span class="dist-count-our">${o || ''}</span>
+                <div style="display:flex;justify-content:flex-end;"><div class="dist-bar-our" style="width:${ow}px;"></div></div>
+                <span style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(l)}</span>
+                <div><div class="dist-bar-opp" style="width:${pw}px;"></div></div>
+                <span class="dist-count-opp">${p || ''}</span>
+            </div>`;
+        }).join('')}`,
+        `cmp-lgdist-${uid}`
+    );
+
+    // ── 6. TH Matchup by Position ─────────────────────────────────────────────
     const matchupRowsHtml = Array.from({length: len}, (_, i) => {
         const o = our[i], p = opp[i], d = o.th - p.th;
         const rc = d > 0 ? 'lg-adv' : d < 0 ? 'lg-dis' : 'lg-even';
@@ -1102,14 +1221,16 @@ function buildCompareHTML(our, opp, meta) {
         return `<tr class="${rc}"><td class="lgt-pos">#${o.pos}</td><td class="lgt-name">${escapeHTML(o.name)}</td><td class="lgt-lg">TH${o.th}</td><td class="lgt-diff ${dc}">${d > 0 ? '+' : ''}${d || '='}</td><td class="lgt-lg" style="text-align:right">TH${p.th}</td><td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td></tr>`;
     }).join('');
 
-    const matchup = `
-        <div class="cmp-title"><img src="/static/img/battle.png" style="width:14px;height:14px;vertical-align:middle;"> TH Matchup by Position</div>
-        <div class="matchup-summary">
+    const matchup = cmpCollapsible(
+        `<span><img src="/static/img/battle.png" style="width:14px;height:14px;vertical-align:middle;"> TH Matchup by Position</span>`,
+        `<div class="matchup-summary">
             <div class="matchup-stat"><div class="mn mn-green">${thBetter}</div><div class="ml">Ahead</div></div>
             <div class="matchup-stat"><div class="mn mn-muted">${thEven}</div><div class="ml">Even</div></div>
             <div class="matchup-stat"><div class="mn mn-red">${thWorse}</div><div class="ml">Behind</div></div>
         </div>
-        <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${ourNameSafe}</th><th>TH</th><th style="text-align:center">Diff</th><th style="text-align:right">TH</th><th style="text-align:right">${oppNameSafe}</th></tr></thead><tbody>${matchupRowsHtml}</tbody></table>`;
+        <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${ourNameSafe}</th><th>TH</th><th style="text-align:center">Diff</th><th style="text-align:right">TH</th><th style="text-align:right">${oppNameSafe}</th></tr></thead><tbody>${matchupRowsHtml}</tbody></table>`,
+        `cmp-matchup-${uid}`
+    );
 
-    return { prediction, stats, th, league, matchup };
+    return { prediction, stats, th, league, lgDist, matchup };
 }
