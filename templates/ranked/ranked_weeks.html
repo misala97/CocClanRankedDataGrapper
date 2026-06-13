@@ -187,7 +187,7 @@
         .chart-card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
         .chart-card h3 { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
         .chart-wrap { position: relative; height: 280px; }
-        .chart-wrap-donut { position: relative; height: 200px; display: flex; align-items: center; justify-content: center; }
+        .chart-wrap-donut { position: relative; height: 280px; display: flex; align-items: center; justify-content: center; }
         @media (max-width: 640px) { .charts-row { flex-direction: column; } }
 
         /* ── HISTORY SECTION ── */
@@ -196,9 +196,8 @@
         .history-section > .hist-hdr h4 { margin: 0; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
         .hist-charts-row { display: flex; gap: 14px; margin-bottom: 18px; }
         .hist-chart-main   { flex: 3; position: relative; height: 200px; }
-        .hist-chart-trophy { flex: 2; position: relative; height: 200px; }
         .hist-chart-league { flex: 2; position: relative; height: 200px; }
-        @media (max-width: 900px) { .hist-charts-row { flex-direction: column; } .hist-chart-main, .hist-chart-trophy, .hist-chart-league { height: 160px; } }
+        @media (max-width: 900px) { .hist-charts-row { flex-direction: column; } .hist-chart-main, .hist-chart-league { height: 160px; } }
 
         /* ── HISTORY SUMMARY CARDS ── */
         .hist-summary-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
@@ -342,12 +341,13 @@
     <option value="up">⬆️ Promotions only</option>
     <option value="neutral">➖ Staying only</option>
     <option value="down">⬇️ Relegations only</option>
+    <option value="completed">✅ Completed only</option>
 </select>
 <button type="button" class="action-btn" id="leftToggle" onclick="toggleLeft()">🚪 Show left</button>
 {% if can_create_reminder_ranked %}
 <button type="button" class="action-btn" onclick="openReminder()" style="border-color:rgba(63,185,80,0.4);color:var(--green);">📣 Reminder</button>
 {% endif %}
-<button type="button" class="action-btn" id="inactiveToggle" onclick="toggleInactive()" style="margin-left:auto;">👁️ Hide inactive</button>
+<button type="button" class="action-btn" id="inactiveToggle" onclick="toggleInactive()" style="margin-left:auto;">👁️‍🗨️ Show inactive</button>
 {% endset %}
 {% include '_page_header.html' %}
 
@@ -455,23 +455,15 @@
         });
     }
 
-    let showInactive = true;
+    let showInactive = false;
     let showLeft = false;
+    let pendingExpandRaf = null;
+    let verdictChartInstance = null;
     let currentRankFilter = 'all';
     let currentSearchTerm = '';
     let currentSort = { column: 'league', direction: 'desc' };
     const historyCharts = new Map();
 
-    const judgeColors = {
-        'badge-godlike':  '#bc8cff',
-        'badge-dominant': '#f39c12',
-        'badge-wow':      '#27ae60',
-        'badge-good':     '#2980b9',
-        'badge-warning':  '#e67e22',
-        'badge-suck':     '#e74c3c',
-        'badge-useless':  '#95a5a6',
-        'badge-inactive': '#95a5a6'
-    };
 
     function updateTable() {
         currentSearchTerm = document.getElementById('searchInput').value.toLowerCase();
@@ -483,6 +475,7 @@
         showLeft = !showLeft;
         document.getElementById('leftToggle').textContent = showLeft ? '🚪 Hide left' : '🚪 Show left';
         buildTable();
+        buildVerdictChart();
     }
 
     function toggleInactive() {
@@ -495,12 +488,9 @@
         if (currentSort.column === column) {
             if (currentSort.direction === 'asc') {
                 currentSort.direction = 'desc';
-            } else if (currentSort.direction === 'desc') {
+            } else {
                 currentSort.column = null;
                 currentSort.direction = null;
-            } else {
-                currentSort.column = column;
-                currentSort.direction = 'asc';
             }
         } else {
             currentSort.column = column;
@@ -511,11 +501,41 @@
 
     function leagueSortKey(tier) {
         if (!tier || tier === 'Unranked' || tier === 'Unknown League') return 0;
+        if (tier === 'Legend League') return 40;
         if (/ III$/.test(tier)) return 34;
         if (/ II$/.test(tier)) return 35;
         if (/ I$/.test(tier)) return 36;
         const m = tier.match(/(\d+)$/);
         return m ? parseInt(m[1], 10) : 0;
+    }
+
+    function buildLeagueArrow(currTier, prevTier, opts = {}) {
+        const curr = leagueSortKey(currTier);
+        const prev = leagueSortKey(prevTier);
+        if (curr === prev) return '';
+        const up = curr > prev;
+        const color = up ? 'var(--green)' : 'var(--red)';
+        const arrow = up ? '▲' : '▼';
+        const action = up ? 'Promoted' : 'Relegated';
+        const style = opts.inline
+            ? `color:${color};font-size:11px;font-weight:700;margin-left:3px;`
+            : `color:${color};font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);`;
+        return `<span style="${style}" title="${action} from ${escapeHTML(prevTier)}">${arrow}</span>`;
+    }
+
+    function buildStarDist(s0, s1, s2, s3, style = '') {
+        return `<div class="star-dist"${style ? ` style="${style}"` : ''}><span class="star-dist-item">${s0}</span><span class="star-dist-item">${s1}</span><span class="star-dist-item">${s2}</span><span class="star-dist-item">${s3}</span></div>`;
+    }
+
+    function attCompletionColor(count, max) {
+        if (max <= 0) return 'var(--muted)';
+        const frac = count / max;
+        return frac === 1 ? 'var(--green)' : frac >= 0.6 ? 'var(--accent)' : 'var(--red)';
+    }
+
+    function buildGroupBadge(full, total) {
+        const col = full >= 75 ? 'var(--green)' : full >= 25 ? 'var(--accent)' : 'var(--red)';
+        return `<div style="font-size:10px;color:${col};font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;" title="${total} total attacks in group">👥 ${full}/100</div>`;
     }
 
     function attAvgColor(avg) {
@@ -563,7 +583,6 @@
         return 0.01;
     }
 
-    function getJudgeColor(badgeClass) { return judgeColors[badgeClass] || '#333'; }
 
     function escapeHTML(value) {
         return String(value || '').replace(/[&<>"']/g, char =>
@@ -586,7 +605,7 @@
                 <td>${escapeHTML(e.opponent_name)}</td>
                 <td>${escapeHTML(e.opponent_th)}</td>
                 <td>${renderStars(e.stars)}</td>
-                <td>${escapeHTML(e.percentage)}</td>
+                <td>${escapeHTML(e.percentage)}%</td>
             </tr>`).join('')}</tbody>
         </table>`;
     }
@@ -596,7 +615,6 @@
         if (!history.length) return '';
         const tagKey      = playerTag.replace(/[^a-zA-Z0-9]/g, '_');
         const canvasId    = `hist-${tagKey}`;
-        const trophyCanvasId = `hist-trophy-${tagKey}`;
         const leagueCanvasId = `hist-league-${tagKey}`;
 
         // ── Derived stats ──────────────────────────────────────────────────────
@@ -656,7 +674,7 @@
                 </div>
                 <div class="hist-stat-card">
                     <div class="hist-stat-label">Best Score</div>
-                    <div class="hist-stat-value" style="color:${bestWeek ? getJudgeColor(bestWeek.badge_class) : 'var(--muted)'};">${bestWeek ? bestWeek.score_100 : '–'}<span class="hist-stat-sub">${bestWeek ? ' / 100' : ''}</span></div>
+                    <div class="hist-stat-value" style="color:${bestWeek ? (VERDICT_COLORS[bestWeek.badge_class] || '#8b949e') : 'var(--muted)'};">${bestWeek ? bestWeek.score_100 : '–'}<span class="hist-stat-sub">${bestWeek ? ' / 100' : ''}</span></div>
                     <div class="hist-stat-meta" style="margin-top:6px;">${bestWeekMeta}</div>
                 </div>
             </div>`;
@@ -665,13 +683,9 @@
         const tableHistory = [...history].reverse();
         const tableRows = tableHistory.map((h, i) => {
             const prevActive = tableHistory.slice(i + 1).find(w => !w.is_inactive);
-            let histLeagueArrow = '';
-            if (!h.is_inactive && prevActive && prevActive.league_tier && h.league_tier && h.league_tier !== prevActive.league_tier) {
-                const curr = leagueSortKey(h.league_tier);
-                const prev = leagueSortKey(prevActive.league_tier);
-                if (curr > prev)      histLeagueArrow = `<span style="color:var(--green);font-size:11px;font-weight:700;margin-left:3px;" title="Promoted from ${escapeHTML(prevActive.league_tier)}">▲</span>`;
-                else if (curr < prev) histLeagueArrow = `<span style="color:var(--red);font-size:11px;font-weight:700;margin-left:3px;" title="Relegated from ${escapeHTML(prevActive.league_tier)}">▼</span>`;
-            }
+            const histLeagueArrow = (!h.is_inactive && prevActive && prevActive.league_tier && h.league_tier && h.league_tier !== prevActive.league_tier)
+                ? buildLeagueArrow(h.league_tier, prevActive.league_tier, { inline: true })
+                : '';
             const leagueCell = h.league_icon
                 ? `<div style="display:inline-flex;align-items:center;gap:5px;"><img src="${escapeHTML(h.league_icon)}" alt="${escapeHTML(h.league_tier)}" title="${escapeHTML(h.league_tier)}" style="width:22px;height:22px;vertical-align:middle;object-fit:cover;border-radius:3px;"> <span style="font-size:11px;color:var(--muted);">${escapeHTML(h.league_tier)}</span>${histLeagueArrow}</div>`
                 : `<span style="color:var(--muted);font-size:12px;">${escapeHTML(h.league_tier) || '–'}</span>${histLeagueArrow}`;
@@ -712,7 +726,7 @@
 
             const rowStyle = isLatest ? 'background:rgba(240,165,0,0.035);' : '';
             const verdictCell = h.badge_class
-                ? `<span class="judgment ${h.badge_class}" style="font-size:10px;padding:2px 8px;">${escapeHTML(VERDICT_LABELS[h.badge_class]||'–')}</span>${h.score_100 > 0 ? ` <span style="color:var(--muted);font-size:11px;font-family:'Rajdhani',sans-serif;">${h.score_100}</span>` : ''}`
+                ? `<span class="judgment ${h.badge_class}" style="font-size:10px;padding:2px 8px;">${escapeHTML(VERDICT_LABELS[h.badge_class]||'–')}${h.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${h.score_100}` : ''}</span>`
                 : '–';
 
             const attThHtml = h.att_avg_th != null ? `<div style="margin-top:2px;">${formatTHDiff(h.att_avg_th, h.player_th)}</div>` : '';
@@ -721,7 +735,12 @@
             return `<tr style="${rowStyle}">
                 <td style="${sep}color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${escapeHTML(h.label)}${nowTag}</td>
                 <td>${leagueCell}</td>
-                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${h.rank ? '#' + h.rank : '–'}${rankDelta}</td>
+                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;text-align:center;">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                        <span>${h.rank ? '#' + h.rank : '–'}${rankDelta}</span>
+                        ${h.group_full_attackers != null ? buildGroupBadge(h.group_full_attackers, h.group_total_attacks) : ''}
+                    </div>
+                </td>
                 <td style="${sep}color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">🏆 ${h.trophies}${trophyDelta}</td>
                 <td>
                     <div style="display:flex;flex-direction:column;gap:4px;min-width:54px;">
@@ -811,60 +830,6 @@
                                     const h = history[ctx.dataIndex];
                                     const vLabel = VERDICT_LABELS[h.badge_class] || '';
                                     return base + (vLabel ? `  ·  ${vLabel} (${h.score_100})` : '');
-                                }
-                                return base;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    function createTrophyChart(canvas, history) {
-        const barColors = history.map((h, i) => {
-            if (i === 0) return 'rgba(88,166,255,0.65)';
-            const dt = h.trophies - history[i - 1].trophies;
-            return dt >= 0 ? 'rgba(63,185,80,0.7)' : 'rgba(248,81,73,0.65)';
-        });
-        return new Chart(canvas, {
-            type: 'bar',
-            data: {
-                labels: history.map(h => h.label),
-                datasets: [{
-                    label: 'Trophies',
-                    data: history.map(h => h.trophies),
-                    backgroundColor: barColors,
-                    borderRadius: 5, borderSkipped: false,
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        ticks: { color: '#8b949e' },
-                        grid: { color: 'rgba(48,54,61,0.6)' }
-                    },
-                    x: {
-                        ticks: { color: '#8b949e', font: { size: 11 } },
-                        grid: { display: false }
-                    }
-                },
-                plugins: {
-                    legend: { display: false },
-                    title: {
-                        display: true, text: 'Trophy Progression',
-                        color: '#8b949e', padding: { bottom: 10 },
-                        font: { size: 11, weight: '700', family: "'Rajdhani', sans-serif" }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => {
-                                const base = ` 🏆 ${ctx.parsed.y}`;
-                                const i = ctx.dataIndex;
-                                if (i > 0) {
-                                    const dt = history[i].trophies - history[i-1].trophies;
-                                    return base + (dt >= 0 ? `  (+${dt})` : `  (${dt})`);
                                 }
                                 return base;
                             }
@@ -982,7 +947,7 @@
                         const actualRank   = item.league_rank || 0;
                         const expectedRank = item.expected_league_rank || 0;
                         const lm           = item.league_mult || 1.0;
-                        const finalScore   = score * lm;
+                        const serverScore = (item.score_100 / 100).toFixed(3);
                         if (leagueDiff > 0) {
                             const steps1 = Math.max(0, Math.min(actualRank, 31) - expectedRank);
                             const steps2 = Math.max(0, actualRank - Math.max(expectedRank, 31));
@@ -990,11 +955,11 @@
                             if (steps1 > 0) multHtml += `<span style="color:var(--green);font-weight:700;">1.005<sup>${steps1}</sup></span>`;
                             if (steps1 > 0 && steps2 > 0) multHtml += ` × `;
                             if (steps2 > 0) multHtml += `<span style="color:var(--green);font-weight:700;">1.015<sup>${steps2}</sup></span>`;
-                            return `<span>Score: <strong style="color:var(--accent);">${finalScore.toFixed(3)}</strong> = Σ adj. stars / ${attMax} attacks × ${multHtml} <span style="color:var(--green);">(league bonus)</span></span>`;
+                            return `<span>Score: <strong style="color:var(--accent);">${serverScore}</strong> = Σ adj. stars / ${attMax} attacks × ${multHtml} <span style="color:var(--green);">(league bonus)</span></span>`;
                         } else if (leagueDiff < 0) {
-                            return `<span>Score: <strong style="color:var(--accent);">${finalScore.toFixed(3)}</strong> = Σ adj. stars / ${attMax} attacks × <span style="color:var(--red);font-weight:700;">0.99<sup>${Math.abs(leagueDiff)}</sup></span> <span style="color:var(--red);">(league penalty)</span></span>`;
+                            return `<span>Score: <strong style="color:var(--accent);">${serverScore}</strong> = Σ adj. stars / ${attMax} attacks × <span style="color:var(--red);font-weight:700;">0.99<sup>${Math.abs(leagueDiff)}</sup></span> <span style="color:var(--red);">(league penalty)</span></span>`;
                         } else {
-                            return `<span>Score: <strong style="color:var(--accent);">${score.toFixed(3)}</strong> = Σ adj. stars / ${attMax} attacks</span>`;
+                            return `<span>Score: <strong style="color:var(--accent);">${serverScore}</strong> = Σ adj. stars / ${attMax} attacks</span>`;
                         }
                     })()}
                     <span>Same-TH avg: <strong style="color:var(--muted);">${(score / thMultiplier(0, playerTH)).toFixed(2)} ★</strong></span>
@@ -1009,10 +974,15 @@
     }
 
     function buildTable() {
+        const expandedTags = new Set(
+            [...document.querySelectorAll('#statsBody .detail-row.expanded')].map(r => r.dataset.playerTag).filter(Boolean)
+        );
+
         const rows = window.weekData.filter(item => {
             if (!showLeft && (item.in_clan === false || item.in_clan === 0)) return false;
             if (!showInactive && !item.is_active) return false;
-            if (currentRankFilter !== 'all' && item.rank_status !== currentRankFilter) return false;
+            if (currentRankFilter === 'completed') { if (!(item.att_max > 0 && item.att_count === item.att_max)) return false; }
+            else if (currentRankFilter !== 'all' && item.rank_status !== currentRankFilter) return false;
             if (currentSearchTerm) {
                 const haystack = [
                     item.player_name, item.player_tag, item.league_tier, item.judge_label,
@@ -1054,6 +1024,8 @@
         historyCharts.forEach(charts => charts.forEach(c => c.destroy()));
         historyCharts.clear();
 
+        const rowLookup = expandedTags.size > 0 ? new Map() : null;
+
         rows.forEach(item => {
             const row = document.createElement('tr');
             row.style.cursor = 'pointer';
@@ -1061,13 +1033,9 @@
                 row.style.background = 'rgba(240,165,0,0.08)';
                 row.style.boxShadow = 'inset 3px 0 0 var(--accent)';
             }
-            let leagueArrow = '';
-            if (item.league_tier_prev && item.league_tier_prev !== item.league_tier) {
-                const prev = leagueSortKey(item.league_tier_prev);
-                const curr = leagueSortKey(item.league_tier);
-                if (curr > prev)      leagueArrow = `<span style="color:var(--green);font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);" title="Promoted from ${escapeHTML(item.league_tier_prev)}">▲</span>`;
-                else if (curr < prev) leagueArrow = `<span style="color:var(--red);font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);" title="Relegated from ${escapeHTML(item.league_tier_prev)}">▼</span>`;
-            }
+            const leagueArrow = (item.league_tier_prev && item.league_tier_prev !== item.league_tier)
+                ? buildLeagueArrow(item.league_tier, item.league_tier_prev)
+                : '';
             const leagueCell = item.league_icon
                 ? `<div class="league-cell"><div style="position:relative;display:inline-flex;"><img src="${escapeHTML(item.league_icon)}" alt="${escapeHTML(item.league_tier||'')}" title="${escapeHTML(item.league_tier||'')}" class="league-icon">${leagueArrow}</div></div>`
                 : `<div class="league-cell"><span class="league-badge">${escapeHTML(item.league_tier||'–')}</span></div>`;
@@ -1084,18 +1052,18 @@
                 : item.rank_status === 'inactive'
                 ? `Inactive\n${zoneInfo}`
                 : `Staying\n${zoneInfo}`;
-            const badgeColor = getJudgeColor(item.badge_class);
+            const attCountColor = attCompletionColor(item.att_count, item.att_max);
 
             row.innerHTML = `
                 <td style="text-align:center;">${leagueCell}</td>
-                <td style="text-align:center;"><div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span>${item.group_full_attackers != null ? (() => { const f = item.group_full_attackers; const col = f >= 70 ? 'var(--green)' : f >= 40 ? 'var(--accent)' : 'var(--muted)'; return `<div style="font-size:10px;color:${col};font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;" title="${item.group_total_attacks} total attacks in group">👥 ${f}/100</div>`; })() : ''}</div></td>
+                <td style="text-align:center;"><div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><span class="rank-badge rank-${item.rank_status}" title="${rankTitle}">${rankIcon} ${rankText}</span>${item.group_full_attackers != null ? buildGroupBadge(item.group_full_attackers, item.group_total_attacks) : ''}</div></td>
                 <td><div class="player-cell"><div class="player-info">
                     <div class="player-name"><a href="/player/${encodeURIComponent((item.player_tag||'').replace('#',''))}" class="player-link">${escapeHTML(item.player_name)} <span class="player-link-arrow">↗</span></a>${(item.in_clan === false || item.in_clan === 0) ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>' : ''}</div>
                     <div class="player-trophy" style="gap:6px;">${item.player_th ? `<span style="color:var(--blue);font-weight:700;">TH${item.player_th}</span> ·` : ''} 🏆 ${item.trophies}</div>
                 </div></div></td>
-                <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.att_count > 0 ? `<div class="star-dist"><span class="star-dist-item">${item.att_0star}</span><span class="star-dist-item">${item.att_1star}</span><span class="star-dist-item">${item.att_2star}</span><span class="star-dist-item">${item.att_3star}</span></div>` : ''}<div class="attacks-cell" style="font-size:12px;">${item.att_count} / ${item.att_max}</div></div></td>
+                <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.att_count > 0 ? buildStarDist(item.att_0star, item.att_1star, item.att_2star, item.att_3star) : ''}<div class="attacks-cell" style="font-size:12px;color:${attCountColor};">${item.att_count} / ${item.att_max}</div></div></td>
                 <td style="text-align:center;">${item.att_count > 0 ? `<strong style="color:${attAvgColor(item.att_avg)};">Ø ${item.att_avg.toFixed(2)}</strong><br>${formatTHDiff(item.att_avg_th, item.player_th)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
-                <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.def_count > 0 ? `<div class="star-dist"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div>` : ''}<div class="defenses-cell" style="font-size:12px;">${item.def_count} / ${item.def_max}</div></div></td>
+                <td><div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${item.def_count > 0 ? buildStarDist(item.def_0star, item.def_1star, item.def_2star, item.def_3star) : ''}<div class="defenses-cell" style="font-size:12px;">${item.def_count} / ${item.def_max}</div></div></td>
                 <td style="text-align:center;">${item.def_count > 0 ? `<strong style="color:${defAvgColor(item.def_avg)};">Ø ${item.def_avg.toFixed(2)}</strong><br>${formatTHDiff(item.def_avg_th, item.player_th, true)}` : `<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;">–</span>`}</td>
                 <td style="text-align:center;"><span class="judgment ${item.badge_class}">${escapeHTML(item.judge_label.split('(')[0].trim())}${item.is_active && item.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${item.score_100}` : ''}</span></td>
                 <td style="text-align:center;"><button type="button" class="action-btn details-toggle">Details</button></td>
@@ -1103,6 +1071,7 @@
 
             const detailRow = document.createElement('tr');
             detailRow.className = 'detail-row';
+            detailRow.dataset.playerTag = item.player_tag;
             const verdictHtml = buildVerdictDetails(item);
             const hasDefenses = item.defense_details && item.defense_details.length > 0;
             const defSection = hasDefenses
@@ -1158,6 +1127,7 @@
 
             tbody.appendChild(row);
             tbody.appendChild(detailRow);
+            if (rowLookup && item.is_active) rowLookup.set(item.player_tag, row);
         });
 
         // ── Mobile cards ──
@@ -1165,13 +1135,9 @@
         if (mobileList) {
             mobileList.innerHTML = '';
             rows.forEach(item => {
-                let leagueArrow = '';
-                if (item.league_tier_prev && item.league_tier_prev !== item.league_tier) {
-                    const prev = leagueSortKey(item.league_tier_prev);
-                    const curr = leagueSortKey(item.league_tier);
-                    if (curr > prev)      leagueArrow = `<span style="color:var(--green);font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);" title="Promoted from ${escapeHTML(item.league_tier_prev)}">▲</span>`;
-                    else if (curr < prev) leagueArrow = `<span style="color:var(--red);font-size:12px;font-weight:700;line-height:1;position:absolute;top:-4px;right:-6px;text-shadow:0 0 4px rgba(0,0,0,0.8);" title="Relegated from ${escapeHTML(item.league_tier_prev)}">▼</span>`;
-                }
+                const leagueArrow = (item.league_tier_prev && item.league_tier_prev !== item.league_tier)
+                    ? buildLeagueArrow(item.league_tier, item.league_tier_prev)
+                    : '';
                 const leagueImg = item.league_icon
                     ? `<div style="position:relative;flex-shrink:0;display:inline-flex;"><img src="${escapeHTML(item.league_icon)}" class="league-icon" style="width:36px;height:36px;" title="${escapeHTML(item.league_tier||'')}">${leagueArrow}</div>`
                     : `<span class="league-badge" style="font-size:10px;">${escapeHTML(item.league_tier||'–')}</span>`;
@@ -1180,14 +1146,16 @@
                 const verdictLabel = item.judge_label.split('(')[0].trim();
                 const verdictScore = item.is_active && item.score_100 > 0 ? ` · ${item.score_100}` : '';
 
+                const mcAttCountColor = attCompletionColor(item.att_count, item.att_max);
+
                 const attStar = item.att_count > 0
-                    ? `<div class="star-dist" style="margin-bottom:2px;"><span class="star-dist-item">${item.att_0star}</span><span class="star-dist-item">${item.att_1star}</span><span class="star-dist-item">${item.att_2star}</span><span class="star-dist-item">${item.att_3star}</span></div>` : '';
+                    ? buildStarDist(item.att_0star, item.att_1star, item.att_2star, item.att_3star, 'margin-bottom:2px;') : '';
                 const attAvg = item.att_count > 0
                     ? `<div class="mc-stat-avg" style="color:${attAvgColor(item.att_avg)};">${item.att_avg.toFixed(2)}</div><div style="margin-top:1px;">${formatTHDiff(item.att_avg_th, item.player_th)}</div>`
                     : `<div class="mc-stat-avg" style="color:var(--muted);">–</div>`;
 
                 const defStar = item.def_count > 0
-                    ? `<div class="star-dist" style="margin-bottom:2px;"><span class="star-dist-item">${item.def_0star}</span><span class="star-dist-item">${item.def_1star}</span><span class="star-dist-item">${item.def_2star}</span><span class="star-dist-item">${item.def_3star}</span></div>` : '';
+                    ? buildStarDist(item.def_0star, item.def_1star, item.def_2star, item.def_3star, 'margin-bottom:2px;') : '';
                 const defAvg = item.def_count > 0
                     ? `<div class="mc-stat-avg" style="color:${defAvgColor(item.def_avg)};">${item.def_avg.toFixed(2)}</div><div style="margin-top:1px;">${formatTHDiff(item.def_avg_th, item.player_th, true)}</div>`
                     : `<div class="mc-stat-avg" style="color:var(--muted);">–</div>`;
@@ -1206,7 +1174,7 @@
                         </div>
                         <div class="mc-right">
                             <span class="rank-badge rank-${item.rank_status}">${rankIcon} ${rankText}</span>
-                            ${item.group_full_attackers != null ? (() => { const f = item.group_full_attackers; const col = f >= 70 ? 'var(--green)' : f >= 40 ? 'var(--accent)' : 'var(--muted)'; return `<div style="font-size:10px;color:${col};font-family:'Rajdhani',sans-serif;font-weight:700;" title="${item.group_total_attacks} total attacks in group">👥 ${f}/100</div>`; })() : ''}
+                            ${item.group_full_attackers != null ? buildGroupBadge(item.group_full_attackers, item.group_total_attacks) : ''}
                             <span class="judgment ${item.badge_class}">${escapeHTML(verdictLabel)}${verdictScore}</span>
                         </div>
                     </div>
@@ -1214,7 +1182,7 @@
                         <div class="mc-stat">
                             <div class="mc-stat-label">Attacks</div>
                             ${attStar}
-                            <div class="mc-stat-count">${item.att_count} / ${item.att_max}</div>
+                            <div class="mc-stat-count" style="color:${mcAttCountColor};">${item.att_count} / ${item.att_max}</div>
                             ${attAvg}
                         </div>
                         <div class="mc-stat">
@@ -1248,6 +1216,14 @@
         const weekLabel = document.querySelector('#week-select option:checked')?.textContent?.trim() || '';
         document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown${weekLabel ? ' · ' + weekLabel : ''}`;
         updateSortHeaders();
+
+        if (pendingExpandRaf !== null) cancelAnimationFrame(pendingExpandRaf);
+        if (expandedTags.size > 0) {
+            pendingExpandRaf = requestAnimationFrame(() => {
+                pendingExpandRaf = null;
+                expandedTags.forEach(tag => { const r = rowLookup.get(tag); if (r) r.click(); });
+            });
+        }
     }
 
     function updateSortHeaders() {
@@ -1312,11 +1288,14 @@
             { key: 'badge-useless',  label: 'Useless' },
             { key: 'badge-inactive', label: 'Inactive' },
         ];
-        const counts = tiers.map(t => window.weekData.filter(p => p.badge_class === t.key).length);
+        const counts = tiers.map(t => window.weekData.filter(p =>
+            (showLeft || (p.in_clan !== false && p.in_clan !== 0)) && p.badge_class === t.key
+        ).length);
         const nonZero = tiers.filter((_, i) => counts[i] > 0);
         const nonZeroCounts = counts.filter(c => c > 0);
         if (!nonZero.length) return;
-        new Chart(canvas, {
+        if (verdictChartInstance) { verdictChartInstance.destroy(); verdictChartInstance = null; }
+        verdictChartInstance = new Chart(canvas, {
             type: 'doughnut',
             data: {
                 labels: nonZero.map(t => t.label),
@@ -1334,7 +1313,8 @@
                 plugins: {
                     legend: {
                         position: 'right',
-                        labels: { color: '#8b949e', font: { size: 11 }, padding: 10, boxWidth: 12 }
+                        align: 'center',
+                        labels: { color: '#8b949e', font: { size: 13 }, padding: 14, boxWidth: 14, boxHeight: 14 }
                     },
                     tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} player${ctx.parsed !== 1 ? 's' : ''}` } }
                 }
@@ -1380,11 +1360,12 @@
         </table>`;
     }
 
+    let recentBuilt = false;
     function toggleRecent() {
         const body = document.getElementById('recentBody');
         const chevron = document.getElementById('recentChevron');
         const open = body.style.display === 'none';
-        if (open) buildRecentAttacks();
+        if (open && !recentBuilt) { buildRecentAttacks(); recentBuilt = true; }
         body.style.display = open ? '' : 'none';
         chevron.classList.toggle('open', open);
     }
@@ -1394,6 +1375,7 @@
         buildTable();
         buildTopChart();
         buildVerdictChart();
+        document.getElementById('inactiveToggle').textContent = showInactive ? '👁️ Hide inactive' : '👁️‍🗨️ Show inactive';
     });
 </script>
 {% endif %}

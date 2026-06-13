@@ -623,7 +623,7 @@ function buildEnemyOverview() {
                 ? `<span class="enemy-destroyed">✓ Destroyed</span>`
                 : `<span class="enemy-not-destroyed">${d.last_pct_total}%</span>`;
             return `<tr>
-                <td class="enemy-district-name">${escapeHTML(d.name)} <span style="color:var(--muted);font-size:11px;font-family:'Rajdhani',sans-serif;">Lvl ${d.level}</span></td>
+                <td class="enemy-district-name"><div style="line-height:1.2;">${escapeHTML(d.name)}<div style="color:var(--muted);font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:600;">Lvl ${d.level}</div></div></td>
                 <td><div class="enemy-atk-pips">${pips}<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;margin-left:5px;">${d.attacks}</span></div></td>
                 <td>${statusHtml}</td>
             </tr>`;

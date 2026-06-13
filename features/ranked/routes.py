@@ -223,16 +223,22 @@ def ranked_weeks_page():
                     'score_100': score_100_hist,
                     'badge_class': badge_hist,
                     'is_inactive': False,
+                    'group_full_attackers': rw.group_full_attackers,
+                    'group_total_attacks': rw.group_total_attacks,
                 })
             else:
                 history.append({
                     'label': dw.start_day.strftime('%d.%m.%y'),
                     'att_count': 0, 'att_max': 0, 'att_avg': 0,
+                    'att_avg_th': None, 'def_avg_th': None,
+                    'player_th': 0,
                     'def_count': 0, 'def_avg': 0,
                     'trophies': 0, 'rank': None,
                     'league_tier': '', 'league_icon': '',
                     'score_100': 0, 'badge_class': 'badge-inactive',
                     'is_inactive': True,
+                    'group_full_attackers': None,
+                    'group_total_attacks': None,
                 })
         if history:
             player_history[player.tag] = history

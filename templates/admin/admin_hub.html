@@ -550,7 +550,7 @@
                         <table style="width:100%;border-collapse:collapse;font-size:13px;" id="war-roster-table">
                             <thead>
                                 <tr style="background:var(--surf2);">
-                                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">#</th>
+                                    <th class="sortable" data-col="pos" data-type="num" onclick="sortWarRoster(this)" style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;cursor:pointer;"># <span class="sort-icon">⇅</span></th>
                                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
                                     <th class="sortable" data-col="league" data-type="league" onclick="sortWarRoster(this)" style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;cursor:pointer;">League <span class="sort-icon">⇅</span></th>
                                     <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">TH</th>
@@ -1384,7 +1384,9 @@ function renderCWLBonus(data) {
             return starCell + atkCell + bonusCell;
         }).join('');
 
-        return `<tr data-name="${(p.name||'').toLowerCase()}" data-tag="${p.tag.toLowerCase()}" data-league="${(p.ranked_league||p.league||'').toLowerCase()}" style="border-bottom:1px solid var(--bord2);">
+        const posVal = p.cwl_pos != null ? p.cwl_pos : 999;
+        return `<tr data-name="${(p.name||'').toLowerCase()}" data-tag="${p.tag.toLowerCase()}" data-league="${(p.ranked_league||p.league||'').toLowerCase()}" data-cwlpos="${posVal}" style="border-bottom:1px solid var(--bord2);">
+                <td style="padding:8px 10px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);font-size:13px;">${p.cwl_pos != null ? '#' + p.cwl_pos : '—'}</td>
                 <td style="padding:8px 14px;white-space:nowrap;">
                 <div style="font-weight:600;font-size:13px;">${p.name}</div>
                 <div style="font-size:10px;color:var(--muted);margin-top:1px;">${p.tag}</div>
@@ -1401,6 +1403,7 @@ function renderCWLBonus(data) {
         <table class="member-table" id="cwl-bonus-table" style="min-width:700px;">
             <thead>
                 <tr>
+                    <th rowspan="2" class="sortable" data-col="cwlpos" data-type="num" onclick="sortCwlBonus(this)" style="vertical-align:middle;padding:8px 10px;text-align:center;cursor:pointer;white-space:nowrap;"># <span class="sort-icon">⇅</span></th>
                     <th rowspan="2" style="vertical-align:middle;padding:8px 14px;">Player</th>
                     <th rowspan="2" class="sortable" data-col="league" data-type="league" onclick="sortCwlBonus(this)" style="vertical-align:middle;padding:8px 10px;text-align:center;cursor:pointer;">League <span class="sort-icon">⇅</span></th>
                     ${h1}
@@ -1650,8 +1653,10 @@ function renderWarRoster(roster, bench) {
     document.getElementById('war-roster-count').textContent = `(${roster.length})`;
     document.getElementById('cwl-bench-count').textContent  = `(${bench.length})`;
 
-    rTbody.innerHTML = roster.map((p, i) => `
-        <tr data-league="${(p.ranked_league||p.league||'').toLowerCase()}" data-th="${p.th}" data-waract="${p.war_score}" data-verdict="${p.verdict}" style="border-bottom:1px solid var(--bord2);">
+    const rosterByPos = [...roster].sort((a, b) =>
+        b.th - a.th || leagueSortKey(b.ranked_league || b.league) - leagueSortKey(a.ranked_league || a.league));
+    rTbody.innerHTML = rosterByPos.map((p, i) => `
+        <tr data-league="${(p.ranked_league||p.league||'').toLowerCase()}" data-th="${p.th}" data-waract="${p.war_score}" data-verdict="${p.verdict}" data-pos="${i+1}" style="border-bottom:1px solid var(--bord2);">
             <td style="padding:9px 12px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);">${i+1}</td>
             <td style="padding:9px 12px;font-weight:600;">${p.name}</td>
             <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${p.ranked_league||p.league||'—'}</td>

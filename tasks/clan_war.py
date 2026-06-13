@@ -146,16 +146,25 @@ def task_update_clan_war():
         if state == 'warEnded':
             try:
                 from models import Player
-                attacker_tags = {a.attacker_tag for a in clan_war.attacks}
+                from collections import Counter
+
+                attack_counts = Counter(a.attacker_tag for a in clan_war.attacks)
                 for m in clan_war.members:
                     if m.is_opponent:
                         continue
-                    if m.player_tag not in attacker_tags:
+                    if attack_counts[m.player_tag] == 0:
                         player = db.session.get(Player, m.player_tag)
                         if player and player.war_preference_custom != 'out':
                             player.war_preference_custom = 'out'
                             pref_updated += 1
                             clan_war_logger.info(f"Auto pref=out: {player.name} (0 attacks)")
+                    # Check if the player tag appears exactly 2 times in the list
+                    elif attack_counts[m.player_tag] == 2:
+                        player = db.session.get(Player, m.player_tag)
+                        if player and player.war_preference_custom != 'in':
+                            player.war_preference_custom = 'in'
+                            pref_updated += 1
+                            clan_war_logger.info(f"Auto pref=in: {player.name} (2 attacks)")
                 if pref_updated:
                     db.session.commit()
             except Exception as e:

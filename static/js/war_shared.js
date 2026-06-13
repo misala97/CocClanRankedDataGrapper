@@ -652,6 +652,129 @@ function equalizeRoster(gridEl) {
     }
 }
 
+// ── Shared war-card registry (attack data per round/war) ─────────────────────
+const warCardData = {};
+function registerWarCard(n, data) { warCardData[n] = data; }
+
+// ── Toggle win-probability section (shared, calls page-defined buildWinCalc) ─
+function toggleWinCalc(n) {
+    const body = document.getElementById('wcBody-' + n);
+    const chev = document.getElementById('wcChev-' + n);
+    if (!body) return;
+    const opening = body.style.display !== 'block';
+    body.style.display = opening ? 'block' : 'none';
+    if (chev) chev.classList.toggle('open', opening);
+    if (opening && !document.getElementById('winCalc-' + n)?.innerHTML.trim()) buildWinCalc(n);
+}
+
+// ── Toggle attack log section ─────────────────────────────────────────────────
+function toggleLog(n) {
+    const body    = document.getElementById('logBody-' + n);
+    const chevron = document.getElementById('logChevron-' + n);
+    if (!body || !chevron) return;
+    const opening = body.style.display === 'none' || !body.style.display;
+    body.style.display = opening ? 'block' : 'none';
+    chevron.classList.toggle('open', opening);
+    if (opening && !body.innerHTML.trim())
+        body.innerHTML = buildAttackLogHTML((warCardData[n] || {}).attacks || []);
+}
+
+// ── Roster grid (connection lines + row selection) ────────────────────────────
+const rosterState = {};
+const _rosterRebuild = {};
+
+// Single document-level click handler — clears every active roster selection.
+document.addEventListener('click', () => {
+    Object.keys(_rosterRebuild).forEach(k => {
+        const key = Number(k);
+        if (rosterState[key]?.size) { rosterState[key].clear(); _rosterRebuild[key](); }
+    });
+});
+
+// Top-level so it doesn't get overwritten on each initRoster call.
+function toggleAllSide(btn, event, rn) {
+    event.stopPropagation();
+    const card = btn.closest('.roster-card');
+    const tags = [...card.querySelectorAll('.member-row[data-tag]')].map(r => r.dataset.tag);
+    const allSel = tags.every(t => rosterState[rn].has(t));
+    if (allSel) tags.forEach(t => rosterState[rn].delete(t));
+    else tags.forEach(t => rosterState[rn].add(t));
+    if (_rosterRebuild[rn]) _rosterRebuild[rn]();
+}
+
+function initRoster(n) {
+    const grid = document.getElementById('rosterGrid-' + n); if (!grid) return;
+    const svg  = document.getElementById('warConnections-' + n);
+    const atkPer = parseInt(grid.dataset.atkPer || '1');
+    rosterState[n] = new Set();
+    const TGT = ['row-tgt-3','row-tgt-2','row-tgt-1','row-tgt-0','row-tgt-open'];
+
+    function getPos(row) {
+        const gr = grid.getBoundingClientRect(), rr = row.getBoundingClientRect();
+        return { left: rr.left-gr.left, right: rr.right-gr.left, y: rr.top-gr.top+rr.height/2 };
+    }
+    function syncButtons() {
+        grid.querySelectorAll('.toggle-all-btn').forEach(btn => {
+            const card = btn.closest('.roster-card');
+            const tags = [...card.querySelectorAll('.member-row[data-tag]')].map(r => r.dataset.tag);
+            const allSel = tags.length > 0 && tags.every(t => rosterState[n].has(t));
+            btn.textContent = allSel ? 'Deselect All' : 'Select All';
+            btn.classList.toggle('active', tags.some(t => rosterState[n].has(t)));
+        });
+    }
+    function rebuild() {
+        if (svg) svg.innerHTML = '';
+        grid.querySelectorAll('.member-row').forEach(r => r.classList.remove('row-sel', 'row-dim', ...TGT));
+        syncButtons();
+        if (!rosterState[n].size) return;
+        const cards = grid.querySelectorAll('.roster-card');
+        rosterState[n].forEach(tag => {
+            const row = grid.querySelector(`.member-row[data-tag="${CSS.escape(tag)}"]`); if (!row) return;
+            row.classList.add('row-sel');
+            const isLeft = cards[0] && cards[0].contains(row);
+            const srcPos = getPos(row);
+            JSON.parse(row.dataset.attacks || '[]').forEach(atk => {
+                const defRow = grid.querySelector(`.member-row[data-tag="${CSS.escape(atk.tag)}"]`); if (!defRow) return;
+                defRow.classList.add('row-tgt-' + atk.stars);
+                const dstPos = getPos(defRow);
+                if (svg) drawSVGCurve(svg, isLeft?srcPos.right+2:srcPos.left-2, srcPos.y, isLeft?dstPos.left-2:dstPos.right+2, dstPos.y, atk.stars, false);
+            });
+            JSON.parse(row.dataset.defendedBy || '[]').forEach(atk => {
+                const atkRow = grid.querySelector(`.member-row[data-tag="${CSS.escape(atk.tag)}"]`); if (!atkRow) return;
+                atkRow.classList.add('row-tgt-' + atk.stars);
+                const atkPos = getPos(atkRow);
+                if (svg) drawSVGCurve(svg, isLeft?atkPos.left-2:atkPos.right+2, atkPos.y, isLeft?srcPos.right+2:srcPos.left-2, srcPos.y, atk.stars, true);
+            });
+            if (JSON.parse(row.dataset.attacks || '[]').length < atkPer) {
+                const oppCard = isLeft ? cards[1] : cards[0];
+                if (oppCard) oppCard.querySelectorAll('.member-row[data-tag]').forEach(oppRow => {
+                    if (TGT.some(c => oppRow.classList.contains(c))) return;
+                    const recv = JSON.parse(oppRow.dataset.defendedBy || '[]');
+                    if (Math.max(...recv.map(a => a.stars), 0) < 3) {
+                        oppRow.classList.add('row-tgt-open');
+                        const dstPos = getPos(oppRow);
+                        if (svg) drawSVGPotential(svg, isLeft?srcPos.right+2:srcPos.left-2, srcPos.y, isLeft?dstPos.left-2:dstPos.right+2, dstPos.y);
+                    }
+                });
+            }
+        });
+        grid.querySelectorAll('.member-row').forEach(r => {
+            if (!r.classList.contains('row-sel') && !TGT.some(c => r.classList.contains(c))) r.classList.add('row-dim');
+        });
+    }
+
+    _rosterRebuild[n] = rebuild;
+
+    grid.querySelectorAll('.member-row[data-tag]').forEach(r => {
+        r.addEventListener('click', e => {
+            e.stopPropagation();
+            const tag = r.dataset.tag;
+            if (rosterState[n].has(tag)) rosterState[n].delete(tag); else rosterState[n].add(tag);
+            rebuild();
+        });
+    });
+}
+
 // Build attack log table HTML from an attacks array.
 function buildAttackLogHTML(attacks) {
     if (!attacks.length) return '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded yet.</div>';
@@ -830,4 +953,163 @@ function openPlayerMatchupRatesModal(history, nameMap) {
     }
     bd.style.display = 'block';
     modal.style.display = 'block';
+}
+
+// ── Shared Compare & Predict ─────────────────────────────────────────────────
+// Builds all five compare sections and returns them as HTML strings.
+// meta: { ourName, oppName, warsWonOur, warsWonOpp, streakOur, streakOpp,
+//         winPct?, lossPct? }
+// winPct/lossPct are optional — if omitted a simple sigmoid is used as fallback.
+function buildCompareHTML(our, opp, meta) {
+    const len = Math.min(our.length, opp.length);
+    const ourNameSafe = escapeHTML(meta.ourName);
+    const oppNameSafe = escapeHTML(meta.oppName);
+
+    // ── Analysis ─────────────────────────────────────────────────────────────
+    const avgThOur = avg(our.map(m => m.th));
+    const avgThOpp = avg(opp.map(m => m.th));
+
+    let thDiffTotal = 0, thBetter = 0, thEven = 0, thWorse = 0;
+    for (let i = 0; i < len; i++) {
+        const d = our[i].th - opp[i].th;
+        thDiffTotal += d;
+        if (d > 0) thBetter++; else if (d < 0) thWorse++; else thEven++;
+    }
+    const safeLen   = Math.max(len, 1);
+    const thDiffAvg = thDiffTotal / safeLen;
+    const posScore  = (thBetter - thWorse) / safeLen;
+
+    const avgLrOur   = avg(our.slice(0, len).map(m => m.lr).filter(r => r > 0));
+    const avgLrOpp   = avg(opp.slice(0, len).map(m => m.lr).filter(r => r > 0));
+    const leagueDiff = (avgLrOur - avgLrOpp) / 36;
+
+    const maxWins    = Math.max(meta.warsWonOur, meta.warsWonOpp, 1);
+    const warsScore  = (Math.log(meta.warsWonOur + 1) - Math.log(meta.warsWonOpp + 1)) / Math.log(maxWins + 1);
+    const maxStreak  = Math.max(meta.streakOur, meta.streakOpp, 1);
+    const streakScore = (meta.streakOur - meta.streakOpp) / maxStreak;
+
+    let lgBetter = 0, lgEven = 0, lgWorse = 0;
+    for (let i = 0; i < len; i++) {
+        const o = our[i], p = opp[i];
+        if (o.lr > 0 && p.lr > 0) {
+            const d = o.lr - p.lr;
+            if (d > 0) lgBetter++; else if (d < 0) lgWorse++; else lgEven++;
+        } else if (o.lr > 0) { lgBetter++;
+        } else if (p.lr > 0) { lgWorse++;
+        } else { lgEven++; }
+    }
+    const lgPosScore = (lgBetter - lgWorse) / Math.max(len, 1);
+
+    let winPct = meta.winPct, lossPct = meta.lossPct;
+    if (winPct == null) {
+        const rawScore = thDiffAvg * 0.40 + posScore * 0.22 + leagueDiff * 2 * 0.18 + lgPosScore * 0.10 + warsScore * 0.05 + streakScore * 0.05;
+        winPct  = Math.round(clamp(sigmoid(rawScore * 1.8), 0.25, 0.75) * 100);
+        lossPct = 100 - winPct;
+    }
+
+    const verdict = winPct  > 54 ? `${ourNameSafe} have a statistical edge in this matchup.`
+                  : lossPct > 54 ? `${oppNameSafe} have a statistical edge in this matchup.`
+                  : 'This looks like an even matchup — could go either way.';
+
+    // ── 1. Prediction ─────────────────────────────────────────────────────────
+    function factorCard(label, ov, pv, score) {
+        const cls = score > 0.05 ? 'pfr-win-our' : score < -0.05 ? 'pfr-win-opp' : '';
+        return `<div class="pred-factor-row ${cls}"><div class="pfr-label">${label}</div><div class="pfr-vals"><span class="pfr-our">${ov}</span><span class="pfr-sep">vs</span><span class="pfr-opp">${pv}</span></div></div>`;
+    }
+
+    const prediction = `
+        <div class="cmp-title">📊 War Prediction</div>
+        <div class="pred-verdict" style="margin-bottom:16px;">${verdict}</div>
+        <div class="pred-factors-grid">
+            ${factorCard('Avg TH', avgThOur.toFixed(1), avgThOpp.toFixed(1), thDiffAvg)}
+            ${factorCard('TH Positions Ahead', `+${thBetter} ahead`, `+${thWorse} ahead`, posScore)}
+            ${factorCard('Avg League Rank', avgLrOur > 0 ? avgLrOur.toFixed(1) : '—', avgLrOpp > 0 ? avgLrOpp.toFixed(1) : '—', avgLrOur - avgLrOpp)}
+            ${factorCard('League Positions Ahead', `+${lgBetter} ahead`, `+${lgWorse} ahead`, lgPosScore)}
+            ${factorCard('Wars Won', meta.warsWonOur, meta.warsWonOpp, warsScore)}
+            ${factorCard('Win Streak', meta.streakOur || '—', meta.streakOpp || '—', streakScore)}
+        </div>`;
+
+    // ── 2. Key Stats ──────────────────────────────────────────────────────────
+    function statRow(label, ov, pv, hb = true) {
+        const diff = parseFloat(ov) - parseFloat(pv);
+        const ow = hb ? diff > 0.01 : diff < -0.01;
+        const pw = hb ? diff < -0.01 : diff > 0.01;
+        return `<div class="stat-cmp-row"><div class="scr-our ${ow ? 'scr-win' : pw ? 'scr-lose' : ''}">${ov}</div><div class="scr-label">${label}</div><div class="scr-opp ${pw ? 'scr-win' : ow ? 'scr-lose' : ''}">${pv}</div></div>`;
+    }
+
+    const stats = `
+        <div class="cmp-title">📋 Key Statistics</div>
+        <div style="display:grid;grid-template-columns:1fr 140px 1fr;margin-bottom:8px;">
+            <span style="font-size:11px;font-weight:600;color:var(--green)">${ourNameSafe}</span>
+            <span></span>
+            <span style="font-size:11px;font-weight:600;color:var(--red)">${oppNameSafe}</span>
+        </div>
+        ${statRow('AVG TH', avgThOur.toFixed(1), avgThOpp.toFixed(1))}
+        ${statRow('TH POSITIONS AHEAD', thBetter, thWorse)}
+        ${avgLrOur > 0 || avgLrOpp > 0 ? statRow('AVG LEAGUE RANK', avgLrOur > 0 ? avgLrOur.toFixed(1) : '—', avgLrOpp > 0 ? avgLrOpp.toFixed(1) : '—') : ''}
+        ${lgBetter + lgWorse > 0 ? statRow('LEAGUE POSITIONS AHEAD', lgBetter, lgWorse) : ''}
+        ${statRow('WARS WON', meta.warsWonOur ?? '—', meta.warsWonOpp ?? '—')}
+        ${statRow('WIN STREAK', meta.streakOur ?? '—', meta.streakOpp ?? '—')}`;
+
+    // ── 3. TH Distribution ────────────────────────────────────────────────────
+    const thOur = {}, thOpp = {};
+    our.forEach(m => { thOur[m.th] = (thOur[m.th] || 0) + 1; });
+    opp.forEach(m => { thOpp[m.th] = (thOpp[m.th] || 0) + 1; });
+    const allThs    = [...new Set([...Object.keys(thOur), ...Object.keys(thOpp)].map(Number))].sort((a, b) => b - a);
+    const maxCount  = Math.max(...allThs.map(t => Math.max(thOur[t] || 0, thOpp[t] || 0)), 1);
+
+    const th = `
+        <div class="cmp-title"><img src="/static/img/townHall.png" style="width:14px;height:14px;vertical-align:middle;"> TH Distribution</div>
+        <div class="dist-header"><span class="dist-our-lbl">${ourNameSafe}</span><span></span><span class="dist-opp-lbl">${oppNameSafe}</span></div>
+        ${allThs.map(t => {
+            const o = thOur[t] || 0, p = thOpp[t] || 0;
+            const ow = Math.round(o / maxCount * 130), pw = Math.round(p / maxCount * 130);
+            return `<div class="dist-row"><span class="dist-count-our">${o || ''}</span><div style="display:flex;justify-content:flex-end"><div class="dist-bar-our" style="width:${ow}px"></div></div><span class="dist-lbl">TH${t}</span><div><div class="dist-bar-opp" style="width:${pw}px"></div></div><span class="dist-count-opp">${p || ''}</span></div>`;
+        }).join('')}`;
+
+    // ── 4. League Comparison ──────────────────────────────────────────────────
+    const lgRowsHtml = Array.from({length: len}, (_, i) => {
+        const o = our[i], p = opp[i];
+        const hasO = o.lr > 0, hasP = p.lr > 0;
+        let rowCls = '', diffLabel = '—';
+        if (hasO && hasP) {
+            const d = o.lr - p.lr;
+            if (d > 0)      { rowCls = 'lg-adv'; diffLabel = `+${d}`; }
+            else if (d < 0) { rowCls = 'lg-dis'; diffLabel = `${d}`; }
+            else            { rowCls = 'lg-even'; diffLabel = '='; }
+        } else if (hasO) { rowCls = 'lg-adv'; diffLabel = '+'; }
+        else if (hasP)   { rowCls = 'lg-dis'; diffLabel = '−'; }
+        else             { rowCls = 'lg-even'; }
+        const oLg = hasO ? escapeHTML(o.league) : '<span class="no-data-lg">—</span>';
+        const pLg = hasP ? escapeHTML(p.league) : '<span class="no-data-lg">—</span>';
+        return `<tr class="${rowCls}"><td class="lgt-pos">#${o.pos}</td><td class="lgt-name">${escapeHTML(o.name)}</td><td class="lgt-lg">${oLg}</td><td class="lgt-diff">${diffLabel}</td><td class="lgt-lg" style="text-align:right">${pLg}</td><td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td></tr>`;
+    }).join('');
+
+    const league = `
+        <div class="cmp-title">🎯 League Comparison</div>
+        <div class="matchup-summary">
+            <div class="matchup-stat"><div class="mn mn-green">${lgBetter}</div><div class="ml">Ahead</div></div>
+            <div class="matchup-stat"><div class="mn mn-muted">${lgEven}</div><div class="ml">Even</div></div>
+            <div class="matchup-stat"><div class="mn mn-red">${lgWorse}</div><div class="ml">Behind</div></div>
+        </div>
+        <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${ourNameSafe}</th><th style="text-align:left">League</th><th style="text-align:center">Diff</th><th style="text-align:right">League</th><th style="text-align:right">${oppNameSafe}</th></tr></thead><tbody>${lgRowsHtml}</tbody></table>`;
+
+    // ── 5. TH Matchup by Position ─────────────────────────────────────────────
+    const matchupRowsHtml = Array.from({length: len}, (_, i) => {
+        const o = our[i], p = opp[i], d = o.th - p.th;
+        const rc = d > 0 ? 'lg-adv' : d < 0 ? 'lg-dis' : 'lg-even';
+        const dc = d > 0 ? 'mt-adv' : d < 0 ? 'mt-dis' : 'mt-even';
+        return `<tr class="${rc}"><td class="lgt-pos">#${o.pos}</td><td class="lgt-name">${escapeHTML(o.name)}</td><td class="lgt-lg">TH${o.th}</td><td class="lgt-diff ${dc}">${d > 0 ? '+' : ''}${d || '='}</td><td class="lgt-lg" style="text-align:right">TH${p.th}</td><td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td></tr>`;
+    }).join('');
+
+    const matchup = `
+        <div class="cmp-title"><img src="/static/img/battle.png" style="width:14px;height:14px;vertical-align:middle;"> TH Matchup by Position</div>
+        <div class="matchup-summary">
+            <div class="matchup-stat"><div class="mn mn-green">${thBetter}</div><div class="ml">Ahead</div></div>
+            <div class="matchup-stat"><div class="mn mn-muted">${thEven}</div><div class="ml">Even</div></div>
+            <div class="matchup-stat"><div class="mn mn-red">${thWorse}</div><div class="ml">Behind</div></div>
+        </div>
+        <table class="lg-table"><thead><tr><th>#</th><th style="text-align:left">${ourNameSafe}</th><th>TH</th><th style="text-align:center">Diff</th><th style="text-align:right">TH</th><th style="text-align:right">${oppNameSafe}</th></tr></thead><tbody>${matchupRowsHtml}</tbody></table>`;
+
+    return { prediction, stats, th, league, matchup };
 }

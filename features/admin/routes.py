@@ -261,6 +261,7 @@ def admin_cwl_bonus_list():
 
     # CWL stats per month
     month_stats = {}  # month -> { player_tag -> {stars, attacks, max_attacks} }
+    current_month_war_ids = []
     for month in months:
         season = CWLSeason.query.filter_by(season=month).first()
         if not season:
@@ -269,6 +270,9 @@ def admin_cwl_bonus_list():
                    if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
         if not war_ids:
             continue
+
+        if month == current_month:
+            current_month_war_ids = war_ids
 
         max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
                     .filter(CWLMember.war_id.in_(war_ids),
@@ -298,6 +302,15 @@ def admin_cwl_bonus_list():
             } for tag in max_atk_map
         }
 
+    # Map positions from the current month's CWL (min across war days = consistent position)
+    cwl_pos_map = {}
+    if current_month_war_ids:
+        pos_rows = (db.session.query(CWLMember.player_tag, func.min(CWLMember.map_position))
+                    .filter(CWLMember.war_id.in_(current_month_war_ids),
+                            CWLMember.clan_tag == CLAN_TAG)
+                    .group_by(CWLMember.player_tag).all())
+        cwl_pos_map = {tag: pos for tag, pos in pos_rows if pos is not None}
+
     return jsonify(
         months=months,
         current_month=current_month,
@@ -306,6 +319,7 @@ def admin_cwl_bonus_list():
             'name': p.name or p.tag,
             'ranked_league': p.league_tier,
             'league': p.league_tier,
+            'cwl_pos': cwl_pos_map.get(p.tag),
             'by_month': {
                 m: {
                     'has_bonus':   (p.tag, m) in bonus_set,

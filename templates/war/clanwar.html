@@ -596,7 +596,10 @@
             {% else %}
             <div class="clan-badge-ph">🛡️</div>
             {% endif %}
-            <div class="clan-name-text">{{ war.clan_name or 'Our Clan' }}</div>
+            <div>
+                <div class="clan-name-text">{{ war.clan_name or 'Our Clan' }}</div>
+                {% if war.clan_tag %}<div style="font-size:11px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.3px;margin-top:2px;">{{ war.clan_tag }}</div>{% endif %}
+            </div>
         </div>
         <div class="stat-divider"></div>
         <div class="stat-list">
@@ -616,12 +619,10 @@
                 <span class="sk">Avg TH</span>
                 <span class="sv">{{ avg_th_our }}</span>
             </div>
-            {% if war.clan_location %}
             <div class="stat-entry">
                 <span class="sk">Location</span>
-                <span class="sv">{{ war.clan_location }}</span>
+                <span class="sv">{{ war.clan_location or '—' }}</span>
             </div>
-            {% endif %}
             {% if war.clan_wars_won is not none %}
             <div class="stat-entry">
                 <span class="sk">Wars Won</span>
@@ -714,7 +715,10 @@
     {# ── OPPONENT CLAN ── #}
     <div class="clan-panel right">
         <div class="clan-ident">
-            <div class="clan-name-text">{{ war.opponent_name }}</div>
+            <div style="text-align:right;">
+                <div class="clan-name-text">{{ war.opponent_name }}</div>
+                {% if war.opponent_tag %}<div style="font-size:11px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.3px;margin-top:2px;">{{ war.opponent_tag }}</div>{% endif %}
+            </div>
             {% if war.opponent_clan_badge %}
             <img src="{{ war.opponent_clan_badge }}" class="clan-badge-img" alt="">
             {% else %}
@@ -739,12 +743,10 @@
                 <span class="sk">Avg TH</span>
                 <span class="sv">{{ avg_th_opp }}</span>
             </div>
-            {% if war.opponent_clan_location %}
             <div class="stat-entry">
                 <span class="sk">Location</span>
-                <span class="sv">{{ war.opponent_clan_location }}</span>
+                <span class="sv">{{ war.opponent_clan_location or '—' }}</span>
             </div>
-            {% endif %}
             {% if war.opponent_wars_won is not none %}
             <div class="stat-entry">
                 <span class="sk">Wars Won</span>
@@ -782,17 +784,17 @@
 
 {# ── WIN PROBABILITY CARD ── #}
 {% if members_our and members_opp and war.state == 'inWar' %}
-<div class="recent-card" id="warWinProbCard">
-    <div class="recent-header" onclick="toggleWarWinProb()">
+<div class="recent-card" id="wcWrap-0">
+    <div class="recent-header" onclick="toggleWinCalc(0)">
         <div style="display:flex;align-items:center;gap:10px;">
             <span class="recent-header-title">🎲 Win Probability</span>
-            {% if war.state == 'inWar' %}<span class="state-badge state-inWar" style="padding:2px 8px;font-size:9px;">Live</span>{% endif %}
+            <div class="live-atk-badge" style="margin-left:0;">Live</div>
         </div>
-        <span class="recent-chevron" id="warWpChev">▼</span>
+        <span class="recent-chevron" id="wcChev-0">▼</span>
     </div>
-    <div id="warWpBarPreview" onclick="toggleWarWinProb()" style="padding:0 16px 14px;display:none;cursor:pointer;"></div>
-    <div class="recent-body" id="warWpBody">
-        <div id="warWinCalc"></div>
+    <div id="wcBarPreview-0" onclick="toggleWinCalc(0)" style="padding:0 16px 14px;display:none;cursor:pointer;"></div>
+    <div class="recent-body" id="wcBody-0">
+        <div id="winCalc-0"></div>
     </div>
 </div>
 {% endif %}
@@ -809,11 +811,11 @@
             <table class="vt-table" id="warVerdictTable">
                 <thead>
                     <tr>
-                        <th class="vt-sortable" onclick="sortWarVerdict('player_name')">Player</th>
+                        <th class="vt-sortable" onclick="sortWarVerdict('map_pos')" style="text-align:center;">#</th>
+                <th class="vt-sortable" onclick="sortWarVerdict('player_name')">Player</th>
                 <th class="vt-sortable" onclick="sortWarVerdict('league')">League</th>
                 <th class="vt-sortable" onclick="sortWarVerdict('attacks_used')" style="text-align:center;">Attacks</th>
-                <th class="vt-sortable" onclick="sortWarVerdict('score')" style="text-align:center;">Score</th>
-                <th style="text-align:center;">Verdict</th>
+                <th class="vt-sortable" onclick="sortWarVerdict('score')" style="text-align:center;">Verdict</th>
                 <th></th>
                     </tr>
                 </thead>
@@ -827,18 +829,18 @@
 {# ── ATTACK LOG ── #}
 {% if all_attacks_json %}
 <div class="recent-card">
-    <div class="recent-header" onclick="toggleWarAttackLog()">
+    <div class="recent-header" onclick="toggleLog(0)">
         <span class="recent-header-title">⚔ Attack Log · {{ all_attacks_json | length }} attacks</span>
-        <span class="recent-chevron" id="warLogChevron">▼</span>
+        <span class="recent-chevron" id="logChevron-0">▼</span>
     </div>
-    <div class="recent-body" id="warLogBody"></div>
+    <div class="recent-body" id="logBody-0"></div>
 </div>
 {% endif %}
 
 {# ── ROSTER ── #}
 {% if members_our or members_opp %}
-<div class="roster-grid" id="rosterGrid" style="position:relative">
-    <svg id="warConnections" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5;"></svg>
+<div class="roster-grid" id="rosterGrid-0" data-atk-per="2" style="position:relative">
+    <svg id="warConnections-0" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5;"></svg>
 
     {# OUR SIDE #}
     <div class="roster-card">
@@ -848,7 +850,7 @@
                 <span class="rh-meta">{{ members_our | length }} members</span>
                 {% if avg_th_our %}<span class="rh-meta">· Ø TH {{ avg_th_our }}</span>{% endif %}
                 {% if avg_league_our %}<span class="league-pill lp-gold" style="font-size:10px;">{{ avg_league_our }}</span>{% endif %}
-                <button class="toggle-all-btn" onclick="toggleAllSide(this, event)">Select All</button>
+                <button class="toggle-all-btn" onclick="toggleAllSide(this, event, 0)">Select All</button>
             </div>
         </div>
         <div class="roster-col-hdr">
@@ -909,7 +911,7 @@
                 <span class="rh-meta">{{ members_opp | length }} members</span>
                 {% if avg_th_opp %}<span class="rh-meta">· Ø TH {{ avg_th_opp }}</span>{% endif %}
                 {% if avg_league_opp %}<span class="league-pill lp-gold" style="font-size:10px;">{{ avg_league_opp }}</span>{% endif %}
-                <button class="toggle-all-btn" onclick="toggleAllSide(this, event)">Select All</button>
+                <button class="toggle-all-btn" onclick="toggleAllSide(this, event, 0)">Select All</button>
             </div>
         </div>
         <div class="roster-col-hdr">
@@ -998,7 +1000,10 @@ function toggleWarFlag(event, btn, url) {
         });
 }
 
-document.addEventListener('DOMContentLoaded', () => equalizeRoster(document.getElementById('rosterGrid')));
+document.addEventListener('DOMContentLoaded', () => {
+    equalizeRoster(document.getElementById('rosterGrid-0'));
+    initRoster(0);
+});
 </script>
 {% endif %}
 
@@ -1112,25 +1117,15 @@ function computeWarPrediction() {
 }
 
 
-function buildWarWinCalc() {
-    const el = document.getElementById('warWinCalc');
-    const prevEl = document.getElementById('warWpBarPreview');
+function buildWinCalc(n) {
+    const el = document.getElementById('winCalc-' + n);
+    const prevEl = document.getElementById('wcBarPreview-' + n);
     if (!el) return;
     const wc = computeWarWinCalc();
     if (!wc) { el.innerHTML = '<div style="padding:20px;color:var(--muted);">Not enough data to compute.</div>'; return; }
     const { barHtml, bodyHtml } = buildWinCalcHTML(wc, WAR.ourName, WAR.oppName, WAR.ourPct || 0, WAR.oppPct || 0, 'warWcOur', 'warWcOpp', 'toggleBreakdown');
     if (prevEl) { prevEl.style.display = 'block'; prevEl.innerHTML = barHtml; }
     el.innerHTML = bodyHtml;
-}
-
-function toggleWarWinProb() {
-    const body = document.getElementById('warWpBody');
-    const chev = document.getElementById('warWpChev');
-    if (!body) return;
-    const open = body.style.display !== 'block';
-    body.style.display = open ? 'block' : 'none';
-    if (chev) chev.classList.toggle('open', open);
-    if (open && !document.getElementById('warWinCalc').innerHTML.trim()) buildWarWinCalc();
 }
 
 // ── Compare & Predict Modal ───────────────────────────────────────────────────
@@ -1187,230 +1182,21 @@ function buildWarCmpWinProb() {
 }
 
 function buildCompare() {
-    const len = Math.min(OUR.length, OPP.length);
-    const ourNameSafe = escapeHTML(WAR.ourName);
-    const oppNameSafe = escapeHTML(WAR.oppName);
-
-    // ── Analysis ──────────────────────────────────────────────────────────────
-    const avgThOur = avg(OUR.map(m => m.th));
-    const avgThOpp = avg(OPP.map(m => m.th));
-
-    let thDiffTotal = 0;
-    for (let i = 0; i < len; i++) thDiffTotal += OUR[i].th - OPP[i].th;
-    const thDiffAvg = thDiffTotal / len;
-
-    const avgLrOur = avg(OUR.slice(0, len).map(m => m.lr).filter(r => r > 0));
-    const avgLrOpp = avg(OPP.slice(0, len).map(m => m.lr).filter(r => r > 0));
-    const leagueDiff = (avgLrOur - avgLrOpp) / 36;
-
-    const maxWins   = Math.max(WAR.warsWonOur, WAR.warsWonOpp, 1);
-    const warsScore = (Math.log(WAR.warsWonOur + 1) - Math.log(WAR.warsWonOpp + 1)) / Math.log(maxWins + 1);
-    const maxStreak  = Math.max(WAR.streakOur, WAR.streakOpp, 1);
-    const streakScore = (WAR.streakOur - WAR.streakOpp) / maxStreak;
-
-    let thBetter = 0, thEven = 0, thWorse = 0;
-    for (let i = 0; i < len; i++) {
-        const d = OUR[i].th - OPP[i].th;
-        if (d > 0) thBetter++; else if (d < 0) thWorse++; else thEven++;
-    }
-    const posScore = (thBetter - thWorse) / len;
-
-    let lgBetter = 0, lgEven = 0, lgWorse = 0;
-    for (let i = 0; i < len; i++) {
-        const o = OUR[i], p = OPP[i];
-        if (o.lr > 0 && p.lr > 0) {
-            const d = o.lr - p.lr;
-            if (d > 0) lgBetter++; else if (d < 0) lgWorse++; else lgEven++;
-        } else if (o.lr > 0) { lgBetter++;
-        } else if (p.lr > 0) { lgWorse++;
-        } else { lgEven++; }
-    }
-    const lgPosScore = (lgBetter - lgWorse) / Math.max(len, 1);
-
-    const rawScore = thDiffAvg * 0.40 + posScore * 0.22 + leagueDiff * 2 * 0.18 + lgPosScore * 0.10 + warsScore * 0.05 + streakScore * 0.05;
-    let prob = sigmoid(rawScore * 1.8);
-    prob = clamp(prob, 0.25, 0.75);
-    const ourPct = Math.round(prob * 100);
-    const oppPct = 100 - ourPct;
-
-    const verdict = ourPct > 54 ? `${WAR.ourName} have a statistical edge in this matchup.`
-                  : ourPct < 46 ? `${WAR.oppName} have a statistical edge in this matchup.`
-                  : 'This looks like an even matchup — could go either way.';
-
-    // ── 1. PREDICTION ─────────────────────────────────────────────────────────
-    function factorCard(label, ourVal, oppVal, score) {
-        const cls = score > 0.05 ? 'pfr-win-our' : score < -0.05 ? 'pfr-win-opp' : '';
-        return `<div class="pred-factor-row ${cls}">
-            <div class="pfr-label">${label}</div>
-            <div class="pfr-vals">
-                <span class="pfr-our">${ourVal}</span>
-                <span class="pfr-sep">vs</span>
-                <span class="pfr-opp">${oppVal}</span>
-            </div>
-        </div>`;
-    }
-
-    document.getElementById('warCmp-prediction').innerHTML = `
-        <div class="cmp-title">📊 War Prediction</div>
-        <div class="pred-verdict" style="margin-bottom:16px;">${verdict}</div>
-        <div class="pred-factors-grid">
-            ${factorCard('Avg TH', avgThOur.toFixed(1), avgThOpp.toFixed(1), thDiffAvg)}
-            ${factorCard('Avg League Rank', avgLrOur > 0 ? avgLrOur.toFixed(1) : '—', avgLrOpp > 0 ? avgLrOpp.toFixed(1) : '—', leagueDiff)}
-            ${factorCard('Position Edge', `+${thBetter} ahead`, `+${thWorse} ahead`, posScore)}
-            ${factorCard('League Edge', `+${lgBetter} ahead`, `+${lgWorse} ahead`, lgPosScore)}
-            ${factorCard('Wars Won', WAR.warsWonOur, WAR.warsWonOpp, warsScore)}
-            ${factorCard('Win Streak', WAR.streakOur || '—', WAR.streakOpp || '—', streakScore)}
-        </div>
-    `;
-
-    // ── 2. KEY STATS ──────────────────────────────────────────────────────────
-    function statRow(label, ourVal, oppVal, higherBetter = true) {
-        const diff = parseFloat(ourVal) - parseFloat(oppVal);
-        const ourWins = higherBetter ? diff > 0.01 : diff < -0.01;
-        const oppWins = higherBetter ? diff < -0.01 : diff > 0.01;
-        return `<div class="stat-cmp-row">
-            <div class="scr-our ${ourWins ? 'scr-win' : oppWins ? 'scr-lose' : ''}">${ourVal}</div>
-            <div class="scr-label">${label}</div>
-            <div class="scr-opp ${oppWins ? 'scr-win' : ourWins ? 'scr-lose' : ''}">${oppVal}</div>
-        </div>`;
-    }
-
-    document.getElementById('warCmp-stats').innerHTML = `
-        <div class="cmp-title">📋 Key Statistics</div>
-        <div style="display:grid;grid-template-columns:1fr 140px 1fr;margin-bottom:8px;">
-            <span style="font-size:11px;font-weight:600;color:var(--green)">${ourNameSafe}</span>
-            <span></span>
-            <span style="font-size:11px;font-weight:600;color:var(--red)">${oppNameSafe}</span>
-        </div>
-        ${statRow('AVG TH', avgThOur.toFixed(1), avgThOpp.toFixed(1))}
-        ${avgLrOur > 0 || avgLrOpp > 0 ? statRow('AVG LEAGUE RANK', avgLrOur > 0 ? avgLrOur.toFixed(1) : '—', avgLrOpp > 0 ? avgLrOpp.toFixed(1) : '—') : ''}
-        ${statRow('WARS WON', WAR.warsWonOur, WAR.warsWonOpp)}
-        ${statRow('WIN STREAK', WAR.streakOur, WAR.streakOpp)}
-        ${statRow('TH POSITIONS AHEAD', thBetter, thWorse)}
-        ${lgBetter + lgWorse > 0 ? statRow('LEAGUE POSITIONS AHEAD', lgBetter, lgWorse) : ''}
-    `;
-
-    // ── 3. TH DISTRIBUTION ────────────────────────────────────────────────────
-    const thOur = {}, thOpp = {};
-    OUR.forEach(m => { thOur[m.th] = (thOur[m.th]||0) + 1; });
-    OPP.forEach(m => { thOpp[m.th] = (thOpp[m.th]||0) + 1; });
-    const allThs   = [...new Set([...Object.keys(thOur), ...Object.keys(thOpp)].map(Number))].sort((a,b) => b-a);
-    const maxCount = Math.max(...allThs.map(t => Math.max(thOur[t]||0, thOpp[t]||0)), 1);
-
-    const thRows = allThs.map(th => {
-        const o  = thOur[th] || 0, p = thOpp[th] || 0;
-        const ow = Math.round((o / maxCount) * 130);
-        const pw = Math.round((p / maxCount) * 130);
-        return `<div class="dist-row">
-            <span class="dist-count-our">${o || ''}</span>
-            <div style="display:flex;justify-content:flex-end"><div class="dist-bar-our" style="width:${ow}px"></div></div>
-            <span class="dist-lbl">TH${th}</span>
-            <div><div class="dist-bar-opp" style="width:${pw}px"></div></div>
-            <span class="dist-count-opp">${p || ''}</span>
-        </div>`;
-    }).join('');
-
-    document.getElementById('warCmp-th').innerHTML = `
-        <div class="cmp-title"><img src="/static/img/townHall.png" style="width:14px;height:14px;vertical-align:middle;"> TH Distribution</div>
-        <div class="dist-header">
-            <span class="dist-our-lbl">${ourNameSafe}</span>
-            <span></span>
-            <span class="dist-opp-lbl">${oppNameSafe}</span>
-        </div>
-        ${thRows}
-    `;
-
-    // ── 4. LEAGUE COMPARISON (per player) ─────────────────────────────────────
-    const lgRows = Array.from({length: len}, (_, i) => {
-        const o = OUR[i], p = OPP[i];
-        const hasO = o.lr > 0, hasP = p.lr > 0;
-        let rowCls = '', diffLabel = '—';
-        if (hasO && hasP) {
-            const diff = o.lr - p.lr;
-            if (diff > 0)      { rowCls = 'lg-adv'; diffLabel = `+${diff}`; }
-            else if (diff < 0) { rowCls = 'lg-dis'; diffLabel = `${diff}`; }
-            else               { rowCls = 'lg-even'; diffLabel = '='; }
-        } else if (hasO) { rowCls = 'lg-adv'; diffLabel = '+';
-        } else if (hasP) { rowCls = 'lg-dis'; diffLabel = '−';
-        } else           { rowCls = 'lg-even'; }
-        const oLg = hasO ? escapeHTML(o.league) : '<span class="no-data-lg">—</span>';
-        const pLg = hasP ? escapeHTML(p.league) : '<span class="no-data-lg">—</span>';
-        return `<tr class="${rowCls}">
-            <td class="lgt-pos">#${o.pos}</td>
-            <td class="lgt-name">${escapeHTML(o.name)}</td>
-            <td class="lgt-lg">${oLg}</td>
-            <td class="lgt-diff">${diffLabel}</td>
-            <td class="lgt-lg" style="text-align:right">${pLg}</td>
-            <td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('warCmp-league').innerHTML = `
-        <div class="cmp-title">🎯 League Comparison</div>
-        <div class="matchup-summary">
-            <div class="matchup-stat"><div class="mn mn-green">${lgBetter}</div><div class="ml">Ahead</div></div>
-            <div class="matchup-stat"><div class="mn mn-muted">${lgEven}</div><div class="ml">Even</div></div>
-            <div class="matchup-stat"><div class="mn mn-red">${lgWorse}</div><div class="ml">Behind</div></div>
-        </div>
-        <table class="lg-table">
-            <thead><tr>
-                <th>#</th>
-                <th style="text-align:left">${ourNameSafe}</th>
-                <th style="text-align:left">League</th>
-                <th style="text-align:center">Diff</th>
-                <th style="text-align:right">League</th>
-                <th style="text-align:right">${oppNameSafe}</th>
-            </tr></thead>
-            <tbody>${lgRows}</tbody>
-        </table>
-    `;
-
-    // ── 5. POSITION MATCHUP (TH) ──────────────────────────────────────────────
-    const matchupRows = Array.from({length: len}, (_, i) => {
-        const o = OUR[i], p = OPP[i];
-        const diff   = o.th - p.th;
-        const rowCls = diff > 0 ? 'lg-adv' : diff < 0 ? 'lg-dis' : 'lg-even';
-        const note   = diff > 0 ? `+${diff}` : diff < 0 ? `${diff}` : '=';
-        const diffCls = diff > 0 ? 'mt-adv' : diff < 0 ? 'mt-dis' : 'mt-even';
-        return `<tr class="${rowCls}">
-            <td class="lgt-pos">#${o.pos}</td>
-            <td class="lgt-name">${escapeHTML(o.name)}</td>
-            <td class="lgt-lg">TH${o.th}</td>
-            <td class="lgt-diff ${diffCls}">${note}</td>
-            <td class="lgt-lg" style="text-align:right">TH${p.th}</td>
-            <td class="lgt-name" style="text-align:right">${escapeHTML(p.name)}</td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('warCmp-matchup').innerHTML = `
-        <div class="cmp-title"><img src="/static/img/battle.png" style="width:14px;height:14px;vertical-align:middle;"> TH Matchup by Position</div>
-        <div class="matchup-summary">
-            <div class="matchup-stat"><div class="mn mn-green">${thBetter}</div><div class="ml">Ahead</div></div>
-            <div class="matchup-stat"><div class="mn mn-muted">${thEven}</div><div class="ml">Even</div></div>
-            <div class="matchup-stat"><div class="mn mn-red">${thWorse}</div><div class="ml">Behind</div></div>
-        </div>
-        <table class="lg-table">
-            <thead><tr>
-                <th>#</th>
-                <th style="text-align:left">${ourNameSafe}</th>
-                <th style="text-align:left">TH</th>
-                <th style="text-align:center">Diff</th>
-                <th style="text-align:right">TH</th>
-                <th style="text-align:right">${oppNameSafe}</th>
-            </tr></thead>
-            <tbody>${matchupRows}</tbody>
-        </table>
-    `;
+    const html = buildCompareHTML(OUR, OPP, {
+        ourName:    WAR.ourName,    oppName:    WAR.oppName,
+        warsWonOur: WAR.warsWonOur, warsWonOpp: WAR.warsWonOpp,
+        streakOur:  WAR.streakOur,  streakOpp:  WAR.streakOpp,
+    });
+    document.getElementById('warCmp-prediction').innerHTML = html.prediction;
+    document.getElementById('warCmp-stats').innerHTML      = html.stats;
+    document.getElementById('warCmp-th').innerHTML         = html.th;
+    document.getElementById('warCmp-league').innerHTML     = html.league;
+    document.getElementById('warCmp-matchup').innerHTML    = html.matchup;
 }
 
 // ── ATTACK LOG ──────────────────────────────────────────────────────────────
 const WAR_ATTACKS = {{ all_attacks_json | default([]) | tojson | safe }};
-
-function buildWarAttackLog() {
-    const body = document.getElementById('warLogBody');
-    if (!body) return;
-    body.innerHTML = buildAttackLogHTML(WAR_ATTACKS);
-}
+registerWarCard(0, { attacks: WAR_ATTACKS });
 
 {% if war_verdicts %}
 const WAR_VERDICTS = {{ war_verdicts | tojson | safe }};
@@ -1535,14 +1321,14 @@ function buildWarVerdictTable() {
         ).join('<br>') || `<span style="color:var(--muted);opacity:.45;">—</span>`;
 
         row.innerHTML = `
+            <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);font-size:13px;">#${v.map_pos}</td>
             <td>
                 <div style="font-weight:600;font-size:13.5px;"><a href="/player/${encodeURIComponent((v.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(v.player_name)} <span class="player-link-arrow">↗</span></a></div>
-                <div style="font-size:11px;color:var(--muted);margin-top:1px;">TH${v.player_th} · #${v.map_pos}</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:1px;">TH${v.player_th}</div>
             </td>
             <td style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.league ? escapeHTML(v.league) : '—'}</td>
             <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${v.attacks_used}<span style="font-size:12px;color:var(--muted);font-weight:400;">/2</span></td>
-            <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;">${v.score}</td>
-            <td style="text-align:center;"><span class="judgment ${v.badge}" title="${v.badge === 'badge-undefined' ? v.label : ''}">${v.badge === 'badge-undefined' ? '?' : v.label}</span></td>
+            <td style="text-align:center;"><span class="judgment ${v.badge}" title="${v.badge === 'badge-undefined' ? v.label : ''}">${v.badge === 'badge-undefined' ? '?' : v.label}${v.score > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${v.score}` : ''}</span></td>
             <td><button type="button" class="action-btn details-toggle" onclick="event.stopPropagation(); toggleWarVerdictDetails(this)">Details</button></td>
         `;
 
@@ -1594,152 +1380,20 @@ function toggleWarVerdicts() {
 }
 {% endif %}
 
-function toggleWarAttackLog() {
-    const body    = document.getElementById('warLogBody');
-    const chevron = document.getElementById('warLogChevron');
-    const opening = body.style.display === 'none' || body.style.display === '';
-    body.style.display = opening ? 'block' : 'none';
-    chevron.classList.toggle('open', opening);
-    if (opening && !body.innerHTML.trim()) buildWarAttackLog();
-}
-
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeWarCmpModal(); closeMatchupRatesModal(); closePlayerMatchupRatesModal(); } });
 
 document.addEventListener('DOMContentLoaded', () => {
     {% if war and war.state == 'inWar' %}
-    toggleWarWinProb();
+    toggleWinCalc(0);
     {% endif %}
 });
 </script>
 {% endif %}
 
-{% if war %}
-<script>
-(function () {
-    const grid = document.getElementById('rosterGrid');
-    const svg  = document.getElementById('warConnections');
-    if (!grid || !svg) return;
-
-    const activeTags = new Set();
-    const TGT_CLASSES = ['row-tgt-3','row-tgt-2','row-tgt-1','row-tgt-0','row-tgt-open'];
-
-    function getPos(row) {
-        const gr = grid.getBoundingClientRect();
-        const rr = row.getBoundingClientRect();
-        return { left: rr.left - gr.left, right: rr.right - gr.left,
-                 y: rr.top - gr.top + rr.height / 2 };
-    }
-
-    function syncButtons() {
-        document.querySelectorAll('.toggle-all-btn').forEach(btn => {
-            const card = btn.closest('.roster-card');
-            const tags = [...card.querySelectorAll('.member-row[data-tag]')].map(r => r.dataset.tag);
-            const allSel = tags.length > 0 && tags.every(t => activeTags.has(t));
-            const anySel = tags.some(t => activeTags.has(t));
-            btn.textContent = allSel ? 'Deselect All' : 'Select All';
-            btn.classList.toggle('active', anySel);
-        });
-    }
-
-    function rebuildConnections() {
-        svg.innerHTML = '';
-        document.querySelectorAll('.member-row').forEach(r => {
-            r.classList.remove('row-sel', 'row-dim', ...TGT_CLASSES);
-        });
-        syncButtons();
-        if (activeTags.size === 0) return;
-
-        const cards = document.querySelectorAll('.roster-card');
-
-        activeTags.forEach(tag => {
-            const row = document.querySelector(`.member-row[data-tag="${CSS.escape(tag)}"]`);
-            if (!row) return;
-            row.classList.add('row-sel');
-            const isLeft = cards[0] && cards[0].contains(row);
-            const srcPos = getPos(row);
-
-            // outgoing attacks
-            const attacks = JSON.parse(row.dataset.attacks || '[]');
-            attacks.forEach(atk => {
-                const defRow = document.querySelector(`.member-row[data-tag="${CSS.escape(atk.tag)}"]`);
-                if (!defRow) return;
-                defRow.classList.add('row-tgt-' + atk.stars);
-                const dstPos = getPos(defRow);
-                const x1 = isLeft ? srcPos.right + 2 : srcPos.left  - 2;
-                const x2 = isLeft ? dstPos.left  - 2 : dstPos.right + 2;
-                drawSVGCurve(svg, x1, srcPos.y, x2, dstPos.y, atk.stars, false);
-            });
-
-            // incoming attacks (dashed)
-            const defended = JSON.parse(row.dataset.defendedBy || '[]');
-            defended.forEach(atk => {
-                const atkRow = document.querySelector(`.member-row[data-tag="${CSS.escape(atk.tag)}"]`);
-                if (!atkRow) return;
-                atkRow.classList.add('row-tgt-' + atk.stars);
-                const atkPos = getPos(atkRow);
-                // line goes FROM attacker TO selected player (incoming direction)
-                const x1 = isLeft ? atkPos.left  - 2 : atkPos.right + 2;
-                const x2 = isLeft ? srcPos.right + 2 : srcPos.left  - 2;
-                drawSVGCurve(svg, x1, atkPos.y, x2, srcPos.y, atk.stars, true);
-            });
-
-            // potential targets: remaining attacks → opponent rows not yet 3-starred
-            if (attacks.length < 2) {
-                const oppCard = isLeft ? cards[1] : cards[0];
-                if (oppCard) {
-                    oppCard.querySelectorAll('.member-row[data-tag]').forEach(oppRow => {
-                        if (['row-tgt-0','row-tgt-1','row-tgt-2','row-tgt-3'].some(c => oppRow.classList.contains(c))) return;
-                        const recv = JSON.parse(oppRow.dataset.defendedBy || '[]');
-                        const best = recv.length ? Math.max(...recv.map(a => a.stars)) : 0;
-                        if (best < 3) {
-                            oppRow.classList.add('row-tgt-open');
-                            const dstPos = getPos(oppRow);
-                            const x1 = isLeft ? srcPos.right + 2 : srcPos.left  - 2;
-                            const x2 = isLeft ? dstPos.left  - 2 : dstPos.right + 2;
-                            drawSVGPotential(svg, x1, srcPos.y, x2, dstPos.y);
-                        }
-                    });
-                }
-            }
-        });
-
-        document.querySelectorAll('.member-row').forEach(r => {
-            if (!r.classList.contains('row-sel') && !TGT_CLASSES.some(c => r.classList.contains(c)))
-                r.classList.add('row-dim');
-        });
-    }
-
-    function clearAll() {
-        activeTags.clear();
-        rebuildConnections();
-    }
-
-    function onRowClick(e) {
-        e.stopPropagation();
-        const tag = e.currentTarget.dataset.tag;
-        if (activeTags.has(tag)) activeTags.delete(tag);
-        else activeTags.add(tag);
-        rebuildConnections();
-    }
-
-    window.toggleAllSide = function(btn, event) {
-        event.stopPropagation();
-        const card = btn.closest('.roster-card');
-        const tags = [...card.querySelectorAll('.member-row[data-tag]')].map(r => r.dataset.tag);
-        const allSel = tags.every(t => activeTags.has(t));
-        if (allSel) tags.forEach(t => activeTags.delete(t));
-        else tags.forEach(t => activeTags.add(t));
-        rebuildConnections();
-    };
-
-    document.querySelectorAll('.member-row[data-tag]').forEach(r => r.addEventListener('click', onRowClick));
-    document.addEventListener('click', clearAll);
-})();
-</script>
-{% endif %}
 
 {% if war and members_our and members_opp %}
 <!-- ── TH Matchup Rates Modal ── -->
+{# roster initialized in the first DOMContentLoaded block above #}
 {# matchup_source consumed by both modal includes below — keep this set before both #}
 {% set matchup_source = "clan war" %}
 {% include '_matchup_rates_modal.html' %}

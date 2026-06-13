@@ -235,7 +235,6 @@
 </form>
 <div class="ctrl-divider" style="margin-left:auto;"></div>
 <input id="searchInput" class="selector" type="search" placeholder="🔍 Search player…" oninput="buildTable()" style="min-width:180px;">
-</form>
 {% endset %}
 {% include '_page_header.html' %}
 
@@ -357,6 +356,7 @@
 
     let currentSort = { column: null, direction: null };
     let resourceChart = null;
+    let attacksChart = null;
 
     function fmt(n) { return Number(n).toLocaleString(); }
 
@@ -408,7 +408,7 @@
     }
 
     function renderStars(n) {
-        n = parseInt(n) || 0;
+        n = Math.min(parseInt(n) || 0, 3);
         return `<span style="font-size:1.18em;letter-spacing:1px;color:var(--yellow);">${'★'.repeat(n)}</span><span style="font-size:1.18em;letter-spacing:1px;color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
     }
 
@@ -418,7 +418,7 @@
             <td>${escapeHTML(l.opponent_tag)}</td>
             <td>${formatType(l.type)}</td>
             <td>${renderStars(l.stars)}</td>
-            <td>${l.percentage}%</td>
+            <td>${l.percentage ?? 0}%</td>
             <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.gold)}</td>
             <td style="color:var(--purple);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.elixir)}</td>
             <td style="color:var(--red);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.dark)}</td>
@@ -436,27 +436,36 @@
         return { hour, dow };
     }
 
-    function buildHeatmap(logs) {
-        const counts = Array.from({length: 7}, () => new Array(24).fill(0));
+    function computeLogMetrics(logs) {
+        const starCounts = [0, 0, 0, 0];
+        let totalPct = 0;
+        const grid = Array.from({length: 7}, () => new Array(24).fill(0));
         logs.forEach(l => {
+            starCounts[Math.min(l.stars || 0, 3)]++;
+            totalPct += l.percentage || 0;
             const t = parseLocalTime(l.time_sort);
-            if (!t) return;
-            counts[t.dow][t.hour]++;
+            if (t) grid[t.dow][t.hour]++;
         });
-        const maxCount = Math.max(1, ...counts.flat());
+        const dayCounts  = grid.map(row => row.reduce((s, v) => s + v, 0));
+        const hourCounts = Array.from({length: 24}, (_, h) => grid.reduce((s, row) => s + row[h], 0));
+        return { starCounts, totalPct, grid, dayCounts, hourCounts };
+    }
+
+    function buildHeatmap(grid) {
+        const maxCount = Math.max(1, ...grid.flat());
         const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
         const hourLabels = Array.from({length: 24}, (_, h) =>
             `<span class="hm-hour-lbl">${h % 6 === 0 ? h : ''}</span>`
         ).join('');
         const rows = DAYS.map((day, di) => {
             const cells = Array.from({length: 24}, (_, h) => {
-                const c = counts[di][h];
+                const c = grid[di][h];
                 let bg;
                 if (c === 0) {
                     bg = 'var(--surf2)';
                 } else {
-                    const t = Math.sqrt(c / maxCount);
-                    const a = (0.2 + t * 0.8).toFixed(2);
+                    const frac = Math.sqrt(c / maxCount);
+                    const a = (0.2 + frac * 0.8).toFixed(2);
                     bg = `rgba(240,165,0,${a})`;
                 }
                 const tip = c === 0 ? `${day} ${h}:00 – no attacks` : `${day} ${h}:00 – ${c} attack${c > 1 ? 's' : ''}`;
@@ -471,26 +480,15 @@
         </div>`;
     }
 
-    function buildDetailStats(logs) {
-        const total = logs.length;
-        const starCounts = [0, 0, 0, 0];
-        let totalPct = 0;
-        const dayCounts  = new Array(7).fill(0);
-        const hourCounts = new Array(24).fill(0);
-
-        logs.forEach(l => {
-            starCounts[Math.min(l.stars || 0, 3)]++;
-            totalPct += l.percentage || 0;
-            const t = parseLocalTime(l.time_sort);
-            if (t) { dayCounts[t.dow]++; hourCounts[t.hour]++; }
-        });
-
+    function buildDetailStats({ starCounts, totalPct, dayCounts, hourCounts }, total) {
         const avgPct    = total ? Math.round(totalPct / total) : 0;
         const threeStar = total ? Math.round(starCounts[3] / total * 100) : 0;
         const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-        const peakDay  = DAYS[dayCounts.indexOf(Math.max(...dayCounts))];
-        const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
-        const peakHourStr = `${peakHour}:00`;
+        const maxDay  = Math.max(...dayCounts);
+        const peakDay = maxDay > 0 ? DAYS[dayCounts.indexOf(maxDay)] : '–';
+        const maxHour = Math.max(...hourCounts);
+        const peakHour = maxHour > 0 ? hourCounts.indexOf(maxHour) : null;
+        const peakHourStr = peakHour !== null ? `${peakHour}:00` : '–';
 
         const STAR_COLORS = ['#8b949e','#f0a500','#e3b341','#3fb950'];
         const STAR_LABELS = [
@@ -528,7 +526,8 @@
     function buildDetailTable(logs) {
         if (!logs || !logs.length) return '<div style="color:var(--muted);padding:8px 0;font-size:13px;">No attacks recorded.</div>';
         const sorted = [...logs].sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
-        return `<div class="detail-top">${buildHeatmap(logs)}${buildDetailStats(logs)}</div>
+        const metrics = computeLogMetrics(logs);
+        return `<div class="detail-top">${buildHeatmap(metrics.grid)}${buildDetailStats(metrics, logs.length)}</div>
         <table class="detail-table">
             <thead><tr><th>Time</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th><th><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th><th><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th></tr></thead>
             <tbody>${sorted.map(attackLogRow).join('')}</tbody>
@@ -552,7 +551,7 @@
                 <td>${escapeHTML(l.opponent_tag)}</td>
                 <td>${formatType(l.type)}</td>
                 <td>${renderStars(l.stars)}</td>
-                <td>${l.percentage}%</td>
+                <td>${l.percentage ?? 0}%</td>
                 <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.gold)}</td>
                 <td style="color:var(--purple);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.elixir)}</td>
                 <td style="color:var(--red);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.dark)}</td>
@@ -560,15 +559,22 @@
         </table>`;
     }
 
+    let recentBuilt = false;
     function toggleRecent() {
         const body = document.getElementById('recentBody');
         const chevron = document.getElementById('recentChevron');
         const open = body.style.display === 'none';
+        if (open && !recentBuilt) { buildRecentAttacks(); recentBuilt = true; }
         body.style.display = open ? '' : 'none';
         chevron.classList.toggle('open', open);
     }
 
     function buildTable() {
+        const expandedTags = new Set(
+            [...document.querySelectorAll('#statsBody .detail-row.expanded')]
+                .map(r => r.dataset.playerTag).filter(Boolean)
+        );
+
         const search = (document.getElementById('searchInput').value || '').toLowerCase();
         let rows = window.playerData.filter(p =>
             !search || (p.player_name||'').toLowerCase().includes(search) || (p.player_tag||'').toLowerCase().includes(search)
@@ -607,16 +613,23 @@
 
             const detailRow = document.createElement('tr');
             detailRow.className = 'detail-row';
-            detailRow.innerHTML = `<td class="detail-cell" colspan="6"><div class="detail-inner">${buildDetailTable(p.attack_logs)}</div></td>`;
+            detailRow.dataset.playerTag = p.player_tag;
+            detailRow.innerHTML = `<td class="detail-cell" colspan="6"><div class="detail-inner"></div></td>`;
 
             const toggleButton = row.querySelector('.details-toggle');
             row.addEventListener('click', () => {
+                if (!detailRow.dataset.built) {
+                    detailRow.querySelector('.detail-inner').innerHTML = buildDetailTable(p.attack_logs);
+                    detailRow.dataset.built = 'true';
+                }
                 const expanded = detailRow.classList.toggle('expanded');
                 toggleButton.textContent = expanded ? 'Close' : 'Details';
             });
 
             tbody.appendChild(row);
             tbody.appendChild(detailRow);
+
+            if (expandedTags.has(p.player_tag)) row.click();
         });
 
         const totalAttacks = rows.reduce((s, p) => s + (p.att_count || 0), 0);
@@ -628,12 +641,9 @@
         if (currentSort.column === col) {
             if (currentSort.direction === 'asc') {
                 currentSort.direction = 'desc';
-            } else if (currentSort.direction === 'desc') {
+            } else {
                 currentSort.column = null;
                 currentSort.direction = null;
-            } else {
-                currentSort.column = col;
-                currentSort.direction = 'asc';
             }
         } else {
             currentSort.column = col;
@@ -653,10 +663,11 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        makeDonut('chartAttacks', topByAttacks, 'player_name', 'att_count');
-        resourceChart = makeDonut('chartResources', getTop10ByResource('total_gold'), 'player_name', 'total_gold');
+        if (attacksChart)  { attacksChart.destroy();  attacksChart  = null; }
+        if (resourceChart) { resourceChart.destroy(); resourceChart = null; }
+        attacksChart  = makeDonut('chartAttacks',    topByAttacks,                   'player_name', 'att_count');
+        resourceChart = makeDonut('chartResources',  getTop10ByResource('total_gold'), 'player_name', 'total_gold');
         buildTable();
-        buildRecentAttacks();
     });
 </script>
 {% endif %}

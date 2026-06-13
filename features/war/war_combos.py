@@ -51,16 +51,20 @@ def classify_attack(stars, attacker_th, dfn_th, already_3starred, partially_atta
 
 WAR_COMBOS = {
     (CLEAR, CLEAR):                    (100, 'Flawless'),
+    
     (LOW_CLEAR, CLEAN_UP):             (90,  'War Crimes'),
-
     (CLEAR, LOW_CLEAR):                (90, 'Scaredy Cat'),
     
-    (CLEAR, FAILED_CLEAR):              (50,  'Fumble'),
-    
     (LOW_CLEAR, FARM):                 (75,  'Lazy Farmer'),
+    
+    (CLEAR, FAILED_CLEAR):              (50,  'Fumble'),
     (FARM, FARM):                      (50,  'Farmer'),
-    (FAILED_FARM, FARM):               (25,  'Inconsitend Farmer'),
-    (WASTED, FARM):                    (25,  'Inconsitend Farmer'),
+    
+    
+    (FAILED_FARM, FARM):                (25,  'Inconsitend Farmer'),
+    (WASTED, FARM):                     (25,  'Inconsitend Farmer'),
+    
+    (FAILED_CLEAR, FAILED_CLEAR):       (15, 'Failure'),
     (WASTED, WASTED):                  (15, 'Wasted'),
     (NO_ATTACK, NO_ATTACK):            (0,   'No Show'),
 }

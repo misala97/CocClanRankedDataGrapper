@@ -144,8 +144,18 @@ def task_update_raid_weekend():
             if raid_weekend.state == 'ended' and raid_weekend.end_time:
                 next_run = raid_weekend.end_time + dt.timedelta(days=4)
                 next_run = next_run.replace(tzinfo=dt.timezone.utc)
-                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='date', run_date=next_run)
-                raid_weekend_logger.info(f"Raid ended — rescheduled to {next_run} UTC")
+                now = dt.datetime.now(dt.timezone.utc)
+                if next_run > now:
+                    extensions.scheduler.reschedule_job('raid_weekend_update', trigger='date', run_date=next_run)
+                    raid_weekend_logger.info(f"Raid ended — rescheduled to {next_run} UTC")
+                else:
+                    # Past the expected start window — raid hasn't been manually started yet, poll until it does
+                    extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', minutes=30)
+                    raid_weekend_logger.info("Waiting for new raid to be started — polling every 30 minutes")
             elif raid_weekend.state == 'ongoing':
                 extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', minutes=3)
                 raid_weekend_logger.info("Raid ongoing — keeping 3-minute interval")
+
+            
+            
+            

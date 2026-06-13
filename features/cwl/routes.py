@@ -486,9 +486,15 @@ def cwl_page():
             if tag not in _perf:
                 _perf[tag] = {
                     'name': v['player_name'], 'th': v['player_th'],
+                    'map_pos': v['map_pos'],
                     'wars': 0, 'attacks_used': 0,
                     'stars': 0, 'destruction': 0.0,
+                    'def_th_sum': 0, 'def_th_count': 0,
                     'zero_stars': 0, 'one_stars': 0, 'two_stars': 0, 'three_stars': 0,
+                    'def_received': 0, 'def_stars': 0,
+                    'def_zero_stars': 0, 'def_one_stars': 0, 'def_two_stars': 0, 'def_three_stars': 0,
+                    'def_wars_attacked': 0,
+                    'atk_th_sum': 0, 'atk_th_count': 0,
                     'verdict_scores': [],
                     'daily_details': [],
                 }
@@ -500,6 +506,25 @@ def cwl_page():
                 p['destruction']  += atk['pct']
                 s = atk['stars']
                 inc_star_bucket(p, s)
+                if atk['defender_th']:
+                    p['def_th_sum']   += atk['defender_th']
+                    p['def_th_count'] += 1
+            def_attacks = d['attacks_on_defender'].get(tag, [])
+            if def_attacks:
+                p['def_wars_attacked'] += 1
+            for datk in def_attacks:
+                attacker = d['member_by_tag'].get(datk.attacker_tag)
+                atk_th = (attacker.town_hall_level or 0) if attacker else 0
+                p['def_received'] += 1
+                ds = datk.stars or 0
+                p['def_stars'] += ds
+                if   ds == 0: p['def_zero_stars']  += 1
+                elif ds == 1: p['def_one_stars']   += 1
+                elif ds == 2: p['def_two_stars']   += 1
+                else:         p['def_three_stars'] += 1
+                if atk_th:
+                    p['atk_th_sum']   += atk_th
+                    p['atk_th_count'] += 1
             p['verdict_scores'].append(v['score'])
             p['daily_details'].append({
                 'round':         v.get('round_number') or 0,
@@ -520,6 +545,8 @@ def cwl_page():
         our_player_perf.append({
             'name':            p['name'],
             'th':              p['th'],
+            'map_pos':         p['map_pos'],
+            'avg_def_th':      round(p['def_th_sum'] / p['def_th_count'], 1) if p['def_th_count'] else None,
             'wars':            p['wars'],
             'attacks_used':    used,
             'missed':          p['wars'] - used,
@@ -533,6 +560,17 @@ def cwl_page():
             'one_stars':       p['one_stars'],
             'two_stars':       p['two_stars'],
             'three_stars':     p['three_stars'],
+            'def_received':    p['def_received'],
+            'def_stars':       p['def_stars'],
+            'def_zero_stars':  p['def_zero_stars'],
+            'def_one_stars':   p['def_one_stars'],
+            'def_two_stars':   p['def_two_stars'],
+            'def_three_stars': p['def_three_stars'],
+            'def_wars_attacked': p['def_wars_attacked'],
+            'def_missed':      p['wars'] - p['def_wars_attacked'],
+            'avg_def_stars':      round(p['def_stars'] / p['def_received'], 2) if p['def_received'] else 0.0,
+            'three_star_def_rate': round(p['def_three_stars'] / p['def_received'] * 100) if p['def_received'] else 0,
+            'avg_atk_th':      round(p['atk_th_sum'] / p['atk_th_count'], 1) if p['atk_th_count'] else None,
             'daily_details':   p['daily_details'],
         })
     our_player_perf.sort(key=lambda p: (-p['avg_stars'], -p['wars']))

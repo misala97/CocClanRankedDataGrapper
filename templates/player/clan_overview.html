@@ -244,7 +244,8 @@
                         ${bar(p.activity.ranked_score, 'var(--blue)')}
                         ${bar(p.activity.raid_score,   'var(--accent)')}
                         ${bar(p.activity.battle_score, 'var(--green)')}
-                        ${p.activity.war_score_has_data ? bar(p.activity.war_score, 'var(--red)') : barNoData()}
+                        ${p.activity.war_score_has_data ? bar(p.activity.war_score, 'var(--red)')    : barNoData()}
+                        ${p.activity.cwl_score_has_data ? bar(p.activity.cwl_score, 'var(--purple)') : barNoData()}
                     </div>
                 </div>
                 <div class="mini-score">
@@ -252,10 +253,11 @@
                     <div class="mini-num" style="color:${skColor};">${p.skill.score}</div>
                     <div class="mini-tag" style="color:${skColor};">${escapeHTML(p.skill.label)}</div>
                     <div class="mini-bars">
-                        ${p.skill.ranked_skill_has_data ? bar(p.skill.ranked_skill, 'var(--blue)')   : barNoData()}
-                        ${p.skill.raid_skill_has_data   ? bar(p.skill.raid_skill,   'var(--accent)') : barNoData()}
-                        ${p.skill.battle_skill_has_data ? bar(p.skill.battle_skill, 'var(--green)')  : barNoData()}
-                        ${p.skill.war_skill_has_data    ? bar(p.skill.war_skill,    'var(--red)')    : barNoData()}
+                        ${p.skill.ranked_skill_has_data ? bar(p.skill.ranked_skill, 'var(--blue)')    : barNoData()}
+                        ${p.skill.raid_skill_has_data   ? bar(p.skill.raid_skill,   'var(--accent)')  : barNoData()}
+                        ${p.skill.battle_skill_has_data ? bar(p.skill.battle_skill, 'var(--green)')   : barNoData()}
+                        ${p.skill.war_skill_has_data    ? bar(p.skill.war_skill,    'var(--red)')     : barNoData()}
+                        ${p.skill.cwl_skill_has_data    ? bar(p.skill.cwl_skill,    'var(--purple)')  : barNoData()}
                     </div>
                 </div>
             </div>
