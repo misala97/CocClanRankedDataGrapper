@@ -34,9 +34,15 @@ def task_update_cwl():
     with app.app_context():
         try:
             group = api_fetch_cwl_league_group(CLAN_TAG)
-        except Exception as e:
-            cwl_logger.warning(f"Could not fetch CWL league group: {e}")
-            db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', str(e), logger=cwl_logger)
+        except RuntimeError as e:
+            if '404' in str(e):
+                cwl_logger.info("Not in CWL (404 notFound) — skipping.")
+                if extensions.scheduler:
+                    extensions.scheduler.reschedule_job('cwl_update', trigger='interval', hours=1)
+                db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', 'notFound', logger=cwl_logger)
+            else:
+                cwl_logger.warning(f"Could not fetch CWL league group: {e}")
+                db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', str(e), logger=cwl_logger)
             return
 
         state       = json_get(group, JSON_CWL_GROUP_DATA.STATE  ) or 'unknown'
@@ -166,11 +172,12 @@ def task_update_cwl():
                 # ── Members (add once per war) ────────────────────────────────
                 try:
                     if not CWLMember.query.filter_by(war_id=war.id).first():
-                        for side_data, is_opp in (
-                            (json_get(war_data, JSON_CWL_WAR_DATA.CLAN) or {}, False),
-                            (json_get(war_data, JSON_CWL_WAR_DATA.OPPONENT) or {}, True),
+                        for side_data in (
+                            json_get(war_data, JSON_CWL_WAR_DATA.CLAN) or {},
+                            json_get(war_data, JSON_CWL_WAR_DATA.OPPONENT) or {},
                         ):
                             clan_tag = json_get(side_data, JSON_CWL_WAR_DATA.SIDE_TAG)
+                            is_opp = clan_tag != CLAN_TAG
                             for member_data in json_get(side_data, JSON_CWL_WAR_DATA.SIDE_MEMBERS) or []:
                                 ptag   = json_get(member_data, JSON_CWL_WAR_DATA.MEMBER_TAG)
                                 league = clan_member_leagues.get(ptag)

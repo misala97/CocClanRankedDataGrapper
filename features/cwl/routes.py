@@ -62,6 +62,24 @@ def _build_cwl_matchup_rates():
     return rates, counts, total_with_th
 
 
+def cwl_attack_verdict(attack, member_by_key, matchup_rates):
+    """Score one CWL attack using TH matchup rates.
+
+    member_by_key: dict keyed (war_id, player_tag) → CWLMember
+    matchup_rates: from _build_cwl_matchup_rates()
+    Returns (score, label, badge).
+    """
+    atk_m = member_by_key.get((attack.war_id, attack.attacker_tag))
+    dfn_m = member_by_key.get((attack.war_id, attack.defender_tag))
+    atk_th = atk_m.town_hall_level or 0 if atk_m else 0
+    dfn_th = dfn_m.town_hall_level or 0 if dfn_m else 0
+    if dfn_m and (dfn_m.is_rushed or dfn_m.is_troll):
+        dfn_th = max(dfn_th - 1, atk_th)
+    rates = matchup_rates.get(f"{atk_th}_{dfn_th}") if atk_th and dfn_th else None
+    avg_s = round(sum(i * p for i, p in enumerate(rates)), 2) if rates else None
+    return get_cwl_verdict(attack.stars or 0, avg_s)
+
+
 def _build_war_detail(war, our_tag, matchup_rates=None):
     """Build the member/attack/verdict data for one CWL war, mirroring clan war page logic."""
     members_our = sorted([m for m in war.members if m.clan_tag == our_tag],  key=lambda m: m.map_position or 999)

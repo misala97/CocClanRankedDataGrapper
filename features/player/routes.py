@@ -16,6 +16,7 @@ from services.helpers import (
 
 
 from features.war.war_combos import classify_attack, get_war_verdict, get_attack_context, get_cwl_verdict
+from features.cwl.routes import _build_cwl_matchup_rates, cwl_attack_verdict
 
 player_bp = Blueprint('player', __name__)
 
@@ -53,6 +54,7 @@ def _period_limits(period):
 
 
 def calculate_activity_score(player_tag, period='week'):
+    from app import CLAN_TAG
     now = dt.datetime.now(dt.timezone.utc)
     season_limit, raid_limit, battle_days, war_limit = _period_limits(period)
 
@@ -158,7 +160,7 @@ def calculate_activity_score(player_tag, period='week'):
         _cwl_selected_wars = [m.war_id for m in CWLMember.query
                                .join(CWLWar, CWLMember.war_id == CWLWar.id)
                                .filter(CWLMember.player_tag == player_tag,
-                                       CWLMember.is_opponent == False,
+                                       CWLMember.clan_tag == CLAN_TAG,
                                        CWLWar.season_id.in_(cwl_season_ids))
                                .all()]
         cwl_rounds_selected = len(_cwl_selected_wars)
@@ -208,6 +210,7 @@ def calculate_activity_score(player_tag, period='week'):
 
 
 def calculate_skill_score(player_tag, period='month'):
+    from app import CLAN_TAG
     now = dt.datetime.now(dt.timezone.utc)
     season_limit, raid_limit, battle_days, war_limit = _period_limits(period)
 
@@ -323,7 +326,7 @@ def calculate_skill_score(player_tag, period='month'):
         cwl_player_wars = [m.war_id for m in CWLMember.query
                            .join(CWLWar, CWLMember.war_id == CWLWar.id)
                            .filter(CWLMember.player_tag == player_tag,
-                                   CWLMember.is_opponent == False,
+                                   CWLMember.clan_tag == CLAN_TAG,
                                    CWLWar.season_id.in_(cwl_season_ids_sk))
                            .all()]
         cwl_atk_by_war = {}
@@ -336,11 +339,17 @@ def calculate_skill_score(player_tag, period='month'):
         cwl_player_wars = []
         cwl_atk_by_war = {}
 
+    cwl_matchup_rates, _, _ = _build_cwl_matchup_rates()
+    cwl_member_by_key = {
+        (m.war_id, m.player_tag): m
+        for m in CWLMember.query.filter(CWLMember.war_id.in_(cwl_player_wars)).all()
+    } if cwl_player_wars else {}
+
     cwl_skill_scores = []
     for wid in cwl_player_wars:
         atks = cwl_atk_by_war.get(wid, [])
         if atks:
-            sc, _, _ = get_cwl_verdict(atks[0].stars or 0, None)
+            sc, _, _ = cwl_attack_verdict(atks[0], cwl_member_by_key, cwl_matchup_rates)
             cwl_skill_scores.append(sc)
         else:
             cwl_skill_scores.append(0)
@@ -385,29 +394,336 @@ def calculate_skill_score(player_tag, period='month'):
     }
 
 
+def calculate_scores_all_periods(player_tag, cwl_matchup_rates):
+    """Compute activity + skill scores for all three periods in a single DB pass.
+    Returns (activity_periods_dict, skill_periods_dict) keyed by 'week'/'month'/'6months'.
+    """
+    from app import CLAN_TAG
+    now = dt.datetime.now(dt.timezone.utc)
+
+    _season_limit = {'week': 1,  'month': 4,  '6months': 16}
+    _raid_limit   = {'week': 1,  'month': 4,  '6months': 20}
+    _battle_days  = {'week': 7,  'month': 30, '6months': 180}
+    _war_limit    = {'week': 2,  'month': 8,  '6months': 30}
+    _cwl_limit    = {'week': 1,  'month': 2,  '6months': 6}
+
+    # ── 1. Player join date ─────────────────────────────────────────────────
+    player_obj = Player.query.filter_by(tag=player_tag).first()
+    join_date  = player_obj.join_date if player_obj else None
+
+    # ── 2. Ranked seasons (max 16 + avg max pre-fetched) ───────────────────
+    all_season_rows = (db.session.query(RankedWeek.league_season_id, func.min(RankedWeek.start_day))
+                       .group_by(RankedWeek.league_season_id)
+                       .order_by(RankedWeek.league_season_id.desc())
+                       .limit(16).all())
+    all_season_ids  = [sid for sid, _ in all_season_rows]
+
+    all_player_weeks = (RankedWeek.query
+                        .filter(RankedWeek.player_tag == player_tag,
+                                RankedWeek.league_season_id.in_(all_season_ids))
+                        .options(selectinload(RankedWeek.battle_logs))
+                        .all()) if all_season_ids else []
+
+    all_avg_max = dict(
+        db.session.query(RankedWeek.league_season_id, func.avg(RankedWeek.max_attacks))
+        .filter(RankedWeek.league_season_id.in_(all_season_ids))
+        .group_by(RankedWeek.league_season_id)
+        .all()
+    ) if all_season_ids else {}
+
+    # ── 3. Clan tags + battle logs (180-day window covers all periods) ──────
+    in_clan_tags      = [r.tag for r in Player.query.filter(Player.in_clan == True).with_entities(Player.tag).all()]
+    clan_member_count = len(in_clan_tags)
+    cutoff_max        = now - dt.timedelta(days=180)
+
+    player_battles_raw = (db.session.query(
+            BattleLog.time,
+            func.coalesce(BattleLog.loot_gold, 0),
+            func.coalesce(BattleLog.loot_elixir, 0),
+            func.coalesce(BattleLog.loot_dark_elixir, 0))
+        .filter(BattleLog.player_tag == player_tag,
+                BattleLog.attack == True,
+                BattleLog.time >= cutoff_max)
+        .all())
+
+    clan_battles_raw = (db.session.query(
+            BattleLog.time,
+            func.coalesce(BattleLog.loot_gold, 0),
+            func.coalesce(BattleLog.loot_elixir, 0),
+            func.coalesce(BattleLog.loot_dark_elixir, 0))
+        .filter(BattleLog.player_tag.in_(in_clan_tags),
+                BattleLog.attack == True,
+                BattleLog.time >= cutoff_max)
+        .all()) if in_clan_tags else []
+
+    # ── 4. Raids (max 20) ───────────────────────────────────────────────────
+    all_raids   = RaidWeekend.query.order_by(RaidWeekend.start_time.desc()).limit(20).all()
+    all_raid_ids = [r.id for r in all_raids]
+    all_raid_logs = (RaidWeekendLog.query
+                     .filter(RaidWeekendLog.player_tag == player_tag,
+                             RaidWeekendLog.raid_weekend_id.in_(all_raid_ids))
+                     .all()) if all_raid_ids else []
+    raid_logs_by_id = {}
+    for l in all_raid_logs:
+        raid_logs_by_id.setdefault(l.raid_weekend_id, []).append(l)
+
+    # ── 5. Regular wars (max 30) ────────────────────────────────────────────
+    all_wars    = ClanWar.query.order_by(ClanWar.start_time.desc()).limit(30).all()
+    all_war_ids = [w.id for w in all_wars]
+
+    all_war_members = (ClanWarMember.query
+                       .filter(ClanWarMember.clan_war_id.in_(all_war_ids),
+                               ClanWarMember.player_tag == player_tag,
+                               ClanWarMember.is_opponent == False)
+                       .all()) if all_war_ids else []
+    all_participated = {m.clan_war_id for m in all_war_members}
+    war_member_map   = {m.clan_war_id: m for m in all_war_members}
+
+    all_war_attacks = (ClanWarAttack.query
+                       .filter(ClanWarAttack.clan_war_id.in_(list(all_participated)))
+                       .all()) if all_participated else []
+    opp_war_members = (ClanWarMember.query
+                       .filter(ClanWarMember.clan_war_id.in_(list(all_participated)),
+                               ClanWarMember.is_opponent == True)
+                       .all()) if all_participated else []
+    opp_th_by_war = {}
+    for m in opp_war_members:
+        opp_th_by_war.setdefault(m.clan_war_id, {})[m.player_tag] = m.town_hall_level
+
+    all_attacks_by_war    = {}
+    player_attacks_by_war = {}
+    for a in all_war_attacks:
+        all_attacks_by_war.setdefault(a.clan_war_id, []).append(a)
+        if a.attacker_tag == player_tag:
+            player_attacks_by_war.setdefault(a.clan_war_id, []).append(a)
+
+    # ── 6. CWL (max 6 seasons) ──────────────────────────────────────────────
+    all_cwl_seasons    = CWLSeason.query.order_by(CWLSeason.id.desc()).limit(6).all()
+    all_cwl_season_ids = [s.id for s in all_cwl_seasons]
+
+    cwl_player_members = (CWLMember.query
+                          .join(CWLWar, CWLMember.war_id == CWLWar.id)
+                          .filter(CWLMember.player_tag == player_tag,
+                                  CWLMember.clan_tag == CLAN_TAG,
+                                  CWLWar.season_id.in_(all_cwl_season_ids))
+                          .all()) if all_cwl_season_ids else []
+    cwl_war_ids = [m.war_id for m in cwl_player_members]
+
+    cwl_war_season_map = {w.id: w.season_id
+                          for w in CWLWar.query.filter(CWLWar.id.in_(cwl_war_ids)).all()
+                          } if cwl_war_ids else {}
+
+    cwl_attacks = (CWLAttack.query
+                   .filter(CWLAttack.war_id.in_(cwl_war_ids),
+                           CWLAttack.attacker_tag == player_tag)
+                   .all()) if cwl_war_ids else []
+    cwl_atk_by_war = {}
+    for a in cwl_attacks:
+        cwl_atk_by_war.setdefault(a.war_id, []).append(a)
+
+    cwl_member_by_key = {
+        (m.war_id, m.player_tag): m
+        for m in CWLMember.query.filter(CWLMember.war_id.in_(cwl_war_ids)).all()
+    } if cwl_war_ids else {}
+
+    # ── Per-period computation (no further DB queries) ──────────────────────
+    activity_periods = {}
+    skill_periods    = {}
+
+    for period in ('week', 'month', '6months'):
+        sl = _season_limit[period]
+        rl = _raid_limit[period]
+        bd = _battle_days[period]
+        wl = _war_limit[period]
+        cl = _cwl_limit[period]
+
+        cutoff  = week_cutoff(now, bd)
+        # Normalise to naive UTC so Python datetime comparisons work
+        if getattr(cutoff, 'tzinfo', None) is not None:
+            cutoff = cutoff.astimezone(dt.timezone.utc).replace(tzinfo=None)
+        weeks_f = bd / 7
+
+        # ── Ranked ──────────────────────────────────────────────────────────
+        period_season_rows   = all_season_rows[:sl]
+        eligible_season_rows = [(sid, start) for sid, start in period_season_rows
+                                if join_date is None or start is None or start >= join_date]
+        eligible_season_ids  = {sid for sid, _ in eligible_season_rows}
+        total_eligible       = len(eligible_season_rows)
+
+        period_weeks            = [w for w in all_player_weeks if w.league_season_id in eligible_season_ids]
+        participated_season_ids = {w.league_season_id for w in period_weeks}
+        player_total_max        = sum(w.max_attacks or 0 for w in period_weeks)
+
+        for sid in (sid for sid in eligible_season_ids if sid not in participated_season_ids):
+            player_total_max += round(all_avg_max.get(sid) or 8)
+
+        total_done   = sum(sum(1 for l in w.battle_logs if _is_attack(l)) for w in period_weeks)
+        ranked_score = min(100, round(100 * total_done / player_total_max)) if player_total_max else 0
+
+        ranked_scores = []
+        for rw in period_weeks:
+            a_logs = [l for l in rw.battle_logs if _is_attack(l)]
+            if not (rw.max_attacks or 0):
+                continue
+            sc, _, _ = _calc_ranked_score(a_logs, rw.townhall or 0, rw.max_attacks, rw.league_tier)
+            ranked_scores.append(sc)
+        avg_ranked   = sum(ranked_scores) / len(ranked_scores) if ranked_scores else 0
+        ranked_skill = round(avg_ranked)
+
+        # ── Battles ─────────────────────────────────────────────────────────
+        p_in = [(t, g, e, d) for t, g, e, d in player_battles_raw if t and t >= cutoff]
+        c_in = [(t, g, e, d) for t, g, e, d in clan_battles_raw   if t and t >= cutoff]
+
+        battles_in_window = len(p_in)
+        clan_weekly_avg   = len(c_in) / clan_member_count / weeks_f if clan_member_count else 0
+        player_weekly_avg = battles_in_window / weeks_f
+        battle_score      = min(100, round(100 * player_weekly_avg / clan_weekly_avg)) if clan_weekly_avg > 0 else 0
+
+        player_loot   = sum(g + e + d for _, g, e, d in p_in)
+        clan_loot_sum = sum(g + e + d for _, g, e, d in c_in)
+        clan_avg_loot = clan_loot_sum / clan_member_count if clan_member_count else 0
+        battle_skill  = min(100, round(100 * player_loot / clan_avg_loot)) if clan_avg_loot > 0 else 0
+
+        # ── Raids ────────────────────────────────────────────────────────────
+        period_raids   = all_raids[:rl]
+        eligible_raids = [r for r in period_raids
+                          if not join_date or (r.start_time and r.start_time.date() >= join_date)]
+        eligible_raid_ids   = [r.id for r in eligible_raids]
+        eligible_raid_count = len(eligible_raids)
+
+        raid_attacks      = sum(len(raid_logs_by_id.get(rid, [])) for rid in eligible_raid_ids)
+        raid_max_possible = eligible_raid_count * 6
+        raid_score        = min(100, round(100 * raid_attacks / raid_max_possible)) if raid_max_possible else 0
+
+        attended_raid_ids = [rid for rid in eligible_raid_ids if rid in raid_logs_by_id]
+        raid_scores       = [_raid_verdict(raid_logs_by_id[rid])[2] for rid in attended_raid_ids]
+        avg_raid          = sum(raid_scores) / len(raid_scores) if raid_scores else 0
+        raid_skill        = round(avg_raid)
+
+        # ── Regular wars ─────────────────────────────────────────────────────
+        period_war_set       = {w.id for w in all_wars[:wl]}
+        participated_war_ids = all_participated & period_war_set
+
+        total_war_max    = len(participated_war_ids) * 2
+        war_attacks_done = sum(len(player_attacks_by_war.get(wid, [])) for wid in participated_war_ids)
+        war_score        = min(100, round(100 * war_attacks_done / total_war_max)) if total_war_max else 0
+
+        war_skill_scores = []
+        for war_id in participated_war_ids:
+            p_atks = player_attacks_by_war.get(war_id, [])
+            if not p_atks:
+                war_skill_scores.append(0)
+                continue
+            m = war_member_map.get(war_id)
+            score, _, _, _ = _war_player_verdict(
+                player_tag, m.town_hall_level if m else 0, p_atks,
+                all_attacks_by_war.get(war_id, []),
+                opp_th_by_war.get(war_id, {}),
+            )
+            war_skill_scores.append(score)
+        war_skill = round(sum(war_skill_scores) / len(war_skill_scores)) if war_skill_scores else 0
+
+        # ── CWL ──────────────────────────────────────────────────────────────
+        period_cwl_season_set = {s.id for s in all_cwl_seasons[:cl]}
+        period_cwl_war_ids    = [wid for wid in cwl_war_ids
+                                 if cwl_war_season_map.get(wid) in period_cwl_season_set]
+
+        cwl_rounds_selected = len(period_cwl_war_ids)
+        cwl_attacks_done    = sum(len(cwl_atk_by_war.get(wid, [])) for wid in period_cwl_war_ids)
+        cwl_score           = min(100, round(100 * cwl_attacks_done / cwl_rounds_selected)) if cwl_rounds_selected else 0
+        cwl_score_has_data  = cwl_rounds_selected > 0
+
+        cwl_skill_scores = []
+        for wid in period_cwl_war_ids:
+            atks = cwl_atk_by_war.get(wid, [])
+            if atks:
+                sc, _, _ = cwl_attack_verdict(atks[0], cwl_member_by_key, cwl_matchup_rates)
+                cwl_skill_scores.append(sc)
+            else:
+                cwl_skill_scores.append(0)
+        cwl_skill          = round(sum(cwl_skill_scores) / len(cwl_skill_scores)) if cwl_skill_scores else 0
+        cwl_skill_has_data = bool(period_cwl_war_ids)
+        avg_cwl            = sum(cwl_skill_scores) / len(cwl_skill_scores) if cwl_skill_scores else 0
+
+        # ── Activity dict ────────────────────────────────────────────────────
+        act_comps = [ranked_score, battle_score, raid_score]
+        if participated_war_ids: act_comps.append(war_score)
+        if cwl_score_has_data:   act_comps.append(cwl_score)
+        act_total = round(sum(act_comps) / len(act_comps))
+
+        if   act_total >= 80: act_label, act_color = 'Active',   'green'
+        elif act_total >= 50: act_label, act_color = 'Regular',  'blue'
+        elif act_total >= 20: act_label, act_color = 'Casual',   'accent'
+        else:                 act_label, act_color = 'Inactive', 'red'
+
+        activity_periods[period] = {
+            'score': act_total, 'label': act_label, 'label_color': act_color,
+            'ranked_score': ranked_score, 'ranked_max': 100,
+            'ranked_detail': f'{total_done}/{player_total_max} attacks · {len(period_weeks)}/{total_eligible} seasons played',
+            'battle_score': battle_score, 'battle_max': 100,
+            'battle_detail': f'{battles_in_window} attacks · {player_weekly_avg:.1f}/week · Clan avg: {clan_weekly_avg:.1f}/week',
+            'raid_score': raid_score, 'raid_max': 100,
+            'raid_detail': f'{raid_attacks}/{raid_max_possible} attacks across last {eligible_raid_count} raid weekends',
+            'war_score': war_score, 'war_max': 100,
+            'war_score_has_data': bool(participated_war_ids),
+            'war_detail': f'{war_attacks_done}/{total_war_max} attacks across {len(participated_war_ids)} wars',
+            'cwl_score': cwl_score, 'cwl_max': 100,
+            'cwl_score_has_data': cwl_score_has_data,
+            'cwl_detail': f'{cwl_attacks_done}/{cwl_rounds_selected} attacks across last {len(period_cwl_season_set)} CWL seasons',
+            'has_data': total_eligible > 0 or battles_in_window > 0 or eligible_raid_count > 0,
+        }
+
+        # ── Skill dict ───────────────────────────────────────────────────────
+        sk_comps = []
+        if ranked_scores:       sk_comps.append(ranked_skill)
+        if attended_raid_ids:   sk_comps.append(raid_skill)
+        if player_loot > 0:     sk_comps.append(battle_skill)
+        if war_skill_scores:    sk_comps.append(war_skill)
+        if cwl_skill_has_data:  sk_comps.append(cwl_skill)
+        sk_total = round(sum(sk_comps) / len(sk_comps)) if sk_comps else 0
+
+        if   sk_total >= 80: sk_label, sk_color = 'Elite',   'purple'
+        elif sk_total >= 60: sk_label, sk_color = 'Strong',  'green'
+        elif sk_total >= 40: sk_label, sk_color = 'Average', 'blue'
+        elif sk_total >= 20: sk_label, sk_color = 'Weak',    'accent'
+        else:                sk_label, sk_color = 'Novice',  'muted'
+
+        skill_periods[period] = {
+            'score': sk_total, 'label': sk_label, 'label_color': sk_color,
+            'ranked_skill': ranked_skill, 'ranked_max': 100,
+            'ranked_skill_has_data': bool(ranked_scores),
+            'ranked_detail': f'Avg verdict {avg_ranked:.0f}/100 · {len(period_weeks)} seasons played',
+            'raid_skill': raid_skill, 'raid_max': 100,
+            'raid_skill_has_data': bool(attended_raid_ids),
+            'raid_detail': f'Avg verdict {avg_raid:.0f}/100 · {len(attended_raid_ids)} raids attended',
+            'battle_skill': battle_skill, 'battle_max': 100,
+            'battle_skill_has_data': player_loot > 0,
+            'battle_detail': f'{_fmt_loot(player_loot)} loot · Clan avg: {_fmt_loot(clan_avg_loot)}',
+            'war_skill': war_skill, 'war_max': 100,
+            'war_skill_has_data': bool(war_skill_scores),
+            'war_detail': f'Avg verdict {war_skill:.0f}/100 · {len(participated_war_ids)} wars selected',
+            'cwl_skill': cwl_skill, 'cwl_max': 100,
+            'cwl_skill_has_data': cwl_skill_has_data,
+            'cwl_detail': f'Avg verdict {avg_cwl:.0f}/100 · {len(period_cwl_war_ids)} CWL rounds selected',
+            'has_data': bool(sk_comps),
+        }
+
+    return activity_periods, skill_periods
+
+
 @player_bp.route('/player/<tag>')
 def player_profile(tag):
+    from app import CLAN_TAG
     actual_tag = '#' + tag
     player = db_player_get(actual_tag)
     if not player:
         return render_template('player/player_profile.html', player=None, player_tag=actual_tag), 404
 
-    _act_week  = calculate_activity_score(actual_tag, 'week')
-    _act_month = calculate_activity_score(actual_tag, 'month')
-    _act_6m    = calculate_activity_score(actual_tag, '6months')
-    activity_periods = {}
-    if _act_week['has_data']:  activity_periods['week']    = _act_week
-    if _act_month['has_data']: activity_periods['month']   = _act_month
-    if _act_6m['has_data']:    activity_periods['6months'] = _act_6m
-    activity = _act_week
-
-    _sk_week  = calculate_skill_score(actual_tag, 'week')
-    _sk_month = calculate_skill_score(actual_tag, 'month')
-    _sk_6m    = calculate_skill_score(actual_tag, '6months')
-    skill_periods = {}
-    if _sk_week['has_data']:  skill_periods['week']    = _sk_week
-    if _sk_month['has_data']: skill_periods['month']   = _sk_month
-    if _sk_6m['has_data']:    skill_periods['6months'] = _sk_6m
+    cwl_matchup_rates, _, _ = _build_cwl_matchup_rates()
+    _all_act, _all_sk = calculate_scores_all_periods(actual_tag, cwl_matchup_rates)
+    activity_periods = {p: d for p, d in _all_act.items() if d['has_data']}
+    skill_periods    = {p: d for p, d in _all_sk.items()  if d['has_data']}
+    activity = _all_act.get('week', next(iter(_all_act.values()), {}))
 
     ranked_weeks_q = (RankedWeek.query
                       .filter(RankedWeek.player_tag == actual_tag)
@@ -541,7 +857,7 @@ def player_profile(tag):
     # CWL History
     player_cwl_members = (CWLMember.query
                           .filter(CWLMember.player_tag == actual_tag,
-                                  CWLMember.is_opponent == False)
+                                  CWLMember.clan_tag == CLAN_TAG)
                           .all())
     cwl_war_ids = [m.war_id for m in player_cwl_members]
     cwl_history = []
@@ -551,6 +867,11 @@ def player_profile(tag):
         for a in CWLAttack.query.filter(CWLAttack.attacker_tag == actual_tag,
                                         CWLAttack.war_id.in_(cwl_war_ids)).all():
             cwl_attacks_by_war.setdefault(a.war_id, []).append(a)
+
+        _cwl_mbr = {
+            (m.war_id, m.player_tag): m
+            for m in CWLMember.query.filter(CWLMember.war_id.in_(cwl_war_ids)).all()
+        }
 
         members_by_season = {}
         for m in player_cwl_members:
@@ -580,7 +901,7 @@ def player_profile(tag):
                 if attacks:
                     att_used += len(attacks)
                     for a in attacks:
-                        sc, _, _ = get_cwl_verdict(a.stars or 0, None)
+                        sc, _, _ = cwl_attack_verdict(a, _cwl_mbr, cwl_matchup_rates)
                         scores.append(sc)
                         total_stars += (a.stars or 0)
                 else:
@@ -599,6 +920,7 @@ def player_profile(tag):
             else:                  badge_c, judge_l = 'badge-useless',  'Skipped'
 
             cwl_history.append({
+                'season_id':        season_id,
                 'season':           s.season if s else f'Season {season_id}',
                 'rounds_selected':  len(wars_and_members),
                 'att_used':         att_used,
@@ -623,6 +945,7 @@ def player_profile(tag):
 
 
 def _calculate_scores_bulk(player_tags, period='month'):
+    from app import CLAN_TAG
     if not player_tags:
         return {}
 
@@ -753,7 +1076,7 @@ def _calculate_scores_bulk(player_tags, period='month'):
         all_cwl_members_bulk = (CWLMember.query
                                 .join(CWLWar, CWLMember.war_id == CWLWar.id)
                                 .filter(CWLMember.player_tag.in_(player_tags),
-                                        CWLMember.is_opponent == False,
+                                        CWLMember.clan_tag == CLAN_TAG,
                                         CWLWar.season_id.in_(cwl_season_ids_bulk))
                                 .all())
         cwl_war_ids_bulk = list({m.war_id for m in all_cwl_members_bulk})
@@ -773,6 +1096,12 @@ def _calculate_scores_bulk(player_tags, period='month'):
     cwl_attacks_by_player_bulk = {}  # tag → {war_id → [CWLAttack]}
     for a in all_cwl_attacks_bulk:
         cwl_attacks_by_player_bulk.setdefault(a.attacker_tag, {}).setdefault(a.war_id, []).append(a)
+
+    cwl_matchup_rates_bulk, _, _ = _build_cwl_matchup_rates()
+    cwl_member_by_key_bulk = {
+        (m.war_id, m.player_tag): m
+        for m in CWLMember.query.filter(CWLMember.war_id.in_(cwl_war_ids_bulk)).all()
+    } if cwl_war_ids_bulk else {}
 
     # ── compute per-player ────────────────────────────────────────────────────
     results = {}
@@ -872,7 +1201,7 @@ def _calculate_scores_bulk(player_tags, period='month'):
         for wid in cwl_wars_for_player:
             atks = tag_cwl_attacks.get(wid, [])
             if atks:
-                sc, _, _ = get_cwl_verdict(atks[0].stars or 0, None)
+                sc, _, _ = cwl_attack_verdict(atks[0], cwl_member_by_key_bulk, cwl_matchup_rates_bulk)
                 cwl_skill_scores.append(sc)
             else:
                 cwl_skill_scores.append(0)
