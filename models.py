@@ -229,8 +229,20 @@ class AppUser(db.Model):
     perm_create_reminder_ranked = db.Column(db.Boolean, default=False, nullable=False)
     perm_clan_war_edits         = db.Column(db.Boolean, default=False, nullable=False)
     linked_player_tag = db.Column(db.String(50), db.ForeignKey('player.tag'), nullable=True)
+    ore_shiny         = db.Column(db.Integer, default=0, nullable=True)
+    ore_glowy         = db.Column(db.Integer, default=0, nullable=True)
+    ore_starry        = db.Column(db.Integer, default=0, nullable=True)
 
     linked_player = db.relationship('Player', foreign_keys=[linked_player_tag], lazy='joined')
+
+
+class EquipmentGoal(db.Model):
+    __tablename__ = 'equipment_goal'
+
+    user_id        = db.Column(db.Integer, db.ForeignKey('app_user.id'), primary_key=True)
+    equipment_name = db.Column(db.String(100), primary_key=True)
+    target_level   = db.Column(db.Integer, nullable=False)
+    priority       = db.Column(db.Integer, nullable=True)
 
 
 class ClanWar(db.Model):
