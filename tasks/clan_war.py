@@ -40,7 +40,7 @@ def task_update_clan_war():
             return
         
         
-        if state == 'notInWar':
+        if state in ('notInWar' , 'warEnded'):
             if extensions.scheduler:
                 extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', hours=1)
             clan_war_logger.info("No active war — skipping.")
