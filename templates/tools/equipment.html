@@ -250,9 +250,14 @@
             padding: 4px 6px; cursor: pointer; text-align: center;
         }
         .gain-card-freq:focus { outline: none; border-color: var(--accent); }
-        .gain-flbl {
-            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: .7px; color: var(--accent); white-space: nowrap;
+        .gain-modal-foot {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+            background: var(--surf2);
+        }
+        .gain-foot-lbl {
+            font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .7px; color: var(--muted); white-space: nowrap;
         }
         #gain-days { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); }
         .gain-ore-ro {
@@ -264,6 +269,34 @@
             font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
             text-transform: uppercase; letter-spacing: .5px; color: var(--muted); text-align: center;
         }
+        .gain-ore-table {
+            display: grid; grid-template-columns: 18px 1fr 1fr; gap: 4px 8px; align-items: center;
+        }
+        .gain-ore-table > img { width: 16px; height: 16px; object-fit: contain; justify-self: center; }
+        .gain-ore-hd {
+            font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .7px; color: var(--muted); text-align: right;
+        }
+        .gain-ore-num {
+            background: var(--surf2); border: 1px solid var(--bord2); border-radius: 5px;
+            padding: 4px 8px; font-family: 'Rajdhani', sans-serif; font-size: 13px;
+            font-weight: 700; color: var(--text); text-align: right;
+        }
+        .gain-ore-num.dim { background: transparent; border-color: transparent; color: var(--muted); font-size: 12px; padding-right: 4px; }
+        .gain-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
+        .gain-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .gain-t-track {
+            display: inline-block; width: 32px; height: 18px; border-radius: 9px; flex-shrink: 0;
+            background: var(--bord2, rgba(255,255,255,.08)); border: 1px solid var(--border);
+            transition: background .2s, border-color .2s;
+        }
+        .gain-t-thumb {
+            position: absolute; left: 3px; width: 12px; height: 12px;
+            background: var(--muted); border-radius: 50%;
+            transition: transform .2s, background .2s; pointer-events: none;
+        }
+        .gain-toggle input:checked ~ .gain-t-track { background: var(--accent); border-color: var(--accent); }
+        .gain-toggle input:checked ~ .gain-t-thumb { transform: translateX(14px); background: #fff; }
 
         /* Upgrade plan panel */
         #plan-section {
@@ -968,8 +1001,8 @@ const EQUIP_IMAGES = {
 // ── Daily Ore Gain ─────────────────────────────────────────────────────────
 let gainSources = [
     { id: 'star',   name: 'Star Bonus',      icon: '⭐', freq: 'daily',   shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  th: 0, league: 'Unranked' },
-    { id: 'war',    name: 'Clan War',        icon: '⚔️', freq: 'weekly',  shiny: 100, glowy: 50,  starry: 0,  enabled: false  },
-    { id: 'cwl',    name: 'CWL',             icon: '🏆', freq: 'monthly', shiny: 200, glowy: 100, starry: 10, enabled: false  },
+    { id: 'war',    name: 'Clan War',        icon: '⚔️', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  attacks: 0, wars: 0 },
+    { id: 'cwl',    name: 'CWL',             icon: '🏆', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  attacks: 0, wars: 0 },
     { id: 'trader', name: 'Trader (Medals)', icon: '🪙', freq: 'monthly', shiny: 50,  glowy: 25,  starry: 5,  enabled: false  },
     { id: 'prosp',  name: 'Prospector',      icon: '⛏️', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: false },
     { id: 'event',  name: 'Event Pass',      icon: '🎟️', freq: 'monthly', shiny: 150, glowy: 75,  starry: 15, enabled: false },
@@ -982,6 +1015,7 @@ function loadGainSources() {
         const saved = JSON.parse(localStorage.getItem(GAIN_LS_KEY) || 'null');
         if (!Array.isArray(saved)) return;
         const map = Object.fromEntries(saved.map(s => [s.id, s]));
+        const AUTO = new Set(['star', 'war', 'cwl']);
         gainSources.forEach(s => {
             const sv = map[s.id];
             if (!sv) return;
@@ -989,7 +1023,7 @@ function loadGainSources() {
             if (sv.glowy   != null) s.glowy   = sv.glowy;
             if (sv.starry  != null) s.starry  = sv.starry;
             if (sv.freq    != null) s.freq    = sv.freq;
-            if (sv.enabled != null) s.enabled = sv.enabled;
+            if (sv.enabled != null && !AUTO.has(s.id)) s.enabled = sv.enabled;
         });
     } catch(e) {}
 }
@@ -1006,7 +1040,6 @@ function calcDailyGain() {
     
     const M = { daily: 1, weekly: 1/7, monthly: 1/30 };
     return gainSources.filter(s => s.enabled).reduce((acc, s) => {
-        console.log(s.freq, M[s.freq])
         const m = M[s.freq] || 0;
         acc.shiny  += s.shiny  * m;
         acc.glowy  += s.glowy  * m;
@@ -1077,18 +1110,26 @@ function applyStarBonus(th, league) {
     const v = lookupStarBonus(th, league);
     star.shiny = v.shiny; star.glowy = v.glowy; star.starry = v.starry;
     star.freq = "daily"
-    const upd = k => { const el = document.getElementById('star-' + k); if (el) el.textContent = v[k]; };
+    const upd   = k => { const el = document.getElementById('star-' + k);       if (el) el.textContent = (v[k]||0).toLocaleString(); };
+    const updMo = k => { const el = document.getElementById('star-' + k + '-mo'); if (el) el.textContent = fmtOreMo(v[k]); };
     upd('shiny'); upd('glowy'); upd('starry');
+    updMo('shiny'); updMo('glowy'); updMo('starry');
     saveGainSources();
     updateGainSummary();
 }
 
 
+function fmtOreD(n) {
+    const d = (n || 0) / 30;
+    return Number.isInteger(d) ? d.toLocaleString() : d.toFixed(1);
+}
+function fmtOreMo(n) { return Math.round((n || 0) * 30).toLocaleString(); }
+
 function renderStarCard(s) {
     const v = lookupStarBonus(s.th, s.league);
     const thLabel = s.th ? `TH${s.th}` : '—';
     return `
-        <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-${s.id}">
+        <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-star">
             <div class="gain-card-head">
                 <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
             </div>
@@ -1096,13 +1137,128 @@ function renderStarCard(s) {
                 <div class="gain-ore-ro" style="flex:0 0 auto;padding:4px 10px;">${thLabel}</div>
                 <div class="gain-ore-ro" style="flex:1;text-align:left;">${s.league || 'Unranked'}</div>
             </div>
-            <div class="gain-card-ores">
-                <div class="gain-card-ore"><img src="/static/img/shiny.png"> <div class="gain-ore-ro" id="star-shiny">${v.shiny}</div></div>
-                <div class="gain-card-ore"><img src="/static/img/glowy.png"> <div class="gain-ore-ro" id="star-glowy">${v.glowy}</div></div>
-                <div class="gain-card-ore"><img src="/static/img/starry.png"> <div class="gain-ore-ro" id="star-starry">${v.starry}</div></div>
+            <div class="gain-ore-table">
+                <span></span>
+                <div class="gain-ore-hd">Daily</div>
+                <div class="gain-ore-hd">Monthly</div>
+                <img src="/static/img/shiny.png">
+                <div class="gain-ore-num" id="star-shiny">${v.shiny.toLocaleString()}</div>
+                <div class="gain-ore-num dim" id="star-shiny-mo">${fmtOreMo(v.shiny)}</div>
+                <img src="/static/img/glowy.png">
+                <div class="gain-ore-num" id="star-glowy">${v.glowy.toLocaleString()}</div>
+                <div class="gain-ore-num dim" id="star-glowy-mo">${fmtOreMo(v.glowy)}</div>
+                <img src="/static/img/starry.png">
+                <div class="gain-ore-num" id="star-starry">${v.starry.toLocaleString()}</div>
+                <div class="gain-ore-num dim" id="star-starry-mo">${fmtOreMo(v.starry)}</div>
             </div>
-            <div class="gain-auto-lbl">Per Day · synced from profile</div>
+            <div class="gain-auto-lbl">Synced from profile</div>
         </div>`;
+}
+
+function renderWarCard(s) {
+    const a = s.attacks || 0, w = s.wars || 0;
+    const countTxt = a > 0
+        ? `${a} attack${a !== 1 ? 's' : ''} · ${w} war${w !== 1 ? 's' : ''} · last 30d`
+        : 'No war attacks in last 30d';
+    return `
+        <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-war">
+            <div class="gain-card-head">
+                <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
+            </div>
+            <div class="gain-ore-ro" style="text-align:left;font-size:12px;" id="war-count">${countTxt}</div>
+            <div class="gain-ore-table">
+                <span></span>
+                <div class="gain-ore-hd">Daily</div>
+                <div class="gain-ore-hd">Monthly</div>
+                <img src="/static/img/shiny.png">
+                <div class="gain-ore-num dim" id="war-shiny-d">${fmtOreD(s.shiny)}</div>
+                <div class="gain-ore-num" id="war-shiny">${(s.shiny || 0).toLocaleString()}</div>
+                <img src="/static/img/glowy.png">
+                <div class="gain-ore-num dim" id="war-glowy-d">${fmtOreD(s.glowy)}</div>
+                <div class="gain-ore-num" id="war-glowy">${(s.glowy || 0).toLocaleString()}</div>
+                <img src="/static/img/starry.png">
+                <div class="gain-ore-num dim" id="war-starry-d">${fmtOreD(s.starry)}</div>
+                <div class="gain-ore-num" id="war-starry">${(s.starry || 0).toLocaleString()}</div>
+            </div>
+            <div class="gain-auto-lbl">Synced from war log</div>
+        </div>`;
+}
+
+function applyWarStats(data) {
+    const war = gainSources.find(s => s.id === 'war');
+    if (!war) return;
+    war.freq    = 'monthly';   // always 30-day totals — override any stale localStorage value
+    war.shiny   = data.shiny   || 0;
+    war.glowy   = data.glowy   || 0;
+    war.starry  = data.starry  || 0;
+    war.attacks = data.attacks || 0;
+    war.wars    = data.wars    || 0;
+    const upd  = k => { const el = document.getElementById('war-' + k);       if (el) el.textContent = (data[k]||0).toLocaleString(); };
+    const updD = k => { const el = document.getElementById('war-' + k + '-d'); if (el) el.textContent = fmtOreD(data[k]); };
+    upd('shiny');  upd('glowy');  upd('starry');
+    updD('shiny'); updD('glowy'); updD('starry');
+    const countEl = document.getElementById('war-count');
+    if (countEl) {
+        const a = data.attacks || 0, w = data.wars || 0;
+        countEl.textContent = a > 0
+            ? `${a} attack${a !== 1 ? 's' : ''} · ${w} war${w !== 1 ? 's' : ''} (last 30d)`
+            : 'No war attacks in last 30d';
+    }
+    saveGainSources();
+    updateGainSummary();
+}
+
+function renderCwlCard(s) {
+    const a = s.attacks || 0, w = s.wars || 0;
+    const countTxt = a > 0
+        ? `${a} attack${a !== 1 ? 's' : ''} · ${w} round${w !== 1 ? 's' : ''} · last CWL season`
+        : 'No CWL data in last 31d';
+    return `
+        <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-cwl">
+            <div class="gain-card-head">
+                <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
+            </div>
+            <div class="gain-ore-ro" style="text-align:left;font-size:12px;" id="cwl-count">${countTxt}</div>
+            <div class="gain-ore-table">
+                <span></span>
+                <div class="gain-ore-hd">Daily</div>
+                <div class="gain-ore-hd">Monthly</div>
+                <img src="/static/img/shiny.png">
+                <div class="gain-ore-num dim" id="cwl-shiny-d">${fmtOreD(s.shiny)}</div>
+                <div class="gain-ore-num" id="cwl-shiny">${(s.shiny || 0).toLocaleString()}</div>
+                <img src="/static/img/glowy.png">
+                <div class="gain-ore-num dim" id="cwl-glowy-d">${fmtOreD(s.glowy)}</div>
+                <div class="gain-ore-num" id="cwl-glowy">${(s.glowy || 0).toLocaleString()}</div>
+                <img src="/static/img/starry.png">
+                <div class="gain-ore-num dim" id="cwl-starry-d">${fmtOreD(s.starry)}</div>
+                <div class="gain-ore-num" id="cwl-starry">${(s.starry || 0).toLocaleString()}</div>
+            </div>
+            <div class="gain-auto-lbl">Synced from CWL season</div>
+        </div>`;
+}
+
+function applyCwlStats(data) {
+    const cwl = gainSources.find(s => s.id === 'cwl');
+    if (!cwl) return;
+    cwl.freq    = 'monthly';
+    cwl.shiny   = data.shiny   || 0;
+    cwl.glowy   = data.glowy   || 0;
+    cwl.starry  = data.starry  || 0;
+    cwl.attacks = data.attacks || 0;
+    cwl.wars    = data.wars    || 0;
+    const upd  = k => { const el = document.getElementById('cwl-' + k);       if (el) el.textContent = (data[k]||0).toLocaleString(); };
+    const updD = k => { const el = document.getElementById('cwl-' + k + '-d'); if (el) el.textContent = fmtOreD(data[k]); };
+    upd('shiny');  upd('glowy');  upd('starry');
+    updD('shiny'); updD('glowy'); updD('starry');
+    const countEl = document.getElementById('cwl-count');
+    if (countEl) {
+        const a = data.attacks || 0, w = data.wars || 0;
+        countEl.textContent = a > 0
+            ? `${a} attack${a !== 1 ? 's' : ''} · ${w} round${w !== 1 ? 's' : ''} · last CWL season`
+            : 'No CWL data in last 31d';
+    }
+    saveGainSources();
+    updateGainSummary();
 }
 
 function renderGainCards() {
@@ -1110,6 +1266,8 @@ function renderGainCards() {
     if (!container) return;
     container.innerHTML = gainSources.map(s => {
         if (s.id === 'star') return renderStarCard(s);
+        if (s.id === 'war')  return renderWarCard(s);
+        if (s.id === 'cwl')  return renderCwlCard(s);
         return `
         <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-${s.id}">
             <div class="gain-card-head">
@@ -1198,6 +1356,16 @@ function onGainFreq(select) {
     updateGainSummary();
 }
 
+function onGainToggle(cb) {
+    const src = gainSources.find(s => s.id === cb.dataset.id);
+    if (!src) return;
+    src.enabled = cb.checked;
+    const card = document.getElementById('gain-card-' + src.id);
+    if (card) card.classList.toggle('gain-card-off', !src.enabled);
+    saveGainSources();
+    updateGainSummary();
+}
+
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1219,11 +1387,13 @@ document.addEventListener('DOMContentLoaded', () => {
     initGoalState();
     applySavedData({ ores: {{ saved_ores_json|safe }}, goals: {{ saved_goals_json|safe }} });
     loadGainSources();
-    // Star Bonus always synced from player DB, never from localStorage
+    // Star Bonus and Clan War always synced from DB, never from localStorage
     applyStarBonus(
         {{ (player.current_th if player else 0) | tojson }},
         {{ ((player.league_tier or 'Unranked') if player else 'Unranked') | tojson }}
     );
+    applyWarStats({{ war_stats_json|safe }});
+    applyCwlStats({{ cwl_stats_json|safe }});
     renderGainCards();
     document.getElementById('gain-modal')?.addEventListener('click', e => {
         if (e.target === e.currentTarget) closeGainModal();
@@ -1270,12 +1440,13 @@ function resetAll() {
             <div id="gain-cards"></div>
         </div>
         <div class="gain-modal-foot">
-            <span class="gain-flbl">Daily avg</span>
-            <div id="gain-daily" style="display:flex;gap:8px;align-items:center;"></div>
-            <div style="flex:1;"></div>
-            <span class="gain-flbl" id="gain-days-lbl" style="display:none;">Plan done in</span>
-            <span id="gain-days"></span>
-            <button class="gain-modal-close" onclick="closeGainModal()">Close</button>
+            <span class="gain-foot-lbl">Daily avg</span>
+            <div id="gain-daily" style="display:flex;gap:6px;align-items:center;"></div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+                <span class="gain-foot-lbl" id="gain-days-lbl" style="display:none;">Plan done in</span>
+                <span id="gain-days"></span>
+                <button class="gain-modal-close" onclick="closeGainModal()">Close</button>
+            </div>
         </div>
     </div>
 </div>
