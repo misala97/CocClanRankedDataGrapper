@@ -1,3 +1,4 @@
+import json
 import os
 import secrets
 
@@ -218,6 +219,65 @@ def index():
             baseline = total_medals / total_attacks
             active_raid_est_medals = max(0, min(round(baseline * 6), 1620)) + avg_def
 
+    # ── Player-specific hero data ────────────────────────────────────────────
+    player_ranked_left        = None
+    player_gain_settings_json = 'null'
+    _zero_stats = '{"shiny":0,"glowy":0,"starry":0,"attacks":0,"wars":0}'
+    player_war_stats_json     = _zero_stats
+    player_cwl_stats_json     = _zero_stats
+    player_th                 = 0
+    player_league             = ''
+    player_ore                = {'shiny': 0, 'glowy': 0, 'starry': 0}
+    player_attacks_this_week  = 0
+    player_war_stats          = {'attacks': 0, 'wars': 0}
+    player_cwl_stats          = {'attacks': 0, 'wars': 0}
+
+    _idx_user = _current_user()
+    if _idx_user and _idx_user.linked_player:
+        _p = _idx_user.linked_player
+
+        try:
+            if current_season:
+                from sqlalchemy.orm import selectinload as _sload
+                from services.helpers import _is_attack as _ia
+                _rw = RankedWeek.query.filter_by(
+                    player_tag=_p.tag,
+                    league_season_id=current_season[0],
+                ).options(_sload(RankedWeek.battle_logs)).first()
+                if _rw:
+                    _att = sum(1 for log in _rw.battle_logs if _ia(log))
+                    player_ranked_left = max(0, (_rw.max_attacks or 0) - _att)
+        except Exception:
+            pass
+
+        try:
+            from features.tools.routes import _compute_war_stats, _compute_cwl_stats
+            _ws = _compute_war_stats(_p.tag)
+            _cs = _compute_cwl_stats(_p.tag)
+            player_gain_settings_json = _idx_user.gain_settings or 'null'
+            player_war_stats_json     = json.dumps(_ws)
+            player_cwl_stats_json     = json.dumps(_cs)
+            player_th                 = _p.current_th or 0
+            player_league             = _p.league_tier or ''
+            player_war_stats          = {'attacks': _ws['attacks'], 'wars': _ws['wars']}
+            player_cwl_stats          = {'attacks': _cs['attacks'], 'wars': _cs['wars']}
+        except Exception:
+            pass
+
+        try:
+            player_ore = {
+                'shiny':  _idx_user.ore_shiny  or 0,
+                'glowy':  _idx_user.ore_glowy  or 0,
+                'starry': _idx_user.ore_starry or 0,
+            }
+            player_attacks_this_week = BattleLog.query.filter(
+                BattleLog.player_tag == _p.tag,
+                BattleLog.time >= week_start,
+                BattleLog.attack == True,
+            ).count()
+        except Exception:
+            pass
+
     return render_template(
         'index.html',
         clan_name=clan_name,
@@ -233,6 +293,16 @@ def index():
         active_cwl_war=active_cwl_war,
         cwl_win_status=cwl_win_status,
         CLAN_TAG=CLAN_TAG,
+        player_ranked_left=player_ranked_left,
+        player_gain_settings_json=player_gain_settings_json,
+        player_war_stats_json=player_war_stats_json,
+        player_cwl_stats_json=player_cwl_stats_json,
+        player_th=player_th,
+        player_league=player_league,
+        player_ore=player_ore,
+        player_attacks_this_week=player_attacks_this_week,
+        player_war_stats=player_war_stats,
+        player_cwl_stats=player_cwl_stats,
     )
 
 

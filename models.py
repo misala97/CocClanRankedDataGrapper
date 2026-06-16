@@ -232,6 +232,7 @@ class AppUser(db.Model):
     ore_shiny         = db.Column(db.Integer, default=0, nullable=True)
     ore_glowy         = db.Column(db.Integer, default=0, nullable=True)
     ore_starry        = db.Column(db.Integer, default=0, nullable=True)
+    gain_settings     = db.Column(db.Text, nullable=True)  # JSON: serialised OreGain source state
 
     linked_player = db.relationship('Player', foreign_keys=[linked_player_tag], lazy='joined')
 

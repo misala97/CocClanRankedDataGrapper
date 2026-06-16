@@ -333,7 +333,7 @@
         {% if distinct_weeks %}
             {% for week in distinct_weeks %}
             <option value="{{ week.league_season_id }}" {% if week.league_season_id == selected_week_id %}selected{% endif %}>
-                {%- if loop.first %}⭐ Current Week{% else %}{{ week.start_day.strftime('%d.%m.%Y') }} – {{ week.end_day.strftime('%d.%m.%Y') }}{% endif -%}
+                {%- if week.league_season_id == current_week_id %}⭐ Current Week · {{ week.start_day.strftime('%d.%m') }} – {{ week.end_day.strftime('%d.%m.%Y') }}{% else %}{{ week.start_day.strftime('%d.%m.%Y') }} – {{ week.end_day.strftime('%d.%m.%Y') }}{% endif -%}
             </option>
             {% endfor %}
         {% else %}

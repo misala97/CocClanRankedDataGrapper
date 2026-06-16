@@ -43,7 +43,14 @@
         }
 
         /* ── STAT BOXES ── */
-        .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
+        .hero-stat-section { margin-top: 20px; }
+        .hero-stat-label {
+            font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 1.8px; text-transform: uppercase; color: var(--muted);
+            margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+        }
+        .hero-stat-label::after { content: ''; flex: 1; height: 1px; background: var(--bord2); }
         .stat-box {
             background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
             padding: 20px 16px; text-align: center;
@@ -55,6 +62,32 @@
         .stat-value.gold  { color: var(--accent); }
         .stat-value.green { color: var(--green); }
         .stat-label { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+        /* ── PLAYER CARD ── */
+        .player-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            padding: 20px 24px; display: grid; grid-template-columns: 1fr auto; align-items: center;
+        }
+        .pc-left { min-width: 0; }
+        .pc-right { padding-left: 28px; border-left: 1px solid var(--border); }
+        .pc-th { font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 700; color: var(--accent); line-height: 1; }
+        .pc-league { font-size: 11px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; margin-top: 2px; margin-bottom: 14px; display: block; }
+        .pc-stat-row { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; text-decoration: none; border-radius: 4px; transition: color .15s; }
+        .pc-stat-row:hover .pc-stat-lbl { color: var(--accent); }
+        .pc-stat-num { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; min-width: 24px; text-align: right; flex-shrink: 0; }
+        .pc-stat-lbl { font-size: 12px; color: var(--muted); transition: color .15s; }
+        .pog { display: grid; grid-template-columns: 16px auto auto auto; gap: 6px 18px; align-items: center; }
+        .pog img { width: 14px; height: 14px; object-fit: contain; justify-self: center; }
+        .pog-hd { font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); text-align: right; }
+        .pog-v { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; text-align: right; }
+        .pog-m { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; color: var(--muted); text-align: right; }
+
+        /* ── ORE PILLS (shared with equipment page) ── */
+        .ore-pill { display: inline-flex; align-items: center; gap: 4px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; padding: 3px 9px; border-radius: 5px; }
+        .ore-shiny  { background: rgba(240,165,0,.12);  border: 1px solid rgba(240,165,0,.25); }
+        .ore-glowy  { background: rgba(63,185,80,.12);  border: 1px solid rgba(63,185,80,.25); }
+        .ore-starry { background: rgba(130,80,255,.12); border: 1px solid rgba(130,80,255,.25); }
+        .ore-img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
 
         /* ── HERO EMBLEM ── */
         .hero-emblem { width: 220px; height: 220px; position: relative; flex-shrink: 0; }
@@ -319,6 +352,83 @@
 <section class="hero">
     <div class="hero-inner">
         <div>
+            {% if current_user and current_user.linked_player %}
+            <div class="hero-eyebrow">{{ clan_name }}</div>
+            <h2>Welcome back,<br><span class="clan-name">{{ current_user.linked_player.name }}</span></h2>
+
+            <div class="hero-stat-section">
+                <div class="hero-stat-label">Clan</div>
+                <div class="stat-grid">
+                    <a href="/clan" class="stat-box">
+                        <div class="stat-value blue">{{ total_members }}</div>
+                        <div class="stat-label">Active Members</div>
+                    </a>
+                    <a href="/battles" class="stat-box">
+                        <div class="stat-value gold">{{ battle_logs_this_week }}</div>
+                        <div class="stat-label">Attacks tracked<br>since {{ week_start_name }}</div>
+                    </a>
+                    <a href="/ranked" class="stat-box">
+                        <div class="stat-value green">{{ ranked_battles_this_week }}</div>
+                        <div class="stat-label">Ranked attacks<br>this week</div>
+                    </a>
+                </div>
+            </div>
+
+            <div class="hero-stat-section">
+                <div class="hero-stat-label">You</div>
+                <div class="player-card">
+                    <div class="pc-left">
+                        {% if player_th %}
+                        <div class="pc-th">TH{{ player_th }}</div>
+                        <span class="pc-league">{{ player_league or 'Unranked' }}</span>
+                        {% endif %}
+                        {% if player_ranked_left is not none %}
+                        <a href="/ranked" class="pc-stat-row">
+                            <span class="pc-stat-num" style="color:{{ 'var(--green)' if player_ranked_left == 0 else ('var(--accent)' if player_ranked_left <= 3 else 'var(--red)') }};">{{ player_ranked_left }}</span>
+                            <span class="pc-stat-lbl">ranked attacks left this week</span>
+                        </a>
+                        {% endif %}
+                        <a href="/battles" class="pc-stat-row">
+                            <span class="pc-stat-num" style="color:{{ 'var(--green)' if player_attacks_this_week > 0 else 'var(--muted)' }};">{{ player_attacks_this_week }}</span>
+                            <span class="pc-stat-lbl">attacks since {{ week_start_name }}</span>
+                        </a>
+                        {% if player_war_stats.attacks > 0 %}
+                        <a href="/war" class="pc-stat-row">
+                            <span class="pc-stat-num" style="color:var(--accent);">{{ player_war_stats.attacks }}</span>
+                            <span class="pc-stat-lbl">war attacks · {{ player_war_stats.wars }} war{{ 's' if player_war_stats.wars != 1 else '' }} · last 30d</span>
+                        </a>
+                        {% endif %}
+                        {% if player_cwl_stats.attacks > 0 %}
+                        <a href="/cwl" class="pc-stat-row">
+                            <span class="pc-stat-num" style="color:var(--accent);">{{ player_cwl_stats.attacks }}</span>
+                            <span class="pc-stat-lbl">CWL · {{ player_cwl_stats.wars }} round{{ 's' if player_cwl_stats.wars != 1 else '' }} · last season</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                    <a href="/tools/equipment" class="pc-right" style="text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='rgba(240,165,0,.35)'" onmouseout="this.style.borderColor='var(--border)'">
+                        <div class="pog">
+                            <span></span>
+                            <span class="pog-hd">Balance</span>
+                            <span class="pog-hd">/day</span>
+                            <span class="pog-hd">/mo</span>
+                            <img src="/static/img/shiny.png">
+                            <span class="pog-v" style="color:#f0a500;">{{ "{:,}".format(player_ore.shiny) }}</span>
+                            <span class="pog-v" id="pog-shiny-d" style="color:#f0a500;">—</span>
+                            <span class="pog-m" id="pog-shiny-m">—</span>
+                            <img src="/static/img/glowy.png">
+                            <span class="pog-v" style="color:#3fb950;">{{ "{:,}".format(player_ore.glowy) }}</span>
+                            <span class="pog-v" id="pog-glowy-d" style="color:#3fb950;">—</span>
+                            <span class="pog-m" id="pog-glowy-m">—</span>
+                            <img src="/static/img/starry.png">
+                            <span class="pog-v" style="color:#a78bfa;">{{ player_ore.starry }}</span>
+                            <span class="pog-v" id="pog-starry-d" style="color:#a78bfa;">—</span>
+                            <span class="pog-m" id="pog-starry-m">—</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            {% else %}
             <div class="hero-eyebrow">Clan Dashboard</div>
             <h2><span class="clan-name">{{ clan_name }}</span><br>Analytics</h2>
             <p>Discover your clan's performance metrics, track battle statistics, and analyze seasonal rankings in real-time.</p>
@@ -336,6 +446,7 @@
                     <div class="stat-label">Ranked attacks<br>this week</div>
                 </a>
             </div>
+            {% endif %}
         </div>
         <div class="hero-emblem">
             <div class="emblem-inner">
@@ -659,5 +770,16 @@
     </div>
 </footer>
 
+{% if current_user and current_user.linked_player %}
+<script src="/static/js/ore_gain.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    OreGain.init({ savedSettings: {{ player_gain_settings_json|safe }} });
+    OreGain.applyStarBonus({{ player_th|tojson }}, {{ player_league|tojson }});
+    OreGain.applyWarStats({{ player_war_stats_json|safe }});
+    OreGain.applyCwlStats({{ player_cwl_stats_json|safe }});
+});
+</script>
+{% endif %}
 </body>
 </html>

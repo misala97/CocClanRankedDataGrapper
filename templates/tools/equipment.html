@@ -4,6 +4,7 @@
 {% include '_head.html' %}
 
         .container { max-width: 100%; }
+        .page-header { position: static; }
 
         .no-link {
             background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
@@ -113,54 +114,67 @@
         }
         .equip-img-wrap img { width: 60px; height: 60px; object-fit: contain; }
 
-        /* ── Sticky bars ── */
-        .sticky-bar {
-            position: sticky; top: 64px; z-index: 50;
-            background: var(--surface); border: 1px solid rgba(240,165,0,.35);
-            border-radius: 12px; padding: 12px 18px;
-            margin-bottom: 12px;
-            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-            box-shadow: 0 4px 20px rgba(0,0,0,.3);
+        /* ── Sticky Panel ── */
+        .sp-panel {
+            position: sticky; top: 59px; z-index: 50;
+            display: grid; grid-template-columns: auto 1px 1fr;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; margin-bottom: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,.3);
+            overflow: hidden;
         }
-        .bar-label {
-            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: .8px; color: var(--accent);
-            white-space: nowrap; flex-shrink: 0;
+        .sp-col { padding: 18px 22px; }
+        .sp-vdiv { background: var(--border); }
+        .sp-heading {
+            font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+            margin-bottom: 14px;
         }
-        .bar-divider { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
-
-        /* Ore inputs */
-        .ore-input-group { display: flex; align-items: center; gap: 5px; }
-        .ore-input-group img { width: 18px; height: 18px; object-fit: contain; }
-        .ore-input {
-            width: 90px; background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 6px; color: var(--text); font-family: 'Rajdhani', sans-serif;
-            font-size: 14px; font-weight: 700; padding: 4px 8px; text-align: right;
+        .sp-ore-rows { display: flex; flex-direction: column; gap: 10px; }
+        .sp-ore-row { display: flex; align-items: center; gap: 10px; }
+        .sp-ore-row img { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
+        .sp-ore-input {
+            width: 120px; background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-family: 'Rajdhani', sans-serif;
+            font-size: 16px; font-weight: 700; padding: 6px 10px; text-align: right;
+            -moz-appearance: textfield;
         }
-        .ore-input:focus { outline: none; border-color: var(--accent); }
+        .sp-ore-input::-webkit-outer-spin-button,
+        .sp-ore-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .sp-ore-input:focus { outline: none; border-color: var(--accent); }
+        .sp-plan-col { display: flex; flex-direction: column; gap: 10px; }
+        .sp-cost-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .sp-cost-item { display: flex; align-items: center; gap: 7px; }
+        .sp-cost-item img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+        .sp-cost-val {
+            font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; line-height: 1;
+        }
+        .sp-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .sp-count-txt {
+            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted);
+        }
+        .sp-days-txt {
+            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; color: var(--muted);
+        }
+        .sp-gain-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+        .gr-item { display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; }
+        .gr-item img { width: 16px; height: 16px; object-fit: contain; }
+        .gr-d { font-size: 13px; font-weight: 700; }
+        .gr-sep { font-size: 11px; color: var(--border); margin: 0 1px; }
+        .gr-m { font-size: 11px; font-weight: 600; color: var(--muted); }
+        .sp-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .sp-btn {
+            background: none; border: 1px solid var(--border); border-radius: 7px;
+            color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
+            padding: 5px 12px; cursor: pointer; transition: border-color .12s, color .12s; white-space: nowrap;
+        }
+        .sp-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .sp-btn-reset:hover { border-color: var(--red); color: var(--red); }
+        .ore-img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
         #save-indicator {
             font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-            opacity: 0; transition: opacity .3s; margin-left: auto;
+            opacity: 0; transition: opacity .3s;
         }
-
-        /* Cost summary bar */
-        .sum-ores { display: flex; gap: 10px; flex-wrap: wrap; flex: 1; }
-        .sum-ore-big {
-            display: flex; align-items: center; gap: 6px;
-            font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
-        }
-        .sum-count {
-            font-size: 11px; color: var(--muted);
-            font-family: 'Rajdhani', sans-serif; font-weight: 600; white-space: nowrap;
-        }
-        .ore-img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
-        #sum-reset {
-            background: none; border: 1px solid var(--border); border-radius: 6px;
-            color: var(--muted); font-size: 11px; padding: 4px 10px; cursor: pointer;
-            font-family: 'Rajdhani', sans-serif; font-weight: 700;
-            transition: border-color .12s, color .12s;
-        }
-        #sum-reset:hover { border-color: var(--red); color: var(--red); }
 
         /* Priority badge on cards */
         .equip-card { position: relative; }
@@ -183,15 +197,6 @@
         .bench-arrow { display:inline-block; transition: transform 0.15s; }
 
         /* ── Daily Ore Gain modal ── */
-        .gain-trigger-bar {
-            display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
-        }
-        #gain-open-btn {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text); font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
-            padding: 7px 14px; cursor: pointer; transition: border-color .12s, color .12s; white-space: nowrap;
-        }
-        #gain-open-btn:hover { border-color: var(--accent); color: var(--accent); }
         #gain-modal {
             display: none; position: fixed; inset: 0; z-index: 9999;
             background: rgba(0,0,0,.65); backdrop-filter: blur(4px);
@@ -218,7 +223,7 @@
         }
         .gain-modal-close:hover { border-color: var(--red); color: var(--red); }
         .gain-modal-body { overflow-y: auto; padding: 16px 20px; flex: 1; }
-        #gain-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        #gain-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
         @media (max-width: 660px) { #gain-cards { grid-template-columns: repeat(2, 1fr); } }
         .gain-card {
             background: var(--surface); border: 1px solid var(--border);
@@ -300,7 +305,7 @@
 
         /* Upgrade plan panel */
         #plan-section {
-            margin-top: 12px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border);
+            margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border);
             border-radius: 14px; overflow: hidden;
         }
         .plan-header {
@@ -320,7 +325,7 @@
         }
         .plan-row {
             display: flex; flex-direction: column; gap: 6px;
-            padding: 12px 20px; border-bottom: 1px solid var(--bord2, rgba(255,255,255,.04));
+            padding: 14px 20px; border-bottom: 1px solid var(--bord2, rgba(255,255,255,.04));
         }
         .plan-row:last-child { border-bottom: none; }
         .plan-row-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -346,9 +351,9 @@
             font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
         }
         .plan-after-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
-        .plan-status-full    { border-left: 3px solid var(--green); }
-        .plan-status-partial { border-left: 3px solid var(--yellow); }
-        .plan-status-none    { border-left: 3px solid var(--border); opacity: .7; }
+        .plan-status-full    { border-left: 4px solid var(--green); }
+        .plan-status-partial { border-left: 4px solid var(--yellow); }
+        .plan-status-none    { border-left: 4px solid var(--border); opacity: .65; }
 
     </style>
 </head>
@@ -374,31 +379,42 @@
 
 {% elif equipment is not none %}
 
-    <!-- Combined ore + cost bar -->
-    <div class="sticky-bar" id="ore-bar">
-        <span class="bar-label">Your Ores</span>
-        <div class="ore-input-group">
-            <img src="/static/img/shiny.png">
-            <input class="ore-input" id="ore-shiny" type="number" min="0" placeholder="0" oninput="onOreChange()">
+    <!-- Sticky Panel -->
+    <div class="sp-panel" id="ore-bar">
+        <!-- Balance column -->
+        <div class="sp-col">
+            <div class="sp-heading">Balance</div>
+            <div class="sp-ore-rows">
+                <div class="sp-ore-row">
+                    <img src="/static/img/shiny.png">
+                    <input class="sp-ore-input" id="ore-shiny" type="number" min="0" placeholder="0" oninput="onOreChange()">
+                </div>
+                <div class="sp-ore-row">
+                    <img src="/static/img/glowy.png">
+                    <input class="sp-ore-input" id="ore-glowy" type="number" min="0" placeholder="0" oninput="onOreChange()">
+                </div>
+                <div class="sp-ore-row" id="starry-input-group">
+                    <img src="/static/img/starry.png">
+                    <input class="sp-ore-input" id="ore-starry" type="number" min="0" placeholder="0" oninput="onOreChange()">
+                </div>
+            </div>
         </div>
-        <div class="ore-input-group">
-            <img src="/static/img/glowy.png">
-            <input class="ore-input" id="ore-glowy" type="number" min="0" placeholder="0" oninput="onOreChange()">
+        <div class="sp-vdiv"></div>
+        <!-- Plan summary column -->
+        <div class="sp-col sp-plan-col">
+            <div class="sp-heading">Total Cost</div>
+            <div class="sp-cost-row">
+                <div class="sp-cost-item" id="sum-shiny"><img src="/static/img/shiny.png"> <span class="sp-cost-val" id="sum-shiny-val" style="color:#f0a500;">0</span></div>
+                <div class="sp-cost-item" id="sum-glowy"><img src="/static/img/glowy.png"> <span class="sp-cost-val" id="sum-glowy-val" style="color:#3fb950;">0</span></div>
+                <div class="sp-cost-item" id="sum-starry" style="display:none;"><img src="/static/img/starry.png"> <span class="sp-cost-val" id="sum-starry-val" style="color:#a78bfa;">0</span></div>
+            </div>
+            <div class="sp-gain-row" id="gain-pills"></div>
+            <div class="sp-actions">
+                <button id="gain-open-btn" class="sp-btn" onclick="OreGain.open()">Ore Gains</button>
+                <button id="sum-reset" class="sp-btn sp-btn-reset" onclick="resetAll()">Reset</button>
+                <span id="save-indicator"></span>
+            </div>
         </div>
-        <div class="ore-input-group" id="starry-input-group">
-            <img src="/static/img/starry.png">
-            <input class="ore-input" id="ore-starry" type="number" min="0" placeholder="0" oninput="onOreChange()">
-        </div>
-        <div class="bar-divider"></div>
-        <span class="bar-label">Total Cost</span>
-        <div class="sum-ores">
-            <div class="sum-ore-big" id="sum-shiny"><img src="/static/img/shiny.png" class="ore-img"> <span id="sum-shiny-val" style="color:#f0a500;">0</span></div>
-            <div class="sum-ore-big" id="sum-glowy"><img src="/static/img/glowy.png" class="ore-img"> <span id="sum-glowy-val" style="color:#3fb950;">0</span></div>
-            <div class="sum-ore-big" id="sum-starry" style="display:none;"><img src="/static/img/starry.png" class="ore-img"> <span id="sum-starry-val" style="color:#a78bfa;">0</span></div>
-        </div>
-        <div class="sum-count" id="sum-count">No upgrades selected</div>
-        <button id="sum-reset" onclick="resetAll()">Reset</button>
-        <span id="save-indicator" style="margin-left:auto;"></span>
     </div>
 
     {% macro equip_card(e, idx) %}
@@ -444,18 +460,14 @@
     </div>
     {% endmacro %}
 
-    <!-- Daily Ore Gain trigger -->
-    <div class="gain-trigger-bar">
-        <button id="gain-open-btn" onclick="openGainModal()">&#x1F4C8; Ore Gains</button>
-        <span id="gain-pills" style="display:flex;gap:6px;align-items:center;"></span>
-        <span id="gain-days-short" style="margin-left:auto;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;"></span>
-    </div>
-
     <!-- Upgrade Plan -->
     <div id="plan-section">
         <div class="plan-header">
-            <span class="plan-header-title">&#x1F4CB; Upgrade Plan</span>
-            <span class="plan-header-sub">sorted by priority &middot; based on your ore balance</span>
+            <div style="display:flex;align-items:center;gap:14px;">
+                <span class="plan-header-title">&#x1F4CB; Upgrade Plan</span>
+                <span class="plan-header-sub" id="sum-count"></span>
+                <span class="plan-header-sub" id="gain-days-short"></span>
+            </div>
         </div>
         <div id="plan-list"><div class="plan-empty">Set target levels and priority on cards below to build your plan.</div></div>
     </div>
@@ -757,6 +769,7 @@ async function doSave() {
         glowy:  parseInt(document.getElementById('ore-glowy').value)  || 0,
         starry: parseInt(document.getElementById('ore-starry').value) || 0,
         goals,
+        gainSettings: OreGain.getSettings(),
     };
     try {
         const r = await fetch('/tools/equipment/save', {
@@ -769,13 +782,15 @@ async function doSave() {
 }
 
 function showSave(text, err = false) {
-    const el = document.getElementById('save-indicator');
-    if (!el) return;
-    el.textContent = text;
-    el.style.color = err ? 'var(--red)' : 'var(--green)';
-    el.style.opacity = '1';
-    clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.opacity = '0'; }, 2200);
+    for (const id of ['save-indicator', 'gain-modal-save']) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.textContent = text;
+        el.style.color = err ? 'var(--red)' : 'var(--green)';
+        el.style.opacity = '1';
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.opacity = '0'; }, 2200);
+    }
 }
 
 // ── Slider ────────────────────────────────────────────────────────────────
@@ -897,7 +912,7 @@ function computeAndRenderPlan() {
         }
     }
     renderPlan(results);
-    updateGainSummary();
+    OreGain.updateSummary();
 }
 
 function renderPlan(results) {
@@ -1003,7 +1018,7 @@ let gainSources = [
     { id: 'star',   name: 'Star Bonus',      icon: '⭐', freq: 'daily',   shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  th: 0, league: 'Unranked' },
     { id: 'war',    name: 'Clan War',        icon: '⚔️', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  attacks: 0, wars: 0 },
     { id: 'cwl',    name: 'CWL',             icon: '🏆', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  attacks: 0, wars: 0 },
-    { id: 'trader', name: 'Trader (Medals)', icon: '🪙', freq: 'monthly', shiny: 50,  glowy: 25,  starry: 5,  enabled: false  },
+    { id: 'trader', name: 'Trader (Medals)', icon: '🪙', freq: 'weekly',  shiny: 1000, glowy: 100, starry: 10, enabled: true, shinyBuys: 2, glowyBuys: 2, starryBuys: 2 },
     { id: 'prosp',  name: 'Prospector',      icon: '⛏️', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: false },
     { id: 'event',  name: 'Event Pass',      icon: '🎟️', freq: 'monthly', shiny: 150, glowy: 75,  starry: 15, enabled: false },
     { id: 'custom', name: 'Custom',          icon: '✨', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: false },
@@ -1019,11 +1034,14 @@ function loadGainSources() {
         gainSources.forEach(s => {
             const sv = map[s.id];
             if (!sv) return;
-            if (sv.shiny   != null) s.shiny   = sv.shiny;
-            if (sv.glowy   != null) s.glowy   = sv.glowy;
-            if (sv.starry  != null) s.starry  = sv.starry;
-            if (sv.freq    != null) s.freq    = sv.freq;
-            if (sv.enabled != null && !AUTO.has(s.id)) s.enabled = sv.enabled;
+            if (sv.shiny      != null) s.shiny      = sv.shiny;
+            if (sv.glowy      != null) s.glowy      = sv.glowy;
+            if (sv.starry     != null) s.starry     = sv.starry;
+            if (sv.freq       != null) s.freq       = sv.freq;
+            if (sv.enabled    != null && !AUTO.has(s.id)) s.enabled = sv.enabled;
+            if (sv.shinyBuys  != null) s.shinyBuys  = sv.shinyBuys;
+            if (sv.glowyBuys  != null) s.glowyBuys  = sv.glowyBuys;
+            if (sv.starryBuys != null) s.starryBuys = sv.starryBuys;
         });
     } catch(e) {}
 }
@@ -1031,8 +1049,18 @@ function loadGainSources() {
 function saveGainSources() {
     try {
         localStorage.setItem(GAIN_LS_KEY, JSON.stringify(
-            gainSources.map(({ id, shiny, glowy, starry, freq, enabled }) => ({ id, shiny, glowy, starry, freq, enabled }))
+            gainSources.map(({ id, shiny, glowy, starry, freq, enabled, shinyBuys, glowyBuys, starryBuys }) =>
+                ({ id, shiny, glowy, starry, freq, enabled, shinyBuys, glowyBuys, starryBuys }))
         ));
+        // re-derive trader ore amounts from per-bundle buy counts
+        const trader = gainSources.find(s => s.id === 'trader');
+        if (trader) {
+            trader.shiny  = TRADER_BUNDLES.shiny  * (trader.shinyBuys  ?? 2);
+            trader.glowy  = TRADER_BUNDLES.glowy  * (trader.glowyBuys  ?? 2);
+            trader.starry = TRADER_BUNDLES.starry * (trader.starryBuys ?? 2);
+            trader.freq   = 'weekly';
+            trader.enabled = trader.shiny > 0 || trader.glowy > 0 || trader.starry > 0;
+        }
     } catch(e) {}
 }
 
@@ -1261,17 +1289,98 @@ function applyCwlStats(data) {
     updateGainSummary();
 }
 
+// Trader: 3 independent bundles, each buyable 0–2× per week
+const TRADER_BUNDLES = { shiny: 500, glowy: 50, starry: 5 };
+
+function _traderBuysBtn(ore, n, active) {
+    return `<button onclick="setTraderBuys('${ore}',${n})" id="trader-${ore}-${n}"
+        style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;padding:2px 6px;
+               border-radius:4px;cursor:pointer;
+               background:${active?'var(--accent)':'var(--surf2)'};
+               color:${active?'var(--bg)':'var(--muted)'};
+               border:1px solid ${active?'var(--accent)':'var(--border)'};">${n}×</button>`;
+}
+
+function _traderFmtD(weekly) { const d = weekly / 7; return d < 10 ? d.toFixed(1) : Math.round(d).toString(); }
+
+function renderTraderCard(s) {
+    const bs = s.shinyBuys ?? 2, bg = s.glowyBuys ?? 2, bst = s.starryBuys ?? 2;
+    const ws = TRADER_BUNDLES.shiny * bs, wg = TRADER_BUNDLES.glowy * bg, wst = TRADER_BUNDLES.starry * bst;
+    const btns = (ore, buys) => `<div style="display:flex;gap:3px;">${[0,1,2].map(n => _traderBuysBtn(ore, n, buys===n)).join('')}</div>`;
+    return `
+        <div class="gain-card" id="gain-card-trader">
+            <div class="gain-card-head">
+                <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:4px 8px;align-items:center;">
+                <span></span>
+                <div class="gain-ore-hd"></div>
+                <div class="gain-ore-hd">Daily</div>
+                <div class="gain-ore-hd">Weekly</div>
+                <img src="/static/img/shiny.png" style="width:16px;height:16px;object-fit:contain;justify-self:center;">
+                ${btns('shiny', bs)}
+                <div class="gain-ore-num dim" id="trader-shiny-d">${_traderFmtD(ws)}</div>
+                <div class="gain-ore-num" id="trader-shiny-mo">${ws}</div>
+                <img src="/static/img/glowy.png" style="width:16px;height:16px;object-fit:contain;justify-self:center;">
+                ${btns('glowy', bg)}
+                <div class="gain-ore-num dim" id="trader-glowy-d">${_traderFmtD(wg)}</div>
+                <div class="gain-ore-num" id="trader-glowy-mo">${wg}</div>
+                <img src="/static/img/starry.png" style="width:16px;height:16px;object-fit:contain;justify-self:center;">
+                ${btns('starry', bst)}
+                <div class="gain-ore-num dim" id="trader-starry-d">${_traderFmtD(wst)}</div>
+                <div class="gain-ore-num" id="trader-starry-mo">${wst}</div>
+            </div>
+        </div>`;
+}
+
+function setTraderBuys(ore, val) {
+    const src = gainSources.find(s => s.id === 'trader');
+    if (!src) return;
+    if (ore === 'shiny')  src.shinyBuys  = val;
+    if (ore === 'glowy')  src.glowyBuys  = val;
+    if (ore === 'starry') src.starryBuys = val;
+    src.shiny  = TRADER_BUNDLES.shiny  * (src.shinyBuys  ?? 2);
+    src.glowy  = TRADER_BUNDLES.glowy  * (src.glowyBuys  ?? 2);
+    src.starry = TRADER_BUNDLES.starry * (src.starryBuys ?? 2);
+    src.freq   = 'weekly';
+    src.enabled = src.shiny > 0 || src.glowy > 0 || src.starry > 0;
+    const upd = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    upd('trader-shiny-d',   _traderFmtD(src.shiny));
+    upd('trader-shiny-mo',  src.shiny);
+    upd('trader-glowy-d',   _traderFmtD(src.glowy));
+    upd('trader-glowy-mo',  src.glowy);
+    upd('trader-starry-d',  _traderFmtD(src.starry));
+    upd('trader-starry-mo', src.starry);
+    ['shiny','glowy','starry'].forEach(o => [0,1,2].forEach(n => {
+        const btn = document.getElementById(`trader-${o}-${n}`);
+        if (!btn) return;
+        const buys = o === 'shiny' ? src.shinyBuys : o === 'glowy' ? src.glowyBuys : src.starryBuys;
+        const active = buys === n;
+        btn.style.background  = active ? 'var(--accent)' : 'var(--surf2)';
+        btn.style.color       = active ? 'var(--bg)'     : 'var(--muted)';
+        btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    }));
+    saveGainSources();
+    updateGainSummary();
+}
+
 function renderGainCards() {
     const container = document.getElementById('gain-cards');
     if (!container) return;
     container.innerHTML = gainSources.map(s => {
-        if (s.id === 'star') return renderStarCard(s);
-        if (s.id === 'war')  return renderWarCard(s);
-        if (s.id === 'cwl')  return renderCwlCard(s);
+        if (s.id === 'star')   return renderStarCard(s);
+        if (s.id === 'war')    return renderWarCard(s);
+        if (s.id === 'cwl')    return renderCwlCard(s);
+        if (s.id === 'trader') return renderTraderCard(s);
         return `
         <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-${s.id}">
             <div class="gain-card-head">
                 <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
+                <label class="gain-toggle">
+                    <input type="checkbox" data-id="${s.id}" onchange="onGainToggle(this)" ${s.enabled ? 'checked' : ''}>
+                    <span class="gain-t-track"></span>
+                    <span class="gain-t-thumb"></span>
+                </label>
             </div>
             <div class="gain-card-ores">
                 <div class="gain-card-ore"><img src="/static/img/shiny.png">
@@ -1303,10 +1412,11 @@ function updateGainSummary() {
     const fd = n => n < 10 ? n.toFixed(1) : Math.round(n).toString();
 
     const pillsEl = document.getElementById('gain-pills');
+    const fmo = n => Math.round(n * 30).toLocaleString();
     if (pillsEl) pillsEl.innerHTML =
-        `<span class="ore-pill ore-shiny"><img src="/static/img/shiny.png" class="ore-img"> ${fd(daily.shiny)}/d</span>` +
-        `<span class="ore-pill ore-glowy"><img src="/static/img/glowy.png" class="ore-img"> ${fd(daily.glowy)}/d</span>` +
-        (daily.starry > 0 ? `<span class="ore-pill ore-starry"><img src="/static/img/starry.png" class="ore-img"> ${fd(daily.starry)}/d</span>` : '');
+        `<span class="gr-item"><img src="/static/img/shiny.png"><span class="gr-d" style="color:#f0a500;">${fd(daily.shiny)}/d</span><span class="gr-sep">·</span><span class="gr-m">${fmo(daily.shiny)}/mo</span></span>` +
+        `<span class="gr-item"><img src="/static/img/glowy.png"><span class="gr-d" style="color:#3fb950;">${fd(daily.glowy)}/d</span><span class="gr-sep">·</span><span class="gr-m">${fmo(daily.glowy)}/mo</span></span>` +
+        (daily.starry > 0 ? `<span class="gr-item"><img src="/static/img/starry.png"><span class="gr-d" style="color:#a78bfa;">${fd(daily.starry)}/d</span><span class="gr-sep">·</span><span class="gr-m">${fmo(daily.starry)}/mo</span></span>` : '');
 
     const dailyEl = document.getElementById('gain-daily');
     if (dailyEl) dailyEl.innerHTML =
@@ -1386,18 +1496,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initGoalState();
     applySavedData({ ores: {{ saved_ores_json|safe }}, goals: {{ saved_goals_json|safe }} });
-    loadGainSources();
+    OreGain.init({
+        getBalance:    () => ({
+            shiny:  parseInt(document.getElementById('ore-shiny')?.value)  || 0,
+            glowy:  parseInt(document.getElementById('ore-glowy')?.value)  || 0,
+            starry: parseInt(document.getElementById('ore-starry')?.value) || 0,
+        }),
+        getTotalCost:  calcTotalPlanCost,
+        savedSettings: {{ gain_settings_json|safe }},
+    });
     // Star Bonus and Clan War always synced from DB, never from localStorage
-    applyStarBonus(
+    OreGain.applyStarBonus(
         {{ (player.current_th if player else 0) | tojson }},
         {{ ((player.league_tier or 'Unranked') if player else 'Unranked') | tojson }}
     );
-    applyWarStats({{ war_stats_json|safe }});
-    applyCwlStats({{ cwl_stats_json|safe }});
-    renderGainCards();
-    document.getElementById('gain-modal')?.addEventListener('click', e => {
-        if (e.target === e.currentTarget) closeGainModal();
-    });
+    OreGain.applyWarStats({{ war_stats_json|safe }});
+    OreGain.applyCwlStats({{ cwl_stats_json|safe }});
 });
 
 function resetAll() {
@@ -1429,26 +1543,7 @@ function resetAll() {
 }
 </script>
 
-<!-- Daily Ore Gain Modal -->
-<div id="gain-modal">
-    <div class="gain-modal-box">
-        <div class="gain-modal-head">
-            <span class="gain-modal-title">&#x1F4C8; Daily Ore Gains</span>
-            <button class="gain-modal-close" onclick="closeGainModal()">&#x2715;</button>
-        </div>
-        <div class="gain-modal-body">
-            <div id="gain-cards"></div>
-        </div>
-        <div class="gain-modal-foot">
-            <span class="gain-foot-lbl">Daily avg</span>
-            <div id="gain-daily" style="display:flex;gap:6px;align-items:center;"></div>
-            <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
-                <span class="gain-foot-lbl" id="gain-days-lbl" style="display:none;">Plan done in</span>
-                <span id="gain-days"></span>
-                <button class="gain-modal-close" onclick="closeGainModal()">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
+{% include '_ore_gain_modal.html' %}
+<script src="/static/js/ore_gain.js"></script>
 </body>
 </html>

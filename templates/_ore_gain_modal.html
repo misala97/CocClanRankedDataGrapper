@@ -1,0 +1,26 @@
+<div id="gain-modal">
+    <div class="gain-modal-box">
+        <div class="gain-modal-head">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span class="gain-modal-title">&#x1F4C8; Daily Ore Gains</span>
+                <span id="gain-modal-save" style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--green);opacity:0;transition:opacity .3s;"></span>
+            </div>
+            <button class="gain-modal-close" onclick="OreGain.close()">&#x2715;</button>
+        </div>
+        <div class="gain-modal-body">
+            <div id="gain-cards"></div>
+        </div>
+        <div class="gain-modal-foot">
+            <span class="gain-foot-lbl">Daily avg</span>
+            <div id="gain-daily" style="display:flex;gap:6px;align-items:center;"></div>
+            <div style="width:1px;height:18px;background:var(--border);flex-shrink:0;"></div>
+            <span class="gain-foot-lbl">Monthly avg</span>
+            <div id="gain-monthly" style="display:flex;gap:6px;align-items:center;"></div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+                <span class="gain-foot-lbl" id="gain-days-lbl" style="display:none;">Plan done in</span>
+                <span id="gain-days"></span>
+                <button class="gain-modal-close" onclick="OreGain.close()">Close</button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -17,15 +17,27 @@ ranked_bp = Blueprint('ranked', __name__)
 
 @ranked_bp.route('/ranked')
 def ranked_weeks_page():
-    distinct_weeks = db.session.query(
-        RankedWeek.start_day,
-        RankedWeek.end_day,
-        RankedWeek.league_season_id
-    ).distinct().order_by(RankedWeek.start_day.desc()).all()
+    distinct_weeks = (
+        db.session.query(
+            RankedWeek.start_day,
+            RankedWeek.end_day,
+            db.func.max(RankedWeek.league_season_id).label('league_season_id'),
+        )
+        .group_by(RankedWeek.start_day, RankedWeek.end_day)
+        .order_by(RankedWeek.start_day.desc())
+        .all()
+    )
+
+    current_week_row = (
+        db.session.query(RankedWeek.league_season_id)
+        .filter(RankedWeek.is_done == False)
+        .first()
+    )
+    current_week_id = current_week_row.league_season_id if current_week_row else None
 
     selected_week_id = request.args.get('week_id', default=None)
-    if not selected_week_id and distinct_weeks:
-        selected_week_id = distinct_weeks[0].league_season_id
+    if not selected_week_id:
+        selected_week_id = current_week_id or (distinct_weeks[0].league_season_id if distinct_weeks else None)
 
     last_10_seasons = [dw.league_season_id for dw in distinct_weeks[:52]]
     season_filter   = set(last_10_seasons)
@@ -262,6 +274,7 @@ def ranked_weeks_page():
         distinct_weeks=distinct_weeks,
         selected_week_id=selected_week_id,
         selected_week_info=selected_week_info,
+        current_week_id=current_week_id,
         week_data=week_data,
         player_history=player_history,
     )

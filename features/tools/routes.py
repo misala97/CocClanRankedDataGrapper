@@ -119,7 +119,7 @@ def equipment_calculator():
     if not player:
         return render_template('tools/equipment.html', player=None, equipment=None, error=None,
                                saved_goals_json='{}', saved_ores_json='{"shiny":0,"glowy":0,"starry":0}',
-                               war_stats_json=_empty, cwl_stats_json=_empty)
+                               war_stats_json=_empty, cwl_stats_json=_empty, gain_settings_json='null')
 
     try:
         data = api_fetch_player_data(player.tag)
@@ -159,7 +159,7 @@ def equipment_calculator():
     except RuntimeError as e:
         return render_template('tools/equipment.html', player=player, equipment=None, error=str(e),
                                saved_goals_json='{}', saved_ores_json='{"shiny":0,"glowy":0,"starry":0}',
-                               war_stats_json=_empty, cwl_stats_json=_empty)
+                               war_stats_json=_empty, cwl_stats_json=_empty, gain_settings_json='null')
 
     goals = {g.equipment_name: {'target': g.target_level, 'priority': g.priority}
              for g in EquipmentGoal.query.filter_by(user_id=user.id).all()}
@@ -185,6 +185,7 @@ def equipment_calculator():
         saved_ores_json=json.dumps(ores),
         war_stats_json=json.dumps(war_stats),
         cwl_stats_json=json.dumps(cwl_stats),
+        gain_settings_json=user.gain_settings or 'null',
     )
 
 
@@ -199,6 +200,10 @@ def equipment_save():
     user.ore_shiny  = max(0, int(data.get('shiny',  0) or 0))
     user.ore_glowy  = max(0, int(data.get('glowy',  0) or 0))
     user.ore_starry = max(0, int(data.get('starry', 0) or 0))
+
+    gain_settings = data.get('gainSettings')
+    if gain_settings is not None:
+        user.gain_settings = json.dumps(gain_settings)
 
     incoming = data.get('goals', {})  # {name: {target, priority} | null}
 
