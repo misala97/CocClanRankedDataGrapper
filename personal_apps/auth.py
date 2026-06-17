@@ -26,7 +26,7 @@ def login_required(f):
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if _is_logged_in():
-        return redirect(url_for('index'))
+        return redirect(url_for('pubquiz.pubquiz'))
     error = None
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -37,7 +37,7 @@ def login():
         if ok:
             session.clear()
             session['logged_in'] = True
-            return redirect(url_for('index'))
+            return redirect(url_for('pubquiz.pubquiz_admin'))
         error = 'Invalid username or password.'
     return render_template('auth/login.html', error=error)
 
@@ -45,4 +45,4 @@ def login():
 @auth_bp.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    return redirect(url_for('pubquiz.pubquiz'))
