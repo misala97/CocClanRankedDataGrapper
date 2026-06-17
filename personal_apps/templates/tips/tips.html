@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trinkgeld Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        :root {
+            --bg:      #0b0d14;
+            --surface: #131722;
+            --surf2:   #1a1f2e;
+            --border:  #272c3d;
+            --bord2:   #1e2333;
+            --text:    #eef0f7;
+            --muted:   #8b91a7;
+            --accent:  #6d6af6;
+            --acc2:    #22d3ee;
+            --green:   #34d399;
+            --red:     #fb7185;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse 60% 40% at 15% 0%, rgba(109,106,246,0.10) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 100% 20%, rgba(34,211,238,0.07) 0%, transparent 60%);
+        }
+        a { text-decoration: none; color: inherit; }
+
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(11,13,20,0.92);
+            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-inner {
+            max-width: 1200px; margin: 0 auto; padding: 0 32px;
+            height: 62px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .nav-logo { display: flex; align-items: center; gap: 10px; }
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            font-size: 17px;
+        }
+        .nav-logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
+        .nav-links { display: flex; align-items: center; gap: 6px; }
+        .nav-links a {
+            font-size: 13px; font-weight: 500; color: var(--muted);
+            padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
+        }
+        .nav-links a:hover { color: var(--text); background: var(--surf2); }
+
+        .page-wrap { max-width: 1200px; margin: 0 auto; padding: 32px 32px 56px; position: relative; z-index: 1; }
+        h1 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+        h2 { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; }
+        h3 { font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; overflow: hidden; margin-bottom: 20px;
+        }
+        .card-header {
+            padding: 14px 18px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-body { padding: 18px; }
+
+        /* ── PERIOD STAT GRID ── */
+        .period-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;
+            margin-bottom: 20px;
+        }
+        .period-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px;
+        }
+        .period-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        .period-card .rates { display: flex; gap: 18px; margin: 8px 0 10px; }
+        .period-card .rate-block .rate-val { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; color: var(--acc2); }
+        .period-card .rate-block .rate-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+        .period-card .sub { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+        .period-card .sub strong { color: var(--text); }
+
+        /* ── FORMS ── */
+        .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+        .form-group input, .form-group select, .form-group textarea {
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); padding: 7px 10px; font-size: 13px; font-family: inherit;
+            transition: border-color 0.15s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+        .form-group.grow { flex: 1; min-width: 130px; }
+        .form-group.grow input, .form-group.grow select { width: 100%; }
+        .num-input { width: 90px; }
+        .time-input { width: 110px; }
+
+        .btn {
+            padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
+            font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--acc2)); color: #0b0d14; border-color: transparent; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
+        .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+        .btn-danger { background: transparent; color: var(--red); border-color: var(--red); }
+        .btn-danger:hover { background: rgba(251,113,133,0.1); }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+        /* ── CHART ── */
+        .chart-wrap { padding: 18px; height: 280px; }
+
+        /* ── BREAKDOWN ── */
+        .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .breakdown-row {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 9px 18px; border-bottom: 1px solid var(--bord2); font-size: 13px;
+        }
+        .breakdown-row:last-child { border-bottom: none; }
+        .breakdown-label { font-weight: 600; }
+        .breakdown-meta { font-size: 11px; color: var(--muted); }
+        .breakdown-vals { text-align: right; }
+        .breakdown-vals .rate { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--acc2); }
+        .breakdown-vals .sub { font-size: 11px; color: var(--muted); }
+
+        /* ── BEST/WORST ── */
+        .bw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+        .bw-list { list-style: none; }
+        .bw-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 9px 18px; border-bottom: 1px solid var(--bord2); font-size: 13px;
+        }
+        .bw-row:last-child { border-bottom: none; }
+        .bw-date { color: var(--muted); }
+        .bw-val { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--acc2); }
+
+        /* ── SHIFT LIST ── */
+        .shift-item { border-bottom: 1px solid var(--bord2); }
+        .shift-item:last-child { border-bottom: none; }
+        .shift-summary {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 12px 18px; cursor: pointer; user-select: none; flex-wrap: wrap;
+        }
+        .shift-summary:hover { background: var(--surf2); }
+        .shift-summary .main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .shift-date-badge { font-weight: 600; font-size: 14px; min-width: 90px; }
+        .shift-meta { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+        .shift-rates { display: flex; align-items: baseline; gap: 10px; }
+        .shift-rate-primary { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; color: var(--acc2); }
+        .shift-rate-secondary { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--accent); }
+        .shift-total-sub { font-size: 11px; color: var(--muted); }
+        .chevron { color: var(--muted); font-size: 12px; transition: transform 0.2s; }
+        .chevron.open { transform: rotate(90deg); }
+
+        .shift-edit { display: none; padding: 0 18px 18px; }
+        .shift-edit.open { display: block; }
+
+        .empty { text-align: center; padding: 36px; color: var(--muted); font-size: 14px; }
+
+        @media (max-width: 700px) {
+            .page-wrap { padding: 24px 16px 40px; }
+            .shift-summary .main { gap: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-inner">
+        <div class="nav-logo">
+            <div class="logo-icon">🛵</div>
+            <span>Trinkgeld Tracker</span>
+        </div>
+        <div class="nav-links">
+            <a href="/">Übersicht</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="page-wrap">
+    <h1>Trinkgeld Tracker</h1>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:24px">Schichten erfassen und Statistiken auswerten</p>
+
+    <!-- Add shift -->
+    <div class="card">
+        <div class="card-header"><h2>Neue Schicht erfassen</h2></div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('tips.tips_add') }}">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Datum</label>
+                        <input type="date" name="shift_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Beginn</label>
+                        <input type="time" name="shift_start" class="time-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Ende</label>
+                        <input type="time" name="shift_end" class="time-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Stunden</label>
+                        <select name="hours_worked" class="num-input" required>
+                            {% for h in [4, 6, 8] %}
+                            <option value="{{ h }}">{{ h }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Trinkgeld Bar</label>
+                        <input type="number" name="tips_cash" step="0.01" min="0" class="num-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Trinkgeld Online</label>
+                        <input type="number" name="tips_online" step="0.01" min="0" class="num-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Lieferungen</label>
+                        <input type="number" name="deliveries" min="0" class="num-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Fahrrad</label>
+                        <select name="bike_size">
+                            <option value="">—</option>
+                            {% for val, label in bike_choices %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Wetter</label>
+                        <select name="weather">
+                            {% for val, label in weather_choices %}
+                            <option value="{{ val }}" {% if val == 'clear' %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group grow">
+                        <label>Notiz</label>
+                        <input type="text" name="notes" placeholder="optional">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Hinzufügen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Period totals -->
+    <div class="period-grid">
+        {% for key, title in [('week','Diese Woche'), ('month','Dieser Monat'), ('year','Dieses Jahr'), ('all','Gesamt')] %}
+        {% set p = periods[key] %}
+        <div class="period-card">
+            <div class="label">{{ title }}</div>
+            <div class="rates">
+                <div class="rate-block">
+                    <div class="rate-val">{{ ('%.2f'|format(p.avg_per_hour) ~ ' €') if p.avg_per_hour is not none else '—' }}</div>
+                    <div class="rate-lbl">Ø pro Stunde</div>
+                </div>
+                <div class="rate-block">
+                    <div class="rate-val">{{ ('%.2f'|format(p.avg_per_delivery) ~ ' €') if p.avg_per_delivery is not none else '—' }}</div>
+                    <div class="rate-lbl">Ø pro Lieferung</div>
+                </div>
+            </div>
+            <div class="sub">
+                <span>{{ p.shift_count }} Schichten · {{ '%.1f'|format(p.total_hours) }} Std · {{ p.total_deliveries }} Lieferungen</span>
+                <span>Gesamt: <strong>{{ '%.2f'|format(p.total_tips) }} €</strong> (Bar {{ '%.2f'|format(p.total_cash) }} € · Online {{ '%.2f'|format(p.total_online) }} €)</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Trend chart -->
+    {% if chart_labels %}
+    <div class="card">
+        <div class="card-header"><h2>Verlauf</h2></div>
+        <div class="chart-wrap">
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Breakdowns -->
+    {% if rows %}
+    <div class="breakdown-grid">
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Nach Wochentag</h2></div>
+            <div class="chart-wrap" style="height:{{ 60 + breakdown_weekday|length * 36 }}px">
+                <canvas id="chart-weekday"></canvas>
+            </div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Nach Tageszeit</h2></div>
+            {% if breakdown_time %}
+            <div class="chart-wrap" style="height:{{ 60 + breakdown_time|length * 36 }}px">
+                <canvas id="chart-time"></canvas>
+            </div>
+            {% else %}
+            <div class="empty">Keine Schichten mit Beginn-Zeit erfasst.</div>
+            {% endif %}
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Nach Wetter</h2></div>
+            <div class="chart-wrap" style="height:{{ 60 + breakdown_weather|length * 36 }}px">
+                <canvas id="chart-weather"></canvas>
+            </div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Nach Fahrrad</h2></div>
+            {% if breakdown_bike %}
+            <div class="chart-wrap" style="height:{{ 60 + breakdown_bike|length * 36 }}px">
+                <canvas id="chart-bike"></canvas>
+            </div>
+            {% else %}
+            <div class="empty">Keine Schichten mit Fahrrad-Angabe erfasst.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Best / worst -->
+    {% if rows %}
+    <div class="bw-grid" style="margin-bottom:20px">
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Beste Rate (€/Std)</h2></div>
+            <ul class="bw-list">
+                {% for r in best_rate %}
+                <li class="bw-row">
+                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
+                    <span class="bw-val">{{ '%.2f'|format(r.per_hour) }} €/h</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Schwächste Rate (€/Std)</h2></div>
+            <ul class="bw-list">
+                {% for r in worst_rate %}
+                <li class="bw-row">
+                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
+                    <span class="bw-val">{{ '%.2f'|format(r.per_hour) }} €/h</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Beste Rate (€/Lieferung)</h2></div>
+            <ul class="bw-list">
+                {% for r in best_delivery_rate %}
+                <li class="bw-row">
+                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
+                    <span class="bw-val">{{ '%.2f'|format(r.per_delivery) }} €</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Schwächste Rate (€/Lieferung)</h2></div>
+            <ul class="bw-list">
+                {% for r in worst_delivery_rate %}
+                <li class="bw-row">
+                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
+                    <span class="bw-val">{{ '%.2f'|format(r.per_delivery) }} €</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Shift list -->
+    <div class="card">
+        <div class="card-header"><h2>Alle Schichten</h2></div>
+        {% if rows %}
+        <div>
+            {% for r in rows %}
+            <div class="shift-item">
+                <div class="shift-summary" onclick="toggleShift({{ r.id }})">
+                    <div class="main">
+                        <span class="shift-date-badge">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
+                        <span class="shift-meta">
+                            <span>{{ '%.1f'|format(r.hours_worked) if r.hours_worked is not none else '—' }} Std</span>
+                            <span>{{ r.deliveries }} Lieferungen</span>
+                            <span>{{ r.bike_label }}</span>
+                            <span>{{ r.weather_label }}</span>
+                        </span>
+                    </div>
+                    <div class="main">
+                        <div class="shift-rates">
+                            <span class="shift-rate-primary">{{ ('%.2f'|format(r.per_hour) ~ ' €/h') if r.per_hour is not none else '—' }}</span>
+                            <span class="shift-rate-secondary">{{ ('%.2f'|format(r.per_delivery) ~ ' €/Lief.') if r.per_delivery is not none else '—' }}</span>
+                        </div>
+                        <span class="shift-total-sub">({{ '%.2f'|format(r.total) }} € gesamt)</span>
+                        <span class="chevron" id="chevron-{{ r.id }}">▶</span>
+                    </div>
+                </div>
+                <div class="shift-edit" id="edit-{{ r.id }}">
+                    <form method="post" action="{{ url_for('tips.tips_update', shift_id=r.id) }}">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Datum</label>
+                                <input type="date" name="shift_date" value="{{ r.shift_date.strftime('%Y-%m-%d') }}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Beginn</label>
+                                <input type="time" name="shift_start" class="time-input" value="{{ r.shift_start.strftime('%H:%M') if r.shift_start else '' }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Ende</label>
+                                <input type="time" name="shift_end" class="time-input" value="{{ r.shift_end.strftime('%H:%M') if r.shift_end else '' }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Stunden</label>
+                                <select name="hours_worked" class="num-input" required>
+                                    {% for h in [4, 6, 8] %}
+                                    <option value="{{ h }}" {% if r.hours_worked == h %}selected{% endif %}>{{ h }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Trinkgeld Bar</label>
+                                <input type="number" name="tips_cash" step="0.01" min="0" class="num-input" value="{{ r.tips_cash }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Trinkgeld Online</label>
+                                <input type="number" name="tips_online" step="0.01" min="0" class="num-input" value="{{ r.tips_online }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Lieferungen</label>
+                                <input type="number" name="deliveries" min="0" class="num-input" value="{{ r.deliveries }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Fahrrad</label>
+                                <select name="bike_size">
+                                    <option value="">—</option>
+                                    {% for val, label in bike_choices %}
+                                    <option value="{{ val }}" {% if r.bike_size == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Wetter</label>
+                                <select name="weather">
+                                    {% for val, label in weather_choices %}
+                                    <option value="{{ val }}" {% if (r.weather or 'clear') == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group grow">
+                                <label>Notiz</label>
+                                <input type="text" name="notes" value="{{ r.notes or '' }}" placeholder="optional">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Speichern</button>
+                        </div>
+                    </form>
+                    <form method="post" action="{{ url_for('tips.tips_delete', shift_id=r.id) }}"
+                          onsubmit="return confirm('Schicht löschen?')" style="margin-top:10px">
+                        <button type="submit" class="btn btn-danger btn-sm">Schicht löschen</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">Noch keine Schichten erfasst.</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function toggleShift(id) {
+    const edit = document.getElementById('edit-' + id);
+    const chevron = document.getElementById('chevron-' + id);
+    const isOpen = edit.classList.contains('open');
+    edit.classList.toggle('open', !isOpen);
+    chevron.classList.toggle('open', !isOpen);
+}
+
+{% if chart_labels %}
+const ctx = document.getElementById('trendChart');
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: {{ chart_labels | tojson }},
+        datasets: [
+            {
+                label: '€/Std',
+                data: {{ chart_rates | tojson }},
+                borderColor: '#6d6af6',
+                backgroundColor: 'rgba(109,106,246,0.12)',
+                tension: 0.3,
+                fill: true,
+                yAxisID: 'y',
+            },
+            {
+                label: 'Trinkgeld gesamt (€)',
+                data: {{ chart_totals | tojson }},
+                borderColor: '#22d3ee',
+                backgroundColor: 'rgba(34,211,238,0.08)',
+                tension: 0.3,
+                fill: false,
+                yAxisID: 'y1',
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+            x: { ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' } },
+            y: { position: 'left', ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' } },
+            y1: { position: 'right', ticks: { color: '#8b91a7' }, grid: { display: false } },
+        },
+        plugins: {
+            legend: { labels: { color: '#eef0f7' } }
+        }
+    }
+});
+{% endif %}
+
+function renderBreakdownChart(canvasId, groups) {
+    const el = document.getElementById(canvasId);
+    if (!el || !groups.length) return;
+    new Chart(el, {
+        type: 'bar',
+        data: {
+            labels: groups.map(g => g.label),
+            datasets: [
+                {
+                    label: '€/Std',
+                    data: groups.map(g => g.avg_per_hour),
+                    backgroundColor: 'rgba(109,106,246,0.75)',
+                    borderRadius: 6,
+                },
+                {
+                    label: '€/Lieferung',
+                    data: groups.map(g => g.avg_per_delivery),
+                    backgroundColor: 'rgba(34,211,238,0.65)',
+                    borderRadius: 6,
+                }
+            ]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' }, beginAtZero: true },
+                y: { ticks: { color: '#eef0f7' }, grid: { display: false } },
+            },
+            plugins: {
+                legend: { labels: { color: '#eef0f7' } },
+                tooltip: {
+                    callbacks: {
+                        afterBody: (items) => {
+                            const g = groups[items[0].dataIndex];
+                            return `${g.shift_count} Schichten · Gesamt ${g.total_tips.toFixed(2)} €`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+renderBreakdownChart('chart-weekday', {{ breakdown_weekday | tojson }});
+renderBreakdownChart('chart-time', {{ breakdown_time | tojson }});
+renderBreakdownChart('chart-weather', {{ breakdown_weather | tojson }});
+renderBreakdownChart('chart-bike', {{ breakdown_bike | tojson }});
+</script>
+
+</body>
+</html>

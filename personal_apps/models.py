@@ -26,3 +26,18 @@ class QuizTeam(db.Model):
     round4_size   = db.Column(db.Integer)
 
     round = db.relationship('QuizRound', back_populates='teams')
+
+
+class DeliveryShift(db.Model):
+    __tablename__ = 'delivery_shifts'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    shift_date   = db.Column(db.Date, nullable=False)
+    shift_start  = db.Column(db.Time, nullable=True)
+    shift_end    = db.Column(db.Time, nullable=True)
+    hours_worked = db.Column(db.Float, nullable=False)
+    tips_cash    = db.Column(db.Float, default=0)
+    tips_online  = db.Column(db.Float, default=0)
+    deliveries   = db.Column(db.Integer, default=0)
+    bike_size    = db.Column(db.String(10))   # 'small' | 'big'
+    weather      = db.Column(db.String(20))   # 'clear' | 'rain' | 'heavy_rain' | 'snow' | 'thunderstorm' | 'hail'
+    notes        = db.Column(db.Text, nullable=True)

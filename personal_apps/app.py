@@ -2,7 +2,7 @@ import os
 import secrets
 
 from dotenv import load_dotenv
-from flask import Flask, render_template
+from flask import Flask, render_template, request, redirect, url_for
 from flask_migrate import Migrate
 
 from extensions import db
@@ -39,11 +39,29 @@ migrate = Migrate(app, db)
 from models import *
 db.configure_mappers()
 
-from auth import auth_bp
+from auth import auth_bp, _is_logged_in, login_required
 from features.pubquiz.routes import pubquiz_bp
+from features.tips.routes import tips_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(pubquiz_bp)
+app.register_blueprint(tips_bp)
+
+# Hostname that should require login for every page (the "full access" domain).
+# Other hostnames (e.g. the public pubquiz-only domain) are unaffected and keep
+# whatever per-route protection each blueprint already defines.
+FULL_ACCESS_HOST = os.getenv("PERSONAL_FULL_ACCESS_HOST", "mgemmel.viewdns.net")
+
+
+@app.before_request
+def _require_login_on_full_access_host():
+    if request.host.split(':')[0] != FULL_ACCESS_HOST:
+        return
+    if request.endpoint in ('auth.login', 'auth.logout', 'static'):
+        return
+    if not _is_logged_in():
+        return redirect(url_for('auth.login'))
+
 
 APPS = [
     {
@@ -52,10 +70,17 @@ APPS = [
         'icon': '🍻',
         'url': '/pubquiz',
     },
+    {
+        'name': 'Trinkgeld Tracker',
+        'description': 'Schichten, Trinkgeld und Statistiken für den Lieferjob.',
+        'icon': '🛵',
+        'url': '/tips',
+    },
 ]
 
 
 @app.route('/')
+@login_required
 def index():
     return render_template('overview.html', apps=APPS)
 
