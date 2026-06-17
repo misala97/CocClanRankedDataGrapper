@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login – Personal Apps</title>
+    <style>
+        :root {
+            --bg: #0d1117; --surface: #161b22; --surf2: #1c2330;
+            --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+            --accent: #f0a500; --acc2: #f7b733; --red: #f85149;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: var(--bg); color: var(--text); font-family: 'DM Sans', Arial, sans-serif;
+            padding: 24px;
+        }
+        .login-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; padding: 48px 40px;
+            width: 100%; max-width: 380px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+        }
+        .login-title { font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 6px; }
+        .login-subtitle { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 28px; }
+        .form-group { margin-bottom: 18px; }
+        label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 7px; letter-spacing: 0.4px; text-transform: uppercase; }
+        input[type="text"], input[type="password"] {
+            width: 100%; padding: 11px 14px;
+            background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 14px;
+            font-family: inherit; outline: none;
+        }
+        input:focus { border-color: var(--accent); }
+        .error-msg {
+            background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.25);
+            border-radius: 8px; padding: 10px 14px;
+            font-size: 13px; color: var(--red); margin-bottom: 18px;
+        }
+        .btn-login {
+            width: 100%; padding: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border: none; border-radius: 8px;
+            font-size: 15px; font-weight: 700; letter-spacing: 0.5px;
+            color: #0d1117; cursor: pointer;
+        }
+        .btn-login:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+<div class="login-card">
+    <div class="login-title">Personal Apps</div>
+    <div class="login-subtitle">Sign in to continue</div>
+
+    {% if error %}
+    <div class="error-msg">⚠ {{ error }}</div>
+    {% endif %}
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" autocomplete="username" autofocus>
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-login">Sign In</button>
+    </form>
+</div>
+</body>
+</html>

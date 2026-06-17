@@ -3,8 +3,8 @@ import datetime as dt
 from flask import Blueprint, render_template, request, session, redirect, url_for
 
 from extensions import db
-from models import PubQuizRounds, PubQuizTeams
-from features.auth.routes import require_super_admin
+from models import QuizRound, QuizTeam
+from auth import login_required
 
 pubquiz_bp = Blueprint('pubquiz', __name__)
 
@@ -25,12 +25,12 @@ def _team_scores(team):
 
 @pubquiz_bp.route('/pubquiz')
 def pubquiz():
-    rounds      = PubQuizRounds.query.order_by(PubQuizRounds.datum.desc()).all()
+    rounds      = QuizRound.query.order_by(QuizRound.datum.desc()).all()
     selected_id = request.args.get('round_id', type=int)
     if not selected_id and rounds:
         selected_id = rounds[0].id
 
-    selected_round = PubQuizRounds.query.filter_by(id=selected_id).first() if selected_id else None
+    selected_round = QuizRound.query.filter_by(id=selected_id).first() if selected_id else None
 
     team_data      = []
     round_rankings = {1: [], 2: [], 3: [], 4: []}
@@ -83,13 +83,13 @@ def pubquiz_admin_logout():
 
 
 @pubquiz_bp.route('/pubquiz/admin')
-@require_super_admin
+@login_required
 def pubquiz_admin():
-    rounds      = PubQuizRounds.query.order_by(PubQuizRounds.datum.desc()).all()
+    rounds      = QuizRound.query.order_by(QuizRound.datum.desc()).all()
     selected_id = request.args.get('round_id', type=int)
     if not selected_id and rounds:
         selected_id = rounds[0].id
-    selected_round = PubQuizRounds.query.filter_by(id=selected_id).first() if selected_id else None
+    selected_round = QuizRound.query.filter_by(id=selected_id).first() if selected_id else None
     return render_template('pubquiz/pubquiz_admin.html',
                            rounds=rounds,
                            selected_round=selected_round,
@@ -97,7 +97,7 @@ def pubquiz_admin():
 
 
 @pubquiz_bp.route('/pubquiz/admin/round/create', methods=['POST'])
-@require_super_admin
+@login_required
 def pubquiz_create_round():
     datum_str   = request.form.get('datum', '').strip()
     bilderrunde = request.form.get('bilderrunde', '').strip() or None
@@ -106,25 +106,25 @@ def pubquiz_create_round():
         datum = dt.datetime.fromisoformat(datum_str) if datum_str else dt.datetime.now()
     except ValueError:
         datum = dt.datetime.now()
-    new_round = PubQuizRounds(datum=datum, bilderrunde=bilderrunde, quizmaster=quizmaster)
+    new_round = QuizRound(datum=datum, bilderrunde=bilderrunde, quizmaster=quizmaster)
     db.session.add(new_round)
     db.session.commit()
     return redirect(url_for('pubquiz.pubquiz_admin', round_id=new_round.id))
 
 
 @pubquiz_bp.route('/pubquiz/admin/round/<int:round_id>/delete', methods=['POST'])
-@require_super_admin
+@login_required
 def pubquiz_delete_round(round_id):
-    r = db.get_or_404(PubQuizRounds,round_id)
+    r = db.get_or_404(QuizRound, round_id)
     db.session.delete(r)
     db.session.commit()
     return redirect(url_for('pubquiz.pubquiz_admin'))
 
 
 @pubquiz_bp.route('/pubquiz/admin/round/<int:round_id>/update', methods=['POST'])
-@require_super_admin
+@login_required
 def pubquiz_update_round(round_id):
-    r         = db.get_or_404(PubQuizRounds,round_id)
+    r         = db.get_or_404(QuizRound, round_id)
     datum_str = request.form.get('datum', '').strip()
     if datum_str:
         try:
@@ -138,26 +138,26 @@ def pubquiz_update_round(round_id):
 
 
 @pubquiz_bp.route('/pubquiz/admin/team/add', methods=['POST'])
-@require_super_admin
+@login_required
 def pubquiz_add_team():
     round_id = request.form.get('round_id', type=int)
     name     = request.form.get('name', '').strip()
     if not round_id or not name:
         return redirect(url_for('pubquiz.pubquiz_admin', round_id=round_id))
-    if PubQuizTeams.query.filter(PubQuizTeams.round_id == round_id, db.func.lower(PubQuizTeams.name) == name.lower()).first():
+    if QuizTeam.query.filter(QuizTeam.round_id == round_id, db.func.lower(QuizTeam.name) == name.lower()).first():
         return redirect(url_for('pubquiz.pubquiz_admin', round_id=round_id, error='duplicate', error_name=name))
-    team = PubQuizTeams(name=name, round_id=round_id)
+    team = QuizTeam(name=name, round_id=round_id)
     db.session.add(team)
     db.session.commit()
     return redirect(url_for('pubquiz.pubquiz_admin', round_id=round_id))
 
 
 @pubquiz_bp.route('/pubquiz/admin/round/<int:round_id>/scores/<int:round_num>', methods=['POST'])
-@require_super_admin
+@login_required
 def pubquiz_save_round_scores(round_id, round_num):
     if round_num not in (1, 2, 3, 4):
         return redirect(url_for('pubquiz.pubquiz_admin', round_id=round_id))
-    teams = PubQuizTeams.query.filter_by(round_id=round_id).all()
+    teams = QuizTeam.query.filter_by(round_id=round_id).all()
     for team in teams:
         pts_str  = request.form.get(f'team_{team.id}_points', '').strip()
         size_str = request.form.get(f'team_{team.id}_size', '').strip()
@@ -175,9 +175,9 @@ def pubquiz_save_round_scores(round_id, round_num):
 
 
 @pubquiz_bp.route('/pubquiz/admin/team/<int:team_id>/update', methods=['POST'])
-@require_super_admin
+@login_required
 def pubquiz_update_team(team_id):
-    team = db.get_or_404(PubQuizTeams,team_id)
+    team = db.get_or_404(QuizTeam, team_id)
     team.name = request.form.get('name', team.name).strip()
 
     def _float_pts(key, fallback):
@@ -200,9 +200,9 @@ def pubquiz_update_team(team_id):
 
 
 @pubquiz_bp.route('/pubquiz/admin/team/<int:team_id>/delete', methods=['POST'])
-@require_super_admin
+@login_required
 def pubquiz_delete_team(team_id):
-    team     = db.get_or_404(PubQuizTeams,team_id)
+    team     = db.get_or_404(QuizTeam, team_id)
     round_id = team.round_id
     db.session.delete(team)
     db.session.commit()

@@ -1254,6 +1254,9 @@ function nmDetailPanel(p) {
         </div>` : ''}
     </div>`;
 
+    const tagClean = p.tag.replace('#', '');
+    const iframeUrl = `/admin/proxy/clashspot/${tagClean}`;
+
     return `<div style="padding:18px 20px;">
         ${statsRow}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;">
@@ -1264,6 +1267,21 @@ function nmDetailPanel(p) {
             <div>
                 <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Checks</div>
                 ${checkRows}
+            </div>
+        </div>
+        <div style="margin-top:20px;border-top:1px solid var(--bord2);padding-top:16px;">
+            <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">External Profile</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <a href="https://clashspot.net/en/player/${tagClean}/capital-raid-seasons" target="_blank" rel="noopener"
+                   style="display:inline-flex;align-items:center;gap:8px;padding:9px 18px;background:rgba(88,166,255,.08);color:#58a6ff;border:1px solid rgba(88,166,255,.3);border-radius:8px;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.4px;text-decoration:none;transition:all .15s;"
+                   onmouseover="this.style.background='rgba(88,166,255,.18)'" onmouseout="this.style.background='rgba(88,166,255,.08)'">
+                    🏰 Capital Raid Seasons ↗
+                </a>
+                <a href="https://clashspot.net/en/player/${tagClean}/view" target="_blank" rel="noopener"
+                   style="display:inline-flex;align-items:center;gap:8px;padding:9px 18px;background:rgba(240,165,0,.08);color:var(--accent);border:1px solid rgba(240,165,0,.3);border-radius:8px;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.4px;text-decoration:none;transition:all .15s;"
+                   onmouseover="this.style.background='rgba(240,165,0,.18)'" onmouseout="this.style.background='rgba(240,165,0,.08)'">
+                    👤 Full Profile ↗
+                </a>
             </div>
         </div>
     </div>`;

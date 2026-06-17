@@ -1,6 +1,8 @@
 import datetime as dt
 from collections import defaultdict
 
+import requests as req_lib
+
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -1000,3 +1002,6 @@ def admin_war_roster():
         eligible_count=eligible_count,
         auto=auto_mode,
     )
+
+
+
