@@ -1,6 +1,25 @@
+import glob
+import os
 import time
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
+
+from logging_config import reset_task_logs
+from tasks import LOCK_DIR
+
+reset_task_logs(
+    'logs/task_battle_logs.log',
+    'logs/raid_weekend.log',
+    'logs/task_ranked_weeks.log',
+    'logs/clan_war.log',
+    'logs/task_clan_members.log',
+    'logs/cwl.log',
+)
+
+# A fresh process start means nothing can legitimately hold a task lock yet —
+# clear any stale lock files left behind by a previous crash.
+for _stale_lock in glob.glob(os.path.join(LOCK_DIR, '*.lock')):
+    os.remove(_stale_lock)
 
 from app import app
 from tasks.battle_logs   import task_update_battle_logs

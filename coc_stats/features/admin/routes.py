@@ -202,7 +202,7 @@ def admin_members():
     return render_template('admin/admin_members.html', players=players)
 
 
-from tasks import _task_locks
+from tasks import TaskBusyError
 
 _TRIGGERABLE_TASKS = {
     'task_update_battle_logs':  ('tasks.battle_logs',  'task_update_battle_logs'),
@@ -221,18 +221,15 @@ def admin_trigger_task():
     task_name = (request.get_json() or {}).get('task')
     if task_name not in _TRIGGERABLE_TASKS:
         return jsonify(ok=False, error='Unknown task'), 400
-    lock = _task_locks[task_name]
-    if not lock.acquire(blocking=False):
-        return jsonify(ok=False, busy=True, error='Task is already running — try again in a moment.'), 409
     try:
         module_path, fn_name = _TRIGGERABLE_TASKS[task_name]
         mod = importlib.import_module(module_path)
         getattr(mod, fn_name)()
         return jsonify(ok=True)
+    except TaskBusyError:
+        return jsonify(ok=False, busy=True, error='Task is already running — try again in a moment.'), 409
     except Exception as e:
         return jsonify(ok=False, error=str(e)), 500
-    finally:
-        lock.release()
 
 
 # ── CWL Bonus ─────────────────────────────────────────────────────────────────

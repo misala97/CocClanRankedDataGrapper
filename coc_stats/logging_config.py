@@ -2,6 +2,14 @@ import logging
 import os
 import sys
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _resolve(path):
+    # Anchor relative log paths to this package's directory rather than the
+    # process's cwd, which depends on how/where the process was launched.
+    return path if os.path.isabs(path) else os.path.join(BASE_DIR, path)
+
 
 class ConsoleColorFormatter(logging.Formatter):
     RED = "\033[31m"
@@ -46,16 +54,24 @@ _task_console_formatter = ConsoleColorFormatter(
 )
 
 
+def reset_task_logs(*log_files):
+    # Called once from the scheduler entrypoint; setup_task_logger always appends so that
+    # other processes lazily importing a task module (e.g. the admin "trigger task" button)
+    # don't wipe out logs the scheduler already wrote this run.
+    os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
+    for log_file in log_files:
+        open(_resolve(log_file), 'w', encoding='utf-8').close()
+
+
 def setup_task_logger(name, log_file):
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
+    os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+    file_handler = logging.FileHandler(_resolve(log_file), mode='a', encoding='utf-8')
     file_handler.setFormatter(_file_formatter)
     logger.addHandler(file_handler)
 
