@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Apps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      #0b0d14;
+            --surface: #131722;
+            --surf2:   #1a1f2e;
+            --border:  #272c3d;
+            --text:    #eef0f7;
+            --muted:   #8b91a7;
+            --accent:  #6d6af6;
+            --acc2:    #22d3ee;
+        }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
+            min-height: 100vh; position: relative;
+        }
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse 60% 40% at 15% 0%, rgba(109,106,246,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 100% 20%, rgba(34,211,238,0.08) 0%, transparent 60%);
+        }
+        a { text-decoration: none; color: inherit; }
+
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(11,13,20,0.92);
+            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-inner {
+            max-width: 1100px; margin: 0 auto; padding: 0 32px;
+            height: 62px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .nav-logo { display: flex; align-items: center; gap: 10px; }
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            font-size: 17px;
+        }
+        .nav-logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
+        .nav-links a {
+            font-size: 13px; font-weight: 500; color: var(--muted);
+            padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
+        }
+        .nav-links a:hover { color: var(--text); background: var(--surf2); }
+
+        .page-wrap { max-width: 1100px; margin: 0 auto; padding: 56px 32px; position: relative; z-index: 1; }
+        .page-header { margin-bottom: 36px; }
+        .page-header h1 { font-family: 'Space Grotesk', sans-serif; font-size: 34px; font-weight: 700; }
+        .page-header p { color: var(--muted); margin-top: 8px; font-size: 15px; }
+
+        .app-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px;
+        }
+        .app-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+            padding: 24px; display: flex; flex-direction: column; gap: 14px;
+            transition: border-color 0.15s, transform 0.15s;
+        }
+        .app-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .app-icon {
+            width: 46px; height: 46px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            font-size: 22px; box-shadow: 0 0 18px rgba(109,106,246,0.3);
+        }
+        .app-name { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; }
+        .app-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+        .app-arrow { font-size: 13px; color: var(--acc2); font-weight: 600; margin-top: auto; }
+
+        .empty-state { text-align: center; padding: 60px 16px; color: var(--muted); }
+        .empty-state .icon { font-size: 36px; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-inner">
+        <div class="nav-logo">
+            <div class="logo-icon">✨</div>
+            <span>Personal Apps</span>
+        </div>
+        <div class="nav-links">
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="page-wrap">
+    <div class="page-header">
+        <h1>Personal Apps</h1>
+        <p>Eine Übersicht aller privaten Tools</p>
+    </div>
+
+    {% if apps %}
+    <div class="app-grid">
+        {% for app in apps %}
+        <a class="app-card" href="{{ app.url }}">
+            <div class="app-icon">{{ app.icon }}</div>
+            <div>
+                <div class="app-name">{{ app.name }}</div>
+                <div class="app-desc">{{ app.description }}</div>
+            </div>
+            <div class="app-arrow">Öffnen →</div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">📭</div>
+        <p>Noch keine Apps eingerichtet.</p>
+    </div>
+    {% endif %}
+</div>
+
+</body>
+</html>

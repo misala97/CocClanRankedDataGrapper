@@ -4,52 +4,68 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login – Personal Apps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0d1117; --surface: #161b22; --surf2: #1c2330;
-            --border: #30363d; --text: #e6edf3; --muted: #8b949e;
-            --accent: #f0a500; --acc2: #f7b733; --red: #f85149;
+            --bg: #0b0d14; --surface: #131722; --surf2: #1a1f2e;
+            --border: #272c3d; --text: #eef0f7; --muted: #8b91a7;
+            --accent: #6d6af6; --acc2: #22d3ee; --red: #fb7185;
         }
         * { box-sizing: border-box; }
         body {
             margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-            background: var(--bg); color: var(--text); font-family: 'DM Sans', Arial, sans-serif;
-            padding: 24px;
+            background: var(--bg); color: var(--text); font-family: 'Inter', Arial, sans-serif;
+            padding: 24px; position: relative; overflow: hidden;
+        }
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse 50% 50% at 20% 20%, rgba(109,106,246,0.14) 0%, transparent 65%),
+                radial-gradient(ellipse 45% 45% at 85% 80%, rgba(34,211,238,0.10) 0%, transparent 65%);
         }
         .login-card {
             background: var(--surface); border: 1px solid var(--border);
-            border-radius: 16px; padding: 48px 40px;
-            width: 100%; max-width: 380px;
-            box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+            border-radius: 20px; padding: 48px 40px;
+            width: 100%; max-width: 380px; position: relative; z-index: 1;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.45);
         }
-        .login-title { font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 6px; }
+        .login-icon {
+            width: 48px; height: 48px; margin: 0 auto 20px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 14px; display: flex; align-items: center; justify-content: center;
+            font-size: 22px; box-shadow: 0 0 24px rgba(109,106,246,0.35);
+        }
+        .login-title { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 6px; }
         .login-subtitle { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 28px; }
         .form-group { margin-bottom: 18px; }
         label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 7px; letter-spacing: 0.4px; text-transform: uppercase; }
         input[type="text"], input[type="password"] {
             width: 100%; padding: 11px 14px;
             background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-size: 14px;
-            font-family: inherit; outline: none;
+            border-radius: 10px; color: var(--text); font-size: 14px;
+            font-family: inherit; outline: none; transition: border-color 0.15s;
         }
         input:focus { border-color: var(--accent); }
         .error-msg {
-            background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.25);
-            border-radius: 8px; padding: 10px 14px;
+            background: rgba(251,113,133,0.08); border: 1px solid rgba(251,113,133,0.25);
+            border-radius: 10px; padding: 10px 14px;
             font-size: 13px; color: var(--red); margin-bottom: 18px;
         }
         .btn-login {
             width: 100%; padding: 12px;
             background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border: none; border-radius: 8px;
-            font-size: 15px; font-weight: 700; letter-spacing: 0.5px;
-            color: #0d1117; cursor: pointer;
+            border: none; border-radius: 999px;
+            font-family: 'Inter', sans-serif;
+            font-size: 15px; font-weight: 700; letter-spacing: 0.3px;
+            color: #0b0d14; cursor: pointer; transition: opacity 0.15s;
         }
         .btn-login:hover { opacity: 0.9; }
     </style>
 </head>
 <body>
 <div class="login-card">
+    <div class="login-icon">🔐</div>
     <div class="login-title">Personal Apps</div>
     <div class="login-subtitle">Sign in to continue</div>
 

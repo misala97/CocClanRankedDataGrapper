@@ -5,31 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pub Quiz – Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg:      #0d1117;
-            --surface: #161b22;
-            --surf2:   #1c2330;
-            --border:  #30363d;
-            --bord2:   #21262d;
-            --text:    #e6edf3;
-            --muted:   #8b949e;
-            --accent:  #f0a500;
-            --acc2:    #e8863a;
-            --green:   #3fb950;
-            --blue:    #58a6ff;
-            --red:     #f85149;
+            --bg:      #0b0d14;
+            --surface: #131722;
+            --surf2:   #1a1f2e;
+            --border:  #272c3d;
+            --bord2:   #1e2333;
+            --text:    #eef0f7;
+            --muted:   #8b91a7;
+            --accent:  #6d6af6;
+            --acc2:    #22d3ee;
+            --green:   #34d399;
+            --red:     #fb7185;
         }
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse 60% 40% at 15% 0%, rgba(109,106,246,0.10) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 100% 20%, rgba(34,211,238,0.07) 0%, transparent 60%);
+        }
         a { text-decoration: none; color: inherit; }
 
         nav {
             position: sticky; top: 0; z-index: 100;
-            background: rgba(13,17,23,0.92);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            background: rgba(11,13,20,0.92);
+            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
             border-bottom: 1px solid var(--border);
         }
         .nav-inner {
@@ -40,29 +45,29 @@
         .logo-icon {
             width: 36px; height: 36px;
             background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border-radius: 8px; display: flex; align-items: center; justify-content: center;
-            font-size: 18px;
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            font-size: 17px;
         }
-        .nav-logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 19px; }
+        .nav-logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
         .nav-links { display: flex; align-items: center; gap: 6px; }
         .nav-links a {
             font-size: 13px; font-weight: 500; color: var(--muted);
-            padding: 6px 14px; border-radius: 6px; transition: color 0.15s, background 0.15s;
+            padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
         }
         .nav-links a:hover { color: var(--text); background: var(--surf2); }
 
-        .page-wrap { max-width: 1200px; margin: 0 auto; padding: 40px 32px; }
+        .page-wrap { max-width: 1200px; margin: 0 auto; padding: 40px 32px; position: relative; z-index: 1; }
 
-        h1 { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; margin-bottom: 8px; }
-        h2 { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; }
-        h3 { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        h1 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+        h2 { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; }
+        h3 { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
         .layout { display: grid; grid-template-columns: 240px 1fr; gap: 24px; margin-top: 32px; }
         @media (max-width: 768px) { .layout { grid-template-columns: 1fr; } }
 
         .card {
             background: var(--surface); border: 1px solid var(--border);
-            border-radius: 12px; overflow: hidden; margin-bottom: 20px;
+            border-radius: 16px; overflow: hidden; margin-bottom: 20px;
         }
         .card:last-child { margin-bottom: 0; }
         .card-header {
@@ -79,7 +84,7 @@
             color: var(--muted); transition: all 0.12s;
         }
         .round-item a:hover { color: var(--text); background: var(--surf2); }
-        .round-item a.active { color: var(--accent); background: rgba(240,165,0,0.07); }
+        .round-item a.active { color: var(--acc2); background: rgba(109,106,246,0.10); }
         .round-date { font-weight: 600; }
         .round-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
@@ -89,7 +94,7 @@
         .form-group { display: flex; flex-direction: column; gap: 5px; }
         .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
         .form-group input {
-            background: var(--surf2); border: 1px solid var(--border); border-radius: 6px;
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
             color: var(--text); padding: 7px 10px; font-size: 13px; font-family: inherit;
             transition: border-color 0.15s;
         }
@@ -99,16 +104,16 @@
         .num-input { width: 80px; }
 
         .btn {
-            padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
+            padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
             font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
             white-space: nowrap;
         }
-        .btn-primary { background: var(--accent); color: #0d1117; border-color: var(--accent); }
-        .btn-primary:hover { background: var(--acc2); border-color: var(--acc2); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--acc2)); color: #0b0d14; border-color: transparent; }
+        .btn-primary:hover { opacity: 0.9; }
         .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
         .btn-ghost:hover { color: var(--text); border-color: var(--text); }
         .btn-danger { background: transparent; color: var(--red); border-color: var(--red); }
-        .btn-danger:hover { background: rgba(248,81,73,0.1); }
+        .btn-danger:hover { background: rgba(251,113,133,0.1); }
         .btn-sm { padding: 4px 10px; font-size: 12px; }
 
         /* Teams list */
@@ -142,7 +147,7 @@
         .score-table td { padding: 6px 8px; vertical-align: middle; }
         .score-table tbody tr:hover { background: var(--surf2); }
         .score-table input {
-            background: var(--surf2); border: 1px solid var(--border); border-radius: 6px;
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
             color: var(--text); padding: 5px 8px; font-size: 13px; font-family: inherit;
             width: 80px; transition: border-color 0.15s;
         }
@@ -164,7 +169,7 @@
 <nav>
     <div class="nav-inner">
         <div class="nav-logo">
-            <div class="logo-icon">🍺</div>
+            <div class="logo-icon">🍻</div>
             <span>Pub Quiz – Admin</span>
         </div>
         <div class="nav-links">

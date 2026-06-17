@@ -2,7 +2,7 @@ import os
 import secrets
 
 from dotenv import load_dotenv
-from flask import Flask, redirect, url_for
+from flask import Flask, render_template
 from flask_migrate import Migrate
 
 from extensions import db
@@ -45,10 +45,19 @@ from features.pubquiz.routes import pubquiz_bp
 app.register_blueprint(auth_bp)
 app.register_blueprint(pubquiz_bp)
 
+APPS = [
+    {
+        'name': 'Pub Quiz',
+        'description': 'Ergebnisse und Verwaltung der Pub Quiz Abende.',
+        'icon': '🍻',
+        'url': '/pubquiz',
+    },
+]
+
 
 @app.route('/')
 def index():
-    return redirect(url_for('pubquiz.pubquiz'))
+    return render_template('overview.html', apps=APPS)
 
 
 if __name__ == '__main__':
