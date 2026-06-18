@@ -252,6 +252,17 @@ def admin_cwl_bonus_list():
     current_month = dt.date.today().strftime('%Y-%m')
     months = [_shift_month(current_month, i) for i in range(-3, 2)]  # -3,-2,-1,0,+1
 
+    # A calendar month can have 2 CWL seasons (Supercell schedule shifts) — CoC's API gives
+    # those a distinct, longer season key (e.g. '2026-06-16') instead of reusing 'YYYY-MM'.
+    # Pull in any such extra seasons that fall within our window and weave them into the list.
+    extra_seasons = (CWLSeason.query
+                      .filter(db.or_(*[CWLSeason.season.like(f'{m}-%') for m in months]))
+                      .all())
+    for s in extra_seasons:
+        if s.season not in months:
+            months.append(s.season)
+    months.sort()   # 'YYYY-MM' sorts right before its same-month 'YYYY-MM-DD...' extra keys
+
     members = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
 
     # All bonuses for all months in one query
@@ -259,19 +270,19 @@ def admin_cwl_bonus_list():
     bonus_set = {(b.player_tag, b.month) for b in all_bonuses}
 
     # CWL stats per month
-    month_stats = {}  # month -> { player_tag -> {stars, attacks, max_attacks} }
-    current_month_war_ids = []
+    month_stats = {}     # month -> { player_tag -> {stars, attacks, max_attacks} }
+    season_states = {}   # month -> CWLSeason.state
+    month_war_ids = {}   # month -> [war_id, ...]
     for month in months:
         season = CWLSeason.query.filter_by(season=month).first()
         if not season:
             continue
+        season_states[month] = season.state
         war_ids = [w.id for w in CWLWar.query.filter_by(season_id=season.id).all()
                    if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
         if not war_ids:
             continue
-
-        if month == current_month:
-            current_month_war_ids = war_ids
+        month_war_ids[month] = war_ids
 
         max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
                     .filter(CWLMember.war_id.in_(war_ids),
@@ -301,18 +312,26 @@ def admin_cwl_bonus_list():
             } for tag in max_atk_map
         }
 
-    # Map positions from the current month's CWL (min across war days = consistent position)
+    # Active CWL period = most recent season that isn't finished yet; falls back to the
+    # literal calendar month (even with no data) so the UI behaves as before in normal months.
+    active_month = current_month
+    for m in reversed(months):
+        if season_states.get(m) and season_states[m] != 'ended':
+            active_month = m
+            break
+
+    # Map positions from the active month's CWL (min across war days = consistent position)
     cwl_pos_map = {}
-    if current_month_war_ids:
+    if month_war_ids.get(active_month):
         pos_rows = (db.session.query(CWLMember.player_tag, func.min(CWLMember.map_position))
-                    .filter(CWLMember.war_id.in_(current_month_war_ids),
+                    .filter(CWLMember.war_id.in_(month_war_ids[active_month]),
                             CWLMember.clan_tag == CLAN_TAG)
                     .group_by(CWLMember.player_tag).all())
         cwl_pos_map = {tag: pos for tag, pos in pos_rows if pos is not None}
 
     return jsonify(
         months=months,
-        current_month=current_month,
+        current_month=active_month,
         members=[{
             'tag':  p.tag,
             'name': p.name or p.tag,
@@ -450,11 +469,15 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
                        .group_by(CWLBonus.player_tag).all())
     last_bonus_map = {tag: m for tag, m in last_bonus_rows}
 
+    def _year_month(s):
+        y, mo = s.split('-')[:2]
+        return int(y), int(mo)
+
     def _months_ago(last_month):
         if not last_month:
             return None
-        cy, cm = map(int, month.split('-'))
-        py, pm = map(int, last_month.split('-'))
+        cy, cm = _year_month(month)
+        py, pm = _year_month(last_month)
         return (cy - py) * 12 + (cm - pm)
 
     participant_list = [{

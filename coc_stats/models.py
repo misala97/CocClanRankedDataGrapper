@@ -32,7 +32,7 @@ class CWLBonus(db.Model):
 
     id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
     player_tag = db.Column(db.String(50), db.ForeignKey('player.tag'), nullable=False)
-    month      = db.Column(db.String(7), nullable=False)   # YYYY-MM
+    month      = db.Column(db.String(20), nullable=False)   # YYYY-MM, or YYYY-MM-DD-style CWLSeason key when a month has 2 CWLs
 
     player = db.relationship('Player', foreign_keys=[player_tag])
 

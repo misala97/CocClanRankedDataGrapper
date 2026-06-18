@@ -1295,7 +1295,11 @@ function nmToggleDetail(id) {
 // ── CWL Bonus ─────────────────────────────────────────────────────────────────
 const _MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function _fmtMonth(m) {
-    const [y, mo] = m.split('-');
+    const parts = m.split('-');
+    const [y, mo] = parts;
+    // a month with 2 CWLs has an extra key like '2026-06-16' — show the day instead of the
+    // year so the two columns for the same month are visually distinct
+    if (parts.length > 2) return _MONTH_NAMES[parseInt(mo) - 1] + ' ' + parts[2];
     return _MONTH_NAMES[parseInt(mo) - 1] + ' ' + y;
 }
 
