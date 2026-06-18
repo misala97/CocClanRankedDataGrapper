@@ -5,6 +5,7 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from logging_config import reset_task_logs
+from services.helpers import LOCAL_TZ
 from tasks import LOCK_DIR
 
 reset_task_logs(
@@ -32,7 +33,7 @@ from tasks.cwl           import task_update_cwl
 if __name__ == '__main__':
     logging.info("Starting standalone scheduler...")
     import extensions
-    scheduler = BackgroundScheduler()
+    scheduler = BackgroundScheduler(timezone=LOCAL_TZ)
     extensions.scheduler = scheduler
 
     scheduler.add_job(func=task_update_clan_members, trigger="interval", minutes=5,  max_instances=1)
