@@ -63,8 +63,8 @@ WAR_COMBOS = {
     (LOW_CLEAR, FAILED_CLEAR):         (50,  'Fumble'),
     
     
-    (FAILED_FARM, FARM):                (25,  'Inconsitend Farmer'),
-    (WASTED, FARM):                     (25,  'Inconsitend Farmer'),
+    (FAILED_FARM, FARM):                (25,  'Inconsistent Farmer'),
+    (WASTED, FARM):                     (25,  'Inconsistent Farmer'),
     
     (FAILED_CLEAR, FAILED_CLEAR):       (15, 'Failure'),
     (WASTED, WASTED):                  (15, 'Wasted'),

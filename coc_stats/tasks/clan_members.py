@@ -29,10 +29,15 @@ def task_update_clan_members():
 
     with app.app_context():
         try:
-            from models import ClanConfig
             clan_api = api_fetch_clan_data(CLAN_TAG)
             member_list_api = json_get(clan_api, JSON_CLAN_DATA.MEMBER_LIST)
+        except Exception as e:
+            clan_logger.warning(f"Could not fetch clan data: {e}", exc_info=True)
+            db_finalize_uptime(task_update_clan_members.__name__, t0, 'error', str(e), logger=clan_logger)
+            return
 
+        try:
+            from models import ClanConfig
             cwl_league = json_get(clan_api, JSON_CLAN_DATA.WAR_LEAGUE, raise_on_missing=False)
             if cwl_league:
                 cfg = db.session.get(ClanConfig, CLAN_TAG) or ClanConfig(clan_tag=CLAN_TAG)

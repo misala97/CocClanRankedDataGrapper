@@ -98,7 +98,7 @@ def create_db_ranked_week(league_group_tag, league_season_id, player_data_api, l
     league_members = json_get(league_group_data_api, JSON_RANKED_GROUP_DATA.MEMBERS)
     player_tag     = json_get(player_data_api, JSON_PLAYER_DATA.TAG)
     calculated_rank           = get_member_rank_by_tag(league_members, player_tag)
-    if calculated_rank <= 0 or calculated_rank > len(league_members):
+    if calculated_rank is None or calculated_rank <= 0 or calculated_rank > len(league_members):
         raise ValueError(f"Invalid rank {calculated_rank} for player {player_tag}")
     player_group_data = league_members[calculated_rank - 1]
     league_tier_name  = get_name_to_id(json_get(player_data_api, JSON_PLAYER_DATA.LEAGUE_TIER.ID))
@@ -128,7 +128,7 @@ def create_db_ranked_week_done(done_week_db : RankedWeek,  league_group_data_api
     league_members = json_get(league_group_data_api, JSON_RANKED_GROUP_DATA.MEMBERS)
     player_tag     = done_week_db.player_tag
     calculated_rank           = get_member_rank_by_tag(league_members, player_tag)
-    if calculated_rank <= 0 or calculated_rank > len(league_members):
+    if calculated_rank is None or calculated_rank <= 0 or calculated_rank > len(league_members):
         raise ValueError(f"Invalid rank {calculated_rank} for player {player_tag}")
     player_group_data = league_members[calculated_rank - 1]
     group_total_attacks, group_full_attackers = _group_attack_stats(league_members, done_week_db.max_attacks or 0)
@@ -265,6 +265,9 @@ def db_raid_weekend_get(start_time, end_time) -> RaidWeekend:
     return RaidWeekend.query.filter(RaidWeekend.start_time == start_time, RaidWeekend.end_time == end_time).first()
 
 def db_ranked_week_get_all_done() -> List[RankedWeek]:
+    # Deliberately UTC, not LOCAL_TZ — this waits for the CoC ranked season to actually roll
+    # over server-side, not for the local calendar day to change (unlike start_day/end_day,
+    # which are local-calendar Mondays for display purposes).
     now_utc = dt.datetime.now(dt.timezone.utc)
     cutoff_date = now_utc.date() if now_utc.hour >= 6 else now_utc.date() - dt.timedelta(days=1)
     return RankedWeek.query.filter(

@@ -35,6 +35,22 @@ def _war_result(war, our_tag):
     return 'draw'
 
 
+def _clan_current_war_map(wars):
+    """Most recent inWar/warEnded war per clan_tag, preferring inWar over warEnded.
+
+    `wars` must already be ordered by round_number ascending.
+    """
+    clan_current_war = {}
+    for war in wars:
+        if war.state not in ('inWar', 'warEnded'):
+            continue
+        for tag in (war.clan_tag, war.opp_tag):
+            existing = clan_current_war.get(tag)
+            if existing is None or war.state == 'inWar' or existing.state != 'inWar':
+                clan_current_war[tag] = war
+    return clan_current_war
+
+
 def _build_cwl_matchup_rates():
     """Return (rates, counts) dicts keyed 'atk_th_def_th' from all CWL attack history."""
     _AttM = aliased(CWLMember)
@@ -446,14 +462,7 @@ def cwl_page():
             r['active_unranked']  = 0
 
     # ── Sort day-1 roster by current-day map position ────────────────────────
-    # Find the most recent inWar/warEnded war per clan (prefer inWar over warEnded)
-    clan_current_war = {}
-    for war in sorted(wars, key=lambda w: w.round_number or 0):
-        if war.state not in ('inWar', 'warEnded'):
-            continue
-        for tag in (war.clan_tag, war.opp_tag):
-            if tag not in clan_current_war or war.state == 'inWar':
-                clan_current_war[tag] = war
+    clan_current_war = _clan_current_war_map(wars)
 
     for clan_tag, war in clan_current_war.items():
         r = clan_rosters.get(clan_tag)

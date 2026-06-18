@@ -29,11 +29,12 @@ def task_update_battle_logs():
         for db_player in db_players_in_clan:
             try:
                 battle_log_api = api_fetch_battlelog(db_player.tag)
+                battle_items = json_get(battle_log_api, JSON_BATTLE_LOG_DATA.ITEMS)
             except Exception as e:
                 battle_logger.warning(f"Could not fetch battle log for {db_player.name}: {e}")
                 continue
 
-            for battle_api in json_get(battle_log_api, JSON_BATTLE_LOG_DATA.ITEMS):
+            for battle_api in battle_items:
                 try:
                     tmp_battle_log = create_db_battle_log(db_player, battle_api)
                     if not tmp_battle_log.opponent_tag:

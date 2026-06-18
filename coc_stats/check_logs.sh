@@ -1,8 +1,12 @@
 #!/bin/bash
 # Usage: ./check_logs.sh          -> show all errors/warnings
 #        ./check_logs.sh -n 100   -> only last 100 lines per log file
+#
+# Override the project location (default ~/coc-stats/coc_stats) with:
+#   COC_STATS_DIR=/path/to/coc-stats/coc_stats ./check_logs.sh
 
-LOGS_DIR="$(dirname "$0")/logs"
+PROJECT_DIR="${COC_STATS_DIR:-$HOME/coc-stats/coc_stats}"
+LOGS_DIR="$PROJECT_DIR/logs"
 TAIL_LINES=${2:-0}  # 0 = whole file
 
 RED='\033[0;31m'
@@ -31,8 +35,16 @@ for log_file in "$LOGS_DIR"/*.log; do
     echo -e "${CYAN}${BOLD}$(basename "$log_file")${RESET}  (${RED}${errors} errors${RESET}, ${YELLOW}${warnings} warnings${RESET})"
     echo "──────────────────────────────────────────────────────"
 
-    echo "$content" | grep -E " - (ERROR|WARNING) - " | while IFS= read -r line; do
-        if echo "$line" | grep -q " - ERROR - "; then
+    # Tag each ERROR/WARNING line with its level, and carry that level onto any
+    # following lines that aren't a new timestamped log entry (e.g. a traceback
+    # attached via exc_info=True) — stops as soon as the next timestamped line appears.
+    echo "$content" | awk '
+        /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} - ERROR - /   { level="ERROR";   print level "\t" $0; next }
+        /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} - WARNING - / { level="WARNING"; print level "\t" $0; next }
+        /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} - (INFO|DEBUG|CRITICAL) - / { level=""; next }
+        level != "" { print level "\t" $0 }
+    ' | while IFS=$'\t' read -r level line; do
+        if [ "$level" = "ERROR" ]; then
             echo -e "  ${RED}${line}${RESET}"
         else
             echo -e "  ${YELLOW}${line}${RESET}"
@@ -44,14 +56,29 @@ for log_file in "$LOGS_DIR"/*.log; do
     total_warnings=$((total_warnings + warnings))
 done
 
-echo -e "${BOLD}Summary:${RESET} ${RED}${total_errors} errors${RESET}, ${YELLOW}${total_warnings} warnings${RESET} across all logs"
-
 # Also check systemd journal for the scheduler service
-echo ""
 echo -e "${CYAN}${BOLD}systemd (last 50 lines):${RESET}"
 echo "──────────────────────────────────────────────────────"
-journalctl -u coc_scheduler.service -n 50 --no-pager 2>/dev/null \
-    | grep -iE "error|warning|traceback|exception" \
-    | while IFS= read -r line; do
-        echo -e "  ${RED}${line}${RESET}"
-    done || echo "  (no issues found)"
+journal_content=$(journalctl -u coc_scheduler.service -n 50 --no-pager 2>/dev/null)
+journal_hits=$(echo "$journal_content" | grep -iE "error|warning|traceback|exception")
+
+journal_errors=0
+journal_warnings=0
+if [ -n "$journal_hits" ]; then
+    echo "$journal_hits" | while IFS= read -r line; do
+        if echo "$line" | grep -qiE "error|traceback|exception"; then
+            echo -e "  ${RED}${line}${RESET}"
+        else
+            echo -e "  ${YELLOW}${line}${RESET}"
+        fi
+    done
+    # error-class takes priority (matches the coloring above), so a line never counts as both.
+    journal_errors=$(echo "$journal_hits" | grep -ciE "error|traceback|exception")
+    journal_warnings=$(echo "$journal_hits" | grep -viE "error|traceback|exception" | grep -ci "warning")
+else
+    echo "  (no issues found)"
+fi
+
+echo ""
+echo -e "${BOLD}Summary:${RESET} ${RED}${total_errors} errors${RESET}, ${YELLOW}${total_warnings} warnings${RESET} across all logs"
+echo -e "${BOLD}Journal${RESET} (loose text match, may include non-app crashes): ${RED}${journal_errors} error-like${RESET}, ${YELLOW}${journal_warnings} warning-like${RESET} lines"

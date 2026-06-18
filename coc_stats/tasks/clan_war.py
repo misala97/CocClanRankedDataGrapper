@@ -2,7 +2,7 @@ import datetime as dt
 import time
 
 from logging_config import setup_task_logger
-from services.helpers import json_get, JSON_CLAN_WAR_DATA
+from services.helpers import json_get, parse_iso_datetime, JSON_CLAN_WAR_DATA
 from tasks import task_lock
 
 clan_war_logger = setup_task_logger('clan_war', 'logs/clan_war.log')
@@ -24,6 +24,12 @@ def task_update_clan_war():
     t0 = time.time()
     clan_war_logger.info(f"Starting at {dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
+    def _reschedule(**interval_kwargs):
+        if extensions.scheduler:
+            extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', **interval_kwargs)
+        else:
+            clan_war_logger.debug("No live scheduler in this process (likely a manual trigger) — reschedule skipped.")
+
     status = 'success'
     error_msg = None
     members_added = 0
@@ -40,15 +46,23 @@ def task_update_clan_war():
             return
         
         
-        if state in ('notInWar' , 'warEnded'):
-            if extensions.scheduler:
-                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', hours=1)
+        if state == 'notInWar':
+            _reschedule(hours=1)
             clan_war_logger.info("No active war — skipping.")
             db_finalize_uptime(task_update_clan_war.__name__, t0, 'skipped', summary='notInWar', logger=clan_war_logger)
             return
+        elif state == 'warEnded':
+            _reschedule(hours=1)
+            start_time   = parse_iso_datetime(json_get(war_data, JSON_CLAN_WAR_DATA.START_TIME, raise_on_missing=False))
+            existing_war = db_clan_war_get(start_time) if start_time else None
+            if existing_war and existing_war.state == 'warEnded':
+                # Already finalized on a prior hourly poll — reprocessing would only
+                # waste API calls and risk clobbering a manually-set war preference.
+                clan_war_logger.info("War already finalized — skipping reprocessing.")
+                db_finalize_uptime(task_update_clan_war.__name__, t0, 'skipped', summary='already finalized', logger=clan_war_logger)
+                return
         else:
-            if extensions.scheduler:
-                extensions.scheduler.reschedule_job('clan_war_update', trigger='interval', minutes=3)
+            _reschedule(minutes=3)
 
 
         opp_tag = json_get(

@@ -131,23 +131,23 @@ def task_update_ranked_weeks():
                     continue
             db.session.commit()
 
-            for done_week in db_ranked_week_get_all_done():
-                try:
-                    done_group_data_api = api_fetch_league_group(done_week.league_group_tag, done_week.league_season_id, done_week.player_tag)
-                except Exception as e:
-                    ranked_logger.warning(f"Could not fetch league group for {db_player.name}: {e}")
-                    players_failed += 1
-                    continue
-                
-                try:
-                    tmp_ranked_week = create_db_ranked_week_done(done_week , done_group_data_api)
-                    db_ranked_week_update(done_week, tmp_ranked_week, True)
-                    weeks_updated += 1
-                except Exception as e:
-                    ranked_logger.error(f"Failed to update done ranked week for {done_week.player.name}: {e}", exc_info=True)
-                    db.session.rollback()
-                    continue
-                db.session.commit()
+        for done_week in db_ranked_week_get_all_done():
+            try:
+                done_group_data_api = api_fetch_league_group(done_week.league_group_tag, done_week.league_season_id, done_week.player_tag)
+            except Exception as e:
+                ranked_logger.warning(f"Could not fetch league group for {done_week.player.name}: {e}")
+                players_failed += 1
+                continue
+
+            try:
+                tmp_ranked_week = create_db_ranked_week_done(done_week , done_group_data_api)
+                db_ranked_week_update(done_week, tmp_ranked_week, True)
+                weeks_updated += 1
+            except Exception as e:
+                ranked_logger.error(f"Failed to update done ranked week for {done_week.player.name}: {e}", exc_info=True)
+                db.session.rollback()
+                continue
+            db.session.commit()
 
         summary = f"weeks_created={weeks_created} weeks_updated={weeks_updated} attack_logs={attack_logs_added} defense_logs={defense_logs_added} players_failed={players_failed}"
         db_finalize_uptime(task_update_ranked_weeks.__name__, t0, summary=summary, logger=ranked_logger)

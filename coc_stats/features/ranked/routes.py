@@ -31,6 +31,7 @@ def ranked_weeks_page():
     current_week_row = (
         db.session.query(RankedWeek.league_season_id)
         .filter(RankedWeek.is_done == False)
+        .order_by(RankedWeek.start_day.desc())
         .first()
     )
     current_week_id = current_week_row.league_season_id if current_week_row else None

@@ -26,10 +26,9 @@ def task_update_cwl():
     t0 = time.time()
     cwl_logger.info(f"Starting at {dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
-    status        = 'success'
-    error_msg     = None
-    wars_updated  = 0
-    attacks_added = 0
+    wars_updated    = 0
+    attacks_added   = 0
+    failed_war_tags = []
 
     with app.app_context():
         try:
@@ -45,8 +44,14 @@ def task_update_cwl():
                 db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', str(e), logger=cwl_logger)
             return
 
-        state       = json_get(group, JSON_CWL_GROUP_DATA.STATE  ) or 'unknown'
-        season_str  = json_get(group, JSON_CWL_GROUP_DATA.SEASON ) or ''
+        try:
+            state      = json_get(group, JSON_CWL_GROUP_DATA.STATE  ) or 'unknown'
+            season_str = json_get(group, JSON_CWL_GROUP_DATA.SEASON ) or ''
+        except Exception as e:
+            cwl_logger.warning(f"Could not read CWL group state/season: {e}", exc_info=True)
+            db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger)
+            return
+
         from models import ClanConfig
         cfg         = db.session.get(ClanConfig, CLAN_TAG)
         league_name = cfg.cwl_league_name if cfg else None
@@ -120,9 +125,19 @@ def task_update_cwl():
         }
 
         # ── Fetch and upsert each round's wars ────────────────────────────────
-        rounds = json_get(group, JSON_CWL_GROUP_DATA.ROUNDS) or []
+        try:
+            rounds = json_get(group, JSON_CWL_GROUP_DATA.ROUNDS) or []
+        except Exception as e:
+            cwl_logger.warning(f"Could not read CWL rounds: {e}", exc_info=True)
+            db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger)
+            return
+
         for round_num, round_data in enumerate(rounds, start=1):
-            war_tags = json_get(round_data, JSON_CWL_GROUP_DATA.ROUND_WAR_TAGS) or []
+            try:
+                war_tags = json_get(round_data, JSON_CWL_GROUP_DATA.ROUND_WAR_TAGS) or []
+            except Exception as e:
+                cwl_logger.warning(f"Could not read war tags for round {round_num}: {e}")
+                continue
             for war_tag in war_tags:
                 if war_tag == '#0':
                     continue
@@ -185,6 +200,7 @@ def task_update_cwl():
                 except Exception as e:
                     cwl_logger.error(f"Failed to save CWL members for {war_tag}: {e}", exc_info=True)
                     db.session.rollback()
+                    failed_war_tags.append(war_tag)
                 db.session.commit()
 
                 # ── Attacks (add new ones only) ───────────────────────────────
@@ -204,11 +220,14 @@ def task_update_cwl():
                 except Exception as e:
                     cwl_logger.error(f"Failed to save CWL attacks for {war_tag}: {e}", exc_info=True)
                     db.session.rollback()
+                    failed_war_tags.append(war_tag)
                 db.session.commit()
 
                 wars_updated += 1
 
-        summary = f"season={season_str} state={state} wars_updated={wars_updated} attacks_added={attacks_added}"
+        status    = 'error' if failed_war_tags else 'success'
+        error_msg = f"Failed to save {len(set(failed_war_tags))} war(s): {', '.join(set(failed_war_tags))}" if failed_war_tags else None
+        summary = f"season={season_str} state={state} wars_updated={wars_updated} attacks_added={attacks_added} wars_failed={len(set(failed_war_tags))}"
         cwl_logger.info(summary)
         db_finalize_uptime(task_update_cwl.__name__, t0, status, error_msg, summary, logger=cwl_logger)
 

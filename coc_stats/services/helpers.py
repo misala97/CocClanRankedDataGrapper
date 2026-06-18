@@ -323,7 +323,7 @@ def get_resource_amount(looted_resources, resource_name):
 
 def get_last_monday(ref_date=None):
     if ref_date is None:
-        d = datetime.now().date()
+        d = datetime.now(LOCAL_TZ).date()
     elif isinstance(ref_date, datetime):
         d = ref_date.date()
     else:
@@ -333,7 +333,7 @@ def get_last_monday(ref_date=None):
 
 def get_next_monday(ref_date=None):
     if ref_date is None:
-        d = datetime.now().date()
+        d = datetime.now(LOCAL_TZ).date()
     elif isinstance(ref_date, datetime):
         d = ref_date.date()
     else:

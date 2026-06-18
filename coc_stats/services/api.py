@@ -9,24 +9,44 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 API_TOKEN = os.getenv("API_TOKEN")
 
+MAX_ATTEMPTS = 2          # 1 retry on transient (timeout/connection) failures.
+RETRY_BACKOFF_SECONDS = 2 # Worst case ~doubles a single attempt's cost (e.g. ~22s if both
+                           # attempts time out), since a retry pays the full request timeout again.
+
 
 def api_call(url: str) -> dict:
     headers = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
-    time.sleep(0.1)
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as http_err:
-        raise RuntimeError(f"HTTP Error: {response.status_code} - {response.text}") from http_err
-    except requests.exceptions.ConnectionError:
-        raise RuntimeError("Connection Error: Failed to connect to the Clash of Clans API.")
-    except requests.exceptions.Timeout:
-        raise RuntimeError("Timeout Error: The Clash of Clans API took too long to respond.")
-    except requests.exceptions.RequestException as req_err:
-        raise RuntimeError(f"Unexpected Request Error: {req_err}") from req_err
-    except ValueError:
-        raise RuntimeError("JSON Decode Error: API did not return valid JSON.")
+    transient = None  # (message, cause) from the most recent retryable failure
+
+    for attempt in range(MAX_ATTEMPTS):
+        if attempt == 0:
+            time.sleep(0.1)
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as http_err:
+            message = f"HTTP Error: {response.status_code} - {response.text}"
+            if response.status_code in (429, 500, 502, 503, 504):
+                transient = (message, http_err)
+            else:
+                raise RuntimeError(message) from http_err
+        except requests.exceptions.ConnectionError as conn_err:
+            transient = ("Connection Error: Failed to connect to the Clash of Clans API.", conn_err)
+        except requests.exceptions.Timeout as timeout_err:
+            transient = ("Timeout Error: The Clash of Clans API took too long to respond.", timeout_err)
+        except requests.exceptions.RequestException as req_err:
+            raise RuntimeError(f"Unexpected Request Error: {req_err}") from req_err
+        except ValueError:
+            raise RuntimeError("JSON Decode Error: API did not return valid JSON.")
+
+        if attempt < MAX_ATTEMPTS - 1:
+            time.sleep(RETRY_BACKOFF_SECONDS)
+
+    if transient is None:
+        raise RuntimeError(f"API call failed: MAX_ATTEMPTS={MAX_ATTEMPTS} made no request attempts.")
+    message, cause = transient
+    raise RuntimeError(message) from cause
 
 
 def clean_tag(tag: str) -> str:
