@@ -35,23 +35,49 @@ def raid_weekend_page():
             .all()
         )
 
-        # ── Per-attack medal-rate impact (id order ≈ chronological order) ──────
-        # Tracks medals_so_far / attacks_so_far before vs after each attack, so we
-        # can tell whether a given attack pulled the clan's per-attack rate up
-        # (it finished a district) or down (it used an attack without finishing one).
-        rate_delta_by_log_id = {}
-        medals_so_far = 0
-        attacks_so_far = 0
-        completed_districts = set()
+        # ── Per-player medal impact (order-independent, leave-one-out) ──────────
+        # Compares the raid's real medals/attack baseline against what it would
+        # be if this one player's attacks were removed entirely. If a player's
+        # contribution was necessary to push a district to 100%, removing them
+        # removes that district's value too; if their attacks never finished
+        # anything, removing them only shrinks the attack count, raising the
+        # baseline slightly — so "wasted" attacks land negative. Computed against
+        # final totals, so it doesn't matter when in the raid someone attacked or
+        # what anyone else did nearby.
+        district_total_pct  = {}
+        district_value      = {}
+        player_attack_count = {}
+        player_district_pct = {}
+        player_districts    = {}
         for log in logs:
-            before_rate = (medals_so_far / attacks_so_far) if attacks_so_far else 0.0
-            attacks_so_far += 1
-            district_key = (log.defender_tag, log.district_name)
-            if (log.percentage_total or 0) >= 100 and district_key not in completed_districts:
-                completed_districts.add(district_key)
-                medals_so_far += raid_district_medal_value(log.district_name, log.district_level)
-            after_rate = medals_so_far / attacks_so_far
-            rate_delta_by_log_id[log.id] = round(after_rate - before_rate, 2)
+            key = (log.defender_tag, log.district_name)
+            district_total_pct[key] = district_total_pct.get(key, 0) + (log.percentage or 0)
+            if (log.percentage_total or 0) >= 100:
+                district_value[key] = raid_district_medal_value(log.district_name, log.district_level)
+            player_attack_count[log.player_tag] = player_attack_count.get(log.player_tag, 0) + 1
+            pkey = (log.player_tag, key)
+            player_district_pct[pkey] = player_district_pct.get(pkey, 0) + (log.percentage or 0)
+            player_districts.setdefault(log.player_tag, set()).add(key)
+
+        total_medals_now  = sum(district_value.values())
+        total_attacks_now = len(logs)
+        baseline_with     = (total_medals_now / total_attacks_now) if total_attacks_now else 0.0
+
+        net_medal_impact_by_player = {}
+        for player_tag, districts_touched in player_districts.items():
+            medals_lost_without_player = 0
+            for key in districts_touched:
+                if key in district_value:
+                    pct_without_player = district_total_pct[key] - player_district_pct.get((player_tag, key), 0)
+                    if pct_without_player < 100:
+                        medals_lost_without_player += district_value[key]
+            total_medals_without_player  = total_medals_now - medals_lost_without_player
+            total_attacks_without_player = total_attacks_now - player_attack_count[player_tag]
+            baseline_without_player = (
+                total_medals_without_player / total_attacks_without_player
+                if total_attacks_without_player > 0 else 0.0
+            )
+            net_medal_impact_by_player[player_tag] = round((baseline_with - baseline_without_player) * 6, 2)
 
         player_map = {}
         for log in logs:
@@ -87,7 +113,6 @@ def raid_weekend_page():
                 'percentage':       pct,
                 'adj_score':        0.0,
                 'percentage_total': log.percentage_total or 0,
-                'rate_delta':       rate_delta_by_log_id.get(log.id, 0.0),
                 'is_clean_up':      False,
                 'defender_name':         log.defender_name or '—',
                 'defender_tag':          log.defender_tag or '—',
@@ -115,9 +140,9 @@ def raid_weekend_page():
                 l['is_clean_up'] = l['log_id'] in cleanup_log_ids
                 l['adj_score']   = round(0.0 if l['is_clean_up'] else l['percentage'] * l['level_mult'], 2)
 
-            p['cleanup_count']   = len(cleanup_log_ids)
-            p['solo_wipes']      = solo_wipe_count
-            p['net_rate_impact'] = round(sum(l['rate_delta'] for l in p['attack_logs']), 2)
+            p['cleanup_count']    = len(cleanup_log_ids)
+            p['solo_wipes']       = solo_wipe_count
+            p['net_medal_impact'] = net_medal_impact_by_player.get(p['player_tag'], 0.0)
 
             non_cleanup = [l['percentage'] for l in p['attack_logs'] if not l['is_clean_up']]
             p['avg_pct'] = round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0
@@ -139,17 +164,7 @@ def raid_weekend_page():
         cleanup_count = sum(p['cleanup_count'] for p in player_data)
 
         # ── Estimated raid medals ─────────────────────────────────────────────
-        destroyed = (
-            RaidWeekendLog.query
-            .filter(
-                RaidWeekendLog.raid_weekend_id == selected_raid.id,
-                RaidWeekendLog.percentage_total >= 100,
-            )
-            .with_entities(RaidWeekendLog.defender_tag, RaidWeekendLog.district_name, RaidWeekendLog.district_level)
-            .distinct()
-            .all()
-        )
-        total_medals  = sum(raid_district_medal_value(r.district_name, r.district_level) for r in destroyed)
+        total_medals  = total_medals_now
         total_attacks = max(total_log_attacks, 1)
 
         # Average defensive reward from last 10 finished raids
