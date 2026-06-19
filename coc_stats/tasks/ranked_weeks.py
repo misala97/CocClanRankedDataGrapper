@@ -110,7 +110,7 @@ def task_update_ranked_weeks():
                         ranked_logger.info(f"New ranked attack log for {db_player.name}")
                 except Exception as e:
                     db.session.rollback()
-                    ranked_logger.warning(f"Could not add ranked attack log for {db_player.name}: {e}", exc_info=True)
+                    ranked_logger.warning(f"Could not add ranked attack log for {db_player.name}: {e}")
                     continue
             db.session.commit()
 
@@ -127,7 +127,7 @@ def task_update_ranked_weeks():
                         ranked_logger.info(f"New ranked defense log for {db_player.name}")
                 except Exception as e:
                     db.session.rollback()
-                    ranked_logger.warning(f"Could not add ranked defense log for {db_player.name}: {e}", exc_info=True)
+                    ranked_logger.warning(f"Could not add ranked defense log for {db_player.name}: {e}")
                     continue
             db.session.commit()
 

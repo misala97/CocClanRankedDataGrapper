@@ -41,7 +41,7 @@ def task_update_clan_war():
             war_data = api_fetch_clan_war(CLAN_TAG)
             state    = json_get(war_data, JSON_CLAN_WAR_DATA.STATE)
         except Exception as e:
-            clan_war_logger.warning(f"Could not fetch clan war: {e}", exc_info=True)
+            clan_war_logger.warning(f"Could not fetch clan war: {e}")
             db_finalize_uptime(task_update_clan_war.__name__, t0, 'error', str(e), logger=clan_war_logger)
             return
         
@@ -174,7 +174,7 @@ def task_update_clan_war():
                 if pref_updated:
                     db.session.commit()
             except Exception as e:
-                clan_war_logger.warning(f"Failed to auto-set pref=out: {e}", exc_info=True)
+                clan_war_logger.warning(f"Failed to auto-set pref=out: {e}")
                 db.session.rollback()
 
         summary = f"state={state} war={war_action} members_added={members_added} attacks_added={attacks_added} pref_out={pref_updated}"

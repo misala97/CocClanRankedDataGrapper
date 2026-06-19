@@ -36,7 +36,7 @@ def task_update_raid_weekend():
             raid_weekend_all_api = api_fetch_raid_weekend(CLAN_TAG)
             current_raid_weekend = json_get(raid_weekend_all_api, JSON_RAID_WEEKEND_DATA.ITEMS)[0]
         except Exception as e:
-            raid_weekend_logger.warning(f"Could not fetch raid weekend: {e}", exc_info=True)
+            raid_weekend_logger.warning(f"Could not fetch raid weekend: {e}")
             db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'error', str(e), logger=raid_weekend_logger)
             return
 
@@ -70,7 +70,7 @@ def task_update_raid_weekend():
             attack_logs_api = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_ATTACKLOG)
             members_api     = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS, raise_on_missing=False) or []
         except Exception as e:
-            raid_weekend_logger.warning(f"Could not get attack log for raid weekend: {e}", exc_info=True)
+            raid_weekend_logger.warning(f"Could not get attack log for raid weekend: {e}")
             db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'error', str(e), logger=raid_weekend_logger)
             return
 

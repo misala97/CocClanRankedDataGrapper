@@ -1111,10 +1111,18 @@ function _calcWarProb(ourAssignments, oppAssignments, ourStars, oppStars) {
                         warPlayerInfo, (a,d) => atkDist(WAR_MATCHUP_RATES, a, d), WAR_MATCHUP_COUNTS);
 }
 
-function computeWarWinCalc() {
+// Computes the win-prob model as of an arbitrary point in the war: given exactly which
+// attacks have landed (attacksSubset) and the star totals at that point. computeWarWinCalc()
+// is just this called with the full current attack list — computeWarAttackHistory() replays
+// it after each individual attack to see how much that attack moved the win%.
+function computeWarWinCalcAt(attacksSubset, ourStars, oppStars) {
     if (!WAR.teamSize) return null;
-    const { ourAssignments, oppAssignments } = computeWarAssignment(WAR_ATTACKS);
-    return _calcWarProb(ourAssignments, oppAssignments, WAR.ourStars, WAR.oppStars);
+    const { ourAssignments, oppAssignments } = computeWarAssignment(attacksSubset);
+    return _calcWarProb(ourAssignments, oppAssignments, ourStars, oppStars);
+}
+
+function computeWarWinCalc() {
+    return computeWarWinCalcAt(WAR_ATTACKS, WAR.ourStars, WAR.oppStars);
 }
 
 function computeWarPrediction() {
@@ -1123,6 +1131,53 @@ function computeWarPrediction() {
     return _calcWarProb(ourAssignments, oppAssignments, 0, 0);
 }
 
+// Chronological replay: for each attack, the win% (destruction-adjusted) immediately before
+// and after it landed, plus the model's expected stars for that matchup — so over/under
+// performance and its effect on the live win% are both visible at a glance.
+function computeWarAttackHistory() {
+    if (!WAR.teamSize || !WAR_ATTACKS.length) return [];
+
+    const sorted = [...WAR_ATTACKS].sort((a, b) => (a.order || 0) - (b.order || 0));
+    const teamSize = WAR.teamSize;
+
+    let ourStars = 0, oppStars = 0, ourPctSum = 0, oppPctSum = 0;
+    const ourBestDef = {}, oppBestDef = {}; // best stars seen so far per defender pos
+    const history = [];
+
+    for (let i = 0; i < sorted.length; i++) {
+        const atk = sorted[i];
+        const before = computeWarWinCalcAt(sorted.slice(0, i), ourStars, oppStars);
+        if (!before) continue;
+        const ourPctBefore = ourPctSum / teamSize, oppPctBefore = oppPctSum / teamSize;
+        const adjBefore = computeAdjustedWin(before, ourPctBefore, oppPctBefore);
+
+        const isOur = atk.attacker_side === 'our';
+        const defBestMap = isOur ? oppBestDef : ourBestDef;
+        const defBest = defBestMap[atk.defender_pos] || 0;
+        const { dist } = resolveAtkDist(warPlayerInfo, (a, d) => atkDist(WAR_MATCHUP_RATES, a, d),
+                                         atk.attacker_tag, atk.attacker_th, atk.defender_th, WAR_MATCHUP_COUNTS);
+        const adjustedDist = adjustDistForStarred(dist, defBest);
+        const expStars = adjustedDist.reduce((s, p, k) => s + p * k, 0);
+        const inc = Math.max(0, atk.stars - defBest);
+
+        if (isOur) { ourStars += inc; ourPctSum += atk.pct; oppBestDef[atk.defender_pos] = Math.max(defBest, atk.stars); }
+        else       { oppStars += inc; oppPctSum += atk.pct; ourBestDef[atk.defender_pos] = Math.max(defBest, atk.stars); }
+
+        const after = computeWarWinCalcAt(sorted.slice(0, i + 1), ourStars, oppStars);
+        const ourPctAfter = ourPctSum / teamSize, oppPctAfter = oppPctSum / teamSize;
+        const adjAfter = after ? computeAdjustedWin(after, ourPctAfter, oppPctAfter) : adjBefore;
+
+        history.push({
+            side: isOur ? 'our' : 'opp',
+            name: atk.attacker_name, th: atk.attacker_th,
+            defName: atk.defender_name, defTH: atk.defender_th,
+            stars: inc, pct: atk.pct, expStars,
+            pWinBeforePct: adjBefore.pWinAdj * 100,
+            pWinAfterPct: adjAfter.pWinAdj * 100,
+        });
+    }
+    return history;
+}
 
 function buildWinCalc(n) {
     const el = document.getElementById('winCalc-' + n);
@@ -1132,7 +1187,7 @@ function buildWinCalc(n) {
     if (!wc) { el.innerHTML = '<div style="padding:20px;color:var(--muted);">Not enough data to compute.</div>'; return; }
     const { barHtml, bodyHtml } = buildWinCalcHTML(wc, WAR.ourName, WAR.oppName, WAR.ourPct || 0, WAR.oppPct || 0, 'warWcOur', 'warWcOpp', 'toggleBreakdown');
     if (prevEl) { prevEl.style.display = 'block'; prevEl.innerHTML = barHtml; }
-    el.innerHTML = bodyHtml;
+    el.innerHTML = bodyHtml + buildAttackHistoryHTML(computeWarAttackHistory(), 'warWcHist-' + n, wc, WAR.ourPct || 0, WAR.oppPct || 0);
 }
 
 // ── Compare & Predict Modal ───────────────────────────────────────────────────

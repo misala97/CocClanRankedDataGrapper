@@ -1968,10 +1968,12 @@ const wcPlayerInfo = (tag, atkTH, defTH, histK) => playerInfo(PLAYER_ALL_TIME, C
 // Positional assignment: rank-i remaining attacker → rank-i open (not 3-starred) base.
 // Returns { ourAssignments, oppAssignments } each as array of { attacker, defender } pairs,
 // plus avg TH fallbacks for ghost-padding unknown remaining slots.
-function computeCWLAssignment(r) {
+// attacksOverride lets callers replay the war as of an earlier point (see computeCWLAttackHistory)
+// instead of always using the full, current r.attacks.
+function computeCWLAssignment(r, attacksOverride) {
     const usedOurPos = new Set(), usedOppPos = new Set();
     const oppDefStars = {}, ourDefStars = {};
-    for (const atk of (r.attacks || [])) {
+    for (const atk of (attacksOverride || r.attacks || [])) {
         if (atk.attacker_side === 'our') {
             usedOurPos.add(atk.attacker_pos);
             oppDefStars[atk.defender_pos] = Math.max(oppDefStars[atk.defender_pos] || 0, atk.stars);
@@ -2010,18 +2012,21 @@ function _calcCWLProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible) {
                        wcPlayerInfo, (a,d) => atkDist(CWL_MATCHUP_RATES, a, d), CWL_MATCHUP_COUNTS);
 }
 
-function computeCWLWinCalc(n) {
-    const r = CWL[n];
+// Computes the win-prob model as of an arbitrary point in the war: given exactly which
+// attacks have landed (attacksSubset) and the star totals at that point. computeCWLWinCalc(n)
+// is just this called with the full current attack list — computeCWLAttackHistory(n) replays
+// it after each individual attack to see how much that attack moved the win%.
+function computeCWLWinCalcAt(r, attacksSubset, ourStars, oppStars) {
     if (!r || !r.teamSize) return null;
 
-    const ourStars    = r.ourStars   || 0;
-    const oppStars    = r.oppStars   || 0;
-    const ourRem      = Math.max(0, r.teamSize - (r.ourAttacks || 0));
-    const oppRem      = Math.max(0, r.teamSize - (r.oppAttacks || 0));
+    const ourMade     = attacksSubset.filter(a => a.attacker_side === 'our').length;
+    const oppMade     = attacksSubset.filter(a => a.attacker_side === 'opp').length;
+    const ourRem      = Math.max(0, r.teamSize - ourMade);
+    const oppRem      = Math.max(0, r.teamSize - oppMade);
     const maxPossible = r.teamSize * 3;
 
     const { ourRemAtk, oppRemAtk, ourAtkDef, oppAtkDef, oppDefStars, ourDefStars,
-            avgOurRemTH, avgOppRemTH, avgOppLiveTH, avgOurLiveTH } = computeCWLAssignment(r);
+            avgOurRemTH, avgOppRemTH, avgOppLiveTH, avgOurLiveTH } = computeCWLAssignment(r, attacksSubset);
 
     const ourPairs = ourRemAtk.slice(0, ourRem).map(m => {
         const def = ourAtkDef[m.pos] ?? { th: Math.round(avgOppLiveTH), name: '?' };
@@ -2040,6 +2045,64 @@ function computeCWLWinCalc(n) {
         oppPairs.push({ tag: null, atkTH: Math.round(avgOppRemTH), name: '?', pos: -1, defTH: Math.round(avgOurLiveTH), defName: '?' });
 
     return _calcCWLProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible);
+}
+
+function computeCWLWinCalc(n) {
+    const r = CWL[n];
+    if (!r) return null;
+    return computeCWLWinCalcAt(r, r.attacks || [], r.ourStars || 0, r.oppStars || 0);
+}
+
+// Chronological replay: for each attack, the win% (destruction-adjusted) immediately before
+// and after it landed, plus the model's expected stars for that matchup — so over/under
+// performance and its effect on the live win% are both visible at a glance.
+function computeCWLAttackHistory(n) {
+    const r = CWL[n];
+    if (!r || !r.teamSize || !(r.attacks || []).length) return [];
+
+    const sorted = [...r.attacks].sort((a, b) => (a.order || 0) - (b.order || 0));
+    const ourRoster = r.our || [], oppRoster = r.opp || [];
+    const teamSize = r.teamSize;
+
+    let ourStars = 0, oppStars = 0, ourPctSum = 0, oppPctSum = 0;
+    const ourBestDef = {}, oppBestDef = {}; // best stars seen so far per defender pos
+    const history = [];
+
+    for (let i = 0; i < sorted.length; i++) {
+        const atk = sorted[i];
+        const before = computeCWLWinCalcAt(r, sorted.slice(0, i), ourStars, oppStars);
+        if (!before) continue;
+        const ourPctBefore = ourPctSum / teamSize, oppPctBefore = oppPctSum / teamSize;
+        const adjBefore = computeAdjustedWin(before, ourPctBefore, oppPctBefore);
+
+        const isOur = atk.attacker_side === 'our';
+        const roster = isOur ? ourRoster : oppRoster;
+        const member = roster.find(m => m.pos === atk.attacker_pos);
+        const defBestMap = isOur ? oppBestDef : ourBestDef;
+        const defBest = defBestMap[atk.defender_pos] || 0;
+        const { dist } = resolveAtkDist(wcPlayerInfo, (a, d) => atkDist(CWL_MATCHUP_RATES, a, d),
+                                         member ? member.tag : null, atk.attacker_th, atk.defender_th, CWL_MATCHUP_COUNTS);
+        const adjustedDist = adjustDistForStarred(dist, defBest);
+        const expStars = adjustedDist.reduce((s, p, k) => s + p * k, 0);
+        const inc = Math.max(0, atk.stars - defBest);
+
+        if (isOur) { ourStars += inc; ourPctSum += atk.pct; oppBestDef[atk.defender_pos] = Math.max(defBest, atk.stars); }
+        else       { oppStars += inc; oppPctSum += atk.pct; ourBestDef[atk.defender_pos] = Math.max(defBest, atk.stars); }
+
+        const after = computeCWLWinCalcAt(r, sorted.slice(0, i + 1), ourStars, oppStars);
+        const ourPctAfter = ourPctSum / teamSize, oppPctAfter = oppPctSum / teamSize;
+        const adjAfter = after ? computeAdjustedWin(after, ourPctAfter, oppPctAfter) : adjBefore;
+
+        history.push({
+            side: isOur ? 'our' : 'opp',
+            name: atk.attacker_name, th: atk.attacker_th,
+            defName: atk.defender_name, defTH: atk.defender_th,
+            stars: inc, pct: atk.pct, expStars,
+            pWinBeforePct: adjBefore.pWinAdj * 100,
+            pWinAfterPct: adjAfter.pWinAdj * 100,
+        });
+    }
+    return history;
 }
 
 function computeCWLPrediction(n) {
@@ -2068,7 +2131,7 @@ function buildWinCalc(n) {
         stdEl.style.color = winAdjPct >= 60 ? 'var(--green)' : winAdjPct >= 45 ? 'var(--accent)' : 'var(--red)';
         stdEl.textContent = winAdjPct + '%';
     }
-    el.innerHTML = bodyHtml;
+    el.innerHTML = bodyHtml + buildAttackHistoryHTML(computeCWLAttackHistory(n), 'wcHist-' + n, wc, r.ourPct || 0, r.oppPct || 0);
 }
 
 

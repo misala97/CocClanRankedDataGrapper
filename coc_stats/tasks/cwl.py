@@ -48,7 +48,7 @@ def task_update_cwl():
             state      = json_get(group, JSON_CWL_GROUP_DATA.STATE  ) or 'unknown'
             season_str = json_get(group, JSON_CWL_GROUP_DATA.SEASON ) or ''
         except Exception as e:
-            cwl_logger.warning(f"Could not read CWL group state/season: {e}", exc_info=True)
+            cwl_logger.warning(f"Could not read CWL group state/season: {e}")
             db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger)
             return
 
@@ -128,7 +128,7 @@ def task_update_cwl():
         try:
             rounds = json_get(group, JSON_CWL_GROUP_DATA.ROUNDS) or []
         except Exception as e:
-            cwl_logger.warning(f"Could not read CWL rounds: {e}", exc_info=True)
+            cwl_logger.warning(f"Could not read CWL rounds: {e}")
             db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger)
             return
 

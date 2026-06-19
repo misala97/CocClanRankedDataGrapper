@@ -409,20 +409,44 @@ function openMatchupRatesModal(rates, counts, totalAtks, contentId, backdropId, 
     document.getElementById(modalId).style.display    = 'block';
 }
 
+// P(A > B) for independent A ~ U[aLo,aHi], B ~ U[bLo,bHi].
+// Used to resolve the destruction-% tiebreak when stars end in a draw: both sides'
+// remaining attacks can still move their final % anywhere in [floor, ceiling], so the
+// outcome isn't decided by who currently leads — only by whether the ranges overlap.
+function probRangeGreater(aLo, aHi, bLo, bHi) {
+    if (aHi <= bLo) return 0;
+    if (bHi <= aLo) return 1;
+    const rangeA = aHi - aLo, rangeB = bHi - bLo;
+    if (rangeA === 0) return Math.min(1, Math.max(0, (aLo - bLo) / rangeB));
+    if (rangeB === 0) return Math.min(1, Math.max(0, (aHi - bLo) / rangeA));
+    const loMid = Math.max(aLo, bLo), hiMid = Math.min(aHi, bHi);
+    const segHigh = Math.max(0, aHi - Math.max(aLo, bHi));
+    let segMid = 0;
+    if (hiMid > loMid) {
+        const f = x => Math.pow(x - bLo, 2) / (2 * rangeB);
+        segMid = f(hiMid) - f(loMid);
+    }
+    return Math.min(1, Math.max(0, (segHigh + segMid) / rangeA));
+}
+
+// Destruction-tiebreak-adjusted win probability for a given star-distribution result (wc)
+// and a given pair of current destruction percentages. Pulled out of buildWinCalcHTML so
+// the same calc can be replayed at any point in war history (see buildAttackHistoryHTML).
+function computeAdjustedWin(wc, ourPct, oppPct) {
+    const maxPerAtk = wc.teamSize > 0 ? 100 / wc.teamSize : 6.67;
+    const oppMaxFinalPct = oppPct + wc.oppRem * maxPerAtk;
+    const ourMaxFinalPct = ourPct + wc.ourRem * maxPerAtk;
+    const drawSplitOur = probRangeGreater(ourPct, ourMaxFinalPct, oppPct, oppMaxFinalPct);
+    const pWinAdj = wc.pWin + wc.pDraw * drawSplitOur;
+    return { pWinAdj, drawSplitOur, oppMaxFinalPct, ourMaxFinalPct };
+}
+
 // Live win-probability panel renderer — shared between war and CWL.
 // Returns { barHtml, bodyHtml, winAdjPct }.
 // barHtml  → names + adjusted prob bar for the always-visible preview element.
 // bodyHtml → full panel: guarantee banner, stats, details, chart, breakdown toggles.
 function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtkId, toggleFn) {
-    const maxPerAtk = wc.teamSize > 0 ? 100 / wc.teamSize : 6.67;
-    const oppMaxFinalPct = oppPct + wc.oppRem * maxPerAtk;
-    const ourMaxFinalPct = ourPct + wc.ourRem * maxPerAtk;
-    let drawSplitOur;
-    if      (oppMaxFinalPct < ourPct) drawSplitOur = 1.0;
-    else if (ourMaxFinalPct < oppPct) drawSplitOur = 0.0;
-    else drawSplitOur = ourPct > oppPct ? 1.0 : ourPct < oppPct ? 0.0 : 0.5;
-
-    const pWinAdj    = wc.pWin  + wc.pDraw * drawSplitOur;
+    const { pWinAdj, drawSplitOur, oppMaxFinalPct, ourMaxFinalPct } = computeAdjustedWin(wc, ourPct, oppPct);
     const winPct     = Math.round(wc.pWin  * 100);
     const drawPct    = Math.round(wc.pDraw * 100);
     const lossPct    = Math.max(0, 100 - winPct - drawPct);
@@ -505,6 +529,12 @@ function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtk
                 <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val" style="color:var(--red);">${wc.expOppFinal.toFixed(1)}★</span></div>
                 <div class="wc-detail-row"><span class="wc-detail-key">Exp. lead</span><span class="wc-detail-val" style="color:${wc.expOurFinal >= wc.expOppFinal ? 'var(--green)' : 'var(--red)'};">${wc.expOurFinal > wc.expOppFinal ? '+' : ''}${(wc.expOurFinal - wc.expOppFinal).toFixed(1)}★</span></div>
             </div>
+            <div class="wc-detail-box">
+                <div class="wc-detail-title">Destruction% Range</div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(ourName)}</span><span class="wc-detail-val">${ourPct.toFixed(1)}→<span style="color:var(--green);">${ourMaxFinalPct.toFixed(1)}</span>%</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">${escapeHTML(oppName)}</span><span class="wc-detail-val">${oppPct.toFixed(1)}→<span style="color:var(--red);">${oppMaxFinalPct.toFixed(1)}</span>%</span></div>
+                <div class="wc-detail-row"><span class="wc-detail-key">Tiebreak locked</span><span class="wc-detail-val" style="color:var(--muted);">${ourMaxFinalPct > oppPct && oppMaxFinalPct > ourPct ? 'no — overlaps' : 'yes'}</span></div>
+            </div>
         </div>
         ${buildStarDistChart(wc, ourName, oppName)}
         <div style="border-top:1px solid var(--bord2);">
@@ -524,6 +554,181 @@ function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtk
     return { barHtml, bodyHtml, winAdjPct };
 }
 
+// Floating tooltip for SVG chart markers — styled to match the dark theme, replacing the
+// browser's native <title> tooltip (which always renders as an unstyled white box).
+// Markers carry their content in data-title/data-line1/data-line2; these three functions
+// are the only DOM touchpoint and are shared by every marker kind (attack/start/projection).
+function wcTipShow(el) {
+    let tip = document.getElementById('wcFloatTip');
+    if (!tip) {
+        tip = document.createElement('div');
+        tip.id = 'wcFloatTip';
+        tip.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;background:var(--surf2);border:1px solid var(--bord2);border-radius:6px;padding:8px 10px;font-size:11px;line-height:1.5;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.45);max-width:260px;';
+        document.body.appendChild(tip);
+    }
+    const d = el.dataset;
+    tip.innerHTML = `<div style="font-weight:700;margin-bottom:3px;">${d.title}</div>` +
+                    (d.line1 ? `<div>${d.line1}</div>` : '') +
+                    (d.line2 ? `<div style="color:var(--muted);margin-top:2px;">${d.line2}</div>` : '');
+    tip.style.display = 'block';
+    wcTipMove(window.event);
+}
+function wcTipMove(evt) {
+    const tip = document.getElementById('wcFloatTip');
+    if (!tip || !evt) return;
+    const pad = 14;
+    const rect = tip.getBoundingClientRect();
+    let x = evt.clientX + pad, y = evt.clientY + pad;
+    if (x + rect.width  > window.innerWidth)  x = evt.clientX - rect.width  - pad;
+    if (y + rect.height > window.innerHeight) y = evt.clientY - rect.height - pad;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+}
+function wcTipHide() {
+    const tip = document.getElementById('wcFloatTip');
+    if (tip) tip.style.display = 'none';
+}
+
+// Renders a win% timeline chart — one point per completed attack, the jump between two
+// points being that attack's effect on the adjusted win% — plus a collapsible per-attack
+// table for drill-down. history entries come from computeCWLAttackHistory /
+// computeWarAttackHistory — each: { side, name, th, defName, defTH, stars, pct, expStars,
+// pWinBeforePct, pWinAfterPct }. wc/ourPct/oppPct (the same live win-calc state already
+// shown above this section) are optional — when given, the chart adds a dashed projection
+// to where the war ends up if every remaining attack lands at its expected value.
+function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
+    if (!history || !history.length) return '';
+    const n = history.length;
+    const hasProj = !!wc;
+    const slots = n + (hasProj ? 1.6 : 0);
+    const svgH = 150, padL = 32, padR = 10, padT = 10, padB = 22;
+    const plotH = svgH - padT - padB;
+    const stepW = Math.max(18, Math.min(40, Math.floor(900 / n)));
+    const svgW = stepW * slots + padL + padR;
+    const xFor = k => padL + k * stepW;
+    const yFor = pct => padT + plotH - (Math.max(0, Math.min(100, pct)) / 100) * plotH;
+
+    // Points: index 0 is the pre-attack baseline, index k+1 is the win% right after attack k.
+    // Connecting these with straight segments (rather than a step shape) keeps every dot
+    // sitting exactly on the line that leads into it — no jump that lands past the dot.
+    const pts = [{ x: xFor(0), y: yFor(history[0].pWinBeforePct) }];
+    for (let k = 0; k < n; k++) pts.push({ x: xFor(k + 1), y: yFor(history[k].pWinAfterPct) });
+
+    const tip = (title, line1, line2) =>
+        `data-title="${title}" data-line1="${line1 || ''}" data-line2="${line2 || ''}" ` +
+        `onmouseenter="wcTipShow(this)" onmousemove="wcTipMove(event)" onmouseleave="wcTipHide()"`;
+
+    // Start marker — the model's pre-war baseline (0 stars/0%, full roster, no real data yet).
+    let dots = `<circle cx="${pts[0].x}" cy="${pts[0].y}" r="4" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5" ` +
+               tip('Pre-war baseline', `${history[0].pWinBeforePct.toFixed(1)}% win, before any attacks`, 'Greedy TH-based matchup — no real data yet') + `/>`;
+    let segs = '';
+    for (let k = 0; k < n; k++) {
+        const h = history[k];
+        const swing = h.pWinAfterPct - h.pWinBeforePct;
+        const segColor = swing > 0.05 ? 'var(--green)' : swing < -0.05 ? 'var(--red)' : 'var(--muted)';
+        const deltaStars = h.stars - h.expStars;
+        const perfLabel = deltaStars > 0.05 ? 'over-performed' : deltaStars < -0.05 ? 'under-performed' : 'on par';
+        const dotColor = h.side === 'our' ? 'var(--green)' : 'var(--red)';
+        segs += `<line x1="${pts[k].x}" y1="${pts[k].y}" x2="${pts[k + 1].x}" y2="${pts[k + 1].y}" stroke="${segColor}" stroke-width="2"/>`;
+        dots += `<circle cx="${pts[k + 1].x}" cy="${pts[k + 1].y}" r="4.5" fill="${dotColor}" stroke="var(--surface)" stroke-width="1.5" ` +
+                tip(`#${k + 1} ${escapeHTML(h.name)} (TH${h.th}) vs ${escapeHTML(h.defName)} (TH${h.defTH})`,
+                    `${h.stars}★ / ${h.pct}% — ${perfLabel} (exp ${h.expStars.toFixed(1)}★)`,
+                    `Win%: ${h.pWinBeforePct.toFixed(1)} → ${h.pWinAfterPct.toFixed(1)} (${swing >= 0 ? '+' : ''}${swing.toFixed(1)}pp)`) +
+                `/>`;
+    }
+
+    // Projected continuation: if every remaining attack lands at its expected (mean) outcome,
+    // where does the war end up? Deterministic, unlike the probabilistic win% above — bridges
+    // this chart into the "remaining attacks" prediction shown elsewhere in the panel.
+    let projSeg = '', projDot = '';
+    if (hasProj) {
+        const maxPerAtk = wc.teamSize > 0 ? 100 / wc.teamSize : 6.67;
+        const ourPctProj = ourPct + wc.ourBreakdown.reduce((s, a) => s + (a.expStars / 3) * maxPerAtk, 0);
+        const oppPctProj = oppPct + wc.oppBreakdown.reduce((s, a) => s + (a.expStars / 3) * maxPerAtk, 0);
+        let projWinPct;
+        if      (wc.expOurFinal > wc.expOppFinal) projWinPct = 100;
+        else if (wc.expOurFinal < wc.expOppFinal) projWinPct = 0;
+        else projWinPct = ourPctProj > oppPctProj ? 100 : ourPctProj < oppPctProj ? 0 : 50;
+
+        const last = pts[pts.length - 1];
+        const projX = xFor(n + 1.6), projY = yFor(projWinPct);
+        projSeg = `<line x1="${last.x}" y1="${last.y}" x2="${projX}" y2="${projY}" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4,3" opacity=".7"/>`;
+        projDot = `<circle cx="${projX}" cy="${projY}" r="4.5" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="2,2" ` +
+                  tip('Projected final', `${wc.expOurFinal.toFixed(1)}★ vs ${wc.expOppFinal.toFixed(1)}★ → ${projWinPct.toFixed(0)}% win`, 'If remaining attacks land as expected') +
+                  `/>`;
+    }
+
+    // Horizontal gridlines at 0/25/50/75/100% and x-axis ticks at a handful of attack indices.
+    let gridLines = '';
+    [0, 25, 50, 75, 100].forEach(p => {
+        const y = yFor(p);
+        gridLines += `<line x1="${padL}" y1="${y}" x2="${svgW - padR}" y2="${y}" stroke="var(--bord2)" stroke-width="1" stroke-dasharray="${p === 50 ? '3,3' : '2,4'}"/>` +
+                     `<text x="${padL - 4}" y="${y + 3}" text-anchor="end" font-size="8" fill="var(--muted)">${p}%</text>`;
+    });
+    const niceTickSteps = [1, 2, 5, 10, 20, 25, 50, 100];
+    const tickEvery = niceTickSteps.find(s => Math.ceil(n / s) <= 8) || Math.ceil(n / 8);
+    let xTicks = '';
+    for (let k = 1; k <= n; k++) {
+        if (k !== 1 && k !== n && k % tickEvery !== 0) continue;
+        xTicks += `<text x="${xFor(k)}" y="${svgH - 4}" text-anchor="middle" font-size="8" fill="var(--muted)">${k}</text>`;
+    }
+
+    const rows = history.map(h => {
+        const sideColor = h.side === 'our' ? 'var(--green)' : 'var(--red)';
+        const deltaStars = h.stars - h.expStars;
+        const deltaColor = deltaStars > 0.05 ? 'var(--green)' : deltaStars < -0.05 ? 'var(--red)' : 'var(--muted)';
+        const deltaLabel = deltaStars > 0.05 ? 'over' : deltaStars < -0.05 ? 'under' : 'on par';
+        const swing = h.pWinAfterPct - h.pWinBeforePct;
+        const swingColor = swing > 0.4 ? 'var(--green)' : swing < -0.4 ? 'var(--red)' : 'var(--muted)';
+        return `
+        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:6px 14px;border-bottom:1px solid var(--bord2);font-size:11px;">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                <span style="color:${sideColor};font-weight:600;">${escapeHTML(h.name)}</span>
+                <span style="color:var(--muted);">TH${h.th} &rarr; ${escapeHTML(h.defName)} TH${h.defTH}</span>
+            </div>
+            <div style="text-align:right;white-space:nowrap;">${h.stars}&#9733; <span style="color:var(--muted);">${h.pct}%</span></div>
+            <div style="text-align:right;white-space:nowrap;color:${deltaColor};">${deltaStars >= 0 ? '+' : ''}${deltaStars.toFixed(1)}&#9733; <span style="opacity:.7;">(${deltaLabel}, exp. ${h.expStars.toFixed(1)}&#9733;)</span></div>
+            <div style="text-align:right;white-space:nowrap;color:${swingColor};font-weight:600;">${swing >= 0 ? '+' : ''}${swing.toFixed(1)}pp</div>
+        </div>`;
+    }).join('');
+
+    const tableId = `${idPrefix || 'wcHist'}-table`;
+    return `
+    <div style="border-top:1px solid var(--bord2);padding:10px 16px 12px 20px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">
+            Win% Timeline <span style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:.3px;opacity:.7;">hover a marker for attack detail</span>
+        </div>
+        <div style="overflow-x:auto;">
+            <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none" style="display:block;width:100%;min-width:${svgW}px;height:${svgH}px;">
+                ${gridLines}
+                ${xTicks}
+                ${segs}
+                ${projSeg}
+                ${dots}
+                ${projDot}
+            </svg>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px;font-size:9px;color:var(--muted);">
+            <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:3px;"></span>Our attack</span>
+            <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-right:3px;"></span>Their attack</span>
+            <span><span style="display:inline-block;width:10px;height:2px;background:var(--green);margin-right:3px;vertical-align:middle;"></span>Swing helped us</span>
+            <span><span style="display:inline-block;width:10px;height:2px;background:var(--red);margin-right:3px;vertical-align:middle;"></span>Swing hurt us</span>
+            ${hasProj ? `<span><span style="display:inline-block;width:10px;height:0;border-top:2px dashed var(--accent);margin-right:3px;vertical-align:middle;"></span>Projected if expected</span>` : ''}
+        </div>
+    </div>
+    <div style="border-top:1px solid var(--bord2);">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;cursor:pointer;user-select:none;" onclick="toggleBreakdown('${tableId}', this)">
+            <span style="font-size:12px;font-weight:600;color:var(--muted);">&#9656; Attack-by-attack log (${n})</span>
+        </div>
+        <div id="${tableId}" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:10px;padding:0 14px 6px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">
+                <div>Attacker &rarr; Defender</div><div style="text-align:right;">Result</div><div style="text-align:right;">vs Expected</div><div style="text-align:right;">Win% Swing</div>
+            </div>
+            ${rows}
+        </div>
+    </div>`;
+}
+
 // Pre-war prediction panel renderer — shared between war and CWL compare modals.
 // Returns { probBarHtml, bodyHtml, winPct }.
 // probBarHtml → names + raw prob bar (callers prepend their own page-specific header to barEl).
@@ -532,9 +737,16 @@ function buildPredictionBodyHTML(wc, ourName, oppName, ourAtkId, oppAtkId, toggl
     const winPct  = Math.round(wc.pWin  * 100);
     const drawPct = Math.round(wc.pDraw * 100);
     const lossPct = Math.max(0, 100 - winPct - drawPct);
+    // Fold the star-tie draw probability into win/loss via the same destruction-tiebreak
+    // model the live panel uses (computeAdjustedWin), instead of leaving it as a separate
+    // "not modeled" bucket — otherwise this pre-war number disagrees with the win% timeline's
+    // own pre-war baseline point, which already runs through that same fold-in.
+    const { pWinAdj } = computeAdjustedWin(wc, 0, 0);
+    const winAdjPct  = Math.round(pWinAdj * 100);
+    const lossAdjPct = 100 - winAdjPct;
     const expOurAdd = wc.ourBreakdown.reduce((s, p) => s + p.expStars, 0);
     const expOppAdd = wc.oppBreakdown.reduce((s, p) => s + p.expStars, 0);
-    const drawSpan = drawPct >= 8 ? `<span class="wc-prob-pct">${drawPct}%</span>` : '';
+    const drawSpan = drawPct >= 8 ? `<span class="wc-prob-pct" style="font-size:12px;">${drawPct}%</span>` : '';
 
     const probBarHtml = `
         <div style="display:flex;justify-content:space-between;padding:0 4px 6px;">
@@ -542,18 +754,18 @@ function buildPredictionBodyHTML(wc, ourName, oppName, ourAtkId, oppAtkId, toggl
             <span style="font-size:12px;font-weight:600;color:var(--red);">${escapeHTML(oppName)}</span>
         </div>
         <div class="wc-prob-bar" style="margin:0;height:40px;grid-template-columns:${Math.max(winPct,5)}fr ${Math.max(drawPct,2)}fr ${Math.max(lossPct,5)}fr;">
-            <div class="wc-half-win"><span class="wc-prob-pct">${winPct}%</span></div>
+            <div class="wc-half-win"><span class="wc-prob-pct">${winAdjPct}%</span></div>
             <div class="wc-half-draw">${drawSpan}</div>
-            <div class="wc-half-loss"><span class="wc-prob-pct">${lossPct}%</span></div>
+            <div class="wc-half-loss"><span class="wc-prob-pct">${lossAdjPct}%</span></div>
         </div>`;
 
-    const drawNote = drawPct > 1 ? `<div style="text-align:center;font-size:11px;color:var(--muted);margin:10px 0 4px;">Draw: ${drawPct}% · destruction tiebreaker not modeled</div>` : '';
+    const drawNote = drawPct > 1 ? `<div style="text-align:center;font-size:11px;color:var(--muted);margin:10px 0 4px;">${drawPct}% chance of a star tie · destruction tiebreak split ${Math.round((winAdjPct - winPct))}/${Math.round((lossAdjPct - lossPct))} our/their favor</div>` : '';
     const bodyHtml = `
         ${drawNote}
         <div class="wc-stats-row">
-            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--green);">${winPct}%</div><div class="wc-stat-lbl">Win</div></div>
-            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--muted);">${drawPct}%</div><div class="wc-stat-lbl">Draw</div></div>
-            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--red);">${lossPct}%</div><div class="wc-stat-lbl">Loss</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--green);">${winAdjPct}%</div><div class="wc-stat-lbl">Win</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--muted);">${drawPct}%</div><div class="wc-stat-lbl">Star tie</div></div>
+            <div class="wc-stat-box"><div class="wc-stat-val" style="color:var(--red);">${lossAdjPct}%</div><div class="wc-stat-lbl">Loss</div></div>
         </div>
         <div class="wc-details">
             <div class="wc-detail-box">
