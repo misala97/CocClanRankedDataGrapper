@@ -275,6 +275,7 @@
                         <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
                         <th class="sortable" onclick="sortTable('solo_wipes')">Solo Wipes</th>
                         <th class="sortable" onclick="sortTable('cleanup_count')">Cleanups</th>
+                        <th class="sortable" onclick="sortTable('net_rate_impact')">Impact</th>
                         <th class="sortable" onclick="sortTable('score_100')">Verdict</th>
                         <th>Details</th>
                     </tr>
@@ -390,11 +391,14 @@ function buildVerdictDetails(p) {
             const adjColor     = type === 'cleanup' ? 'var(--muted)' : 'var(--accent)';
             const rowBg        = type === 'cleanup' ? 'opacity:0.5;' : type === 'solo_wipe' ? 'background:rgba(188,140,255,0.04);box-shadow:inset 3px 0 0 var(--purple);' : '';
             const borderBottom = i < span - 1 ? 'border-bottom:1px dashed var(--bord2);' : '';
+            const deltaVal      = l.rate_delta || 0;
+            const deltaColor    = deltaVal > 0 ? 'var(--green)' : deltaVal < 0 ? 'var(--red)' : 'var(--muted)';
             rows += `<tr style="${rowBg}${borderBottom}">
                 ${i === 0 ? districtNameCell : ''}
                 <td style="text-align:center;">${renderStars(l.stars)}</td>
                 <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--blue);">${l.percentage}%</td>
                 <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${adjColor};">${l.adj_score.toFixed(2)}</td>
+                <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:${deltaColor};">${deltaVal > 0 ? '+' : ''}${deltaVal.toFixed(2)}</td>
                 ${i === 0 ? summaryCell : ''}
             </tr>`;
         });
@@ -403,7 +407,7 @@ function buildVerdictDetails(p) {
     for (let i = 0; i < missing; i++) {
         rows += `<tr style="opacity:0.4;">
             <td style="color:var(--red);border-right:1px solid var(--bord2);">— missing —</td>
-            <td>${renderStars(0)}</td><td>—</td><td style="font-family:'Rajdhani',sans-serif;font-weight:700;">0.00</td>
+            <td>${renderStars(0)}</td><td>—</td><td style="font-family:'Rajdhani',sans-serif;font-weight:700;">0.00</td><td>—</td>
             <td style="border-left:1px solid var(--bord2);"></td>
         </tr>`;
     }
@@ -428,7 +432,7 @@ function buildVerdictDetails(p) {
             </div>
             <table class="detail-table">
                 <thead><tr>
-                    <th>District</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Result</th>
+                    <th>District</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Rate Δ</th><th>Result</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
@@ -479,13 +483,14 @@ function buildTable() {
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--blue);">${p.avg_pct}%</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--green);">${p.solo_wipes}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--muted);">${p.cleanup_count}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:${p.net_rate_impact > 0 ? 'var(--green)' : p.net_rate_impact < 0 ? 'var(--red)' : 'var(--muted)'};">${p.net_rate_impact > 0 ? '+' : ''}${p.net_rate_impact.toFixed(2)}</td>
             <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
             <td><button type="button" class="action-btn details-toggle">Details</button></td>
         `;
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'detail-row';
-        detailRow.innerHTML = `<td class="detail-cell" colspan="9"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
+        detailRow.innerHTML = `<td class="detail-cell" colspan="10"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
 
         const toggle = () => {
             const expanded = detailRow.classList.toggle('expanded');

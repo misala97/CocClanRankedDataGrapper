@@ -31,8 +31,27 @@ def raid_weekend_page():
             RaidWeekendLog.query
             .filter(RaidWeekendLog.raid_weekend_id == selected_raid.id)
             .options(selectinload(RaidWeekendLog.player))
+            .order_by(RaidWeekendLog.id.asc())
             .all()
         )
+
+        # ── Per-attack medal-rate impact (id order ≈ chronological order) ──────
+        # Tracks medals_so_far / attacks_so_far before vs after each attack, so we
+        # can tell whether a given attack pulled the clan's per-attack rate up
+        # (it finished a district) or down (it used an attack without finishing one).
+        rate_delta_by_log_id = {}
+        medals_so_far = 0
+        attacks_so_far = 0
+        completed_districts = set()
+        for log in logs:
+            before_rate = (medals_so_far / attacks_so_far) if attacks_so_far else 0.0
+            attacks_so_far += 1
+            district_key = (log.defender_tag, log.district_name)
+            if (log.percentage_total or 0) >= 100 and district_key not in completed_districts:
+                completed_districts.add(district_key)
+                medals_so_far += raid_district_medal_value(log.district_name, log.district_level)
+            after_rate = medals_so_far / attacks_so_far
+            rate_delta_by_log_id[log.id] = round(after_rate - before_rate, 2)
 
         player_map = {}
         for log in logs:
@@ -68,6 +87,7 @@ def raid_weekend_page():
                 'percentage':       pct,
                 'adj_score':        0.0,
                 'percentage_total': log.percentage_total or 0,
+                'rate_delta':       rate_delta_by_log_id.get(log.id, 0.0),
                 'is_clean_up':      False,
                 'defender_name':         log.defender_name or '—',
                 'defender_tag':          log.defender_tag or '—',
@@ -95,8 +115,9 @@ def raid_weekend_page():
                 l['is_clean_up'] = l['log_id'] in cleanup_log_ids
                 l['adj_score']   = round(0.0 if l['is_clean_up'] else l['percentage'] * l['level_mult'], 2)
 
-            p['cleanup_count'] = len(cleanup_log_ids)
-            p['solo_wipes']    = solo_wipe_count
+            p['cleanup_count']   = len(cleanup_log_ids)
+            p['solo_wipes']      = solo_wipe_count
+            p['net_rate_impact'] = round(sum(l['rate_delta'] for l in p['attack_logs']), 2)
 
             non_cleanup = [l['percentage'] for l in p['attack_logs'] if not l['is_clean_up']]
             p['avg_pct'] = round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0
