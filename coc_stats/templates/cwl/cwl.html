@@ -764,6 +764,9 @@
                         <td class="mono text-muted roster-rank" style="text-align:center;">{{ loop.index }}</td>
                         <td style="font-weight:500;">
                             <span {% if _am %}style="color:var(--purple);"{% endif %}>{{ m.player_name or m.player_tag }}</span>
+                            {%- if m.player_name -%}
+                                <span class="mono" style="font-size:10px;color:var(--muted);margin-left:5px;">{{ m.player_tag }}</span>
+                            {%- endif -%}
                             {%- if not _season_ended and _is_today -%}
                                 <div style="font-size:11px;color:var(--green);margin-top:2px;">Active today</div>
                             {%- elif _last_round and (not _season_ended or not _on_final_day) -%}
