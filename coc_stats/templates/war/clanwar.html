@@ -788,13 +788,17 @@
 </div>
 
 {# ── WIN PROBABILITY CARD ── #}
-{% if members_our and members_opp and war.state == 'inWar' %}
+{% if members_our and members_opp and war.state in ('inWar', 'warEnded') %}
 <div class="recent-card" id="wcWrap-0">
     <div onclick="toggleWinCalc(0)" style="cursor:pointer;transition:background .15s;border-radius:10px 10px 0 0;" onmouseenter="this.style.background='var(--surf2)'" onmouseleave="this.style.background=''">
         <div class="recent-header" style="pointer-events:none;">
             <div style="display:flex;align-items:center;gap:10px;">
                 <span class="recent-header-title">🎲 Win Probability</span>
-                <div class="live-atk-badge" style="margin-left:0;">Live</div>
+                {% if war.state == 'inWar' %}
+                <div style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.3);">Live</div>
+                {% else %}
+                <div style="margin-left:0;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;background:rgba(139,148,158,.1);color:var(--muted);border:1px solid rgba(139,148,158,.25);">Final</div>
+                {% endif %}
             </div>
             <span class="recent-chevron" id="wcChev-0">▼</span>
         </div>
@@ -1115,14 +1119,19 @@ function _calcWarProb(ourAssignments, oppAssignments, ourStars, oppStars) {
 // attacks have landed (attacksSubset) and the star totals at that point. computeWarWinCalc()
 // is just this called with the full current attack list — computeWarAttackHistory() replays
 // it after each individual attack to see how much that attack moved the win%.
-function computeWarWinCalcAt(attacksSubset, ourStars, oppStars) {
+// forceNoRemaining locks remaining attacks to 0 regardless of attacksSubset — used once the
+// war has ended, since any unused attack is forfeited and will never land, so it shouldn't
+// keep contributing hedge uncertainty to a war that's already decided.
+function computeWarWinCalcAt(attacksSubset, ourStars, oppStars, forceNoRemaining) {
     if (!WAR.teamSize) return null;
-    const { ourAssignments, oppAssignments } = computeWarAssignment(attacksSubset);
+    const { ourAssignments, oppAssignments } = forceNoRemaining
+        ? { ourAssignments: [], oppAssignments: [] }
+        : computeWarAssignment(attacksSubset);
     return _calcWarProb(ourAssignments, oppAssignments, ourStars, oppStars);
 }
 
 function computeWarWinCalc() {
-    return computeWarWinCalcAt(WAR_ATTACKS, WAR.ourStars, WAR.oppStars);
+    return computeWarWinCalcAt(WAR_ATTACKS, WAR.ourStars, WAR.oppStars, WAR.state === 'warEnded');
 }
 
 function computeWarPrediction() {

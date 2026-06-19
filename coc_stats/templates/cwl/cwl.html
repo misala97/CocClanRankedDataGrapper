@@ -1184,13 +1184,17 @@
         </div>
 
         {# ── WIN PROBABILITY ── #}
-        {% if war.state == 'inWar' %}
+        {% if war.state in ('inWar', 'warEnded') %}
         <div class="recent-card" id="wcWrap-{{ n }}" style="margin-top:20px;">
             <div onclick="toggleWinCalc({{ n }})" style="cursor:pointer;transition:background .15s;border-radius:10px 10px 0 0;" onmouseenter="this.style.background='var(--surf2)'" onmouseleave="this.style.background=''">
                 <div class="recent-header" style="pointer-events:none;">
                     <div style="display:flex;align-items:center;gap:10px;">
                         <span class="recent-header-title">🎲 Win Probability</span>
+                        {% if war.state == 'inWar' %}
                         <div class="live-atk-badge" style="margin-left:0;">Live</div>
+                        {% else %}
+                        <div style="margin-left:0;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;background:rgba(139,148,158,.1);color:var(--muted);border:1px solid rgba(139,148,158,.25);">Final</div>
+                        {% endif %}
                     </div>
                     <span class="recent-chevron" id="wcChev-{{ n }}">▼</span>
                 </div>
@@ -2019,13 +2023,16 @@ function _calcCWLProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible) {
 // attacks have landed (attacksSubset) and the star totals at that point. computeCWLWinCalc(n)
 // is just this called with the full current attack list — computeCWLAttackHistory(n) replays
 // it after each individual attack to see how much that attack moved the win%.
-function computeCWLWinCalcAt(r, attacksSubset, ourStars, oppStars) {
+// forceNoRemaining locks remaining attacks to 0 regardless of attacksSubset — used once the
+// war has ended, since any unused attack is forfeited and will never land, so it shouldn't
+// keep contributing hedge uncertainty to a war that's already decided.
+function computeCWLWinCalcAt(r, attacksSubset, ourStars, oppStars, forceNoRemaining) {
     if (!r || !r.teamSize) return null;
 
     const ourMade     = attacksSubset.filter(a => a.attacker_side === 'our').length;
     const oppMade     = attacksSubset.filter(a => a.attacker_side === 'opp').length;
-    const ourRem      = Math.max(0, r.teamSize - ourMade);
-    const oppRem      = Math.max(0, r.teamSize - oppMade);
+    const ourRem      = forceNoRemaining ? 0 : Math.max(0, r.teamSize - ourMade);
+    const oppRem      = forceNoRemaining ? 0 : Math.max(0, r.teamSize - oppMade);
     const maxPossible = r.teamSize * 3;
 
     const { ourRemAtk, oppRemAtk, ourAtkDef, oppAtkDef, oppDefStars, ourDefStars,
@@ -2053,7 +2060,7 @@ function computeCWLWinCalcAt(r, attacksSubset, ourStars, oppStars) {
 function computeCWLWinCalc(n) {
     const r = CWL[n];
     if (!r) return null;
-    return computeCWLWinCalcAt(r, r.attacks || [], r.ourStars || 0, r.oppStars || 0);
+    return computeCWLWinCalcAt(r, r.attacks || [], r.ourStars || 0, r.oppStars || 0, r.state === 'warEnded');
 }
 
 // Chronological replay: for each attack, the win% (destruction-adjusted) immediately before
