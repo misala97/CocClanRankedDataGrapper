@@ -1,11 +1,12 @@
 import calendar as _cal
 import datetime as dt
+from collections import Counter
 
 from flask import Blueprint, render_template, request, jsonify
 from sqlalchemy.orm import selectinload, aliased
 
 from extensions import db
-from models import CWLSeason, CWLClan, CWLClanMember, CWLWar, CWLMember, CWLAttack
+from models import CWLSeason, CWLClan, CWLClanMember, CWLWar, CWLMember, CWLAttack, CWLBonus
 from features.war.war_combos import classify_attack, get_war_verdict, get_cwl_verdict, get_attack_context
 from features.auth.routes import _can_edit_clan_war
 from services.helpers import league_rank, avg_league_name, SKIP_LEAGUES, inc_star_bucket, compute_cwl_win_status
@@ -905,7 +906,7 @@ def cwl_stats_page():
         group_size = len(sorted_tags)
 
         try:
-            yr, mo    = season.season.split('-')
+            yr, mo    = season.season.split('-')[:2]   # tolerate extra suffix on double-CWL-month season keys
             szn_label = f"{_cal.month_abbr[int(mo)]} {yr}"
         except Exception:
             szn_label = season.season
@@ -959,21 +960,17 @@ def cwl_stats_page():
     total_draws         = sum(s['draws']         for s in seasons_data)
     total_stars_for     = sum(s['stars_for']     for s in seasons_data)
     total_stars_against = sum(s['stars_against'] for s in seasons_data)
-    win_rate            = round(total_wins / total_wars * 100) if total_wars else 0
+    win_rate             = round(total_wins / total_wars * 100) if total_wars else 0
 
-    ranked_szns  = [s for s in seasons_data if s['rank']]
-    avg_rank     = round(sum(s['rank'] for s in ranked_szns) / len(ranked_szns), 1) if ranked_szns else None
-    promotions   = sum(1 for s in seasons_data if s.get('finish') == 'promotion')
-    relegations  = sum(1 for s in seasons_data if s.get('finish') == 'relegation')
+    latest_season      = seasons_data[-1]
+    promotions         = sum(1 for s in seasons_data if s.get('finish') == 'promotion')
+    relegations        = sum(1 for s in seasons_data if s.get('finish') == 'relegation')
+    total_bonus_medals = CWLBonus.query.count()
 
-    rank_dist = {}
-    for s in seasons_data:
-        if s['rank']:
-            rank_dist[s['rank']] = rank_dist.get(s['rank'], 0) + 1
-
-    # ── Player stats + per-season tracking ───────────────────────────────────
-    player_stats  = {}
-    player_szn    = {}   # tag -> {season_id -> {'stars','attacks','wars'}}
+    # ── Player stats, defense, and round-by-round tracking ────────────────────
+    player_stats = {}
+    player_szn   = {}   # tag -> {season_id -> {'stars','attacks','wars','verdict_scores'}}
+    round_stats  = {}   # round_number -> {'attacks_used','attacks_possible','verdict_scores'}
 
     for war in our_ended_wars:
         members_our   = [m for m in war.members if m.clan_tag == our_tag]
@@ -983,6 +980,8 @@ def cwl_stats_page():
             atks_by_att.setdefault(a.attacker_tag, []).append(a)
             atks_on_dfn.setdefault(a.defender_tag, []).append(a)
 
+        rs = round_stats.setdefault(war.round_number, {'attacks_used': 0, 'attacks_possible': 0, 'verdict_scores': []})
+
         for member in members_our:
             tag    = member.player_tag
             atk_th = member.town_hall_level or 0
@@ -991,7 +990,8 @@ def cwl_stats_page():
                     'name': member.player_name or tag, 'th': atk_th,
                     'wars': 0, 'attacks_used': 0, 'attacks_possible': 0,
                     'stars': 0, 'three_stars': 0, 'two_stars': 0, 'one_stars': 0, 'zero_stars': 0,
-                    'destruction_sum': 0.0, 'verdict_scores': [], 'seasons_set': set(),
+                    'verdict_scores': [], 'seasons_set': set(),
+                    'defenses': 0, 'stars_conceded': 0, 'clean_defenses': 0,
                 }
             ps = player_stats[tag]
             ps['name'] = member.player_name or tag
@@ -1003,22 +1003,23 @@ def cwl_stats_page():
             atk_list = atks_by_att.get(tag, [])
             ps['attacks_used'] += len(atk_list)
 
-            sw = player_szn.setdefault(tag, {}).setdefault(war.season_id, {'stars': 0, 'attacks': 0, 'wars': 0})
+            sw = player_szn.setdefault(tag, {}).setdefault(war.season_id, {'stars': 0, 'attacks': 0, 'wars': 0, 'verdict_scores': []})
             sw['wars']    += 1
             sw['attacks'] += len(atk_list)
             sw['stars']   += sum(a.stars or 0 for a in atk_list)
 
             for atk in atk_list:
-                dfn    = member_by_tag.get(atk.defender_tag)
-                dfn_th = (dfn.town_hall_level or 0) if dfn else atk_th
-                stars  = atk.stars or 0
-                already_3star, partially_attacked = get_attack_context(atk, atks_on_dfn)
-                label = classify_attack(stars, atk_th, dfn_th, already_3star, partially_attacked)
+                stars = atk.stars or 0
                 ps['stars'] += stars
-                ps['destruction_sum'] += float(atk.destruction_pct or 0)
                 inc_star_bucket(ps, stars)
 
-            # For CWL stats, use single-attack verdict scored against matchup average
+            # Defense: every attack landed on this member's base this war, win or theirs to throw
+            defenses = atks_on_dfn.get(tag, [])
+            ps['defenses']       += len(defenses)
+            ps['stars_conceded'] += sum(a.stars or 0 for a in defenses)
+            ps['clean_defenses'] += sum(1 for a in defenses if (a.stars or 0) == 0)
+
+            # CWL allows one attack per war — score it against the global TH-matchup average
             if atk_list:
                 atk = atk_list[0]
                 dfn = member_by_tag.get(atk.defender_tag)
@@ -1032,25 +1033,30 @@ def cwl_stats_page():
             else:
                 score = 0
             ps['verdict_scores'].append(score)
+            sw['verdict_scores'].append(score)
 
-    all_szn_ids = [s['season_id'] for s in seasons_data]
+            rs['attacks_possible'] += 1
+            rs['attacks_used']     += len(atk_list)
+            rs['verdict_scores'].append(score)
+
+    all_szn_ids  = [s['season_id'] for s in seasons_data]
+    bonus_counts = Counter(b.player_tag for b in CWLBonus.query.all())
+    min_wars     = max(3, total_wars // 8)
+    min_defenses = max(3, total_wars // 8)
 
     player_list = []
     for tag, ps in player_stats.items():
         used     = ps['attacks_used']
         possible = ps['attacks_possible']
-        ps['tag']             = tag
-        ps['seasons']         = len(ps['seasons_set'])
-        ps['avg_stars']       = round(ps['stars']       / used,    2) if used else 0.0
-        ps['three_star_rate'] = round(ps['three_stars'] / used * 100) if used else 0
-        ps['two_star_rate']   = round(ps['two_stars']   / used * 100) if used else 0
-        ps['one_star_rate']   = round(ps['one_stars']   / used * 100) if used else 0
-        ps['zero_star_rate']  = round(ps['zero_stars']  / used * 100) if used else 0
-        ps['avg_destruction'] = round(ps['destruction_sum'] / used, 1) if used else 0.0
-        ps['participation']   = round(used / possible * 100) if possible else 0
+        ps['tag']                = tag
+        ps['seasons']            = len(ps['seasons_set'])
+        ps['avg_stars']          = round(ps['stars']       / used,    2) if used else 0.0
+        ps['three_star_rate']    = round(ps['three_stars'] / used * 100) if used else 0
+        ps['participation']      = round(used / possible * 100) if possible else 0
         vs = ps['verdict_scores']
-        ps['avg_verdict']     = round(sum(vs) / len(vs), 1) if vs else 0.0
-        ps['attacks_missed']  = possible - used
+        ps['avg_verdict']        = round(sum(vs) / len(vs), 1) if vs else 0.0
+        ps['bonus_count']        = bonus_counts.get(tag, 0)
+        ps['avg_stars_conceded'] = round(ps['stars_conceded'] / ps['defenses'], 2) if ps['defenses'] else None
 
         # Longest consecutive season streak
         curr_str = max_str = 0
@@ -1075,14 +1081,9 @@ def cwl_stats_page():
         del ps['seasons_set']
         player_list.append(ps)
 
-    player_list.sort(key=lambda x: (-x['wars'], -x['avg_stars']))
+    player_list.sort(key=lambda x: (-x['wars'], -x['avg_verdict']))
 
-    # Star contribution %
-    total_cwl_stars = sum(p['stars'] for p in player_list)
-    for p in player_list:
-        p['star_contribution'] = round(p['stars'] / total_cwl_stars * 100, 1) if total_cwl_stars else 0.0
-
-    # ── Season MVPs ───────────────────────────────────────────────────────────
+    # ── Season MVPs (picked by total stars; verdict shown as supporting context) ──
     season_mvps = []
     for s in seasons_data:
         szn_map = {tag: player_szn[tag][s['season_id']]
@@ -1095,17 +1096,18 @@ def cwl_stats_page():
             continue
         sw = szn_map[mvp_tag]
         season_mvps.append({
-            'season':    s['season_label'],
-            'league':    s['league'],
-            'lc':        s['league_class'],
-            'finish':    s['finish'],
-            'rank':      s['rank'],
-            'name':      p['name'],
-            'th':        p['th'],
-            'stars':     sw['stars'],
-            'attacks':   sw['attacks'],
-            'wars':      sw['wars'],
-            'avg_stars': round(sw['stars'] / sw['attacks'], 2) if sw['attacks'] else 0,
+            'season':      s['season_label'],
+            'league':      s['league'],
+            'lc':          s['league_class'],
+            'finish':      s['finish'],
+            'rank':        s['rank'],
+            'name':        p['name'],
+            'th':          p['th'],
+            'stars':       sw['stars'],
+            'attacks':     sw['attacks'],
+            'wars':        sw['wars'],
+            'avg_stars':   round(sw['stars'] / sw['attacks'], 2) if sw['attacks'] else 0,
+            'avg_verdict': round(sum(sw['verdict_scores']) / len(sw['verdict_scores']), 1) if sw['verdict_scores'] else 0,
         })
     season_mvps.reverse()   # most recent first
 
@@ -1125,22 +1127,33 @@ def cwl_stats_page():
     h2h_list = sorted(h2h.values(), key=lambda x: (-x['wars'], x['name']))[:12]
 
     # ── Hall of Fame ──────────────────────────────────────────────────────────
-    min_wars = max(3, total_wars // 8)
-    eligible = [p for p in player_list if p['wars'] >= min_wars] or player_list[:10]
+    eligible       = [p for p in player_list if p['wars']     >= min_wars]     or player_list[:10]
+    eligible_def   = [p for p in player_list if p['defenses'] >= min_defenses] or player_list[:10]
+    decorated_pool = [p for p in player_list if p['bonus_count'] > 0]
 
-    hof_veterans = sorted(player_list, key=lambda p: (-p['seasons'], -p['max_consecutive_seasons']))[:10]
-    hof_ironman  = sorted(player_list, key=lambda p: (-p['participation'], -p['wars']))[:10]
-    hof_stars    = sorted(player_list, key=lambda p: (-p['stars'],         -p['avg_stars']))[:10]
-    hof_elite    = sorted(eligible,    key=lambda p: (-p['avg_stars'],     -p['wars']))[:10]
+    hof_veterans  = sorted(player_list,    key=lambda p: (-p['seasons'], -p['max_consecutive_seasons']))[:10]
+    hof_ironman   = sorted(player_list,    key=lambda p: (-p['participation'], -p['wars']))[:10]
+    hof_stars     = sorted(player_list,    key=lambda p: (-p['stars'], -p['avg_verdict']))[:10]
+    hof_elite     = sorted(eligible,       key=lambda p: (-p['avg_verdict'], -p['wars']))[:10]
+    hof_bunker    = sorted(eligible_def,   key=lambda p: (p['avg_stars_conceded'] if p['avg_stars_conceded'] is not None else 999, -p['defenses']))[:10]
+    hof_decorated = sorted(decorated_pool, key=lambda p: (-p['bonus_count'], -p['wars']))[:10]
 
     # ── Chart data ────────────────────────────────────────────────────────────
-    rank_dist_data    = [rank_dist.get(i, 0) for i in range(1, 9)]
-    league_rank_js    = [s['league_rank']  for s in seasons_data]
-    league_labels_js  = [s['season_label'] for s in seasons_data]
-    league_names_js   = [s['league']       for s in seasons_data]
-    season_winrate_js = [s['win_rate']     for s in seasons_data]
-    season_stars_js   = [s['stars_for']    for s in seasons_data]
+    league_rank_js    = [s['league_rank']   for s in seasons_data]
+    league_labels_js  = [s['season_label']  for s in seasons_data]
+    league_names_js   = [s['league']        for s in seasons_data]
+    season_winrate_js = [s['win_rate']      for s in seasons_data]
+    season_stars_js   = [s['stars_for']     for s in seasons_data]
     season_stars_a_js = [s['stars_against'] for s in seasons_data]
+
+    max_round = max(round_stats.keys(), default=0)
+    round_labels_js        = [f'Day {i}' for i in range(1, max_round + 1)]
+    round_participation_js = []
+    round_verdict_js       = []
+    for i in range(1, max_round + 1):
+        rs = round_stats.get(i)
+        round_participation_js.append(round(rs['attacks_used'] / rs['attacks_possible'] * 100) if rs and rs['attacks_possible'] else 0)
+        round_verdict_js.append(round(sum(rs['verdict_scores']) / len(rs['verdict_scores']), 1) if rs and rs['verdict_scores'] else 0)
 
     return render_template('cwl/cwl_stats.html',
         no_data             = False,
@@ -1153,12 +1166,14 @@ def cwl_stats_page():
         total_stars_for     = total_stars_for,
         total_stars_against = total_stars_against,
         win_rate            = win_rate,
-        avg_rank            = avg_rank,
+        latest_rank         = latest_season['rank'],
+        latest_group_size   = latest_season['group_size'],
         promotions          = promotions,
         relegations         = relegations,
+        total_bonus_medals  = total_bonus_medals,
         first_season        = seasons_data[0]['season_label'],
-        latest_league       = seasons_data[-1]['league'],
-        latest_lc           = seasons_data[-1]['league_class'],
+        latest_league       = latest_season['league'],
+        latest_lc           = latest_season['league_class'],
         seasons_data        = seasons_data,
         season_mvps         = season_mvps,
         player_list         = player_list,
@@ -1167,13 +1182,17 @@ def cwl_stats_page():
         hof_ironman         = hof_ironman,
         hof_stars           = hof_stars,
         hof_elite           = hof_elite,
-        rank_dist_data      = rank_dist_data,
+        hof_bunker          = hof_bunker,
+        hof_decorated       = hof_decorated,
         league_rank_js      = league_rank_js,
         league_labels_js    = league_labels_js,
         league_names_js     = league_names_js,
         season_winrate_js   = season_winrate_js,
         season_stars_js     = season_stars_js,
         season_stars_a_js   = season_stars_a_js,
+        round_labels_js         = round_labels_js,
+        round_participation_js  = round_participation_js,
+        round_verdict_js        = round_verdict_js,
     )
 
 
