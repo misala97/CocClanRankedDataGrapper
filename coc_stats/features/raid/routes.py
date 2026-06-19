@@ -36,42 +36,36 @@ def raid_weekend_page():
         )
 
         # ── Per-player medal impact (order-independent, leave-one-out) ──────────
-        # Compares the raid's real medals/attack baseline against what it would
-        # be if this one player's attacks were removed entirely. If a player's
-        # contribution was necessary to push a district to 100%, removing them
-        # removes that district's value too; if their attacks never finished
-        # anything, removing them only shrinks the attack count, raising the
-        # baseline slightly — so "wasted" attacks land negative. Computed against
-        # final totals, so it doesn't matter when in the raid someone attacked or
-        # what anyone else did nearby.
-        district_total_pct  = {}
-        district_value      = {}
-        player_attack_count = {}
-        player_district_pct = {}
-        player_districts    = {}
+        # Each fully-destroyed district's medal value is split across whoever
+        # attacked it, in proportion to each attacker's own destruction % — two
+        # players splitting a district 40/60 share its value 40/60, not both
+        # claiming the full value. Impact compares the raid's real medals/attack
+        # baseline against what it would be with this player's attacks (and their
+        # share of medal credit) removed entirely. Computed against final totals,
+        # so it doesn't matter when in the raid someone attacked or what anyone
+        # else did nearby.
+        district_value = {}
         for log in logs:
-            key = (log.defender_tag, log.district_name)
-            district_total_pct[key] = district_total_pct.get(key, 0) + (log.percentage or 0)
             if (log.percentage_total or 0) >= 100:
+                key = (log.defender_tag, log.district_name)
                 district_value[key] = raid_district_medal_value(log.district_name, log.district_level)
-            player_attack_count[log.player_tag] = player_attack_count.get(log.player_tag, 0) + 1
-            pkey = (log.player_tag, key)
-            player_district_pct[pkey] = player_district_pct.get(pkey, 0) + (log.percentage or 0)
-            player_districts.setdefault(log.player_tag, set()).add(key)
 
         total_medals_now  = sum(district_value.values())
         total_attacks_now = len(logs)
         baseline_with     = (total_medals_now / total_attacks_now) if total_attacks_now else 0.0
 
+        player_attack_count = {}
+        player_credit       = {}
+        for log in logs:
+            key    = (log.defender_tag, log.district_name)
+            value  = district_value.get(key, 0)
+            credit = (log.percentage or 0) / 100.0 * value
+            player_attack_count[log.player_tag] = player_attack_count.get(log.player_tag, 0) + 1
+            player_credit[log.player_tag]       = player_credit.get(log.player_tag, 0) + credit
+
         net_medal_impact_by_player = {}
-        for player_tag, districts_touched in player_districts.items():
-            medals_lost_without_player = 0
-            for key in districts_touched:
-                if key in district_value:
-                    pct_without_player = district_total_pct[key] - player_district_pct.get((player_tag, key), 0)
-                    if pct_without_player < 100:
-                        medals_lost_without_player += district_value[key]
-            total_medals_without_player  = total_medals_now - medals_lost_without_player
+        for player_tag, credit in player_credit.items():
+            total_medals_without_player  = total_medals_now - credit
             total_attacks_without_player = total_attacks_now - player_attack_count[player_tag]
             baseline_without_player = (
                 total_medals_without_player / total_attacks_without_player
