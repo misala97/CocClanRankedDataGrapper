@@ -4,3 +4,4 @@ __pycache__/
 *.log
 logs/
 locks/
+personal_apps/static/quizbank_uploads/

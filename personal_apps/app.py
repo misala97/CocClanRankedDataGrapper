@@ -42,10 +42,12 @@ db.configure_mappers()
 from auth import auth_bp, _is_logged_in, login_required
 from features.pubquiz.routes import pubquiz_bp
 from features.tips.routes import tips_bp
+from features.quizbank.routes import quizbank_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(pubquiz_bp)
 app.register_blueprint(tips_bp)
+app.register_blueprint(quizbank_bp)
 
 # Hostname that should require login for every page (the "full access" domain).
 # Other hostnames (e.g. the public pubquiz-only domain) are unaffected and keep
@@ -76,6 +78,12 @@ APPS = [
         'icon': '🛵',
         'url': '/tips',
     },
+    {
+        'name': 'Quiz Archiv',
+        'description': 'Besuchte Pub Quizzes und Fragen erfassen und auswerten.',
+        'icon': '🧠',
+        'url': '/quizbank',
+    },
 ]
 
 
@@ -86,4 +94,4 @@ def index():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False, port=5001)
+    app.run(debug=True, use_reloader=False, port=5000)

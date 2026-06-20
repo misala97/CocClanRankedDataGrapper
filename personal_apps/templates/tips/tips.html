@@ -229,6 +229,10 @@
                         <input type="number" name="deliveries" min="0" class="num-input">
                     </div>
                     <div class="form-group">
+                        <label>Fahrten</label>
+                        <input type="number" name="trips" min="0" class="num-input">
+                    </div>
+                    <div class="form-group">
                         <label>Fahrrad</label>
                         <select name="bike_size">
                             <option value="">—</option>
@@ -270,9 +274,13 @@
                     <div class="rate-val">{{ ('%.2f'|format(p.avg_per_delivery) ~ ' €') if p.avg_per_delivery is not none else '—' }}</div>
                     <div class="rate-lbl">Ø pro Lieferung</div>
                 </div>
+                <div class="rate-block">
+                    <div class="rate-val">{{ ('%.2f'|format(p.avg_per_trip) ~ ' €') if p.avg_per_trip is not none else '—' }}</div>
+                    <div class="rate-lbl">Ø pro Fahrt</div>
+                </div>
             </div>
             <div class="sub">
-                <span>{{ p.shift_count }} Schichten · {{ '%.1f'|format(p.total_hours) }} Std · {{ p.total_deliveries }} Lieferungen</span>
+                <span>{{ p.shift_count }} Schichten · {{ '%.1f'|format(p.total_hours) }} Std · {{ p.total_deliveries }} Lieferungen · {{ p.total_trips }} Fahrten</span>
                 <span>Gesamt: <strong>{{ '%.2f'|format(p.total_tips) }} €</strong> (Bar {{ '%.2f'|format(p.total_cash) }} € · Online {{ '%.2f'|format(p.total_online) }} €)</span>
             </div>
         </div>
@@ -374,6 +382,28 @@
                 {% endfor %}
             </ul>
         </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Beste Rate (€/Fahrt)</h2></div>
+            <ul class="bw-list">
+                {% for r in best_trip_rate %}
+                <li class="bw-row">
+                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
+                    <span class="bw-val">{{ '%.2f'|format(r.per_trip) }} €</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Schwächste Rate (€/Fahrt)</h2></div>
+            <ul class="bw-list">
+                {% for r in worst_trip_rate %}
+                <li class="bw-row">
+                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
+                    <span class="bw-val">{{ '%.2f'|format(r.per_trip) }} €</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
     </div>
     {% endif %}
 
@@ -390,6 +420,7 @@
                         <span class="shift-meta">
                             <span>{{ '%.1f'|format(r.hours_worked) if r.hours_worked is not none else '—' }} Std</span>
                             <span>{{ r.deliveries }} Lieferungen</span>
+                            <span>{{ r.trips }} Fahrten</span>
                             <span>{{ r.bike_label }}</span>
                             <span>{{ r.weather_label }}</span>
                         </span>
@@ -398,6 +429,7 @@
                         <div class="shift-rates">
                             <span class="shift-rate-primary">{{ ('%.2f'|format(r.per_hour) ~ ' €/h') if r.per_hour is not none else '—' }}</span>
                             <span class="shift-rate-secondary">{{ ('%.2f'|format(r.per_delivery) ~ ' €/Lief.') if r.per_delivery is not none else '—' }}</span>
+                            <span class="shift-rate-secondary">{{ ('%.2f'|format(r.per_trip) ~ ' €/Fahrt') if r.per_trip is not none else '—' }}</span>
                         </div>
                         <span class="shift-total-sub">({{ '%.2f'|format(r.total) }} € gesamt)</span>
                         <span class="chevron" id="chevron-{{ r.id }}">▶</span>
@@ -437,6 +469,10 @@
                             <div class="form-group">
                                 <label>Lieferungen</label>
                                 <input type="number" name="deliveries" min="0" class="num-input" value="{{ r.deliveries }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Fahrten</label>
+                                <input type="number" name="trips" min="0" class="num-input" value="{{ r.trips }}">
                             </div>
                             <div class="form-group">
                                 <label>Fahrrad</label>
@@ -534,7 +570,7 @@ function renderBreakdownChart(canvasId, groups) {
     new Chart(el, {
         type: 'bar',
         data: {
-            labels: groups.map(g => g.label),
+            labels: groups.map(g => `${g.label} (n=${g.shift_count})`),
             datasets: [
                 {
                     label: '€/Std',

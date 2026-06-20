@@ -20,6 +20,7 @@ WEATHER_CHOICES = [
     ('snow', 'Schnee'),
     ('thunderstorm', 'Gewitter'),
     ('hail', 'Hagel'),
+    ('heat', 'Hitze'),
 ]
 WEATHER_LABELS = dict(WEATHER_CHOICES)
 BIKE_LABELS = dict(BIKE_CHOICES)
@@ -52,6 +53,7 @@ def _shift_row(s):
     total = (s.tips_cash or 0) + (s.tips_online or 0)
     per_hour = round(total / s.hours_worked, 2) if s.hours_worked else None
     per_delivery = round(total / s.deliveries, 2) if s.deliveries else None
+    per_trip = round(total / s.trips, 2) if s.trips else None
     return {
         'id': s.id,
         'shift_date': s.shift_date,
@@ -61,6 +63,7 @@ def _shift_row(s):
         'tips_cash': s.tips_cash or 0,
         'tips_online': s.tips_online or 0,
         'deliveries': s.deliveries or 0,
+        'trips': s.trips or 0,
         'bike_size': s.bike_size,
         'bike_label': BIKE_LABELS.get(s.bike_size, '—'),
         'weather': s.weather,
@@ -69,6 +72,7 @@ def _shift_row(s):
         'total': round(total, 2),
         'per_hour': per_hour,
         'per_delivery': per_delivery,
+        'per_trip': per_trip,
     }
 
 
@@ -79,6 +83,7 @@ def _aggregate(rows):
     total_tips = total_cash + total_online
     total_hours = sum(r['hours_worked'] or 0 for r in rows)
     total_deliveries = sum(r['deliveries'] for r in rows)
+    total_trips = sum(r['trips'] for r in rows)
     return {
         'shift_count': shift_count,
         'total_cash': round(total_cash, 2),
@@ -86,9 +91,11 @@ def _aggregate(rows):
         'total_tips': round(total_tips, 2),
         'total_hours': round(total_hours, 2),
         'total_deliveries': total_deliveries,
+        'total_trips': total_trips,
         'avg_per_shift': round(total_tips / shift_count, 2) if shift_count else None,
         'avg_per_hour': round(total_tips / total_hours, 2) if total_hours else None,
         'avg_per_delivery': round(total_tips / total_deliveries, 2) if total_deliveries else None,
+        'avg_per_trip': round(total_tips / total_trips, 2) if total_trips else None,
     }
 
 
@@ -116,20 +123,24 @@ def _time_bucket(t):
     return 'night'
 
 
-def _group_breakdown(rows, key_func, label_func):
+def _group_breakdown(rows, key_func, label_func, order=None):
     groups = {}
     for r in rows:
         k = key_func(r)
         if k is None:
             continue
         groups.setdefault(k, []).append(r)
-    result = []
+    entries = []
     for k, group_rows in groups.items():
         agg = _aggregate(group_rows)
         agg['label'] = label_func(k)
-        result.append(agg)
-    result.sort(key=lambda a: a['avg_per_hour'] if a['avg_per_hour'] is not None else -1, reverse=True)
-    return result
+        entries.append((k, agg))
+    if order is not None:
+        order_index = {k: i for i, k in enumerate(order)}
+        entries.sort(key=lambda e: order_index.get(e[0], len(order)))
+    else:
+        entries.sort(key=lambda e: e[1]['avg_per_hour'] if e[1]['avg_per_hour'] is not None else -1, reverse=True)
+    return [agg for _, agg in entries]
 
 
 @tips_bp.route('/tips')
@@ -156,16 +167,21 @@ def tips_dashboard():
     rows_with_delivery_rate = [r for r in rows if r['per_delivery'] is not None]
     best_delivery_rate = sorted(rows_with_delivery_rate, key=lambda r: r['per_delivery'], reverse=True)[:5]
     worst_delivery_rate = sorted(rows_with_delivery_rate, key=lambda r: r['per_delivery'])[:5]
+    rows_with_trip_rate = [r for r in rows if r['per_trip'] is not None]
+    best_trip_rate = sorted(rows_with_trip_rate, key=lambda r: r['per_trip'], reverse=True)[:5]
+    worst_trip_rate = sorted(rows_with_trip_rate, key=lambda r: r['per_trip'])[:5]
 
     breakdown_weekday = _group_breakdown(
         rows,
         lambda r: r['shift_date'].weekday() if r['shift_date'] else None,
         lambda k: WEEKDAY_LABELS[k],
+        order=list(range(7)),
     )
     breakdown_time = _group_breakdown(
         rows,
         lambda r: _time_bucket(r['shift_start']),
         lambda k: TIME_BUCKET_LABELS[k],
+        order=TIME_BUCKET_ORDER,
     )
     breakdown_weather = _group_breakdown(
         rows,
@@ -191,6 +207,8 @@ def tips_dashboard():
         worst_rate=worst_rate,
         best_delivery_rate=best_delivery_rate,
         worst_delivery_rate=worst_delivery_rate,
+        best_trip_rate=best_trip_rate,
+        worst_trip_rate=worst_trip_rate,
         breakdown_weekday=breakdown_weekday,
         breakdown_time=breakdown_time,
         breakdown_weather=breakdown_weather,
@@ -220,6 +238,7 @@ def tips_add():
         tips_cash=_to_float(request.form.get('tips_cash', '')),
         tips_online=_to_float(request.form.get('tips_online', '')),
         deliveries=_to_int(request.form.get('deliveries', '')),
+        trips=_to_int(request.form.get('trips', '')),
         bike_size=request.form.get('bike_size') if request.form.get('bike_size') in dict(BIKE_CHOICES) else None,
         weather=request.form.get('weather') if request.form.get('weather') in dict(WEATHER_CHOICES) else None,
         notes=request.form.get('notes', '').strip() or None,
@@ -246,6 +265,7 @@ def tips_update(shift_id):
     shift.tips_cash = _to_float(request.form.get('tips_cash', ''), shift.tips_cash)
     shift.tips_online = _to_float(request.form.get('tips_online', ''), shift.tips_online)
     shift.deliveries = _to_int(request.form.get('deliveries', ''), shift.deliveries)
+    shift.trips = _to_int(request.form.get('trips', ''), shift.trips)
     bike = request.form.get('bike_size')
     shift.bike_size = bike if bike in dict(BIKE_CHOICES) else None
     weather = request.form.get('weather')

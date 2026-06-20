@@ -38,9 +38,13 @@ def week_cutoff(now_utc, battle_days):
     return now_utc - timedelta(days=battle_days)
 
 
+def is_capital_peak(name):
+    return bool(name) and 'capital peak' in name.lower()
+
+
 def raid_district_medal_value(name, level):
     lvl = int(level or 0)
-    if name and 'capital peak' in name.lower():
+    if is_capital_peak(name):
         return RAID_CAPITAL_PEAK_MEDALS.get(lvl, 0)
     return RAID_DISTRICT_MEDALS.get(lvl, 0)
 

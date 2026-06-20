@@ -2075,7 +2075,8 @@ function computeCWLAttackHistory(n) {
     const teamSize = r.teamSize;
 
     let ourStars = 0, oppStars = 0, ourPctSum = 0, oppPctSum = 0;
-    const ourBestDef = {}, oppBestDef = {}; // best stars seen so far per defender pos
+    const ourBestDef = {}, oppBestDef = {};       // best stars seen so far per defender pos
+    const ourBestDefPct = {}, oppBestDefPct = {}; // best destruction% seen so far per defender pos
     const history = [];
 
     for (let i = 0; i < sorted.length; i++) {
@@ -2090,14 +2091,21 @@ function computeCWLAttackHistory(n) {
         const member = roster.find(m => m.pos === atk.attacker_pos);
         const defBestMap = isOur ? oppBestDef : ourBestDef;
         const defBest = defBestMap[atk.defender_pos] || 0;
+        const defBestPctMap = isOur ? oppBestDefPct : ourBestDefPct;
+        const defBestPct = defBestPctMap[atk.defender_pos] || 0;
         const { dist } = resolveAtkDist(wcPlayerInfo, (a, d) => atkDist(CWL_MATCHUP_RATES, a, d),
                                          member ? member.tag : null, atk.attacker_th, atk.defender_th, CWL_MATCHUP_COUNTS);
         const adjustedDist = adjustDistForStarred(dist, defBest);
         const expStars = adjustedDist.reduce((s, p, k) => s + p * k, 0);
         const inc = Math.max(0, atk.stars - defBest);
+        // Destruction% has to follow the same "only the improvement over this base's prior
+        // best counts" rule as stars — a second/third attack re-hitting an already-damaged or
+        // already-3-starred base does NOT add its full % on top, since the real war total is
+        // sum of best-per-base, not sum of every attack ever thrown at it.
+        const pctInc = Math.max(0, atk.pct - defBestPct);
 
-        if (isOur) { ourStars += inc; ourPctSum += atk.pct; oppBestDef[atk.defender_pos] = Math.max(defBest, atk.stars); }
-        else       { oppStars += inc; oppPctSum += atk.pct; ourBestDef[atk.defender_pos] = Math.max(defBest, atk.stars); }
+        if (isOur) { ourStars += inc; ourPctSum += pctInc; oppBestDef[atk.defender_pos] = Math.max(defBest, atk.stars); oppBestDefPct[atk.defender_pos] = Math.max(defBestPct, atk.pct); }
+        else       { oppStars += inc; oppPctSum += pctInc; ourBestDef[atk.defender_pos] = Math.max(defBest, atk.stars); ourBestDefPct[atk.defender_pos] = Math.max(defBestPct, atk.pct); }
 
         const after = computeCWLWinCalcAt(r, sorted.slice(0, i + 1), ourStars, oppStars);
         const ourPctAfter = ourPctSum / teamSize, oppPctAfter = oppPctSum / teamSize;
@@ -2110,7 +2118,28 @@ function computeCWLAttackHistory(n) {
             stars: inc, pct: atk.pct, expStars,
             pWinBeforePct: adjBefore.pWinAdj * 100,
             pWinAfterPct: adjAfter.pWinAdj * 100,
+            lockedBefore: adjBefore.lockedWin,
+            lockedAfter: adjAfter.lockedWin,
+            lossLockedBefore: adjBefore.lockedLoss,
+            lossLockedAfter: adjAfter.lockedLoss,
         });
+    }
+
+    // The replay above reconstructs stars/destruction% from individual attack records, which
+    // should converge to the server's authoritative totals once every attack has been replayed
+    // — but if attack ingestion is ever incomplete relative to the official aggregate, they
+    // could silently drift. Reuse computeCWLWinCalc(n) itself (the exact call the live panel
+    // above this chart uses) for the final point, instead of trusting the replay's own running
+    // total for the one point that has to match it exactly.
+    if (history.length) {
+        const finalWc = computeCWLWinCalc(n);
+        if (finalWc) {
+            const finalAdj = computeAdjustedWin(finalWc, r.ourPct || 0, r.oppPct || 0);
+            const last = history[history.length - 1];
+            last.pWinAfterPct  = finalAdj.pWinAdj * 100;
+            last.lockedAfter   = finalAdj.lockedWin;
+            last.lossLockedAfter = finalAdj.lockedLoss;
+        }
     }
     return history;
 }
@@ -2141,7 +2170,10 @@ function buildWinCalc(n) {
         stdEl.style.color = winAdjPct >= 60 ? 'var(--green)' : winAdjPct >= 45 ? 'var(--accent)' : 'var(--red)';
         stdEl.textContent = winAdjPct + '%';
     }
-    el.innerHTML = bodyHtml + buildAttackHistoryHTML(computeCWLAttackHistory(n), 'wcHist-' + n, wc, r.ourPct || 0, r.oppPct || 0);
+    const history = computeCWLAttackHistory(n);
+    const histIdPrefix = 'wcHist-' + n;
+    el.innerHTML = bodyHtml + buildAttackHistoryHTML(history, histIdPrefix, wc, r.ourPct || 0, r.oppPct || 0);
+    renderAttackHistoryChart(histIdPrefix, history, wc, r.ourPct || 0, r.oppPct || 0);
 }
 
 

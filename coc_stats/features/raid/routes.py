@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import RaidWeekend, RaidWeekendLog, Player
-from services.helpers import CLEANUP_THRESHOLD, raid_district_medal_value, raid_score_verdict, _raid_level_mult
+from services.helpers import CLEANUP_THRESHOLD, raid_district_medal_value, raid_score_verdict, _raid_level_mult, is_capital_peak
 
 raid_bp = Blueprint('raid', __name__)
 
@@ -25,6 +25,11 @@ def raid_weekend_page():
     total_log_attacks = 0
     cleanup_count = 0
     est_medals_6atk = None
+    est_off_6atk = None
+    est_avg_defensive = None
+    regular_baseline = None
+    peak_baseline = None
+    combined_baseline = None
 
     if selected_raid:
         logs = (
@@ -35,43 +40,134 @@ def raid_weekend_page():
             .all()
         )
 
-        # ── Per-player medal impact (order-independent, leave-one-out) ──────────
+        # ── Per-player medal impact ─────────────────────────────────────────────
         # Each fully-destroyed district's medal value is split across whoever
         # attacked it, in proportion to each attacker's own destruction % — two
         # players splitting a district 40/60 share its value 40/60, not both
-        # claiming the full value. Impact compares the raid's real medals/attack
-        # baseline against what it would be with this player's attacks (and their
-        # share of medal credit) removed entirely. Computed against final totals,
-        # so it doesn't matter when in the raid someone attacked or what anyone
-        # else did nearby.
-        district_value = {}
+        # claiming the full value. Impact is your own medals/attack rate minus
+        # the bucket's average medals/attack rate — directly comparable to
+        # "my total credit ÷ my attacks" without any further scaling. Computed
+        # against final totals, so attack order and timing don't matter.
+        #
+        # Capital Peak attacks are NOT comparable to regular district attacks —
+        # a peak is worth far more per attack than any regular district, so even
+        # a badly-played peak attempt can outscore a great run on regular
+        # districts if both are judged against the same average. Each bucket is
+        # compared only against other attacks of the same kind.
+        def _bucket_impact(bucket_logs, exclude_log_ids=frozenset()):
+            # A district counts as cleared if it ever reached 100% — a fact about what actually
+            # happened, independent of which specific attack (possibly excluded below) crossed
+            # the line. Built from bucket_logs, not credited_logs: if only the completing attack
+            # were excluded from this check, the WHOLE district's value would vanish, taking
+            # every other (legitimate, non-excluded) attacker's share of it down too — punishing
+            # teammates who did real work just because someone else's cleanup tap finished it.
+            district_value = {}
+            for log in bucket_logs:
+                if (log.percentage_total or 0) >= 100:
+                    key = (log.defender_tag, log.district_name)
+                    district_value[key] = raid_district_medal_value(log.district_name, log.district_level)
+
+            # Every attacker keeps their own share of whatever they destroyed, cleanup or not —
+            # a cleanup tap still earned its medals. What it doesn't do is count as an "attack"
+            # for averaging: it's excluded from the attacker's own denominator (so it's a pure
+            # bonus, never a penalty for taking the unglamorous finishing tap), and it's excluded
+            # from the raid-wide baseline's denominator too. The baseline's medal total also only
+            # draws from non-cleanup attacks — so a cleanup tap can credit its own attacker without
+            # ever inflating the average everyone else gets compared against.
+            credit           = {}
+            attack_count     = {}
+            baseline_medals  = 0.0
+            baseline_attacks = 0
+            for log in bucket_logs:
+                key   = (log.defender_tag, log.district_name)
+                value = district_value.get(key, 0)
+                share = (log.percentage or 0) / 100.0 * value
+                credit[log.player_tag] = credit.get(log.player_tag, 0) + share
+                if log.id not in exclude_log_ids:
+                    attack_count[log.player_tag] = attack_count.get(log.player_tag, 0) + 1
+                    baseline_medals  += share
+                    baseline_attacks += 1
+
+            baseline = (baseline_medals / baseline_attacks) if baseline_attacks else 0.0
+
+            rate   = {}
+            impact = {}
+            for player_tag, ac in attack_count.items():
+                personal_rate = credit[player_tag] / ac
+                rate[player_tag]   = round(personal_rate, 2)
+                impact[player_tag] = round(personal_rate - baseline, 2)
+            return {'baseline': round(baseline, 2), 'rate': rate, 'impact': impact}
+
+        # A "cleanup" attack (one tiny finishing tap on a district someone else
+        # already nearly destroyed) isn't really skill — the existing Verdict
+        # Score already excludes these. Overall Impact does the same: cleanup
+        # logs are skipped entirely (not counted as an attack, no credit), raid-
+        # wide, so they don't shift the baseline either. The two visible per-
+        # bucket columns deliberately stay literal/unadjusted, so this exclusion
+        # only feeds Overall Impact, not Medals/Atk or Peak Medals/Atk.
+        player_district_groups = {}
+        for log in logs:
+            key = (log.player_tag, log.defender_tag, log.district_name)
+            player_district_groups.setdefault(key, []).append(log)
+        cleanup_log_ids = {
+            hits[0].id for hits in player_district_groups.values()
+            if len(hits) == 1 and (hits[0].percentage_total or 0) == 100 and (hits[0].percentage or 0) < CLEANUP_THRESHOLD
+        }
+
+        peak_logs    = [l for l in logs if is_capital_peak(l.district_name)]
+        regular_logs = [l for l in logs if not is_capital_peak(l.district_name)]
+        regular_bucket = _bucket_impact(regular_logs)
+        peak_bucket    = _bucket_impact(peak_logs)
+        regular_bucket_no_cleanup = _bucket_impact(regular_logs, exclude_log_ids=cleanup_log_ids)
+        peak_bucket_no_cleanup    = _bucket_impact(peak_logs, exclude_log_ids=cleanup_log_ids)
+
+        net_medal_impact_by_player  = regular_bucket['impact']
+        peak_medal_impact_by_player = peak_bucket['impact']
+        regular_rate_by_player      = regular_bucket['rate']
+        peak_rate_by_player         = peak_bucket['rate']
+        regular_baseline            = regular_bucket['baseline'] if regular_logs else None
+        peak_baseline               = peak_bucket['baseline'] if peak_logs else None
+        players_with_peak_attack    = {l.player_tag for l in peak_logs}
+        players_with_regular_attack = {l.player_tag for l in regular_logs}
+
+        overall_regular_impact_by_player       = regular_bucket_no_cleanup['impact']
+        overall_peak_impact_by_player          = peak_bucket_no_cleanup['impact']
+        players_with_peak_attack_no_cleanup    = set(overall_peak_impact_by_player.keys())
+        players_with_regular_attack_no_cleanup = set(overall_regular_impact_by_player.keys())
+
+        # ── Overall impact (regular + peak, weighted by real value share) ───────
+        # A Capital Peak is worth far more than its "1 of 9 structures" share would
+        # suggest, so weighting regular vs peak by raw structure count understates
+        # the peak's real importance. Instead, weight each bucket by its share of
+        # the max medals actually achievable this raid (using each district's
+        # observed level, since not every enemy is maxed) — only districts hit by
+        # at least one attack are known, since untouched districts' levels aren't
+        # captured by ingestion.
+        observed_level = {}
+        for log in logs:
+            key = (log.defender_tag, log.district_name)
+            if key not in observed_level:
+                observed_level[key] = log.district_level
+
+        medals_non_peak_max = sum(
+            raid_district_medal_value(name, lvl)
+            for (_, name), lvl in observed_level.items() if not is_capital_peak(name)
+        )
+        medals_peak_max = sum(
+            raid_district_medal_value(name, lvl)
+            for (_, name), lvl in observed_level.items() if is_capital_peak(name)
+        )
+        medals_weight_total = medals_non_peak_max + medals_peak_max
+        weight_regular = (medals_non_peak_max / medals_weight_total) if medals_weight_total else 0.0
+        weight_peak    = (medals_peak_max / medals_weight_total) if medals_weight_total else 0.0
+
+        # Combined district value across both buckets, for the existing medal estimate below.
+        district_value_all = {}
         for log in logs:
             if (log.percentage_total or 0) >= 100:
                 key = (log.defender_tag, log.district_name)
-                district_value[key] = raid_district_medal_value(log.district_name, log.district_level)
-
-        total_medals_now  = sum(district_value.values())
-        total_attacks_now = len(logs)
-        baseline_with     = (total_medals_now / total_attacks_now) if total_attacks_now else 0.0
-
-        player_attack_count = {}
-        player_credit       = {}
-        for log in logs:
-            key    = (log.defender_tag, log.district_name)
-            value  = district_value.get(key, 0)
-            credit = (log.percentage or 0) / 100.0 * value
-            player_attack_count[log.player_tag] = player_attack_count.get(log.player_tag, 0) + 1
-            player_credit[log.player_tag]       = player_credit.get(log.player_tag, 0) + credit
-
-        net_medal_impact_by_player = {}
-        for player_tag, credit in player_credit.items():
-            total_medals_without_player  = total_medals_now - credit
-            total_attacks_without_player = total_attacks_now - player_attack_count[player_tag]
-            baseline_without_player = (
-                total_medals_without_player / total_attacks_without_player
-                if total_attacks_without_player > 0 else 0.0
-            )
-            net_medal_impact_by_player[player_tag] = round((baseline_with - baseline_without_player) * 6, 2)
+                district_value_all[key] = raid_district_medal_value(log.district_name, log.district_level)
+        total_medals_now = sum(district_value_all.values())
 
         player_map = {}
         for log in logs:
@@ -121,22 +217,59 @@ def raid_weekend_page():
             for l in p['attack_logs']:
                 key = (l['district_name'], l['defender_tag'])
                 district_hits.setdefault(key, []).append(l)
-            cleanup_log_ids = set()
+            player_cleanup_log_ids = set()
             solo_wipe_count = 0
             for hits in district_hits.values():
                 district_done = any(l['percentage_total'] == 100 for l in hits)
                 player_total  = sum(l['percentage'] for l in hits)
                 if len(hits) == 1 and district_done and hits[0]['percentage'] < CLEANUP_THRESHOLD:
-                    cleanup_log_ids.add(hits[0]['log_id'])
+                    player_cleanup_log_ids.add(hits[0]['log_id'])
                 if district_done and player_total == 100:
                     solo_wipe_count += 1
             for l in p['attack_logs']:
-                l['is_clean_up'] = l['log_id'] in cleanup_log_ids
+                l['is_clean_up'] = l['log_id'] in player_cleanup_log_ids
                 l['adj_score']   = round(0.0 if l['is_clean_up'] else l['percentage'] * l['level_mult'], 2)
 
-            p['cleanup_count']    = len(cleanup_log_ids)
-            p['solo_wipes']       = solo_wipe_count
-            p['net_medal_impact'] = net_medal_impact_by_player.get(p['player_tag'], 0.0)
+            p['cleanup_count']      = len(player_cleanup_log_ids)
+            p['solo_wipes']         = solo_wipe_count
+            p['medals_per_attack'] = (
+                regular_rate_by_player.get(p['player_tag'])
+                if p['player_tag'] in players_with_regular_attack else None
+            )
+            p['net_medal_impact'] = (
+                net_medal_impact_by_player.get(p['player_tag'])
+                if p['player_tag'] in players_with_regular_attack else None
+            )
+            p['peak_medals_per_attack'] = (
+                peak_rate_by_player.get(p['player_tag'])
+                if p['player_tag'] in players_with_peak_attack else None
+            )
+            p['peak_medal_impact'] = (
+                peak_medal_impact_by_player.get(p['player_tag'])
+                if p['player_tag'] in players_with_peak_attack else None
+            )
+
+            # Overall Impact combines both buckets weighted by real medal-value share, but
+            # a player with credited attacks in only one bucket (e.g. peak-only) shouldn't
+            # have their score diluted by an assumed "average" performance in a bucket they
+            # never touched — renormalize over whichever bucket(s) they actually have data in.
+            overall_regular_impact = (
+                overall_regular_impact_by_player.get(p['player_tag'])
+                if p['player_tag'] in players_with_regular_attack_no_cleanup else None
+            )
+            overall_peak_impact = (
+                overall_peak_impact_by_player.get(p['player_tag'])
+                if p['player_tag'] in players_with_peak_attack_no_cleanup else None
+            )
+            weighted_parts = []
+            if overall_regular_impact is not None:
+                weighted_parts.append((weight_regular, overall_regular_impact))
+            if overall_peak_impact is not None:
+                weighted_parts.append((weight_peak, overall_peak_impact))
+            weight_sum = sum(w for w, _ in weighted_parts)
+            p['overall_impact'] = (
+                round(sum(w * v for w, v in weighted_parts) / weight_sum, 2) if weight_sum else None
+            )
 
             non_cleanup = [l['percentage'] for l in p['attack_logs'] if not l['is_clean_up']]
             p['avg_pct'] = round(sum(non_cleanup) / len(non_cleanup), 1) if non_cleanup else 0
@@ -174,14 +307,20 @@ def raid_weekend_page():
 
         if total_medals > 0:
             baseline = total_medals / total_attacks
+            combined_baseline = round(baseline, 2)
             off_6atk = max(0, min(round(baseline * 6), 1620))
             est_medals_6atk = off_6atk + avg_defensive
+            est_off_6atk = off_6atk
+            est_avg_defensive = avg_defensive
             for p in player_data:
                 p['est_medals'] = max(0, min(round(min(p['att_count'], 6) * baseline), 1620)) + avg_defensive
         elif selected_raid.offensive_reward and selected_raid.offensive_reward > 0:
             baseline = selected_raid.offensive_reward
+            combined_baseline = round(baseline, 2)
             off_6atk = min(round(baseline * 6), 1620)
             est_medals_6atk = off_6atk + avg_defensive
+            est_off_6atk = off_6atk
+            est_avg_defensive = avg_defensive
             for p in player_data:
                 p['est_medals'] = min(round(min(p['att_count'], 6) * baseline), 1620) + avg_defensive
         else:
@@ -213,6 +352,11 @@ def raid_weekend_page():
         total_log_attacks=total_log_attacks,
         cleanup_count=cleanup_count,
         est_medals_6atk=est_medals_6atk,
+        est_off_6atk=est_off_6atk,
+        est_avg_defensive=est_avg_defensive,
+        regular_baseline=regular_baseline,
+        peak_baseline=peak_baseline,
+        combined_baseline=combined_baseline,
     )
 
 

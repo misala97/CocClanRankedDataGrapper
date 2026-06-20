@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Archiv</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        :root {
+            --bg:      #0b0d14;
+            --surface: #131722;
+            --surf2:   #1a1f2e;
+            --border:  #272c3d;
+            --bord2:   #1e2333;
+            --text:    #eef0f7;
+            --muted:   #8b91a7;
+            --accent:  #6d6af6;
+            --acc2:    #22d3ee;
+            --green:   #34d399;
+            --red:     #fb7185;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse 60% 40% at 15% 0%, rgba(109,106,246,0.10) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 100% 20%, rgba(34,211,238,0.07) 0%, transparent 60%);
+        }
+        a { text-decoration: none; color: inherit; }
+
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(11,13,20,0.92);
+            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-inner {
+            max-width: 1200px; margin: 0 auto; padding: 0 32px;
+            height: 62px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .nav-logo { display: flex; align-items: center; gap: 10px; }
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            font-size: 17px;
+        }
+        .nav-logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
+        .nav-links { display: flex; align-items: center; gap: 6px; }
+        .nav-links a, .nav-links span.disabled {
+            font-size: 13px; font-weight: 500; color: var(--muted);
+            padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
+        }
+        .nav-links a:hover { color: var(--text); background: var(--surf2); }
+        .nav-links span.disabled { cursor: not-allowed; opacity: 0.5; }
+
+        .page-wrap { max-width: 1200px; margin: 0 auto; padding: 32px 32px 56px; position: relative; z-index: 1; }
+        h1 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+        h2 { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; }
+        h3 { font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        h4 { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; }
+
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; overflow: hidden; margin-bottom: 20px;
+        }
+        .card-header {
+            padding: 14px 18px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-body { padding: 18px; }
+
+        /* ── FORMS ── */
+        .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+        .form-group input, .form-group select, .form-group textarea {
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); padding: 7px 10px; font-size: 13px; font-family: inherit;
+            transition: border-color 0.15s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+        .form-group.grow { flex: 1; min-width: 160px; }
+        .form-group.grow input, .form-group.grow select, .form-group.grow textarea { width: 100%; }
+        .num-input { width: 90px; }
+        textarea { resize: vertical; min-height: 38px; }
+
+        .btn {
+            padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
+            font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--acc2)); color: #0b0d14; border-color: transparent; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
+        .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+        .btn-danger { background: transparent; color: var(--red); border-color: var(--red); }
+        .btn-danger:hover { background: rgba(251,113,133,0.1); }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+        /* ── CHART ── */
+        .chart-wrap { padding: 18px; height: 280px; }
+
+        /* ── BREAKDOWN ── */
+        .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+
+        /* ── QUIZ LIST ── */
+        .quiz-item { border-bottom: 1px solid var(--bord2); }
+        .quiz-item:last-child { border-bottom: none; }
+        .quiz-summary {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 12px 18px; cursor: pointer; user-select: none; flex-wrap: wrap;
+        }
+        .quiz-summary:hover { background: var(--surf2); }
+        .quiz-summary .main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .quiz-date-badge { font-weight: 600; font-size: 14px; min-width: 90px; }
+        .quiz-meta { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+        .quiz-count-badge { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--acc2); }
+        .chevron { color: var(--muted); font-size: 12px; transition: transform 0.2s; }
+        .chevron.open { transform: rotate(90deg); }
+
+        .quiz-detail { display: none; padding: 0 18px 18px; }
+        .quiz-detail.open { display: block; }
+
+        /* ── ROUNDS ── */
+        .round-block {
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 12px;
+            padding: 14px; margin-bottom: 12px;
+        }
+        .round-block-header {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+        }
+        .round-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+            padding: 3px 11px; font-size: 12px; font-weight: 600; color: var(--acc2);
+        }
+        .round-topic { font-size: 12px; color: var(--muted); }
+
+        .question-row {
+            display: grid; grid-template-columns: 24px 100px 1fr 1fr 60px auto;
+            gap: 10px; align-items: start; padding: 7px 0; border-bottom: 1px solid var(--bord2); font-size: 13px;
+        }
+        .song-row {
+            display: grid; grid-template-columns: 24px 1fr 1fr auto;
+            gap: 10px; align-items: start; padding: 7px 0; border-bottom: 1px solid var(--bord2); font-size: 13px;
+        }
+        .question-row:last-child, .song-row:last-child { border-bottom: none; }
+        .row-num { color: var(--muted); }
+        .question-category {
+            display: inline-block; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 999px; padding: 2px 9px; font-size: 11px; color: var(--acc2); white-space: nowrap;
+        }
+        .question-text, .song-title { word-break: break-word; }
+        .ai-badge {
+            display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 600;
+            color: var(--acc2); background: var(--surface); border: 1px solid var(--border);
+            border-radius: 999px; padding: 1px 8px; white-space: nowrap;
+        }
+        .question-answer, .song-artist { color: var(--muted); word-break: break-word; }
+        .question-points { color: var(--text); font-weight: 600; text-align: right; }
+
+        .reconstructed-row {
+            display: flex; align-items: center; gap: 8px; padding: 0 0 9px 34px; flex-wrap: wrap;
+        }
+        .reconstructed-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+        .reconstructed-inline-form { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 220px; }
+        .reconstructed-row input[type="text"] {
+            flex: 1; min-width: 200px; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); padding: 5px 9px; font-size: 12px; font-style: italic; font-family: inherit;
+        }
+
+        .round-image { max-width: 220px; max-height: 220px; border-radius: 10px; border: 1px solid var(--border); display: block; margin-bottom: 10px; }
+
+        .add-divider {
+            display: flex; align-items: center; gap: 10px;
+            margin: 14px 0 10px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--green);
+        }
+        .add-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .add-entry-form { background: var(--surface); border: 1px dashed var(--border); border-radius: 10px; padding: 10px; }
+
+        .empty { text-align: center; padding: 36px; color: var(--muted); font-size: 14px; }
+        .empty-sm { text-align: center; padding: 12px; color: var(--muted); font-size: 12px; }
+
+        @media (max-width: 700px) {
+            .page-wrap { padding: 24px 16px 40px; }
+            .quiz-summary .main { gap: 8px; }
+            .question-row, .song-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-inner">
+        <div class="nav-logo">
+            <div class="logo-icon">🧠</div>
+            <span>Quiz Archiv</span>
+        </div>
+        <div class="nav-links">
+            <a href="/">Übersicht</a>
+            <span class="disabled" title="Bald verfügbar">Import</span>
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="page-wrap">
+    <h1>Quiz Archiv</h1>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:24px">Besuchte Pub Quizzes und ihre Runden erfassen und auswerten</p>
+
+    {% if llm_error %}
+    <div class="card" style="border-color:var(--red);margin-bottom:20px">
+        <div class="card-body" style="color:var(--red);font-size:13px">KI-Rekonstruktion fehlgeschlagen: {{ llm_error }}</div>
+    </div>
+    {% endif %}
+
+    <!-- Add quiz -->
+    <div class="card">
+        <div class="card-header"><h2>Neues Quiz erfassen</h2></div>
+        <div class="card-body">
+            <p style="color:var(--muted);font-size:12px;margin-bottom:10px">
+                Erstellt automatisch 4 Runden (2x Trivia, 1x Bilderrunde, 1x Musikrunde) — Runden können danach angepasst werden.
+            </p>
+            <form method="post" action="{{ url_for('quizbank.quizbank_add_quiz') }}">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Datum</label>
+                        <input type="date" name="event_date">
+                    </div>
+                    <div class="form-group grow">
+                        <label>Veranstaltungsort</label>
+                        <input type="text" name="venue" placeholder="z.B. Kneipe XY">
+                    </div>
+                    <div class="form-group grow">
+                        <label>Quizmaster</label>
+                        <input type="text" name="quizmaster" placeholder="optional">
+                    </div>
+                    <div class="form-group grow">
+                        <label>Notiz</label>
+                        <input type="text" name="notes" placeholder="optional">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Hinzufügen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Breakdowns -->
+    {% if rows %}
+    <div class="breakdown-grid">
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Trivia nach Kategorie</h2></div>
+            {% if category_breakdown %}
+            <div class="chart-wrap" style="height:{{ 60 + category_breakdown|length * 32 }}px">
+                <canvas id="chart-category"></canvas>
+            </div>
+            {% else %}
+            <div class="empty">Noch keine Trivia-Fragen erfasst.</div>
+            {% endif %}
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Nach Quizmaster</h2></div>
+            <div class="chart-wrap" style="height:{{ 60 + quizmaster_breakdown|length * 32 }}px">
+                <canvas id="chart-quizmaster"></canvas>
+            </div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+            <div class="card-header"><h2>Nach Veranstaltungsort</h2></div>
+            <div class="chart-wrap" style="height:{{ 60 + venue_breakdown|length * 32 }}px">
+                <canvas id="chart-venue"></canvas>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Quiz list -->
+    <div class="card">
+        <div class="card-header"><h2>Alle Quizzes</h2></div>
+        {% if rows %}
+        <div>
+            {% for r in rows %}
+            <div class="quiz-item">
+                <div class="quiz-summary" onclick="toggleQuiz({{ r.id }})">
+                    <div class="main">
+                        <span class="quiz-date-badge">{{ r.event_date.strftime('%d.%m.%Y') if r.event_date else '—' }}</span>
+                        <span class="quiz-meta">
+                            <span>{{ r.venue or '—' }}</span>
+                            <span>{{ r.quizmaster or '—' }}</span>
+                            {% if r.notes %}<span>{{ r.notes }}</span>{% endif %}
+                        </span>
+                    </div>
+                    <div class="main">
+                        <span class="quiz-count-badge">{{ r.rounds|length }} Runden · {{ r.question_count }} Trivia-Fragen</span>
+                        <span class="chevron" id="chevron-{{ r.id }}">▶</span>
+                    </div>
+                </div>
+                <div class="quiz-detail" id="detail-{{ r.id }}">
+
+                    <!-- Edit quiz meta -->
+                    <form method="post" action="{{ url_for('quizbank.quizbank_update_quiz', quiz_id=r.id) }}" style="margin-bottom:14px">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Datum</label>
+                                <input type="date" name="event_date" value="{{ r.event_date.strftime('%Y-%m-%d') if r.event_date else '' }}">
+                            </div>
+                            <div class="form-group grow">
+                                <label>Veranstaltungsort</label>
+                                <input type="text" name="venue" value="{{ r.venue or '' }}">
+                            </div>
+                            <div class="form-group grow">
+                                <label>Quizmaster</label>
+                                <input type="text" name="quizmaster" value="{{ r.quizmaster or '' }}">
+                            </div>
+                            <div class="form-group grow">
+                                <label>Notiz</label>
+                                <input type="text" name="notes" value="{{ r.notes or '' }}">
+                            </div>
+                            <button type="submit" class="btn btn-ghost btn-sm">Speichern</button>
+                        </div>
+                    </form>
+
+                    <!-- Rounds -->
+                    {% for round in r.rounds %}
+                    <div class="round-block">
+                        <div class="round-block-header">
+                            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                                <span class="round-badge">
+                                    {% if round.round_type == 'trivia' %}❓ Trivia
+                                    {% elif round.round_type == 'picture' %}🖼️ Bilderrunde
+                                    {% elif round.round_type == 'music' %}🎵 Musikrunde
+                                    {% endif %}
+                                </span>
+                                {% if round.round_type == 'picture' and round.topic %}
+                                <span class="round-topic">Thema: {{ round.topic }}</span>
+                                {% endif %}
+                            </div>
+                            <form method="post" action="{{ url_for('quizbank.quizbank_delete_round', round_id=round.id) }}"
+                                  onsubmit="return confirm('Runde löschen?')">
+                                <button type="submit" class="btn btn-danger btn-sm">Runde löschen</button>
+                            </form>
+                        </div>
+
+                        {% if round.round_type == 'trivia' %}
+                            {% if round.questions %}
+                            <div style="margin-bottom:10px">
+                                {% for q in round.questions %}
+                                <div>
+                                <div class="question-row">
+                                    <span class="row-num">{{ loop.index }}.</span>
+                                    <span><span class="question-category">{{ q.category or '—' }}</span></span>
+                                    <span class="question-text">
+                                        {{ q.question_text }}
+                                        {% if q.is_ai_reconstructed %}
+                                        <span class="ai-badge" title="Von der KI ergänzt, noch nicht geprüft">🤖 KI-Vorschlag{% if q.reconstructed_confidence %} ({{ q.reconstructed_confidence }}){% endif %} — bitte prüfen</span>
+                                        {% endif %}
+                                    </span>
+                                    <span class="question-answer">{{ q.answer or '—' }}</span>
+                                    <span class="question-points">{{ ('%.1f'|format(q.points)) if q.points is not none else '—' }}</span>
+                                    <form method="post" action="{{ url_for('quizbank.quizbank_delete_question', question_id=q.id) }}"
+                                          onsubmit="return confirm('Frage löschen?')">
+                                        <button type="submit" class="btn btn-danger btn-sm">×</button>
+                                    </form>
+                                </div>
+                                <div class="reconstructed-row">
+                                    <form method="post" action="{{ url_for('quizbank.quizbank_update_question', question_id=q.id) }}" class="reconstructed-inline-form">
+                                        <select name="category">
+                                            <option value="">— Kategorie —</option>
+                                            {% for cat in trivia_categories %}
+                                            <option value="{{ cat }}" {% if q.category == cat %}selected{% endif %}>{{ cat }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <input type="text" name="answer" value="{{ q.answer or '' }}" placeholder="Antwort">
+                                        <input type="number" name="points" step="0.5" min="0" class="num-input" value="{{ q.points if q.points is not none else '' }}" placeholder="Pkt.">
+                                        <input type="text" name="question_text" value="{{ q.question_text }}" placeholder="Frage bearbeiten (Stichwort oder vollständig)">
+                                        <button type="submit" class="btn btn-ghost btn-sm">Speichern</button>
+                                    </form>
+                                    <form method="post" action="{{ url_for('quizbank.quizbank_reconstruct_question', question_id=q.id) }}" class="reconstructed-inline-form" style="flex:0">
+                                        <button type="submit" class="btn btn-ghost btn-sm">🤖 KI: alles vervollständigen</button>
+                                    </form>
+                                </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="empty-sm">Noch keine Fragen in dieser Runde.</div>
+                            {% endif %}
+                            <div class="add-divider">+ neue Frage zu dieser Runde hinzufügen</div>
+                            <form method="post" action="{{ url_for('quizbank.quizbank_add_question', round_id=round.id) }}" class="add-entry-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Kategorie</label>
+                                        <select name="category">
+                                            <option value="">— unbekannt —</option>
+                                            {% for cat in trivia_categories %}
+                                            <option value="{{ cat }}">{{ cat }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="form-group grow">
+                                        <label>Frage</label>
+                                        <textarea name="question_text" required placeholder="vollständige Frage, oder nur ein Stichwort, falls das ist, was du hast"></textarea>
+                                    </div>
+                                    <div class="form-group grow">
+                                        <label>Antwort</label>
+                                        <textarea name="answer" placeholder="leer lassen, wenn unbekannt"></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Punkte</label>
+                                        <input type="number" name="points" step="0.5" min="0" class="num-input">
+                                    </div>
+                                </div>
+                                <div class="form-row" style="margin-top:10px">
+                                    <button type="submit" class="btn btn-primary btn-sm">Frage hinzufügen</button>
+                                    <button type="submit" name="use_ai" value="1" class="btn btn-ghost btn-sm">🤖 Hinzufügen + von KI vervollständigen lassen</button>
+                                </div>
+                            </form>
+
+                        {% elif round.round_type == 'picture' %}
+                            {% if round.image_filename %}
+                            <img class="round-image" src="{{ url_for('static', filename='quizbank_uploads/' + round.image_filename) }}" alt="Bilderrunde">
+                            {% endif %}
+                            <form method="post" action="{{ url_for('quizbank.quizbank_update_round', round_id=round.id) }}" enctype="multipart/form-data">
+                                <input type="hidden" name="round_type" value="picture">
+                                <div class="form-row">
+                                    <div class="form-group grow">
+                                        <label>Thema</label>
+                                        <input type="text" name="topic" value="{{ round.topic or '' }}" placeholder="z.B. Logos erkennen">
+                                    </div>
+                                    <div class="form-group grow">
+                                        <label>Bild {{ 'ersetzen' if round.image_filename else 'hochladen' }}</label>
+                                        <input type="file" name="image" accept="image/*">
+                                    </div>
+                                    {% if round.image_filename %}
+                                    <div class="form-group">
+                                        <label>
+                                            <input type="checkbox" name="remove_image" value="1" style="width:auto;margin-right:4px">
+                                            Bild entfernen
+                                        </label>
+                                    </div>
+                                    {% endif %}
+                                    <button type="submit" class="btn btn-primary btn-sm">Speichern</button>
+                                </div>
+                            </form>
+
+                        {% elif round.round_type == 'music' %}
+                            {% if round.songs %}
+                            <div style="margin-bottom:10px">
+                                {% for s in round.songs %}
+                                <div class="song-row">
+                                    <span class="row-num">{{ loop.index }}.</span>
+                                    <span class="song-artist">{{ s.artist or '—' }}</span>
+                                    <span class="song-title">{{ s.title or '—' }}</span>
+                                    <form method="post" action="{{ url_for('quizbank.quizbank_delete_song', song_id=s.id) }}"
+                                          onsubmit="return confirm('Song löschen?')">
+                                        <button type="submit" class="btn btn-danger btn-sm">×</button>
+                                    </form>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="empty-sm">Noch keine Songs in dieser Runde.</div>
+                            {% endif %}
+                            <div class="add-divider">+ neuen Song zu dieser Runde hinzufügen</div>
+                            <form method="post" action="{{ url_for('quizbank.quizbank_add_song', round_id=round.id) }}" class="add-entry-form">
+                                <div class="form-row">
+                                    <div class="form-group grow">
+                                        <label>Künstler</label>
+                                        <input type="text" name="artist">
+                                    </div>
+                                    <div class="form-group grow">
+                                        <label>Songtitel</label>
+                                        <input type="text" name="title">
+                                    </div>
+                                    <button type="submit" class="btn btn-primary btn-sm">Song hinzufügen</button>
+                                </div>
+                            </form>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+
+                    <!-- Add round -->
+                    <form method="post" action="{{ url_for('quizbank.quizbank_add_round', quiz_id=r.id) }}" style="margin-bottom:14px">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Neue Runde</label>
+                                <select name="round_type">
+                                    {% for t in round_types %}
+                                    <option value="{{ t }}">{{ {'trivia': 'Trivia', 'picture': 'Bilderrunde', 'music': 'Musikrunde'}[t] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-ghost btn-sm">Runde hinzufügen</button>
+                        </div>
+                    </form>
+
+                    <form method="post" action="{{ url_for('quizbank.quizbank_delete_quiz', quiz_id=r.id) }}"
+                          onsubmit="return confirm('Gesamtes Quiz inkl. aller Runden löschen?')">
+                        <button type="submit" class="btn btn-danger btn-sm">Quiz löschen</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">Noch keine Quizzes erfasst.</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function toggleQuiz(id) {
+    const detail = document.getElementById('detail-' + id);
+    const chevron = document.getElementById('chevron-' + id);
+    const isOpen = detail.classList.contains('open');
+    detail.classList.toggle('open', !isOpen);
+    chevron.classList.toggle('open', !isOpen);
+}
+
+{% if open_quiz_id %}
+(function() {
+    const detail = document.getElementById('detail-{{ open_quiz_id }}');
+    const chevron = document.getElementById('chevron-{{ open_quiz_id }}');
+    if (detail && chevron) {
+        detail.classList.add('open');
+        chevron.classList.add('open');
+        detail.scrollIntoView({ block: 'nearest' });
+    }
+    if (window.history.replaceState) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('open');
+        window.history.replaceState({}, '', url);
+    }
+})();
+{% endif %}
+
+function renderCountChart(canvasId, groups, countKey, label) {
+    const el = document.getElementById(canvasId);
+    if (!el || !groups.length) return;
+    new Chart(el, {
+        type: 'bar',
+        data: {
+            labels: groups.map(g => g.label),
+            datasets: [{
+                label: label,
+                data: groups.map(g => g[countKey]),
+                backgroundColor: 'rgba(109,106,246,0.75)',
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' }, beginAtZero: true },
+                y: { ticks: { color: '#eef0f7' }, grid: { display: false } },
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+renderCountChart('chart-category', {{ category_breakdown | tojson }}, 'question_count', 'Fragen');
+renderCountChart('chart-quizmaster', {{ quizmaster_breakdown | tojson }}, 'quiz_count', 'Quizzes');
+renderCountChart('chart-venue', {{ venue_breakdown | tojson }}, 'quiz_count', 'Quizzes');
+</script>
+
+</body>
+</html>

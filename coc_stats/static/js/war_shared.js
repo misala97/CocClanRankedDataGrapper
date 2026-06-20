@@ -432,13 +432,28 @@ function probRangeGreater(aLo, aHi, bLo, bHi) {
 // Destruction-tiebreak-adjusted win probability for a given star-distribution result (wc)
 // and a given pair of current destruction percentages. Pulled out of buildWinCalcHTML so
 // the same calc can be replayed at any point in war history (see buildAttackHistoryHTML).
+// lockedWin/lockedLoss are true only when the outcome is mathematically guaranteed via exact
+// integer star-margin or exact destruction-range comparisons — NOT when pWinAdj merely rounds
+// to 100%. pWin/pDraw can each be sums of many convolution terms, so they can land at e.g.
+// 0.9999999999998 from float accumulation even in cases this *is* exact; rounding the percentage
+// for display would call that "100%" too, but it isn't the same thing as a provable guarantee.
+//
+// The destruction-range half of lockedWin/lockedLoss ONLY decides a star TIE — it must never
+// fire unless the opponent's star ceiling can't exceed our current stars (oppMax <= ourStars),
+// i.e. the worst case for us is "at best they tie us," never "they outright out-star us." Without
+// that guard, a huge destruction lead could flip lockedWin true while the opponent still has
+// enough remaining attacks to win on pure stars — destruction is irrelevant unless stars tie.
 function computeAdjustedWin(wc, ourPct, oppPct) {
     const maxPerAtk = wc.teamSize > 0 ? 100 / wc.teamSize : 6.67;
     const oppMaxFinalPct = oppPct + wc.oppRem * maxPerAtk;
     const ourMaxFinalPct = ourPct + wc.ourRem * maxPerAtk;
     const drawSplitOur = probRangeGreater(ourPct, ourMaxFinalPct, oppPct, oppMaxFinalPct);
     const pWinAdj = wc.pWin + wc.pDraw * drawSplitOur;
-    return { pWinAdj, drawSplitOur, oppMaxFinalPct, ourMaxFinalPct };
+    const starsCantLoseForUs  = wc.oppMax <= wc.ourStars; // their ceiling can at best tie our current stars
+    const starsCantLoseForOpp = wc.ourMax <= wc.oppStars;
+    const lockedWin  = starsCantLoseForUs  && (wc.ourStars > wc.oppMax || oppMaxFinalPct < ourPct);
+    const lockedLoss = starsCantLoseForOpp && (wc.oppStars > wc.ourMax || ourMaxFinalPct < oppPct);
+    return { pWinAdj, drawSplitOur, oppMaxFinalPct, ourMaxFinalPct, lockedWin, lockedLoss };
 }
 
 // Live win-probability panel renderer — shared between war and CWL.
@@ -446,7 +461,7 @@ function computeAdjustedWin(wc, ourPct, oppPct) {
 // barHtml  → names + adjusted prob bar for the always-visible preview element.
 // bodyHtml → full panel: guarantee banner, stats, details, chart, breakdown toggles.
 function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtkId, toggleFn) {
-    const { pWinAdj, drawSplitOur, oppMaxFinalPct, ourMaxFinalPct } = computeAdjustedWin(wc, ourPct, oppPct);
+    const { pWinAdj, drawSplitOur, oppMaxFinalPct, ourMaxFinalPct, lockedWin, lockedLoss } = computeAdjustedWin(wc, ourPct, oppPct);
     const winPct     = Math.round(wc.pWin  * 100);
     const drawPct    = Math.round(wc.pDraw * 100);
     const lossPct    = Math.max(0, 100 - winPct - drawPct);
@@ -475,20 +490,36 @@ function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtk
             <div class="wc-half-loss"><span class="wc-prob-pct">${lossAdjPct}%</span></div>
         </div>`;
 
+    // lockedWin/lockedLoss are exact (integer star-margin or exact destruction-range)
+    // guarantees. winAdjPct/lossAdjPct >= 100 below is just the *rounded* percentage and can
+    // be true from float summation noise without the outcome being provably locked — so it
+    // only earns a probabilistic "likely" message, never the "guaranteed" wording.
+    // "even with all 3★ on N remaining attacks" is only honest framing when N real attacks are
+    // still actually possible. Once oppRem/ourRem is 0 (either because the war ended and those
+    // attacks were forfeited, or because that side has simply used every slot already), there is
+    // no remaining-capacity hypothetical to reference — say so plainly instead of implying a
+    // margin calculation that was never run.
     let guaranteeHtml = '';
     if (wc.ourStars > wc.oppMax) {
-        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot bridge the ${wc.ourStars - wc.oppMax}★ gap even with all 3★</div>`;
+        guaranteeHtml = wc.oppRem > 0
+            ? `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot bridge the ${wc.ourStars - wc.oppMax}★ gap even with all 3★ on their ${wc.oppRem} remaining attack${wc.oppRem !== 1 ? 's' : ''}</div>`
+            : `<div class="wc-guarantee" style="color:var(--green);">✓ Win — final ${wc.ourStars}★ to ${wc.oppStars}★, no attacks remain</div>`;
     } else if (wc.oppStars > wc.ourMax) {
-        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — even with all remaining 3★ you still trail by ${wc.oppStars - wc.ourMax}★</div>`;
+        guaranteeHtml = wc.ourRem > 0
+            ? `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — even with all 3★ on your ${wc.ourRem} remaining attack${wc.ourRem !== 1 ? 's' : ''} you still trail by ${wc.oppStars - wc.ourMax}★</div>`
+            : `<div class="wc-guarantee" style="color:var(--red);">✗ Lost — final ${wc.ourStars}★ to ${wc.oppStars}★, no attacks remain</div>`;
+    } else if (lockedWin) {
+        guaranteeHtml = wc.oppRem > 0
+            ? `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — even tied at worst on stars, opponent cannot reach your destruction% with ${wc.oppRem} perfect attack${wc.oppRem !== 1 ? 's' : ''}</div>`
+            : `<div class="wc-guarantee" style="color:var(--green);">✓ Win — stars tied ${wc.ourStars}★ each, destruction decided it ${ourPct.toFixed(1)}% to ${oppPct.toFixed(1)}%</div>`;
+    } else if (lockedLoss) {
+        guaranteeHtml = wc.ourRem > 0
+            ? `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — even tied at best on stars, you cannot reach their destruction% with ${wc.ourRem} perfect attack${wc.ourRem !== 1 ? 's' : ''}</div>`
+            : `<div class="wc-guarantee" style="color:var(--red);">✗ Lost — stars tied ${wc.ourStars}★ each, destruction decided it ${oppPct.toFixed(1)}% to ${ourPct.toFixed(1)}%</div>`;
     } else if (winAdjPct >= 100) {
-        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ Win guaranteed — opponent cannot reach your destruction% even with ${wc.oppRem} perfect attack${wc.oppRem !== 1 ? 's' : ''}</div>`;
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ &gt;99.5% win chance — extremely likely, but not yet mathematically locked</div>`;
     } else if (lossAdjPct >= 100) {
-        if (ourMaxFinalPct < oppPct)
-            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — you cannot reach their destruction% even with ${wc.ourRem} perfect attack${wc.ourRem !== 1 ? 's' : ''}</div>`;
-        else if (drawSplitOur <= 0.0)
-            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — trailing on destruction% (all ties go to them) · unfavorable star matchup</div>`;
-        else
-            guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — very unfavorable matchup</div>`;
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--red);">⚠ &lt;1% win chance — very unfavorable matchup, but not yet mathematically impossible</div>`;
     } else {
         const ourNeeded = Math.max(0, wc.oppMax - wc.ourStars + 1);
         const oppNeeded = Math.max(0, wc.ourMax - wc.oppStars + 1);
@@ -589,22 +620,28 @@ function wcTipHide() {
     if (tip) tip.style.display = 'none';
 }
 
-// Renders a win% timeline chart — one point per completed attack, the jump between two
-// points being that attack's effect on the adjusted win% — plus a collapsible per-attack
-// table for drill-down. history entries come from computeCWLAttackHistory /
-// computeWarAttackHistory — each: { side, name, th, defName, defTH, stars, pct, expStars,
-// pWinBeforePct, pWinAfterPct }. wc/ourPct/oppPct (the same live win-calc state already
-// shown above this section) are optional — when given, the chart adds a dashed projection
-// to where the war ends up if every remaining attack lands at its expected value.
-function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
-    if (!history || !history.length) return '';
+// Renders just the <svg> for the win% timeline — split out from buildAttackHistoryHTML so it
+// can be (re)built once the actual rendered width of its container is known. A fixed viewBox
+// scaled via CSS would stretch dot radii/stroke widths/font sizes non-uniformly along with the
+// layout (ugly with few data points, where the natural width is far narrower than the panel) —
+// so instead this always renders 1 SVG unit = 1px, and availWidth controls spacing between
+// points directly, leaving marker/text sizes untouched regardless of how few or many there are.
+function buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, availWidth) {
     const n = history.length;
     const hasProj = !!wc;
     const slots = n + (hasProj ? 1.6 : 0);
     const svgH = 150, padL = 32, padR = 10, padT = 10, padB = 22;
     const plotH = svgH - padT - padB;
-    const stepW = Math.max(18, Math.min(40, Math.floor(900 / n)));
-    const svgW = stepW * slots + padL + padR;
+    // Always stretch point spacing to fill the full measured width, whether that's 5 attacks
+    // or 100 — dead space (too little data) and a horizontal scrollbar (too much data) are both
+    // worse than tight spacing. Marker/stroke/font sizes below are fixed pixel values regardless
+    // of stepW, so cramming more points in only tightens the gaps between them, never distorts
+    // their shape.
+    const stepW = availWidth > 0 ? Math.max(4, (availWidth - padL - padR) / slots) : 30;
+    // Equals availWidth exactly in the normal case; only exceeds it if stepW had to be floored
+    // (absurdly many attacks in a tiny container), which falls back to the wrapper's horizontal
+    // scroll rather than clipping points off the edge.
+    const svgW = Math.max(availWidth || 0, stepW * slots + padL + padR);
     const xFor = k => padL + k * stepW;
     const yFor = pct => padT + plotH - (Math.max(0, Math.min(100, pct)) / 100) * plotH;
 
@@ -617,9 +654,19 @@ function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
     const tip = (title, line1, line2) =>
         `data-title="${title}" data-line1="${line1 || ''}" data-line2="${line2 || ''}" ` +
         `onmouseenter="wcTipShow(this)" onmousemove="wcTipMove(event)" onmouseleave="wcTipHide()"`;
+    // lockedBefore/lockedAfter (and the mirror lossLockedBefore/After) are exact (integer
+    // star-margin or exact destruction-range) guarantees, not just pWinAdj rounding to 100% —
+    // see computeAdjustedWin. Ring those points so the exact attack where the war first became
+    // mathematically unloseable — or unwinnable — is visible directly on the timeline, without
+    // claiming certainty for "very likely but not proven."
+    const lockRing = (x, y, locked, color) => locked
+        ? `<circle cx="${x}" cy="${y}" r="7.5" fill="none" stroke="${color}" stroke-width="1.5" opacity=".85"/>`
+        : '';
 
     // Start marker — the model's pre-war baseline (0 stars/0%, full roster, no real data yet).
-    let dots = `<circle cx="${pts[0].x}" cy="${pts[0].y}" r="4" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5" ` +
+    let dots = lockRing(pts[0].x, pts[0].y, history[0].lockedBefore, 'var(--accent)') +
+               lockRing(pts[0].x, pts[0].y, history[0].lossLockedBefore, 'var(--red)') +
+               `<circle cx="${pts[0].x}" cy="${pts[0].y}" r="4" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5" ` +
                tip('Pre-war baseline', `${history[0].pWinBeforePct.toFixed(1)}% win, before any attacks`, 'Greedy TH-based matchup — no real data yet') + `/>`;
     let segs = '';
     for (let k = 0; k < n; k++) {
@@ -630,9 +677,14 @@ function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
         const perfLabel = deltaStars > 0.05 ? 'over-performed' : deltaStars < -0.05 ? 'under-performed' : 'on par';
         const dotColor = h.side === 'our' ? 'var(--green)' : 'var(--red)';
         segs += `<line x1="${pts[k].x}" y1="${pts[k].y}" x2="${pts[k + 1].x}" y2="${pts[k + 1].y}" stroke="${segColor}" stroke-width="2"/>`;
-        dots += `<circle cx="${pts[k + 1].x}" cy="${pts[k + 1].y}" r="4.5" fill="${dotColor}" stroke="var(--surface)" stroke-width="1.5" ` +
+        const lockNote = h.lockedAfter ? '<br>🔒 Win locked — guaranteed from here'
+                        : h.lossLockedAfter ? '<br>🔒 Loss locked — impossible to win from here'
+                        : '';
+        dots += lockRing(pts[k + 1].x, pts[k + 1].y, h.lockedAfter, 'var(--accent)') +
+                lockRing(pts[k + 1].x, pts[k + 1].y, h.lossLockedAfter, 'var(--red)') +
+                `<circle cx="${pts[k + 1].x}" cy="${pts[k + 1].y}" r="4.5" fill="${dotColor}" stroke="var(--surface)" stroke-width="1.5" ` +
                 tip(`#${k + 1} ${escapeHTML(h.name)} (TH${h.th}) vs ${escapeHTML(h.defName)} (TH${h.defTH})`,
-                    `${h.stars}★ / ${h.pct}% — ${perfLabel} (exp ${h.expStars.toFixed(1)}★)`,
+                    `${h.stars}★ / ${h.pct}% — ${perfLabel} (exp ${h.expStars.toFixed(1)}★)${lockNote}`,
                     `Win%: ${h.pWinBeforePct.toFixed(1)} → ${h.pWinAfterPct.toFixed(1)} (${swing >= 0 ? '+' : ''}${swing.toFixed(1)}pp)`) +
                 `/>`;
     }
@@ -673,6 +725,35 @@ function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
         xTicks += `<text x="${xFor(k)}" y="${svgH - 4}" text-anchor="middle" font-size="8" fill="var(--muted)">${k}</text>`;
     }
 
+    return `<svg viewBox="0 0 ${svgW} ${svgH}" width="${svgW}" height="${svgH}" style="display:block;">
+        ${gridLines}
+        ${xTicks}
+        ${segs}
+        ${projSeg}
+        ${dots}
+        ${projDot}
+    </svg>`;
+}
+
+// Measures the actual rendered width of the chart's container and (re)builds the SVG to fill
+// it — called once right after buildAttackHistoryHTML's placeholder div has been inserted into
+// the DOM, since that's the earliest point a real clientWidth is available to size against.
+function renderAttackHistoryChart(idPrefix, history, wc, ourPct, oppPct) {
+    const box = document.getElementById(`${idPrefix}-chartbox`);
+    if (!box || !history || !history.length) return;
+    box.innerHTML = buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, box.clientWidth);
+}
+
+// Wrapper around the chart: header, an empty chart placeholder (filled in by
+// renderAttackHistoryChart once it's in the DOM and measurable), a legend, and a collapsible
+// per-attack table for drill-down. history/wc/ourPct/oppPct — see buildAttackHistoryChartSVG.
+function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
+    if (!history || !history.length) return '';
+    const n = history.length;
+    const hasProj = !!wc;
+    const anyLocked = history[0].lockedBefore || history.some(h => h.lockedAfter);
+    const anyLossLocked = history[0].lossLockedBefore || history.some(h => h.lossLockedAfter);
+
     const rows = history.map(h => {
         const sideColor = h.side === 'our' ? 'var(--green)' : 'var(--red)';
         const deltaStars = h.stars - h.expStars;
@@ -698,22 +779,15 @@ function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
         <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">
             Win% Timeline <span style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:.3px;opacity:.7;">hover a marker for attack detail</span>
         </div>
-        <div style="overflow-x:auto;">
-            <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none" style="display:block;width:100%;min-width:${svgW}px;height:${svgH}px;">
-                ${gridLines}
-                ${xTicks}
-                ${segs}
-                ${projSeg}
-                ${dots}
-                ${projDot}
-            </svg>
-        </div>
+        <div id="${idPrefix}-chartbox" style="overflow-x:auto;min-height:150px;"></div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px;font-size:9px;color:var(--muted);">
             <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:3px;"></span>Our attack</span>
             <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-right:3px;"></span>Their attack</span>
             <span><span style="display:inline-block;width:10px;height:2px;background:var(--green);margin-right:3px;vertical-align:middle;"></span>Swing helped us</span>
             <span><span style="display:inline-block;width:10px;height:2px;background:var(--red);margin-right:3px;vertical-align:middle;"></span>Swing hurt us</span>
             ${hasProj ? `<span><span style="display:inline-block;width:10px;height:0;border-top:2px dashed var(--accent);margin-right:3px;vertical-align:middle;"></span>Projected if expected</span>` : ''}
+            ${anyLocked ? `<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--accent);margin-right:3px;vertical-align:middle;"></span>🔒 Win locked (100%)</span>` : ''}
+            ${anyLossLocked ? `<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--red);margin-right:3px;vertical-align:middle;"></span>🔒 Loss locked (0%)</span>` : ''}
         </div>
     </div>
     <div style="border-top:1px solid var(--bord2);">

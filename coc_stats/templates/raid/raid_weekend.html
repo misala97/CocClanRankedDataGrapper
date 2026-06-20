@@ -56,13 +56,13 @@
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
         thead th {
-            padding: 11px 16px; text-align: left; font-weight: 600; color: var(--muted);
+            padding: 10px 12px; text-align: left; font-weight: 600; color: var(--muted);
             font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
         }
         tbody tr { border-bottom: 1px solid var(--bord2); transition: background 0.12s; }
         tbody tr:last-child { border-bottom: none; }
         tbody tr:hover { background: rgba(255,255,255,0.03); }
-        tbody td { padding: 12px 16px; vertical-align: middle; }
+        tbody td { padding: 10px 12px; vertical-align: middle; white-space: nowrap; }
 
         .player-cell  { display: flex; align-items: center; gap: 10px; }
         .player-info  { display: flex; flex-direction: column; gap: 2px; }
@@ -224,16 +224,44 @@
             </div>
             <div class="stat-label">Avg Attacks / District</div>
         </div>
+        {% set raid_is_ended = (selected_raid.state or '')|lower == 'ended' %}
+        {% set actual_medals = (selected_raid.defensive_reward or 0) + (selected_raid.offensive_reward or 0) * 6 %}
         <div class="stat-card">
             <div class="stat-icon"><img src="/static/img/raidMedal.png" style="width:64px;height:64px;"></div>
-            <div class="stat-value" style="color:var(--purple);">{{ (selected_raid.defensive_reward or 0) + (selected_raid.offensive_reward or 0) * 6 }}</div>
+            {% if raid_is_ended %}
+            <div class="stat-value" style="color:var(--purple);">{{ actual_medals }}</div>
+            {% if est_medals_6atk is not none %}
+            {% set medal_diff = actual_medals - est_medals_6atk %}
+            <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:{{ 'var(--green)' if medal_diff > 0 else ('var(--red)' if medal_diff < 0 else 'var(--muted)') }};">{{ '%+d'|format(medal_diff) }} vs est.</div>
+            {% endif %}
             <div class="stat-label">Raid Medals</div>
+            {% else %}
+            <div class="stat-value" style="color:var(--yellow);">{{ ('≈' + est_medals_6atk|string) if est_medals_6atk is not none else '—' }}</div>
+            {% if est_off_6atk is not none %}
+            <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--muted);">{{ est_off_6atk }} off + {{ est_avg_defensive }} def</div>
+            {% endif %}
+            <div class="stat-label">Est. Medals (off. + avg def.)</div>
+            {% endif %}
         </div>
-        {% if est_medals_6atk %}
+        {% if combined_baseline is not none %}
         <div class="stat-card">
             <div class="stat-icon"><img src="/static/img/raidMedal.png" style="width:64px;height:64px;"></div>
-            <div class="stat-value" style="color:var(--yellow);">≈{{ est_medals_6atk }}</div>
-            <div class="stat-label">Est. Medals (off. + avg def.)</div>
+            <div class="stat-value" style="color:var(--yellow);">{{ '%.2f'|format(combined_baseline) }}</div>
+            <div class="stat-label">Avg Medals / Attack</div>
+        </div>
+        {% endif %}
+        {% if regular_baseline is not none %}
+        <div class="stat-card">
+            <div class="stat-icon"><img src="/static/img/raidMedal.png" style="width:64px;height:64px;"></div>
+            <div class="stat-value" style="color:var(--blue);">{{ '%.2f'|format(regular_baseline) }}</div>
+            <div class="stat-label">Avg Medals / District Attack</div>
+        </div>
+        {% endif %}
+        {% if peak_baseline is not none %}
+        <div class="stat-card">
+            <div class="stat-icon"><img src="/static/img/raidMedal.png" style="width:64px;height:64px;"></div>
+            <div class="stat-value" style="color:var(--purple);">{{ '%.2f'|format(peak_baseline) }}</div>
+            <div class="stat-label">Avg Medals / Peak Attack</div>
         </div>
         {% endif %}
     </div>
@@ -271,11 +299,12 @@
                         <th class="sortable" onclick="sortTable('player')">Player</th>
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
                         <th class="sortable" onclick="sortTable('capital_loot')"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;"> Loot</th>
-                        <th class="sortable" onclick="sortTable('avg_loot')">Avg Loot</th>
                         <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
                         <th class="sortable" onclick="sortTable('solo_wipes')">Solo Wipes</th>
                         <th class="sortable" onclick="sortTable('cleanup_count')">Cleanups</th>
-                        <th class="sortable" onclick="sortTable('net_medal_impact')">Impact</th>
+                        <th class="sortable" onclick="sortTable('net_medal_impact')" style="text-align:center;" title="Includes cleanup attacks (tiny finishing taps) — unlike Overall Impact, which excludes them">Medals / Atk</th>
+                        <th class="sortable" onclick="sortTable('peak_medal_impact')" style="text-align:center;" title="Includes cleanup attacks (tiny finishing taps) — unlike Overall Impact, which excludes them">Peak Medals / Atk</th>
+                        <th class="sortable" onclick="sortTable('overall_impact')" style="text-align:center;" title="Excludes cleanup attacks (tiny finishing taps), unlike Medals/Atk and Peak Medals/Atk">Overall Impact</th>
                         <th class="sortable" onclick="sortTable('score_100')">Verdict</th>
                         <th>Details</th>
                     </tr>
@@ -324,6 +353,14 @@ function renderStars(n) {
 }
 
 const MAX_ATTACKS = 6;
+
+function impactCell(rate, impact) {
+    if (impact == null) return `<span style="color:var(--muted);">—</span>`;
+    const sign  = impact > 0 ? '+' : '';
+    const color = impact > 0 ? 'var(--green)' : impact < 0 ? 'var(--red)' : 'var(--muted)';
+    return `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--text);">${rate.toFixed(2)}</div>
+            <div style="margin-top:2px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${color};">${sign}${impact.toFixed(2)}</div>`;
+}
 
 function buildVerdictDetails(p) {
     const logs = p.attack_logs || [];
@@ -438,9 +475,6 @@ function buildVerdictDetails(p) {
 }
 
 function buildTable() {
-    playerData.forEach(p => {
-        p.avg_loot = (p.att_count > 0 && p.capital_loot) ? Math.round(p.capital_loot / p.att_count) : 0;
-    });
     const search = (document.getElementById('searchInput').value || '').toLowerCase();
     let rows = playerData.filter(p =>
         !search || (p.player_name || '').toLowerCase().includes(search) || (p.player_tag || '').toLowerCase().includes(search)
@@ -449,7 +483,14 @@ function buildTable() {
     if (currentSort.column && currentSort.direction) {
         const colKey = currentSort.column === 'player' ? 'player_name' : currentSort.column;
         rows.sort((a, b) => {
-            let av = a[colKey] ?? 0, bv = b[colKey] ?? 0;
+            let av = a[colKey], bv = b[colKey];
+            // Missing (null) values — e.g. a player with no peak/regular attacks this raid —
+            // always sort to the bottom regardless of direction, rather than coercing to 0
+            // and getting interleaved with players who genuinely scored near zero.
+            const aMissing = av == null, bMissing = bv == null;
+            if (aMissing && bMissing) return 0;
+            if (aMissing) return 1;
+            if (bMissing) return -1;
             if (typeof av === 'string') av = av.toLowerCase();
             if (typeof bv === 'string') bv = bv.toLowerCase();
             if (av < bv) return currentSort.direction === 'asc' ? -1 : 1;
@@ -476,18 +517,19 @@ function buildTable() {
             <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="${profileUrl}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftBadge}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${p.att_count}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;color:var(--accent);">${p.capital_loot ? p.capital_loot.toLocaleString() : '—'}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;color:var(--muted);">${p.att_count > 0 && p.capital_loot ? Math.round(p.capital_loot / p.att_count).toLocaleString() : '—'}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--blue);">${p.avg_pct}%</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--green);">${p.solo_wipes}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--muted);">${p.cleanup_count}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:${p.net_medal_impact > 0 ? 'var(--green)' : p.net_medal_impact < 0 ? 'var(--red)' : 'var(--muted)'};">${p.net_medal_impact > 0 ? '+' : ''}${p.net_medal_impact.toFixed(2)}</td>
+            <td style="text-align:center;">${impactCell(p.medals_per_attack, p.net_medal_impact)}</td>
+            <td style="text-align:center;">${impactCell(p.peak_medals_per_attack, p.peak_medal_impact)}</td>
+            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;text-align:center;color:${p.overall_impact == null ? 'var(--muted)' : p.overall_impact > 0 ? 'var(--green)' : p.overall_impact < 0 ? 'var(--red)' : 'var(--muted)'};">${p.overall_impact == null ? '—' : (p.overall_impact > 0 ? '+' : '') + p.overall_impact.toFixed(2)}</td>
             <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
             <td><button type="button" class="action-btn details-toggle">Details</button></td>
         `;
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'detail-row';
-        detailRow.innerHTML = `<td class="detail-cell" colspan="10"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
+        detailRow.innerHTML = `<td class="detail-cell" colspan="11"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
 
         const toggle = () => {
             const expanded = detailRow.classList.toggle('expanded');
