@@ -1597,7 +1597,7 @@ function buildCWLBonusReportText() {
     }
     function statLine(p) {
         if (p.attacks && p.attacks === p.total_wars && p.stars === p.attacks * 3) return 'FLAWLESS';
-        return `${String(p.stars).padStart(2)}⭐  ${(p.destruction || 0).toFixed(1)}%`;
+        return `${String(p.stars).padStart(2)}⭐ ${(p.destruction || 0).toFixed(1)}%`;
     }
 
     // Rebuild priority queue exactly as backend
