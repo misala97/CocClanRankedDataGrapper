@@ -273,6 +273,7 @@ def admin_cwl_bonus_list():
     month_stats = {}     # month -> { player_tag -> {stars, attacks, max_attacks} }
     season_states = {}   # month -> CWLSeason.state
     month_war_ids = {}   # month -> [war_id, ...]
+    month_total_wars = {}   # month -> total wars in the season (for "flawless" = full participation)
     for month in months:
         season = CWLSeason.query.filter_by(season=month).first()
         if not season:
@@ -283,6 +284,7 @@ def admin_cwl_bonus_list():
         if not war_ids:
             continue
         month_war_ids[month] = war_ids
+        month_total_wars[month] = len(war_ids)
 
         max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
                     .filter(CWLMember.war_id.in_(war_ids),
@@ -345,6 +347,7 @@ def admin_cwl_bonus_list():
                     'stars':       month_stats.get(m, {}).get(p.tag, {}).get('stars', 0),
                     'attacks':     month_stats.get(m, {}).get(p.tag, {}).get('attacks', 0),
                     'max_attacks': month_stats.get(m, {}).get(p.tag, {}).get('max_attacks', 0),
+                    'total_wars':  month_total_wars.get(m, 0),
                 } for m in months
             },
         } for p in members],
@@ -480,6 +483,7 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
         py, pm = _year_month(last_month)
         return (cy - py) * 12 + (cm - pm)
 
+    total_wars = len(wars)   # full season length — "flawless" requires attacking every war, not just every war you were rostered for
     participant_list = [{
         'tag':         tag,
         'name':        player_map.get(tag, tag),
@@ -487,6 +491,7 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
         'destruction': round(destruction_map.get(tag, 0), 1),
         'attacks':     atk_map.get(tag, 0),
         'max_attacks': max_atk_map.get(tag, 0),
+        'total_wars':  total_wars,
         'has_bonus':   tag in current_bonuses,
         'last_bonus':  last_bonus_map.get(tag),
         'months_ago':  _months_ago(last_bonus_map.get(tag)),
@@ -509,11 +514,14 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
         if p['last_bonus'] is None:
             return 'No bonus on record'
         ma = p['months_ago']
-        return f"Last bonus {ma} month{'s' if ma != 1 else ''} ago ({p['last_bonus']})"
+        if ma == 0:
+            return f"Last bonus last CWL ({p['last_bonus']})"
+        return f"Last bonus {ma} CWLs ago ({p['last_bonus']})"
 
     suggested_tags    = [p['tag'] for p in selected]
     suggested_details = [{'tag': p['tag'], 'name': p['name'], 'stars': p['stars'],
-                          'attacks': p['attacks'], 'max_attacks': p['max_attacks'], 'reason': _reason(p)}
+                          'attacks': p['attacks'], 'max_attacks': p['max_attacks'],
+                          'total_wars': p['total_wars'], 'reason': _reason(p)}
                          for p in selected]
 
     return jsonify(

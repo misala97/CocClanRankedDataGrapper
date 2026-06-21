@@ -302,9 +302,9 @@
                         <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
                         <th class="sortable" onclick="sortTable('solo_wipes')">Solo Wipes</th>
                         <th class="sortable" onclick="sortTable('cleanup_count')">Cleanups</th>
-                        <th class="sortable" onclick="sortTable('net_medal_impact')" style="text-align:center;" title="Includes cleanup attacks (tiny finishing taps) — unlike Overall Impact, which excludes them">Medals / Atk</th>
-                        <th class="sortable" onclick="sortTable('peak_medal_impact')" style="text-align:center;" title="Includes cleanup attacks (tiny finishing taps) — unlike Overall Impact, which excludes them">Peak Medals / Atk</th>
-                        <th class="sortable" onclick="sortTable('overall_impact')" style="text-align:center;" title="Excludes cleanup attacks (tiny finishing taps), unlike Medals/Atk and Peak Medals/Atk">Overall Impact</th>
+                        <th class="sortable" onclick="sortTable('net_medal_impact')" style="text-align:center;" title="Your medal credit per attack on regular districts, vs. the raid-wide average">Medals / Atk</th>
+                        <th class="sortable" onclick="sortTable('peak_medal_impact')" style="text-align:center;" title="Your medal credit per attack on the Capital Peak, vs. the raid-wide average">Peak Medals / Atk</th>
+                        <th class="sortable" onclick="sortTable('overall_impact')" style="text-align:center;" title="Medals/Atk and Peak Medals/Atk combined, weighted by each bucket's share of total medal value">Overall Impact</th>
                         <th class="sortable" onclick="sortTable('score_100')">Verdict</th>
                         <th>Details</th>
                     </tr>
@@ -522,7 +522,7 @@ function buildTable() {
             <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;color:var(--muted);">${p.cleanup_count}</td>
             <td style="text-align:center;">${impactCell(p.medals_per_attack, p.net_medal_impact)}</td>
             <td style="text-align:center;">${impactCell(p.peak_medals_per_attack, p.peak_medal_impact)}</td>
-            <td style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;text-align:center;color:${p.overall_impact == null ? 'var(--muted)' : p.overall_impact > 0 ? 'var(--green)' : p.overall_impact < 0 ? 'var(--red)' : 'var(--muted)'};">${p.overall_impact == null ? '—' : (p.overall_impact > 0 ? '+' : '') + p.overall_impact.toFixed(2)}</td>
+            <td style="text-align:center;">${impactCell(p.overall_rate, p.overall_impact)}</td>
             <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
             <td><button type="button" class="action-btn details-toggle">Details</button></td>
         `;

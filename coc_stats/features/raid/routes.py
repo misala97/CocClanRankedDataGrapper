@@ -98,28 +98,10 @@ def raid_weekend_page():
                 impact[player_tag] = round(personal_rate - baseline, 2)
             return {'baseline': round(baseline, 2), 'rate': rate, 'impact': impact}
 
-        # A "cleanup" attack (one tiny finishing tap on a district someone else
-        # already nearly destroyed) isn't really skill — the existing Verdict
-        # Score already excludes these. Overall Impact does the same: cleanup
-        # logs are skipped entirely (not counted as an attack, no credit), raid-
-        # wide, so they don't shift the baseline either. The two visible per-
-        # bucket columns deliberately stay literal/unadjusted, so this exclusion
-        # only feeds Overall Impact, not Medals/Atk or Peak Medals/Atk.
-        player_district_groups = {}
-        for log in logs:
-            key = (log.player_tag, log.defender_tag, log.district_name)
-            player_district_groups.setdefault(key, []).append(log)
-        cleanup_log_ids = {
-            hits[0].id for hits in player_district_groups.values()
-            if len(hits) == 1 and (hits[0].percentage_total or 0) == 100 and (hits[0].percentage or 0) < CLEANUP_THRESHOLD
-        }
-
         peak_logs    = [l for l in logs if is_capital_peak(l.district_name)]
         regular_logs = [l for l in logs if not is_capital_peak(l.district_name)]
         regular_bucket = _bucket_impact(regular_logs)
         peak_bucket    = _bucket_impact(peak_logs)
-        regular_bucket_no_cleanup = _bucket_impact(regular_logs, exclude_log_ids=cleanup_log_ids)
-        peak_bucket_no_cleanup    = _bucket_impact(peak_logs, exclude_log_ids=cleanup_log_ids)
 
         net_medal_impact_by_player  = regular_bucket['impact']
         peak_medal_impact_by_player = peak_bucket['impact']
@@ -129,11 +111,6 @@ def raid_weekend_page():
         peak_baseline               = peak_bucket['baseline'] if peak_logs else None
         players_with_peak_attack    = {l.player_tag for l in peak_logs}
         players_with_regular_attack = {l.player_tag for l in regular_logs}
-
-        overall_regular_impact_by_player       = regular_bucket_no_cleanup['impact']
-        overall_peak_impact_by_player          = peak_bucket_no_cleanup['impact']
-        players_with_peak_attack_no_cleanup    = set(overall_peak_impact_by_player.keys())
-        players_with_regular_attack_no_cleanup = set(overall_regular_impact_by_player.keys())
 
         # ── Overall impact (regular + peak, weighted by real value share) ───────
         # A Capital Peak is worth far more than its "1 of 9 structures" share would
@@ -249,26 +226,32 @@ def raid_weekend_page():
                 if p['player_tag'] in players_with_peak_attack else None
             )
 
-            # Overall Impact combines both buckets weighted by real medal-value share, but
-            # a player with credited attacks in only one bucket (e.g. peak-only) shouldn't
-            # have their score diluted by an assumed "average" performance in a bucket they
-            # never touched — renormalize over whichever bucket(s) they actually have data in.
+            # Overall Impact is this player's weighted share of impact on the raid's whole
+            # medal pool: a player who never attacked the Capital Peak had no chance to move
+            # the ~28% of total value that lives there, so that share counts as 0 for them —
+            # it isn't excluded/renormalized away, it caps their Overall Impact below someone
+            # who covered both buckets, even if their regular-district performance was identical.
             overall_regular_impact = (
-                overall_regular_impact_by_player.get(p['player_tag'])
-                if p['player_tag'] in players_with_regular_attack_no_cleanup else None
+                net_medal_impact_by_player.get(p['player_tag'], 0)
+                if p['player_tag'] in players_with_regular_attack else 0
             )
             overall_peak_impact = (
-                overall_peak_impact_by_player.get(p['player_tag'])
-                if p['player_tag'] in players_with_peak_attack_no_cleanup else None
+                peak_medal_impact_by_player.get(p['player_tag'], 0)
+                if p['player_tag'] in players_with_peak_attack else 0
             )
-            weighted_parts = []
-            if overall_regular_impact is not None:
-                weighted_parts.append((weight_regular, overall_regular_impact))
-            if overall_peak_impact is not None:
-                weighted_parts.append((weight_peak, overall_peak_impact))
-            weight_sum = sum(w for w, _ in weighted_parts)
-            p['overall_impact'] = (
-                round(sum(w * v for w, v in weighted_parts) / weight_sum, 2) if weight_sum else None
+            p['overall_impact'] = round(
+                weight_regular * overall_regular_impact + weight_peak * overall_peak_impact, 2
+            )
+            overall_regular_rate = (
+                regular_rate_by_player.get(p['player_tag'], 0)
+                if p['player_tag'] in players_with_regular_attack else 0
+            )
+            overall_peak_rate = (
+                peak_rate_by_player.get(p['player_tag'], 0)
+                if p['player_tag'] in players_with_peak_attack else 0
+            )
+            p['overall_rate'] = round(
+                weight_regular * overall_regular_rate + weight_peak * overall_peak_rate, 2
             )
 
             non_cleanup = [l['percentage'] for l in p['attack_logs'] if not l['is_clean_up']]

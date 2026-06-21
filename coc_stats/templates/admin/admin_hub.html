@@ -1388,8 +1388,9 @@ function renderCWLBonus(data) {
             const md  = p.by_month[m];
             const bg  = m === current_month ? 'background:rgba(240,165,0,.025);' : '';
             const sep = i > 0 ? SEP : '';
+            const flawless = md.in_cwl && md.attacks > 0 && md.attacks === md.total_wars && md.stars === md.attacks * 3;
             const starCell = md.in_cwl
-                ? `<td style="text-align:center;padding:8px 4px;${bg}${sep}font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--yellow);">${md.stars}</td>`
+                ? `<td style="text-align:center;padding:8px 4px;${bg}${sep}font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--yellow);">${md.stars}${flawless ? ` <span title="3 stars on every attack" style="font-size:10px;">✨</span>` : ''}</td>`
                 : `<td style="text-align:center;padding:8px 4px;${bg}${sep}color:var(--bord2);font-size:12px;">—</td>`;
             const atkCell = md.in_cwl
                 ? `<td style="text-align:center;padding:8px 4px;${bg}font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${_cwlAtkColor(md.attacks, md.max_attacks)};">${md.attacks}/${md.max_attacks}</td>`
@@ -1487,9 +1488,12 @@ function _applyCWLSuggestion(data) {
 
     const detailRows = (data.suggested_details || []).map(p => {
         const ac = _cwlAtkColor(p.attacks, p.max_attacks);
+        const flawless = p.attacks > 0 && p.attacks === p.total_wars && p.stars === p.attacks * 3;
+        const flawlessBadge = flawless
+            ? ` <span title="3 stars on every attack" style="font-size:10px;">✨</span>` : '';
         return `<tr style="border-bottom:1px solid var(--bord2);">
             <td style="padding:5px 10px;font-weight:600;font-size:12px;">${p.name}</td>
-            <td style="padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--yellow);white-space:nowrap;">${p.stars}⭐</td>
+            <td style="padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--yellow);white-space:nowrap;">${p.stars}⭐${flawlessBadge}</td>
             <td style="padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${ac};white-space:nowrap;">${p.attacks}/${p.max_attacks} atk</td>
             <td style="padding:5px 10px;font-size:11px;color:var(--muted);">${p.reason}</td>
         </tr>`;
@@ -1588,7 +1592,15 @@ function copyCWLBonusReport(btn) {
     }
     function waitDesc(p) {
         if (!p.last_bonus) return 'never had a bonus';
-        return `${p.months_ago} month${p.months_ago !== 1 ? 's' : ''} without bonus`;
+        if (p.months_ago === 0) return 'last bonus last CWL';
+        return `last bonus ${p.months_ago} CWLs ago`;
+    }
+    function avgDest(p) {
+        return p.attacks ? (p.destruction || 0) / p.attacks : 0;
+    }
+    function statLine(p) {
+        if (p.attacks && p.attacks === p.total_wars && p.stars === p.attacks * 3) return 'FLAWLESS';
+        return `${p.stars}⭐, ${avgDest(p).toFixed(1)}% avg dest`;
     }
 
     // Rebuild priority queue exactly as backend
@@ -1619,18 +1631,6 @@ function copyCWLBonusReport(btn) {
         return base;
     }
 
-    function noSlotReason(p) {
-        if (!cutoff) return 'no slots available';
-        const myBonus = p.last_bonus || '', cutoffBonus = cutoff.last_bonus || '';
-        if (myBonus > cutoffBonus) {
-            const cutoffWait = cutoff.last_bonus ? `${cutoff.months_ago} month${cutoff.months_ago !== 1 ? 's' : ''}` : 'never bonused';
-            return `last bonus more recently than others – last slot went to ${cutoff.name} (${cutoffWait} without bonus)`;
-        }
-        if (p.stars !== cutoff.stars)
-            return `${waitDesc(p)}, fewer stars than ${cutoff.name} (${p.stars}⭐ vs ${cutoff.stars}⭐)`;
-        return `${waitDesc(p)}, less destruction than ${cutoff.name} (${(p.destruction||0).toFixed(1)}% vs ${(cutoff.destruction||0).toFixed(1)}%)`;
-    }
-
     // Bonus group sorted by priority (never bonused first, then longest wait, then most stars, then most destruction)
     const bonusGroup = [
         ...selected,
@@ -1649,17 +1649,24 @@ function copyCWLBonusReport(btn) {
         `${data.wins} win${data.wins !== 1 ? 's' : ''} + ${data.guaranteed} guaranteed = ${data.total_bonuses} slots`,
         '',
         `✅ Got bonus (${bonusGroup.length}):`,
-        ...bonusGroup.map(p => `• ${p.name} – ${p.stars}⭐ ${(p.destruction||0).toFixed(1)}% – ${bonusReason(p)}`),
+        ...bonusGroup.map(p => `• ${p.name} – ${statLine(p)} – ${bonusReason(p)}`),
     ];
 
     if (notSelected.length) {
+        // Anyone tied with the cutoff on wait time lost their slot purely on performance —
+        // show their stats so it's clear why; a more-recent bonus needs no further explanation.
+        const tiedWithCutoff = p => cutoff && (p.last_bonus || null) === (cutoff.last_bonus || null);
+
         lines.push('', `❌ Not enough slots (${notSelected.length}):`);
-        lines.push(...notSelected.map(p => `• ${p.name} – ${p.stars}⭐ ${(p.destruction||0).toFixed(1)}% – ${noSlotReason(p)}`));
+        if (cutoff) lines.push(`   Last slot went to ${cutoff.name} (${statLine(cutoff)}, ${waitDesc(cutoff)})`);
+        lines.push(...notSelected.map(p => tiedWithCutoff(p)
+            ? `• ${p.name} – ${statLine(p)}, ${waitDesc(p)}`
+            : `• ${p.name} – ${waitDesc(p)}`));
     }
 
     if (missedAtk.length) {
         lines.push('', `❌ Missed an attack (${missedAtk.length}):`);
-        lines.push(...missedAtk.map(p => `• ${p.name} – ${p.stars}⭐ ${(p.destruction||0).toFixed(1)}%, ${p.attacks}/${p.max_attacks} atk`));
+        lines.push(...missedAtk.map(p => `• ${p.name} – ${statLine(p)}, ${p.attacks}/${p.max_attacks} atk`));
     }
 
     navigator.clipboard.writeText(lines.join('\n')).then(() => {
