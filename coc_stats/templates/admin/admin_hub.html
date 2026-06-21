@@ -1525,7 +1525,7 @@ function _applyCWLSuggestion(data) {
                 style="padding:7px 18px;background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:7px;color:var(--green);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap;">
             ✓ Apply Suggestions
         </button>
-        <button onclick="copyCWLBonusReport(this)"
+        <button onclick="openCWLBonusReportModal()"
                 style="padding:7px 18px;background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.3);border-radius:7px;color:var(--blue);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap;margin-left:8px;">
             📋 Copy Report
         </button>`;
@@ -1577,9 +1577,9 @@ function applyCWLSuggestions() {
     });
 }
 
-function copyCWLBonusReport(btn) {
+function buildCWLBonusReportText() {
     const data = window._cwlSuggestData;
-    if (!data) return;
+    if (!data) return '';
     const month = window._cwlCurrentMonth || '';
     const participants = data.participants || [];
     const available = data.available || 0;
@@ -1592,15 +1592,12 @@ function copyCWLBonusReport(btn) {
     }
     function waitDesc(p) {
         if (!p.last_bonus) return 'never had a bonus';
-        if (p.months_ago === 1) return 'last bonus last CWL';
-        return `last bonus ${p.months_ago} CWLs ago`;
-    }
-    function avgDest(p) {
-        return p.attacks ? (p.destruction || 0) / p.attacks : 0;
+        if (p.months_ago === 1) return 'bonus last CWL';
+        return `bonus ${p.months_ago} CWLs ago`;
     }
     function statLine(p) {
         if (p.attacks && p.attacks === p.total_wars && p.stars === p.attacks * 3) return 'FLAWLESS';
-        return `${p.stars}⭐, ${avgDest(p).toFixed(1)}% avg dest`;
+        return `${p.stars}⭐  ${(p.destruction || 0).toFixed(1)}%`;
     }
 
     // Rebuild priority queue exactly as backend
@@ -1631,7 +1628,7 @@ function copyCWLBonusReport(btn) {
         return grp.some(p => selectedTags.has(p.tag)) && grp.some(p => !selectedTags.has(p.tag));
     }));
     const needsStats = p => contestedWaits.has(p.last_bonus || '');
-    const statSuffix = p => needsStats(p) ? ` – ${statLine(p)}` : '';
+    const statSuffix = p => needsStats(p) ? ` => ${statLine(p)}` : '';
 
     function bonusReason(p) {
         if (p.has_bonus && !selectedTags.has(p.tag)) return 'already had bonus this month';
@@ -1657,34 +1654,53 @@ function copyCWLBonusReport(btn) {
     // everywhere, unlike tab characters.
     const maxNameLen = Math.max(0, ...[...bonusGroup, ...notSelected, ...missedAtk].map(p => p.name.length));
     const name = p => p.name.padEnd(maxNameLen);
+    const SEP = '------------';
+    // Insert a separator line between each player line (not after the last one) within a section.
+    const withSep = arr => arr.flatMap((line, i) => i === 0 ? [line] : [SEP, line]);
 
     const lines = [
         `CWL Bonus · ${fmtMonth(month)} · ${data.league} ${data.war_size}v${data.war_size}`,
         `${data.wins} win${data.wins !== 1 ? 's' : ''} + ${data.guaranteed} guaranteed = ${data.total_bonuses} slots`,
         '',
         `✅ Got bonus (${bonusGroup.length}):`,
-        ...bonusGroup.map(p => `• ${name(p)} : ${bonusReason(p)}${statSuffix(p)}`),
+        ...withSep(bonusGroup.map(p => `${name(p)} : ${bonusReason(p)}${statSuffix(p)}`)),
     ];
 
     if (notSelected.length) {
         lines.push('', `❌ Not enough slots (${notSelected.length}):`);
         if (cutoff) lines.push(`   Last slot went to ${cutoff.name} (${waitDesc(cutoff)}${statSuffix(cutoff)})`);
-        lines.push(...notSelected.map(p => `• ${name(p)} : ${waitDesc(p)}${statSuffix(p)}`));
+        lines.push(...withSep(notSelected.map(p => `${name(p)} : ${waitDesc(p)}${statSuffix(p)}`)));
     }
 
     if (missedAtk.length) {
         lines.push('', `❌ Missed an attack (${missedAtk.length}):`);
-        lines.push(...missedAtk.map(p => `• ${name(p)} : ${p.attacks}/${p.max_attacks} atk – ${statLine(p)}`));
+        lines.push(...withSep(missedAtk.map(p => `${name(p)} : ${p.attacks}/${p.max_attacks} atk`)));
     }
 
-    const report = '```\n' + lines.join('\n') + '\n```';
+    return '```\n' + lines.join('\n') + '\n```';
+}
 
-    navigator.clipboard.writeText(report).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = '✓ Copied!';
-        setTimeout(() => { btn.textContent = orig; }, 2000);
+function openCWLBonusReportModal() {
+    document.getElementById('cwlReportText').value = buildCWLBonusReportText();
+    document.getElementById('cwlReportCopied').style.display = 'none';
+    document.getElementById('cwlReportBackdrop').style.display = 'block';
+    document.getElementById('cwlReportModal').style.display = 'block';
+}
+
+function closeCWLBonusReportModal() {
+    document.getElementById('cwlReportBackdrop').style.display = 'none';
+    document.getElementById('cwlReportModal').style.display = 'none';
+}
+
+function copyCWLBonusReportModal() {
+    navigator.clipboard.writeText(document.getElementById('cwlReportText').value).then(() => {
+        const el = document.getElementById('cwlReportCopied');
+        el.style.display = 'flex';
+        setTimeout(() => { el.style.display = 'none'; }, 2000);
     });
 }
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCWLBonusReportModal(); });
 
 function renderWarRoster(roster, bench) {
     const rTbody = document.getElementById('war-roster-tbody');
@@ -2004,6 +2020,22 @@ function buildQuadrants(pts) {
     }).join('');
 }
 </script>
+
+<!-- ── CWL Bonus Report Preview Modal ── -->
+<div id="cwlReportBackdrop" onclick="closeCWLBonusReportModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;backdrop-filter:blur(4px);"></div>
+<div id="cwlReportModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;width:min(640px,90vw);box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <span style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:0.5px;">📋 CWL Bonus Report</span>
+        <button onclick="closeCWLBonusReportModal()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">✕</button>
+    </div>
+    <textarea id="cwlReportText" readonly style="width:100%;height:340px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;
+        color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.6;padding:12px;resize:none;outline:none;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+        <button onclick="copyCWLBonusReportModal()" class="action-btn" style="border-color:rgba(63,185,80,0.4);color:var(--green);padding:8px 18px;font-size:12px;">📋 Copy to clipboard</button>
+        <span id="cwlReportCopied" style="display:none;align-items:center;color:var(--green);font-size:13px;font-weight:600;">✓ Copied!</span>
+    </div>
+</div>
 
 </body>
 </html>
