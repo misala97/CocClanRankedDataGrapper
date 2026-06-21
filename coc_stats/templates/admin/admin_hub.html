@@ -1592,7 +1592,7 @@ function copyCWLBonusReport(btn) {
     }
     function waitDesc(p) {
         if (!p.last_bonus) return 'never had a bonus';
-        if (p.months_ago === 0) return 'last bonus last CWL';
+        if (p.months_ago === 1) return 'last bonus last CWL';
         return `last bonus ${p.months_ago} CWLs ago`;
     }
     function avgDest(p) {

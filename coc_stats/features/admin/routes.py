@@ -472,16 +472,23 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
                        .group_by(CWLBonus.player_tag).all())
     last_bonus_map = {tag: m for tag, m in last_bonus_rows}
 
-    def _year_month(s):
-        y, mo = s.split('-')[:2]
-        return int(y), int(mo)
+    # Count actual elapsed CWL seasons, not calendar months — some months run two CWL groups
+    # (e.g. '2026-06' and '2026-06-16'), so a plain month-number diff would undercount how many
+    # seasons separate a player's last bonus from the current one. A gap of 1 means their last
+    # bonus was the immediately preceding season ("last CWL"); it can never be 0, since the
+    # current season's own bonuses are excluded from the "last bonus" lookup above.
+    all_seasons  = [s.season for s in CWLSeason.query.order_by(CWLSeason.id.asc()).all()]
+    season_index = {s: i for i, s in enumerate(all_seasons)}
+    current_idx  = season_index.get(month)
 
     def _months_ago(last_month):
         if not last_month:
             return None
-        cy, cm = _year_month(month)
-        py, pm = _year_month(last_month)
-        return (cy - py) * 12 + (cm - pm)
+        if current_idx is not None and last_month in season_index:
+            return current_idx - season_index[last_month]
+        y, mo = last_month.split('-')[:2]
+        cy, cmo = month.split('-')[:2]
+        return (int(cy) - int(y)) * 12 + (int(cmo) - int(mo))
 
     total_wars = len(wars)   # full season length — "flawless" requires attacking every war, not just every war you were rostered for
     participant_list = [{
@@ -514,7 +521,7 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
         if p['last_bonus'] is None:
             return 'No bonus on record'
         ma = p['months_ago']
-        if ma == 0:
+        if ma == 1:
             return f"Last bonus last CWL ({p['last_bonus']})"
         return f"Last bonus {ma} CWLs ago ({p['last_bonus']})"
 
