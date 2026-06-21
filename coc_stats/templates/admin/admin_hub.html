@@ -1616,19 +1616,27 @@ function copyCWLBonusReport(btn) {
     const selected     = queue.slice(0, available);
     const notSelected  = queue.slice(available);
     const cutoff       = queue[available - 1];
-    const firstMissed  = queue[available];
     const selectedTags = new Set(selected.map(p => p.tag));
+
+    // Stats only matter when a wait-time tier was actually contested — i.e. it has both a
+    // winner and a loser sharing the same wait. An uncontested tier (everyone in it either all
+    // got the bonus or all missed it) needs no further explanation beyond the wait time itself.
+    const byWait = {};
+    queue.forEach(p => {
+        const key = p.last_bonus || '';
+        (byWait[key] = byWait[key] || []).push(p);
+    });
+    const contestedWaits = new Set(Object.keys(byWait).filter(key => {
+        const grp = byWait[key];
+        return grp.some(p => selectedTags.has(p.tag)) && grp.some(p => !selectedTags.has(p.tag));
+    }));
+    const needsStats = p => contestedWaits.has(p.last_bonus || '');
+    const statSuffix = p => needsStats(p) ? ` – ${statLine(p)}` : '';
 
     function bonusReason(p) {
         if (p.has_bonus && !selectedTags.has(p.tag)) return 'already had bonus this month';
         if (!p.last_bonus) return 'first ever bonus';
-        const base = waitDesc(p);
-        if (cutoff && p.tag === cutoff.tag && firstMissed && (firstMissed.last_bonus || '') === (cutoff.last_bonus || '')) {
-            if (firstMissed.stars === cutoff.stars)
-                return `${base} (most destruction among equal stars)`;
-            return `${base} (most stars among equal wait)`;
-        }
-        return base;
+        return waitDesc(p);
     }
 
     // Bonus group sorted by priority (never bonused first, then longest wait, then most stars, then most destruction)
@@ -1644,32 +1652,34 @@ function copyCWLBonusReport(btn) {
 
     const missedAtk = participants.filter(p => !p.has_bonus && p.attacks < p.max_attacks);
 
+    // Pad the name column to a consistent width across every section, so bullet lines line up
+    // when pasted somewhere monospace (Discord/Slack code block) — plain spaces survive copy-paste
+    // everywhere, unlike tab characters.
+    const maxNameLen = Math.max(0, ...[...bonusGroup, ...notSelected, ...missedAtk].map(p => p.name.length));
+    const name = p => p.name.padEnd(maxNameLen);
+
     const lines = [
         `CWL Bonus · ${fmtMonth(month)} · ${data.league} ${data.war_size}v${data.war_size}`,
         `${data.wins} win${data.wins !== 1 ? 's' : ''} + ${data.guaranteed} guaranteed = ${data.total_bonuses} slots`,
         '',
         `✅ Got bonus (${bonusGroup.length}):`,
-        ...bonusGroup.map(p => `• ${p.name} – ${statLine(p)} – ${bonusReason(p)}`),
+        ...bonusGroup.map(p => `• ${name(p)} : ${bonusReason(p)}${statSuffix(p)}`),
     ];
 
     if (notSelected.length) {
-        // Anyone tied with the cutoff on wait time lost their slot purely on performance —
-        // show their stats so it's clear why; a more-recent bonus needs no further explanation.
-        const tiedWithCutoff = p => cutoff && (p.last_bonus || null) === (cutoff.last_bonus || null);
-
         lines.push('', `❌ Not enough slots (${notSelected.length}):`);
-        if (cutoff) lines.push(`   Last slot went to ${cutoff.name} (${statLine(cutoff)}, ${waitDesc(cutoff)})`);
-        lines.push(...notSelected.map(p => tiedWithCutoff(p)
-            ? `• ${p.name} – ${statLine(p)}, ${waitDesc(p)}`
-            : `• ${p.name} – ${waitDesc(p)}`));
+        if (cutoff) lines.push(`   Last slot went to ${cutoff.name} (${waitDesc(cutoff)}${statSuffix(cutoff)})`);
+        lines.push(...notSelected.map(p => `• ${name(p)} : ${waitDesc(p)}${statSuffix(p)}`));
     }
 
     if (missedAtk.length) {
         lines.push('', `❌ Missed an attack (${missedAtk.length}):`);
-        lines.push(...missedAtk.map(p => `• ${p.name} – ${statLine(p)}, ${p.attacks}/${p.max_attacks} atk`));
+        lines.push(...missedAtk.map(p => `• ${name(p)} : ${p.attacks}/${p.max_attacks} atk – ${statLine(p)}`));
     }
 
-    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    const report = '```\n' + lines.join('\n') + '\n```';
+
+    navigator.clipboard.writeText(report).then(() => {
         const orig = btn.textContent;
         btn.textContent = '✓ Copied!';
         setTimeout(() => { btn.textContent = orig; }, 2000);
