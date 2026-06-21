@@ -279,12 +279,15 @@ def admin_cwl_bonus_list():
         if not season:
             continue
         season_states[month] = season.state
-        war_ids = [w.id for w in CWLWar.query.filter_by(season_id=season.id).all()
-                   if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
-        if not war_ids:
+        season_wars = [w for w in CWLWar.query.filter_by(season_id=season.id).all()
+                       if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
+        if not season_wars:
             continue
+        war_ids = [w.id for w in season_wars]
         month_war_ids[month] = war_ids
-        month_total_wars[month] = len(war_ids)
+        # "Flawless" requires attacking every war that's actually happened so far — a future war
+        # still in 'preparation' hasn't given anyone a chance to attack yet, so it must not count.
+        month_total_wars[month] = sum(1 for w in season_wars if w.state in ('inWar', 'warEnded'))
 
         max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
                     .filter(CWLMember.war_id.in_(war_ids),
@@ -497,7 +500,10 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
         cy, cmo = month.split('-')[:2]
         return (int(cy) - int(y)) * 12 + (int(cmo) - int(mo))
 
-    total_wars = len(wars)   # full season length — "flawless" requires attacking every war, not just every war you were rostered for
+    # "Flawless" requires attacking every war that's actually happened so far this season — a
+    # future war still in 'preparation' hasn't given anyone a chance to attack yet, so it must
+    # not count toward the denominator (otherwise nobody could ever be flawless mid-season).
+    total_wars = sum(1 for w in wars if w.state in ('inWar', 'warEnded'))
     participant_list = [{
         'tag':         tag,
         'name':        player_map.get(tag, tag),

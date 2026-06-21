@@ -1597,7 +1597,7 @@ function buildCWLBonusReportText() {
     }
     function statLine(p) {
         if (p.attacks && p.attacks === p.total_wars && p.stars === p.attacks * 3) return 'FLAWLESS';
-        return `${p.stars}⭐  ${(p.destruction || 0).toFixed(1)}%`;
+        return `${String(p.stars).padStart(2)}⭐  ${(p.destruction || 0).toFixed(1)}%`;
     }
 
     // Rebuild priority queue exactly as backend
@@ -1612,7 +1612,6 @@ function buildCWLBonusReportText() {
 
     const selected     = queue.slice(0, available);
     const notSelected  = queue.slice(available);
-    const cutoff       = queue[available - 1];
     const selectedTags = new Set(selected.map(p => p.tag));
 
     // Stats only matter when a wait-time tier was actually contested — i.e. it has both a
@@ -1654,7 +1653,7 @@ function buildCWLBonusReportText() {
     // everywhere, unlike tab characters.
     const maxNameLen = Math.max(0, ...[...bonusGroup, ...notSelected, ...missedAtk].map(p => p.name.length));
     const name = p => p.name.padEnd(maxNameLen);
-    const SEP = '------------';
+    const SEP = '-------------------';
     // Insert a separator line between each player line (not after the last one) within a section.
     const withSep = arr => arr.flatMap((line, i) => i === 0 ? [line] : [SEP, line]);
 
@@ -1668,7 +1667,6 @@ function buildCWLBonusReportText() {
 
     if (notSelected.length) {
         lines.push('', `❌ Not enough slots (${notSelected.length}):`);
-        if (cutoff) lines.push(`   Last slot went to ${cutoff.name} (${waitDesc(cutoff)}${statSuffix(cutoff)})`);
         lines.push(...withSep(notSelected.map(p => `${name(p)} : ${waitDesc(p)}${statSuffix(p)}`)));
     }
 
