@@ -89,19 +89,46 @@ function adjustDistForStarred(dist, best) {
     return adj;
 }
 
+// Blend a player's personal attack-usage rate with the global rate — same shrinkage as
+// blendPlayerDist (more personal history shifts weight toward their own rate). Returns the
+// MISS rate (1 - blended use-rate), ready to fold into a star distribution. Clamped to [0,1]
+// in case used/possible ever disagree (e.g. a data anomaly pushing used above possible).
+function blendMissRate(used, possible, globalUsed, globalPossible, histK = 5) {
+    const hasGlobal = globalPossible > 0;
+    if (!possible) return hasGlobal ? 1 - globalUsed / globalPossible : 0;
+    const personalRate = used / possible;
+    const globalRate = hasGlobal ? globalUsed / globalPossible : personalRate;
+    const w = possible / (possible + histK);
+    const missRate = 1 - (w * personalRate + (1 - w) * globalRate);
+    return Math.max(0, Math.min(1, missRate));
+}
+
+// Shift `missRate` worth of probability mass onto "0 stars" — a remaining attack slot isn't
+// guaranteed to ever be used, and a historical star distribution alone only describes outcomes
+// for attacks that actually landed.
+function applyMissRate(dist, missRate) {
+    if (!missRate) return dist;
+    const out = dist.map(p => p * (1 - missRate));
+    out[0] += missRate;
+    return out;
+}
+
 // Full win-probability calculation given pre-built attacker→defender pair lists.
 // Each pair: { tag, atkTH, name, pos, defTH, defName, defPos?, defBestStars? }
 // defBestStars: current best stars on the target base — limits the incremental contribution.
+// missRateFn(tag) → optional, returns the chance this player's remaining attack never happens.
 // The attack→defender mapping is the only thing callers differ on — everything else is shared.
-function calcWinProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible, playerInfoFn, atkDistFn, matchupCounts) {
+function calcWinProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible, playerInfoFn, atkDistFn, matchupCounts, missRateFn) {
     function buildSide(pairs) {
         const dists = [], breakdown = [];
         for (const p of pairs) {
-            const { dist: rawDist, srcLabel } = resolveAtkDist(playerInfoFn, atkDistFn, p.tag, p.atkTH, p.defTH, matchupCounts);
+            const { dist: histDist, srcLabel } = resolveAtkDist(playerInfoFn, atkDistFn, p.tag, p.atkTH, p.defTH, matchupCounts);
+            const missRate = missRateFn ? missRateFn(p.tag) : 0;
+            const rawDist = missRate ? applyMissRate(histDist, missRate) : histDist;
             const adjustedDist = adjustDistForStarred(rawDist, p.defBestStars || 0);
             dists.push(adjustedDist);  // incremental — used for convolution only
             const entry = { name: p.name, th: p.atkTH, pos: p.pos, defTH: p.defTH, defName: p.defName,
-                            dist: rawDist, expStars: rawDist.reduce((s, q, k) => s + q * k, 0), srcLabel };
+                            dist: rawDist, expStars: rawDist.reduce((s, q, k) => s + q * k, 0), srcLabel, missRate };
             if (p.defPos !== undefined) entry.defPos = p.defPos;
             if (p.defBestStars) entry.defBestStars = p.defBestStars;
             breakdown.push(entry);
@@ -247,7 +274,7 @@ function buildAttackerTable(breakdown, side) {
             </td>
             <td style="padding:7px 12px;">${seg}</td>
             <td style="padding:7px 16px 7px 8px;text-align:right;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:${clr};">${p.expStars.toFixed(1)}★</td>
-            <td style="padding:7px 12px 7px 4px;font-size:10px;color:var(--muted);white-space:nowrap;">${escapeHTML(p.srcLabel)}</td>
+            <td style="padding:7px 12px 7px 4px;font-size:10px;color:var(--muted);white-space:nowrap;">${escapeHTML(p.srcLabel)}${p.missRate >= 0.01 ? ` · <span title="Chance this attack never happens at all, folded into the 0★ bucket above">${Math.round(p.missRate * 100)}% miss</span>` : ''}</td>
         </tr>`;
     }).join('');
     return `<table style="width:100%;border-collapse:collapse;">

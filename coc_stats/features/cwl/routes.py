@@ -761,6 +761,35 @@ def cwl_page():
         player_all_time_perf[ptag][key]['counts'][s] += 1
         player_all_time_perf[ptag][key]['total'] += 1
 
+    # ── Per-player attack-usage rate, all-time, for the win-probability engine's remaining
+    # attacks — mirrors the regular-war version: a historical star distribution only describes
+    # attacks that landed, not the real chance a remaining attack slot goes unused entirely.
+    # Only warEnded wars count, since an ongoing day's unused slot isn't "missed" yet.
+    _possible_rows = (
+        db.session.query(CWLMember.player_tag, db.func.count(CWLMember.id))
+        .join(CWLWar, CWLMember.war_id == CWLWar.id)
+        .filter(CWLWar.state == 'warEnded')
+        .group_by(CWLMember.player_tag)
+        .all()
+    )
+    cwl_player_attack_rate = {tag: {'used': 0, 'possible': cnt} for tag, cnt in _possible_rows}
+
+    _used_rows = (
+        db.session.query(CWLAttack.attacker_tag, db.func.count(CWLAttack.id))
+        .join(CWLWar, CWLAttack.war_id == CWLWar.id)
+        .filter(CWLWar.state == 'warEnded')
+        .group_by(CWLAttack.attacker_tag)
+        .all()
+    )
+    for tag, cnt in _used_rows:
+        if tag in cwl_player_attack_rate:
+            cwl_player_attack_rate[tag]['used'] = cnt
+
+    cwl_global_attack_rate = {
+        'used':     sum(d['used']     for d in cwl_player_attack_rate.values()),
+        'possible': sum(d['possible'] for d in cwl_player_attack_rate.values()),
+    }
+
     # ── Clans we already fought this season ───────────────────────────────────
     fought_clans = {
         detail['opp_clan_tag']: {'round': rn, 'result': detail['result'], 'state': detail['war'].state}
@@ -815,6 +844,8 @@ def cwl_page():
         season_overview_our=season_overview_our,
         season_overview_all=season_overview_all,
         player_all_time_perf=player_all_time_perf,
+        cwl_player_attack_rate=cwl_player_attack_rate,
+        cwl_global_attack_rate=cwl_global_attack_rate,
         cwl_matchup_rates=cwl_matchup_rates,
         cwl_matchup_counts=cwl_matchup_counts,
         cwl_total_atk_count=cwl_total_atk_count,

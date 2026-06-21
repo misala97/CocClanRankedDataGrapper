@@ -1045,12 +1045,22 @@ const WAR_MATCHUP_RATES     = {{ war_matchup_rates     | tojson | safe }};
 const WAR_MATCHUP_COUNTS    = {{ war_matchup_counts    | tojson | safe }};
 const WAR_TOTAL_ATK_COUNT   = {{ war_total_atk_count   | tojson | safe }};
 const ATTACKS_PER_PLAYER    = 2;
-const WAR_PLAYER_HISTORY    = {{ war_player_history    | tojson | safe }};
+const WAR_PLAYER_HISTORY     = {{ war_player_history     | tojson | safe }};
+const WAR_PLAYER_ATTACK_RATE = {{ war_player_attack_rate | tojson | safe }};
+const WAR_GLOBAL_ATTACK_RATE = {{ war_global_attack_rate | tojson | safe }};
 initDiffFallback(WAR_MATCHUP_RATES, WAR_MATCHUP_COUNTS);
 
 // ── Win Probability Engine ────────────────────────────────────────────────────
 
 const warPlayerInfo = (tag, atkTH, defTH, histK) => playerInfo(WAR_PLAYER_HISTORY, WAR_MATCHUP_RATES, tag, atkTH, defTH, histK);
+
+// Chance this player's remaining attack slot never gets used at all — blended same way as
+// star outcomes: personal usage rate shrinks toward the clan-wide rate with little/no history.
+const warMissRate = tag => {
+    const r = WAR_PLAYER_ATTACK_RATE[tag];
+    return blendMissRate(r ? r.used : 0, r ? r.possible : 0,
+                         WAR_GLOBAL_ATTACK_RATE.used, WAR_GLOBAL_ATTACK_RATE.possible);
+};
 
 // Greedy assignment: highest attacker → highest uncleared defender (no repeat pairs).
 // attacks = array of attack objects with attacker_tag, attacker_side, defender_pos, stars
@@ -1088,7 +1098,8 @@ function computeWarAssignment(attacks) {
                 if (atkPairs.has(atk.tag + '_' + def.pos)) continue;
                 const info = warPlayerInfo(atk.tag, atk.th, def.th, 5);
                 const diff = Math.max(-4, Math.min(4, atk.th - def.th));
-                const dist = info ? info.dist : (_DIFF_FALLBACK[String(diff)] || _DIFF_FALLBACK[0]);
+                const histDist = info ? info.dist : (_DIFF_FALLBACK[String(diff)] || _DIFF_FALLBACK[0]);
+                const dist = applyMissRate(histDist, warMissRate(atk.tag));
                 const exp  = dist.reduce((s, p, k) => s + p * k, 0);
                 if (exp > bestExp) { bestExp = exp; bestAtk = atk; }
             }
@@ -1112,7 +1123,7 @@ function _calcWarProb(ourAssignments, oppAssignments, ourStars, oppStars) {
                             defBestStars: a.defBestStars || 0 });
     return calcWinProb(ourAssignments.map(toPair), oppAssignments.map(toPair),
                        ourStars, oppStars, WAR.teamSize * 3,
-                        warPlayerInfo, (a,d) => atkDist(WAR_MATCHUP_RATES, a, d), WAR_MATCHUP_COUNTS);
+                        warPlayerInfo, (a,d) => atkDist(WAR_MATCHUP_RATES, a, d), WAR_MATCHUP_COUNTS, warMissRate);
 }
 
 // Computes the win-prob model as of an arbitrary point in the war: given exactly which

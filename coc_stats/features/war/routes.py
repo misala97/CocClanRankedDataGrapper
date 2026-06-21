@@ -187,6 +187,29 @@ def clan_war_page():
         if ph:
             war_player_history[tag] = ph
 
+    # ── Per-player attack-usage rate, for the win-probability engine's remaining attacks ──────
+    # A historical star distribution only describes attacks that landed — it says nothing about
+    # the real chance a remaining slot never gets used at all (forgot, ran out of time). Only
+    # warEnded wars count here, since an ongoing war's unused slots aren't "missed" yet — they
+    # may still get used before it ends.
+    _player_possible = {}   # tag -> {'used': N, 'possible': N}
+    for hw in _hist:
+        if hw.state != 'warEnded':
+            continue
+        for m in hw.members:
+            if not m.player_tag:
+                continue
+            _player_possible.setdefault(m.player_tag, {'used': 0, 'possible': 0})['possible'] += 2
+        for atk in hw.attacks:
+            if atk.attacker_tag in _player_possible:
+                _player_possible[atk.attacker_tag]['used'] += 1
+
+    war_player_attack_rate = _player_possible
+    war_global_attack_rate = {
+        'used':     sum(d['used']     for d in _player_possible.values()),
+        'possible': sum(d['possible'] for d in _player_possible.values()),
+    }
+
     war_options = []
     for w in wars:
         if w.state == 'preparation':
@@ -220,6 +243,8 @@ def clan_war_page():
         war_matchup_counts=war_matchup_counts,
         war_total_atk_count=war_total_atk_count,
         war_player_history=war_player_history,
+        war_player_attack_rate=war_player_attack_rate,
+        war_global_attack_rate=war_global_attack_rate,
         now=dt.datetime.now(dt.timezone.utc),
     )
 
