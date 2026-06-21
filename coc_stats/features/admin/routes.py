@@ -477,7 +477,14 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
     # seasons separate a player's last bonus from the current one. A gap of 1 means their last
     # bonus was the immediately preceding season ("last CWL"); it can never be 0, since the
     # current season's own bonuses are excluded from the "last bonus" lookup above.
-    all_seasons  = [s.season for s in CWLSeason.query.order_by(CWLSeason.id.asc()).all()]
+    #
+    # CWLSeason only retains recent rotations (old ones get cleaned up), so it alone can't place
+    # older bonus months in order. CWLBonus.month covers full history but only at coarse monthly
+    # granularity. Union both — the keys sort correctly together either way ('2026-06' < '2026-06-16'),
+    # so this gives a complete, correctly-ordered season list even past CWLSeason's retention window.
+    season_rows  = {s.season for s in CWLSeason.query.all()}
+    bonus_months = {m for (m,) in db.session.query(CWLBonus.month).distinct().all()}
+    all_seasons  = sorted(season_rows | bonus_months | {month})
     season_index = {s: i for i, s in enumerate(all_seasons)}
     current_idx  = season_index.get(month)
 
