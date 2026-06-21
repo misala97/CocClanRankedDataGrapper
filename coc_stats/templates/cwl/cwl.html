@@ -1414,16 +1414,19 @@ const CWL_MATCHUP_RATES  = {{ cwl_matchup_rates     | tojson | safe }};
 // {"atkTH_defTH": total_attack_count}
 const CWL_MATCHUP_COUNTS    = {{ cwl_matchup_counts    | tojson | safe }};
 const CWL_TOTAL_ATK_COUNT   = {{ cwl_total_atk_count | tojson | safe }};  // attacks with TH data; excludes attacks missing member records
-const CWL_PLAYER_ATTACK_RATE = {{ cwl_player_attack_rate | tojson | safe }};
-const CWL_GLOBAL_ATTACK_RATE = {{ cwl_global_attack_rate | tojson | safe }};
+const CWL_PLAYER_ATTACK_RATE       = {{ cwl_player_attack_rate       | tojson | safe }};
+const CWL_GLOBAL_ATTACK_RATE_OUR   = {{ cwl_global_attack_rate_our   | tojson | safe }};
+const CWL_GLOBAL_ATTACK_RATE_ENEMY = {{ cwl_global_attack_rate_enemy | tojson | safe }};
 initDiffFallback(CWL_MATCHUP_RATES, CWL_MATCHUP_COUNTS);
 
 // Chance this player's remaining attack slot never gets used at all — blended same way as
-// star outcomes: personal usage rate shrinks toward the all-time rate with little/no history.
-const cwlMissRate = tag => {
+// star outcomes: personal usage rate shrinks toward a side-specific all-time rate (our roster
+// vs every other clan in the group) with little/no personal history, using a side-specific histK.
+const cwlMissRate = (tag, isOpp) => {
     const r = CWL_PLAYER_ATTACK_RATE[tag];
-    return blendMissRate(r ? r.used : 0, r ? r.possible : 0,
-                         CWL_GLOBAL_ATTACK_RATE.used, CWL_GLOBAL_ATTACK_RATE.possible);
+    const g = isOpp ? CWL_GLOBAL_ATTACK_RATE_ENEMY : CWL_GLOBAL_ATTACK_RATE_OUR;
+    const histK = isOpp ? ENEMY_HIST_K : OUR_HIST_K;
+    return blendMissRate(r ? r.used : 0, r ? r.possible : 0, g.used, g.possible, histK);
 };
 
 // ── CWL season overview data ──────────────────────────────────────────────────
@@ -2104,7 +2107,8 @@ function computeCWLAttackHistory(n) {
         const defBestPctMap = isOur ? oppBestDefPct : ourBestDefPct;
         const defBestPct = defBestPctMap[atk.defender_pos] || 0;
         const { dist } = resolveAtkDist(wcPlayerInfo, (a, d) => atkDist(CWL_MATCHUP_RATES, a, d),
-                                         member ? member.tag : null, atk.attacker_th, atk.defender_th, CWL_MATCHUP_COUNTS);
+                                         member ? member.tag : null, atk.attacker_th, atk.defender_th, CWL_MATCHUP_COUNTS,
+                                         isOur ? OUR_HIST_K : ENEMY_HIST_K);
         const adjustedDist = adjustDistForStarred(dist, defBest);
         const expStars = adjustedDist.reduce((s, p, k) => s + p * k, 0);
         const inc = Math.max(0, atk.stars - defBest);

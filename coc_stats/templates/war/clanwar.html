@@ -1045,9 +1045,10 @@ const WAR_MATCHUP_RATES     = {{ war_matchup_rates     | tojson | safe }};
 const WAR_MATCHUP_COUNTS    = {{ war_matchup_counts    | tojson | safe }};
 const WAR_TOTAL_ATK_COUNT   = {{ war_total_atk_count   | tojson | safe }};
 const ATTACKS_PER_PLAYER    = 2;
-const WAR_PLAYER_HISTORY     = {{ war_player_history     | tojson | safe }};
-const WAR_PLAYER_ATTACK_RATE = {{ war_player_attack_rate | tojson | safe }};
-const WAR_GLOBAL_ATTACK_RATE = {{ war_global_attack_rate | tojson | safe }};
+const WAR_PLAYER_HISTORY          = {{ war_player_history          | tojson | safe }};
+const WAR_PLAYER_ATTACK_RATE      = {{ war_player_attack_rate      | tojson | safe }};
+const WAR_GLOBAL_ATTACK_RATE_OUR   = {{ war_global_attack_rate_our   | tojson | safe }};
+const WAR_GLOBAL_ATTACK_RATE_ENEMY = {{ war_global_attack_rate_enemy | tojson | safe }};
 initDiffFallback(WAR_MATCHUP_RATES, WAR_MATCHUP_COUNTS);
 
 // ── Win Probability Engine ────────────────────────────────────────────────────
@@ -1055,11 +1056,13 @@ initDiffFallback(WAR_MATCHUP_RATES, WAR_MATCHUP_COUNTS);
 const warPlayerInfo = (tag, atkTH, defTH, histK) => playerInfo(WAR_PLAYER_HISTORY, WAR_MATCHUP_RATES, tag, atkTH, defTH, histK);
 
 // Chance this player's remaining attack slot never gets used at all — blended same way as
-// star outcomes: personal usage rate shrinks toward the clan-wide rate with little/no history.
-const warMissRate = tag => {
+// star outcomes: personal usage rate shrinks toward a side-specific clan-wide rate (our roster
+// vs the enemy clan) with little/no personal history, using a side-specific histK too.
+const warMissRate = (tag, isOpp) => {
     const r = WAR_PLAYER_ATTACK_RATE[tag];
-    return blendMissRate(r ? r.used : 0, r ? r.possible : 0,
-                         WAR_GLOBAL_ATTACK_RATE.used, WAR_GLOBAL_ATTACK_RATE.possible);
+    const g = isOpp ? WAR_GLOBAL_ATTACK_RATE_ENEMY : WAR_GLOBAL_ATTACK_RATE_OUR;
+    const histK = isOpp ? ENEMY_HIST_K : OUR_HIST_K;
+    return blendMissRate(r ? r.used : 0, r ? r.possible : 0, g.used, g.possible, histK);
 };
 
 // Greedy assignment: highest attacker → highest uncleared defender (no repeat pairs).
@@ -1082,7 +1085,8 @@ function computeWarAssignment(attacks) {
         }
     }
 
-    function assignSide(attackers, defenders, defStars, atkUsed, atkPairs) {
+    function assignSide(attackers, defenders, defStars, atkUsed, atkPairs, isOpp) {
+        const histK = isOpp ? ENEMY_HIST_K : OUR_HIST_K;
         const uncleared = defenders
             .filter(m => (defStars[m.pos] || 0) < 3)
             .sort((a, b) => a.pos - b.pos);
@@ -1096,10 +1100,10 @@ function computeWarAssignment(attacks) {
             for (const atk of attackers) {
                 if (slotsLeft[atk.tag] <= 0) continue;
                 if (atkPairs.has(atk.tag + '_' + def.pos)) continue;
-                const info = warPlayerInfo(atk.tag, atk.th, def.th, 5);
+                const info = warPlayerInfo(atk.tag, atk.th, def.th, histK);
                 const diff = Math.max(-4, Math.min(4, atk.th - def.th));
                 const histDist = info ? info.dist : (_DIFF_FALLBACK[String(diff)] || _DIFF_FALLBACK[0]);
-                const dist = applyMissRate(histDist, warMissRate(atk.tag));
+                const dist = applyMissRate(histDist, warMissRate(atk.tag, isOpp));
                 const exp  = dist.reduce((s, p, k) => s + p * k, 0);
                 if (exp > bestExp) { bestExp = exp; bestAtk = atk; }
             }
@@ -1112,8 +1116,8 @@ function computeWarAssignment(attacks) {
     }
 
     return {
-        ourAssignments: assignSide(OUR, OPP, oppDefStars, ourAtkUsed, ourAtkPairs),
-        oppAssignments: assignSide(OPP, OUR, ourDefStars, oppAtkUsed, oppAtkPairs),
+        ourAssignments: assignSide(OUR, OPP, oppDefStars, ourAtkUsed, ourAtkPairs, false),
+        oppAssignments: assignSide(OPP, OUR, ourDefStars, oppAtkUsed, oppAtkPairs, true),
     };
 }
 
@@ -1178,7 +1182,8 @@ function computeWarAttackHistory() {
         const defBestPctMap = isOur ? oppBestDefPct : ourBestDefPct;
         const defBestPct = defBestPctMap[atk.defender_pos] || 0;
         const { dist } = resolveAtkDist(warPlayerInfo, (a, d) => atkDist(WAR_MATCHUP_RATES, a, d),
-                                         atk.attacker_tag, atk.attacker_th, atk.defender_th, WAR_MATCHUP_COUNTS);
+                                         atk.attacker_tag, atk.attacker_th, atk.defender_th, WAR_MATCHUP_COUNTS,
+                                         isOur ? OUR_HIST_K : ENEMY_HIST_K);
         const adjustedDist = adjustDistForStarred(dist, defBest);
         const expStars = adjustedDist.reduce((s, p, k) => s + p * k, 0);
         const inc = Math.max(0, atk.stars - defBest);

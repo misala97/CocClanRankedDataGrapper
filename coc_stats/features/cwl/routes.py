@@ -765,30 +765,56 @@ def cwl_page():
     # attacks — mirrors the regular-war version: a historical star distribution only describes
     # attacks that landed, not the real chance a remaining attack slot goes unused entirely.
     # Only warEnded wars count, since an ongoing day's unused slot isn't "missed" yet.
+    #
+    # The global fallback is split by CWLMember.clan_tag == our_tag, not is_opponent — a CWL
+    # season ingests the whole group's bracket, including wars between two other clans that
+    # have nothing to do with us, so is_opponent there just means "second clan in that specific
+    # pairing," not "our enemy." clan_tag is the only field that reliably answers "is this our
+    # roster" regardless of which side of any given war record a player is labeled on.
     _possible_rows = (
-        db.session.query(CWLMember.player_tag, db.func.count(CWLMember.id))
+        db.session.query(CWLMember.player_tag, CWLMember.clan_tag, db.func.count(CWLMember.id))
         .join(CWLWar, CWLMember.war_id == CWLWar.id)
         .filter(CWLWar.state == 'warEnded')
-        .group_by(CWLMember.player_tag)
+        .group_by(CWLMember.player_tag, CWLMember.clan_tag)
         .all()
     )
-    cwl_player_attack_rate = {tag: {'used': 0, 'possible': cnt} for tag, cnt in _possible_rows}
+    cwl_player_attack_rate = {}
+    _our_possible, _enemy_possible = 0, 0
+    for tag, clan_tag, cnt in _possible_rows:
+        d = cwl_player_attack_rate.setdefault(tag, {'used': 0, 'possible': 0})
+        d['possible'] += cnt
+        if clan_tag == our_tag:
+            _our_possible += cnt
+        else:
+            _enemy_possible += cnt
 
+    # Outer join — an attack whose attacker has no matching CWLMember row for this exact war
+    # (a data-sync gap, not something that should happen by game rules) still counts toward the
+    # player's own used total; it just can't be confidently attributed to either side's global
+    # pool (clan_tag comes back None), so it's excluded from the our/enemy split rather than
+    # silently misclassified into one of them.
     _used_rows = (
-        db.session.query(CWLAttack.attacker_tag, db.func.count(CWLAttack.id))
+        db.session.query(CWLAttack.attacker_tag, CWLMember.clan_tag, db.func.count(CWLAttack.id))
         .join(CWLWar, CWLAttack.war_id == CWLWar.id)
+        .outerjoin(CWLMember, db.and_(CWLMember.war_id == CWLAttack.war_id,
+                                       CWLMember.player_tag == CWLAttack.attacker_tag))
         .filter(CWLWar.state == 'warEnded')
-        .group_by(CWLAttack.attacker_tag)
+        .group_by(CWLAttack.attacker_tag, CWLMember.clan_tag)
         .all()
     )
-    for tag, cnt in _used_rows:
+    _our_used, _enemy_used = 0, 0
+    for tag, clan_tag, cnt in _used_rows:
         if tag in cwl_player_attack_rate:
-            cwl_player_attack_rate[tag]['used'] = cnt
+            cwl_player_attack_rate[tag]['used'] += cnt
+        if clan_tag is None:
+            continue
+        if clan_tag == our_tag:
+            _our_used += cnt
+        else:
+            _enemy_used += cnt
 
-    cwl_global_attack_rate = {
-        'used':     sum(d['used']     for d in cwl_player_attack_rate.values()),
-        'possible': sum(d['possible'] for d in cwl_player_attack_rate.values()),
-    }
+    cwl_global_attack_rate_our = {'used': _our_used, 'possible': _our_possible}
+    cwl_global_attack_rate_enemy = {'used': _enemy_used, 'possible': _enemy_possible}
 
     # ── Clans we already fought this season ───────────────────────────────────
     fought_clans = {
@@ -845,7 +871,8 @@ def cwl_page():
         season_overview_all=season_overview_all,
         player_all_time_perf=player_all_time_perf,
         cwl_player_attack_rate=cwl_player_attack_rate,
-        cwl_global_attack_rate=cwl_global_attack_rate,
+        cwl_global_attack_rate_our=cwl_global_attack_rate_our,
+        cwl_global_attack_rate_enemy=cwl_global_attack_rate_enemy,
         cwl_matchup_rates=cwl_matchup_rates,
         cwl_matchup_counts=cwl_matchup_counts,
         cwl_total_atk_count=cwl_total_atk_count,

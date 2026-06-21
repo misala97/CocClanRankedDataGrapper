@@ -152,7 +152,17 @@ def clan_war_page():
              .options(selectinload(ClanWar.members), selectinload(ClanWar.attacks))
              .filter(ClanWar.state.in_(['inWar', 'warEnded']))
              .all())
+    # Per-player attack-usage rate, for the win-probability engine's remaining attacks — a
+    # historical star distribution only describes attacks that landed, not the real chance a
+    # remaining slot never gets used at all (forgot, ran out of time). Only warEnded wars count,
+    # since an ongoing war's unused slots aren't "missed" yet — they may still get used before
+    # it ends. The global fallback is split by is_opponent — reliable for War specifically, since
+    # every ClanWar row is fetched as api_fetch_clan_war(CLAN_TAG), so 'clan' is always us and
+    # 'opponent' is always the enemy. Our own roster gets disciplined toward full attack usage;
+    # a random enemy clan has no such pressure from us, so the two populations genuinely differ.
     _raw_war, _player_war = {}, {}
+    _player_possible = {}    # tag -> {'used': N, 'possible': N}
+    _our_possible, _our_used, _enemy_possible, _enemy_used = 0, 0, 0, 0
     for hw in _hist:
         _mb = {m.player_tag: m for m in hw.members}
         for atk in hw.attacks:
@@ -168,6 +178,25 @@ def clan_war_page():
             k = (ath, dth)
             _raw_war.setdefault(k, [0, 0, 0, 0])[s] += 1
             _player_war.setdefault(am.player_tag, {}).setdefault(k, [0, 0, 0, 0])[s] += 1
+
+        if hw.state != 'warEnded':
+            continue
+        for m in hw.members:
+            if not m.player_tag:
+                continue
+            _player_possible.setdefault(m.player_tag, {'used': 0, 'possible': 0})['possible'] += 2
+            if m.is_opponent:
+                _enemy_possible += 2
+            else:
+                _our_possible += 2
+        for atk in hw.attacks:
+            if atk.attacker_tag in _player_possible:
+                _player_possible[atk.attacker_tag]['used'] += 1
+                am = _mb.get(atk.attacker_tag)
+                if am and am.is_opponent:
+                    _enemy_used += 1
+                else:
+                    _our_used += 1
 
     war_matchup_rates, war_matchup_counts = {}, {}
     war_total_atk_count = sum(sum(v) for v in _raw_war.values())
@@ -187,28 +216,9 @@ def clan_war_page():
         if ph:
             war_player_history[tag] = ph
 
-    # ── Per-player attack-usage rate, for the win-probability engine's remaining attacks ──────
-    # A historical star distribution only describes attacks that landed — it says nothing about
-    # the real chance a remaining slot never gets used at all (forgot, ran out of time). Only
-    # warEnded wars count here, since an ongoing war's unused slots aren't "missed" yet — they
-    # may still get used before it ends.
-    _player_possible = {}   # tag -> {'used': N, 'possible': N}
-    for hw in _hist:
-        if hw.state != 'warEnded':
-            continue
-        for m in hw.members:
-            if not m.player_tag:
-                continue
-            _player_possible.setdefault(m.player_tag, {'used': 0, 'possible': 0})['possible'] += 2
-        for atk in hw.attacks:
-            if atk.attacker_tag in _player_possible:
-                _player_possible[atk.attacker_tag]['used'] += 1
-
     war_player_attack_rate = _player_possible
-    war_global_attack_rate = {
-        'used':     sum(d['used']     for d in _player_possible.values()),
-        'possible': sum(d['possible'] for d in _player_possible.values()),
-    }
+    war_global_attack_rate_our = {'used': _our_used, 'possible': _our_possible}
+    war_global_attack_rate_enemy = {'used': _enemy_used, 'possible': _enemy_possible}
 
     war_options = []
     for w in wars:
@@ -244,7 +254,8 @@ def clan_war_page():
         war_total_atk_count=war_total_atk_count,
         war_player_history=war_player_history,
         war_player_attack_rate=war_player_attack_rate,
-        war_global_attack_rate=war_global_attack_rate,
+        war_global_attack_rate_our=war_global_attack_rate_our,
+        war_global_attack_rate_enemy=war_global_attack_rate_enemy,
         now=dt.datetime.now(dt.timezone.utc),
     )
 

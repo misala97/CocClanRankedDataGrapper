@@ -1,6 +1,15 @@
 // ── Shared war/CWL probability engine ────────────────────────────────────────
 // Included by clanwar.html and cwl.html. Do not add page-specific code here.
 
+// Shrinkage constants for blending personal data with a global rate (see blendPlayerDist /
+// blendMissRate). Our own roster realistically accumulates dozens of fights over time, so a
+// slower-to-trust histK is safe. An enemy player is rarely seen more than once or twice — we
+// almost never refight the same clan — so their personal sample caps out around ~7 fights;
+// a lower histK lets that capped sample still earn meaningful trust instead of being
+// permanently under-weighted by a constant tuned for a much larger ceiling.
+const OUR_HIST_K   = 4;
+const ENEMY_HIST_K = 2;
+
 // Fallback star distributions by TH diff (attacker - defender), clamped [-4, +4]
 // Base prior — recalibrated to ~67% 3★ at even matchup (observed DB average).
 // Overwritten at page load by initDiffFallback() once real data is available.
@@ -64,11 +73,12 @@ function convolve(dists) {
 
 // Resolve star distribution + source label for one attacker vs defender.
 // playerInfoFn(tag, atkTH, defTH, histK) → {dist, count} | null
+// histK: shrinkage constant for this player's side (OUR_HIST_K or ENEMY_HIST_K).
 // matchupCounts optional — enables "DB avg · N fights" vs "Fallback" distinction.
-function resolveAtkDist(playerInfoFn, atkDistFn, tag, atkTH, defTH, matchupCounts) {
-    const info = playerInfoFn(tag, atkTH, defTH, 5);
+function resolveAtkDist(playerInfoFn, atkDistFn, tag, atkTH, defTH, matchupCounts, histK = OUR_HIST_K) {
+    const info = playerInfoFn(tag, atkTH, defTH, histK);
     if (info) {
-        const pct = Math.round(info.count / (info.count + 5) * 100);
+        const pct = Math.round(info.count / (info.count + histK) * 100);
         return { dist: info.dist, srcLabel: `${info.count} fights · ${pct}% own` };
     }
     const dist = atkDistFn(atkTH, defTH);
@@ -93,7 +103,7 @@ function adjustDistForStarred(dist, best) {
 // blendPlayerDist (more personal history shifts weight toward their own rate). Returns the
 // MISS rate (1 - blended use-rate), ready to fold into a star distribution. Clamped to [0,1]
 // in case used/possible ever disagree (e.g. a data anomaly pushing used above possible).
-function blendMissRate(used, possible, globalUsed, globalPossible, histK = 5) {
+function blendMissRate(used, possible, globalUsed, globalPossible, histK = OUR_HIST_K) {
     const hasGlobal = globalPossible > 0;
     if (!possible) return hasGlobal ? 1 - globalUsed / globalPossible : 0;
     const personalRate = used / possible;
@@ -116,14 +126,16 @@ function applyMissRate(dist, missRate) {
 // Full win-probability calculation given pre-built attacker→defender pair lists.
 // Each pair: { tag, atkTH, name, pos, defTH, defName, defPos?, defBestStars? }
 // defBestStars: current best stars on the target base — limits the incremental contribution.
-// missRateFn(tag) → optional, returns the chance this player's remaining attack never happens.
+// missRateFn(tag, isOpp) → optional, returns the chance this player's remaining attack never happens.
+// isOpp is passed through so callers can pick the right side-specific global fallback.
 // The attack→defender mapping is the only thing callers differ on — everything else is shared.
 function calcWinProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible, playerInfoFn, atkDistFn, matchupCounts, missRateFn) {
-    function buildSide(pairs) {
+    function buildSide(pairs, isOpp) {
+        const histK = isOpp ? ENEMY_HIST_K : OUR_HIST_K;
         const dists = [], breakdown = [];
         for (const p of pairs) {
-            const { dist: histDist, srcLabel } = resolveAtkDist(playerInfoFn, atkDistFn, p.tag, p.atkTH, p.defTH, matchupCounts);
-            const missRate = missRateFn ? missRateFn(p.tag) : 0;
+            const { dist: histDist, srcLabel } = resolveAtkDist(playerInfoFn, atkDistFn, p.tag, p.atkTH, p.defTH, matchupCounts, histK);
+            const missRate = missRateFn ? missRateFn(p.tag, isOpp) : 0;
             const rawDist = missRate ? applyMissRate(histDist, missRate) : histDist;
             const adjustedDist = adjustDistForStarred(rawDist, p.defBestStars || 0);
             dists.push(adjustedDist);  // incremental — used for convolution only
@@ -135,8 +147,8 @@ function calcWinProb(ourPairs, oppPairs, ourStars, oppStars, maxPossible, player
         }
         return { dists, breakdown };
     }
-    const { dists: ourDists, breakdown: ourBreakdown } = buildSide(ourPairs);
-    const { dists: oppDists, breakdown: oppBreakdown } = buildSide(oppPairs);
+    const { dists: ourDists, breakdown: ourBreakdown } = buildSide(ourPairs, false);
+    const { dists: oppDists, breakdown: oppBreakdown } = buildSide(oppPairs, true);
     const dpOur = convolve(ourDists), dpOpp = convolve(oppDists);
     let pWin = 0, pDraw = 0, pLoss = 0;
     for (let i = 0; i < dpOur.length; i++) {
