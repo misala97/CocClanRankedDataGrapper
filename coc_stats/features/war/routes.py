@@ -162,7 +162,7 @@ def clan_war_page():
     # a random enemy clan has no such pressure from us, so the two populations genuinely differ.
     _raw_war, _player_war = {}, {}
     _player_possible = {}    # tag -> {'used': N, 'possible': N}
-    _our_possible, _our_used, _enemy_possible, _enemy_used = 0, 0, 0, 0
+    _our_possible, _our_used = 0, 0
     for hw in _hist:
         _mb = {m.player_tag: m for m in hw.members}
         for atk in hw.attacks:
@@ -185,17 +185,13 @@ def clan_war_page():
             if not m.player_tag:
                 continue
             _player_possible.setdefault(m.player_tag, {'used': 0, 'possible': 0})['possible'] += 2
-            if m.is_opponent:
-                _enemy_possible += 2
-            else:
+            if not m.is_opponent:
                 _our_possible += 2
         for atk in hw.attacks:
             if atk.attacker_tag in _player_possible:
                 _player_possible[atk.attacker_tag]['used'] += 1
                 am = _mb.get(atk.attacker_tag)
-                if am and am.is_opponent:
-                    _enemy_used += 1
-                else:
+                if am and not am.is_opponent:
                     _our_used += 1
 
     war_matchup_rates, war_matchup_counts = {}, {}
@@ -218,7 +214,14 @@ def clan_war_page():
 
     war_player_attack_rate = _player_possible
     war_global_attack_rate_our = {'used': _our_used, 'possible': _our_possible}
-    war_global_attack_rate_enemy = {'used': _enemy_used, 'possible': _enemy_possible}
+
+    # Regular wars are rarely rematches, so the enemy side almost never has personal attack-rate
+    # history and falls back to this global average on nearly every attacker, every war. Taken
+    # raw, that average pools every opponent clan we've ever faced (including undisciplined ones)
+    # and ends up systematically inflating predicted enemy misses regardless of who we're actually
+    # fighting. With zero opponent-specific signal, just assume the opponent behaves like our own
+    # (generally well-disciplined) roster until we have real data on them.
+    war_global_attack_rate_enemy = dict(war_global_attack_rate_our)
 
     war_options = []
     for w in wars:
