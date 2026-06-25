@@ -152,15 +152,15 @@ def clan_war_page():
              .options(selectinload(ClanWar.members), selectinload(ClanWar.attacks))
              .filter(ClanWar.state.in_(['inWar', 'warEnded']))
              .all())
-    # Per-player attack-usage rate, for the win-probability engine's remaining attacks — a
+    # War-wide attack-usage rate, for the win-probability engine's remaining attacks — a
     # historical star distribution only describes attacks that landed, not the real chance a
     # remaining slot never gets used at all (forgot, ran out of time). Only warEnded wars count,
-    # since an ongoing war's unused slots aren't "missed" yet — they may still get used before
-    # it ends. is_opponent is reliable for War specifically, since every ClanWar row is fetched as
-    # api_fetch_clan_war(CLAN_TAG), so 'clan' is always us and 'opponent' is always the enemy —
-    # used below to compute our own roster's global attack-usage rate.
+    # since an ongoing war's unused slots aren't "missed" yet — they may still get used before it
+    # ends. One flat rate is used for every player on both sides (see warMissRate in
+    # clanwar.html) — regular war is every other day with 2 attacks each, so per-player/per-side
+    # blending only added noise and a structural bias (our roster always has personal history, a
+    # regular-war opponent almost never does).
     _raw_war, _player_war = {}, {}
-    _player_possible = {}    # tag -> {'used': N, 'possible': N}
     _our_possible, _our_used = 0, 0
     for hw in _hist:
         _mb = {m.player_tag: m for m in hw.members}
@@ -181,17 +181,10 @@ def clan_war_page():
         if hw.state != 'warEnded':
             continue
         for m in hw.members:
-            if not m.player_tag:
-                continue
-            _player_possible.setdefault(m.player_tag, {'used': 0, 'possible': 0})['possible'] += 2
-            if not m.is_opponent:
+            if m.player_tag and not m.is_opponent:
                 _our_possible += 2
-        for atk in hw.attacks:
-            if atk.attacker_tag in _player_possible:
-                _player_possible[atk.attacker_tag]['used'] += 1
-                am = _mb.get(atk.attacker_tag)
-                if am and not am.is_opponent:
-                    _our_used += 1
+        if hw.clan_attacks:
+            _our_used += hw.clan_attacks
 
     war_matchup_rates, war_matchup_counts = {}, {}
     war_total_atk_count = sum(sum(v) for v in _raw_war.values())
@@ -211,16 +204,7 @@ def clan_war_page():
         if ph:
             war_player_history[tag] = ph
 
-    war_player_attack_rate = _player_possible
     war_global_attack_rate_our = {'used': _our_used, 'possible': _our_possible}
-
-    # Regular wars are rarely rematches, so the enemy side almost never has personal attack-rate
-    # history and falls back to this global average on nearly every attacker, every war. Taken
-    # raw, that average pools every opponent clan we've ever faced (including undisciplined ones)
-    # and ends up systematically inflating predicted enemy misses regardless of who we're actually
-    # fighting. With zero opponent-specific signal, just assume the opponent behaves like our own
-    # (generally well-disciplined) roster until we have real data on them.
-    war_global_attack_rate_enemy = dict(war_global_attack_rate_our)
 
     war_options = []
     for w in wars:
@@ -255,9 +239,7 @@ def clan_war_page():
         war_matchup_counts=war_matchup_counts,
         war_total_atk_count=war_total_atk_count,
         war_player_history=war_player_history,
-        war_player_attack_rate=war_player_attack_rate,
         war_global_attack_rate_our=war_global_attack_rate_our,
-        war_global_attack_rate_enemy=war_global_attack_rate_enemy,
         now=dt.datetime.now(dt.timezone.utc),
     )
 

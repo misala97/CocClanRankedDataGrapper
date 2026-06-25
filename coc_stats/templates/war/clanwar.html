@@ -1046,27 +1046,20 @@ const WAR_MATCHUP_COUNTS    = {{ war_matchup_counts    | tojson | safe }};
 const WAR_TOTAL_ATK_COUNT   = {{ war_total_atk_count   | tojson | safe }};
 const ATTACKS_PER_PLAYER    = 2;
 const WAR_PLAYER_HISTORY          = {{ war_player_history          | tojson | safe }};
-const WAR_PLAYER_ATTACK_RATE      = {{ war_player_attack_rate      | tojson | safe }};
 const WAR_GLOBAL_ATTACK_RATE_OUR   = {{ war_global_attack_rate_our   | tojson | safe }};
-const WAR_GLOBAL_ATTACK_RATE_ENEMY = {{ war_global_attack_rate_enemy | tojson | safe }};
 initDiffFallback(WAR_MATCHUP_RATES, WAR_MATCHUP_COUNTS);
 
 // ── Win Probability Engine ────────────────────────────────────────────────────
 
 const warPlayerInfo = (tag, atkTH, defTH, histK) => playerInfo(WAR_PLAYER_HISTORY, WAR_MATCHUP_RATES, tag, atkTH, defTH, histK);
 
-// Chance this player's remaining attack slot never gets used at all — blended same way as
-// star outcomes, but with its own histK (not ENEMY_HIST_K/OUR_HIST_K from war_shared.js, which
-// CWL also reads): a regular-war opponent is rarely seen more than once or twice, so a low K
-// there let one or two stray missed attacks swing their blended miss rate wildly even though the
-// enemy global fallback is now identical to ours (see war_global_attack_rate_enemy in
-// routes.py). Using OUR_HIST_K for both sides here shrinks sparse enemy samples just as hard as
-// ours, without touching ENEMY_HIST_K itself — star-outcome blending and CWL stay untouched.
-const warMissRate = (tag, isOpp) => {
-    const r = WAR_PLAYER_ATTACK_RATE[tag];
-    const g = isOpp ? WAR_GLOBAL_ATTACK_RATE_ENEMY : WAR_GLOBAL_ATTACK_RATE_OUR;
-    return blendMissRate(r ? r.used : 0, r ? r.possible : 0, g.used, g.possible, OUR_HIST_K);
-};
+// Chance a remaining attack slot never gets used at all. Regular war (unlike CWL) is every
+// other day with 2 attacks each, so per-player/per-side personal blending only introduced noise
+// and a structural bias (our roster always has personal history, a regular-war opponent almost
+// never does). One flat war-wide rate for every player on both sides removes that asymmetry
+// entirely. CWL's own missRate is untouched.
+const warMissRate = (_tag, _isOpp) =>
+    WAR_GLOBAL_ATTACK_RATE_OUR.possible ? 1 - WAR_GLOBAL_ATTACK_RATE_OUR.used / WAR_GLOBAL_ATTACK_RATE_OUR.possible : 0;
 
 // Greedy assignment: highest attacker → highest uncleared defender (no repeat pairs).
 // attacks = array of attack objects with attacker_tag, attacker_side, defender_pos, stars
