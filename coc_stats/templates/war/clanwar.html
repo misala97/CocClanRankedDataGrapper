@@ -1056,13 +1056,16 @@ initDiffFallback(WAR_MATCHUP_RATES, WAR_MATCHUP_COUNTS);
 const warPlayerInfo = (tag, atkTH, defTH, histK) => playerInfo(WAR_PLAYER_HISTORY, WAR_MATCHUP_RATES, tag, atkTH, defTH, histK);
 
 // Chance this player's remaining attack slot never gets used at all — blended same way as
-// star outcomes: personal usage rate shrinks toward a side-specific clan-wide rate (our roster
-// vs the enemy clan) with little/no personal history, using a side-specific histK too.
+// star outcomes, but with its own histK (not ENEMY_HIST_K/OUR_HIST_K from war_shared.js, which
+// CWL also reads): a regular-war opponent is rarely seen more than once or twice, so a low K
+// there let one or two stray missed attacks swing their blended miss rate wildly even though the
+// enemy global fallback is now identical to ours (see war_global_attack_rate_enemy in
+// routes.py). Using OUR_HIST_K for both sides here shrinks sparse enemy samples just as hard as
+// ours, without touching ENEMY_HIST_K itself — star-outcome blending and CWL stay untouched.
 const warMissRate = (tag, isOpp) => {
     const r = WAR_PLAYER_ATTACK_RATE[tag];
     const g = isOpp ? WAR_GLOBAL_ATTACK_RATE_ENEMY : WAR_GLOBAL_ATTACK_RATE_OUR;
-    const histK = isOpp ? ENEMY_HIST_K : OUR_HIST_K;
-    return blendMissRate(r ? r.used : 0, r ? r.possible : 0, g.used, g.possible, histK);
+    return blendMissRate(r ? r.used : 0, r ? r.possible : 0, g.used, g.possible, OUR_HIST_K);
 };
 
 // Greedy assignment: highest attacker → highest uncleared defender (no repeat pairs).
