@@ -156,10 +156,9 @@ def clan_war_page():
     # historical star distribution only describes attacks that landed, not the real chance a
     # remaining slot never gets used at all (forgot, ran out of time). Only warEnded wars count,
     # since an ongoing war's unused slots aren't "missed" yet — they may still get used before
-    # it ends. The global fallback is split by is_opponent — reliable for War specifically, since
-    # every ClanWar row is fetched as api_fetch_clan_war(CLAN_TAG), so 'clan' is always us and
-    # 'opponent' is always the enemy. Our own roster gets disciplined toward full attack usage;
-    # a random enemy clan has no such pressure from us, so the two populations genuinely differ.
+    # it ends. is_opponent is reliable for War specifically, since every ClanWar row is fetched as
+    # api_fetch_clan_war(CLAN_TAG), so 'clan' is always us and 'opponent' is always the enemy —
+    # used below to compute our own roster's global attack-usage rate.
     _raw_war, _player_war = {}, {}
     _player_possible = {}    # tag -> {'used': N, 'possible': N}
     _our_possible, _our_used = 0, 0
