@@ -490,8 +490,13 @@ function probRangeGreater(aLo, aHi, bLo, bHi) {
 // enough remaining attacks to win on pure stars — destruction is irrelevant unless stars tie.
 function computeAdjustedWin(wc, ourPct, oppPct) {
     const maxPerAtk = wc.teamSize > 0 ? 100 / wc.teamSize : 6.67;
-    const oppMaxFinalPct = oppPct + wc.oppRem * maxPerAtk;
-    const ourMaxFinalPct = ourPct + wc.ourRem * maxPerAtk;
+    // Clamped to 100 — destruction% cannot exceed 100 per base, so an unclamped "every remaining
+    // attack lands at a perfect 100%" projection can overshoot past the real ceiling once a side
+    // is already close to maxed. That fictitious headroom was feeding into probRangeGreater as if
+    // it were real, letting drawSplitOur (and therefore pWinAdj) climb toward "likely win" even
+    // when the opponent had already locked in a perfect, unbeatable score.
+    const oppMaxFinalPct = Math.min(100, oppPct + wc.oppRem * maxPerAtk);
+    const ourMaxFinalPct = Math.min(100, ourPct + wc.ourRem * maxPerAtk);
     const drawSplitOur = probRangeGreater(ourPct, ourMaxFinalPct, oppPct, oppMaxFinalPct);
     const pWinAdj = wc.pWin + wc.pDraw * drawSplitOur;
     const starsCantLoseForUs  = wc.oppMax <= wc.ourStars; // their ceiling can at best tie our current stars
