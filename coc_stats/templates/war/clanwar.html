@@ -1058,8 +1058,12 @@ const warPlayerInfo = (tag, atkTH, defTH, histK) => playerInfo(WAR_PLAYER_HISTOR
 // and a structural bias (our roster always has personal history, a regular-war opponent almost
 // never does). One flat war-wide rate for every player on both sides removes that asymmetry
 // entirely. CWL's own missRate is untouched.
+// Dampened to 1/3 of the raw historical rate — a 2-day war window gives plenty of time for a
+// slot that looks unused mid-war to still get attacked before it ends, so the raw rate
+// (measured only at war-end) overstates the true remaining-slot miss chance.
+const WAR_MISS_RATE_DAMPING = 1 / 3;
 const warMissRate = (_tag, _isOpp) =>
-    WAR_GLOBAL_ATTACK_RATE_OUR.possible ? 1 - WAR_GLOBAL_ATTACK_RATE_OUR.used / WAR_GLOBAL_ATTACK_RATE_OUR.possible : 0;
+    (WAR_GLOBAL_ATTACK_RATE_OUR.possible ? 1 - WAR_GLOBAL_ATTACK_RATE_OUR.used / WAR_GLOBAL_ATTACK_RATE_OUR.possible : 0) * WAR_MISS_RATE_DAMPING;
 
 // Greedy assignment: highest attacker → highest uncleared defender (no repeat pairs).
 // attacks = array of attack objects with attacker_tag, attacker_side, defender_pos, stars

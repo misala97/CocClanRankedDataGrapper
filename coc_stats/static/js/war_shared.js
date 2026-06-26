@@ -453,6 +453,12 @@ function openMatchupRatesModal(rates, counts, totalAtks, contentId, backdropId, 
 // remaining attacks can still move their final % anywhere in [floor, ceiling], so the
 // outcome isn't decided by who currently leads — only by whether the ranges overlap.
 function probRangeGreater(aLo, aHi, bLo, bHi) {
+    // Both sides reduced to a single point (no remaining attacks left to move it) at the exact
+    // same value — a real, unbreakable destruction-tie. Falling through to the aHi<=bLo check
+    // below would resolve this case as "0" (we lose the tiebreak) every time, since that
+    // condition is symmetric and triggers first regardless of which side "should" win — when
+    // really it's a draw with no further bound that can decide it either way.
+    if (aLo === aHi && bLo === bHi && aLo === bLo) return 0.5;
     if (aHi <= bLo) return 0;
     if (bHi <= aLo) return 1;
     const rangeA = aHi - aLo, rangeB = bHi - bLo;
@@ -555,6 +561,8 @@ function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtk
         guaranteeHtml = wc.ourRem > 0
             ? `<div class="wc-guarantee" style="color:var(--red);">✗ Win impossible — even tied at best on stars, you cannot reach their destruction% with ${wc.ourRem} perfect attack${wc.ourRem !== 1 ? 's' : ''}</div>`
             : `<div class="wc-guarantee" style="color:var(--red);">✗ Lost — stars tied ${wc.ourStars}★ each, destruction decided it ${oppPct.toFixed(1)}% to ${ourPct.toFixed(1)}%</div>`;
+    } else if (wc.ourRem === 0 && wc.oppRem === 0 && drawPct >= 100) {
+        guaranteeHtml = `<div class="wc-guarantee" style="color:var(--muted);">⚖ Draw — stars tied ${wc.ourStars}★ each, destruction tied at ${ourPct.toFixed(1)}%, no attacks remain</div>`;
     } else if (winAdjPct >= 100) {
         guaranteeHtml = `<div class="wc-guarantee" style="color:var(--green);">✓ &gt;99.5% win chance — extremely likely, but not yet mathematically locked</div>`;
     } else if (lossAdjPct >= 100) {
