@@ -675,7 +675,7 @@ function wcTipHide() {
 // points directly, leaving marker/text sizes untouched regardless of how few or many there are.
 function buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, availWidth) {
     const n = history.length;
-    const hasProj = !!wc;
+    const hasProj = !!wc && (wc.ourRem > 0 || wc.oppRem > 0);
     const slots = n + (hasProj ? 1.6 : 0);
     const svgH = 150, padL = 32, padR = 10, padT = 10, padB = 22;
     const plotH = svgH - padT - padB;
@@ -731,7 +731,8 @@ function buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, availWidth) {
                 lockRing(pts[k + 1].x, pts[k + 1].y, h.lossLockedAfter, 'var(--red)') +
                 `<circle cx="${pts[k + 1].x}" cy="${pts[k + 1].y}" r="4.5" fill="${dotColor}" stroke="var(--surface)" stroke-width="1.5" ` +
                 tip(`#${k + 1} ${escapeHTML(h.name)} (TH${h.th}) vs ${escapeHTML(h.defName)} (TH${h.defTH})`,
-                    `${h.stars}★ / ${h.pct}% — ${perfLabel} (exp ${h.expStars.toFixed(1)}★)${lockNote}`,
+                    `${h.stars}★ / ${h.pct}% — ${perfLabel} (exp ${h.expStars.toFixed(1)}★)${lockNote}` +
+                    (h.ourStarsAfter !== undefined ? `<br>Score after: ${h.ourStarsAfter}★ – ${h.oppStarsAfter}★` : ''),
                     `Win%: ${h.pWinBeforePct.toFixed(1)} → ${h.pWinAfterPct.toFixed(1)} (${swing >= 0 ? '+' : ''}${swing.toFixed(1)}pp)`) +
                 `/>`;
     }
@@ -797,7 +798,7 @@ function renderAttackHistoryChart(idPrefix, history, wc, ourPct, oppPct) {
 function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
     if (!history || !history.length) return '';
     const n = history.length;
-    const hasProj = !!wc;
+    const hasProj = !!wc && (wc.ourRem > 0 || wc.oppRem > 0);
     const anyLocked = history[0].lockedBefore || history.some(h => h.lockedAfter);
     const anyLossLocked = history[0].lossLockedBefore || history.some(h => h.lossLockedAfter);
 
