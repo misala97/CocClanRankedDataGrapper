@@ -1209,6 +1209,16 @@ function computeWarAttackHistory() {
             ourStarsAfter: ourStars, oppStarsAfter: oppStars,
             pWinBeforePct: adjBefore.pWinAdj * 100,
             pWinAfterPct: adjAfter.pWinAdj * 100,
+            // Raw (pre-tiebreak) draw mass — pWinAdj already folds in the *destruction-tiebreak*
+            // outcome (e.g. "0% win" can mean either "dead loss" or "can't win outright, but very
+            // likely to draw," and pWinAdj alone can't tell those apart). Carried through so the
+            // chart can show the real draw odds as a band above the line instead of looking like
+            // a flat, hopeless 0%.
+            // Zeroed once both sides are out of attacks — at that point pDraw isn't "remaining
+            // hope," it's the literal final, fully-decided result (an exact tie, displayed via
+            // the same 50/50 convention as everywhere else), so there's nothing left to shade.
+            pDrawBeforePct: before.ourRem === 0 && before.oppRem === 0 ? 0 : before.pDraw * 100,
+            pDrawAfterPct: !after || (after.ourRem === 0 && after.oppRem === 0) ? 0 : after.pDraw * 100,
             lockedBefore: adjBefore.lockedWin,
             lockedAfter: adjAfter.lockedWin,
             lossLockedBefore: adjBefore.lockedLoss,
