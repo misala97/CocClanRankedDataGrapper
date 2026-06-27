@@ -2130,8 +2130,15 @@ function computeCWLAttackHistory(n) {
             name: atk.attacker_name, th: atk.attacker_th,
             defName: atk.defender_name, defTH: atk.defender_th,
             stars: inc, pct: atk.pct, expStars,
-            pWinBeforePct: adjBefore.pWinAdj * 100,
-            pWinAfterPct: adjAfter.pWinAdj * 100,
+            // "Not losing" chance, not strict win chance: pWinAdj (used for the lock rings below)
+            // folds a star-tie into win/loss via the destruction tiebreak, which is right for
+            // those guarantees but wrong for the timeline — a draw is NOT a loss in Clash of
+            // Clans, yet pWinAdj credits a near-certain draw only half toward "good outcome."
+            // pWin + pDraw counts every draw as fully non-losing, which is what the line should
+            // track: it can never crash toward 0 just because outright winning became impossible
+            // while a draw stayed easily reachable.
+            pWinBeforePct: (before.pWin + before.pDraw) * 100,
+            pWinAfterPct: (after ? after.pWin + after.pDraw : before.pWin + before.pDraw) * 100,
             lockedBefore: adjBefore.lockedWin,
             lockedAfter: adjAfter.lockedWin,
             lossLockedBefore: adjBefore.lockedLoss,
@@ -2150,7 +2157,7 @@ function computeCWLAttackHistory(n) {
         if (finalWc) {
             const finalAdj = computeAdjustedWin(finalWc, r.ourPct || 0, r.oppPct || 0);
             const last = history[history.length - 1];
-            last.pWinAfterPct  = finalAdj.pWinAdj * 100;
+            last.pWinAfterPct  = (finalWc.pWin + finalWc.pDraw) * 100;
             last.lockedAfter   = finalAdj.lockedWin;
             last.lossLockedAfter = finalAdj.lockedLoss;
         }

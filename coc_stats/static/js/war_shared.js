@@ -719,7 +719,7 @@ function buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, availWidth) {
     let dots = lockRing(pts[0].x, pts[0].y, history[0].lockedBefore, 'var(--accent)') +
                lockRing(pts[0].x, pts[0].y, history[0].lossLockedBefore, 'var(--red)') +
                `<circle cx="${pts[0].x}" cy="${pts[0].y}" r="4" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.5" ` +
-               tip('Pre-war baseline', `${history[0].pWinBeforePct.toFixed(1)}% win, before any attacks`, 'Greedy TH-based matchup — no real data yet') + `/>`;
+               tip('Pre-war baseline', `${history[0].pWinBeforePct.toFixed(1)}% not losing, before any attacks`, 'Greedy TH-based matchup — no real data yet') + `/>`;
     let segs = '';
     for (let k = 0; k < n; k++) {
         const h = history[k];
@@ -738,7 +738,7 @@ function buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, availWidth) {
                 tip(`#${k + 1} ${escapeHTML(h.name)} (TH${h.th}) vs ${escapeHTML(h.defName)} (TH${h.defTH})`,
                     `${h.stars}★ / ${h.pct}% — ${perfLabel} (exp ${h.expStars.toFixed(1)}★)${lockNote}` +
                     (h.ourStarsAfter !== undefined ? `<br>Score after: ${h.ourStarsAfter}★ – ${h.oppStarsAfter}★` : ''),
-                    `Win%: ${h.pWinBeforePct.toFixed(1)} → ${h.pWinAfterPct.toFixed(1)} (${swing >= 0 ? '+' : ''}${swing.toFixed(1)}pp)`) +
+                    `Not losing: ${h.pWinBeforePct.toFixed(1)}% → ${h.pWinAfterPct.toFixed(1)}% (${swing >= 0 ? '+' : ''}${swing.toFixed(1)}pp)`) +
                 `/>`;
     }
 
@@ -849,7 +849,7 @@ function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
         </div>
         <div id="${tableId}" style="display:none;">
             <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:10px;padding:0 14px 6px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">
-                <div>Attacker &rarr; Defender</div><div style="text-align:right;">Result</div><div style="text-align:right;">vs Expected</div><div style="text-align:right;">Win% Swing</div>
+                <div>Attacker &rarr; Defender</div><div style="text-align:right;">Result</div><div style="text-align:right;">vs Expected</div><div style="text-align:right;">Not-Losing% Swing</div>
             </div>
             ${rows}
         </div>
