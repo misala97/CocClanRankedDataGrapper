@@ -14,15 +14,15 @@ const ENEMY_HIST_K = 2;
 // Base prior — recalibrated to ~67% 3★ at even matchup (observed DB average).
 // Overwritten at page load by initDiffFallback() once real data is available.
 let _DIFF_FALLBACK = {
-     4: [0.00, 0.01, 0.05, 0.94],
-     3: [0.00, 0.02, 0.11, 0.87],
-     2: [0.01, 0.03, 0.17, 0.79],
-     1: [0.02, 0.05, 0.20, 0.73],
-     0: [0.03, 0.07, 0.23, 0.67],
-    '-1': [0.05, 0.13, 0.28, 0.54],
-    '-2': [0.09, 0.19, 0.33, 0.39],
-    '-3': [0.15, 0.28, 0.35, 0.22],
-    '-4': [0.23, 0.37, 0.28, 0.12],
+     4: [0.00, 0.00, 0.00, 1.00],
+     3: [0.00, 0.00, 0.00, 1.00],
+     2: [0.00, 0.00, 0.05, 0.95],
+     1: [0.00, 0.01, 0.13, 0.86],
+     0: [0.00, 0.02, 0.21, 0.77],
+    '-1': [0.01, 0.15, 0.42, 0.42],
+    '-2': [0.04, 0.22, 0.44, 0.30],
+    '-3': [0.12, 0.38, 0.38, 0.12],
+    '-4': [0.30, 0.44, 0.22, 0.04],
 };
 
 // Return [p0,p1,p2,p3] for an attacker TH vs defender TH from the given rates dict.
@@ -34,10 +34,21 @@ function atkDist(rates, atkTH, defTH) {
     return _DIFF_FALLBACK[String(diff)] || _DIFF_FALLBACK['0'];
 }
 
-// Aggregate all recorded attacks by TH diff, weighted by sample count, and use
-// those empirical distributions as the per-diff fallback. For diffs with no recorded
-// data at all (e.g. brand-new TH pairings), the base constants above remain.
-function buildDiffFallback(rates, counts) {
+// Aggregate all recorded attacks by TH diff, weighted by sample count, and use those
+// empirical distributions as the per-diff fallback once a diff has enough pooled volume
+// (DIFF_FALLBACK_MIN_ATTACKS); below that, the base constants above remain.
+//
+// Note: `rates` only ever contains TH-pairs that individually already cleared the
+// 5-attack bar (see war/cwl routes.py), so a pooled diff total is never 1-4 — it's
+// always 0 or >=5. DIFF_FALLBACK_MIN_ATTACKS is therefore a separate, higher bar:
+// trusting the broad per-diff prior enough to fully replace it requires more
+// aggregate volume than just one already-qualifying matchup pair.
+const DIFF_FALLBACK_MIN_ATTACKS = 10;
+
+// Pools `rates` entries by TH diff. Shared by buildDiffFallback (decides what to use)
+// and the matchup-rates modal (labels what's actually showing), so the two can never
+// disagree on the pooled totals.
+function diffFallbackTotals(rates, counts) {
     const totals = {}, weighted = {};
     for (const [key, d] of Object.entries(rates)) {
         const [atkTH, defTH] = key.split('_').map(Number);
@@ -47,14 +58,24 @@ function buildDiffFallback(rates, counts) {
         totals[diff] += n;
         d.forEach((p, i) => { weighted[diff][i] += p * n; });
     }
+    return { totals, weighted };
+}
+
+function buildDiffFallback(totals, weighted) {
     const out = { ..._DIFF_FALLBACK };
     for (const [diff, n] of Object.entries(totals))
-        if (n > 0) out[diff] = weighted[diff].map(w => w / n);
+        if (n >= DIFF_FALLBACK_MIN_ATTACKS) out[diff] = weighted[diff].map(w => w / n);
     return out;
 }
 
+// Stashed so the matchup-rates modal can label each row "DB avg · N attacks" vs
+// "Base prior" without recomputing the pool itself.
+let _DIFF_FALLBACK_POOLED_N = {};
+
 function initDiffFallback(rates, counts) {
-    _DIFF_FALLBACK = buildDiffFallback(rates, counts);
+    const { totals, weighted } = diffFallbackTotals(rates, counts);
+    _DIFF_FALLBACK_POOLED_N = totals;
+    _DIFF_FALLBACK = buildDiffFallback(totals, weighted);
 }
 
 // Convolve independent per-attack probability distributions via DP.
@@ -406,9 +427,19 @@ function openMatchupRatesModal(rates, counts, totalAtks, contentId, backdropId, 
                 const diffN = +diff;
                 const diffLabel = diffN > 0 ? `+${diffN}` : String(diffN);
                 const eg = diffN === 0 ? 'e.g. TH18 vs TH18' : diffN > 0 ? `e.g. TH${18} vs TH${18-diffN}` : `e.g. TH${18+diffN} vs TH${18}`;
+                // Whether THIS row is real pooled DB data or the hardcoded base prior depends
+                // on diffFallbackTotals' pooled count for this diff vs DIFF_FALLBACK_MIN_ATTACKS
+                // — same check buildDiffFallback used, so this label can never disagree with
+                // what's actually active.
+                const pooledN = _DIFF_FALLBACK_POOLED_N[diff] || 0;
+                const isReal = pooledN >= DIFF_FALLBACK_MIN_ATTACKS;
+                const sourceHtml = isReal
+                    ? `<span style="color:var(--blue);">DB avg</span> &middot; ${pooledN.toLocaleString()} atk`
+                    : `<span style="color:var(--muted);">Base prior</span>${pooledN ? ` &middot; ${pooledN} atk (&lt;${DIFF_FALLBACK_MIN_ATTACKS})` : ''}`;
                 return `<tr style="border-bottom:1px solid var(--bord2);">
                     <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:${diffN>=0?'var(--green)':'var(--red)'};">${diffLabel}</td>
                     <td style="padding:8px 14px;font-size:11px;color:var(--muted);">${eg}</td>
+                    <td style="padding:8px 14px;font-size:11px;font-family:'Rajdhani',sans-serif;font-weight:600;white-space:nowrap;">${sourceHtml}</td>
                     <td style="padding:8px 14px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:${avg>=2.5?'var(--green)':avg>=1.8?'var(--yellow)':avg>=1.2?'var(--accent)':'var(--red)'};">&#216; ${avg}&#9733;</td>
                     <td style="padding:8px 20px 8px 4px;">
                         <div style="display:flex;height:8px;border-radius:2px;overflow:hidden;min-width:80px;">
@@ -429,12 +460,13 @@ function openMatchupRatesModal(rates, counts, totalAtks, contentId, backdropId, 
         html += `
         <div style="margin-top:8px;padding-top:20px;border-top:2px solid var(--bord2);">
             <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">
-                Fallback Distribution (used when &lt;5 attacks on record)
+                Per-TH-Diff Fallback Curve (used when a specific matchup has &lt;5 attacks)
             </div>
             <table style="width:100%;border-collapse:collapse;">
                 <thead><tr style="background:var(--surf2);">
                     <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">TH Diff</th>
                     <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Example</th>
+                    <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Source</th>
                     <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">Avg &#9733;</th>
                     <th style="padding:6px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">0&#9733; &#183; 1&#9733; &#183; 2&#9733; &#183; 3&#9733;</th>
                 </tr></thead>
