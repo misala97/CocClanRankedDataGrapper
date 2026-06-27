@@ -703,17 +703,6 @@ function buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, availWidth) {
     const pts = [{ x: xFor(0), y: yFor(history[0].pWinBeforePct) }];
     for (let k = 0; k < n; k++) pts.push({ x: xFor(k + 1), y: yFor(history[k].pWinAfterPct) });
 
-    // Draw-probability band — pWinAdj already folds the destruction-tiebreak outcome into a
-    // single win number, so "0% win" can mean either "dead loss" or "can't win outright, but
-    // very likely to draw." Shading the raw draw mass above the line surfaces that difference:
-    // a point sitting on a flat 0% with a tall band above it still has real hope, while one with
-    // no band really is decided.
-    const bandTop = [yFor(Math.min(100, history[0].pWinBeforePct + history[0].pDrawBeforePct))];
-    for (let k = 0; k < n; k++) bandTop.push(yFor(Math.min(100, history[k].pWinAfterPct + history[k].pDrawAfterPct)));
-    const bandPath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
-        + pts.slice().reverse().map((p, i) => `L${p.x},${bandTop[pts.length - 1 - i]}`).join(' ') + ' Z';
-    const band = `<path d="${bandPath}" fill="var(--muted)" opacity=".18" stroke="none"/>`;
-
     const tip = (title, line1, line2) =>
         `data-title="${title}" data-line1="${line1 || ''}" data-line2="${line2 || ''}" ` +
         `onmouseenter="wcTipShow(this)" onmousemove="wcTipMove(event)" onmouseleave="wcTipHide()"`;
@@ -749,7 +738,7 @@ function buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, availWidth) {
                 tip(`#${k + 1} ${escapeHTML(h.name)} (TH${h.th}) vs ${escapeHTML(h.defName)} (TH${h.defTH})`,
                     `${h.stars}★ / ${h.pct}% — ${perfLabel} (exp ${h.expStars.toFixed(1)}★)${lockNote}` +
                     (h.ourStarsAfter !== undefined ? `<br>Score after: ${h.ourStarsAfter}★ – ${h.oppStarsAfter}★` : ''),
-                    `Win%: ${h.pWinBeforePct.toFixed(1)} → ${h.pWinAfterPct.toFixed(1)} (${swing >= 0 ? '+' : ''}${swing.toFixed(1)}pp) · Draw%: ${h.pDrawAfterPct.toFixed(1)}`) +
+                    `Win%: ${h.pWinBeforePct.toFixed(1)} → ${h.pWinAfterPct.toFixed(1)} (${swing >= 0 ? '+' : ''}${swing.toFixed(1)}pp)`) +
                 `/>`;
     }
 
@@ -792,7 +781,6 @@ function buildAttackHistoryChartSVG(history, wc, ourPct, oppPct, availWidth) {
     return `<svg viewBox="0 0 ${svgW} ${svgH}" width="${svgW}" height="${svgH}" style="display:block;">
         ${gridLines}
         ${xTicks}
-        ${band}
         ${segs}
         ${projSeg}
         ${dots}
@@ -842,7 +830,7 @@ function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
     return `
     <div style="border-top:1px solid var(--bord2);padding:10px 16px 12px 20px;">
         <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">
-            Win% Timeline <span style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:.3px;opacity:.7;">hover a marker for attack detail</span>
+            Win/Draw% Timeline <span style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:.3px;opacity:.7;">chance of not losing · hover a marker for attack detail</span>
         </div>
         <div id="${idPrefix}-chartbox" style="overflow-x:auto;min-height:150px;"></div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px;font-size:9px;color:var(--muted);">
@@ -850,7 +838,6 @@ function buildAttackHistoryHTML(history, idPrefix, wc, ourPct, oppPct) {
             <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-right:3px;"></span>Their attack</span>
             <span><span style="display:inline-block;width:10px;height:2px;background:var(--green);margin-right:3px;vertical-align:middle;"></span>Swing helped us</span>
             <span><span style="display:inline-block;width:10px;height:2px;background:var(--red);margin-right:3px;vertical-align:middle;"></span>Swing hurt us</span>
-            <span><span style="display:inline-block;width:10px;height:7px;background:var(--muted);opacity:.4;margin-right:3px;vertical-align:middle;"></span>Draw chance (can't win, but might not lose)</span>
             ${hasProj ? `<span><span style="display:inline-block;width:10px;height:0;border-top:2px dashed var(--accent);margin-right:3px;vertical-align:middle;"></span>Projected if expected</span>` : ''}
             ${anyLocked ? `<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--accent);margin-right:3px;vertical-align:middle;"></span>🔒 Win locked (100%)</span>` : ''}
             ${anyLossLocked ? `<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--red);margin-right:3px;vertical-align:middle;"></span>🔒 Loss locked (0%)</span>` : ''}
