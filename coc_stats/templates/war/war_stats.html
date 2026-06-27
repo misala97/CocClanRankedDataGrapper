@@ -70,15 +70,6 @@
         .fp-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); cursor:default; }
         .fp-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 
-        /* custom tooltip */
-        .fp-tooltip {
-            position:fixed; z-index:999; background:var(--surf2); border:1px solid var(--border);
-            border-radius:7px; padding:7px 12px; font-size:12px; font-family:'DM Sans',sans-serif;
-            color:var(--text); pointer-events:none; white-space:nowrap;
-            box-shadow:0 4px 16px rgba(0,0,0,.4); display:none;
-        }
-        .fp-tooltip strong { color:var(--accent); }
-
         /* label colors */
         .lb-clear          { background:#3fb950; }
         .lb-failed-clear   { background:#e3b341; }
@@ -311,8 +302,6 @@
         <div class="fp-legend" id="fpLegend"></div>
     </div>
 </div>
-<div class="fp-tooltip" id="fpTooltip"></div>
-
 {# ── TH BREAKDOWN ── #}
 <div class="section">
     <div class="section-title">Performance by Town Hall Level</div>
@@ -536,7 +525,6 @@ function renderHoF() {
 }
 
 /* ── Fingerprint ── */
-const tooltip = document.getElementById('fpTooltip');
 function renderFingerprint() {
     const lbl = showFarm ? LBL_ALL : LBL_NF;
     const total = Object.values(lbl).reduce((a,b)=>a+b,0);
@@ -555,12 +543,9 @@ function renderFingerprint() {
         seg.dataset.count=n;
         seg.dataset.pct=pct.toFixed(1);
         seg.addEventListener('mousemove', e=>{
-            tooltip.style.display='block';
-            tooltip.style.left=(e.clientX+14)+'px';
-            tooltip.style.top=(e.clientY-36)+'px';
-            tooltip.innerHTML=`<strong>${seg.dataset.label}</strong>: ${seg.dataset.count} attacks (${seg.dataset.pct}%)`;
+            showFloatTip(`<strong style="color:var(--accent);">${seg.dataset.label}</strong>: ${seg.dataset.count} attacks (${seg.dataset.pct}%)`, e);
         });
-        seg.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
+        seg.addEventListener('mouseleave', hideFloatTip);
         bar.appendChild(seg);
 
         const item=document.createElement('div');

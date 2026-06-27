@@ -6,7 +6,10 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import RaidWeekend, RaidWeekendLog, Player
-from services.helpers import CLEANUP_THRESHOLD, raid_district_medal_value, raid_score_verdict, _raid_level_mult, is_capital_peak
+from services.helpers import (
+    CLEANUP_THRESHOLD, RAID_DISTRICT_MEDALS, RAID_CAPITAL_PEAK_MEDALS,
+    raid_district_medal_value, raid_score_verdict, _raid_level_mult, is_capital_peak,
+)
 
 raid_bp = Blueprint('raid', __name__)
 
@@ -340,6 +343,10 @@ def raid_weekend_page():
         regular_baseline=regular_baseline,
         peak_baseline=peak_baseline,
         combined_baseline=combined_baseline,
+        raid_medal_tables_json=json.dumps({
+            'district': RAID_DISTRICT_MEDALS,
+            'peak': RAID_CAPITAL_PEAK_MEDALS,
+        }),
     )
 
 

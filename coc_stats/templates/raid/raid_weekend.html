@@ -142,24 +142,64 @@
         .recent-body { border-top: 1px solid var(--border); }
 
         /* ── ENEMY OVERVIEW ── */
-        .enemy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; padding: 16px; }
+        .enemy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; padding: 12px; }
         .enemy-card { background: var(--surf2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
         .enemy-card-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 14px; border-bottom: 1px solid var(--border);
+            display: flex; flex-direction: column; gap: 3px;
+            padding: 6px 12px; border-bottom: 1px solid var(--border);
             background: rgba(255,255,255,0.02);
         }
-        .enemy-card-name { font-weight: 700; font-size: 13px; color: var(--text); }
-        .enemy-card-meta { font-size: 11px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
-        .enemy-district-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .enemy-district-table td { padding: 6px 14px; border-bottom: 1px solid var(--bord2); vertical-align: middle; }
-        .enemy-district-table tr:last-child td { border-bottom: none; }
-        .enemy-district-name { font-weight: 600; color: var(--text); }
-        .enemy-atk-pips { display: flex; gap: 3px; align-items: center; }
-        .atk-pip { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
-        .atk-pip.empty { background: var(--bord2); border: 1px solid var(--border); }
-        .enemy-destroyed { color: var(--green); font-weight: 700; font-size: 11px; font-family: 'Rajdhani', sans-serif; }
-        .enemy-not-destroyed { color: var(--muted); font-size: 11px; font-family: 'Rajdhani', sans-serif; }
+        .enemy-card-header-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .enemy-card-header-top img { width: 22px !important; height: 22px !important; }
+        .enemy-card-name { font-weight: 700; font-size: 12px; color: var(--text); line-height: 1.2; }
+        .enemy-card-meta { display: block; font-size: 10px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+
+        /* ── CAPITAL PYRAMID ── */
+        .capital-pyramid {
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            padding: 8px 10px 8px;
+            background: radial-gradient(ellipse at top, rgba(240,165,0,0.07), transparent 65%);
+        }
+        .capital-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+        .capital-tile { display: flex; flex-direction: column; align-items: center; gap: 0; width: 54px; }
+        .capital-tile-pct { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 10px; color: var(--text); line-height: 1; }
+        .capital-tile-stars { font-size: 0.5em; line-height: 1; }
+        .capital-tile-icon { position: relative; width: 28px; height: 25px; margin: 1px 0 2px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+        .capital-tile-roof {
+            position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent;
+            border-bottom: 10px solid var(--tile-color, var(--muted));
+        }
+        .capital-tile-body {
+            position: absolute; bottom: 0; left: 2px; right: 2px; height: 15px;
+            background: var(--tile-color, var(--muted)); border-radius: 3px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 9px; color: rgba(0,0,0,0.55);
+            box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15);
+        }
+        .capital-tile.finished-good { --tile-color: var(--green); }
+        .capital-tile.finished-ok   { --tile-color: var(--orange); }
+        .capital-tile.finished-bad  { --tile-color: var(--red); }
+        .capital-tile.partial   { --tile-color: var(--blue); }
+        .capital-tile.untouched { --tile-color: var(--bord2); }
+        .capital-tile[title] .capital-tile-icon { cursor: help; }
+        .capital-tile.untouched .capital-tile-body { color: var(--muted); }
+        .capital-tile.peak .capital-tile-icon { width: 34px; height: 30px; }
+        .capital-tile.peak .capital-tile-roof { border-left-width: 18px; border-right-width: 18px; border-bottom-width: 12px; }
+        .capital-tile.peak .capital-tile-body { height: 18px; font-size: 10px; }
+        .capital-tile.peak .capital-tile-pct { font-size: 11px; }
+        .capital-tile-name { font-size: 8px; font-weight: 600; color: var(--text); text-align: center; line-height: 1.05; max-width: 54px; }
+        .capital-tile-level { font-size: 7px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+        .capital-tile-medals { font-size: 7px; color: var(--accent); font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+
+        .capital-legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; padding: 8px 12px 0; }
+        .cl-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+        .cl-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+        .enemy-cleared-badge {
+            color: var(--green); font-weight: 700; margin-left: 8px;
+        }
+        .enemy-card-cleared { border-color: rgba(63,185,80,0.35); box-shadow: 0 0 0 1px rgba(63,185,80,0.12); }
 
         /* ── RESPONSIVE ── */
         @media (max-width: 1024px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -336,6 +376,7 @@
 <script>
 const playerData = {{ player_data | tojson | safe }};
 const myPlayerTag = {{ (current_user.linked_player_tag if current_user and current_user.linked_player_tag else None) | tojson }};
+const RAID_MEDAL_TABLES = {{ raid_medal_tables_json | safe }};
 
 let currentSort = { column: 'score_100', direction: 'desc' };
 
@@ -626,51 +667,148 @@ function buildEnemyOverview() {
     playerData.forEach(p => {
         (p.attack_logs || []).forEach(l => {
             const cKey = l.defender_tag || l.defender_name || '—';
-            if (!clans[cKey]) clans[cKey] = { name: l.defender_name || '—', tag: l.defender_tag || '', badge: l.defender_badge || null, league: l.defender_league || null, leagueBadge: l.defender_league_badge || null, districts: {}, firstLogId: l.log_id ?? Infinity };
-            if ((l.log_id ?? Infinity) < clans[cKey].firstLogId) clans[cKey].firstLogId = l.log_id;
+            if (!clans[cKey]) clans[cKey] = { name: l.defender_name || '—', tag: l.defender_tag || '', badge: l.defender_badge || null, league: l.defender_league || null, leagueBadge: l.defender_league_badge || null, districts: {}, lastLogId: l.log_id ?? -Infinity };
+            if ((l.log_id ?? -Infinity) > clans[cKey].lastLogId) clans[cKey].lastLogId = l.log_id;
             const dKey = l.district_name || '—';
             if (!clans[cKey].districts[dKey]) {
                 clans[cKey].districts[dKey] = {
                     name: dKey, level: l.district_level || 0,
-                    attacks: 0, destroyed: false, last_pct_total: 0,
+                    attacks: 0, destroyed: false, last_pct_total: 0, attackers: [],
                 };
             }
             const d = clans[cKey].districts[dKey];
             d.attacks++;
+            d.attackers.push({ name: p.player_name, percentage: l.percentage || 0, stars: l.stars || 0 });
             if ((l.percentage_total || 0) >= 100) d.destroyed = true;
             if ((l.percentage_total || 0) > d.last_pct_total) d.last_pct_total = l.percentage_total || 0;
         });
     });
 
-    const clanList = Object.values(clans).sort((a, b) => a.firstLogId - b.firstLogId);
+    const clanList = Object.values(clans);
     if (!clanList.length) {
         document.getElementById('enemyBody').innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No enemy data recorded.</div>';
         return;
     }
 
-    const MAX_PIPS = 6;
-    const cards = clanList.map(clan => {
+    const isPeakName = n => n === 'Capital Peak' || n === 'Capital Peaks';
+
+    // Sourced from services/helpers.py's RAID_DISTRICT_MEDALS / RAID_CAPITAL_PEAK_MEDALS
+    // via the route, rather than duplicated here — see raid_medal_tables_json below.
+    function medalValue(level, isPeak) {
+        return (isPeak ? RAID_MEDAL_TABLES.peak : RAID_MEDAL_TABLES.district)[level] || 0;
+    }
+
+    // Every capital has exactly one peak, even if nobody in our clan has attacked it yet —
+    // build a placeholder rather than silently omitting it. Computed once per clan up front
+    // so both the sort order below and the card rendering can reuse the same totals.
+    clanList.forEach(clan => {
         const districts = Object.values(clan.districts).sort((a, b) => {
-            if (a.name === 'Capital Peak' || a.name === 'Capital Peaks') return -1;
-            if (b.name === 'Capital Peak' || b.name === 'Capital Peaks') return 1;
+            if (isPeakName(a.name)) return -1;
+            if (isPeakName(b.name)) return 1;
             return a.name.localeCompare(b.name);
         });
-        const totalAtk = districts.reduce((s, d) => s + d.attacks, 0);
-        const destroyed = districts.filter(d => d.destroyed).length;
-        const avgAtk = districts.length ? (totalAtk / districts.length).toFixed(1) : '—';
+        clan.peakDistrict = districts.find(d => isPeakName(d.name))
+            || { name: 'Capital Peak', level: 0, attacks: 0, destroyed: false, last_pct_total: 0, attackers: [] };
+        clan.otherDistricts = districts.filter(d => !isPeakName(d.name));
+        clan.districtCount  = clan.otherDistricts.length + 1;
+        clan.totalAtk       = clan.otherDistricts.reduce((s, d) => s + d.attacks, 0) + clan.peakDistrict.attacks;
+        clan.destroyedCount = clan.otherDistricts.filter(d => d.destroyed).length + (clan.peakDistrict.destroyed ? 1 : 0);
+        clan.remaining      = clan.districtCount - clan.destroyedCount;
+        clan.avgAtk         = (clan.totalAtk / clan.districtCount).toFixed(1);
+    });
 
-        const rows = districts.map(d => {
-            const pips = Array.from({ length: MAX_PIPS }, (_, i) =>
-                `<div class="atk-pip${i < d.attacks ? '' : ' empty'}"></div>`
-            ).join('');
-            const statusHtml = d.destroyed
-                ? `<span class="enemy-destroyed">✓ Destroyed</span>`
-                : `<span class="enemy-not-destroyed">${d.last_pct_total}%</span>`;
-            return `<tr>
-                <td class="enemy-district-name"><div style="line-height:1.2;">${escapeHTML(d.name)}<div style="color:var(--muted);font-size:10px;font-family:'Rajdhani',sans-serif;font-weight:600;">Lvl ${d.level}</div></div></td>
-                <td><div class="enemy-atk-pips">${pips}<span style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;margin-left:5px;">${d.attacks}</span></div></td>
-                <td>${statusHtml}</td>
-            </tr>`;
+    // The clan most recently attacked — i.e. the one currently being worked on — surfaces
+    // first, so whoever's mid-raid sees their current target at the top of the list.
+    clanList.sort((a, b) => b.lastLogId - a.lastLogId);
+
+    // Splits the non-peak districts into rows that widen going down the
+    // pyramid, mirroring the in-game capital layout (e.g. 8 districts -> 2/3/3).
+    function pyramidRows(n) {
+        if (n <= 0) return [];
+        const rows = [];
+        let remaining = n;
+        while (remaining > 0) {
+            const take = remaining >= 3 ? 3 : remaining;
+            rows.push(take);
+            remaining -= take;
+        }
+        if (rows.length >= 2 && rows[rows.length - 1] === 1) {
+            rows[rows.length - 2] -= 1;
+            rows[rows.length - 1] += 1;
+        }
+        return rows.reverse();
+    }
+
+    // A finished district's color tells you how efficiently it died: too many
+    // attacks burned on one district means fewer attacks left for the rest of
+    // the raid, so it's flagged orange/red even though the outcome (100%) is
+    // identical to a clean 1-2 hit clear. The legend text below is generated
+    // from these same numbers so the two can't drift out of sync.
+    const FINISHED_THRESHOLDS = { nonPeak: { good: 2, ok: 3 }, peak: { good: 3, ok: 4 } };
+    function finishedColorClass(attacks, isPeak) {
+        const t = isPeak ? FINISHED_THRESHOLDS.peak : FINISHED_THRESHOLDS.nonPeak;
+        if (attacks <= t.good) return 'finished-good';
+        if (attacks === t.ok) return 'finished-ok';
+        return 'finished-bad';
+    }
+
+    function attackersTooltip(d) {
+        if (!d.attackers || !d.attackers.length) return '';
+        return d.attackers
+            .map(a => `${a.name} — ${a.percentage}% ${'★'.repeat(a.stars)}${'☆'.repeat(3 - a.stars)}`)
+            .join('\n');
+    }
+
+    function capitalTile(d, isPeak) {
+        const pct = d.destroyed ? 100 : (d.last_pct_total || 0);
+        const stars = pct >= 100 ? 3 : pct >= 50 ? 2 : pct > 0 ? 1 : 0;
+        const statusClass = d.destroyed
+            ? finishedColorClass(d.attacks, isPeak)
+            : (pct > 0 ? 'partial' : 'untouched');
+        // Attacker breakdown is useful for any district someone has actually hit —
+        // not just finished ones — so coordinating remaining attacks doesn't require
+        // guessing who already chipped away at a district still in progress.
+        const tooltip = (d.attackers && d.attackers.length)
+            ? ` title="${escapeHTML(attackersTooltip(d))}"` : '';
+        // Medal value helps prioritize which untouched/in-progress district to hit next;
+        // once destroyed the value is already secured, so it'd just be clutter.
+        const medals = d.destroyed ? 0 : medalValue(d.level, isPeak);
+        const medalHtml = medals ? `<div class="capital-tile-medals">${medals}🏅</div>` : '';
+        // A finished district's color already says "100%, done" — repeating "100% ★★★"
+        // on every tile is pure clutter, so that line only renders while still in progress.
+        const pctStarsHtml = d.destroyed ? '' : `
+            <div class="capital-tile-pct">${pct}%</div>
+            <div class="capital-tile-stars">${renderStars(stars)}</div>`;
+        return `<div class="capital-tile ${statusClass}${isPeak ? ' peak' : ''}"${tooltip}>
+            ${pctStarsHtml}
+            <div class="capital-tile-icon">
+                <div class="capital-tile-roof"></div>
+                <div class="capital-tile-body">${d.attacks}</div>
+            </div>
+            <div class="capital-tile-name">${escapeHTML(d.name)}</div>
+            <div class="capital-tile-level">Lvl ${d.level || '—'}</div>
+            ${medalHtml}
+        </div>`;
+    }
+
+    const { nonPeak: npT, peak: pT } = FINISHED_THRESHOLDS;
+    const legendHtml = `<div class="capital-legend">
+        <span class="cl-item"><span class="cl-dot" style="background:var(--green);"></span>Efficient clear (&le;${npT.good} atk · peak &le;${pT.good})</span>
+        <span class="cl-item"><span class="cl-dot" style="background:var(--orange);"></span>${npT.ok} atk · peak ${pT.ok}</span>
+        <span class="cl-item"><span class="cl-dot" style="background:var(--red);"></span>${npT.ok + 1}+ atk · peak ${pT.ok + 1}+</span>
+        <span class="cl-item"><span class="cl-dot" style="background:var(--blue);"></span>In progress</span>
+        <span class="cl-item"><span class="cl-dot" style="background:var(--bord2);"></span>Untouched</span>
+    </div>`;
+
+    const cards = clanList.map(clan => {
+        const { peakDistrict, otherDistricts, districtCount, totalAtk, destroyedCount, avgAtk, remaining } = clan;
+
+        const peakHtml = `<div class="capital-row">${capitalTile(peakDistrict, true)}</div>`;
+        let idx = 0;
+        const rowsHtml = pyramidRows(otherDistricts.length).map(size => {
+            const rowDistricts = otherDistricts.slice(idx, idx + size);
+            idx += size;
+            return `<div class="capital-row">${rowDistricts.map(d => capitalTile(d, false)).join('')}</div>`;
         }).join('');
 
         const badgeHtml = clan.badge
@@ -679,16 +817,17 @@ function buildEnemyOverview() {
         const leagueHtml = clan.league
             ? `<span style="font-size:10px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;white-space:nowrap;">${escapeHTML(clan.league)}</span>`
             : '';
-        return `<div class="enemy-card">
+        const clearedBadge = remaining === 0 ? `<span class="enemy-cleared-badge">✓ Fully Cleared</span>` : '';
+        return `<div class="enemy-card${remaining === 0 ? ' enemy-card-cleared' : ''}">
             <div class="enemy-card-header">
-                <div style="display:flex;align-items:center;gap:8px;min-width:0;">${badgeHtml}<div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span class="enemy-card-name">${escapeHTML(clan.name)}</span>${leagueHtml}</div></div>
-                <span class="enemy-card-meta" style="flex-shrink:0;">avg ${avgAtk} · ${totalAtk} atk · ${destroyed}/${districts.length} districts</span>
+                <div class="enemy-card-header-top">${badgeHtml}<div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span class="enemy-card-name">${escapeHTML(clan.name)}</span>${leagueHtml}</div></div>
+                <span class="enemy-card-meta">avg ${avgAtk} · ${totalAtk} atk · ${destroyedCount}/${districtCount} districts${clearedBadge}</span>
             </div>
-            <table class="enemy-district-table"><tbody>${rows}</tbody></table>
+            <div class="capital-pyramid">${peakHtml}${rowsHtml}</div>
         </div>`;
     }).join('');
 
-    document.getElementById('enemyBody').innerHTML = `<div class="enemy-grid">${cards}</div>`;
+    document.getElementById('enemyBody').innerHTML = `${legendHtml}<div class="enemy-grid">${cards}</div>`;
 }
 
 function toggleEnemy() {

@@ -165,14 +165,6 @@
     .hm-cell-val   { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; }
     .hm-cell-empty { color: var(--muted); opacity: .2; font-size: 12px; }
     .hm-row:last-child .hm-week-cell, .hm-row:last-child .hm-cell { border-bottom: none; }
-    .hm-cell[data-tip]:hover::before {
-        content: attr(data-tip);
-        position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%);
-        background: var(--surf2); border: 1px solid var(--border); border-radius: 7px;
-        padding: 5px 9px; font-size: 11px; color: var(--text); white-space: pre; z-index: 200;
-        box-shadow: 0 6px 20px rgba(0,0,0,.5); pointer-events: none; line-height: 1.5;
-        font-family: 'DM Sans', sans-serif;
-    }
 
     /* ── PAGE FOOTER ── */
     .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: .3px; }
@@ -506,8 +498,8 @@ function buildThEraGrid() {
             const era = eraMap[th];
             if (!era) return `<td class="th-era-cell th-era-empty">\u2014</td>`;
             const c   = scoreColor(era.avg_score);
-            const tip = `TH${th}\n${esc(p.player_name)}\nAvg score: ${era.avg_score}\nAttacks: ${era.attacks}\nWeeks: ${era.weeks}\n3★ rate: ${era.three_rate}%`;
-            return `<td class="th-era-cell" style="background:${c.bg};" data-tip="${tip}">
+            const tip = `TH${th}\n${p.player_name}\nAvg score: ${era.avg_score}\nAttacks: ${era.attacks}\nWeeks: ${era.weeks}\n3★ rate: ${era.three_rate}%`;
+            return `<td class="th-era-cell" style="background:${c.bg};" title="${esc(tip)}">
                 <div class="th-era-score" style="color:${c.text};">${era.avg_score}</div>
                 <div class="th-era-meta">${era.attacks} atk</div>
             </td>`;
@@ -526,12 +518,6 @@ function buildThEraGrid() {
         </tr></thead>
         <tbody>${rows}</tbody>
     </table>`;
-
-    // tooltip support via CSS attr() — add hover handler for cells outside viewport
-    wrap.querySelectorAll('.th-era-cell[data-tip]').forEach(cell => {
-        cell.style.position = 'relative';
-        cell.title = cell.dataset.tip.replace(/\n/g, ' | ');
-    });
 }
 
 // ── sort state ────────────────────────────────────────────────────────────────
@@ -645,7 +631,7 @@ function buildHeatmap() {
             if (s == null) return `<td class="hm-cell"><span class="hm-cell-empty">\u2014</span></td>`;
             const c   = scoreColor(s);
             const tip = `${player}\n${weekLabel}\nScore: ${s}`;
-            return `<td class="hm-cell" style="background:${c.bg};" data-tip="${esc(tip)}">
+            return `<td class="hm-cell" style="background:${c.bg};" title="${esc(tip)}">
                 <span class="hm-cell-val" style="color:${c.text};">${s}</span>
             </td>`;
         }).join('');

@@ -637,40 +637,9 @@ function buildWinCalcHTML(wc, ourName, oppName, ourPct, oppPct, ourAtkId, oppAtk
     return { barHtml, bodyHtml, winAdjPct };
 }
 
-// Floating tooltip for SVG chart markers — styled to match the dark theme, replacing the
-// browser's native <title> tooltip (which always renders as an unstyled white box).
-// Markers carry their content in data-title/data-line1/data-line2; these three functions
-// are the only DOM touchpoint and are shared by every marker kind (attack/start/projection).
-function wcTipShow(el) {
-    let tip = document.getElementById('wcFloatTip');
-    if (!tip) {
-        tip = document.createElement('div');
-        tip.id = 'wcFloatTip';
-        tip.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;background:var(--surf2);border:1px solid var(--bord2);border-radius:6px;padding:8px 10px;font-size:11px;line-height:1.5;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.45);max-width:260px;';
-        document.body.appendChild(tip);
-    }
-    const d = el.dataset;
-    tip.innerHTML = `<div style="font-weight:700;margin-bottom:3px;">${d.title}</div>` +
-                    (d.line1 ? `<div>${d.line1}</div>` : '') +
-                    (d.line2 ? `<div style="color:var(--muted);margin-top:2px;">${d.line2}</div>` : '');
-    tip.style.display = 'block';
-    wcTipMove(window.event);
-}
-function wcTipMove(evt) {
-    const tip = document.getElementById('wcFloatTip');
-    if (!tip || !evt) return;
-    const pad = 14;
-    const rect = tip.getBoundingClientRect();
-    let x = evt.clientX + pad, y = evt.clientY + pad;
-    if (x + rect.width  > window.innerWidth)  x = evt.clientX - rect.width  - pad;
-    if (y + rect.height > window.innerHeight) y = evt.clientY - rect.height - pad;
-    tip.style.left = x + 'px';
-    tip.style.top  = y + 'px';
-}
-function wcTipHide() {
-    const tip = document.getElementById('wcFloatTip');
-    if (tip) tip.style.display = 'none';
-}
+// wcTipShow/wcTipMove/wcTipHide (used by SVG chart markers below via
+// data-title/data-line1/data-line2) now live in static/js/float_tooltip.js,
+// shared by every tooltip on the site.
 
 // Renders just the <svg> for the win% timeline — split out from buildAttackHistoryHTML so it
 // can be (re)built once the actual rendered width of its container is known. A fixed viewBox

@@ -185,16 +185,6 @@
     .hm-row:last-child .hm-district-cell,
     .hm-row:last-child .hm-cell { border-bottom: none; }
 
-    /* Tooltip */
-    .hm-cell[data-tip]:hover::before {
-        content: attr(data-tip);
-        position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
-        background: var(--surf2); border: 1px solid var(--border); border-radius: 7px;
-        padding: 6px 10px; font-size: 11px; color: var(--text); white-space: pre; z-index: 200;
-        box-shadow: 0 6px 20px rgba(0,0,0,.5); pointer-events: none; line-height: 1.6;
-        font-family: 'DM Sans', sans-serif; font-weight: 400;
-    }
-
     /* ── LEADERBOARD ── */
     .lb-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
     .lb-hdr {
@@ -688,7 +678,7 @@ function buildChampionsAndHeatmap() {
             if (!d) return `<td class="hm-cell"><div class="hm-cell-inner"><span class="hm-empty">—</span></div></td>`;
             const c   = heatColor(d.avg);
             const tip = `${player}\n${dist}\nAvg attacks: ${d.avg.toFixed(2)}\nSolo wipes: ${d.clears}×`;
-            return `<td class="hm-cell" style="background:${c.bg};" data-tip="${esc(tip)}">
+            return `<td class="hm-cell" style="background:${c.bg};" title="${esc(tip)}">
                 <div class="hm-cell-inner">
                     <span class="hm-avg" style="color:${c.text};">${d.avg.toFixed(2)}</span>
                     <span class="hm-clears" style="color:${c.text};">${d.clears}×</span>

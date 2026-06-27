@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     {% if chartjs %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endif %}
     {% if chartjs_adapter %}<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>{% endif %}
+    <script src="/static/js/float_tooltip.js"></script>
     <script>
         window.VERDICT_LABELS = {'badge-godlike':'Godlike','badge-dominant':'Dominant','badge-wow':'Very Good','badge-good':'Good','badge-warning':'Bad','badge-suck':'Disaster','badge-useless':'Useless','badge-inactive':'Inactive'};
         window.VERDICT_COLORS = {'badge-godlike':'#bc8cff','badge-dominant':'#f0a500','badge-wow':'#3fb950','badge-good':'#58a6ff','badge-warning':'#e8793a','badge-suck':'#f85149','badge-useless':'#8b949e','badge-inactive':'#3d4f66'};
@@ -31,6 +32,14 @@
         }
 
         html { overflow-y: scroll; }
+
+        /* ── FLOATING TOOLTIP (shared by every hover-info element site-wide) ── */
+        .float-tooltip {
+            position: fixed; z-index: 9999; display: none; pointer-events: none;
+            background: var(--surf2); border: 1px solid var(--bord2); border-radius: 6px;
+            padding: 8px 10px; font-size: 11px; line-height: 1.5; color: var(--text);
+            font-family: 'DM Sans', sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.45); max-width: 320px;
+        }
 
         /* ── PAGE HEADER ── */
         .page-header {

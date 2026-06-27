@@ -644,7 +644,6 @@
                             Scatter Plot — Ranked Win Rate vs Raid Avg Dmg%
                         </div>
                         <div id="skill-corr-scatter" style="position:relative;background:var(--surf2);border:1px solid var(--border);border-radius:10px;overflow:hidden;"></div>
-                        <div id="skill-corr-tooltip" style="display:none;position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;pointer-events:none;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.4);"></div>
                     </div>
                     <div>
                         <div style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">
@@ -1924,23 +1923,17 @@ function buildScatterPlot(pts, r) {
     wrap.innerHTML = svg;
 
     // Tooltip on hover
-    const tooltip = document.getElementById('skill-corr-tooltip');
     wrap.querySelectorAll('.sc-dot').forEach(el => {
         const i = +el.dataset.idx;
         const p = pts[i];
-        el.addEventListener('mouseenter', e => {
-            tooltip.style.display = 'block';
-            tooltip.innerHTML = `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;margin-bottom:4px;">${p.name} · TH${p.th}</div>
+        const html = `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;margin-bottom:4px;">${p.name} · TH${p.th}</div>
                 <div style="color:var(--muted);line-height:1.8;">
                     🏆 Ranked score: <strong style="color:var(--text);">${p.ranked_score}/100</strong> <span style="color:var(--muted);font-size:10px;">(${p.ranked_weeks} weeks · ${p.ranked_games} battles)</span><br>
                     💥 Raid score: <strong style="color:var(--text);">${p.raid_score}/100</strong> <span style="color:var(--muted);font-size:10px;">(${p.raid_weekends} weekends · ${p.raid_attacks} attacks)</span>
                 </div>`;
-        });
-        el.addEventListener('mousemove', e => {
-            tooltip.style.left = (e.clientX + 14) + 'px';
-            tooltip.style.top  = (e.clientY - 10) + 'px';
-        });
-        el.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+        el.addEventListener('mouseenter', e => showFloatTip(html, e));
+        el.addEventListener('mousemove', e => moveFloatTip(e));
+        el.addEventListener('mouseleave', hideFloatTip);
     });
 }
 
