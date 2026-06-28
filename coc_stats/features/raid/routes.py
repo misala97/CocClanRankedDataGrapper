@@ -77,8 +77,10 @@ def raid_weekend_page():
             # from the raid-wide baseline's denominator too. The baseline's medal total also only
             # draws from non-cleanup attacks — so a cleanup tap can credit its own attacker without
             # ever inflating the average everyone else gets compared against.
-            credit           = {}
-            attack_count     = {}
+            credit                  = {}
+            attack_count            = {}
+            player_baseline_medals  = {}
+            player_baseline_attacks = {}
             baseline_medals  = 0.0
             baseline_attacks = 0
             for log in bucket_logs:
@@ -90,16 +92,37 @@ def raid_weekend_page():
                     attack_count[log.player_tag] = attack_count.get(log.player_tag, 0) + 1
                     baseline_medals  += share
                     baseline_attacks += 1
+                    player_baseline_medals[log.player_tag]  = player_baseline_medals.get(log.player_tag, 0) + share
+                    player_baseline_attacks[log.player_tag] = player_baseline_attacks.get(log.player_tag, 0) + 1
 
             baseline = (baseline_medals / baseline_attacks) if baseline_attacks else 0.0
 
-            rate   = {}
-            impact = {}
+            rate           = {}
+            impact         = {}
+            baseline_shift = {}
             for player_tag, ac in attack_count.items():
                 personal_rate = credit[player_tag] / ac
                 rate[player_tag]   = round(personal_rate, 2)
                 impact[player_tag] = round(personal_rate - baseline, 2)
-            return {'baseline': round(baseline, 2), 'rate': rate, 'impact': impact}
+                # Baseline Shift answers a different question than Impact: not "how does my
+                # rate compare to average" but "how many medals/attack did MY OWN attacks pull
+                # the shared average up or down by" — baseline-with-me minus baseline-without-me
+                # (the latter computed leave-one-out: this player's own non-cleanup medals/
+                # attacks removed from the bucket totals). A player can have a huge Impact
+                # (their rate is far from average) while barely moving the baseline (their
+                # attacks are a tiny fraction of a large pool), or the reverse — a middling
+                # Impact but a large Baseline Shift if the bucket is thin and they're a big
+                # chunk of it (this is common on the Capital Peak, which gets far fewer attacks
+                # overall than regular districts). Falls back to 0 if this player IS the entire
+                # bucket (no one else to compare to, so there's no "average without them").
+                other_medals   = baseline_medals  - player_baseline_medals.get(player_tag, 0)
+                other_attacks  = baseline_attacks - player_baseline_attacks.get(player_tag, 0)
+                other_baseline = (other_medals / other_attacks) if other_attacks else baseline
+                baseline_shift[player_tag] = round(baseline - other_baseline, 2)
+            return {
+                'baseline': round(baseline, 2), 'rate': rate, 'impact': impact,
+                'baseline_shift': baseline_shift,
+            }
 
         peak_logs    = [l for l in logs if is_capital_peak(l.district_name)]
         regular_logs = [l for l in logs if not is_capital_peak(l.district_name)]
@@ -108,6 +131,10 @@ def raid_weekend_page():
 
         net_medal_impact_by_player  = regular_bucket['impact']
         peak_medal_impact_by_player = peak_bucket['impact']
+        # Only used internally to build the combined overall_baseline_shift below — not
+        # surfaced per-bucket, just like overall_impact doesn't surface separate columns.
+        net_medal_baseline_shift_by_player    = regular_bucket['baseline_shift']
+        peak_medal_baseline_shift_by_player   = peak_bucket['baseline_shift']
         regular_rate_by_player      = regular_bucket['rate']
         peak_rate_by_player         = peak_bucket['rate']
         regular_baseline            = regular_bucket['baseline'] if regular_logs else None
@@ -228,7 +255,6 @@ def raid_weekend_page():
                 peak_medal_impact_by_player.get(p['player_tag'])
                 if p['player_tag'] in players_with_peak_attack else None
             )
-
             # Overall Impact is this player's weighted share of impact on the raid's whole
             # medal pool: a player who never attacked the Capital Peak had no chance to move
             # the ~28% of total value that lives there, so that share counts as 0 for them —
@@ -244,6 +270,17 @@ def raid_weekend_page():
             )
             p['overall_impact'] = round(
                 weight_regular * overall_regular_impact + weight_peak * overall_peak_impact, 2
+            )
+            overall_regular_baseline_shift = (
+                net_medal_baseline_shift_by_player.get(p['player_tag'], 0)
+                if p['player_tag'] in players_with_regular_attack else 0
+            )
+            overall_peak_baseline_shift = (
+                peak_medal_baseline_shift_by_player.get(p['player_tag'], 0)
+                if p['player_tag'] in players_with_peak_attack else 0
+            )
+            p['overall_baseline_shift'] = round(
+                weight_regular * overall_regular_baseline_shift + weight_peak * overall_peak_baseline_shift, 2
             )
             overall_regular_rate = (
                 regular_rate_by_player.get(p['player_tag'], 0)

@@ -162,6 +162,7 @@
         }
         .capital-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
         .capital-tile { display: flex; flex-direction: column; align-items: center; gap: 0; width: 54px; }
+        .capital-tile-top { min-height: 22px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
         .capital-tile-pct { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 10px; color: var(--text); line-height: 1; }
         .capital-tile-stars { font-size: 0.5em; line-height: 1; }
         .capital-tile-icon { position: relative; width: 28px; height: 25px; margin: 1px 0 2px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
@@ -345,6 +346,7 @@
                         <th class="sortable" onclick="sortTable('net_medal_impact')" style="text-align:center;" title="Your medal credit per attack on regular districts, vs. the raid-wide average">Medals / Atk</th>
                         <th class="sortable" onclick="sortTable('peak_medal_impact')" style="text-align:center;" title="Your medal credit per attack on the Capital Peak, vs. the raid-wide average">Peak Medals / Atk</th>
                         <th class="sortable" onclick="sortTable('overall_impact')" style="text-align:center;" title="Medals/Atk and Peak Medals/Atk combined, weighted by each bucket's share of total medal value">Overall Impact</th>
+                        <th class="sortable" onclick="sortTable('overall_baseline_shift')" style="text-align:center;" title="How many medals/attack YOUR OWN attacks pulled the raid-wide average up or down by — baseline with you minus baseline without you. Different from Overall Impact: that's how far your rate is FROM the average, this is how much you personally MOVED it.">Overall Shift</th>
                         <th class="sortable" onclick="sortTable('score_100')">Verdict</th>
                         <th>Details</th>
                     </tr>
@@ -401,6 +403,16 @@ function impactCell(rate, impact) {
     const color = impact > 0 ? 'var(--green)' : impact < 0 ? 'var(--red)' : 'var(--muted)';
     return `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--text);">${rate.toFixed(2)}</div>
             <div style="margin-top:2px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${color};">${sign}${impact.toFixed(2)}</div>`;
+}
+
+// Unlike impactCell, there's no "rate" to pair this with — baseline shift isn't a
+// comparison of your rate to anything, it's literally how many medals/attack your own
+// attacks moved the shared bucket average by (baseline with you minus without you).
+function shiftCell(shift) {
+    if (shift == null) return `<span style="color:var(--muted);">—</span>`;
+    const sign  = shift > 0 ? '+' : '';
+    const color = shift > 0 ? 'var(--green)' : shift < 0 ? 'var(--red)' : 'var(--muted)';
+    return `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:${color};">${sign}${shift.toFixed(2)}</div>`;
 }
 
 function buildVerdictDetails(p) {
@@ -564,13 +576,14 @@ function buildTable() {
             <td style="text-align:center;">${impactCell(p.medals_per_attack, p.net_medal_impact)}</td>
             <td style="text-align:center;">${impactCell(p.peak_medals_per_attack, p.peak_medal_impact)}</td>
             <td style="text-align:center;">${impactCell(p.overall_rate, p.overall_impact)}</td>
+            <td style="text-align:center;">${shiftCell(p.overall_baseline_shift)}</td>
             <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
             <td><button type="button" class="action-btn details-toggle">Details</button></td>
         `;
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'detail-row';
-        detailRow.innerHTML = `<td class="detail-cell" colspan="11"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
+        detailRow.innerHTML = `<td class="detail-cell" colspan="12"><div class="detail-inner">${buildVerdictDetails(p)}</div></td>`;
 
         const toggle = () => {
             const expanded = detailRow.classList.toggle('expanded');
@@ -692,6 +705,17 @@ function buildEnemyOverview() {
 
     const isPeakName = n => n === 'Capital Peak' || n === 'Capital Peaks';
 
+    // Capital districts unlock strictly in this order as Capital Hall rises — a clan can't
+    // have Skeleton Park without already having Dragon Cliffs, Balloon Lagoon, etc. So
+    // observing ANY district in our logs lets us deduce every earlier-order district also
+    // exists for that clan, even if our own members never happened to attack it. (Anything
+    // AFTER the highest observed district is genuinely unknown — it may or may not exist —
+    // so those are left out rather than guessed.)
+    const DISTRICT_UNLOCK_ORDER = [
+        'Barbarian Camp', 'Wizard Valley', 'Balloon Lagoon', "Builder's Workshop",
+        'Dragon Cliffs', 'Golem Quarry', 'Skeleton Park', 'Goblin Mines',
+    ];
+
     // Sourced from services/helpers.py's RAID_DISTRICT_MEDALS / RAID_CAPITAL_PEAK_MEDALS
     // via the route, rather than duplicated here — see raid_medal_tables_json below.
     function medalValue(level, isPeak) {
@@ -709,7 +733,22 @@ function buildEnemyOverview() {
         });
         clan.peakDistrict = districts.find(d => isPeakName(d.name))
             || { name: 'Capital Peak', level: 0, attacks: 0, destroyed: false, last_pct_total: 0, attackers: [] };
-        clan.otherDistricts = districts.filter(d => !isPeakName(d.name));
+
+        const touchedOthers = districts.filter(d => !isPeakName(d.name));
+        const touchedNames = new Set(touchedOthers.map(d => d.name));
+        const highestIdx = touchedOthers.reduce((max, d) => {
+            const idx = DISTRICT_UNLOCK_ORDER.indexOf(d.name);
+            return idx > max ? idx : max;
+        }, -1);
+        const inferredDistricts = [];
+        for (let i = 0; i < highestIdx; i++) {
+            const name = DISTRICT_UNLOCK_ORDER[i];
+            if (!touchedNames.has(name)) {
+                inferredDistricts.push({ name, level: 0, attacks: 0, destroyed: false, last_pct_total: 0, attackers: [] });
+            }
+        }
+        clan.otherDistricts = touchedOthers.concat(inferredDistricts).sort((a, b) => a.name.localeCompare(b.name));
+
         clan.districtCount  = clan.otherDistricts.length + 1;
         clan.totalAtk       = clan.otherDistricts.reduce((s, d) => s + d.attacks, 0) + clan.peakDistrict.attacks;
         clan.destroyedCount = clan.otherDistricts.filter(d => d.destroyed).length + (clan.peakDistrict.destroyed ? 1 : 0);
@@ -775,12 +814,15 @@ function buildEnemyOverview() {
         const medals = d.destroyed ? 0 : medalValue(d.level, isPeak);
         const medalHtml = medals ? `<div class="capital-tile-medals">${medals}🏅</div>` : '';
         // A finished district's color already says "100%, done" — repeating "100% ★★★"
-        // on every tile is pure clutter, so that line only renders while still in progress.
+        // on every tile is pure clutter, so the text only renders while still in progress.
+        // The wrapper itself always renders though (just empty when finished), at a fixed
+        // min-height — otherwise a finished tile's icon sits higher than its still-in-progress
+        // neighbors in the same row, since nothing pushes it down to match.
         const pctStarsHtml = d.destroyed ? '' : `
             <div class="capital-tile-pct">${pct}%</div>
             <div class="capital-tile-stars">${renderStars(stars)}</div>`;
         return `<div class="capital-tile ${statusClass}${isPeak ? ' peak' : ''}"${tooltip}>
-            ${pctStarsHtml}
+            <div class="capital-tile-top">${pctStarsHtml}</div>
             <div class="capital-tile-icon">
                 <div class="capital-tile-roof"></div>
                 <div class="capital-tile-body">${d.attacks}</div>
