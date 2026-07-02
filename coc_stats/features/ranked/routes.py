@@ -1,11 +1,14 @@
 import datetime as dt
 import json
+import threading
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, jsonify, redirect, render_template, request, url_for
+
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import Player, RankedWeek
+from features.auth.routes import _current_user
+from models import Player, RankedWeek, RankedWeekAnalysis
 from services.helpers import (
     get_league_thresholds, _get_league_rank,
     EXPECTED_LEAGUE_RANK, _calc_th_multiplier, to_local,
@@ -13,6 +16,12 @@ from services.helpers import (
 )
 
 ranked_bp = Blueprint('ranked', __name__)
+
+ANALYSIS_COOLDOWN = dt.timedelta(minutes=10)
+# A 'running' row whose process died (crash/restart) mid-run would otherwise stay stuck
+# forever and lock the user out — treat it as abandoned past this age, same idea as
+# tasks/__init__.py's STALE_LOCK_SECONDS for the scheduler's file locks.
+STALE_RUNNING_TIMEOUT = dt.timedelta(minutes=15)
 
 
 @ranked_bp.route('/ranked')
@@ -569,4 +578,85 @@ def ranked_stats_page():
         all_attacks_total    = all_attacks_total,
         clan_three_star_rate = clan_three_star_rate,
         avg_clan_score       = avg_clan_score,
+    )
+
+
+@ranked_bp.route('/ranked/analysis')
+def ranked_analysis_page():
+    user = _current_user()
+    if not user or not user.linked_player_tag:
+        return redirect(url_for('ranked.ranked_weeks_page'))
+
+    row = db.session.get(RankedWeekAnalysis, user.id)
+    results = json.loads(row.results_json) if row and row.results_json else None
+    retry_after = None
+    if row and row.finished_at:
+        elapsed = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) - row.finished_at
+        if elapsed < ANALYSIS_COOLDOWN:
+            retry_after = int((ANALYSIS_COOLDOWN - elapsed).total_seconds())
+
+    return render_template(
+        'ranked/ranked_analysis.html',
+        analysis=row,
+        results=results,
+        retry_after=retry_after,
+    )
+
+
+@ranked_bp.route('/ranked/analysis/run', methods=['POST'])
+def ranked_analysis_run():
+    from services.ranked_analysis import run_week_analysis
+
+    user = _current_user()
+    if not user or not user.linked_player_tag:
+        return jsonify(ok=False, error='Link a player to your account first.'), 403
+
+    row = db.session.get(RankedWeekAnalysis, user.id)
+    if not row:
+        row = RankedWeekAnalysis(app_user_id=user.id, status='idle')
+        db.session.add(row)
+        db.session.commit()
+
+    if row.status == 'running':
+        started = row.started_at
+        is_stale = started is None or (
+            dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) - started > STALE_RUNNING_TIMEOUT
+        )
+        if not is_stale:
+            return jsonify(ok=False, busy=True, error='Analysis is already running — try again in a moment.'), 409
+
+    if row.finished_at:
+        elapsed = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) - row.finished_at
+        if elapsed < ANALYSIS_COOLDOWN:
+            retry_after = int((ANALYSIS_COOLDOWN - elapsed).total_seconds())
+            return jsonify(ok=False, cooldown=True, retry_after=retry_after,
+                            error='Please wait before running another analysis.'), 429
+
+    row.status = 'running'
+    row.progress_done = 0
+    row.progress_total = 0
+    row.error_message = None
+    row.started_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    db.session.commit()
+
+    threading.Thread(target=run_week_analysis, args=(user.id,), daemon=True).start()
+    return jsonify(ok=True)
+
+
+@ranked_bp.route('/ranked/analysis/status')
+def ranked_analysis_status():
+    user = _current_user()
+    if not user or not user.linked_player_tag:
+        return jsonify(ok=False, error='Link a player to your account first.'), 403
+
+    row = db.session.get(RankedWeekAnalysis, user.id)
+    if not row:
+        return jsonify(ok=True, status='idle', progress_done=0, progress_total=0)
+
+    return jsonify(
+        ok=True,
+        status=row.status,
+        progress_done=row.progress_done or 0,
+        progress_total=row.progress_total or 0,
+        error=row.error_message,
     )

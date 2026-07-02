@@ -182,7 +182,7 @@
         .capital-tile.finished-ok   { --tile-color: var(--orange); }
         .capital-tile.finished-bad  { --tile-color: var(--red); }
         .capital-tile.partial   { --tile-color: var(--blue); }
-        .capital-tile.untouched { --tile-color: var(--bord2); }
+        .capital-tile.untouched { --tile-color: #4a5260; }
         .capital-tile[title] .capital-tile-icon { cursor: help; }
         .capital-tile.untouched .capital-tile-body { color: var(--muted); }
         .capital-tile.peak .capital-tile-icon { width: 34px; height: 30px; }
@@ -813,19 +813,20 @@ function buildEnemyOverview() {
         // once destroyed the value is already secured, so it'd just be clutter.
         const medals = d.destroyed ? 0 : medalValue(d.level, isPeak);
         const medalHtml = medals ? `<div class="capital-tile-medals">${medals}🏅</div>` : '';
-        // A finished district's color already says "100%, done" — repeating "100% ★★★"
-        // on every tile is pure clutter, so the text only renders while still in progress.
-        // The wrapper itself always renders though (just empty when finished), at a fixed
-        // min-height — otherwise a finished tile's icon sits higher than its still-in-progress
-        // neighbors in the same row, since nothing pushes it down to match.
-        const pctStarsHtml = d.destroyed ? '' : `
+        // A finished district's color already says "100%, done", and an untouched one has
+        // nothing to report yet — "0% ☆☆☆" on every still-grey tile is pure noise. Only a
+        // district actually in progress has something this line needs to say. The wrapper
+        // itself always renders though (just empty otherwise), at a fixed min-height —
+        // otherwise a tile with nothing above it sits higher than its neighbors that do,
+        // throwing off the row's icon alignment.
+        const pctStarsHtml = statusClass === 'partial' ? `
             <div class="capital-tile-pct">${pct}%</div>
-            <div class="capital-tile-stars">${renderStars(stars)}</div>`;
+            <div class="capital-tile-stars">${renderStars(stars)}</div>` : '';
         return `<div class="capital-tile ${statusClass}${isPeak ? ' peak' : ''}"${tooltip}>
             <div class="capital-tile-top">${pctStarsHtml}</div>
             <div class="capital-tile-icon">
                 <div class="capital-tile-roof"></div>
-                <div class="capital-tile-body">${d.attacks}</div>
+                <div class="capital-tile-body">${d.attacks || ''}</div>
             </div>
             <div class="capital-tile-name">${escapeHTML(d.name)}</div>
             <div class="capital-tile-level">Lvl ${d.level || '—'}</div>

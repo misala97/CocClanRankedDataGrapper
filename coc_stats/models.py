@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from extensions import db
 
 
@@ -78,6 +79,22 @@ class RankedWeek(db.Model):
     def league_icon(self) -> str:
         from services.helpers import league_icon_url
         return league_icon_url(self.league_tier)
+
+
+class RankedWeekAnalysis(db.Model):
+    __tablename__ = 'ranked_week_analysis'
+
+    app_user_id       = db.Column(db.Integer, db.ForeignKey('app_user.id'), primary_key=True)
+    status            = db.Column(db.String(20), default='idle')   # idle | running | done | error
+    league_group_tag  = db.Column(db.String(50), nullable=True)
+    league_season_id  = db.Column(db.String(50), nullable=True)
+    player_tag        = db.Column(db.String(50), nullable=True)    # linked player tag at time of run
+    progress_done     = db.Column(db.Integer, default=0)
+    progress_total    = db.Column(db.Integer, default=0)
+    started_at        = db.Column(db.DateTime, nullable=True)
+    finished_at       = db.Column(db.DateTime, nullable=True)
+    error_message     = db.Column(db.Text, nullable=True)
+    results_json      = db.Column(MEDIUMTEXT, nullable=True)
 
 
 class RankedBattleLog(db.Model):

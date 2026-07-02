@@ -503,6 +503,41 @@ def get_league_thresholds(league_name):
     return thresholds.get(name)
 
 
+def trophies_at_rank(members_sorted_by_rank, rank):
+    """1-indexed rank lookup into a league-group members list (list order = rank order)."""
+    if not rank or rank < 1 or rank > len(members_sorted_by_rank):
+        return None
+    return members_sorted_by_rank[rank - 1].get('leagueTrophies')
+
+
+# Max hero level achievable at each TH level (home village heroes only)
+HERO_TH_MAX = {
+    'Barbarian King': {7: 10, 8: 20, 9: 30, 10: 40, 11: 50, 12: 65, 13: 75, 14: 85, 15: 90, 16: 95, 17: 100, 18: 110},
+    'Archer Queen': { 8: 10, 9: 30, 10: 40, 11: 50, 12: 65, 13: 75, 14: 85, 15: 90, 16: 95, 17: 100, 18: 110},
+    'Minion Prince':  {9: 10, 10: 20, 11:30, 12:40, 13:50, 14:60,15:70,16:80,17:90,18:95},
+    'Grand Warden':   {11: 20, 12: 40, 13: 50, 14: 60, 15: 65, 16: 70, 17: 75, 18: 85},
+    'Royal Champion': {13: 25, 14: 30, 15: 40, 16: 45, 17: 50, 18: 55},
+    'Dragon Duke': { 15: 10, 16: 15, 17: 20, 18: 25},
+}
+
+
+def hero_th_max(hero_name, th_level):
+    mapping = HERO_TH_MAX.get(hero_name)
+    if not mapping:
+        return None
+    for th in sorted(mapping.keys(), reverse=True):
+        if th_level >= th:
+            return mapping[th]
+    return None
+
+
+def compute_hero_pct(heroes_raw, th_level):
+    """% of TH-appropriate max hero levels for a home-village heroes list."""
+    hero_total = sum(h.get('level', 0) for h in heroes_raw)
+    hero_max_sum = sum(hero_th_max(h.get('name', ''), th_level) or h.get('maxLevel', 1) for h in heroes_raw)
+    return round(hero_total / hero_max_sum * 100) if hero_max_sum else 0
+
+
 EXPECTED_LEAGUE_RANK = {
     7: 1, 8: 2, 9: 3, 10: 5, 11: 7, 12: 9,
     13: 11, 14: 14, 15: 17, 16: 21, 17: 23, 18: 26,

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+{% set page_title = 'Week Analysis – CoC Analytics' %}
+{% include '_head.html' %}
+<style>
+    .analysis-hero {
+        background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+        padding: 22px 24px; margin-bottom: 20px; display: flex; align-items: center;
+        justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .analysis-hero p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    #runBtn {
+        padding: 10px 22px; background: rgba(240,165,0,0.12); color: var(--accent);
+        border: 1px solid var(--accent); border-radius: 7px; font-weight: 700; font-size: 13px;
+        font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; text-transform: uppercase;
+        cursor: pointer; transition: all 0.15s;
+    }
+    #runBtn:hover:not(:disabled) { background: rgba(240,165,0,0.2); box-shadow: 0 0 14px rgba(240,165,0,0.25); }
+    #runBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .progress-wrap { display: none; flex: 1; min-width: 220px; }
+    .progress-bar-track { background: var(--surf2); border: 1px solid var(--border); border-radius: 8px; height: 10px; overflow: hidden; }
+    .progress-bar-fill { background: linear-gradient(90deg, var(--accent), var(--acc2)); height: 100%; width: 0%; transition: width 0.3s; }
+    .progress-label { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .error-box { color: var(--red); font-size: 13px; margin-top: 8px; }
+    .empty-state { padding: 60px 20px; text-align: center; color: var(--muted); }
+
+    /* ── Summary cards ── */
+    .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .stat-card .value { font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 700; }
+    .stat-card .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .stat-card.zone-promo { border-color: rgba(63,185,80,0.4); }
+    .stat-card.zone-promo .value { color: var(--green); }
+    .stat-card.zone-dem { border-color: rgba(248,81,73,0.4); }
+    .stat-card.zone-dem .value { color: var(--red); }
+
+    /* ── Townhall spread ── */
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; }
+    .panel h3 { font-family: 'Rajdhani', sans-serif; font-size: 15px; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 12px; color: var(--text); }
+    .th-bars { display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+    .th-bar-row { display: flex; align-items: center; gap: 12px; }
+    .th-bar-label { width: 42px; flex-shrink: 0; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted); }
+    .th-bar-track { flex: 1; background: var(--surf2); border-radius: 5px; height: 16px; overflow: hidden; }
+    .th-bar-fill { height: 100%; border-radius: 5px; background: #30363d; transition: width 0.4s; }
+    .th-bar-fill.own { background: linear-gradient(90deg, var(--accent), var(--acc2)); }
+    .th-bar-count { width: 28px; flex-shrink: 0; text-align: right; font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; }
+    .th-bar-group:not(:last-child) { margin-bottom: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--bord2); }
+
+    .hero-bucket-group { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 0 54px; }
+    .hero-bucket-row { display: flex; align-items: center; gap: 10px; }
+    .hero-bucket-label { width: 52px; flex-shrink: 0; font-size: 10px; color: var(--muted); }
+    .hero-bucket-track { flex: 1; background: var(--surf2); border-radius: 4px; height: 8px; overflow: hidden; }
+    .hero-bucket-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+    .hero-bucket-fill.b0 { background: var(--red); }
+    .hero-bucket-fill.b1 { background: var(--orange); }
+    .hero-bucket-fill.b2 { background: var(--blue); }
+    .hero-bucket-fill.b3 { background: var(--green); }
+    .hero-bucket-count { width: 20px; flex-shrink: 0; text-align: right; font-size: 11px; color: var(--muted); }
+
+    .you-row { background: rgba(240,165,0,0.08); border-radius: 6px; padding-left: 6px; }
+
+    .opp-meta { color: var(--muted); font-size: 11px; }
+
+    /* ── Roster table ── */
+    table.opp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.opp-table thead th { padding: 10px 8px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+    table.opp-table thead th:hover { color: var(--text); }
+    table.opp-table thead th.sort-asc::after { content: ' \25B2'; color: var(--accent); }
+    table.opp-table thead th.sort-desc::after { content: ' \25BC'; color: var(--accent); }
+    table.opp-table tbody td { padding: 9px 8px; border-bottom: 1px solid var(--bord2); white-space: nowrap; }
+    table.opp-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .wl { font-size: 12px; }
+    .wl .w { color: var(--green); }
+    .wl .l { color: var(--red); }
+    .badge-even { background: rgba(88,166,255,0.06); color: var(--muted); border: 1px solid rgba(139,148,158,0.25); }
+</style>
+</head>
+<body>
+
+{% include '_nav.html' %}
+
+{% set page_header_title = 'Week <span>Analysis</span>' %}
+{% set page_header_desc = 'Scouting report for your current ranked league group' %}
+{% include '_page_header.html' %}
+
+<div class="container">
+
+    <div class="analysis-hero">
+        <div>
+            <div id="statusText">
+                {% if analysis and analysis.status == 'running' %}
+                    Analysis in progress…
+                {% elif results %}
+                    Last analyzed {{ analysis.finished_at.strftime('%d.%m.%Y %H:%M') }} UTC
+                {% else %}
+                    No analysis yet — run one to scout your current ranked league group.
+                {% endif %}
+            </div>
+            <p>Calls the Clash of Clans API once per opponent in your league group (~100 calls) — this can take a minute or two.</p>
+            <div id="errorBox" class="error-box" style="display:none;"></div>
+        </div>
+        <div class="progress-wrap" id="progressWrap">
+            <div class="progress-bar-track"><div class="progress-bar-fill" id="progressFill"></div></div>
+            <div class="progress-label" id="progressLabel">0 / 0</div>
+        </div>
+        <button id="runBtn" type="button" onclick="runAnalysis()">🔮 Run Analysis</button>
+    </div>
+
+    {% if results %}
+    {% set own = results.own %}
+    <div class="summary-row">
+        <div class="stat-card">
+            <div class="label">Your Rank</div>
+            <div class="value">#{{ own.rank }}</div>
+            <div class="sub">{{ results.league_tier }} · {{ results.group_size }} players</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">TH{{ own.th }} · {{ own.trophies }} 🏆</div>
+            <div class="value">{{ own.hero_power }}</div>
+            <div class="sub">total hero levels · {{ own.hero_pct }}% of TH max</div>
+            {% if results.avg_hero_pct is not none %}
+            <div class="sub">group avg: {{ results.avg_hero_pct }}%</div>
+            {% endif %}
+        </div>
+        <div class="stat-card">
+            <div class="label">This Week</div>
+            <div class="value"><span style="color:var(--green);">{{ own.attack_wins }}</span>/<span style="color:var(--red);">{{ own.attack_losses }}</span></div>
+            <div class="sub">attack wins / losses</div>
+        </div>
+        {% if own.promo_zone %}
+        <div class="stat-card zone-promo">
+            <div class="label">Promotion</div>
+            <div class="value">✓ In Zone</div>
+            <div class="sub">top {{ results.promo_cutoff }} promotes</div>
+            {% if results.promo_cutoff_trophies is not none and own.trophies is not none %}
+            {% set promo_lead = own.trophies - results.promo_cutoff_trophies %}
+            {% if promo_lead > 0 %}<div class="sub">{{ promo_lead }} 🏆 above promotion line</div>{% endif %}
+            {% endif %}
+        </div>
+        {% elif results.promo_cutoff %}
+        <div class="stat-card">
+            <div class="label">To Promotion</div>
+            <div class="value">{{ own.spots_to_promo }}</div>
+            <div class="sub">spots to climb (top {{ results.promo_cutoff }})</div>
+            {% if own.trophy_gap_to_promo %}<div class="sub">{{ own.trophy_gap_to_promo }} 🏆 to promotion line</div>{% endif %}
+        </div>
+        {% endif %}
+        {% if own.dem_zone %}
+        <div class="stat-card zone-dem">
+            <div class="label">Relegation</div>
+            <div class="value">⚠ In Zone</div>
+            <div class="sub">bottom ranks demote</div>
+        </div>
+        {% elif results.dem_cutoff_rank %}
+        <div class="stat-card">
+            <div class="label">Above Relegation</div>
+            <div class="value">{{ own.spots_above_dem }}</div>
+            <div class="sub">spots of cushion</div>
+            {% if own.trophy_cushion_above_dem %}<div class="sub">{{ own.trophy_cushion_above_dem }} 🏆 cushion above relegation line</div>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <h3>📊 Townhall Spread</h3>
+        <div class="th-bars">
+            {% set max_count = results.th_distribution.values() | max %}
+            {% set hero_bucket_labels = ['0-25%', '25-50%', '50-75%', '75-100%'] %}
+            {% set hero_bucket_classes = ['b0', 'b1', 'b2', 'b3'] %}
+            {% for th, count in results.th_distribution.items() %}
+            <div class="th-bar-group">
+                <div class="th-bar-row">
+                    <span class="th-bar-label">TH{{ th }}</span>
+                    <div class="th-bar-track">
+                        <div class="th-bar-fill {{ 'own' if (th | int) == own.th else '' }}" style="width: {{ (count / max_count * 100) | round(1) }}%;"></div>
+                    </div>
+                    <span class="th-bar-count">{{ count }}</span>
+                </div>
+                {% set buckets = (results.th_hero_buckets | default({})).get(th, [0, 0, 0, 0]) %}
+                {% set bucket_max = buckets | max %}
+                <div class="hero-bucket-group">
+                    {% for bcount in buckets %}
+                    <div class="hero-bucket-row">
+                        <span class="hero-bucket-label">{{ hero_bucket_labels[loop.index0] }}</span>
+                        <div class="hero-bucket-track">
+                            <div class="hero-bucket-fill {{ hero_bucket_classes[loop.index0] }}" style="width: {{ (bcount / bucket_max * 100) | round(1) if bucket_max else 0 }}%;"></div>
+                        </div>
+                        <span class="hero-bucket-count">{{ bcount }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="table-scroll" style="overflow-x:auto; border-radius:10px; border:1px solid var(--border);">
+        <table class="opp-table" style="min-width:900px; background:var(--surface);">
+            <thead>
+                <tr>
+                    <th data-key="rank" data-type="num" class="sort-asc">Rank</th>
+                    <th data-key="player" data-type="str">Player</th>
+                    <th data-key="clan" data-type="str">Clan</th>
+                    <th data-key="th" data-type="num">TH</th>
+                    <th data-key="trophies" data-type="num">Trophies</th>
+                    <th data-key="heroes" data-type="num">Heroes</th>
+                    <th data-key="atk" data-type="num">Attacks W-L</th>
+                    <th data-key="def" data-type="num">Defenses W-L</th>
+                    <th data-key="threat" data-type="num">Threat</th>
+                </tr>
+            </thead>
+            <tbody id="oppTableBody">
+                {% set ns = namespace(own_shown=false) %}
+                {% for o in results.opponents %}
+                {% if not ns.own_shown and (own.rank is none or o.rank > own.rank) %}
+                <tr class="you-row"
+                    data-rank="{{ own.rank }}" data-player="{{ own.name }}" data-clan="{{ own.clan_name or '' }}"
+                    data-th="{{ own.th }}" data-trophies="{{ own.trophies }}" data-heroes="{{ own.hero_power }}"
+                    data-atk="{{ own.attack_wins - own.attack_losses }}" data-def="{{ own.defense_wins - own.defense_losses }}"
+                    data-threat="">
+                    <td>#{{ own.rank }}</td>
+                    <td>{{ own.name }} <span class="opp-meta">(you)</span></td>
+                    <td>{{ own.clan_name or '–' }}</td>
+                    <td>{{ own.th }}</td>
+                    <td>{{ own.trophies }}</td>
+                    <td>{{ own.hero_power }} <span class="opp-meta">({{ own.hero_pct }}%)</span></td>
+                    <td class="wl">
+                        <span class="w">{{ own.attack_wins }}</span>-<span class="l">{{ own.attack_losses }}</span>
+                        <div class="opp-meta">{{ own.attacks_remaining if own.attacks_remaining is not none else '–' }} left</div>
+                        {% if own.attack_avg_stars is not none %}<div class="opp-meta">{{ own.attack_avg_stars }}★ avg</div>{% endif %}
+                    </td>
+                    <td class="wl">
+                        <span class="w">{{ own.defense_wins }}</span>-<span class="l">{{ own.defense_losses }}</span>
+                        {% if own.defense_avg_stars is not none %}<div class="opp-meta">{{ own.defense_avg_stars }}★ avg given up</div>{% endif %}
+                    </td>
+                    <td>–</td>
+                </tr>
+                {% set ns.own_shown = true %}
+                {% endif %}
+                <tr
+                    data-rank="{{ o.rank }}" data-player="{{ o.name }}" data-clan="{{ o.clan_name or '' }}"
+                    data-th="{{ o.th if not o.data_unavailable else -1 }}" data-trophies="{{ o.trophies }}"
+                    data-heroes="{{ o.hero_power if not o.data_unavailable else -1 }}"
+                    data-atk="{{ o.attack_wins - o.attack_losses }}" data-def="{{ o.defense_wins - o.defense_losses }}"
+                    data-threat="{{ o.threat_score if not o.data_unavailable else '' }}">
+                    <td>#{{ o.rank }}</td>
+                    <td>{{ o.name }}</td>
+                    <td>{{ o.clan_name or '–' }}</td>
+                    <td>{{ o.th if not o.data_unavailable else '–' }}</td>
+                    <td>{{ o.trophies }}</td>
+                    <td>{% if o.data_unavailable %}–{% else %}{{ o.hero_power }} <span class="opp-meta">({{ o.hero_pct }}%)</span>{% endif %}</td>
+                    <td class="wl">
+                        <span class="w">{{ o.attack_wins }}</span>-<span class="l">{{ o.attack_losses }}</span>
+                        <div class="opp-meta">{{ o.attacks_remaining if o.attacks_remaining is not none else '–' }} left</div>
+                        {% if o.attack_avg_stars is not none %}<div class="opp-meta">{{ o.attack_avg_stars }}★ avg</div>{% endif %}
+                    </td>
+                    <td class="wl">
+                        <span class="w">{{ o.defense_wins }}</span>-<span class="l">{{ o.defense_losses }}</span>
+                        {% if o.defense_avg_stars is not none %}<div class="opp-meta">{{ o.defense_avg_stars }}★ avg given up</div>{% endif %}
+                    </td>
+                    <td>
+                        {% if o.data_unavailable %}<span class="judgment badge-undefined">No Data</span>
+                        {% else %}
+                        <span class="judgment {{ o.threat_badge_class }}"
+                              title="History: you avg {{ o.predicted_my_stars if o.predicted_my_stars is not none else '–' }}★ / they avg {{ o.predicted_their_stars if o.predicted_their_stars is not none else '–' }}★ at this TH-diff{{ ' (low data)' if o.low_confidence else '' }}">{{ o.threat_label }}</span>
+                        {% if o.you_attacked %}<div class="opp-meta">you hit: {{ o.you_attacked.stars }}★ ({{ o.you_attacked.destruction }}%)</div>{% endif %}
+                        {% if o.they_attacked_you %}<div class="opp-meta">hit you: {{ o.they_attacked_you.stars }}★ ({{ o.they_attacked_you.destruction }}%)</div>{% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not ns.own_shown %}
+                <tr class="you-row"
+                    data-rank="{{ own.rank }}" data-player="{{ own.name }}" data-clan="{{ own.clan_name or '' }}"
+                    data-th="{{ own.th }}" data-trophies="{{ own.trophies }}" data-heroes="{{ own.hero_power }}"
+                    data-atk="{{ own.attack_wins - own.attack_losses }}" data-def="{{ own.defense_wins - own.defense_losses }}"
+                    data-threat="">
+                    <td>#{{ own.rank }}</td>
+                    <td>{{ own.name }} <span class="opp-meta">(you)</span></td>
+                    <td>{{ own.clan_name or '–' }}</td>
+                    <td>{{ own.th }}</td>
+                    <td>{{ own.trophies }}</td>
+                    <td>{{ own.hero_power }} <span class="opp-meta">({{ own.hero_pct }}%)</span></td>
+                    <td class="wl">
+                        <span class="w">{{ own.attack_wins }}</span>-<span class="l">{{ own.attack_losses }}</span>
+                        <div class="opp-meta">{{ own.attacks_remaining if own.attacks_remaining is not none else '–' }} left</div>
+                        {% if own.attack_avg_stars is not none %}<div class="opp-meta">{{ own.attack_avg_stars }}★ avg</div>{% endif %}
+                    </td>
+                    <td class="wl">
+                        <span class="w">{{ own.defense_wins }}</span>-<span class="l">{{ own.defense_losses }}</span>
+                        {% if own.defense_avg_stars is not none %}<div class="opp-meta">{{ own.defense_avg_stars }}★ avg given up</div>{% endif %}
+                    </td>
+                    <td>–</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state" id="emptyState">
+        <p>No analysis available yet for the current week.</p>
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+    const retryAfter = {{ retry_after | default(0) | tojson }};
+    const runBtn = document.getElementById('runBtn');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    const progressLabel = document.getElementById('progressLabel');
+    const statusText = document.getElementById('statusText');
+    const errorBox = document.getElementById('errorBox');
+    let pollTimer = null;
+
+    function setCooldown(seconds) {
+        if (seconds <= 0) { runBtn.disabled = false; runBtn.textContent = '🔮 Run Analysis'; return; }
+        runBtn.disabled = true;
+        runBtn.textContent = `⏳ Wait ${seconds}s`;
+        setTimeout(() => setCooldown(seconds - 1), 1000);
+    }
+
+    function runAnalysis() {
+        errorBox.style.display = 'none';
+        runBtn.disabled = true;
+        fetch('/ranked/analysis/run', { method: 'POST' })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!data.ok) {
+                    errorBox.textContent = data.error || 'Could not start analysis.';
+                    errorBox.style.display = 'block';
+                    if (data.retry_after) setCooldown(data.retry_after);
+                    else runBtn.disabled = false;
+                    return;
+                }
+                statusText.textContent = 'Analysis in progress…';
+                progressWrap.style.display = 'block';
+                startPolling();
+            })
+            .catch(() => {
+                errorBox.textContent = 'Network error starting analysis.';
+                errorBox.style.display = 'block';
+                runBtn.disabled = false;
+            });
+    }
+
+    function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(() => {
+            fetch('/ranked/analysis/status')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.ok) return;
+                    if (data.progress_total) {
+                        progressFill.style.width = `${Math.round(100 * data.progress_done / data.progress_total)}%`;
+                        progressLabel.textContent = `${data.progress_done} / ${data.progress_total} players analyzed`;
+                    }
+                    if (data.status === 'done') {
+                        clearInterval(pollTimer);
+                        window.location.reload();
+                    } else if (data.status === 'error') {
+                        clearInterval(pollTimer);
+                        errorBox.textContent = data.error || 'Analysis failed.';
+                        errorBox.style.display = 'block';
+                        runBtn.disabled = false;
+                        progressWrap.style.display = 'none';
+                    }
+                });
+        }, 2000);
+    }
+
+    if (retryAfter > 0) setCooldown(retryAfter);
+    {% if analysis and analysis.status == 'running' %}
+    progressWrap.style.display = 'block';
+    startPolling();
+    {% endif %}
+
+    {% if results %}
+    (function() {
+        const table = document.querySelector('table.opp-table');
+        const tbody = document.getElementById('oppTableBody');
+        if (!table || !tbody) return;
+        let sortKey = 'rank', sortAsc = true;
+
+        function applySort() {
+            const type = table.querySelector(`th[data-key="${sortKey}"]`).dataset.type;
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                let av = a.dataset[sortKey], bv = b.dataset[sortKey];
+                let cmp;
+                if (type === 'num') {
+                    av = av === '' ? -Infinity : parseFloat(av);
+                    bv = bv === '' ? -Infinity : parseFloat(bv);
+                    cmp = av - bv;
+                } else {
+                    cmp = av.localeCompare(bv, undefined, { sensitivity: 'base' });
+                }
+                return sortAsc ? cmp : -cmp;
+            });
+            rows.forEach(r => tbody.appendChild(r));
+            table.querySelectorAll('th[data-key]').forEach(th => {
+                th.classList.toggle('sort-asc', th.dataset.key === sortKey && sortAsc);
+                th.classList.toggle('sort-desc', th.dataset.key === sortKey && !sortAsc);
+            });
+        }
+
+        table.querySelectorAll('th[data-key]').forEach(th => {
+            th.addEventListener('click', () => {
+                const key = th.dataset.key;
+                sortAsc = (key === sortKey) ? !sortAsc : true;
+                sortKey = key;
+                applySort();
+            });
+        });
+    })();
+    {% endif %}
+</script>
+
+</body>
+</html>

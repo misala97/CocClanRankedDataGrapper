@@ -683,25 +683,6 @@ def debug_dashboard():
 
 # ── New Member Evaluation ─────────────────────────────────────────────────────
 
-# Max hero level achievable at each TH level (home village heroes only)
-_HERO_TH_MAX = {
-    'Barbarian King': {7: 10, 8: 20, 9: 30, 10: 40, 11: 50, 12: 65, 13: 75, 14: 85, 15: 90, 16: 95, 17: 100, 18: 105},
-    'Archer Queen': { 8: 10, 9: 30, 10: 40, 11: 50, 12: 65, 13: 75, 14: 85, 15: 90, 16: 95, 17: 100, 18: 105},
-    'Minion Prince':  {9: 10, 10: 20, 11:30, 12:40, 13:50, 14:60,15:70,16:80,17:90,18:95},
-    'Grand Warden':   {11: 20, 12: 40, 13: 50, 14: 60, 15: 65, 16: 70, 17: 75, 18: 80},
-    'Royal Champion': {13: 25, 14: 30, 15: 40, 16: 45, 17: 50, 18: 55},
-    'Dragon Duke': { 15: 10, 16: 15, 17: 20, 18: 25},
-}
-
-def _hero_th_max(hero_name, th_level):
-    mapping = _HERO_TH_MAX.get(hero_name)
-    if not mapping:
-        return None
-    for th in sorted(mapping.keys(), reverse=True):
-        if th_level >= th:
-            return mapping[th]
-    return None
-
 # (min_th, pass_threshold, warn_threshold) — evaluated top-down, first match wins
 _WAR_STARS_BRACKETS   = [(18, 300, 200), (17, 250, 150), (16, 150, 75), (15, 100, 50), (13, 50, 10) , (0, 50, 10)]
 _DONATIONS_BRACKETS   = [(14, 2000, 500), (13, 1000, 200), (0, 0, 0)]
@@ -716,24 +697,19 @@ def _th_threshold(th, brackets):
 
 def _evaluate_player_data(data):
     """Given raw CoC API player dict, return evaluation dict (checks + verdict + heroes)."""
-    from services.helpers import EXPECTED_LEAGUE_RANK, _get_league_rank, get_name_to_id
+    from services.helpers import EXPECTED_LEAGUE_RANK, _get_league_rank, get_name_to_id, hero_th_max, compute_hero_pct
 
     th_level    = data.get('townHallLevel', 0)
     league_icon = ((data.get('league') or {}).get('iconUrls') or {}).get('small', '')
 
     # Heroes — percentage of TH-appropriate max levels
     heroes_raw = [h for h in (data.get('heroes') or []) if h.get('village') == 'home']
-    heroes = []
-    hero_total = 0
-    hero_max_sum = 0
-    for h in heroes_raw:
-        name   = h.get('name', '')
-        level  = h.get('level', 0)
-        th_max = _hero_th_max(name, th_level) or h.get('maxLevel', 1)
-        heroes.append({'name': name, 'level': level, 'max_level': th_max})
-        hero_total   += level
-        hero_max_sum += th_max
-    hero_pct = round(hero_total / hero_max_sum * 100) if hero_max_sum else 0
+    heroes = [
+        {'name': h.get('name', ''), 'level': h.get('level', 0),
+         'max_level': hero_th_max(h.get('name', ''), th_level) or h.get('maxLevel', 1)}
+        for h in heroes_raw
+    ]
+    hero_pct = compute_hero_pct(heroes_raw, th_level)
 
     # Lifetime stats from achievements
     ach_map         = {a['name']: a.get('value', 0) for a in (data.get('achievements') or [])}
