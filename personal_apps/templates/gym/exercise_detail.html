@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ exercise.name }} · Gym Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        :root {
+            --bg:      #0b0d14;
+            --surface: #131722;
+            --surf2:   #1a1f2e;
+            --border:  #272c3d;
+            --bord2:   #1e2333;
+            --text:    #eef0f7;
+            --muted:   #8b91a7;
+            --accent:  #6d6af6;
+            --acc2:    #22d3ee;
+            --green:   #34d399;
+            --red:     #fb7185;
+        }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse 60% 40% at 15% 0%, rgba(109,106,246,0.10) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 100% 20%, rgba(34,211,238,0.07) 0%, transparent 60%);
+        }
+        a { text-decoration: none; color: inherit; }
+
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(11,13,20,0.92);
+            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-inner {
+            max-width: 1000px; margin: 0 auto; padding: 0 32px;
+            height: 62px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .nav-logo { display: flex; align-items: center; gap: 10px; }
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            font-size: 17px;
+        }
+        .nav-logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
+        .nav-links { display: flex; align-items: center; gap: 6px; }
+        .nav-links a {
+            font-size: 13px; font-weight: 500; color: var(--muted);
+            padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
+        }
+        .nav-links a:hover { color: var(--text); background: var(--surf2); }
+
+        .page-wrap { max-width: 1000px; margin: 0 auto; padding: 32px 32px 56px; position: relative; z-index: 1; }
+        h1 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+        h2 { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; }
+
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; overflow: hidden; margin-bottom: 20px;
+        }
+        .card-header {
+            padding: 14px 18px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-body { padding: 18px; }
+        .chart-wrap { padding: 18px; height: 280px; }
+
+        .period-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;
+            margin-bottom: 20px;
+        }
+        .period-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px;
+        }
+        .period-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        .period-card .rate-val { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; color: var(--acc2); margin: 8px 0 4px; }
+        .period-card .sub { font-size: 12px; color: var(--muted); }
+
+        table.sets { width: 100%; border-collapse: collapse; font-size: 13px; }
+        table.sets th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; padding: 8px; }
+        table.sets td { padding: 8px; border-top: 1px solid var(--bord2); }
+        table.sets td.num { font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+
+        .empty { text-align: center; padding: 36px; color: var(--muted); font-size: 14px; }
+
+        .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+        .form-group input {
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); padding: 7px 10px; font-size: 13px; font-family: inherit;
+        }
+        .form-group input:focus { outline: none; border-color: var(--accent); }
+        .form-group.grow { flex: 1; min-width: 160px; }
+        .form-group.grow input { width: 100%; }
+        .num-input { width: 90px; }
+
+        .btn {
+            padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
+            font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--acc2)); color: #0b0d14; border-color: transparent; }
+        .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
+        .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+        @media (max-width: 700px) {
+            .page-wrap { padding: 24px 16px 40px; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-inner">
+        <div class="nav-logo">
+            <div class="logo-icon">🏋️</div>
+            <span>Gym Tracker</span>
+        </div>
+        <div class="nav-links">
+            <a href="{{ url_for('gym.gym_dashboard') }}">Gym Übersicht</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="page-wrap">
+    <h1>{{ exercise.name }}</h1>
+    <form method="post" action="{{ url_for('gym.gym_update_exercise', exercise_id=exercise.id) }}" style="margin-bottom:24px">
+        <div class="form-row">
+            <div class="form-group grow">
+                <label>Muskelgruppe</label>
+                <input type="text" name="muscle_group" value="{{ exercise.muscle_group or '' }}" placeholder="z.B. Rücken">
+            </div>
+            <div class="form-group">
+                <label>Standard-Pause (Sek.)</label>
+                <input type="number" name="default_rest_seconds" min="0" class="num-input" value="{{ exercise.default_rest_seconds if exercise.default_rest_seconds is not none else '' }}" placeholder="90">
+            </div>
+            <button type="submit" class="btn btn-ghost btn-sm">Speichern</button>
+        </div>
+    </form>
+
+    {% if available_positions|length > 1 %}
+    <div class="card">
+        <div class="card-body" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-size:12px;color:var(--muted)">Diese Übung wurde an unterschiedlichen Positionen im Workout gemacht (Reihenfolge beeinflusst die Werte) &middot; Nach Position filtern:</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id) }}" class="btn btn-sm {{ 'btn-primary' if selected_position is none else 'btn-ghost' }}">Alle</a>
+                {% for p in available_positions %}
+                <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id, position=p) }}" class="btn btn-sm {{ 'btn-primary' if selected_position == p else 'btn-ghost' }}">Position {{ p }}</a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if rows %}
+    <div class="period-grid">
+        <div class="period-card">
+            <div class="label">Max. Gewicht</div>
+            <div class="rate-val">{{ pr_max_weight.weight }} kg</div>
+            <div class="sub">{{ pr_max_weight.reps }} Wdh. · {{ pr_max_weight.date.strftime('%d.%m.%Y') }}</div>
+        </div>
+        <div class="period-card">
+            <div class="label">Bestes Satzvolumen</div>
+            <div class="rate-val">{{ pr_max_volume.volume }} kg</div>
+            <div class="sub">{{ pr_max_volume.weight }} kg × {{ pr_max_volume.reps }} · {{ pr_max_volume.date.strftime('%d.%m.%Y') }}</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2>Verlauf</h2></div>
+        <div class="chart-wrap">
+            <canvas id="progressChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2>Sätze pro Workout</h2></div>
+        <div class="card-body">
+            <table class="sets">
+                <thead><tr><th>Datum</th><th>Pos.</th><th>Sätze</th><th>Volumen</th></tr></thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr>
+                        <td>{{ r.session.started_at.strftime('%d.%m.%Y') }}</td>
+                        <td>{{ r.position }}</td>
+                        <td>{{ r.sets_display }}</td>
+                        <td class="num">{{ r.volume }} kg</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="empty">Noch keine Sätze für diese Übung protokolliert.</div>
+    </div>
+    {% endif %}
+</div>
+
+{% if rows %}
+<script>
+new Chart(document.getElementById('progressChart'), {
+    type: 'line',
+    data: {
+        labels: {{ chart_labels | tojson }},
+        datasets: [
+            {
+                label: 'Bestes Gewicht (kg)',
+                data: {{ chart_weights | tojson }},
+                borderColor: '#6d6af6',
+                backgroundColor: 'rgba(109,106,246,0.12)',
+                tension: 0.3,
+                fill: true,
+                yAxisID: 'y',
+            },
+            {
+                label: 'Volumen (kg)',
+                data: {{ chart_volumes | tojson }},
+                borderColor: '#22d3ee',
+                backgroundColor: 'rgba(34,211,238,0.08)',
+                tension: 0.3,
+                fill: false,
+                yAxisID: 'y1',
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+            x: { ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' } },
+            y: { position: 'left', ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' } },
+            y1: { position: 'right', ticks: { color: '#8b91a7' }, grid: { display: false } },
+        },
+        plugins: {
+            legend: { labels: { color: '#eef0f7' } }
+        }
+    }
+});
+</script>
+{% endif %}
+
+</body>
+</html>

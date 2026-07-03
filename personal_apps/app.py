@@ -33,6 +33,10 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE']   = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
 
+app.config['VAPID_PUBLIC_KEY']   = os.getenv("VAPID_PUBLIC_KEY")
+app.config['VAPID_PRIVATE_KEY']  = os.getenv("VAPID_PRIVATE_KEY")
+app.config['VAPID_CLAIMS_EMAIL'] = os.getenv("VAPID_CLAIMS_EMAIL", "mailto:michi7788@googlemail.com")
+
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -43,11 +47,13 @@ from auth import auth_bp, _is_logged_in, login_required
 from features.pubquiz.routes import pubquiz_bp
 from features.tips.routes import tips_bp
 from features.quizbank.routes import quizbank_bp
+from features.gym.routes import gym_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(pubquiz_bp)
 app.register_blueprint(tips_bp)
 app.register_blueprint(quizbank_bp)
+app.register_blueprint(gym_bp)
 
 # Hostname that should require login for every page (the "full access" domain).
 # Other hostnames (e.g. the public pubquiz-only domain) are unaffected and keep
@@ -84,6 +90,12 @@ APPS = [
         'icon': '🧠',
         'url': '/quizbank',
     },
+    {
+        'name': 'Gym Tracker',
+        'description': 'Workouts, Sätze und Fortschritt verfolgen.',
+        'icon': '🏋️',
+        'url': '/gym',
+    },
 ]
 
 
@@ -94,4 +106,4 @@ def index():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False, port=5000)
+    app.run(host='0.0.0.0', debug=True, use_reloader=False, port=5000)
