@@ -1,7 +1,8 @@
 import datetime as dt
+import os
 import re
 
-from flask import Blueprint, current_app, jsonify, render_template, request, redirect, url_for
+from flask import Blueprint, current_app, jsonify, render_template, request, redirect, send_from_directory, url_for
 
 from extensions import db
 from models import (
@@ -11,6 +12,21 @@ from models import (
 from auth import login_required
 
 gym_bp = Blueprint('gym', __name__)
+
+
+@gym_bp.route('/sw.js')
+def gym_service_worker():
+    # A service worker's default max scope is its own directory -- served
+    # from /static/gym/sw.js, it could only ever control /static/gym/*, not
+    # /gym/*. Serving it from the site root instead gives it the whole site
+    # as its default scope, which covers /gym/. No @login_required: the
+    # browser fetches this before any page context, and it's static JS with
+    # no user data in it anyway.
+    return send_from_directory(
+        os.path.join(current_app.root_path, 'static', 'gym'),
+        'sw.js',
+        mimetype='application/javascript',
+    )
 
 DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest time is given
 
@@ -300,7 +316,7 @@ def _session_summary_data(session_):
     }
 
 
-@gym_bp.route('/gym')
+@gym_bp.route('/gym', strict_slashes=False)
 @login_required
 def gym_dashboard():
     active_session = _get_active_session()
