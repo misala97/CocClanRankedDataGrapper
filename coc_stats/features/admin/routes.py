@@ -250,17 +250,24 @@ def admin_cwl_bonus_list():
     from app import CLAN_TAG
 
     current_month = dt.date.today().strftime('%Y-%m')
-    months = [_shift_month(current_month, i) for i in range(-3, 2)]  # -3,-2,-1,0,+1
+    candidate_months = [_shift_month(current_month, i) for i in range(-3, 2)]  # -3,-2,-1,0,+1
 
-    # A calendar month can have 2 CWL seasons (Supercell schedule shifts) — CoC's API gives
-    # those a distinct, longer season key (e.g. '2026-06-16') instead of reusing 'YYYY-MM'.
-    # Pull in any such extra seasons that fall within our window and weave them into the list.
-    extra_seasons = (CWLSeason.query
-                      .filter(db.or_(*[CWLSeason.season.like(f'{m}-%') for m in months]))
-                      .all())
-    for s in extra_seasons:
-        if s.season not in months:
-            months.append(s.season)
+    # A calendar month can have 2 CWL seasons (Supercell schedule shifts), and CoC's API may key
+    # a season with a longer string (e.g. '2026-06-02') instead of reusing plain 'YYYY-MM'. Resolve
+    # each candidate month to whichever season key(s) actually exist, falling back to the bare
+    # 'YYYY-MM' placeholder only when nothing was ever recorded for that month — otherwise months
+    # whose real key is the long form end up with a second, always-empty 'YYYY-MM' column too.
+    matching_seasons = (CWLSeason.query
+                        .filter(db.or_(*[db.or_(CWLSeason.season == m, CWLSeason.season.like(f'{m}-%'))
+                                          for m in candidate_months]))
+                        .all())
+    seasons_by_cal_month = {}
+    for s in matching_seasons:
+        seasons_by_cal_month.setdefault(s.season[:7], []).append(s.season)
+
+    months = []
+    for m in candidate_months:
+        months.extend(sorted(seasons_by_cal_month.get(m, [m])))
     months.sort()   # 'YYYY-MM' sorts right before its same-month 'YYYY-MM-DD...' extra keys
 
     members = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
