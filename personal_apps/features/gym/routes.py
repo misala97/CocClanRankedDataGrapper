@@ -3,11 +3,12 @@ import os
 import re
 
 from flask import Blueprint, current_app, jsonify, render_template, request, redirect, send_from_directory, url_for
+from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import (
     Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
-    PushSubscription, PendingPush, STALE_SESSION_TIMEOUT,
+    PushSubscription, PendingPush, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
 )
 from auth import login_required
 
@@ -115,6 +116,20 @@ def _to_int(value, fallback=None):
         return fallback
 
 
+def _clean_muscle_group(value, current=None):
+    """Restricts new values to MUSCLE_GROUPS, but if the submitted value is
+    just the exercise's existing value coming back unchanged (e.g. a legacy
+    free-text category from before this enum existed), preserve it instead
+    of silently nulling it out -- only an actual attempt to change it is
+    held to the fixed list."""
+    value = (value or '').strip()
+    if value in MUSCLE_GROUPS:
+        return value
+    if current and value == current:
+        return current
+    return None
+
+
 def _get_active_session():
     """The one in-progress workout, if any. Sessions left open past
     STALE_SESSION_TIMEOUT are treated as abandoned and auto-finished here,
@@ -129,6 +144,7 @@ def _get_active_session():
         session_.finished_at = session_.started_at + STALE_SESSION_TIMEOUT
         session_.rest_ends_at = None
         session_.resting_set_id = None
+        _cancel_pending_push(session_)
         db.session.commit()
         return None
     return session_
@@ -185,17 +201,33 @@ def _last_full_performance(exercise_id, position=None):
 def _template_exercises_from_session(session_):
     """Build ordered, deduped TemplateExercise rows from a session's current
     exercises, carrying over each exercise's configured rest time so it's
-    not lost when (re)saving a template."""
+    not lost when (re)saving a template.
+
+    Mid-workout replacements (se.replaces_id is not None) are skipped here on
+    purpose -- a substitute swapped in because the usual equipment wasn't
+    available is a one-off for that session, not a change to the plan, so it
+    must never get written into a template. Only the original slot can."""
     seen_exercise_ids = set()
     result = []
     position = 1
     for se in session_.exercises:
+        if se.replaces_id is not None:
+            continue
         if se.exercise_id in seen_exercise_ids:
             continue
         seen_exercise_ids.add(se.exercise_id)
         result.append(TemplateExercise(exercise_id=se.exercise_id, position=position, rest_seconds=se.rest_seconds))
         position += 1
     return result
+
+
+def _cancel_pending_push(session_):
+    """Cancel this session's still-pending push, if any. Must be called
+    whenever resting_set_id/rest_ends_at is cleared or superseded -- an
+    orphaned PendingPush row has no way to tell the notifier daemon that the
+    set/exercise/session it was scheduled for is no longer current, and the
+    daemon fires it regardless the moment it's due."""
+    PendingPush.query.filter_by(session_id=session_.id, sent=False).delete()
 
 
 def _schedule_rest(session_set):
@@ -213,7 +245,7 @@ def _schedule_rest(session_set):
     session_.resting_set_id = session_set.id
     # Replace any still-pending push for this session rather than stacking
     # multiple -- a new completed set means a new (possibly shorter) rest period.
-    PendingPush.query.filter_by(session_id=session_.id, sent=False).delete()
+    _cancel_pending_push(session_)
     db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
 
 
@@ -233,6 +265,14 @@ def _session_summary_data(session_):
     total_sets = 0
 
     for se in session_.exercises:
+        # A replaced-away original isn't part of "what this workout looked
+        # like" -- its slot is represented by the substitute that took over.
+        # Skipping it here (unlike _exercise_progress_data, which still counts
+        # its sets toward that exercise's own all-time history) keeps this
+        # session's total_volume from being inflated by a one-off substitute
+        # exercise the historical comparison below was never scoped to include.
+        if se.replaced_by:
+            continue
         completed_sets = [s for s in se.sets if s.completed]
         if not completed_sets:
             continue
@@ -335,6 +375,7 @@ def gym_dashboard():
         exercises=exercises,
         templates=templates,
         past_sessions=past_sessions,
+        muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
     )
 
@@ -362,7 +403,15 @@ def gym_import():
         for ex in w['exercises']:
             if not ex['sets']:
                 continue
-            exercise = Exercise.query.filter_by(name=ex['name']).first()
+            # Fall back to matching on previous_name -- text pasted from an
+            # older export can still use a name that's since been renamed via
+            # gym_update_exercise, and without this fallback that would
+            # silently create a duplicate Exercise instead of matching the
+            # existing one.
+            exercise = (
+                Exercise.query.filter_by(name=ex['name']).first()
+                or Exercise.query.filter_by(previous_name=ex['name']).first()
+            )
             if not exercise:
                 exercise = Exercise(name=ex['name'], default_rest_seconds=DEFAULT_REST_SECONDS)
                 db.session.add(exercise)
@@ -418,13 +467,24 @@ def gym_start():
 @login_required
 def session_detail(session_id):
     session_ = db.get_or_404(WorkoutSession, session_id)
-    suggestions = {se.id: _last_performance(se.exercise_id, position=se.position) for se in session_.exercises}
+    # A replaced original is hidden from the active view, so its suggestion
+    # would never be used -- skip computing it there. Visibility is derived
+    # from replaces_id (already loaded on every row) rather than by touching
+    # se.replaced_by, which would lazy-load a separate query per row.
+    replaced_original_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
+    visible_exercises = [
+        se for se in session_.exercises
+        if session_.finished_at or se.id not in replaced_original_ids
+    ]
+    suggestions = {se.id: _last_performance(se.exercise_id, position=se.position) for se in visible_exercises}
     exercises = Exercise.query.order_by(Exercise.name).all()
     return render_template(
         'gym/session_detail.html',
         session=session_,
+        visible_exercises=visible_exercises,
         suggestions=suggestions,
         exercises=exercises,
+        muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
     )
 
@@ -441,7 +501,7 @@ def gym_add_session_exercise(session_id):
         if not exercise:
             exercise = Exercise(
                 name=new_name,
-                muscle_group=request.form.get('muscle_group', '').strip() or None,
+                muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
                 default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
             )
             db.session.add(exercise)
@@ -458,6 +518,52 @@ def gym_add_session_exercise(session_id):
         db.session.commit()
 
     return redirect(url_for('gym.session_detail', session_id=session_.id))
+
+
+@gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/replace', methods=['POST'])
+@login_required
+def gym_replace_session_exercise(session_exercise_id):
+    """Swap an exercise mid-workout for a same-category substitute (e.g. its
+    usual equipment is taken) without touching history: the original row and
+    its already-logged sets are left untouched (still counting toward its own
+    exercise's history/PRs), a new SessionExercise is created for the
+    replacement at the same position, and _template_exercises_from_session
+    skips substitutes entirely so this never gets written into a template."""
+    original = db.get_or_404(SessionExercise, session_exercise_id)
+    session_id = original.session_id
+
+    exercise_id = request.form.get('exercise_id', type=int)
+    new_name = request.form.get('new_exercise_name', '').strip()
+    if not exercise_id and new_name:
+        exercise = Exercise.query.filter_by(name=new_name).first()
+        if not exercise:
+            exercise = Exercise(
+                name=new_name,
+                muscle_group=original.exercise.muscle_group,
+                default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+            )
+            db.session.add(exercise)
+            db.session.flush()
+        exercise_id = exercise.id
+
+    if exercise_id and exercise_id != original.exercise_id and not original.replaced_by:
+        db.session.add(SessionExercise(
+            session_id=session_id, exercise_id=exercise_id, position=original.position,
+            rest_seconds=original.rest_seconds, replaces_id=original.id,
+        ))
+
+    # Always commit -- even when the replacement itself didn't happen (e.g.
+    # the guard above rejected it), a newly created Exercise from new_name
+    # above must still be kept, or the user's typed name silently vanishes
+    # with no feedback. A lost race against a concurrent replace of the same
+    # original is caught here (the unique constraint on replaces_id rejects
+    # the second insert) and treated as a no-op instead of a 500.
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+
+    return redirect(url_for('gym.session_detail', session_id=session_id))
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/rest', methods=['POST'])
@@ -505,6 +611,7 @@ def gym_delete_session_exercise(session_exercise_id):
     if session_exercise.session.resting_set_id in [s.id for s in session_exercise.sets]:
         session_exercise.session.resting_set_id = None
         session_exercise.session.rest_ends_at = None
+        _cancel_pending_push(session_exercise.session)
     db.session.delete(session_exercise)
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_id))
@@ -519,6 +626,7 @@ def gym_delete_set(set_id):
     if session_.resting_set_id == set_.id:
         session_.resting_set_id = None
         session_.rest_ends_at = None
+        _cancel_pending_push(session_)
     db.session.delete(set_)
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_id))
@@ -550,7 +658,7 @@ def gym_toggle_set_complete(set_id):
         # to a set that's no longer "done" doesn't make sense, cancel it
         session_.resting_set_id = None
         session_.rest_ends_at = None
-        PendingPush.query.filter_by(session_id=session_.id, sent=False).delete()
+        _cancel_pending_push(session_)
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
@@ -567,9 +675,15 @@ def gym_reorder_session_exercises(session_id):
         se = session_exercises_by_id.get(_to_int(raw_id))
         if se:
             se.position = position
+            # A substitute shares its slot with the original it replaced (which
+            # is hidden from `order` -- it's not rendered while the session is
+            # active) -- keep the hidden original's position in sync so the two
+            # don't drift apart / collide with an unrelated exercise's position.
+            if se.replaces_id and se.replaces:
+                se.replaces.position = position
             position += 1
     db.session.commit()
-    return jsonify({'status': 'ok'})
+    return redirect(url_for('gym.session_detail', session_id=session_id))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/finish', methods=['POST'])
@@ -579,6 +693,10 @@ def gym_finish_session(session_id):
     session_.finished_at = dt.datetime.utcnow()
     session_.rest_ends_at = None
     session_.resting_set_id = None
+    # Finishing early (before a running rest timer naturally elapses) must
+    # cancel its still-pending push -- otherwise the notifier daemon fires it
+    # later for a workout that's already over.
+    _cancel_pending_push(session_)
     db.session.commit()
     return redirect(url_for('gym.gym_session_summary', session_id=session_.id, just_finished=1))
 
@@ -680,11 +798,13 @@ def _exercise_progress_data(exercise_id, position=None):
         if not completed_sets:
             continue
         best_weight = max(s.weight for s in completed_sets)
+        worst_weight = min(s.weight for s in completed_sets)
         volume = sum(s.weight * s.reps for s in completed_sets)
         sets_display = ', '.join(f'{s.weight}kg×{s.reps}' for s in completed_sets)
         rows.append({
             'session': se.session, 'sets': completed_sets, 'best_weight': best_weight,
-            'volume': volume, 'sets_display': sets_display, 'position': se.position,
+            'worst_weight': worst_weight, 'volume': volume, 'sets_display': sets_display,
+            'position': se.position,
         })
 
         for s in completed_sets:
@@ -702,6 +822,7 @@ def _exercise_progress_data(exercise_id, position=None):
         'pr_max_volume': pr_max_volume,
         'chart_labels': [r['session'].started_at.strftime('%d.%m.%Y') for r in chart_rows],
         'chart_weights': [r['best_weight'] for r in chart_rows],
+        'chart_min_weights': [r['worst_weight'] for r in chart_rows],
         'chart_volumes': [r['volume'] for r in chart_rows],
         'available_positions': available_positions,
         'selected_position': position,
@@ -714,7 +835,7 @@ def exercise_detail(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     position = request.args.get('position', type=int)
     data = _exercise_progress_data(exercise_id, position=position)
-    return render_template('gym/exercise_detail.html', exercise=exercise, **data)
+    return render_template('gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS, **data)
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/progress.json')
@@ -751,6 +872,7 @@ def gym_exercise_progress_json(exercise_id):
         'pr_max_volume': fmt_pr_volume(data['pr_max_volume']),
         'chart_labels': data['chart_labels'],
         'chart_weights': data['chart_weights'],
+        'chart_min_weights': data['chart_min_weights'],
         'chart_volumes': data['chart_volumes'],
     })
 
@@ -762,7 +884,7 @@ def gym_add_exercise():
     if name and not Exercise.query.filter_by(name=name).first():
         db.session.add(Exercise(
             name=name,
-            muscle_group=request.form.get('muscle_group', '').strip() or None,
+            muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
             default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
         ))
         db.session.commit()
@@ -773,10 +895,23 @@ def gym_add_exercise():
 @login_required
 def gym_update_exercise(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
-    exercise.muscle_group = request.form.get('muscle_group', '').strip() or None
+    new_name = request.form.get('name', '').strip()
+    name_taken = False
+    if new_name and new_name != exercise.name:
+        if Exercise.query.filter_by(name=new_name).first():
+            name_taken = True  # surfaced to the user below instead of silently skipping the rename
+        else:
+            # Remember the old name so a later import of text that still uses
+            # it (e.g. an older saved export) finds this exercise instead of
+            # creating a duplicate -- see gym_import's lookup.
+            exercise.previous_name = exercise.name
+            exercise.name = new_name
+    exercise.muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''), current=exercise.muscle_group)
     exercise.default_rest_seconds = _to_int(request.form.get('default_rest_seconds', ''))
     db.session.commit()
-    return redirect(url_for('gym.exercise_detail', exercise_id=exercise.id))
+    return redirect(url_for(
+        'gym.exercise_detail', exercise_id=exercise.id, name_taken=1 if name_taken else None,
+    ))
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/delete', methods=['POST'])

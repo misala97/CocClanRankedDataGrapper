@@ -141,10 +141,17 @@ class DeliveryShift(db.Model):
 STALE_SESSION_TIMEOUT = dt.timedelta(hours=3)
 
 
+MUSCLE_GROUPS = (
+    'Bizeps', 'Trizeps', 'Brust', 'Rücken', 'Schultern',
+    'Beine', 'Bauch', 'Gesäß', 'Waden', 'Unterarme', 'Cardio', 'Sonstiges',
+)
+
+
 class Exercise(db.Model):
     __tablename__ = 'gym_exercises'
     id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name                 = db.Column(db.String(150), nullable=False, unique=True)
+    previous_name        = db.Column(db.String(150), nullable=True)  # set to the prior name on rename, so a re-pasted import still using the old name finds this exercise instead of creating a duplicate
     muscle_group         = db.Column(db.String(100), nullable=True)
     default_rest_seconds = db.Column(db.Integer, nullable=True)
 
@@ -203,9 +210,13 @@ class SessionExercise(db.Model):
     exercise_id  = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
     position     = db.Column(db.Integer, nullable=False, default=0)
     rest_seconds = db.Column(db.Integer, nullable=True)  # rest time for this exercise in this workout; seeded from Exercise.default_rest_seconds, editable per session
+    replaces_id  = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True, unique=True)  # set when this row is a mid-workout substitute for another exercise in the same slot; unique so at most one substitute can ever point at a given original
 
     session  = db.relationship('WorkoutSession', back_populates='exercises')
     exercise = db.relationship('Exercise', back_populates='session_exercises')
+    # self-referential: `replaces` points at the original exercise this substitutes for;
+    # `replaced_by` (backref) points the other way, so the original can tell it's been superseded
+    replaces = db.relationship('SessionExercise', remote_side=[id], backref=db.backref('replaced_by', uselist=False))
     sets = db.relationship(
         'SessionSet', back_populates='session_exercise', lazy=True,
         cascade="all, delete-orphan", order_by='SessionSet.position',

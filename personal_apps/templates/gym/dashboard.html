@@ -273,7 +273,12 @@
                     </div>
                     <div class="form-group grow">
                         <label>Muskelgruppe</label>
-                        <input type="text" name="muscle_group" placeholder="optional">
+                        <select name="muscle_group">
+                            <option value="">— optional —</option>
+                            {% for mg in muscle_groups %}
+                            <option value="{{ mg }}">{{ mg }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Pause (Sek.)</label>

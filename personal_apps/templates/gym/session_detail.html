@@ -126,6 +126,10 @@
         .set-row.set-pending { opacity: 0.55; border-left-style: dashed; border-left-color: var(--bord2); }
         .set-row.set-done { border-left-color: var(--green); background: rgba(52,211,153,0.08); }
         .pending-hint { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+        .replace-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+        .replace-details { margin-top: 12px; }
+        .replace-details summary { cursor: pointer; list-style: none; display: inline-block; }
+        .replace-details summary::-webkit-details-marker { display: none; }
         .set-row > * { position: relative; z-index: 1; }
         .set-index { width: 20px; color: var(--muted); }
         .set-edit-form { display: flex; align-items: center; gap: 6px; flex: 1; }
@@ -149,6 +153,11 @@
         }
 
         .exercise-card.dragging { position: relative; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,0.4); cursor: grabbing; touch-action: none; }
+        /* Higher specificity than .exercise-card.dragging (which the ghost also
+           carries, cloned from the real card) so this z-index actually wins --
+           needs to clear the sticky nav's z-index:100 or the nav paints over the
+           ghost while dragging near the top of the viewport. */
+        .exercise-card.dragging.drag-ghost { z-index: 200; }
         #exercise-cards { user-select: none; -webkit-user-select: none; }
         .rest-form { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
@@ -251,7 +260,7 @@
     {% endif %}
 
     <div id="exercise-cards" class="{{ 'read-only' if session.finished_at else '' }}">
-    {% for se in session.exercises %}
+    {% for se in visible_exercises %}
     {% set completed_count = se.sets|selectattr('completed')|list|length %}
     {% set total_count = se.sets|length %}
     {% set all_done = total_count > 0 and completed_count == total_count %}
@@ -266,6 +275,13 @@
                 </div>
                 <button type="button" class="progress-open-btn" data-exercise-id="{{ se.exercise_id }}" data-position="{{ se.position }}" title="Fortschritt anzeigen">📊</button>
             </div>
+            {% if session.finished_at and (se.replaces or se.replaced_by) %}
+            <div class="replace-note">
+                {% if se.replaces %}🔁 Ersetzt: {{ se.replaces.exercise.name }}{% endif %}
+                {% if se.replaces and se.replaced_by %}<br>{% endif %}
+                {% if se.replaced_by %}🔁 Ersetzt durch: {{ se.replaced_by.exercise.name }}{% endif %}
+            </div>
+            {% endif %}
             {% if not session.finished_at %}
             <form method="post" action="{{ url_for('gym.gym_update_session_exercise_rest', session_exercise_id=se.id) }}" class="rest-form" title="Pause in Sekunden -- speichert automatisch">
                 <span class="unit">⏱</span>
@@ -326,6 +342,27 @@
             {% if suggestion and not se.sets %}
             <div class="empty" style="padding-top:8px">Letzte Leistung: {{ suggestion.weight }} kg × {{ suggestion.reps }}</div>
             {% endif %}
+            <details class="replace-details">
+                <summary class="btn btn-ghost btn-sm">🔁 Übung ersetzen</summary>
+                <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}" style="margin-top:8px">
+                    <div class="form-row">
+                        <div class="form-group grow">
+                            <label>Ersatzübung</label>
+                            <select name="exercise_id">
+                                <option value="">— Neue Übung —</option>
+                                {% for e in exercises if e.muscle_group == se.exercise.muscle_group and e.id != se.exercise_id %}
+                                <option value="{{ e.id }}">{{ e.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group grow">
+                            <label>Name der neuen Übung</label>
+                            <input type="text" name="new_exercise_name" placeholder="z.B. Kabelzug">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Ersetzen</button>
+                    </div>
+                </form>
+            </details>
             <form method="post" action="{{ url_for('gym.gym_delete_session_exercise', session_exercise_id=se.id) }}" data-confirm="Übung aus Workout entfernen?" style="margin-top:12px">
                 <button type="submit" class="btn btn-ghost btn-sm">Übung entfernen</button>
             </form>
@@ -353,6 +390,15 @@
                     <div class="form-group grow" id="new-exercise-fields">
                         <label>Name der neuen Übung</label>
                         <input type="text" name="new_exercise_name" placeholder="z.B. Kniebeuge">
+                    </div>
+                    <div class="form-group grow" id="new-exercise-muscle-group">
+                        <label>Muskelgruppe</label>
+                        <select name="muscle_group">
+                            <option value="">— optional —</option>
+                            {% for mg in muscle_groups %}
+                            <option value="{{ mg }}">{{ mg }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <button type="submit" class="btn btn-primary">Hinzufügen</button>
                 </div>
@@ -430,9 +476,12 @@ startRestFillTick();
 
 const exerciseSelect = document.getElementById('exercise-select');
 const newExerciseFields = document.getElementById('new-exercise-fields');
+const newExerciseMuscleGroup = document.getElementById('new-exercise-muscle-group');
 if (exerciseSelect) {
     function syncNewExerciseFields() {
-        newExerciseFields.style.display = exerciseSelect.value ? 'none' : 'flex';
+        const display = exerciseSelect.value ? 'none' : 'flex';
+        newExerciseFields.style.display = display;
+        if (newExerciseMuscleGroup) newExerciseMuscleGroup.style.display = display;
     }
     exerciseSelect.addEventListener('change', syncNewExerciseFields);
     syncNewExerciseFields();
@@ -494,22 +543,41 @@ if (notifyBtn) {
     // threshold; released before that, it's treated as a tap that toggles
     // the card open/closed instead. This lets the same title area serve
     // both purposes without separate icons.
+    //
+    // The real card element NEVER moves visually during a drag -- it stays
+    // exactly where normal document flow puts it (just invisible), so it
+    // keeps contributing its height to the layout and nothing shifts except
+    // when an actual swap happens, same as before. All the *visual* motion
+    // happens on a separate floating clone ("ghost"), fixed-positioned and
+    // living outside #exercise-cards entirely, that does nothing but track
+    // the pointer. Since the ghost has no document-flow role, no scroll
+    // interaction, and nothing else ever touches its position, there is no
+    // "flow drift" left to compensate for -- which is what three separate
+    // attempts at patching a transform-on-a-flow-element approach kept
+    // failing to fully cover (collapsing siblings, DOM reordering, page
+    // scroll, the browser's own scroll clamping/rubber-banding near a
+    // boundary). The ghost's `top` is set exactly once, at creation; every
+    // frame after that moves it via `transform` instead (compositor-only,
+    // no layout recalculation), which is what keeps it smooth.
     const DRAG_THRESHOLD = 8;
     const SCROLL_EDGE_ZONE = 80;   // px from the viewport top/bottom that triggers auto-scroll
     const SCROLL_MAX_SPEED = 16;   // px per animation frame at the very edge
     let dragCard = null;
+    let dragGhost = null;
     let titleArea = null;
     let activePointerId = null;
     let startX = 0;
     let startY = 0;
     let lastClientY = 0;
     let dragStarted = false;
+    let dragGrabOffsetY = 0;   // finger's offset from the card's top edge, captured at grab time
+    let dragGhostBaseTop = 0;  // the fixed `top` the ghost was created at; all movement after that is via `transform`
+    let dragGhostBaseClientY = 0;
     let openIdsBeforeDrag = null;
     let autoScrollRAF = null;
 
     function beginDrag() {
         dragStarted = true;
-        dragCard.classList.add('dragging');
         try { titleArea.setPointerCapture(activePointerId); } catch (err) {}
 
         // Collapse every card for the duration of the drag -- much easier to
@@ -524,6 +592,46 @@ if (notifyBtn) {
             });
         }
 
+        const rect = dragCard.getBoundingClientRect();
+        // Collapsing cards above dragCard can shift its position -- recompute
+        // the grab offset against this post-collapse rect rather than trusting
+        // the one captured at pointerdown, or the ghost spawns wherever the
+        // card USED to be instead of where it actually is now.
+        dragGrabOffsetY = lastClientY - rect.top;
+        dragCard.classList.add('dragging');
+        dragCard.style.visibility = 'hidden';
+
+        dragGhost = dragCard.cloneNode(true);
+        // A card can contain id-bearing elements (e.g. the rest-timer fill
+        // bar) -- strip every id from the clone so it never duplicates one
+        // that's still live on the real (hidden) card while both exist.
+        dragGhost.removeAttribute('id');
+        dragGhost.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+        dragGhost.classList.add('drag-ghost');
+        // pointer-events:none (below) keeps mouse/touch/pen off the ghost, but
+        // has no effect on keyboard focus -- `inert` is what actually keeps its
+        // cloned buttons/forms out of the tab order, so a stray Tab+Enter during
+        // a drag can't trigger a real, un-intercepted submit from a form that
+        // lives outside #exercise-cards.
+        dragGhost.setAttribute('inert', '');
+        dragGhost.style.position = 'fixed';
+        dragGhost.style.left = rect.left + 'px';
+        dragGhost.style.width = rect.width + 'px';
+        // `top` is set ONCE here and never touched again -- all subsequent
+        // movement is driven by `transform` (see updateDragPosition), which
+        // the browser can animate on the compositor without recomputing
+        // layout on every frame. Doing this via `top` on every pointermove
+        // forces a synchronous layout each time, which is slow enough on a
+        // real phone to look laggy/stuttery instead of smoothly following
+        // the finger.
+        dragGhostBaseClientY = lastClientY;
+        dragGhostBaseTop = lastClientY - dragGrabOffsetY;
+        dragGhost.style.top = dragGhostBaseTop + 'px';
+        dragGhost.style.margin = '0';
+        dragGhost.style.pointerEvents = 'none';
+        dragGhost.style.visibility = 'visible';
+        document.body.appendChild(dragGhost);
+
         if (!autoScrollRAF) autoScrollRAF = requestAnimationFrame(autoScrollTick);
     }
 
@@ -532,9 +640,13 @@ if (notifyBtn) {
             cancelAnimationFrame(autoScrollRAF);
             autoScrollRAF = null;
         }
+        if (dragGhost) {
+            dragGhost.remove();
+            dragGhost = null;
+        }
         if (dragCard) {
             dragCard.classList.remove('dragging');
-            dragCard.style.transform = '';
+            dragCard.style.visibility = '';
         }
         if (titleArea && activePointerId !== null) {
             try { titleArea.releasePointerCapture(activePointerId); } catch (err) {}
@@ -556,38 +668,38 @@ if (notifyBtn) {
         dragStarted = false;
     }
 
-    // Moves the dragged card to follow the pointer and checks whether it has
-    // crossed a neighbor's center. Shared by onMove (real pointer movement)
-    // and the auto-scroll loop (pointer held still near an edge while the
-    // page scrolls underneath it -- cards still need to keep swapping).
+    // Moves the ghost to follow the pointer and checks whether it has
+    // crossed an immediate neighbor's center, reordering the real (hidden)
+    // card accordingly. Shared by onMove (real pointer movement) and the
+    // auto-scroll loop (pointer held still near an edge while the page
+    // scrolls underneath it -- cards still need to keep swapping). Only the
+    // immediate neighbors are ever checked -- crossing more than one in a
+    // single call just means it'll cross the next one on the following
+    // call/frame too, converging the same way a multi-step move always has.
     function updateDragPosition(clientY) {
         const container = document.getElementById('exercise-cards');
-        if (!container) return;
-        const deltaY = clientY - startY;
-        dragCard.style.transform = `translateY(${deltaY}px)`;
+        if (!container || !dragGhost) return;
 
-        const dragRect = dragCard.getBoundingClientRect();
+        dragGhost.style.transform = `translateY(${clientY - dragGhostBaseClientY}px)`;
+
+        const dragRect = dragGhost.getBoundingClientRect();
         const dragCenter = dragRect.top + dragRect.height / 2;
         const cards = Array.from(container.children);
         const dragIndex = cards.indexOf(dragCard);
 
-        for (let i = 0; i < cards.length; i++) {
-            if (i === dragIndex) continue;
-            const sib = cards[i];
-            const sibRect = sib.getBoundingClientRect();
-            const sibCenter = sibRect.top + sibRect.height / 2;
-            // Only compare against cards on the side we're dragging toward --
-            // otherwise an already-passed card keeps re-matching every move.
-            if (deltaY > 0 && i > dragIndex && dragCenter > sibCenter) {
-                container.insertBefore(dragCard, sib.nextElementSibling);
-                startY = clientY;
-                dragCard.style.transform = 'translateY(0px)';
-                break;
-            } else if (deltaY < 0 && i < dragIndex && dragCenter < sibCenter) {
-                container.insertBefore(dragCard, sib);
-                startY = clientY;
-                dragCard.style.transform = 'translateY(0px)';
-                break;
+        const nextSib = cards[dragIndex + 1];
+        if (nextSib) {
+            const nextRect = nextSib.getBoundingClientRect();
+            if (dragCenter > nextRect.top + nextRect.height / 2) {
+                container.insertBefore(dragCard, nextSib.nextElementSibling);
+                return;
+            }
+        }
+        const prevSib = cards[dragIndex - 1];
+        if (prevSib) {
+            const prevRect = prevSib.getBoundingClientRect();
+            if (dragCenter < prevRect.top + prevRect.height / 2) {
+                container.insertBefore(dragCard, prevSib);
             }
         }
     }
@@ -595,7 +707,9 @@ if (notifyBtn) {
     // Runs every frame while dragging. If the pointer is sitting near the
     // top/bottom edge of the viewport, scrolls the page so a list longer
     // than one screen can still be reordered -- without this, dragging the
-    // last of e.g. 15 exercises to the top is simply impossible.
+    // last of e.g. 15 exercises to the top is simply impossible. The ghost
+    // is fixed-positioned so scrolling never moves it on its own; only the
+    // (still-in-flow) siblings move, which is exactly what should happen.
     function autoScrollTick() {
         if (!dragStarted || !dragCard) {
             autoScrollRAF = null;
@@ -652,7 +766,9 @@ if (notifyBtn) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ order: order }),
                     credentials: 'same-origin',
-                });
+                })
+                    .then((r) => r.text())
+                    .then(refreshExerciseCards);
             }
         } else if (!isCancel) {
             // never crossed the drag threshold, and this was a genuine
@@ -670,6 +786,8 @@ if (notifyBtn) {
         startX = e.clientX;
         startY = e.clientY;
         lastClientY = e.clientY;
+        // dragGrabOffsetY is computed in beginDrag() instead, once collapsing
+        // has settled the card's real on-screen position.
         dragStarted = false;
         e.preventDefault();
     });
@@ -787,6 +905,16 @@ document.addEventListener('change', (e) => {
                             backgroundColor: 'rgba(109,106,246,0.12)',
                             tension: 0.3,
                             fill: true,
+                            yAxisID: 'y',
+                        },
+                        {
+                            label: 'Leichtestes Gewicht (kg)',
+                            data: data.chart_min_weights,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245,158,11,0.08)',
+                            borderDash: [5, 4],
+                            tension: 0.3,
+                            fill: false,
                             yAxisID: 'y',
                         },
                         {

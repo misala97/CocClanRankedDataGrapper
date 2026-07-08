@@ -92,13 +92,13 @@
         .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
         .form-group { display: flex; flex-direction: column; gap: 5px; }
         .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-        .form-group input {
+        .form-group input, .form-group select {
             background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
             color: var(--text); padding: 7px 10px; font-size: 13px; font-family: inherit;
         }
-        .form-group input:focus { outline: none; border-color: var(--accent); }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
         .form-group.grow { flex: 1; min-width: 160px; }
-        .form-group.grow input { width: 100%; }
+        .form-group.grow input, .form-group.grow select { width: 100%; }
         .num-input { width: 90px; }
 
         .btn {
@@ -133,11 +133,30 @@
 
 <div class="page-wrap">
     <h1>{{ exercise.name }}</h1>
+    {% if request.args.get('name_taken') %}
+    <div class="card" style="border-color:var(--red)">
+        <div class="card-body">
+            <span>Name nicht geändert -- es gibt bereits eine Übung mit diesem Namen. Andere Änderungen wurden trotzdem gespeichert.</span>
+        </div>
+    </div>
+    {% endif %}
     <form method="post" action="{{ url_for('gym.gym_update_exercise', exercise_id=exercise.id) }}" style="margin-bottom:24px">
         <div class="form-row">
             <div class="form-group grow">
+                <label>Name</label>
+                <input type="text" name="name" value="{{ exercise.name }}" required>
+            </div>
+            <div class="form-group grow">
                 <label>Muskelgruppe</label>
-                <input type="text" name="muscle_group" value="{{ exercise.muscle_group or '' }}" placeholder="z.B. Rücken">
+                <select name="muscle_group">
+                    <option value="">— keine —</option>
+                    {% for mg in muscle_groups %}
+                    <option value="{{ mg }}" {{ 'selected' if exercise.muscle_group == mg else '' }}>{{ mg }}</option>
+                    {% endfor %}
+                    {% if exercise.muscle_group and exercise.muscle_group not in muscle_groups %}
+                    <option value="{{ exercise.muscle_group }}" selected>{{ exercise.muscle_group }} (alt)</option>
+                    {% endif %}
+                </select>
             </div>
             <div class="form-group">
                 <label>Standard-Pause (Sek.)</label>
@@ -221,6 +240,16 @@ new Chart(document.getElementById('progressChart'), {
                 backgroundColor: 'rgba(109,106,246,0.12)',
                 tension: 0.3,
                 fill: true,
+                yAxisID: 'y',
+            },
+            {
+                label: 'Leichtestes Gewicht (kg)',
+                data: {{ chart_min_weights | tojson }},
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245,158,11,0.08)',
+                borderDash: [5, 4],
+                tension: 0.3,
+                fill: false,
                 yAxisID: 'y',
             },
             {
