@@ -126,6 +126,7 @@
         .set-row.set-pending { opacity: 0.55; border-left-style: dashed; border-left-color: var(--bord2); }
         .set-row.set-done { border-left-color: var(--green); background: rgba(52,211,153,0.08); }
         .pending-hint { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+        .stagnation-note { font-size: 12px; color: var(--red); background: rgba(251,113,133,0.1); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
         .replace-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
         .replace-details { margin-top: 12px; }
         .replace-details summary { cursor: pointer; list-style: none; display: inline-block; }
@@ -324,6 +325,9 @@
 
             {% if not session.finished_at %}
             {% set suggestion = suggestions.get(se.id) %}
+            {% if se.id in stagnation_counts %}
+            <div class="stagnation-note">💡 {{ stagnation_counts[se.id] }} Workouts ohne neuen e1RM-PR — mehr Gewicht oder Wdh. versuchen (progressive overload)</div>
+            {% endif %}
             <form method="post" action="{{ url_for('gym.gym_add_set', session_exercise_id=se.id) }}">
                 <div class="form-row">
                     <div class="form-group">

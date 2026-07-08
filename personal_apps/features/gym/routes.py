@@ -32,6 +32,8 @@ def gym_service_worker():
 
 DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest time is given
 
+STAGNATION_THRESHOLD = 4  # sessions without a new estimated-1RM PR before nudging toward progressive overload
+
 # Parses the "Strong app" text-share format:
 #   <workout name>
 #   <weekday>, <day>. <German month> <year> um <HH:MM>
@@ -255,6 +257,51 @@ def _epley_1rm(weight, reps):
     test happening mid-workout, so this is the standard estimate used by
     every mainstream lifting tracker for the same reason."""
     return weight * (1 + reps / 30.0)
+
+
+def _sessions_since_last_pr(exercise_id, position=None, exclude_session_id=None):
+    """How many completed sessions in a row -- most recent first -- have
+    passed without a new estimated-1RM PR for this exercise. e1RM (not raw
+    weight) is the yardstick so a rep increase at the same weight still
+    counts as progress. Returns None if there isn't enough history yet
+    (fewer than 2 completed sessions) to say anything meaningful.
+
+    Position-aware like _last_session_exercise: exercise order affects
+    fatigue, so a stagnation read during an active workout should reflect
+    history in that same slot, not muddy it with a fresher/more-fatigued
+    performance from a different position. Falls back to all positions if
+    there isn't enough position-matched history yet to judge from -- fetched
+    in one query so the fallback doesn't cost a second DB round trip.
+    """
+    query = (
+        SessionExercise.query
+        .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+        .filter(
+            SessionExercise.exercise_id == exercise_id,
+            SessionExercise.sets.any(SessionSet.completed == True),
+            WorkoutSession.finished_at.isnot(None),
+        )
+    )
+    if exclude_session_id is not None:
+        query = query.filter(SessionExercise.session_id != exclude_session_id)
+    all_session_exercises = query.order_by(WorkoutSession.started_at).all()
+
+    session_exercises = [se for se in all_session_exercises if se.position == position] if position is not None else []
+    if len(session_exercises) < 2:
+        session_exercises = all_session_exercises
+    if len(session_exercises) < 2:
+        return None
+
+    best_ever = None
+    sessions_since = 0
+    for se in session_exercises:
+        session_best = max(_epley_1rm(s.weight, s.reps) for s in se.sets if s.completed)
+        if best_ever is None or session_best > best_ever:
+            best_ever = session_best
+            sessions_since = 0
+        else:
+            sessions_since += 1
+    return sessions_since
 
 
 def _set_volume(exercise, s):
@@ -495,12 +542,19 @@ def session_detail(session_id):
         if session_.finished_at or se.id not in replaced_original_ids
     ]
     suggestions = {se.id: _last_performance(se.exercise_id, position=se.position) for se in visible_exercises}
+    stagnation_counts = {}
+    if not session_.finished_at:  # only ever shown for an active workout -- skip the queries otherwise
+        for se in visible_exercises:
+            count = _sessions_since_last_pr(se.exercise_id, position=se.position, exclude_session_id=session_.id)
+            if count is not None and count >= STAGNATION_THRESHOLD:
+                stagnation_counts[se.id] = count
     exercises = Exercise.query.order_by(Exercise.name).all()
     return render_template(
         'gym/session_detail.html',
         session=session_,
         visible_exercises=visible_exercises,
         suggestions=suggestions,
+        stagnation_counts=stagnation_counts,
         exercises=exercises,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
