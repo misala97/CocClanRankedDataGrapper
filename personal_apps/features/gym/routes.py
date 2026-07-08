@@ -4,6 +4,7 @@ import re
 
 from flask import Blueprint, current_app, jsonify, render_template, request, redirect, send_from_directory, url_for
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from extensions import db
 from models import (
@@ -256,6 +257,15 @@ def _epley_1rm(weight, reps):
     return weight * (1 + reps / 30.0)
 
 
+def _set_volume(exercise, s):
+    """Volume for one logged set. Unilateral exercises log the per-side
+    weight/reps, so both sides did this -- the real volume is double what's
+    on the row. Centralized here so every volume computation stays in sync
+    (weight and reps themselves are never doubled -- they're displayed as
+    logged, per side)."""
+    return s.weight * s.reps * (2 if exercise.is_unilateral else 1)
+
+
 def _session_summary_data(session_):
     """Post-workout summary: per-exercise PRs (weight / estimated 1RM /
     single-session volume) and how this session's volume compares to your
@@ -277,7 +287,7 @@ def _session_summary_data(session_):
         if not completed_sets:
             continue
 
-        session_volume = sum(s.weight * s.reps for s in completed_sets)
+        session_volume = sum(_set_volume(se.exercise, s) for s in completed_sets)
         session_best_weight = max(s.weight for s in completed_sets)
         session_best_e1rm = max(_epley_1rm(s.weight, s.reps) for s in completed_sets)
         total_volume += session_volume
@@ -300,7 +310,7 @@ def _session_summary_data(session_):
             past_completed = [s for s in past_se.sets if s.completed]
             if not past_completed:
                 continue
-            past_volumes.append(sum(s.weight * s.reps for s in past_completed))
+            past_volumes.append(sum(_set_volume(se.exercise, s) for s in past_completed))
             for s in past_completed:
                 if past_best_weight is None or s.weight > past_best_weight:
                     past_best_weight = s.weight
@@ -334,13 +344,21 @@ def _session_summary_data(session_):
     # below are still shown either way, since those ARE scoped correctly).
     past_total_volumes = []
     if session_.template_id:
-        comparable_sessions = WorkoutSession.query.filter(
-            WorkoutSession.id != session_.id,
-            WorkoutSession.finished_at.isnot(None),
-            WorkoutSession.template_id == session_.template_id,
-        ).all()
+        comparable_sessions = (
+            WorkoutSession.query
+            .options(joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise))
+            .filter(
+                WorkoutSession.id != session_.id,
+                WorkoutSession.finished_at.isnot(None),
+                WorkoutSession.template_id == session_.template_id,
+            )
+            .all()
+        )
         for other in comparable_sessions:
-            v = sum(s.weight * s.reps for se in other.exercises for s in se.sets if s.completed)
+            v = sum(
+                _set_volume(se.exercise, s)
+                for se in other.exercises for s in se.sets if s.completed
+            )
             if v > 0:
                 past_total_volumes.append(v)
 
@@ -763,7 +781,7 @@ def gym_delete_template(template_id):
     return redirect(url_for('gym.gym_dashboard'))
 
 
-def _exercise_progress_data(exercise_id, position=None):
+def _exercise_progress_data(exercise, position=None):
     """Shared by the full exercise-history page and the in-workout progress
     modal. Only counts *completed* sets -- a pending/unconfirmed set (e.g.
     freshly copied from a template) hasn't actually been performed yet and
@@ -780,7 +798,7 @@ def _exercise_progress_data(exercise_id, position=None):
     all_session_exercises = (
         SessionExercise.query
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(SessionExercise.exercise_id == exercise_id, SessionExercise.sets.any(SessionSet.completed == True))
+        .filter(SessionExercise.exercise_id == exercise.id, SessionExercise.sets.any(SessionSet.completed == True))
         .order_by(WorkoutSession.started_at)
         .all()
     )
@@ -799,7 +817,7 @@ def _exercise_progress_data(exercise_id, position=None):
             continue
         best_weight = max(s.weight for s in completed_sets)
         worst_weight = min(s.weight for s in completed_sets)
-        volume = sum(s.weight * s.reps for s in completed_sets)
+        volume = sum(_set_volume(exercise, s) for s in completed_sets)
         sets_display = ', '.join(f'{s.weight}kg×{s.reps}' for s in completed_sets)
         rows.append({
             'session': se.session, 'sets': completed_sets, 'best_weight': best_weight,
@@ -810,7 +828,7 @@ def _exercise_progress_data(exercise_id, position=None):
         for s in completed_sets:
             if pr_max_weight is None or s.weight > pr_max_weight['weight']:
                 pr_max_weight = {'weight': s.weight, 'reps': s.reps, 'date': se.session.started_at}
-            set_volume = s.weight * s.reps
+            set_volume = _set_volume(exercise, s)
             if pr_max_volume is None or set_volume > pr_max_volume['volume']:
                 pr_max_volume = {'weight': s.weight, 'reps': s.reps, 'volume': set_volume, 'date': se.session.started_at}
 
@@ -834,7 +852,7 @@ def _exercise_progress_data(exercise_id, position=None):
 def exercise_detail(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     position = request.args.get('position', type=int)
-    data = _exercise_progress_data(exercise_id, position=position)
+    data = _exercise_progress_data(exercise, position=position)
     return render_template('gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS, **data)
 
 
@@ -849,9 +867,9 @@ def gym_exercise_progress_json(exercise_id):
     just because you haven't done this exercise in this position before."""
     exercise = db.get_or_404(Exercise, exercise_id)
     position = request.args.get('position', type=int)
-    data = _exercise_progress_data(exercise_id, position=position)
+    data = _exercise_progress_data(exercise, position=position)
     if position is not None and not data['rows']:
-        data = _exercise_progress_data(exercise_id)
+        data = _exercise_progress_data(exercise)
         position = None
 
     def fmt_pr(pr):
@@ -867,6 +885,7 @@ def gym_exercise_progress_json(exercise_id):
     return jsonify({
         'exercise_id': exercise.id,
         'name': exercise.name,
+        'is_unilateral': exercise.is_unilateral,
         'position': position,
         'pr_max_weight': fmt_pr(data['pr_max_weight']),
         'pr_max_volume': fmt_pr_volume(data['pr_max_volume']),
@@ -886,6 +905,7 @@ def gym_add_exercise():
             name=name,
             muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
             default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+            is_unilateral=request.form.get('is_unilateral') == 'on',
         ))
         db.session.commit()
     return redirect(url_for('gym.gym_dashboard'))
@@ -908,6 +928,7 @@ def gym_update_exercise(exercise_id):
             exercise.name = new_name
     exercise.muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''), current=exercise.muscle_group)
     exercise.default_rest_seconds = _to_int(request.form.get('default_rest_seconds', ''))
+    exercise.is_unilateral = request.form.get('is_unilateral') == 'on'
     db.session.commit()
     return redirect(url_for(
         'gym.exercise_detail', exercise_id=exercise.id, name_taken=1 if name_taken else None,

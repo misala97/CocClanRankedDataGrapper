@@ -154,6 +154,7 @@ class Exercise(db.Model):
     previous_name        = db.Column(db.String(150), nullable=True)  # set to the prior name on rename, so a re-pasted import still using the old name finds this exercise instead of creating a duplicate
     muscle_group         = db.Column(db.String(100), nullable=True)
     default_rest_seconds = db.Column(db.Integer, nullable=True)
+    is_unilateral        = db.Column(db.Boolean, nullable=False, default=False)  # logged weight/reps are per side (e.g. one-arm curls); volume must be doubled
 
     session_exercises  = db.relationship('SessionExercise', back_populates='exercise', lazy=True)
     template_exercises = db.relationship('TemplateExercise', back_populates='exercise', lazy=True)

@@ -872,9 +872,11 @@ document.addEventListener('change', (e) => {
     function render(data) {
         let html = '';
         if (data.pr_max_weight) {
+            const volLabel = data.is_unilateral ? 'Bestes Satzvolumen (beidseitig)' : 'Bestes Satzvolumen';
+            const volReps = data.is_unilateral ? `${esc(data.pr_max_volume.reps)} je Seite` : esc(data.pr_max_volume.reps);
             html += `<div class="pr-grid">
                 <div class="pr-card"><div class="label">Max. Gewicht</div><div class="val">${esc(data.pr_max_weight.weight)} kg</div><div class="sub">${esc(data.pr_max_weight.reps)} Wdh. &middot; ${esc(data.pr_max_weight.date)}</div></div>
-                <div class="pr-card"><div class="label">Bestes Satzvolumen</div><div class="val">${esc(data.pr_max_volume.volume)} kg</div><div class="sub">${esc(data.pr_max_volume.weight)} kg &times; ${esc(data.pr_max_volume.reps)} &middot; ${esc(data.pr_max_volume.date)}</div></div>
+                <div class="pr-card"><div class="label">${volLabel}</div><div class="val">${esc(data.pr_max_volume.volume)} kg</div><div class="sub">${esc(data.pr_max_volume.weight)} kg &times; ${volReps} &middot; ${esc(data.pr_max_volume.date)}</div></div>
             </div>`;
         }
         if (data.position) {

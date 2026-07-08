@@ -162,6 +162,12 @@
                 <label>Standard-Pause (Sek.)</label>
                 <input type="number" name="default_rest_seconds" min="0" class="num-input" value="{{ exercise.default_rest_seconds if exercise.default_rest_seconds is not none else '' }}" placeholder="90">
             </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="is_unilateral" style="width:auto;margin-right:4px" {{ 'checked' if exercise.is_unilateral else '' }}>
+                    Einseitig (pro Seite)
+                </label>
+            </div>
             <button type="submit" class="btn btn-ghost btn-sm">Speichern</button>
         </div>
     </form>
@@ -188,9 +194,9 @@
             <div class="sub">{{ pr_max_weight.reps }} Wdh. · {{ pr_max_weight.date.strftime('%d.%m.%Y') }}</div>
         </div>
         <div class="period-card">
-            <div class="label">Bestes Satzvolumen</div>
+            <div class="label">Bestes Satzvolumen{{ ' (beidseitig)' if exercise.is_unilateral else '' }}</div>
             <div class="rate-val">{{ pr_max_volume.volume }} kg</div>
-            <div class="sub">{{ pr_max_volume.weight }} kg × {{ pr_max_volume.reps }} · {{ pr_max_volume.date.strftime('%d.%m.%Y') }}</div>
+            <div class="sub">{{ pr_max_volume.weight }} kg × {{ pr_max_volume.reps }}{{ ' je Seite' if exercise.is_unilateral else '' }} · {{ pr_max_volume.date.strftime('%d.%m.%Y') }}</div>
         </div>
     </div>
 
@@ -202,7 +208,12 @@
     </div>
 
     <div class="card">
-        <div class="card-header"><h2>Sätze pro Workout</h2></div>
+        <div class="card-header">
+            <h2>Sätze pro Workout</h2>
+            {% if exercise.is_unilateral %}
+            <span style="font-size:12px;color:var(--muted)">Einseitig: Gewicht/Wdh. je Seite geloggt, Volumen zählt beide Seiten (×2)</span>
+            {% endif %}
+        </div>
         <div class="card-body">
             <table class="sets">
                 <thead><tr><th>Datum</th><th>Pos.</th><th>Sätze</th><th>Volumen</th></tr></thead>
