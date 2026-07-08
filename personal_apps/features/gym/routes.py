@@ -512,6 +512,8 @@ def gym_start():
     if template_id:
         template = db.session.get(WorkoutTemplate, template_id)
         if template:
+            if not name:
+                session_.name = f"{template.name} {dt.datetime.utcnow().strftime('%d.%m.%Y')}"
             for i, te in enumerate(template.exercises, start=1):
                 session_exercise = SessionExercise(
                     exercise_id=te.exercise_id, position=i,
