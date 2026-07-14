@@ -340,6 +340,7 @@ def admin_cwl_bonus_list():
                             CWLMember.clan_tag == CLAN_TAG)
                     .group_by(CWLMember.player_tag).all())
         cwl_pos_map = {tag: pos for tag, pos in pos_rows if pos is not None}
+        
 
     return jsonify(
         months=months,
