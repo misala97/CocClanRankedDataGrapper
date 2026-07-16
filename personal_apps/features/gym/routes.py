@@ -656,6 +656,7 @@ def gym_reorder_session_exercises(session_id):
     for raw_id in order:
         se = session_exercises_by_id.get(_to_int(raw_id))
         if se:
+            old_position = se.position
             se.position = position
             # A substitute shares its slot with the original it replaced (which
             # is hidden from `order` -- it's not rendered while the session is
@@ -663,6 +664,19 @@ def gym_reorder_session_exercises(session_id):
             # don't drift apart / collide with an unrelated exercise's position.
             if se.replaces_id and se.replaces:
                 se.replaces.position = position
+            # Its pending sets (if any) were pre-filled from history matched to
+            # the OLD position -- e.g. at gym_start, or a previous reorder --
+            # which is now stale for the new slot. Re-derive them for the new
+            # position, but only when nothing has been logged for this exercise
+            # yet this session: one completed set means the lifter has already
+            # started on it, and overwriting sets at that point would destroy
+            # real in-progress data rather than a stale suggestion.
+            if position != old_position and not any(s.completed for s in se.sets):
+                se.sets.clear()
+                se.sets.extend(
+                    SessionSet(position=j, weight=prev_set['weight'], reps=prev_set['reps'], completed=False)
+                    for j, prev_set in enumerate(_last_full_performance(se.exercise_id, position=position), start=1)
+                )
             position += 1
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_id))
