@@ -92,12 +92,31 @@ undecided color coding that's already present in the data (`cwl_win_status`).
   - CWL ticket: score, round, win-status tag from `cwl_win_status`
     (Safe Win / Out of Reach / Undecided), link to `/cwl`
   - Raid ticket: `active_raid_est_medals` estimate, link to `/raid`
-- **Zero active events**: replace the ticket row entirely with one quiet
-  line — "No active events right now" — plus inline text links to
-  War/CWL/Raid history. Never show 3 empty/idle cards.
+- **Idle events**: for any of War/CWL/Raid with no active instance, show a
+  compact "last result" line instead of an empty card or dead link — e.g.
+  "Last war: Won 42★–38★ · 3d ago". Requires a new backend query per event
+  type (see Backend Changes below). If even the last-completed record
+  doesn't exist (brand new clan, no history yet), fall back to a plain link
+  to that section. Only when **none** of the three have any active or past
+  record does the whole ticket row collapse to one line: "No activity yet."
 - **Pulse strip**: `total_members`, `battle_logs_this_week`,
   `ranked_battles_this_week` — always shown (not event-tied, always has
   real data), single fluid row.
+
+## Backend Changes
+
+`index()` gains three new queries, mirroring the existing active-event
+queries but filtered to the completed state and ordered most-recent-first,
+`limit(1)` each:
+
+- `last_war = ClanWar.query.filter(ClanWar.state == 'warEnded').order_by(ClanWar.start_time.desc()).first()`
+- `last_raid = RaidWeekend.query.filter(RaidWeekend.state == 'ended').order_by(RaidWeekend.start_time.desc()).first()`
+- `last_cwl_war = CWLWar.query.filter(CWLWar.state == 'warEnded', db.or_(CWLWar.clan_tag == CLAN_TAG, CWLWar.opp_tag == CLAN_TAG)).order_by(CWLWar.id.desc()).first()`
+
+Each is only run when its corresponding `active_*` is `None` (no need to
+query history for an event that's currently live). Passed to the template
+alongside the existing `active_*` variables. This is the only backend
+change — everything else in this spec is template/CSS.
 
 ## Responsive Approach
 
@@ -121,7 +140,6 @@ instead of mobile being a final patch pass.
 
 ## Out of Scope
 
-- Any backend/route changes — all data already exists in `index()`
 - Command Deck tile *content* or link targets (restyle only)
 - Footer content (restyle only)
 - Other pages (`clan_overview.html`, `player_profile.html`, etc.) — separate
