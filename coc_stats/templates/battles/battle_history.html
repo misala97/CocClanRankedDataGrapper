@@ -1,214 +1,197 @@
 <!DOCTYPE html>
 <html lang="en">
 {% set page_title = 'Battle History – CoC Analytics' %}
-{% set chartjs = true %}
 {% include '_head.html' %}
 
-        /* ── NAV: see _nav.html ── */
+        /* Real in-game loot hues — this page is a ledger of the three resources,
+           so they get their own accurate palette rather than reusing UI tokens. */
+        :root {
+            --loot-gold:      #f5b921;
+            --loot-elixir:    #d954d1;
+            --loot-dark:      #9d8fd4;
+            --loot-dark-fill: #4a2f66;
+        }
 
-        /* ── CONTROLS ── */
-        .controls {
-            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-            background: var(--surface); padding: 12px 18px;
-            border-radius: 10px; border: 1px solid var(--border); margin-bottom: 20px;
-            position: sticky; top: 58px; z-index: 99;
-        }
-        .controls label {
-            font-size: 11px; font-weight: 700; color: var(--muted);
-            text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
-        }
-        .ctrl-divider { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
-        .selector {
-            padding: 7px 13px; border: 1px solid var(--border); border-radius: 7px;
-            font-size: 13px; font-family: 'DM Sans', sans-serif;
-            background: var(--surf2); color: var(--text);
-            cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
-            appearance: none; -webkit-appearance: none;
-        }
-        .selector:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(240,165,0,0.12); }
-        .week-sel { min-width: 230px; }
+        /* ── NAV / CONTROLS: see _nav.html / _head.html — this page adds nothing new there ── */
 
-        /* ── STATS GRID ── */
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
-        .stat-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-            padding: 20px 22px; display: flex; flex-direction: column; gap: 5px;
-            transition: border-color 0.2s, box-shadow 0.2s;
+        /* ── LEDGER STRIP ── */
+        .ledger {
+            display: flex; align-items: stretch; background: var(--surface);
+            border: 1px solid var(--border); border-left: 3px solid var(--accent);
+            border-radius: 10px; margin-bottom: 20px; overflow: hidden;
         }
-        .stat-card:hover { border-color: rgba(240,165,0,0.3); box-shadow: 0 4px 24px rgba(0,0,0,0.25); }
-        .stat-icon { font-size: 64px; line-height: 1; margin-bottom: 4px; }
-        .stat-icon img { width: 64px; height: 64px; }
-        .stat-value { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; color: var(--accent); line-height: 1; }
-        .stat-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-
-        /* ── CHARTS GRID ── */
-        .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 20px; }
-        .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; }
-        .chart-card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-        .chart-card h3 {
-            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
-            color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+        .ledger-attacks {
+            padding: 18px 26px; display: flex; flex-direction: column; justify-content: center;
+            border-right: 1px solid var(--border); min-width: 168px;
         }
-        .chart-wrap { position: relative; height: 208px; }
-
-        /* ── RESOURCE TOGGLE ── */
-        .res-toggle { display: flex; gap: 4px; }
-        .res-btn {
-            padding: 5px 10px; background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 6px; color: var(--muted); font-size: 14px; cursor: pointer; transition: all 0.15s;
+        .ledger-attacks-val { font-family: 'JetBrains Mono', monospace; font-size: 34px; font-weight: 700; color: var(--text); line-height: 1; }
+        .ledger-attacks-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-top: 6px; }
+        .ledger-loot { flex: 1; display: flex; }
+        .ledger-loot-cell {
+            flex: 1; padding: 18px 22px; display: flex; align-items: center; gap: 14px;
+            border-right: 1px solid var(--border);
         }
-        .res-btn:hover { border-color: var(--accent); color: var(--text); }
-        .res-btn.active { border-color: var(--accent); background: rgba(240,165,0,0.1); color: var(--accent); }
+        .ledger-loot-cell:last-child { border-right: none; }
+        .ledger-loot-icon { width: 40px; height: 40px; flex-shrink: 0; object-fit: contain; }
+        .ledger-loot-val { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; line-height: 1; }
+        .ledger-loot-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 4px; }
+        @media (max-width: 900px) {
+            .ledger { flex-direction: column; }
+            .ledger-attacks { border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; align-items: baseline; gap: 10px; }
+            .ledger-loot { flex-wrap: wrap; }
+            .ledger-loot-cell { min-width: 45%; border-bottom: 1px solid var(--border); }
+        }
+        @media (max-width: 480px) {
+            .ledger-loot-cell { min-width: 100%; }
+        }
 
-        /* ── TABLE ── */
-        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--border); }
-        .table-wrapper { background: var(--surface); min-width: 560px; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        /* ── HEATMAP (per-player attack timing, inside detail rows only) ── */
+        .heat-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+        .heat-grid { display: inline-flex; flex-direction: column; gap: 3px; min-width: 100%; }
+        .heat-hour-row { display: flex; gap: 3px; padding-left: 46px; margin-bottom: 1px; }
+        .heat-hour-lbl { width: 22px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--muted); text-align: center; flex-shrink: 0; }
+        .heat-row { display: flex; align-items: center; gap: 3px; }
+        .heat-day {
+            width: 40px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--muted);
+            flex-shrink: 0; text-align: right; padding-right: 6px;
+            position: sticky; left: 0; background: var(--bg); z-index: 1;
+        }
+        .heat-cell { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; cursor: default; transition: transform .1s, outline-color .1s; outline: 1px solid transparent; }
+        .heat-cell:hover { transform: scale(1.15); outline: 1px solid rgba(217,164,65,.6); }
+
+        /* ── COMPACT HEATMAP (the only size used now — lives inside player detail rows) ── */
+        .heat-mini .heat-cell, .heat-mini .heat-hour-lbl { width: 13px; }
+        .heat-mini .heat-cell { height: 13px; border-radius: 2px; }
+        .heat-mini .heat-day { width: 30px; font-size: 9.5px; }
+        .heat-mini .heat-hour-row { padding-left: 36px; }
+
+        /* ── RECENT ATTACKS ── */
+        .recent-card {
+            background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+            border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+        }
+        .recent-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; transition: background .15s; }
+        .recent-header:hover { background: var(--surf2); }
+        .recent-header-title { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+        .recent-header-title img { width: 14px; height: 14px; }
+        .recent-chevron { font-size: 11px; color: var(--muted); transition: transform .2s; }
+        .recent-chevron.open { transform: rotate(180deg); }
+        .recent-body { border-top: 1px solid var(--border); }
+
+        /* ── TABLE (desktop ≥641px only — mobile gets card list below) ── */
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--border); border-top: 3px solid var(--accent); }
+        .table-wrapper { background: var(--surface); min-width: 520px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+        col.col-player  { width: auto; }
+        col.col-attacks { width: 72px; }
+        col.col-gold, col.col-elixir, col.col-dark { width: 108px; }
+        col.col-action  { width: 120px; }
         thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
-        thead th {
-            padding: 11px 16px; text-align: left; font-weight: 600; color: var(--muted);
-            font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
-        }
-        tbody tr { border-bottom: 1px solid var(--bord2); transition: background 0.12s; }
+        thead th { padding: 11px 16px; text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .7px; white-space: nowrap; font-family: 'Manrope', sans-serif; }
+        tbody tr { border-bottom: 1px solid var(--bord2); transition: background .12s; }
         tbody tr:last-child { border-bottom: none; }
-        tbody tr:hover { background: rgba(255,255,255,0.03); }
+        tbody tr:hover { background: rgba(255,255,255,.03); }
         tbody td { padding: 12px 16px; vertical-align: middle; }
 
         .player-cell  { display: flex; align-items: center; gap: 10px; }
         .player-info  { display: flex; flex-direction: column; gap: 2px; }
-        .player-name { font-weight: 600; color: var(--text); font-size: 14.5px; }
-        .player-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; }
-        .player-link { color: inherit; text-decoration: none; transition: color 0.15s; }
+        .player-name  { font-weight: 600; color: var(--text); font-size: 14.5px; }
+        .player-tag   { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+        .player-link  { color: inherit; text-decoration: none; transition: color .15s; }
         .player-link:hover { color: var(--accent); }
-        .player-link-arrow { font-size: 10px; color: var(--muted); opacity: 0.4; transition: opacity 0.15s, color 0.15s; vertical-align: super; }
+        .player-link-arrow { font-size: 10px; color: var(--muted); opacity: .4; transition: opacity .15s, color .15s; vertical-align: super; }
         .player-link:hover .player-link-arrow { opacity: 1; color: var(--accent); }
-        .res-gold    { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 600; color: var(--yellow); }
-        .res-elixir  { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 600; color: var(--purple); }
-        .res-dark    { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 600; color: var(--red); }
-
-        .action-btn {
-            padding: 6px 14px; background: transparent; color: var(--accent);
-            border: 1px solid rgba(240,165,0,0.35); border-radius: 6px;
-            font-weight: 700; font-size: 11px; font-family: 'Rajdhani', sans-serif;
-            letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; transition: all 0.15s; min-width: 76px;
-        }
-        .action-btn:hover { background: rgba(240,165,0,0.1); border-color: var(--accent); box-shadow: 0 0 12px rgba(240,165,0,0.18); }
+        .player-left-tag { font-size: 10px; font-family: 'Manrope', sans-serif; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: rgba(139,148,158,.1); color: var(--muted); border: 1px solid rgba(139,148,158,.25); vertical-align: middle; }
+        .att-count { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--text); }
+        .res-gold   { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; color: var(--loot-gold); }
+        .res-elixir { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; color: var(--loot-elixir); }
+        .res-dark   { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; color: var(--loot-dark); }
 
         .sortable { cursor: pointer; user-select: none; }
         .sortable:hover { color: var(--text); }
         .sort-active { color: var(--accent) !important; }
-        .sort-active.asc::after  { content: ' ↑'; font-size: 0.85em; }
-        .sort-active.desc::after { content: ' ↓'; font-size: 0.85em; }
+        .sort-active.asc::after  { content: ' \2191'; font-size: .85em; }
+        .sort-active.desc::after { content: ' \2193'; font-size: .85em; }
 
         /* ── DETAIL ROW ── */
         .detail-row { display: none; }
         .detail-row.expanded { display: table-row; }
         .detail-cell { padding: 0; border: none; background: var(--bg); border-bottom: 1px solid var(--border) !important; }
-        .detail-inner { padding: 16px; }
-        .detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-        .detail-table-scroll { max-height: 324px; overflow-y: auto; border: 1px solid var(--bord2); border-radius: 6px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-        .detail-table-scroll::-webkit-scrollbar { width: 4px; }
-        .detail-table-scroll::-webkit-scrollbar-track { background: transparent; }
-        .detail-table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-        .detail-table-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-        .detail-table-scroll table { border-radius: 0; }
-        .detail-table th, .detail-table td { padding: 7px 10px; border-bottom: 1px solid var(--bord2); text-align: center; }
-        .detail-table th:first-child, .detail-table td:first-child { text-align: left; }
-        .detail-table tbody tr:last-child td { border-bottom: none; }
-        .detail-table th {
-            font-size: 11px; font-weight: 700; color: var(--muted);
-            text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Rajdhani', sans-serif;
-            position: sticky; top: 0; background: var(--surf2); z-index: 1;
-        }
-        .detail-table td { color: var(--text); }
-        .type-badge {
-            display: inline-block; padding: 2px 8px; border-radius: 4px;
-            font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
-            letter-spacing: 0.5px; text-transform: uppercase;
-        }
-        .type-ranked  { background: rgba(240,165,0,0.12); color: var(--accent); border: 1px solid rgba(240,165,0,0.3); }
-        .type-home    { background: rgba(88,166,255,0.10); color: var(--blue);   border: 1px solid rgba(88,166,255,0.25); }
-        .type-other   { background: rgba(139,148,158,0.10); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
-
-        /* ── TIMING HEATMAP ── */
-        .hm-wrap { margin-bottom: 18px; }
-        .hm-label {
-            font-size: 10px; font-weight: 700; color: var(--muted);
-            text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px;
-            font-family: 'Rajdhani', sans-serif;
-        }
-        .hm-hour-row { display: flex; align-items: center; gap: 3px; padding-left: 32px; margin-bottom: 4px; }
-        .hm-hour-lbl { width: 14px; font-size: 9px; color: var(--muted); font-family: 'Rajdhani', sans-serif; text-align: center; flex-shrink: 0; }
-        .hm-row { display: flex; align-items: center; gap: 3px; margin-bottom: 3px; }
-        .hm-day  { width: 28px; font-size: 10px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; flex-shrink: 0; text-align: right; padding-right: 4px; }
-        .hm-cell { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; cursor: default; transition: opacity .1s; }
-        .hm-cell:hover { opacity: .65; }
-
-        /* ── DETAIL STATS PANEL ── */
+        .detail-inner { padding: 18px; }
         .detail-top { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 18px; align-items: flex-start; }
-        .stat-panel { flex: 1; min-width: 200px; }
-        .sp-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; font-family: 'Rajdhani', sans-serif; }
+        .detail-heat { flex: 3; min-width: 260px; }
+        .detail-heat-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; }
+        .stat-panel { flex: 2; min-width: 220px; }
+        .sp-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; }
         .star-dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
-        .sd-label { font-size: 1.05em; letter-spacing: 1px; width: 42px; flex-shrink: 0; }
+        .sd-label { font-size: 1.05em; letter-spacing: 1px; width: 46px; flex-shrink: 0; }
         .sd-bar-wrap { flex: 1; height: 8px; background: var(--surf2); border-radius: 4px; overflow: hidden; }
         .sd-bar { height: 100%; border-radius: 4px; transition: width .3s; }
-        .sd-pct { width: 34px; text-align: right; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; flex-shrink: 0; }
-        .sd-count { width: 28px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 10px; flex-shrink: 0; }
-        .qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .sd-pct { width: 36px; text-align: right; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 11px; flex-shrink: 0; }
+        .sd-count { width: 30px; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 10px; flex-shrink: 0; }
+        .qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
         .qs-card { background: var(--surf2); border: 1px solid var(--bord2); border-radius: 8px; padding: 10px 12px; }
-        .qs-val { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1; }
-        .qs-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
+        .qs-val { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--accent); line-height: 1; }
+        .qs-lbl { font-family: 'Manrope', sans-serif; font-size: 10px; color: var(--muted); margin-top: 4px; }
 
-        /* ── RECENT ATTACKS ── */
-        .recent-card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 10px; margin-bottom: 20px; overflow: hidden;
-        }
-        .recent-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 14px 20px; cursor: pointer; user-select: none;
-            transition: background 0.15s;
-        }
-        .recent-header:hover { background: var(--surf2); }
-        .recent-header-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
-            color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
-        }
-        .recent-chevron {
-            font-size: 11px; color: var(--muted); transition: transform 0.2s;
-        }
-        .recent-chevron.open { transform: rotate(180deg); }
-        .recent-body { border-top: 1px solid var(--border); }
+        .detail-table-scroll { max-height: 320px; overflow-y: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--bord2); border-radius: 6px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        .detail-table-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+        .detail-table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .recent-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 6px; }
+        /* table-layout:fixed from the bare `table` selector above would otherwise force these
+           9 columns into equal narrow slices on mobile, and unwrapped content bleeds outside
+           its cell into neighboring columns — hence auto layout + nowrap + a scroll wrapper. */
+        .detail-table { width: auto; min-width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: auto; }
+        .detail-table th, .detail-table td { padding: 7px 10px; border-bottom: 1px solid var(--bord2); text-align: center; white-space: nowrap; }
+        .detail-table th:first-child, .detail-table td:first-child { text-align: left; }
+        .detail-table tbody tr:last-child td { border-bottom: none; }
+        .detail-table th { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; position: sticky; top: 0; background: var(--surf2); z-index: 1; }
+        .detail-table td { color: var(--text); }
+        .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; letter-spacing: .4px; text-transform: uppercase; }
+        .type-ranked { background: rgba(217,164,65,.12); color: var(--accent); border: 1px solid rgba(217,164,65,.3); }
+        .type-home   { background: rgba(53,194,209,.1); color: var(--blue); border: 1px solid rgba(53,194,209,.25); }
+        .type-other  { background: rgba(131,141,154,.1); color: var(--muted); border: 1px solid rgba(131,141,154,.2); }
 
-        /* ── FOOTER ── */
-        .page-footer {
-            text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
-            margin-top: 4px; border-top: 1px solid var(--bord2);
-            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
-        }
-
-        /* ── EMPTY STATE ── */
+        /* ── FOOTER / EMPTY ── */
+        .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: .3px; }
         .empty-state { text-align: center; padding: 80px 24px; color: var(--muted); }
-        .empty-state p { font-size: 15px; }
+        .empty-state p { font-size: 15px; font-family: 'Manrope', sans-serif; }
+
+        /* ── MOBILE CARDS — the real player list below 641px. No columns to lose
+           off the edge of the screen: every figure a phone user needs is laid
+           out top-to-bottom instead of left-to-right. ── */
+        #mobileList { display: none; flex-direction: column; gap: 8px; }
+        .mc {
+            background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+            border-radius: 10px; overflow: hidden; cursor: pointer; transition: background .12s;
+        }
+        .mc:active { background: var(--surf2); }
+        .mc-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+        .mc-player { flex: 1; min-width: 0; }
+        .mc-player-name { font-weight: 700; font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mc-player-tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 1px; }
+        .mc-attacks { text-align: right; flex-shrink: 0; }
+        .mc-attacks-val { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--text); line-height: 1; }
+        .mc-attacks-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
+        .mc-stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); }
+        .mc-stat { padding: 9px 8px; text-align: center; border-right: 1px solid var(--border); }
+        .mc-stat:last-child { border-right: none; }
+        .mc-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+        .mc-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
+        .mc-detail { display: none; border-top: 1px solid var(--border); padding: 16px 14px; }
+        .mc-detail.expanded { display: block; }
+        .mc-tap-hint { text-align: center; padding: 7px 0 2px; font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--muted); }
 
         /* ── RESPONSIVE ── */
-        @media (max-width: 1024px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-        }
         @media (max-width: 900px) {
-            .charts-grid { grid-template-columns: 1fr; }
             .container { padding-left: 20px; padding-right: 20px; }
+            .detail-top { flex-direction: column; }
         }
         @media (max-width: 640px) {
-            .page-header h1 { font-size: 36px; letter-spacing: 1.5px; }
-            .stats-grid { gap: 10px; }
             .week-sel { min-width: unset; width: 100%; }
-            .controls { padding: 10px 14px; gap: 8px; }
-            .ctrl-divider { display: none; }
             .container { padding-top: 20px; padding-bottom: 20px; }
-        }
-        @media (max-width: 420px) {
-            .stats-grid { grid-template-columns: 1fr; }
+            .table-scroll { display: none !important; }
+            #mobileList { display: flex; }
         }
     </style>
 </head>
@@ -225,7 +208,7 @@
         {% if available_weeks %}
             {% for w in available_weeks %}
             <option value="{{ w.start }}" {% if w.start == selected_week_start %}selected{% endif %}>
-                {%- if w.start == current_week_start %}⭐ Current Week{% else %}{{ w.label }}{% endif -%}
+                {%- if w.start == current_week_start %}★ Current Week{% else %}{{ w.label }}{% endif -%}
             </option>
             {% endfor %}
         {% else %}
@@ -235,104 +218,96 @@
     <div class="ctrl-divider"></div>
     <label>Type</label>
     <select name="type" class="selector" onchange="this.form.submit()">
-        <option value="all" {% if selected_type == 'all' %}selected{% endif %}>🌍 All Types</option>
-        <option value="ranked" {% if selected_type == 'ranked' %}selected{% endif %}>🏆 Ranked</option>
-        <option value="homeVillage" {% if selected_type == 'homeVillage' %}selected{% endif %}>🏘️ Home Battle</option>
+        <option value="all" {% if selected_type == 'all' %}selected{% endif %}>All types</option>
+        <option value="ranked" {% if selected_type == 'ranked' %}selected{% endif %}>Ranked</option>
+        <option value="homeVillage" {% if selected_type == 'homeVillage' %}selected{% endif %}>Home Battle</option>
     </select>
 </form>
 <div class="ctrl-divider" style="margin-left:auto;"></div>
-<button type="button" id="toggleLeftBtn" class="action-btn" onclick="toggleLeftFilter()" style="white-space:nowrap;">Show Left</button>
+<button type="button" id="toggleLeftBtn" class="action-btn" onclick="toggleLeftFilter()">Show left</button>
 <div class="ctrl-divider"></div>
-<input id="searchInput" class="selector" type="search" placeholder="🔍 Search player…" oninput="buildTable()" style="min-width:180px;">
+<input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="buildTable()" style="min-width:180px;">
 {% endset %}
 {% include '_page_header.html' %}
 
 <div class="container">
 
-    <!-- Stats -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon"><img src="/static/img/battle.png" style="width:64px;height:64px;"></div>
-            <div class="stat-value">{{ total_attacks }}</div>
-            <div class="stat-label">Total Attacks</div>
+    <!-- Ledger -->
+    <div class="ledger">
+        <div class="ledger-attacks">
+            <div class="ledger-attacks-val">{{ total_attacks }}</div>
+            <div class="ledger-attacks-lbl">Total Attacks</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-icon"><img src="/static/img/gold.png"></div>
-            <div class="stat-value" style="color:var(--yellow);" title="{{ '{:,}'.format(total_gold) }}">
-                {%- if total_gold >= 1000000000 %}{{ '%.1fB' | format(total_gold / 1000000000) }}
-                {%- elif total_gold >= 1000000 %}{{ '%.1fM' | format(total_gold / 1000000) }}
-                {%- elif total_gold >= 1000 %}{{ '%.1fK' | format(total_gold / 1000) }}
-                {%- else %}{{ total_gold }}{%- endif %}
-            </div>
-            <div class="stat-label">Gold Farmed</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon"><img src="/static/img/elixir.png"></div>
-            <div class="stat-value" style="color:var(--purple);" title="{{ '{:,}'.format(total_elixir) }}">
-                {%- if total_elixir >= 1000000000 %}{{ '%.1fB' | format(total_elixir / 1000000000) }}
-                {%- elif total_elixir >= 1000000 %}{{ '%.1fM' | format(total_elixir / 1000000) }}
-                {%- elif total_elixir >= 1000 %}{{ '%.1fK' | format(total_elixir / 1000) }}
-                {%- else %}{{ total_elixir }}{%- endif %}
-            </div>
-            <div class="stat-label">Elixir Farmed</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon"><img src="/static/img/darkElixir.png"></div>
-            <div class="stat-value" style="color:var(--red);" title="{{ '{:,}'.format(total_dark) }}">
-                {%- if total_dark >= 1000000 %}{{ '%.1fM' | format(total_dark / 1000000) }}
-                {%- elif total_dark >= 1000 %}{{ '%.1fK' | format(total_dark / 1000) }}
-                {%- else %}{{ total_dark }}{%- endif %}
-            </div>
-            <div class="stat-label">Dark Elixir Farmed</div>
-        </div>
-    </div>
-
-    <!-- Charts -->
-    {% if player_data %}
-    <div class="charts-grid">
-        <div class="chart-card">
-            <div class="chart-card-hdr">
-                <h3>Top 10 – Most Attacks</h3>
-            </div>
-            <div class="chart-wrap"><canvas id="chartAttacks"></canvas></div>
-        </div>
-        <div class="chart-card">
-            <div class="chart-card-hdr">
-                <h3>Top 10 – Most Resources</h3>
-                <div class="res-toggle">
-                    <button class="res-btn active" onclick="switchResourceChart('total_gold', this)"><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"></button>
-                    <button class="res-btn" onclick="switchResourceChart('total_elixir', this)"><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"></button>
-                    <button class="res-btn" onclick="switchResourceChart('total_dark', this)"><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"></button>
+        <div class="ledger-loot">
+            <div class="ledger-loot-cell">
+                <img src="/static/img/gold.png" class="ledger-loot-icon">
+                <div>
+                    <div class="ledger-loot-val" style="color:var(--loot-gold);" title="{{ '{:,}'.format(total_gold) }}">
+                        {%- if total_gold >= 1000000000 %}{{ '%.1fB' | format(total_gold / 1000000000) }}
+                        {%- elif total_gold >= 1000000 %}{{ '%.1fM' | format(total_gold / 1000000) }}
+                        {%- elif total_gold >= 1000 %}{{ '%.1fK' | format(total_gold / 1000) }}
+                        {%- else %}{{ total_gold }}{%- endif %}
+                    </div>
+                    <div class="ledger-loot-lbl">Gold farmed</div>
                 </div>
             </div>
-            <div class="chart-wrap"><canvas id="chartResources"></canvas></div>
+            <div class="ledger-loot-cell">
+                <img src="/static/img/elixir.png" class="ledger-loot-icon">
+                <div>
+                    <div class="ledger-loot-val" style="color:var(--loot-elixir);" title="{{ '{:,}'.format(total_elixir) }}">
+                        {%- if total_elixir >= 1000000000 %}{{ '%.1fB' | format(total_elixir / 1000000000) }}
+                        {%- elif total_elixir >= 1000000 %}{{ '%.1fM' | format(total_elixir / 1000000) }}
+                        {%- elif total_elixir >= 1000 %}{{ '%.1fK' | format(total_elixir / 1000) }}
+                        {%- else %}{{ total_elixir }}{%- endif %}
+                    </div>
+                    <div class="ledger-loot-lbl">Elixir farmed</div>
+                </div>
+            </div>
+            <div class="ledger-loot-cell">
+                <img src="/static/img/darkElixir.png" class="ledger-loot-icon">
+                <div>
+                    <div class="ledger-loot-val" style="color:var(--loot-dark);" title="{{ '{:,}'.format(total_dark) }}">
+                        {%- if total_dark >= 1000000 %}{{ '%.1fM' | format(total_dark / 1000000) }}
+                        {%- elif total_dark >= 1000 %}{{ '%.1fK' | format(total_dark / 1000) }}
+                        {%- else %}{{ total_dark }}{%- endif %}
+                    </div>
+                    <div class="ledger-loot-lbl">Dark elixir farmed</div>
+                </div>
+            </div>
         </div>
     </div>
-    {% endif %}
 
     <!-- Recent Attacks -->
     {% if player_data %}
     <div class="recent-card" id="recentCard">
         <div class="recent-header" onclick="toggleRecent()">
-            <span class="recent-header-title"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;"> 20 Most Recent Attacks</span>
+            <span class="recent-header-title"><img src="/static/img/raidCapitalGold.png" alt="">20 Most Recent Attacks</span>
             <span class="recent-chevron" id="recentChevron">▼</span>
         </div>
         <div class="recent-body" id="recentBody" style="display:none;"></div>
     </div>
     {% endif %}
 
-    <!-- Player Table -->
+    <!-- Player Ledger Table -->
     {% if player_data %}
     <div class="table-scroll">
         <div class="table-wrapper">
             <table id="statsTable">
+                <colgroup>
+                    <col class="col-player">
+                    <col class="col-attacks">
+                    <col class="col-gold">
+                    <col class="col-elixir">
+                    <col class="col-dark">
+                    <col class="col-action">
+                </colgroup>
                 <thead>
                     <tr>
                         <th class="sortable" onclick="sortTable('player')">Player</th>
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
-                        <th class="sortable" onclick="sortTable('total_gold')"><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th>
-                        <th class="sortable" onclick="sortTable('total_elixir')"><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th>
-                        <th class="sortable" onclick="sortTable('total_dark')"><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th>
+                        <th class="sortable" onclick="sortTable('total_gold')">Gold</th>
+                        <th class="sortable" onclick="sortTable('total_elixir')">Elixir</th>
+                        <th class="sortable" onclick="sortTable('total_dark')">Dark Elixir</th>
                         <th>Details</th>
                     </tr>
                 </thead>
@@ -340,6 +315,7 @@
             </table>
         </div>
     </div>
+    <div id="mobileList"></div>
     {% else %}
     <div class="table-scroll">
         <div class="table-wrapper">
@@ -354,26 +330,18 @@
 
 {% if player_data %}
 <script>
-    const CHART_COLORS = [
-        '#f0a500','#58a6ff','#3fb950','#bc8cff','#f85149',
-        '#e3b341','#39d353','#a371f7','#ff7b72','#ffa657'
-    ];
-
-    const topByAttacks = {{ top_by_attacks|tojson|safe }};
     window.playerData  = {{ player_data|tojson|safe }};
     window.myPlayerTag = {{ (current_user.linked_player_tag if current_user and current_user.linked_player_tag else None) | tojson }};
 
     let currentSort = { column: null, direction: null };
-    let resourceChart = null;
-    let attacksChart = null;
     let showLeft = false;
+    const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
     function toggleLeftFilter() {
         showLeft = !showLeft;
         const btn = document.getElementById('toggleLeftBtn');
-        btn.textContent = showLeft ? 'Hide Left' : 'Show Left';
-        btn.style.background = showLeft ? 'rgba(240,165,0,0.1)' : '';
-        btn.style.borderColor = showLeft ? 'var(--accent)' : '';
+        btn.textContent = showLeft ? 'Hide left' : 'Show left';
+        btn.classList.toggle('active', showLeft);
         buildTable();
     }
 
@@ -385,41 +353,6 @@
         );
     }
 
-    function makeDonut(canvasId, data, labelKey, valueKey) {
-        if (!data || !data.length) return null;
-        const ctx = document.getElementById(canvasId).getContext('2d');
-        return new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: data.map(d => d[labelKey]),
-                datasets: [{ data: data.map(d => d[valueKey]), backgroundColor: CHART_COLORS.slice(0, data.length), borderColor: '#0d1117', borderWidth: 2, hoverOffset: 6 }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'right', labels: { color: '#8b949e', font: { family: 'DM Sans', size: 13 }, padding: 14, boxWidth: 13, boxHeight: 13 } },
-                    tooltip: { callbacks: { label: ctx => {
-                        const total = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
-                        const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
-                        return ` ${Number(ctx.parsed).toLocaleString()}  (${pct}%)`;
-                    }}},
-                },
-                cutout: '60%'
-            }
-        });
-    }
-
-    function getTop10ByResource(key) {
-        return [...window.playerData].sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10);
-    }
-
-    function switchResourceChart(key, btn) {
-        document.querySelectorAll('.res-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        if (resourceChart) { resourceChart.destroy(); resourceChart = null; }
-        resourceChart = makeDonut('chartResources', getTop10ByResource(key), 'player_name', key);
-    }
-
     function formatType(t) {
         if (t === 'ranked')      return '<span class="type-badge type-ranked">Ranked</span>';
         if (t === 'homeVillage') return '<span class="type-badge type-home">Home</span>';
@@ -428,20 +361,7 @@
 
     function renderStars(n) {
         n = Math.min(parseInt(n) || 0, 3);
-        return `<span style="font-size:1.18em;letter-spacing:1px;color:var(--yellow);">${'★'.repeat(n)}</span><span style="font-size:1.18em;letter-spacing:1px;color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
-    }
-
-    function attackLogRow(l) {
-        return `<tr>
-            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(l.time)}</td>
-            <td>${escapeHTML(l.opponent_tag)}</td>
-            <td>${formatType(l.type)}</td>
-            <td>${renderStars(l.stars)}</td>
-            <td>${l.percentage ?? 0}%</td>
-            <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.gold)}</td>
-            <td style="color:var(--purple);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.elixir)}</td>
-            <td style="color:var(--red);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.dark)}</td>
-        </tr>`;
+        return `<span style="font-size:1.18em;letter-spacing:1px;color:var(--loot-gold);">${'★'.repeat(n)}</span><span style="font-size:1.18em;letter-spacing:1px;color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
     }
 
     function parseLocalTime(ts) {
@@ -470,31 +390,34 @@
         return { starCounts, totalPct, grid, dayCounts, hourCounts };
     }
 
-    function buildHeatmap(grid) {
+    // Dim gold -> hot gold-white. Used by both the clan-wide hero and the
+    // per-player detail heatmap so the two read as the same instrument at
+    // different zoom levels.
+    function heatColor(count, maxCount) {
+        if (count === 0) return 'var(--surf2)';
+        const frac = Math.sqrt(count / Math.max(1, maxCount));
+        const r = Math.round(217 + (255 - 217) * frac);
+        const g = Math.round(164 + (216 - 164) * frac);
+        const b = Math.round(65  + (117 - 65)  * frac);
+        const a = (0.28 + frac * 0.72).toFixed(2);
+        return `rgba(${r},${g},${b},${a})`;
+    }
+
+    function buildHeatGrid(grid, opts = {}) {
         const maxCount = Math.max(1, ...grid.flat());
-        const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
         const hourLabels = Array.from({length: 24}, (_, h) =>
-            `<span class="hm-hour-lbl">${h % 6 === 0 ? h : ''}</span>`
+            `<span class="heat-hour-lbl">${h % 3 === 0 ? h : ''}</span>`
         ).join('');
         const rows = DAYS.map((day, di) => {
             const cells = Array.from({length: 24}, (_, h) => {
                 const c = grid[di][h];
-                let bg;
-                if (c === 0) {
-                    bg = 'var(--surf2)';
-                } else {
-                    const frac = Math.sqrt(c / maxCount);
-                    const a = (0.2 + frac * 0.8).toFixed(2);
-                    bg = `rgba(240,165,0,${a})`;
-                }
-                const tip = c === 0 ? `${day} ${h}:00 – no attacks` : `${day} ${h}:00 – ${c} attack${c > 1 ? 's' : ''}`;
-                return `<div class="hm-cell" style="background:${bg}" title="${tip}"></div>`;
+                const tip = c === 0 ? `${day} ${h}:00 — no attacks` : `${day} ${h}:00 — ${c} attack${c > 1 ? 's' : ''}`;
+                return `<div class="heat-cell" style="background:${heatColor(c, maxCount)};" title="${tip}"></div>`;
             }).join('');
-            return `<div class="hm-row"><span class="hm-day">${day}</span>${cells}</div>`;
+            return `<div class="heat-row"><span class="heat-day">${day}</span>${cells}</div>`;
         }).join('');
-        return `<div class="hm-wrap">
-            <div class="hm-label">Attack Timing · local time</div>
-            <div class="hm-hour-row">${hourLabels}</div>
+        return `<div class="heat-grid${opts.compact ? ' heat-mini' : ''}">
+            <div class="heat-hour-row">${hourLabels}</div>
             ${rows}
         </div>`;
     }
@@ -502,25 +425,24 @@
     function buildDetailStats({ starCounts, totalPct, dayCounts, hourCounts }, total) {
         const avgPct    = total ? Math.round(totalPct / total) : 0;
         const threeStar = total ? Math.round(starCounts[3] / total * 100) : 0;
-        const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
         const maxDay  = Math.max(...dayCounts);
         const peakDay = maxDay > 0 ? DAYS[dayCounts.indexOf(maxDay)] : '–';
         const maxHour = Math.max(...hourCounts);
         const peakHour = maxHour > 0 ? hourCounts.indexOf(maxHour) : null;
         const peakHourStr = peakHour !== null ? `${peakHour}:00` : '–';
 
-        const STAR_COLORS = ['#8b949e','#f0a500','#e3b341','#3fb950'];
+        const STAR_COLORS = ['var(--muted)', 'var(--accent)', 'var(--loot-gold)', 'var(--green)'];
         const STAR_LABELS = [
             '<span style="color:var(--muted);opacity:.4">★★★</span>',
             '<span style="color:var(--accent)">★</span><span style="color:var(--muted);opacity:.4">★★</span>',
-            '<span style="color:var(--yellow)">★★</span><span style="color:var(--muted);opacity:.4">★</span>',
+            '<span style="color:var(--loot-gold)">★★</span><span style="color:var(--muted);opacity:.4">★</span>',
             '<span style="color:var(--green)">★★★</span>',
         ];
         const distRows = [3, 2, 1, 0].map(s => {
             const cnt  = starCounts[s];
             const pct  = total ? Math.round(cnt / total * 100) : 0;
             return `<div class="star-dist-row">
-                <span class="sd-label" style="font-size:1.05em;letter-spacing:1px;">${STAR_LABELS[s]}</span>
+                <span class="sd-label">${STAR_LABELS[s]}</span>
                 <div class="sd-bar-wrap"><div class="sd-bar" style="width:${pct}%;background:${STAR_COLORS[s]}"></div></div>
                 <span class="sd-pct">${pct}%</span>
                 <span class="sd-count">${cnt}×</span>
@@ -530,26 +452,46 @@
         return `<div class="stat-panel">
             <div class="sp-title">Star Distribution</div>
             ${distRows}
-        </div>
-        <div class="stat-panel">
-            <div class="sp-title">Quick Stats</div>
             <div class="qs-grid">
-                <div class="qs-card"><div class="qs-val">${avgPct}%</div><div class="qs-lbl">Avg Destruction</div></div>
-                <div class="qs-card"><div class="qs-val" style="color:var(--green)">${threeStar}%</div><div class="qs-lbl">3★ Rate</div></div>
-                <div class="qs-card"><div class="qs-val" style="color:var(--blue)">${peakDay}</div><div class="qs-lbl">Most Active Day</div></div>
-                <div class="qs-card"><div class="qs-val" style="color:var(--purple)">${peakHourStr}</div><div class="qs-lbl">Peak Hour</div></div>
+                <div class="qs-card"><div class="qs-val">${avgPct}%</div><div class="qs-lbl">Avg destruction</div></div>
+                <div class="qs-card"><div class="qs-val" style="color:var(--green);">${threeStar}%</div><div class="qs-lbl">3★ rate</div></div>
+                <div class="qs-card"><div class="qs-val" style="color:var(--blue);">${peakDay}</div><div class="qs-lbl">Most active day</div></div>
+                <div class="qs-card"><div class="qs-val" style="color:var(--loot-elixir);">${peakHourStr}</div><div class="qs-lbl">Peak hour</div></div>
             </div>
         </div>`;
     }
 
+    function attackLogRow(l) {
+        return `<tr>
+            <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-weight:600;">${escapeHTML(l.time)}</td>
+            <td>${escapeHTML(l.opponent_tag)}</td>
+            <td>${formatType(l.type)}</td>
+            <td>${renderStars(l.stars)}</td>
+            <td>${l.percentage ?? 0}%</td>
+            <td style="color:var(--loot-gold);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.gold)}</td>
+            <td style="color:var(--loot-elixir);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.elixir)}</td>
+            <td style="color:var(--loot-dark);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.dark)}</td>
+        </tr>`;
+    }
+
+    function detailTableHead() {
+        return `<thead><tr><th>Time</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th>Gold</th><th>Elixir</th><th>Dark Elixir</th></tr></thead>`;
+    }
+
     function buildDetailTable(logs) {
-        if (!logs || !logs.length) return '<div style="color:var(--muted);padding:8px 0;font-size:13px;">No attacks recorded.</div>';
+        if (!logs || !logs.length) return '<div style="color:var(--muted);padding:8px 0;font-size:13px;font-family:\'Manrope\',sans-serif;">No attacks recorded.</div>';
         const sorted = [...logs].sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
         const metrics = computeLogMetrics(logs);
-        return `<div class="detail-top">${buildHeatmap(metrics.grid)}${buildDetailStats(metrics, logs.length)}</div>
+        return `<div class="detail-top">
+            <div class="detail-heat">
+                <div class="detail-heat-title">Attack Timing</div>
+                <div class="heat-scroll">${buildHeatGrid(metrics.grid, { compact: true })}</div>
+            </div>
+            ${buildDetailStats(metrics, logs.length)}
+        </div>
         <div class="detail-table-scroll">
         <table class="detail-table">
-            <thead><tr><th>Time</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th><th><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th><th><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th></tr></thead>
+            ${detailTableHead()}
             <tbody>${sorted.map(attackLogRow).join('')}</tbody>
         </table>
         </div>`;
@@ -561,23 +503,23 @@
             (p.attack_logs || []).forEach(l => all.push({ ...l, player_name: p.player_name }));
         });
         all.sort((a, b) => (b.time_sort || '').localeCompare(a.time_sort || ''));
-        const top5 = all.slice(0, 20);
+        const top20 = all.slice(0, 20);
         const body = document.getElementById('recentBody');
-        if (!top5.length) { body.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;">No attacks recorded.</div>'; return; }
-        body.innerHTML = `<table class="detail-table">
-            <thead><tr><th>Time</th><th>Player</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th><th><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th><th><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th></tr></thead>
-            <tbody>${top5.map(l => `<tr>
-                <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:600;">${escapeHTML(l.time)}</td>
+        if (!top20.length) { body.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px;font-family:\'Manrope\',sans-serif;">No attacks recorded.</div>'; return; }
+        body.innerHTML = `<div class="recent-table-scroll"><table class="detail-table">
+            <thead><tr><th>Time</th><th>Player</th><th>Opponent Tag</th><th>Type</th><th>Stars</th><th>Damage %</th><th>Gold</th><th>Elixir</th><th>Dark Elixir</th></tr></thead>
+            <tbody>${top20.map(l => `<tr>
+                <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-weight:600;">${escapeHTML(l.time)}</td>
                 <td style="font-weight:600;">${escapeHTML(l.player_name)}</td>
                 <td>${escapeHTML(l.opponent_tag)}</td>
                 <td>${formatType(l.type)}</td>
                 <td>${renderStars(l.stars)}</td>
                 <td>${l.percentage ?? 0}%</td>
-                <td style="color:var(--yellow);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.gold)}</td>
-                <td style="color:var(--purple);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.elixir)}</td>
-                <td style="color:var(--red);font-family:'Rajdhani',sans-serif;font-weight:600;">${fmt(l.dark)}</td>
+                <td style="color:var(--loot-gold);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.gold)}</td>
+                <td style="color:var(--loot-elixir);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.elixir)}</td>
+                <td style="color:var(--loot-dark);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.dark)}</td>
             </tr>`).join('')}</tbody>
-        </table>`;
+        </table></div>`;
     }
 
     let recentBuilt = false;
@@ -588,6 +530,52 @@
         if (open && !recentBuilt) { buildRecentAttacks(); recentBuilt = true; }
         body.style.display = open ? '' : 'none';
         chevron.classList.toggle('open', open);
+    }
+
+    function buildMobileCards(rows) {
+        const list = document.getElementById('mobileList');
+        if (!list) return;
+        const expandedTags = new Set(
+            [...list.querySelectorAll('.mc-detail.expanded')].map(d => d.dataset.playerTag).filter(Boolean)
+        );
+        list.innerHTML = '';
+        rows.forEach(p => {
+            const leftTag = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
+            const card = document.createElement('div');
+            card.className = 'mc';
+            if (window.myPlayerTag && p.player_tag === window.myPlayerTag) {
+                card.style.background = 'rgba(217,164,65,0.08)';
+            }
+            card.innerHTML = `
+                <div class="mc-header">
+                    <div class="mc-player">
+                        <div class="mc-player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftTag}</div>
+                        <div class="mc-player-tag">${escapeHTML(p.player_tag)}</div>
+                    </div>
+                    <div class="mc-attacks">
+                        <div class="mc-attacks-val">${p.att_count}</div>
+                        <div class="mc-attacks-lbl">Attacks</div>
+                    </div>
+                </div>
+                <div class="mc-stats">
+                    <div class="mc-stat"><div class="mc-stat-lbl">Gold</div><div class="mc-stat-val" style="color:var(--loot-gold);">${fmt(p.total_gold)}</div></div>
+                    <div class="mc-stat"><div class="mc-stat-lbl">Elixir</div><div class="mc-stat-val" style="color:var(--loot-elixir);">${fmt(p.total_elixir)}</div></div>
+                    <div class="mc-stat"><div class="mc-stat-lbl">Dark Elixir</div><div class="mc-stat-val" style="color:var(--loot-dark);">${fmt(p.total_dark)}</div></div>
+                </div>
+                <div class="mc-tap-hint">Tap for attack log</div>
+                <div class="mc-detail" data-player-tag="${escapeHTML(p.player_tag)}"></div>
+            `;
+            const detail = card.querySelector('.mc-detail');
+            card.addEventListener('click', () => {
+                if (!detail.dataset.built) {
+                    detail.innerHTML = buildDetailTable(p.attack_logs);
+                    detail.dataset.built = 'true';
+                }
+                detail.classList.toggle('expanded');
+            });
+            list.appendChild(card);
+            if (expandedTags.has(p.player_tag)) card.click();
+        });
     }
 
     function buildTable() {
@@ -621,12 +609,13 @@
             const row = document.createElement('tr');
             row.style.cursor = 'pointer';
             if (window.myPlayerTag && p.player_tag === window.myPlayerTag) {
-                row.style.background = 'rgba(240,165,0,0.08)';
+                row.style.background = 'rgba(217,164,65,0.08)';
                 row.style.boxShadow = 'inset 3px 0 0 var(--accent)';
             }
+            const leftTag = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
             row.innerHTML = `
-                <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${(p.in_clan === false || p.in_clan === 0) ? ' <span style="font-size:10px;font-family:\'Rajdhani\',sans-serif;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid rgba(139,148,158,0.25);vertical-align:middle;">Left</span>' : ''}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
-                <td style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${p.att_count}</td>
+                <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftTag}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
+                <td><span class="att-count">${p.att_count}</span></td>
                 <td><span class="res-gold">${fmt(p.total_gold)}</span></td>
                 <td><span class="res-elixir">${fmt(p.total_elixir)}</span></td>
                 <td><span class="res-dark">${fmt(p.total_dark)}</span></td>
@@ -653,6 +642,8 @@
 
             if (expandedTags.has(p.player_tag)) row.click();
         });
+
+        buildMobileCards(rows);
 
         const totalAttacks = rows.reduce((s, p) => s + (p.att_count || 0), 0);
         document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown · ${totalAttacks} attack${totalAttacks !== 1 ? 's' : ''}`;
@@ -685,10 +676,6 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        if (attacksChart)  { attacksChart.destroy();  attacksChart  = null; }
-        if (resourceChart) { resourceChart.destroy(); resourceChart = null; }
-        attacksChart  = makeDonut('chartAttacks',    topByAttacks,                   'player_name', 'att_count');
-        resourceChart = makeDonut('chartResources',  getTop10ByResource('total_gold'), 'player_name', 'total_gold');
         buildTable();
     });
 </script>

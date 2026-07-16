@@ -3,158 +3,103 @@
 {% set page_title = (player.name if player else 'Player Not Found') ~ ' – CoC Analytics' %}
 {% include '_head.html' %}
 
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=JetBrains+Mono:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+        /* Real in-game loot hues — same palette Battle History uses, so a
+           player's own loot reads identically wherever it shows up. */
+        :root {
+            --loot-gold:      #f5b921;
+            --loot-elixir:    #d954d1;
+            --loot-dark:      #9d8fd4;
+        }
         /* ── NAV: see _nav.html ── */
 
-        .page-header p, .page-sub { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        /* ── ID CHIP (page_header_right): the two facts that identify any
+           CoC player at a glance — league and town hall. ── */
+        .id-chip { display: flex; align-items: center; gap: 16px; padding: 6px 4px; }
+        .id-chip-part { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .id-chip-league-icon { width: 52px; height: 52px; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,.4)); }
+        .id-chip-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; white-space: nowrap; }
+        .id-chip-div { width: 1px; height: 40px; background: var(--border); flex-shrink: 0; }
+        .id-chip-th { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
+        @media (max-width: 640px) { .id-chip { gap: 12px; } .id-chip-league-icon { width: 40px; height: 40px; } .id-chip-th { font-size: 21px; } }
 
         /* ── STATUS BADGES ── */
         .badge {
             display: inline-block; padding: 2px 9px; border-radius: 20px;
-            font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
+            font-size: 11px; font-weight: 700; font-family: 'Manrope', sans-serif;
             letter-spacing: 0.4px; text-transform: uppercase;
         }
-        .badge-in  { background: rgba(63,185,80,0.12);  color: var(--green);  border: 1px solid rgba(63,185,80,0.25); }
-        .badge-out { background: rgba(248,81,73,0.12);  color: var(--red);    border: 1px solid rgba(248,81,73,0.25); }
-
-        /* ── JUDGMENT BADGES ── */
-        tr.row-absent { opacity: 0.45; }
-        tr.row-absent td { color: var(--muted) !important; }
-        tr.row-absent .judgment { background: none; border-color: var(--border); color: var(--muted); }
-        tr.row-absent:hover { opacity: 0.65; }
-
-        /* ── TYPE BADGES ── */
-        .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; text-transform: uppercase; }
-        .type-ranked { background: rgba(240,165,0,0.12); color: var(--accent); border: 1px solid rgba(240,165,0,0.3); }
-        .type-home   { background: rgba(88,166,255,0.10); color: var(--blue);   border: 1px solid rgba(88,166,255,0.25); }
-        .type-other  { background: rgba(139,148,158,0.10); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
-
-        /* ── SUMMARY CARDS ROW ── */
-        .summary-row {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;
+        .badge-in  { background: rgba(62,192,106,.12); color: var(--green); border: 1px solid rgba(62,192,106,.25); }
+        .badge-out { background: rgba(226,72,63,.12);  color: var(--red);   border: 1px solid rgba(226,72,63,.25); }
+        .you-pill {
+            font-size: 10px; font-weight: 700; font-family: 'Manrope', sans-serif; letter-spacing: .5px; text-transform: uppercase;
+            padding: 1px 7px; border-radius: 4px; background: rgba(217,164,65,.15); color: var(--accent);
+            border: 1px solid rgba(217,164,65,.35); vertical-align: middle;
         }
+
+        /* ── TYPE BADGES (Recent Battles) ── */
+        .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'Manrope', sans-serif; letter-spacing: 0.4px; text-transform: uppercase; }
+        .type-ranked { background: rgba(217,164,65,.12); color: var(--accent); border: 1px solid rgba(217,164,65,.3); }
+        .type-home   { background: rgba(53,194,209,.1);  color: var(--blue);   border: 1px solid rgba(53,194,209,.25); }
+        .type-other  { background: rgba(131,141,154,.1); color: var(--muted); border: 1px solid rgba(131,141,154,.2); }
+
+        /* ── PERIOD TOGGLE (single instance, lives in page_controls) ── */
+        .period-btn.action-btn { }
+
+        /* ── SCORE CARDS: the reason this page exists — both halves always
+           visible, no click required. ── */
+        .summary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
         @media (max-width: 900px) { .summary-row { grid-template-columns: 1fr; } }
-
-        /* ── SCORE CARDS ── */
-        .score-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-            overflow: hidden;
-        }
+        .score-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
         .score-card-header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 20px; border-bottom: 1px solid var(--bord2);
-            background: var(--surf2);
+            padding: 12px 20px; border-bottom: 1px solid var(--bord2); background: var(--surf2);
         }
-        .score-card-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: 0.8px; color: var(--text);
-        }
-        .score-card-body {
-            padding: 28px 32px;
-            display: grid; grid-template-columns: 180px 1fr; gap: 40px; align-items: center;
-        }
+        .score-card-title { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+        .score-card-body { padding: 26px 28px; display: grid; grid-template-columns: 150px 1fr; gap: 30px; align-items: center; }
+        @media (max-width: 900px) { .score-card-body { grid-template-columns: 1fr; gap: 20px; } .score-left { text-align: left !important; display: flex; align-items: center; gap: 18px; } }
         .score-left { text-align: center; }
-        .score-number {
-            font-family: 'Rajdhani', sans-serif; font-size: 72px; font-weight: 700;
-            line-height: 1; margin-bottom: 4px;
-        }
-        .score-label-text {
-            font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700;
-            letter-spacing: 1px; text-transform: uppercase;
-        }
-        .score-out-of { font-size: 12px; color: var(--muted); margin-top: 4px; }
-        .score-sub { margin-top: 10px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 2px; }
-        .score-right-title {
-            font-size: 11px; font-weight: 700; color: var(--muted);
-            text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 16px;
-        }
-        .score-component { margin-bottom: 14px; }
+        .score-number { font-family: 'JetBrains Mono', monospace; font-size: 56px; font-weight: 700; line-height: 1; margin-bottom: 2px; }
+        .score-label-text { font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+        .score-out-of { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--muted); margin-top: 3px; }
+        .score-sub { margin-top: 9px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 2px; }
+        @media (max-width: 900px) { .score-sub { justify-content: flex-start; } }
+        .score-component { margin-bottom: 13px; }
         .score-component:last-child { margin-bottom: 0; }
-        .score-component-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
-        .score-component-name { font-size: 13px; font-weight: 600; }
-        .score-component-pts { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; }
-        .score-bar-track { height: 7px; border-radius: 4px; background: var(--bord2); overflow: hidden; }
-        .score-bar-nodata { height: 7px; border-radius: 4px; background: repeating-linear-gradient(-45deg, var(--bord2) 0px, var(--bord2) 3px, var(--bg) 3px, var(--bg) 6px); }
-        .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
-        .score-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
+        .score-component-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; gap: 8px; }
+        .score-component-name { font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600; }
+        .score-component-pts { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; flex-shrink: 0; }
+        .score-bar-track { height: 6px; border-radius: 3px; background: var(--bord2); overflow: hidden; }
+        .score-bar-nodata { height: 6px; border-radius: 3px; background: repeating-linear-gradient(-45deg, var(--bord2) 0px, var(--bord2) 3px, var(--bg) 3px, var(--bg) 6px); }
+        .score-bar-fill { height: 100%; border-radius: 3px; transition: width .5s cubic-bezier(.4,0,.2,1); }
+        .score-detail { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
-        /* ── PERIOD TOGGLE ── */
-        .period-toggle { display: flex; gap: 4px; }
-        .period-btn {
-            padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border);
-            background: transparent; color: var(--muted); font-size: 11px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; text-transform: uppercase;
-            cursor: pointer; transition: all 0.15s;
-        }
-        .period-btn:hover { color: var(--text); border-color: var(--muted); }
-        .period-btn.active {
-            background: rgba(240,165,0,0.12); color: var(--accent);
-            border-color: rgba(240,165,0,0.4);
-        }
+        /* ── HISTORY SECTIONS ── */
+        .sections-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; align-items: start; }
+        @media (max-width: 700px) { .sections-row { grid-template-columns: 1fr; } }
+        .section-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: clip; min-width: 0; }
+        .section-card.full-width { grid-column: 1 / -1; }
+        .section-header { padding: 13px 18px; border-bottom: 1px solid var(--bord2); background: var(--surf2); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .section-header h3 { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--text); }
+        .section-count { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap; }
 
-        /* ── SECTIONS ── */
-        .sections-row {
-            display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; align-items: start;
-        }
-        @media (max-width: 700px)  { .sections-row { grid-template-columns: 1fr; } }
-        .section-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-            overflow: clip;
-            min-width: 0;
-        }
-
-        /* ── SCROLLABLE HISTORY TABLES ── */
-        .table-scroll-wrap { max-height: 360px; overflow-y: auto; overflow-x: hidden; }
+        .table-scroll-wrap { max-height: 320px; overflow-y: auto; overflow-x: hidden; }
         .table-scroll-wrap::-webkit-scrollbar { width: 4px; }
         .table-scroll-wrap::-webkit-scrollbar-track { background: transparent; }
         .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-        .table-scroll-wrap thead th { position: sticky; top: 0; z-index: 1; background: var(--surf2); box-shadow: 0 1px 0 var(--bord2); }
-        .sections-row .section-card tbody tr { height: 52px; }
-        .section-card.full-width { grid-column: 1 / -1; }
-        .section-header {
-            padding: 14px 20px; border-bottom: 1px solid var(--bord2);
-            background: var(--surf2);
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .section-header h3 {
-            font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: 0.8px; color: var(--text);
-        }
-        .section-count { font-size: 11px; color: var(--muted); font-weight: 500; }
-
-        table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-        thead th {
-            padding: 10px 14px; text-align: center; font-weight: 700; color: var(--muted);
-            font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
-            border-bottom: 1px solid var(--bord2); white-space: nowrap;
-            font-family: 'Rajdhani', sans-serif;
-        }
-        tbody tr { border-bottom: 1px solid var(--bord2); transition: background 0.12s; }
-        tbody tr:last-child { border-bottom: none; }
-        tbody tr:hover { background: rgba(255,255,255,0.03); }
-        tbody td { padding: 10px 14px; vertical-align: middle; text-align: center; }
-
-        .mono { font-family: 'Rajdhani', sans-serif; font-weight: 600; }
-        .text-muted  { color: var(--muted); }
-        .text-green  { color: var(--green); }
-        .text-blue   { color: var(--blue); }
-        .text-accent { color: var(--accent); }
-        .text-red    { color: var(--red); }
-        .text-purple { color: var(--purple); }
-
-        .empty-row td { color: var(--muted); text-align: center; padding: 24px; font-size: 13px; }
+        .sections-row .table-scroll-wrap { max-height: 220px; }
 
         /* ── HISTORY ENTRIES ── */
         .hist-entry {
-            display: flex; align-items: center; gap: 12px;
-            padding: 11px 16px; border-bottom: 1px solid var(--bord2);
-            cursor: pointer; transition: background 0.12s;
-            border-left: 3px solid transparent;
+            display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--bord2);
+            cursor: pointer; transition: background .12s; border-left: 3px solid transparent;
         }
-        .hist-entry:hover { background: rgba(255,255,255,0.025); }
+        .hist-entry:hover { background: rgba(255,255,255,.025); }
         .hist-entry:last-child { border-bottom: none; }
-        .hist-entry.row-absent { opacity: 0.38; }
-        .hist-entry.row-absent:hover { opacity: 0.58; }
+        .hist-entry.row-absent { opacity: .4; }
+        .hist-entry.row-absent:hover { opacity: .6; }
         .bl-godlike  { border-left-color: var(--purple); }
         .bl-dominant { border-left-color: var(--accent); }
         .bl-wow      { border-left-color: var(--green); }
@@ -162,80 +107,65 @@
         .bl-warning  { border-left-color: var(--orange); }
         .bl-suck     { border-left-color: var(--red); }
         .bl-useless, .bl-inactive, .bl-undefined { border-left-color: var(--border); }
-        .hist-thumb {
-            width: 36px; height: 36px; flex-shrink: 0;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .hist-thumb img { width: 36px; height: 36px; object-fit: contain; }
+        .hist-thumb { width: 34px; height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .hist-thumb img { width: 34px; height: 34px; object-fit: contain; }
         .hist-thumb-ltr {
-            width: 36px; height: 36px; border-radius: 8px; background: var(--surf2);
+            width: 34px; height: 34px; border-radius: 8px; background: var(--surf2);
             display: flex; align-items: center; justify-content: center;
-            font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700;
-            color: var(--muted); letter-spacing: 0.5px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .5px;
         }
         .hist-body { flex: 1; min-width: 0; }
-        .hist-title {
-            font-size: 12px; font-weight: 600; color: var(--text);
-            margin-bottom: 4px; white-space: nowrap;
-            overflow: hidden; text-overflow: ellipsis;
-        }
+        .hist-title { font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 700; color: var(--text); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .hist-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
-        .hm { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+        .hm { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
         .hm.val  { color: var(--text); }
         .hm.pos  { color: var(--green); }
         .hm.neg  { color: var(--red); }
         .hm.acc  { color: var(--accent); }
         .hm.blu  { color: var(--blue); }
         .hm.pur  { color: var(--purple); }
-        .hm-sep  { color: var(--border); font-family: 'Rajdhani', sans-serif; font-size: 12px; }
+        .hm-sep  { color: var(--border); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
         .hist-verdict { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-        .hist-score { font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted); }
-        .hist-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
-        .sections-row .table-scroll-wrap { max-height: 189px; }
-        /* ── EXPAND BUTTON ── */
+        .hist-score { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--muted); }
+        .hist-empty { padding: 24px; text-align: center; color: var(--muted); font-family: 'Manrope', sans-serif; font-size: 13px; }
+
+        /* ── EXPAND-TO-FULLSCREEN ── */
         .expand-btn {
-            background: none; border: 1px solid var(--border); border-radius: 5px;
-            color: var(--muted); cursor: pointer; padding: 3px 5px;
-            display: flex; align-items: center; justify-content: center;
-            transition: color 0.12s, border-color 0.12s; flex-shrink: 0; line-height: 0;
+            background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer;
+            padding: 3px 5px; display: flex; align-items: center; justify-content: center;
+            transition: color .12s, border-color .12s; flex-shrink: 0; line-height: 0;
         }
         .expand-btn:hover { color: var(--text); border-color: var(--muted); }
         .expand-btn .icon-collapse { display: none; }
         .section-card.fs-open .expand-btn .icon-expand { display: none; }
         .section-card.fs-open .expand-btn .icon-collapse { display: flex; }
-        /* ── FULLSCREEN CARD ── */
-        .fs-backdrop {
-            display: none; position: fixed; inset: 0; z-index: 999;
-            background: rgba(13, 17, 23, 0.6);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
+        .fs-backdrop { display: none; position: fixed; inset: 0; z-index: 999; background: rgba(13,16,19,.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
         .fs-backdrop.active { display: block; }
         .section-card.fs-open {
-            position: fixed;
-            top: 20%; bottom: 20%;
-            left: 50%; transform: translateX(-50%);
-            width: calc(100% - 64px); max-width: 1400px;
-            z-index: 1000; border-radius: 12px;
+            position: fixed; top: 15%; bottom: 15%; left: 50%; transform: translateX(-50%);
+            width: calc(100% - 48px); max-width: 1400px; z-index: 1000; border-radius: 12px;
             display: flex; flex-direction: column; overflow: hidden;
         }
         .section-card.fs-open .table-scroll-wrap { flex: 1; max-height: none; overflow-y: auto; }
+        @media (max-width: 640px) { .section-card.fs-open { top: 6%; bottom: 6%; width: calc(100% - 24px); } }
 
-        .page-footer {
-            text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
-            margin-top: 4px; border-top: 1px solid var(--bord2);
-            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
-        }
+        /* ── RECENT BATTLES (reuses the sitewide detail-table shell) ── */
+        .detail-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .detail-table { table-layout: auto; width: 100%; min-width: max-content; border-collapse: collapse; font-size: 12.5px; }
+        .detail-table th, .detail-table td { padding: 9px 14px; border-bottom: 1px solid var(--bord2); text-align: center; white-space: nowrap; }
+        .detail-table tbody tr:last-child td { border-bottom: none; }
+        .detail-table tbody tr:hover td { background: rgba(255,255,255,.025); }
+        .detail-table th { font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; background: var(--surf2); }
+        .detail-table td { color: var(--text); }
+        .res-gold   { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--loot-gold); }
+        .res-elixir { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--loot-elixir); }
+        .res-dark   { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--loot-dark); }
+        .empty-row td { color: var(--muted); text-align: center; padding: 24px; font-family: 'Manrope', sans-serif; font-size: 13px; }
 
-        @media (max-width: 900px) {
-            .score-card-body { grid-template-columns: 1fr; gap: 24px; }
-            .score-left { text-align: left; display: flex; align-items: center; gap: 20px; }
-            .sections-row { grid-template-columns: 1fr; }
-            .nav-inner, .page-header, .container { padding-left: 20px; padding-right: 20px; }
-        }
+        .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: .3px; }
+
         @media (max-width: 640px) {
-            .page-header h1 { font-size: 36px; letter-spacing: 1.5px; }
-            .score-number { font-size: 56px; }
+            .score-number { font-size: 42px; }
             .container { padding-top: 20px; padding-bottom: 20px; }
         }
     </style>
@@ -248,102 +178,37 @@
 {% set page_header_title = 'Player <span>Not Found</span>' %}
 {% set page_header_desc = 'No player found with tag ' ~ player_tag %}
 {% else %}
-{% set page_header_title %}{{ player.name | e }}<span>.</span>{% endset %}
-{% set page_header_desc %}<span style="font-family:'Rajdhani',sans-serif;font-weight:600;">{{ player.tag }}</span> <span style="color:var(--border);">·</span> TH{{ player.current_th or '?' }} <span style="color:var(--border);">·</span> {% if player.league_icon %}<img src="{{ player.league_icon }}" alt="" style="width:18px;height:18px;vertical-align:middle;">{% endif %} {{ player.league_tier or 'Unranked' }} <span style="color:var(--border);">·</span> {% if player.in_clan %}<span class="badge badge-in">In Clan</span>{% else %}<span class="badge badge-out">Left Clan</span>{% endif %}{% if player.join_date %} <span style="color:var(--border);">·</span> <span style="color:var(--muted);font-size:13px;">joined {{ player.join_date.strftime('%d %b %Y') }}</span>{% endif %}{% endset %}
+{% set is_me = current_user and current_user.linked_player_tag == player.tag %}
+{% set page_header_title %}{{ player.name | e }}<span>.</span>{% if is_me %} <span class="you-pill">You</span>{% endif %}{% endset %}
+{% set page_header_desc %}{{ player.tag }} <span style="color:var(--border);">·</span> {% if player.in_clan %}<span class="badge badge-in">In Clan</span>{% else %}<span class="badge badge-out">Left Clan</span>{% endif %}{% if player.join_date %} <span style="color:var(--border);">·</span> joined {{ player.join_date.strftime('%d %b %Y') }}{% endif %}{% endset %}
+{% set page_header_right %}
+<div class="id-chip">
+    <div class="id-chip-part">
+        {% if player.league_icon %}<img src="{{ player.league_icon }}" class="id-chip-league-icon" alt="">{% endif %}
+        <span class="id-chip-lbl">{{ player.league_tier or 'Unranked' }}</span>
+    </div>
+    <div class="id-chip-div"></div>
+    <div class="id-chip-part">
+        <span class="id-chip-th">{{ player.current_th or '?' }}</span>
+        <span class="id-chip-lbl">Town Hall</span>
+    </div>
+</div>
+{% endset %}
+{% set page_controls %}
+<label>Period</label>
+<span id="periodToggle" style="display:contents;"></span>
+{% endset %}
 {% endif %}
 {% include '_page_header.html' %}
 
 {% if player %}
 <div class="container">
 
-    <script>
-    const periodLabels  = { week: '1 Week', month: '1 Month', '6months': '6 Months' };
-    const periodOrder   = ['week', 'month', '6months'];
-    const activityPeriods = {{ activity_periods | tojson | safe }};
-    const skillPeriods    = {{ skill_periods    | tojson | safe }};
-    const sharedAvailable = periodOrder.filter(p => activityPeriods[p] || skillPeriods[p]);
-    let   sharedPeriod    = sharedAvailable.includes('month') ? 'month' : (sharedAvailable[0] || 'month');
-
-    function renderCard(periodsData, scoreId, labelId, subId, componentsId, componentDefs, leftId) {
-        const d = periodsData[sharedPeriod];
-        if (!d) {
-            if (leftId) document.getElementById(leftId).style.display = 'none';
-            document.getElementById(componentsId).innerHTML = `
-                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 0;text-align:center;width:100%;">
-                    <div style="font-size:36px;opacity:0.15;">📊</div>
-                    <div style="font-size:13px;color:var(--muted);">Not enough data for this period</div>
-                </div>`;
-            return;
-        }
-        if (leftId) document.getElementById(leftId).style.display = '';
-        const col = `var(--${d.label_color})`;
-        document.getElementById(scoreId).textContent = d.score;
-        document.getElementById(scoreId).style.color = col;
-        document.getElementById(labelId).textContent = d.label;
-        document.getElementById(labelId).style.color = col;
-        const comps = componentDefs(d);
-        document.getElementById(subId).innerHTML = comps.map(c =>
-            `<span style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${c.color};">${c.score}</span>`
-        ).join('<span style="color:var(--border);margin:0 5px;">·</span>');
-        document.getElementById(componentsId).innerHTML = comps.map(c => {
-            if (c.hasData === false) return `
-            <div class="score-component">
-                <div class="score-component-header">
-                    <span class="score-component-name">${c.name}</span>
-                    <span style="font-size:12px;color:var(--muted);font-style:italic;">No data</span>
-                </div>
-                <div class="score-bar-nodata"></div>
-            </div>`;
-            return `
-            <div class="score-component">
-                <div class="score-component-header">
-                    <span class="score-component-name">${c.name}</span>
-                    <span class="score-component-pts ${c.pts}">${c.score}/${c.max}</span>
-                </div>
-                <div class="score-bar-track">
-                    <div class="score-bar-fill" style="width:${c.max ? Math.round(c.score/c.max*100) : 0}%;background:${c.color};"></div>
-                </div>
-                <div class="score-detail">${c.detail}</div>
-            </div>`;
-        }).join('');
-    }
-
-    function renderToggle(id) {
-        document.getElementById(id).innerHTML = sharedAvailable.map(p =>
-            `<button class="period-btn${p === sharedPeriod ? ' active' : ''}" onclick="switchPeriod('${p}')">${periodLabels[p]}</button>`
-        ).join('');
-    }
-
-    function renderAll() {
-        renderToggle('act-toggle');
-        renderToggle('sk-toggle');
-        renderCard(activityPeriods, 'act-score', 'act-label', 'act-sub', 'act-components', d => [
-            { name: 'Ranked',       score: d.ranked_score, max: d.ranked_max, detail: d.ranked_detail, color: 'var(--blue)',    pts: 'text-blue' },
-            { name: 'Raid',         score: d.raid_score,   max: d.raid_max,   detail: d.raid_detail,   color: 'var(--accent)',  pts: 'text-accent' },
-            { name: 'Farm Attacks', score: d.battle_score, max: d.battle_max, detail: d.battle_detail, color: 'var(--green)',   pts: 'text-green' },
-            { name: 'Clan War',     score: d.war_score  || 0, max: d.war_max  || 100, detail: d.war_detail  || '', color: 'var(--red)',    pts: 'text-red',    hasData: d.war_score_has_data },
-            { name: 'CWL',          score: d.cwl_score  || 0, max: d.cwl_max  || 100, detail: d.cwl_detail  || '', color: 'var(--purple)', pts: 'text-purple', hasData: d.cwl_score_has_data },
-        ]);
-        renderCard(skillPeriods, 'sk-score', 'sk-label', 'sk-sub', 'sk-components', d => [
-            { name: 'Ranked',       score: d.ranked_skill, max: d.ranked_max, detail: d.ranked_detail, color: 'var(--blue)',    pts: 'text-blue',    hasData: d.ranked_skill_has_data },
-            { name: 'Raid',         score: d.raid_skill,   max: d.raid_max,   detail: d.raid_detail,   color: 'var(--accent)',  pts: 'text-accent',  hasData: d.raid_skill_has_data },
-            { name: 'Farm Attacks', score: d.battle_skill, max: d.battle_max, detail: d.battle_detail, color: 'var(--green)',   pts: 'text-green',   hasData: d.battle_skill_has_data },
-            { name: 'Clan War',     score: d.war_skill,    max: d.war_max,    detail: d.war_detail,    color: 'var(--red)',     pts: 'text-red',     hasData: d.war_skill_has_data },
-            { name: 'CWL',          score: d.cwl_skill,    max: d.cwl_max,    detail: d.cwl_detail,    color: 'var(--purple)',  pts: 'text-purple',  hasData: d.cwl_skill_has_data },
-        ], 'sk-left');
-    }
-
-    function switchPeriod(p) { sharedPeriod = p; renderAll(); }
-    </script>
-
     <div class="summary-row">
 
         <!-- Activity Card -->
         <div class="score-card">
-            <div class="score-card-header">
-                <span class="score-card-title">Activity Score</span>
-                <div id="act-toggle" class="period-toggle"></div>
-            </div>
+            <div class="score-card-header"><span class="score-card-title">Activity Score</span></div>
             <div class="score-card-body">
                 <div class="score-left">
                     <div id="act-score" class="score-number"></div>
@@ -351,18 +216,13 @@
                     <div class="score-out-of">out of 100</div>
                     <div id="act-sub" class="score-sub"></div>
                 </div>
-                <div class="score-right">
-                    <div id="act-components"></div>
-                </div>
+                <div class="score-right"><div id="act-components"></div></div>
             </div>
         </div>
 
         <!-- Skill Card -->
         <div class="score-card">
-            <div class="score-card-header">
-                <span class="score-card-title">Skill Score</span>
-                <div id="sk-toggle" class="period-toggle"></div>
-            </div>
+            <div class="score-card-header"><span class="score-card-title">Skill Score</span></div>
             <div class="score-card-body">
                 <div class="score-left" id="sk-left">
                     <div id="sk-score" class="score-number"></div>
@@ -370,14 +230,11 @@
                     <div class="score-out-of">out of 100</div>
                     <div id="sk-sub" class="score-sub"></div>
                 </div>
-                <div class="score-right">
-                    <div id="sk-components"></div>
-                </div>
+                <div class="score-right"><div id="sk-components"></div></div>
             </div>
         </div>
 
     </div>
-    <script>renderAll();</script>
 
     <!-- History Section -->
     <div class="sections-row">
@@ -450,9 +307,7 @@
             {% for r in raid_history %}
             <div class="hist-entry bl-{{ r.badge_class | replace('badge-', '') }} {% if not r.participated %}row-absent{% endif %}"
                  onclick="window.location.href='/raid?raid_id={{ r.raid_id }}'">
-                <div class="hist-thumb">
-                    <div class="hist-thumb-ltr">RD</div>
-                </div>
+                <div class="hist-thumb"><div class="hist-thumb-ltr">RD</div></div>
                 <div class="hist-body">
                     <div class="hist-title">{{ r.start }} — {{ r.end }}</div>
                     <div class="hist-meta">
@@ -505,9 +360,7 @@
             {% for w in war_history %}
             <div class="hist-entry bl-{{ w.badge_class | replace('badge-', '') }} {% if w.att_count == 0 %}row-absent{% endif %}"
                  onclick="window.location.href='/war?war_id={{ w.war_id }}'">
-                <div class="hist-thumb">
-                    <div class="hist-thumb-ltr">CW</div>
-                </div>
+                <div class="hist-thumb"><div class="hist-thumb-ltr">CW</div></div>
                 <div class="hist-body">
                     <div class="hist-title">vs {{ w.opponent }}</div>
                     <div class="hist-meta">
@@ -551,9 +404,7 @@
             {% for c in cwl_history %}
             <div class="hist-entry bl-{{ c.badge_class | replace('badge-', '') }} {% if not c.participated %}row-absent{% endif %}"
                  onclick="window.location.href='/cwl?season_id={{ c.season_id }}'">
-                <div class="hist-thumb">
-                    <div class="hist-thumb-ltr">CWL</div>
-                </div>
+                <div class="hist-thumb"><div class="hist-thumb-ltr">CWL</div></div>
                 <div class="hist-body">
                     <div class="hist-title">{{ c.season }}</div>
                     <div class="hist-meta">
@@ -592,15 +443,10 @@
             <h3>Recent Battles</h3>
             <span class="section-count">last {{ battle_history|length }}</span>
         </div>
-        <div class="table-scroll-wrap"><table>
+        <div class="detail-table-scroll"><table class="detail-table">
             <thead>
                 <tr>
-                    <th>Time</th>
-                    <th>Type</th>
-                    <th>Dir</th>
-                    <th>Opponent</th>
-                    <th>Stars</th>
-                    <th>Damage %</th>
+                    <th>Time</th><th>Type</th><th>Dir</th><th>Opponent</th><th>Stars</th><th>Damage %</th>
                     <th><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th>
                     <th><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th>
                     <th><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th>
@@ -609,31 +455,24 @@
             <tbody>
             {% for b in battle_history %}
             <tr>
-                <td class="mono text-muted" style="font-size:11px;">{{ b.time | local_dt('%d.%m %H:%M') }}</td>
+                <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-weight:600;font-size:11px;">{{ b.time | local_dt('%d.%m %H:%M') }}</td>
                 <td>
-                    {% if b.type == 'ranked' %}
-                        <span class="type-badge type-ranked">Ranked</span>
-                    {% elif b.type == 'homeVillage' %}
-                        <span class="type-badge type-home">Home</span>
-                    {% else %}
-                        <span class="type-badge type-other">{{ b.type }}</span>
-                    {% endif %}
+                    {% if b.type == 'ranked' %}<span class="type-badge type-ranked">Ranked</span>
+                    {% elif b.type == 'homeVillage' %}<span class="type-badge type-home">Home</span>
+                    {% else %}<span class="type-badge type-other">{{ b.type }}</span>{% endif %}
                 </td>
                 <td>
-                    {% if b.attack %}
-                        <span style="color:var(--green);font-weight:700;font-size:12px;font-family:'Rajdhani',sans-serif;">↗ ATK</span>
-                    {% else %}
-                        <span style="color:var(--red);font-weight:700;font-size:12px;font-family:'Rajdhani',sans-serif;">↙ DEF</span>
-                    {% endif %}
+                    {% if b.attack %}<span style="color:var(--green);font-weight:700;font-size:11px;font-family:'JetBrains Mono',monospace;">↗ ATK</span>
+                    {% else %}<span style="color:var(--red);font-weight:700;font-size:11px;font-family:'JetBrains Mono',monospace;">↙ DEF</span>{% endif %}
                 </td>
-                <td class="mono text-muted" style="font-size:11px;">{{ b.opponent_tag }}</td>
+                <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px;">{{ b.opponent_tag }}</td>
                 <td style="font-size:1.18em;letter-spacing:1px;">
                     <span style="color:var(--yellow);">{{ '★' * b.stars }}</span><span style="color:var(--muted);opacity:0.4;">{{ '☆' * (3 - b.stars) }}</span>
                 </td>
-                <td class="mono text-blue">{{ b.percentage }}%</td>
-                <td class="mono text-accent" style="font-size:12px;">{{ '{:,}'.format(b.gold) }}</td>
-                <td class="mono text-purple" style="font-size:12px;">{{ '{:,}'.format(b.elixir) }}</td>
-                <td class="mono text-red" style="font-size:12px;">{{ '{:,}'.format(b.dark) }}</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--blue);">{{ b.percentage }}%</td>
+                <td class="res-gold">{{ '{:,}'.format(b.gold) }}</td>
+                <td class="res-elixir">{{ '{:,}'.format(b.elixir) }}</td>
+                <td class="res-dark">{{ '{:,}'.format(b.dark) }}</td>
             </tr>
             {% else %}
             <tr class="empty-row"><td colspan="9">No battles recorded.</td></tr>
@@ -646,35 +485,115 @@
 
 <div class="page-footer">CoC Analytics · {{ player.name | e }}</div>
 
-{% endif %}
+<script>
+    const periodLabels    = { week: '1 Week', month: '1 Month', '6months': '6 Months' };
+    const periodOrder     = ['week', 'month', '6months'];
+    const activityPeriods = {{ activity_periods | tojson | safe }};
+    const skillPeriods    = {{ skill_periods    | tojson | safe }};
+    const sharedAvailable = periodOrder.filter(p => activityPeriods[p] || skillPeriods[p]);
+    let   sharedPeriod    = sharedAvailable.includes('month') ? 'month' : (sharedAvailable[0] || 'month');
 
-<!-- Fullscreen backdrop -->
+    // Canonical per-mode identity colors, matching the homepage hub tiles
+    // (/ranked=cyan, /raid=red, /war=gold, /cwl=purple) — Farm Attacks has no
+    // reserved identity of its own, so it keeps the neutral green it always had here.
+    const MODE_COLOR = { ranked: 'var(--blue)', raid: 'var(--red)', battle: 'var(--green)', war: 'var(--accent)', cwl: 'var(--purple)' };
+
+    function renderCard(periodsData, scoreId, labelId, subId, componentsId, componentDefs, leftId) {
+        const d = periodsData[sharedPeriod];
+        if (!d) {
+            if (leftId) document.getElementById(leftId).style.display = 'none';
+            document.getElementById(componentsId).innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 0;text-align:center;width:100%;">
+                    <div style="font-size:34px;opacity:0.15;">📊</div>
+                    <div style="font-family:'Manrope',sans-serif;font-size:13px;color:var(--muted);">Not enough data for this period</div>
+                </div>`;
+            return;
+        }
+        if (leftId) document.getElementById(leftId).style.display = '';
+        const col = `var(--${d.label_color})`;
+        document.getElementById(scoreId).textContent = d.score;
+        document.getElementById(scoreId).style.color = col;
+        document.getElementById(labelId).textContent = d.label;
+        document.getElementById(labelId).style.color = col;
+        const comps = componentDefs(d);
+        document.getElementById(subId).innerHTML = comps.map(c =>
+            `<span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:${c.color};">${c.score}</span>`
+        ).join('<span style="color:var(--border);margin:0 5px;">·</span>');
+        document.getElementById(componentsId).innerHTML = comps.map(c => {
+            if (c.hasData === false) return `
+            <div class="score-component">
+                <div class="score-component-header">
+                    <span class="score-component-name">${c.name}</span>
+                    <span style="font-family:'Manrope',sans-serif;font-size:12px;color:var(--muted);font-style:italic;">No data</span>
+                </div>
+                <div class="score-bar-nodata"></div>
+            </div>`;
+            return `
+            <div class="score-component">
+                <div class="score-component-header">
+                    <span class="score-component-name">${c.name}</span>
+                    <span class="score-component-pts" style="color:${c.color};">${c.score}/${c.max}</span>
+                </div>
+                <div class="score-bar-track">
+                    <div class="score-bar-fill" style="width:${c.max ? Math.round(c.score/c.max*100) : 0}%;background:${c.color};"></div>
+                </div>
+                <div class="score-detail">${c.detail}</div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderPeriodToggle() {
+        document.getElementById('periodToggle').innerHTML = sharedAvailable.map(p =>
+            `<button class="action-btn${p === sharedPeriod ? ' active' : ''}" onclick="switchPeriod('${p}')">${periodLabels[p]}</button>`
+        ).join('');
+    }
+
+    function renderAll() {
+        renderPeriodToggle();
+        renderCard(activityPeriods, 'act-score', 'act-label', 'act-sub', 'act-components', d => [
+            { name: 'Ranked',       score: d.ranked_score, max: d.ranked_max, detail: d.ranked_detail, color: MODE_COLOR.ranked },
+            { name: 'Raid',         score: d.raid_score,   max: d.raid_max,   detail: d.raid_detail,   color: MODE_COLOR.raid },
+            { name: 'Farm Attacks', score: d.battle_score, max: d.battle_max, detail: d.battle_detail, color: MODE_COLOR.battle },
+            { name: 'Clan War',     score: d.war_score  || 0, max: d.war_max  || 100, detail: d.war_detail  || '', color: MODE_COLOR.war, hasData: d.war_score_has_data },
+            { name: 'CWL',          score: d.cwl_score  || 0, max: d.cwl_max  || 100, detail: d.cwl_detail  || '', color: MODE_COLOR.cwl, hasData: d.cwl_score_has_data },
+        ]);
+        renderCard(skillPeriods, 'sk-score', 'sk-label', 'sk-sub', 'sk-components', d => [
+            { name: 'Ranked',       score: d.ranked_skill, max: d.ranked_max, detail: d.ranked_detail, color: MODE_COLOR.ranked, hasData: d.ranked_skill_has_data },
+            { name: 'Raid',         score: d.raid_skill,   max: d.raid_max,   detail: d.raid_detail,   color: MODE_COLOR.raid,   hasData: d.raid_skill_has_data },
+            { name: 'Farm Attacks', score: d.battle_skill, max: d.battle_max, detail: d.battle_detail, color: MODE_COLOR.battle, hasData: d.battle_skill_has_data },
+            { name: 'Clan War',     score: d.war_skill,    max: d.war_max,    detail: d.war_detail,    color: MODE_COLOR.war,    hasData: d.war_skill_has_data },
+            { name: 'CWL',          score: d.cwl_skill,    max: d.cwl_max,    detail: d.cwl_detail,    color: MODE_COLOR.cwl,    hasData: d.cwl_skill_has_data },
+        ], 'sk-left');
+    }
+
+    function switchPeriod(p) { sharedPeriod = p; renderAll(); }
+
+    function toggleExpand(btn) {
+        const card = btn.closest('.section-card');
+        const backdrop = document.getElementById('fs-backdrop');
+        const isOpen = card.classList.contains('fs-open');
+        document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
+        backdrop.classList.remove('active');
+        if (!isOpen) { card.classList.add('fs-open'); backdrop.classList.add('active'); }
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        renderAll();
+        document.getElementById('fs-backdrop').addEventListener('click', function () {
+            document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
+            this.classList.remove('active');
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
+                document.getElementById('fs-backdrop').classList.remove('active');
+            }
+        });
+    });
+</script>
+
 <div id="fs-backdrop" class="fs-backdrop"></div>
 
-<script>
-function toggleExpand(btn) {
-    const card = btn.closest('.section-card');
-    const backdrop = document.getElementById('fs-backdrop');
-    const isOpen = card.classList.contains('fs-open');
-    // Close any already-open card
-    document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
-    backdrop.classList.remove('active');
-    if (!isOpen) {
-        card.classList.add('fs-open');
-        backdrop.classList.add('active');
-    }
-}
-document.getElementById('fs-backdrop').addEventListener('click', function() {
-    document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
-    this.classList.remove('active');
-});
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
-        document.getElementById('fs-backdrop').classList.remove('active');
-    }
-});
-</script>
+{% endif %}
 
 </body>
 </html>

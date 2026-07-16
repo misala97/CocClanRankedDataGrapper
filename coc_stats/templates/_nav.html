@@ -1,52 +1,62 @@
 <style>
     nav {
         position: sticky; top: 0; z-index: 100;
-        background: rgba(13,17,23,0.96);
+        background: rgba(13,16,19,0.94);
         backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
         border-bottom: 1px solid var(--border);
     }
     .nav-inner {
         max-width: 1400px; margin: 0 auto; padding: 0 28px;
         height: 58px; display: flex; align-items: center; gap: 6px;
+        position: relative;
     }
+
+    /* ── CREST: the homepage hero's hex badge, promoted to a permanent, sitewide mark ── */
     .nav-logo {
         display: flex; align-items: center; gap: 9px;
         text-decoration: none; color: inherit; flex-shrink: 0;
         transition: opacity .15s; margin-right: 6px;
     }
-    .nav-logo:hover { opacity: .8; }
-    .logo-icon {
-        width: 32px; height: 32px; flex-shrink: 0;
-        background: linear-gradient(135deg, var(--accent), var(--acc2));
-        border-radius: 8px; display: flex; align-items: center; justify-content: center;
-        font-size: 16px; box-shadow: 0 0 12px rgba(240,165,0,.25);
+    .nav-logo:hover { opacity: .82; }
+    .nav-crest {
+        width: 30px; height: 26px; flex-shrink: 0; padding: 1.5px;
+        background: linear-gradient(150deg, var(--accent), var(--acc2));
+        clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
     }
+    .nav-crest-inner {
+        width: 100%; height: 100%; background: var(--surface);
+        clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    .nav-crest-inner img { width: 78%; height: 78%; object-fit: contain; }
+    .nav-crest-inner svg { width: 56%; height: 56%; }
     .nav-logo-text {
-        font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 18px;
-        letter-spacing: .5px; white-space: nowrap;
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 18px;
+        letter-spacing: .3px; white-space: nowrap;
     }
+
     .nav-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
     .nav-links { display: flex; align-items: center; gap: 1px; flex: 1; min-width: 0; }
     .nl {
-        font-size: 13px; font-weight: 500; color: var(--muted);
-        padding: 5px 11px; border-radius: 6px; text-decoration: none; white-space: nowrap;
+        font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600; color: var(--muted);
+        padding: 6px 11px; border-radius: 6px; text-decoration: none; white-space: nowrap;
         transition: color .12s, background .12s;
     }
     .nl:hover { color: var(--text); background: rgba(255,255,255,.05); }
-    .nl-active { color: var(--text) !important; background: rgba(255,255,255,.07); }
+    .nl-active { color: var(--accent) !important; background: rgba(217,164,65,.1); }
     .nav-right { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
 
-    /* Task dots */
+    /* Task dots — the ops-room pulse: per-feature sync health at a glance */
     .nav-tasks { display: flex; align-items: center; gap: 6px; }
     .ntd-group { display: flex; align-items: center; gap: 5px; }
     .ntd {
         width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
         cursor: default; position: relative;
     }
-    .ntd-good { background: var(--green); box-shadow: 0 0 5px rgba(63,185,80,.55); }
+    .ntd-good { background: var(--green); box-shadow: 0 0 5px rgba(62,192,106,.55); }
     .ntd-warn { background: var(--yellow); }
-    .ntd-bad  { background: var(--red);   box-shadow: 0 0 5px rgba(248,81,73,.45); }
-    .ntd-none { background: #4a5058; }
+    .ntd-bad  { background: var(--red);   box-shadow: 0 0 5px rgba(226,72,63,.5); }
+    .ntd-none { background: #454c56; }
     .ntd-current {
         width: 9px; height: 9px;
         box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px rgba(255,255,255,.5) !important;
@@ -55,22 +65,22 @@
         display: none; position: absolute; top: calc(100% + 10px); left: 50%;
         transform: translateX(-50%); z-index: 300;
         background: var(--surface); border: 1px solid var(--border);
-        border-radius: 7px; padding: 7px 11px; white-space: nowrap;
+        border-radius: 8px; padding: 7px 11px; white-space: nowrap;
         font-size: 11px; color: var(--text); pointer-events: none;
-        box-shadow: 0 6px 20px rgba(0,0,0,.5);
+        box-shadow: 0 8px 24px rgba(0,0,0,.55);
     }
-    .ntd-tip-name { font-weight: 700; margin-bottom: 1px; font-family: 'Rajdhani', sans-serif; font-size: 12px; }
-    .ntd-tip-time { color: var(--muted); font-size: 11px; }
+    .ntd-tip-name { font-weight: 700; margin-bottom: 2px; font-family: 'Manrope', sans-serif; font-size: 12px; }
+    .ntd-tip-time { color: var(--muted); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
     .ntd:hover .ntd-tip { display: block; }
     .ntd-inline-time {
-        font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-        letter-spacing: .3px;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+        letter-spacing: .2px;
     }
     .ntd-inline-good { color: var(--green); }
     .ntd-inline-warn { color: var(--yellow); }
     .ntd-inline-bad  { color: var(--red); }
     .ntd-inline-none { color: var(--muted); }
-    .ntd-sep { width: 2px; height: 15px; background: rgba(224, 224, 224, 0.46); flex-shrink: 0; }
+    .ntd-sep { width: 1px; height: 15px; background: var(--border); flex-shrink: 0; }
 
     /* User chip + dropdown */
     .nav-user-wrap { position: relative; flex-shrink: 0; }
@@ -80,15 +90,15 @@
         background: var(--surf2); border: 1px solid var(--border);
         cursor: pointer; user-select: none; transition: border-color .15s;
     }
-    .nav-user:hover, .nav-user-wrap.open .nav-user { border-color: rgba(255,255,255,.22); }
+    .nav-user:hover, .nav-user-wrap.open .nav-user { border-color: rgba(217,164,65,.35); }
     .nav-avatar {
         width: 20px; height: 20px; border-radius: 50%;
         background: linear-gradient(135deg, var(--accent), var(--acc2));
         display: flex; align-items: center; justify-content: center;
-        font-size: 10px; font-weight: 700; color: #000;
-        font-family: 'Rajdhani', sans-serif; flex-shrink: 0;
+        font-size: 10px; font-weight: 800; color: #0d1013;
+        font-family: 'Big Shoulders Display', sans-serif; flex-shrink: 0;
     }
-    .nav-uname { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
+    .nav-uname { font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
     .nav-chevron {
         width: 12px; height: 12px; color: var(--muted); flex-shrink: 0;
         transition: transform .18s;
@@ -105,7 +115,7 @@
     .nav-user-wrap.open .nav-dropdown { display: block; }
     .nav-dd-item {
         display: flex; align-items: center; gap: 9px;
-        padding: 8px 11px; border-radius: 6px; font-size: 13px;
+        padding: 9px 11px; border-radius: 6px; font-family: 'Manrope', sans-serif; font-size: 13px;
         color: var(--text); text-decoration: none; transition: background .1s;
         white-space: nowrap;
     }
@@ -113,16 +123,16 @@
     .nav-dd-item svg { width: 14px; height: 14px; flex-shrink: 0; opacity: .65; }
     .nav-dd-sep { height: 1px; background: var(--bord2); margin: 4px 0; }
     .nav-dd-signout { color: var(--muted); }
-    .nav-dd-signout:hover { color: var(--red) !important; background: rgba(248,81,73,.07) !important; }
+    .nav-dd-signout:hover { color: var(--red) !important; background: rgba(226,72,63,.08) !important; }
 
     .nav-login {
-        font-size: 12px; font-weight: 600; color: var(--muted);
-        padding: 5px 13px; border-radius: 6px; border: 1px solid var(--border);
+        font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted);
+        padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
         text-decoration: none; transition: all .12s; flex-shrink: 0;
     }
-    .nav-login:hover { color: var(--accent); border-color: rgba(240,165,0,.4); background: rgba(240,165,0,.05); }
+    .nav-login:hover { color: var(--accent); border-color: rgba(217,164,65,.4); background: rgba(217,164,65,.06); }
 
-    /* War link dropdown */
+    /* Mode-link dropdown (Ranked / Battles / Raids / War / CWL / Tools) */
     .nl-wrap { position: relative; display: inline-flex; }
     .nl-wrap .nl { display: flex; align-items: center; gap: 4px; }
     .nl-wrap .nl-caret {
@@ -132,22 +142,80 @@
     .nl-wrap:hover .nl-caret { transform: rotate(180deg); }
     .nl-submenu {
         display: none; position: absolute; top: 100%; left: 0;
-        min-width: 160px; z-index: 400;
+        min-width: 168px; z-index: 400;
         padding-top: 6px;
     }
     .nl-submenu-inner {
         background: var(--surface); border: 1px solid var(--border);
-        border-radius: 8px; padding: 4px;
+        border-radius: 9px; padding: 4px;
         box-shadow: 0 8px 24px rgba(0,0,0,.5);
     }
     .nl-wrap:hover .nl-submenu { display: block; }
     .nl-sub-item {
-        display: block; padding: 7px 11px; border-radius: 5px;
-        font-size: 12px; font-weight: 500; color: var(--muted);
+        display: block; padding: 8px 11px; border-radius: 6px;
+        font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 500; color: var(--muted);
         text-decoration: none; white-space: nowrap; transition: color .1s, background .1s;
     }
     .nl-sub-item:hover { color: var(--text); background: rgba(255,255,255,.06); }
-    .nl-sub-item.nl-sub-active { color: var(--text); }
+    .nl-sub-item.nl-sub-active { color: var(--accent); }
+
+    /* ── MOBILE BURGER + PANEL ── */
+    .nav-burger {
+        display: none;
+        width: 38px; height: 38px; align-items: center; justify-content: center;
+        background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
+        cursor: pointer; flex-shrink: 0; color: var(--text); padding: 0; margin-left: auto;
+    }
+    .nav-burger svg { width: 18px; height: 18px; }
+    .nav-burger .icon-close { display: none; }
+    .nav-burger.open .icon-menu { display: none; }
+    .nav-burger.open .icon-close { display: block; }
+    .nav-burger.open { border-color: rgba(217,164,65,.4); color: var(--accent); }
+
+    .nav-mobile-panel {
+        display: none;
+        position: absolute; top: 100%; left: 0; right: 0;
+        max-height: calc(100vh - 58px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+        background: var(--surface); border-bottom: 1px solid var(--border);
+        box-shadow: 0 12px 32px rgba(0,0,0,.5);
+        padding: 6px 14px 20px;
+    }
+    .nav-mobile-panel.open { display: block; }
+    .nmp-group { border-bottom: 1px solid var(--bord2); padding: 4px 0; }
+    .nmp-group:last-of-type { border-bottom: none; }
+    .nmp-link {
+        display: block; padding: 12px 10px 4px; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700;
+        color: var(--text); text-decoration: none; border-radius: 8px;
+        border-left: 3px solid transparent;
+    }
+    .nmp-link.nmp-single { padding: 12px 10px; }
+    .nmp-link.nmp-active {
+        color: var(--accent); border-left-color: var(--accent);
+        background: rgba(217,164,65,.07); padding-left: 9px;
+    }
+    .nmp-sublink {
+        display: block; padding: 10px 10px 10px 22px; font-family: 'Manrope', sans-serif; font-size: 13.5px; font-weight: 500;
+        color: var(--muted); text-decoration: none;
+    }
+    .nmp-sublink.nmp-active { color: var(--accent); }
+    .nmp-section-label {
+        padding: 16px 10px 7px; font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted);
+        text-transform: uppercase; letter-spacing: .8px;
+    }
+    .nmp-task-row { display: flex; align-items: center; gap: 9px; padding: 9px 10px; font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--text); }
+    .nmp-task-time { margin-left: auto; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+    @media (max-width: 900px) {
+        .nav-sep   { display: none; }
+        .nav-links { display: none; }
+        .nav-tasks { display: none; }
+        .nav-burger { display: inline-flex; }
+        .nav-inner { padding: 0 16px; gap: 10px; }
+        .nav-logo-text { font-size: 16px; }
+    }
+    @media (max-width: 400px) {
+        .nav-logo-text { display: none; }
+    }
 </style>
 
 {% set _p = request.path %}
@@ -155,7 +223,24 @@
 <nav>
     <div class="nav-inner">
         <a href="/" class="nav-logo">
-            <div class="logo-icon">⚔️</div>
+            <span class="nav-crest">
+                <span class="nav-crest-inner">
+                    {% if clan_badge_url %}
+                    <img src="{{ clan_badge_url }}" alt="">
+                    {% else %}
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
+                        <path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                        <path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/>
+                        <path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/>
+                        <path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/>
+                        <path d="M15.5 9H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5S16.33 9 15.5 9z"/>
+                        <path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/>
+                        <path d="M8.5 15H10v-1.5c0-.83-.67-1.5-1.5-1.5S7 12.67 7 13.5 7.67 15 8.5 15z"/>
+                    </svg>
+                    {% endif %}
+                </span>
+            </span>
             <span class="nav-logo-text">CoC Analytics</span>
         </a>
 
@@ -243,10 +328,19 @@
             <a href="/clan"    class="nl {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nl-active{% endif %}">Clan</a>
             {% if is_super_admin %}
             <a href="/admin" class="nl {% if _p.startswith('/admin') %}nl-active{% endif %}" style="position:relative;">
-                Admin{% if newbie_check_count > 0 %}<span style="position:absolute;top:0px;right:-2px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;font-family:'Rajdhani',sans-serif;line-height:15px;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
+                Admin{% if newbie_check_count > 0 %}<span style="position:absolute;top:0px;right:-2px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:15px;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
             </a>
             {% endif %}
         </div>
+
+        <button type="button" class="nav-burger" id="navBurger" aria-label="Toggle menu" aria-expanded="false" aria-controls="navMobilePanel">
+            <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
+            </svg>
+            <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/>
+            </svg>
+        </button>
 
         <div class="nav-right">
             {% if nav_task_status %}
@@ -318,6 +412,55 @@
             <a href="/login" class="nav-login">Login</a>
             {% endif %}
         </div>
+
+        <div class="nav-mobile-panel" id="navMobilePanel">
+            <div class="nmp-group">
+                <a href="/" class="nmp-link nmp-single {% if _p == '/' %}nmp-active{% endif %}">Home</a>
+            </div>
+            <div class="nmp-group">
+                <a href="/ranked" class="nmp-link {% if _p.startswith('/ranked') %}nmp-active{% endif %}">Ranked</a>
+                <a href="/ranked/stats" class="nmp-sublink {% if _p.startswith('/ranked/stats') %}nmp-active{% endif %}">Long Term Stats</a>
+            </div>
+            <div class="nmp-group">
+                <a href="/battles" class="nmp-link {% if _p.startswith('/battles') %}nmp-active{% endif %}">Battles</a>
+                <a href="/battles/stats" class="nmp-sublink {% if _p.startswith('/battles/stats') %}nmp-active{% endif %}">Long Term Stats</a>
+            </div>
+            <div class="nmp-group">
+                <a href="/raid" class="nmp-link {% if _p.startswith('/raid') %}nmp-active{% endif %}">Raids</a>
+                <a href="/raid/stats" class="nmp-sublink {% if _p.startswith('/raid/stats') %}nmp-active{% endif %}">Long Term Stats</a>
+            </div>
+            <div class="nmp-group">
+                <a href="/war" class="nmp-link {% if _p.startswith('/war') %}nmp-active{% endif %}">War</a>
+                <a href="/war/stats" class="nmp-sublink {% if _p.startswith('/war/stats') %}nmp-active{% endif %}">Long Term Stats</a>
+            </div>
+            <div class="nmp-group">
+                <a href="/cwl" class="nmp-link {% if _p.startswith('/cwl') %}nmp-active{% endif %}">CWL</a>
+                <a href="/cwl/stats" class="nmp-sublink {% if _p.startswith('/cwl/stats') %}nmp-active{% endif %}">Long Term Stats</a>
+            </div>
+            <div class="nmp-group">
+                <a href="/tools/equipment" class="nmp-link nmp-single {% if _p.startswith('/tools') %}nmp-active{% endif %}">Tools · Equipment Calculator</a>
+            </div>
+            <div class="nmp-group">
+                <a href="/clan" class="nmp-link nmp-single {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nmp-active{% endif %}">Clan</a>
+                {% if is_super_admin %}
+                <a href="/admin" class="nmp-link nmp-single {% if _p.startswith('/admin') %}nmp-active{% endif %}">
+                    Admin{% if newbie_check_count > 0 %} <span style="display:inline-block;min-width:16px;padding:1px 5px;border-radius:8px;background:var(--red);color:#fff;font-size:10px;font-weight:700;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
+                </a>
+                {% endif %}
+            </div>
+            {% if nav_task_status %}
+            <div class="nmp-section-label">System Status</div>
+            <div class="nmp-group">
+                {% for t in nav_task_status %}
+                <div class="nmp-task-row">
+                    <span class="ntd ntd-{{ t.status }}" style="position:static;"></span>
+                    <span>{{ t.label }}</span>
+                    <span class="nmp-task-time ntd-inline-{{ t.status }}">{{ t.time_str }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
     </div>
 </nav>
 
@@ -333,5 +476,28 @@
     document.addEventListener('click', function () {
         wrap.classList.remove('open');
     });
+})();
+
+(function () {
+    var burger = document.getElementById('navBurger');
+    var panel  = document.getElementById('navMobilePanel');
+    if (!burger || !panel) return;
+    function close() {
+        panel.classList.remove('open');
+        burger.classList.remove('open');
+        burger.setAttribute('aria-expanded', 'false');
+    }
+    function toggle(e) {
+        e.stopPropagation();
+        var isOpen = panel.classList.toggle('open');
+        burger.classList.toggle('open', isOpen);
+        burger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+    burger.addEventListener('click', toggle);
+    panel.addEventListener('click', function (e) { if (e.target.closest('a')) close(); });
+    document.addEventListener('click', function (e) {
+        if (!panel.contains(e.target) && !burger.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 })();
 </script>

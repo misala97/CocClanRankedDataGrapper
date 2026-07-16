@@ -2,718 +2,543 @@
 <html lang="en">
 {% set page_title = clan_name ~ ' – Clash of Clans Analytics' %}
 {% include '_head.html' %}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=JetBrains+Mono:wght@500;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    html { scroll-behavior: smooth; }
 
-        html { scroll-behavior: smooth; }
+    :root {
+        --ops-bg:        #0d1013;
+        --ops-surface:   #161a20;
+        --ops-surface-2: #1d2229;
+        --ops-line:      #262c35;
+        --ops-ink:       #edf0f4;
+        --ops-ink-dim:   #838d9a;
+        --ops-gold:      #d9a441;
+        --ops-elixir:    #9066e8;
+        --ops-raid:      #e2483f;
+        --ops-ranked:    #35c2d1;
+        --ops-win:       #3ec06a;
+    }
 
-        /* ── NAV: see _nav.html ── */
+    .ops-fd  { font-family: 'Big Shoulders Display', sans-serif; }
+    .ops-mono{ font-family: 'JetBrains Mono', monospace; }
 
-        /* ── HERO ── */
-        .hero {
-            position: relative; overflow: hidden;
-            padding: 72px 32px 80px;
-        }
-        .hero::before {
-            content: '';
-            position: absolute; inset: 0;
-            background:
-                radial-gradient(ellipse 60% 50% at 70% 40%, rgba(240,165,0,0.07) 0%, transparent 70%),
-                radial-gradient(ellipse 40% 40% at 20% 60%, rgba(88,166,255,0.05) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        .hero-inner {
-            max-width: 1400px; margin: 0 auto;
-            display: grid; grid-template-columns: 1fr auto; gap: 48px; align-items: center;
-        }
-        .hero-eyebrow {
-            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
-            letter-spacing: 2px; text-transform: uppercase; color: var(--accent);
-            margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
-        }
-        .hero-eyebrow::before {
-            content: ''; display: inline-block; width: 24px; height: 2px;
-            background: var(--accent); border-radius: 2px;
-        }
-        .hero h2 {
-            font-family: 'Rajdhani', sans-serif; font-size: 52px; font-weight: 700;
-            line-height: 1.05; letter-spacing: 0.5px; margin-bottom: 18px;
-        }
-        .hero h2 .clan-name { color: var(--accent); }
-        .hero > .hero-inner > div > p {
-            font-size: 15px; color: var(--muted); line-height: 1.7; max-width: 440px; margin-bottom: 40px;
-        }
+    /* ── OPS HERO ── */
+    .ops-hero {
+        background: var(--ops-bg);
+        padding: 48px 32px 44px;
+        position: relative;
+        overflow: hidden;
+    }
+    .ops-hero::before {
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background:
+            linear-gradient(180deg, rgba(217,164,65,.05) 0%, transparent 40%),
+            radial-gradient(ellipse 50% 60% at 100% 0%, rgba(144,102,232,.06) 0%, transparent 65%);
+    }
+    .ops-hero-grid {
+        max-width: 1400px; margin: 0 auto; position: relative; z-index: 1;
+        display: grid; grid-template-columns: 1.3fr 1fr; gap: 56px; align-items: start;
+    }
 
-        /* ── STAT BOXES ── */
-        .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
-        .hero-stat-section { margin-top: 20px; }
-        .hero-stat-label {
-            font-size: 10px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
-            letter-spacing: 1.8px; text-transform: uppercase; color: var(--muted);
-            margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
-        }
-        .hero-stat-label::after { content: ''; flex: 1; height: 1px; background: var(--bord2); }
-        .stat-box {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-            padding: 20px 16px; text-align: center;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .stat-box:hover { border-color: rgba(240,165,0,0.35); box-shadow: 0 0 24px rgba(240,165,0,0.08); }
-        .stat-value { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
-        .stat-value.blue  { color: var(--blue); }
-        .stat-value.gold  { color: var(--accent); }
-        .stat-value.green { color: var(--green); }
-        .stat-label { font-size: 11px; color: var(--muted); line-height: 1.4; }
+    /* badge + eyebrow */
+    .ops-badge-row { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+    .hex-badge {
+        width: 60px; height: 52px; flex-shrink: 0; padding: 2px;
+        background: linear-gradient(150deg, var(--ops-gold), #8a6224);
+        clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+    }
+    .hex-badge-inner {
+        width: 100%; height: 100%; background: var(--ops-surface);
+        clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    .hex-badge-inner img { width: 76%; height: 76%; object-fit: contain; }
+    .hex-badge-inner svg { width: 60%; height: 60%; }
+    .ops-eyebrow {
+        font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 11px;
+        letter-spacing: 1.6px; text-transform: uppercase; color: var(--ops-ink-dim);
+    }
+    .ops-eyebrow b { color: var(--ops-ink); font-weight: 700; }
+    .ops-eyebrow .sep { color: var(--ops-gold); margin: 0 2px; }
 
-        /* ── PLAYER CARD ── */
-        .player-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-            padding: 20px 24px; display: grid; grid-template-columns: 1fr auto; align-items: center;
-        }
-        .pc-left { min-width: 0; }
-        .pc-right { padding-left: 28px; border-left: 1px solid var(--border); }
-        .pc-th { font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 700; color: var(--accent); line-height: 1; }
-        .pc-league { font-size: 11px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 600; margin-top: 2px; margin-bottom: 14px; display: block; }
-        .pc-stat-row { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; text-decoration: none; border-radius: 4px; transition: color .15s; }
-        .pc-stat-row:hover .pc-stat-lbl { color: var(--accent); }
-        .pc-stat-num { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; min-width: 24px; text-align: right; flex-shrink: 0; }
-        .pc-stat-lbl { font-size: 12px; color: var(--muted); transition: color .15s; }
-        .pog { display: grid; grid-template-columns: 16px auto auto auto; gap: 6px 18px; align-items: center; }
-        .pog img { width: 14px; height: 14px; object-fit: contain; justify-self: center; }
-        .pog-hd { font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); text-align: right; }
-        .pog-v { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; text-align: right; }
-        .pog-m { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; color: var(--muted); text-align: right; }
+    .ops-h1 {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+        font-size: clamp(32px, 4vw, 48px); line-height: 1.04; letter-spacing: .2px;
+        color: var(--ops-ink); margin-bottom: 8px;
+    }
+    .ops-h1 .who { color: var(--ops-gold); }
+    .ops-rank {
+        font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700;
+        color: var(--ops-ink-dim); margin-bottom: 22px; display: flex; align-items: center; gap: 8px;
+    }
+    .ops-rank .th { color: var(--ops-gold); }
+    .ops-lede { font-family: 'Manrope', sans-serif; font-size: 15px; color: var(--ops-ink-dim); line-height: 1.7; max-width: 460px; margin-bottom: 26px; }
 
-        /* ── ORE PILLS (shared with equipment page) ── */
-        .ore-pill { display: inline-flex; align-items: center; gap: 4px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; padding: 3px 9px; border-radius: 5px; }
-        .ore-shiny  { background: rgba(240,165,0,.12);  border: 1px solid rgba(240,165,0,.25); }
-        .ore-glowy  { background: rgba(63,185,80,.12);  border: 1px solid rgba(63,185,80,.25); }
-        .ore-starry { background: rgba(130,80,255,.12); border: 1px solid rgba(130,80,255,.25); }
-        .ore-img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+    /* personal stat rows */
+    .ops-stat-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 18px; }
+    .ops-stat-row {
+        display: flex; align-items: baseline; gap: 11px; padding: 7px 0 7px 12px;
+        border-left: 2px solid var(--ops-line); text-decoration: none;
+        transition: border-color .15s;
+    }
+    .ops-stat-row:hover { border-left-color: var(--tick, var(--ops-ink-dim)); }
+    .ops-stat-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 17px; min-width: 28px; text-align: right; flex-shrink: 0; }
+    .ops-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); transition: color .15s; }
+    .ops-stat-row:hover .ops-stat-lbl { color: var(--ops-ink); }
 
-        /* ── HERO EMBLEM ── */
-        .hero-emblem { width: 220px; height: 220px; position: relative; flex-shrink: 0; }
-        .hero-emblem::before {
-            content: ''; position: absolute; inset: 0;
-            background: radial-gradient(ellipse at center, rgba(240,165,0,0.2) 0%, transparent 70%);
-            border-radius: 50%; animation: pulse-glow 3s ease-in-out infinite;
-        }
-        .emblem-inner {
-            width: 100%; height: 100%; background: var(--surface); border: 1px solid var(--border);
-            border-radius: 24px; display: flex; align-items: center; justify-content: center;
-            font-size: 80px; animation: float 6s ease-in-out infinite; position: relative; z-index: 1;
-            overflow: hidden;
-        }
-        .emblem-inner img { width: 75%; height: 75%; object-fit: contain; }
-        @keyframes float      { 0%, 100% { transform: translateY(0); }    50% { transform: translateY(-16px); } }
-        @keyframes pulse-glow { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
+    /* ore strip */
+    .ops-ore-strip {
+        display: flex; border: 1px solid var(--ops-line); border-radius: 8px;
+        overflow: hidden; text-decoration: none; max-width: 420px;
+        transition: border-color .15s;
+    }
+    .ops-ore-strip:hover { border-color: rgba(217,164,65,.4); }
+    .ops-ore-cell { flex: 1; padding: 12px 10px; text-align: center; border-right: 1px solid var(--ops-line); }
+    .ops-ore-cell:last-child { border-right: none; }
+    .ops-ore-icon { width: 15px; height: 15px; object-fit: contain; margin-bottom: 6px; }
+    .ops-ore-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; line-height: 1; }
+    .ops-ore-sub { font-family: 'Manrope', sans-serif; font-size: 10px; color: var(--ops-ink-dim); margin-top: 5px; }
 
-        /* ── LIVE EVENTS ── */
-        .live-section {
-            border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-            background: linear-gradient(180deg, rgba(63,185,80,.03) 0%, transparent 100%);
-            padding: 28px 32px;
-        }
-        .live-inner { max-width: 1400px; margin: 0 auto; }
-        .live-hdr {
-            display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
-        }
-        .live-dot {
-            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-            background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.6);
-            animation: live-pulse 1.8s ease-in-out infinite;
-        }
-        @keyframes live-pulse {
-            0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(63,185,80,.6); }
-            50%       { opacity: .5; box-shadow: 0 0 14px rgba(63,185,80,1); }
-        }
-        .live-hdr-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-            letter-spacing: 1.8px; text-transform: uppercase; color: var(--green);
-        }
-        .live-grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px;
-        }
-        .live-card {
-            display: block;
-            background: var(--surface); border-radius: 12px; overflow: hidden;
-            transition: transform .2s, box-shadow .2s;
-            position: relative;
-        }
-        .live-card:hover { transform: translateY(-2px); }
+    /* ── STATUS COLUMN ── */
+    .ops-status-lbl {
+        font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700;
+        letter-spacing: 1.6px; text-transform: uppercase; color: var(--ops-ink-dim);
+        margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+    }
+    .ops-status-lbl::after { content: ''; flex: 1; height: 1px; background: var(--ops-line); }
 
-        .live-card { border: 1px solid rgba(63,185,80,.3); }
-        .live-card:hover { box-shadow: 0 8px 32px rgba(63,185,80,.1); }
+    .ops-ticket {
+        background: var(--ops-surface); border: 1px solid var(--ops-line);
+        border-left: 3px solid var(--mode); border-radius: 8px;
+        padding: 16px 18px; text-decoration: none; display: block;
+        transition: border-color .15s, transform .15s;
+    }
+    .ops-ticket:hover { transform: translateX(2px); }
+    .ops-ticket + .ops-ticket { margin-top: 10px; }
+    .ops-ticket-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .ops-ticket-mode {
+        font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700;
+        letter-spacing: 1.3px; text-transform: uppercase; color: var(--mode);
+        display: flex; align-items: center; gap: 7px;
+    }
+    .ops-live-dot {
+        width: 6px; height: 6px; border-radius: 50%; background: var(--mode); flex-shrink: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        .ops-live-dot.on { animation: ops-pulse 1.8s ease-in-out infinite; }
+    }
+    @keyframes ops-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .ops-ticket-state {
+        font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700;
+        padding: 2px 9px; border-radius: 3px; text-transform: uppercase; letter-spacing: .4px;
+        background: color-mix(in srgb, var(--mode) 14%, transparent);
+        color: var(--mode); border: 1px solid color-mix(in srgb, var(--mode) 32%, transparent);
+    }
+    .ops-score-row { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 4px; }
+    .ops-score-side { text-align: center; flex: 1; }
+    .ops-score-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 30px; line-height: 1; }
+    .ops-score-atk { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); margin-top: 3px; }
+    .ops-score-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); margin-top: 2px; }
+    .ops-score-sep { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--ops-ink-dim); }
+    .ops-win-txt  { color: var(--ops-win) !important; }
+    .ops-loss-txt { color: var(--ops-raid) !important; }
+    .ops-idle-msg { text-align: center; padding: 10px 0 14px; color: var(--ops-ink-dim); font-family: 'Manrope', sans-serif; font-size: 12.5px; }
+    .ops-big-stat { text-align: center; margin-bottom: 4px; }
+    .ops-big-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 32px; color: var(--mode); line-height: 1; }
+    .ops-big-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); margin-top: 4px; }
+    .ops-ticket-meta {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        font-family: 'Manrope', sans-serif; font-size: 11.5px; color: var(--ops-ink-dim);
+        margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ops-line);
+    }
+    .ops-ticket-meta strong { color: var(--ops-ink); font-weight: 600; }
+    .ops-goto { font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .5px; color: var(--ops-ink-dim); }
+    .ops-ticket:hover .ops-goto { color: var(--mode); }
 
-        /* top stripe */
-        .lc-stripe {
-            height: 3px; width: 100%;
-            background: linear-gradient(90deg, var(--green), #39d353);
-        }
+    /* pulse (idle) card */
+    .ops-pulse { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 8px; padding: 22px 18px; }
+    .ops-pulse-row { display: flex; }
+    .ops-pulse-item { flex: 1; text-align: center; padding: 0 8px; border-left: 1px solid var(--ops-line); text-decoration: none; }
+    .ops-pulse-item:first-child { border-left: none; }
+    .ops-pulse-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 26px; color: var(--ops-ink); }
+    .ops-pulse-lbl { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); margin-top: 8px; line-height: 1.4; }
 
-        .lc-content { padding: 18px 22px 20px; }
+    /* ── COMMAND DECK (features) ── */
+    .ops-board { padding: 68px 32px; border-top: 1px solid var(--ops-line); background: var(--ops-bg); }
+    .ops-board-head { max-width: 1400px; margin: 0 auto 40px; }
+    .ops-board-eyebrow {
+        font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 11px;
+        letter-spacing: 1.6px; text-transform: uppercase; color: var(--ops-gold); margin-bottom: 10px;
+    }
+    .ops-board-head h2 {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; text-transform: uppercase;
+        font-size: clamp(26px, 3vw, 34px); letter-spacing: .5px; color: var(--ops-ink); margin-bottom: 8px;
+    }
+    .ops-board-head p { font-family: 'Manrope', sans-serif; font-size: 14px; color: var(--ops-ink-dim); }
 
-        /* header row */
-        .lc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-        .lc-title-row { display: flex; align-items: center; gap: 12px; }
-        .lc-icon {
-            width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0;
-            display: flex; align-items: center; justify-content: center; font-size: 20px;
-            background: var(--surf2); border: 1px solid var(--border);
-        }
-        .lc-name {
-            font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; color: var(--text);
-        }
-        .lc-state {
-            padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif; letter-spacing: .5px; text-transform: uppercase;
-        }
-        .lcs-war     { background: rgba(240,165,0,.12); color: var(--accent); border: 1px solid rgba(240,165,0,.3); }
-        .lcs-prep    { background: rgba(227,179,65,.12); color: var(--yellow); border: 1px solid rgba(227,179,65,.3); }
-        .lcs-raid    { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
-        .lcs-winning { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
-        .lcs-losing  { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.3); }
-        .lcs-tied    { background: rgba(139,148,158,.1); color: var(--muted);  border: 1px solid rgba(139,148,158,.2); }
+    .ops-tile-grid { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .ops-tile {
+        background: var(--ops-surface); border: 1px solid var(--ops-line); border-left: 3px solid var(--mode, var(--ops-line));
+        border-radius: 8px; padding: 22px 24px; display: block; text-decoration: none;
+        transition: border-color .15s, transform .15s, background .15s;
+    }
+    .ops-tile.active:hover { transform: translateY(-2px); background: var(--ops-surface-2); }
+    .ops-tile.disabled { opacity: .4; cursor: not-allowed; }
+    .ops-tile-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+    .ops-tile-icon {
+        width: 40px; height: 40px; border-radius: 8px; background: var(--ops-surface-2);
+        border: 1px solid var(--ops-line); display: flex; align-items: center; justify-content: center; font-size: 19px;
+        position: relative;
+    }
+    .ops-tile-icon img { width: 21px; height: 21px; object-fit: contain; }
+    .ops-tile-tag {
+        font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px;
+        text-transform: uppercase; color: var(--mode, var(--ops-ink-dim)); padding-top: 3px;
+    }
+    .ops-tile h3 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 700; font-size: 19px; color: var(--ops-ink); margin-bottom: 7px; }
+    .ops-tile p { font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); line-height: 1.6; }
+    .ops-tile-alert {
+        position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px;
+        border-radius: 8px; background: var(--ops-raid); color: #fff; font-size: 10px; font-weight: 700;
+        font-family: 'JetBrains Mono', monospace; line-height: 16px; text-align: center;
+    }
 
-        /* scoreboard (war) */
-        .lc-score {
-            display: flex; align-items: center; justify-content: center;
-            gap: 12px; margin-bottom: 14px;
-        }
-        .lc-score-side { text-align: center; flex: 1; }
-        .lc-score-num {
-            font-family: 'Rajdhani', sans-serif; font-size: 36px; font-weight: 700; line-height: 1;
-        }
-        .lc-score-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
-        .lc-score-sep {
-            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
-            letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase;
-            padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;
-            background: var(--surf2);
-        }
-        .lc-score-our  .lc-score-num { color: var(--green); }
-        .lc-score-them .lc-score-num { color: var(--red); }
-        .lc-score-atk  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    /* ── FOOTER ── */
+    .ops-footer { background: var(--ops-surface); border-top: 1px solid var(--ops-line); padding: 40px 32px 24px; }
+    .ops-footer-inner { max-width: 1400px; margin: 0 auto; }
+    .ops-footer-top { display: flex; justify-content: space-between; gap: 40px; flex-wrap: wrap; padding-bottom: 26px; border-bottom: 1px solid var(--ops-line); }
+    .ops-footer-brand h4 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: .4px; color: var(--ops-ink); margin-bottom: 8px; text-transform: uppercase; }
+    .ops-footer-brand p { font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--ops-ink-dim); line-height: 1.6; max-width: 420px; }
+    .ops-status-dot { display: inline-flex; align-items: center; gap: 7px; font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); margin-top: 14px; }
+    .ops-status-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ops-win); box-shadow: 0 0 6px rgba(62,192,106,.55); flex-shrink: 0; }
+    .ops-footer-links { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .ops-footer-links a { font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ops-ink-dim); transition: color .15s; }
+    .ops-footer-links a:hover { color: var(--ops-ink); }
+    .ops-footer-stats { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ops-ink-dim); text-align: right; margin-top: 8px; line-height: 1.8; }
+    .ops-footer-bottom { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 18px; font-family: 'Manrope', sans-serif; font-size: 11.5px; color: var(--ops-ink-dim); }
 
-        /* big stat (raid) */
-        .lc-big-stat { text-align: center; margin-bottom: 14px; }
-        .lc-big-num {
-            font-family: 'Rajdhani', sans-serif; font-size: 38px; font-weight: 700;
-            color: var(--accent); line-height: 1;
-        }
-        .lc-big-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
-
-        /* footer meta */
-        .lc-meta {
-            display: flex; align-items: center; justify-content: space-between;
-            padding-top: 12px; border-top: 1px solid var(--bord2);
-            font-size: 12px; color: var(--muted); gap: 8px; flex-wrap: wrap;
-        }
-        .lc-meta strong { color: var(--text); font-weight: 600; }
-        .lc-meta-end { display: flex; align-items: center; gap: 5px; }
-        .lc-meta-end::before { content: '⏰'; font-size: 11px; }
-        .lc-goto {
-            font-size: 11px; font-weight: 600; font-family: 'Rajdhani', sans-serif;
-            letter-spacing: .6px; text-transform: uppercase;
-            color: var(--muted); border: 1px solid var(--border);
-            padding: 3px 10px; border-radius: 6px; background: var(--surf2);
-            transition: color .15s, border-color .15s;
-        }
-        .live-card:hover .lc-goto { color: var(--green); border-color: rgba(63,185,80,.4); }
-
-        /* ── FEATURES SECTION ── */
-        .features {
-            padding: 80px 32px;
-            border-top: 1px solid var(--border);
-            position: relative;
-        }
-        .features::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, var(--border), transparent);
-        }
-        .section-header { text-align: center; margin-bottom: 52px; }
-        .section-header h3 {
-            font-family: 'Rajdhani', sans-serif; font-size: 36px; font-weight: 700;
-            letter-spacing: 0.5px; margin-bottom: 10px;
-        }
-        .section-header h3 span { color: var(--accent); }
-        .section-header p { font-size: 14px; color: var(--muted); }
-
-        .features-grid {
-            max-width: 1400px; margin: 0 auto;
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
-        }
-
-        /* ── FEATURE CARD ── */
-        .feature-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-            padding: 28px; display: block; position: relative; overflow: hidden;
-            transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-        }
-        .feature-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-            background: linear-gradient(90deg, var(--accent), var(--acc2));
-            opacity: 0; transition: opacity 0.2s;
-        }
-        .feature-card.active:hover {
-            border-color: rgba(240,165,0,0.45);
-            box-shadow: 0 8px 32px rgba(240,165,0,0.1);
-            transform: translateY(-3px);
-        }
-        .feature-card.active:hover::before { opacity: 1; }
-        .feature-card.disabled { opacity: 0.42; cursor: not-allowed; }
-
-        .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
-        .feature-icon {
-            width: 46px; height: 46px; display: flex; align-items: center; justify-content: center;
-            border-radius: 10px; background: var(--surf2); border: 1px solid var(--border);
-            font-size: 22px; transition: transform 0.2s;
-        }
-        .feature-card.active:hover .feature-icon { transform: scale(1.1); }
-
-        .badge {
-            padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.4px; text-transform: uppercase;
-        }
-        .badge-active { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
-        .badge-soon   { background: rgba(139,148,158,0.1); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
-
-        .feature-card h4 {
-            font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700;
-            letter-spacing: 0.3px; margin-bottom: 8px; color: var(--text); transition: color 0.15s;
-        }
-        .feature-card.active:hover h4 { color: var(--accent); }
-        .feature-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
-
-        /* ── FOOTER ── */
-        footer { background: var(--surface); border-top: 1px solid var(--border); padding: 48px 32px 28px; }
-        .footer-inner { max-width: 1400px; margin: 0 auto; }
-        .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 32px; margin-bottom: 36px; }
-        footer h4 {
-            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
-            letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
-        }
-        footer p { font-size: 13px; color: var(--muted); line-height: 1.6; }
-        .footer-links { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-        .footer-links a { font-size: 13px; color: var(--muted); transition: color 0.15s; }
-        .footer-links a:hover { color: var(--text); }
-        .footer-links .dimmed { color: #404756; }
-        .footer-links .live-link { display: flex; align-items: center; gap: 7px; }
-        .footer-links .live-link::before {
-            content: ''; display: inline-block; width: 6px; height: 6px;
-            background: var(--green); border-radius: 50%; flex-shrink: 0;
-            box-shadow: 0 0 5px rgba(63,185,80,0.5);
-        }
-        .footer-links .soon-link { display: flex; align-items: center; gap: 7px; color: #404756; }
-        .footer-links .soon-link::before {
-            content: ''; display: inline-block; width: 6px; height: 6px;
-            background: #30363d; border-radius: 50%; flex-shrink: 0;
-        }
-        .footer-bottom {
-            border-top: 1px solid var(--bord2); padding-top: 20px;
-            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
-        }
-        .footer-bottom p, .footer-bottom a { font-size: 12px; color: var(--muted); }
-        .footer-bottom a:hover { color: var(--text); }
-        .footer-bottom .links { display: flex; gap: 16px; }
-        .status-dot {
-            display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted);
-        }
-        .status-dot::before {
-            content: ''; display: inline-block; width: 7px; height: 7px;
-            background: var(--green); border-radius: 50%; box-shadow: 0 0 6px rgba(63,185,80,0.6);
-        }
-
-        /* ── RESPONSIVE ── */
-        @media (max-width: 1100px) {
-            .features-grid { grid-template-columns: repeat(2, 1fr); }
-            .footer-grid   { grid-template-columns: 1fr 1fr; }
-        }
-        @media (max-width: 900px) {
-            .hero-inner { grid-template-columns: 1fr; }
-            .hero-emblem { display: none; }
-            .hero h2 { font-size: 38px; }
-            .nav-inner, .hero, .features, .footer-inner { padding-left: 20px; padding-right: 20px; }
-            .hero { padding-top: 52px; padding-bottom: 60px; }
-            .features { padding-top: 60px; padding-bottom: 60px; }
-        }
-        @media (max-width: 640px) {
-            .hero h2 { font-size: 30px; }
-            .stat-grid { grid-template-columns: 1fr; }
-            .features-grid { grid-template-columns: 1fr; }
-            .footer-grid { grid-template-columns: 1fr; gap: 24px; }
-            footer { padding: 36px 20px 24px; }
-        }
-    </style>
+    /* ── FOCUS / RESPONSIVE ── */
+    .ops-hero a:focus-visible, .ops-tile:focus-visible, .ops-ticket:focus-visible, .ops-ore-strip:focus-visible {
+        outline: 2px solid var(--ops-gold); outline-offset: 2px; border-radius: 6px;
+    }
+    @media (max-width: 1100px) {
+        .ops-tile-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 900px) {
+        .ops-hero { padding: 40px 20px 36px; }
+        .ops-hero-grid { grid-template-columns: 1fr; gap: 30px; }
+        .ops-board { padding: 52px 20px; }
+        .ops-footer { padding: 32px 20px 20px; }
+    }
+    @media (max-width: 640px) {
+        .ops-tile-grid { grid-template-columns: 1fr; }
+        .ops-footer-top { flex-direction: column; }
+        .ops-footer-links { align-items: flex-start; }
+        .ops-footer-stats { text-align: left; }
+    }
+</style>
 </head>
 <body>
 
 {% include '_nav.html' %}
 
-<!-- Hero -->
-<section class="hero">
-    <div class="hero-inner">
+<!-- Ops Hero -->
+<section class="ops-hero">
+    <div class="ops-hero-grid">
         <div>
-            {% if current_user and current_user.linked_player %}
-            <div class="hero-eyebrow">{{ clan_name }}</div>
-            <h2>Welcome back,<br><span class="clan-name">{{ current_user.linked_player.name }}</span></h2>
-
-            <div class="hero-stat-section">
-                <div class="hero-stat-label">Clan</div>
-                <div class="stat-grid">
-                    <a href="/clan" class="stat-box">
-                        <div class="stat-value blue">{{ total_members }}</div>
-                        <div class="stat-label">Active Members</div>
-                    </a>
-                    <a href="/battles" class="stat-box">
-                        <div class="stat-value gold">{{ battle_logs_this_week }}</div>
-                        <div class="stat-label">Attacks tracked<br>since {{ week_start_name }}</div>
-                    </a>
-                    <a href="/ranked" class="stat-box">
-                        <div class="stat-value green">{{ ranked_battles_this_week }}</div>
-                        <div class="stat-label">Ranked attacks<br>this week</div>
-                    </a>
-                </div>
-            </div>
-
-            <div class="hero-stat-section">
-                <div class="hero-stat-label">You</div>
-                <div class="player-card">
-                    <div class="pc-left">
-                        {% if player_th %}
-                        <div class="pc-th">TH{{ player_th }}</div>
-                        <span class="pc-league">{{ player_league or 'Unranked' }}</span>
-                        {% endif %}
-                        {% if player_ranked_left is not none %}
-                        <a href="/ranked" class="pc-stat-row">
-                            <span class="pc-stat-num" style="color:{{ 'var(--green)' if player_ranked_left == 0 else ('var(--accent)' if player_ranked_left <= 3 else 'var(--red)') }};">{{ player_ranked_left }}</span>
-                            <span class="pc-stat-lbl">ranked attacks left this week</span>
-                        </a>
-                        {% endif %}
-                        <a href="/battles" class="pc-stat-row">
-                            <span class="pc-stat-num" style="color:{{ 'var(--green)' if player_attacks_this_week > 0 else 'var(--muted)' }};">{{ player_attacks_this_week }}</span>
-                            <span class="pc-stat-lbl">attacks since {{ week_start_name }}</span>
-                        </a>
-                        {% if player_war_stats.attacks > 0 %}
-                        <a href="/war" class="pc-stat-row">
-                            <span class="pc-stat-num" style="color:var(--accent);">{{ player_war_stats.attacks }}</span>
-                            <span class="pc-stat-lbl">war attacks · {{ player_war_stats.wars }} war{{ 's' if player_war_stats.wars != 1 else '' }} · last 30d</span>
-                        </a>
-                        {% endif %}
-                        {% if player_cwl_stats.attacks > 0 %}
-                        <a href="/cwl" class="pc-stat-row">
-                            <span class="pc-stat-num" style="color:var(--accent);">{{ player_cwl_stats.attacks }}</span>
-                            <span class="pc-stat-lbl">CWL · {{ player_cwl_stats.wars }} round{{ 's' if player_cwl_stats.wars != 1 else '' }} · last season</span>
-                        </a>
+            <div class="ops-badge-row">
+                <div class="hex-badge">
+                    <div class="hex-badge-inner">
+                        {% if clan_badge_url %}
+                        <img src="{{ clan_badge_url }}" alt="{{ clan_name }} badge">
+                        {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
+                            <path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                            <path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/>
+                            <path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/>
+                            <path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/>
+                            <path d="M15.5 9H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5S16.33 9 15.5 9z"/>
+                            <path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/>
+                            <path d="M8.5 15H10v-1.5c0-.83-.67-1.5-1.5-1.5S7 12.67 7 13.5 7.67 15 8.5 15z"/>
+                        </svg>
                         {% endif %}
                     </div>
-                    <a href="/tools/equipment" class="pc-right" style="text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='rgba(240,165,0,.35)'" onmouseout="this.style.borderColor='var(--border)'">
-                        <div class="pog">
-                            <span></span>
-                            <span class="pog-hd">Balance</span>
-                            <span class="pog-hd">/day</span>
-                            <span class="pog-hd">/mo</span>
-                            <img src="/static/img/shiny.png">
-                            <span class="pog-v" style="color:#f0a500;">{{ "{:,}".format(player_ore.shiny) }}</span>
-                            <span class="pog-v" id="pog-shiny-d" style="color:#f0a500;">—</span>
-                            <span class="pog-m" id="pog-shiny-m">—</span>
-                            <img src="/static/img/glowy.png">
-                            <span class="pog-v" style="color:#3fb950;">{{ "{:,}".format(player_ore.glowy) }}</span>
-                            <span class="pog-v" id="pog-glowy-d" style="color:#3fb950;">—</span>
-                            <span class="pog-m" id="pog-glowy-m">—</span>
-                            <img src="/static/img/starry.png">
-                            <span class="pog-v" style="color:#a78bfa;">{{ player_ore.starry }}</span>
-                            <span class="pog-v" id="pog-starry-d" style="color:#a78bfa;">—</span>
-                            <span class="pog-m" id="pog-starry-m">—</span>
-                        </div>
-                    </a>
                 </div>
+                <div class="ops-eyebrow">Clan Ops <span class="sep">/</span> <b>{{ clan_name }}</b></div>
             </div>
 
-            {% else %}
-            <div class="hero-eyebrow">Clan Dashboard</div>
-            <h2><span class="clan-name">{{ clan_name }}</span><br>Analytics</h2>
-            <p>Discover your clan's performance metrics, track battle statistics, and analyze seasonal rankings in real-time.</p>
-            <div class="stat-grid">
-                <a href="/clan" class="stat-box">
-                    <div class="stat-value blue">{{ total_members }}</div>
-                    <div class="stat-label">Active Members</div>
-                </a>
-                <a href="/battles" class="stat-box">
-                    <div class="stat-value gold">{{ battle_logs_this_week }}</div>
-                    <div class="stat-label">Attacks tracked<br>since {{ week_start_name }}</div>
-                </a>
-                <a href="/ranked" class="stat-box">
-                    <div class="stat-value green">{{ ranked_battles_this_week }}</div>
-                    <div class="stat-label">Ranked attacks<br>this week</div>
-                </a>
-            </div>
+            {% if current_user and current_user.linked_player %}
+            <h1 class="ops-h1">Welcome back,<br><span class="who">{{ current_user.linked_player.name }}</span></h1>
+            {% if player_th %}
+            <div class="ops-rank"><span class="th">TH{{ player_th }}</span> · {{ player_league or 'Unranked' }}</div>
             {% endif %}
-        </div>
-        <div class="hero-emblem">
-            <div class="emblem-inner">
-                {% if clan_badge_url %}
-                <img src="{{ clan_badge_url }}" alt="{{ clan_name }} badge">
-                {% else %}
-                <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#f0a500" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
-                    <path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-                    <path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/>
-                    <path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/>
-                    <path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/>
-                    <path d="M15.5 9H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5S16.33 9 15.5 9z"/>
-                    <path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/>
-                    <path d="M8.5 15H10v-1.5c0-.83-.67-1.5-1.5-1.5S7 12.67 7 13.5 7.67 15 8.5 15z"/>
-                </svg>
+
+            <div class="ops-stat-list">
+                {% if player_ranked_left is not none %}
+                {% set rl_color = 'var(--ops-win)' if player_ranked_left == 0 else ('var(--ops-gold)' if player_ranked_left <= 3 else 'var(--ops-raid)') %}
+                <a href="/ranked" class="ops-stat-row" style="--tick:{{ rl_color }};">
+                    <span class="ops-stat-num" style="color:{{ rl_color }};">{{ player_ranked_left }}</span>
+                    <span class="ops-stat-lbl">ranked attacks left this week</span>
+                </a>
+                {% endif %}
+                <a href="/battles" class="ops-stat-row" style="--tick:var(--ops-ink-dim);">
+                    <span class="ops-stat-num" style="color:{{ 'var(--ops-win)' if player_attacks_this_week > 0 else 'var(--ops-ink-dim)' }};">{{ player_attacks_this_week }}</span>
+                    <span class="ops-stat-lbl">attacks since {{ week_start_name }}</span>
+                </a>
+                {% if player_war_stats.attacks > 0 %}
+                <a href="/war" class="ops-stat-row" style="--tick:var(--ops-gold);">
+                    <span class="ops-stat-num" style="color:var(--ops-gold);">{{ player_war_stats.attacks }}</span>
+                    <span class="ops-stat-lbl">war attacks · {{ player_war_stats.wars }} war{{ 's' if player_war_stats.wars != 1 else '' }} · last 30d</span>
+                </a>
+                {% endif %}
+                {% if player_cwl_stats.attacks > 0 %}
+                <a href="/cwl" class="ops-stat-row" style="--tick:var(--ops-elixir);">
+                    <span class="ops-stat-num" style="color:var(--ops-elixir);">{{ player_cwl_stats.attacks }}</span>
+                    <span class="ops-stat-lbl">CWL · {{ player_cwl_stats.wars }} round{{ 's' if player_cwl_stats.wars != 1 else '' }} · last season</span>
+                </a>
                 {% endif %}
             </div>
-        </div>
-    </div>
-</section>
 
-{% if active_war or active_raid or active_cwl_season %}
-<!-- Live Events -->
-<div class="live-section">
-    <div class="live-inner">
-        <div class="live-hdr">
-            <span class="live-dot"></span>
-            <span class="live-hdr-title">Ongoing Events</span>
+            <a href="/tools/equipment" class="ops-ore-strip" title="Ore balance — open the equipment planner">
+                <div class="ops-ore-cell">
+                    <img src="/static/img/shiny.png" class="ops-ore-icon">
+                    <div class="ops-ore-val" style="color:var(--ops-gold);">{{ "{:,}".format(player_ore.shiny) }}</div>
+                    <div class="ops-ore-sub"><span id="pog-shiny-d">—</span>/d · <span id="pog-shiny-m">—</span>/mo</div>
+                </div>
+                <div class="ops-ore-cell">
+                    <img src="/static/img/glowy.png" class="ops-ore-icon">
+                    <div class="ops-ore-val" style="color:var(--ops-win);">{{ "{:,}".format(player_ore.glowy) }}</div>
+                    <div class="ops-ore-sub"><span id="pog-glowy-d">—</span>/d · <span id="pog-glowy-m">—</span>/mo</div>
+                </div>
+                <div class="ops-ore-cell">
+                    <img src="/static/img/starry.png" class="ops-ore-icon">
+                    <div class="ops-ore-val" style="color:var(--ops-elixir);">{{ player_ore.starry }}</div>
+                    <div class="ops-ore-sub"><span id="pog-starry-d">—</span>/d · <span id="pog-starry-m">—</span>/mo</div>
+                </div>
+            </a>
+
+            {% else %}
+            <h1 class="ops-h1"><span class="who">{{ clan_name }}</span><br>Analytics</h1>
+            <p class="ops-lede">Live performance tracking for the clan — ranked seasons, war scoreboards, CWL standings and raid weekends, updated automatically.</p>
+            {% endif %}
         </div>
-        <div class="live-grid">
+
+        <div>
+            <div class="ops-status-lbl">{% if active_war or active_cwl_season or active_raid %}Live Right Now{% else %}Clan Pulse{% endif %}</div>
 
             {% if active_war %}
-            <a href="/war" class="live-card">
-                <div class="lc-stripe"></div>
-                <div class="lc-content">
-                    <div class="lc-header">
-                        <div class="lc-title-row">
-                            <div class="lc-icon"><img src="/static/img/defense.png" style="width:22px;height:22px;"></div>
-                            <span class="lc-name">Clan War</span>
-                        </div>
-                        <span class="lc-state {% if active_war.state == 'inWar' %}lcs-war{% else %}lcs-prep{% endif %}">
-                            {% if active_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}
-                        </span>
+            <a href="/war" class="ops-ticket" style="--mode:var(--ops-gold);">
+                <div class="ops-ticket-head">
+                    <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if active_war.state == 'inWar' }}"></span>War</span>
+                    <span class="ops-ticket-state">{% if active_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+                </div>
+                {% if active_war.state == 'inWar' %}
+                <div class="ops-score-row">
+                    <div class="ops-score-side">
+                        <div class="ops-score-num ops-win-txt">{{ active_war.clan_stars or 0 }}★</div>
+                        <div class="ops-score-atk">{{ active_war.clan_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
+                        <div class="ops-score-lbl">{{ active_war.clan_name or 'Us' }}</div>
                     </div>
-
-                    {% if active_war.state == 'inWar' %}
-                    <div class="lc-score">
-                        <div class="lc-score-side lc-score-our">
-                            <div class="lc-score-num">{{ active_war.clan_stars or 0 }}</div>
-                            <div class="lc-score-atk">{{ active_war.clan_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
-                            <div class="lc-score-lbl">{{ active_war.clan_name or 'Us' }} ★</div>
-                        </div>
-                        <div class="lc-score-sep">VS</div>
-                        <div class="lc-score-side lc-score-them">
-                            <div class="lc-score-num">{{ active_war.opponent_stars or 0 }}</div>
-                            <div class="lc-score-atk">{{ active_war.opponent_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
-                            <div class="lc-score-lbl">{{ active_war.opponent_name or 'Them' }} ★</div>
-                        </div>
+                    <div class="ops-score-sep">VS</div>
+                    <div class="ops-score-side">
+                        <div class="ops-score-num ops-loss-txt">{{ active_war.opponent_stars or 0 }}★</div>
+                        <div class="ops-score-atk">{{ active_war.opponent_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
+                        <div class="ops-score-lbl">{{ active_war.opponent_name or 'Them' }}</div>
                     </div>
-                    {% else %}
-                    <div style="text-align:center;padding:14px 0 18px;color:var(--muted);font-size:13px;">
-                        War starts {{ active_war.start_time | local_dt('%d.%m · %H:%M') if active_war.start_time else 'soon' }}
-                    </div>
-                    {% endif %}
-
-                    <div class="lc-meta">
-                        <span>vs <strong>{{ active_war.opponent_name or '?' }}</strong>{% if active_war.team_size %} · {{ active_war.team_size }}v{{ active_war.team_size }}{% endif %}</span>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            {% if active_war.end_time %}
-                            <span class="lc-meta-end">Ends {{ active_war.end_time | local_dt('%d.%m · %H:%M') }}</span>
-                            {% endif %}
-                            <span class="lc-goto">Go to →</span>
-                        </div>
+                </div>
+                {% else %}
+                <div class="ops-idle-msg">War starts {{ active_war.start_time | local_dt('%d.%m · %H:%M') if active_war.start_time else 'soon' }}</div>
+                {% endif %}
+                <div class="ops-ticket-meta">
+                    <span>vs <strong>{{ active_war.opponent_name or '?' }}</strong>{% if active_war.team_size %} · {{ active_war.team_size }}v{{ active_war.team_size }}{% endif %}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        {% if active_war.end_time %}<span>Ends {{ active_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        <span class="ops-goto">Go to →</span>
                     </div>
                 </div>
             </a>
             {% endif %}
 
             {% if active_cwl_season %}
-            <a href="/cwl" class="live-card">
-                <div class="lc-stripe"></div>
-                <div class="lc-content">
-                    <div class="lc-header">
-                        <div class="lc-title-row">
-                            <div class="lc-icon">🏆</div>
-                            <span class="lc-name">Clan War League</span>
-                        </div>
-                        <span class="lc-state {% if active_cwl_war and active_cwl_war.state == 'inWar' %}lcs-war{% else %}lcs-prep{% endif %}">
-                            {% if active_cwl_war and active_cwl_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}
-                        </span>
-                    </div>
+            <a href="/cwl" class="ops-ticket" style="--mode:var(--ops-elixir);">
+                <div class="ops-ticket-head">
+                    <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if active_cwl_war and active_cwl_war.state == 'inWar' }}"></span>War League</span>
+                    <span class="ops-ticket-state">{% if active_cwl_war and active_cwl_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+                </div>
 
-                    {% if active_cwl_war and active_cwl_war.state == 'inWar' %}
-                    {% set our_side = active_cwl_war.clan_tag == CLAN_TAG %}
-                    {% set our_stars  = active_cwl_war.clan_stars   if our_side else active_cwl_war.opp_stars %}
-                    {% set our_atk    = active_cwl_war.clan_attacks  if our_side else active_cwl_war.opp_attacks %}
-                    {% set our_name   = active_cwl_war.clan_name    if our_side else active_cwl_war.opp_name %}
-                    {% set opp_stars  = active_cwl_war.opp_stars    if our_side else active_cwl_war.clan_stars %}
-                    {% set opp_atk    = active_cwl_war.opp_attacks   if our_side else active_cwl_war.clan_attacks %}
-                    {% set opp_name   = active_cwl_war.opp_name     if our_side else active_cwl_war.clan_name %}
-                    {% set our_s = our_stars or 0 %}
-                    {% set opp_s = opp_stars or 0 %}
-                    {% if our_s > opp_s %}{% set status_cls = 'lcs-winning' %}{% set status_lbl = 'Winning' %}
-                    {% elif our_s < opp_s %}{% set status_cls = 'lcs-losing' %}{% set status_lbl = 'Losing' %}
-                    {% else %}{% set status_cls = 'lcs-tied' %}{% set status_lbl = 'Tied' %}{% endif %}
-                    <div class="lc-score">
-                        <div class="lc-score-side lc-score-our">
-                            <div class="lc-score-num">{{ our_s }}<span style="font-size:18px;opacity:.7;">★</span></div>
-                            <div class="lc-score-atk">{{ our_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
-                            <div class="lc-score-lbl">{{ our_name or clan_name }}</div>
-                        </div>
-                        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-                            <div class="lc-score-sep">VS</div>
-                            <span class="lc-state {{ status_cls }}">{{ status_lbl }}</span>
-                            {% if cwl_win_status == 'safe_win' %}
-                            <span class="lc-state" style="background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.35);font-size:9px;">🔒 Safe Win</span>
-                            {% elif cwl_win_status == 'cant_win' %}
-                            <span class="lc-state" style="background:rgba(248,81,73,.12);color:var(--red);border:1px solid rgba(248,81,73,.3);font-size:9px;">💀 Out of Reach</span>
-                            {% elif cwl_win_status == 'contested' %}
-                            <span class="lc-state" style="background:rgba(240,165,0,.12);color:var(--accent);border:1px solid rgba(240,165,0,.3);font-size:9px;">⚔ Undecided</span>
-                            {% endif %}
-                        </div>
-                        <div class="lc-score-side lc-score-them">
-                            <div class="lc-score-num">{{ opp_s }}<span style="font-size:18px;opacity:.7;">★</span></div>
-                            <div class="lc-score-atk">{{ opp_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
-                            <div class="lc-score-lbl">{{ opp_name or 'Opponent' }}</div>
-                        </div>
+                {% if active_cwl_war and active_cwl_war.state == 'inWar' %}
+                {% set our_side = active_cwl_war.clan_tag == CLAN_TAG %}
+                {% set our_stars  = active_cwl_war.clan_stars   if our_side else active_cwl_war.opp_stars %}
+                {% set our_atk    = active_cwl_war.clan_attacks  if our_side else active_cwl_war.opp_attacks %}
+                {% set our_name   = active_cwl_war.clan_name    if our_side else active_cwl_war.opp_name %}
+                {% set opp_stars  = active_cwl_war.opp_stars    if our_side else active_cwl_war.clan_stars %}
+                {% set opp_atk    = active_cwl_war.opp_attacks   if our_side else active_cwl_war.clan_attacks %}
+                {% set opp_name   = active_cwl_war.opp_name     if our_side else active_cwl_war.clan_name %}
+                {% set our_s = our_stars or 0 %}
+                {% set opp_s = opp_stars or 0 %}
+                <div class="ops-score-row">
+                    <div class="ops-score-side">
+                        <div class="ops-score-num {{ 'ops-win-txt' if our_s > opp_s else ('ops-loss-txt' if our_s < opp_s else '') }}">{{ our_s }}★</div>
+                        <div class="ops-score-atk">{{ our_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
+                        <div class="ops-score-lbl">{{ our_name or clan_name }}</div>
                     </div>
-                    {% else %}
-                    <div style="text-align:center;padding:14px 0 18px;color:var(--muted);font-size:13px;">
-                        {% if active_cwl_war and active_cwl_war.start_time %}
-                        War starts {{ active_cwl_war.start_time | local_dt('%d.%m · %H:%M') }}
-                        {% else %}
-                        Season {{ active_cwl_season.season }} · {{ active_cwl_season.league_name or 'CWL' }}
-                        {% endif %}
+                    <div class="ops-score-sep">{% if our_s > opp_s %}WINNING{% elif our_s < opp_s %}LOSING{% else %}TIED{% endif %}</div>
+                    <div class="ops-score-side">
+                        <div class="ops-score-num {{ 'ops-win-txt' if opp_s > our_s else ('ops-loss-txt' if opp_s < our_s else '') }}">{{ opp_s }}★</div>
+                        <div class="ops-score-atk">{{ opp_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
+                        <div class="ops-score-lbl">{{ opp_name or 'Opponent' }}</div>
                     </div>
+                </div>
+                {% if cwl_win_status %}
+                <div style="text-align:center;margin-bottom:2px;">
+                    {% if cwl_win_status == 'safe_win' %}<span class="ops-ticket-state" style="--mode:var(--ops-win);color:var(--ops-win);border-color:rgba(62,192,106,.35);background:rgba(62,192,106,.12);">Safe Win</span>
+                    {% elif cwl_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:rgba(226,72,63,.35);background:rgba(226,72,63,.12);">Out of Reach</span>
+                    {% elif cwl_win_status == 'contested' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:rgba(217,164,65,.35);background:rgba(217,164,65,.12);">Undecided</span>
                     {% endif %}
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="ops-idle-msg">
+                    {% if active_cwl_war and active_cwl_war.start_time %}War starts {{ active_cwl_war.start_time | local_dt('%d.%m · %H:%M') }}
+                    {% else %}Season {{ active_cwl_season.season }} · {{ active_cwl_season.league_name or 'CWL' }}{% endif %}
+                </div>
+                {% endif %}
 
-                    <div class="lc-meta">
-                        <span>{{ active_cwl_season.season }}{% if active_cwl_season.league_name %} · {{ active_cwl_season.league_name }}{% endif %}{% if active_cwl_war %} · Round {{ active_cwl_war.round_number }}{% endif %}</span>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            {% if active_cwl_war and active_cwl_war.end_time %}
-                            <span class="lc-meta-end">Ends {{ active_cwl_war.end_time | local_dt('%d.%m · %H:%M') }}</span>
-                            {% endif %}
-                            <span class="lc-goto">Go to →</span>
-                        </div>
+                <div class="ops-ticket-meta">
+                    <span>{{ active_cwl_season.season }}{% if active_cwl_season.league_name %} · {{ active_cwl_season.league_name }}{% endif %}{% if active_cwl_war %} · Round {{ active_cwl_war.round_number }}{% endif %}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        {% if active_cwl_war and active_cwl_war.end_time %}<span>Ends {{ active_cwl_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        <span class="ops-goto">Go to →</span>
                     </div>
                 </div>
             </a>
             {% endif %}
 
             {% if active_raid %}
-            <a href="/raid" class="live-card">
-                <div class="lc-stripe"></div>
-                <div class="lc-content">
-                    <div class="lc-header">
-                        <div class="lc-title-row">
-                            <div class="lc-icon"><img src="/static/img/raidMedal.png" style="width:22px;height:22px;"></div>
-                            <span class="lc-name">Raid Weekend</span>
-                        </div>
-                        <span class="lc-state lcs-raid">Ongoing</span>
-                    </div>
-
-                    <div class="lc-big-stat">
-                        {% if active_raid_est_medals %}
-                        <div class="lc-big-num">≈{{ active_raid_est_medals }}</div>
-                        <div class="lc-big-lbl">Est. Medals (off. + avg def.)</div>
-                        {% else %}
-                        <div class="lc-big-num" style="color:var(--muted)">—</div>
-                        <div class="lc-big-lbl">Est. Medals</div>
-                        {% endif %}
-                    </div>
-
-                    <div class="lc-meta">
-                        <span>Started {{ active_raid.start_time.strftime('%d.%m') if active_raid.start_time else '—' }}</span>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            {% if active_raid.end_time %}
-                            <span class="lc-meta-end">Ends {{ active_raid.end_time | local_dt('%d.%m · %H:%M') }}</span>
-                            {% endif %}
-                            <span class="lc-goto">Go to →</span>
-                        </div>
+            <a href="/raid" class="ops-ticket" style="--mode:var(--ops-raid);">
+                <div class="ops-ticket-head">
+                    <span class="ops-ticket-mode"><span class="ops-live-dot on"></span>Raid Weekend</span>
+                    <span class="ops-ticket-state">Ongoing</span>
+                </div>
+                <div class="ops-big-stat">
+                    {% if active_raid_est_medals %}
+                    <div class="ops-big-num">≈{{ active_raid_est_medals }}</div>
+                    <div class="ops-big-lbl">Est. medals (off. + avg def.)</div>
+                    {% else %}
+                    <div class="ops-big-num" style="color:var(--ops-ink-dim);">—</div>
+                    <div class="ops-big-lbl">Est. medals</div>
+                    {% endif %}
+                </div>
+                <div class="ops-ticket-meta">
+                    <span>Started {{ active_raid.start_time.strftime('%d.%m') if active_raid.start_time else '—' }}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        {% if active_raid.end_time %}<span>Ends {{ active_raid.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        <span class="ops-goto">Go to →</span>
                     </div>
                 </div>
             </a>
             {% endif %}
 
+            {% if not (active_war or active_cwl_season or active_raid) %}
+            <div class="ops-pulse">
+                <div class="ops-pulse-row">
+                    <a href="/clan" class="ops-pulse-item">
+                        <div class="ops-pulse-num">{{ total_members }}</div>
+                        <div class="ops-pulse-lbl">Active<br>members</div>
+                    </a>
+                    <a href="/battles" class="ops-pulse-item">
+                        <div class="ops-pulse-num" style="color:var(--ops-gold);">{{ battle_logs_this_week }}</div>
+                        <div class="ops-pulse-lbl">Attacks tracked<br>since {{ week_start_name }}</div>
+                    </a>
+                    <a href="/ranked" class="ops-pulse-item">
+                        <div class="ops-pulse-num" style="color:var(--ops-ranked);">{{ ranked_battles_this_week }}</div>
+                        <div class="ops-pulse-lbl">Ranked attacks<br>this week</div>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
-</div>
-{% endif %}
+</section>
 
-<!-- Features -->
-<section id="features" class="features">
-    <div class="section-header">
-        <h3>Analytics <span>Features</span></h3>
-        <p>Real-time performance tracking and detailed statistics</p>
+<!-- Command Deck -->
+<section id="features" class="ops-board">
+    <div class="ops-board-head">
+        <div class="ops-board-eyebrow">Command Deck</div>
+        <h2>Where to look next</h2>
+        <p>Four live modes — Ranked, War, CWL and Raid Weekend — plus the reports that back them up.</p>
     </div>
-    <div class="features-grid">
+    <div class="ops-tile-grid">
 
-        <a href="/ranked" class="feature-card active">
-            <div class="card-top">
-                <div class="feature-icon">📊</div>
-                <span class="badge badge-active">Active</span>
+        <a href="/ranked" class="ops-tile active" style="--mode:var(--ops-ranked);">
+            <div class="ops-tile-top">
+                <div class="ops-tile-icon">📊</div>
+                <span class="ops-tile-tag">Ranked</span>
             </div>
-            <h4>Ranked Week Performance</h4>
-            <p>Track your seasonal rankings, trophies, and performance metrics across ranked leagues.</p>
+            <h3>Ranked Week</h3>
+            <p>Seasonal ladder standings, trophies and streaks.</p>
         </a>
 
-        <a href="/battles" class="feature-card active">
-            <div class="card-top">
-                <div class="feature-icon"><img src="/static/img/battle.png" style="width:24px;height:24px;"></div>
-                <span class="badge badge-active">Active</span>
+        <a href="/battles" class="ops-tile active">
+            <div class="ops-tile-top">
+                <div class="ops-tile-icon"><img src="/static/img/battle.png"></div>
+                <span class="ops-tile-tag">Log</span>
             </div>
-            <h4>Battle History</h4>
-            <p>Detailed logs of all attacks and defenses with stars, damage percentages, and loot information.</p>
+            <h3>Battle History</h3>
+            <p>Every attack and defense — stars, percentage, loot.</p>
         </a>
 
-        <a href="/raid" class="feature-card active">
-            <div class="card-top">
-                <div class="feature-icon"><img src="/static/img/raidMedal.png" style="width:24px;height:24px;"></div>
-                <span class="badge badge-active">Active</span>
+        <a href="/raid" class="ops-tile active" style="--mode:var(--ops-raid);">
+            <div class="ops-tile-top">
+                <div class="ops-tile-icon"><img src="/static/img/raidMedal.png"></div>
+                <span class="ops-tile-tag">Raid</span>
             </div>
-            <h4>Raid Weekend Performance</h4>
-            <p>Track clan raid weekends, capital loot, and raid performance metrics.</p>
+            <h3>Raid Weekend</h3>
+            <p>Capital loot, district cleanup and medal totals.</p>
         </a>
 
-        <a href="/war" class="feature-card active">
-            <div class="card-top">
-                <div class="feature-icon"><img src="/static/img/defense.png" style="width:24px;height:24px;"></div>
-                <span class="badge badge-active">Active</span>
+        <a href="/war" class="ops-tile active" style="--mode:var(--ops-gold);">
+            <div class="ops-tile-top">
+                <div class="ops-tile-icon"><img src="/static/img/defense.png"></div>
+                <span class="ops-tile-tag">War</span>
             </div>
-            <h4>Clan War</h4>
-            <p>Clan war performance metrics and detailed battle results.</p>
+            <h3>Clan War</h3>
+            <p>Live scoreboard and full attack breakdown.</p>
         </a>
 
-        <a href="/cwl" class="feature-card active">
-            <div class="card-top">
-                <div class="feature-icon">🏆</div>
-                <span class="badge badge-active">Active</span>
+        <a href="/cwl" class="ops-tile active" style="--mode:var(--ops-elixir);">
+            <div class="ops-tile-top">
+                <div class="ops-tile-icon">🏆</div>
+                <span class="ops-tile-tag">CWL</span>
             </div>
-            <h4>Clan War League</h4>
-            <p>CWL standings, per-round war details, clan rosters and league comparisons across all 8 clans.</p>
+            <h3>War League</h3>
+            <p>Standings, rosters and results across all 8 clans.</p>
         </a>
 
-        <a href="/clan" class="feature-card active">
-            <div class="card-top">
-                <div class="feature-icon">👥</div>
-                <span class="badge badge-active">Active</span>
+        <a href="/clan" class="ops-tile active">
+            <div class="ops-tile-top">
+                <div class="ops-tile-icon">👥</div>
+                <span class="ops-tile-tag">Roster</span>
             </div>
-            <h4>Clan Overview</h4>
-            <p>See every clan member's Activity and Skill score side by side — quickly spot who's active and who's performing.</p>
+            <h3>Clan Overview</h3>
+            <p>Activity and skill score for every member, side by side.</p>
         </a>
 
         {% if is_super_admin %}
-        <a href="/admin" class="feature-card active">
-            <div class="card-top">
-                <div style="position:relative;display:inline-flex;">
-                    <div class="feature-icon">⚙️</div>
-                    {% if newbie_check_count > 0 %}
-                    <span style="position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;line-height:18px;text-align:center;">{{ newbie_check_count }}</span>
-                    {% endif %}
+        <a href="/admin" class="ops-tile active">
+            <div class="ops-tile-top">
+                <div class="ops-tile-icon" style="position:relative;">
+                    ⚙️
+                    {% if newbie_check_count > 0 %}<span class="ops-tile-alert">{{ newbie_check_count }}</span>{% endif %}
                 </div>
-                <span class="badge badge-active">Active</span>
+                <span class="ops-tile-tag">Admin</span>
             </div>
-            <h4>Admin Hub</h4>
-            <p>Centralized control panel for managing clan members, data sync, and system configuration.{% if newbie_check_count > 0 %} <strong style="color:var(--red);">{{ newbie_check_count }} unchecked member{{ 's' if newbie_check_count != 1 else '' }}.</strong>{% endif %}</p>
+            <h3>Admin Hub</h3>
+            <p>Member management, sync and configuration.{% if newbie_check_count > 0 %} <strong style="color:var(--ops-raid);">{{ newbie_check_count }} unchecked.</strong>{% endif %}</p>
         </a>
         {% endif %}
 
@@ -721,51 +546,34 @@
 </section>
 
 <!-- Footer -->
-<footer>
-    <div class="footer-inner">
-        <div class="footer-grid">
-            <div>
+<footer class="ops-footer">
+    <div class="ops-footer-inner">
+        <div class="ops-footer-top">
+            <div class="ops-footer-brand">
                 <h4>CoC Analytics</h4>
-                <p>Real-time Clash of Clans analytics and performance insights for <strong style="color:var(--text)">{{ clan_name }}</strong>. Tracking ranked battles, attack history, and member progress automatically.</p>
-                <div style="margin-top:18px">
-                    <span class="status-dot">All systems operational</span>
+                <p>Real-time Clash of Clans analytics for <strong style="color:var(--ops-ink)">{{ clan_name }}</strong> — ranked battles, attack history and member progress, tracked automatically.</p>
+                <div class="ops-status-dot">All systems operational</div>
+            </div>
+            <div>
+                <div class="ops-footer-links">
+                    <a href="/ranked">Ranked Week</a>
+                    <a href="/battles">Battle History</a>
+                    <a href="/raid">Raid Weekend</a>
+                    <a href="/war">Clan War</a>
+                    <a href="/cwl">War League</a>
+                    <a href="/clan">Clan Overview</a>
+                    {% if is_super_admin %}<a href="/admin">Admin Hub</a>{% endif %}
                 </div>
-            </div>
-            <div>
-                <h4>Live Features</h4>
-                <ul class="footer-links">
-                    <li><a href="/ranked" class="live-link">Ranked Week Performance</a></li>
-                    <li><a href="/battles" class="live-link">Battle History</a></li>
-                    <li><a href="/raid" class="live-link">Raid Weekend</a></li>
-                    <li><a href="/clan" class="live-link">Clan Overview</a></li>
-                    <li><a href="/war" class="live-link">Clan War</a></li>
-                    <li><a href="/cwl" class="live-link">Clan War League</a></li>
-                    {% if is_super_admin %}<li><a href="/admin" class="live-link">Admin Hub</a></li>{% endif %}
-                </ul>
-            </div>
-            <div>
-                <h4>Coming Soon</h4>
-                <ul class="footer-links">
-                    <li><span class="soon-link">More features</span></li>
-                </ul>
-            </div>
-            <div>
-                <h4>System</h4>
-                <ul class="footer-links">
-                    {% if is_super_admin %}<li><a href="/admin">Admin Hub</a></li>{% endif %}
-                </ul>
-                <div style="margin-top:16px; font-size:12px; color:var(--muted); line-height:1.7">
-                    <div>{{ total_members }} members tracked</div>
-                    <div>{{ battle_logs_this_week }} attacks this week</div>
-                    <div>{{ ranked_battles_this_week }} ranked battles</div>
+                <div class="ops-footer-stats">
+                    {{ total_members }} members tracked<br>
+                    {{ battle_logs_this_week }} attacks this week<br>
+                    {{ ranked_battles_this_week }} ranked battles
                 </div>
             </div>
         </div>
-        <div class="footer-bottom">
-            <p>&copy; 2026 CoC Analytics &mdash; Unofficial fan project, not affiliated with Supercell.</p>
-            <div class="links">
-                <span style="color:var(--muted);font-size:12px">6 features live</span>
-            </div>
+        <div class="ops-footer-bottom">
+            <span>&copy; 2026 CoC Analytics &mdash; Unofficial fan project, not affiliated with Supercell.</span>
+            <span>6 features live</span>
         </div>
     </div>
 </footer>
