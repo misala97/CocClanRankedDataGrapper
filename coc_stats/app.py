@@ -225,6 +225,25 @@ def index():
             baseline = total_medals / total_attacks
             active_raid_est_medals = max(0, min(round(baseline * 6), 1620)) + avg_def
 
+    last_war = None
+    if not active_war:
+        last_war = ClanWar.query.filter(
+            ClanWar.state == 'warEnded'
+        ).order_by(ClanWar.start_time.desc()).first()
+
+    last_raid = None
+    if not active_raid:
+        last_raid = RaidWeekend.query.filter(
+            RaidWeekend.state == 'ended'
+        ).order_by(RaidWeekend.start_time.desc()).first()
+
+    last_cwl_war = None
+    if not active_cwl_season:
+        last_cwl_war = CWLWar.query.filter(
+            CWLWar.state == 'warEnded',
+            db.or_(CWLWar.clan_tag == CLAN_TAG, CWLWar.opp_tag == CLAN_TAG)
+        ).order_by(CWLWar.id.desc()).first()
+
     # ── Player-specific hero data ────────────────────────────────────────────
     player_ranked_left        = None
     player_gain_settings_json = 'null'
@@ -298,6 +317,9 @@ def index():
         active_cwl_season=active_cwl_season,
         active_cwl_war=active_cwl_war,
         cwl_win_status=cwl_win_status,
+        last_war=last_war,
+        last_raid=last_raid,
+        last_cwl_war=last_cwl_war,
         CLAN_TAG=CLAN_TAG,
         player_ranked_left=player_ranked_left,
         player_gain_settings_json=player_gain_settings_json,
