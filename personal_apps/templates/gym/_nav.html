@@ -1,0 +1,38 @@
+{# Shared gym nav: top bar (desktop, >860px) + bottom tab bar (mobile).
+   `gym_active_session` is injected into every gym-blueprint template's
+   context automatically by inject_gym_nav_context() in routes.py -- no
+   view needs to pass it explicitly. "Verlauf"/"Übungen" are anchors on the
+   dashboard (there is no separate history/exercises route), see the Global
+   Constraints note in the plan this was built from. #}
+<nav class="gym-nav">
+    <div class="gym-nav-inner">
+        <div class="gym-nav-logo">
+            <div class="gym-logo-icon">🏋️</div>
+            <span>Gym Tracker</span>
+        </div>
+        <div class="gym-nav-links">
+            <a href="{{ url_for('gym.gym_dashboard') }}" class="{{ 'active' if request.endpoint == 'gym.gym_dashboard' else '' }}">Dashboard</a>
+            {% if gym_active_session %}
+            <a href="{{ url_for('gym.session_detail', session_id=gym_active_session.id) }}" class="{{ 'active' if request.endpoint == 'gym.session_detail' else '' }}">Aktiv<span class="gym-nav-dot"></span></a>
+            {% endif %}
+            <a href="{{ url_for('gym.gym_dashboard') }}#history" class="{{ 'active' if request.endpoint == 'gym.gym_session_summary' else '' }}">Verlauf</a>
+            <a href="{{ url_for('gym.gym_dashboard') }}#exercises" class="{{ 'active' if request.endpoint == 'gym.exercise_detail' else '' }}">Übungen</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="gym-tabbar">
+    <a href="{{ url_for('gym.gym_dashboard') }}" class="{{ 'active' if request.endpoint == 'gym.gym_dashboard' else '' }}">
+        <span class="gym-tab-icon">🏠</span>Dashboard
+    </a>
+    <a href="{{ url_for('gym.session_detail', session_id=gym_active_session.id) if gym_active_session else url_for('gym.gym_dashboard') }}" class="{{ 'active' if request.endpoint == 'gym.session_detail' else '' }}">
+        <span class="gym-tab-icon">🏋️{% if gym_active_session %}<span class="gym-nav-dot"></span>{% endif %}</span>Aktiv
+    </a>
+    <a href="{{ url_for('gym.gym_dashboard') }}#history" class="{{ 'active' if request.endpoint == 'gym.gym_session_summary' else '' }}">
+        <span class="gym-tab-icon">📜</span>Verlauf
+    </a>
+    <a href="{{ url_for('gym.gym_dashboard') }}#exercises" class="{{ 'active' if request.endpoint == 'gym.exercise_detail' else '' }}">
+        <span class="gym-tab-icon">📋</span>Übungen
+    </a>
+</div>

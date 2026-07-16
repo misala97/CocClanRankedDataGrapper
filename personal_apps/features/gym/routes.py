@@ -153,6 +153,16 @@ def _get_active_session():
     return session_
 
 
+@gym_bp.context_processor
+def inject_gym_nav_context():
+    """Makes the active session available to `_nav.html` on every gym page,
+    not just the dashboard -- so the nav can show a "session running" dot
+    and link straight to it from anywhere. Reuses `_get_active_session`,
+    which is already idempotent (it only mutates state once, the first time
+    it notices a session has gone stale past the timeout)."""
+    return {'gym_active_session': _get_active_session()}
+
+
 def _last_session_exercise(exercise_id, position=None):
     """The most recent SessionExercise (across any session) with at least one
     *completed* set for this exercise.
