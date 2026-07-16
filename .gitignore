@@ -5,3 +5,4 @@ __pycache__/
 logs/
 locks/
 personal_apps/static/quizbank_uploads/
+.superpowers/
