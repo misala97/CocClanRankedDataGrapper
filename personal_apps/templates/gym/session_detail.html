@@ -9,203 +9,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
-    <meta name="theme-color" content="#0b0d14">
+    <meta name="theme-color" content="#0a0a0a">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <style>
-        :root {
-            --bg:      #0b0d14;
-            --surface: #131722;
-            --surf2:   #1a1f2e;
-            --border:  #272c3d;
-            --bord2:   #1e2333;
-            --text:    #eef0f7;
-            --muted:   #8b91a7;
-            --accent:  #6d6af6;
-            --acc2:    #22d3ee;
-            --green:   #34d399;
-            --red:     #fb7185;
-        }
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        body::before {
-            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-            background:
-                radial-gradient(ellipse 60% 40% at 15% 0%, rgba(109,106,246,0.10) 0%, transparent 60%),
-                radial-gradient(ellipse 50% 40% at 100% 20%, rgba(34,211,238,0.07) 0%, transparent 60%);
-        }
-        a { text-decoration: none; color: inherit; }
-
-        nav {
-            position: sticky; top: 0; z-index: 100;
-            background: rgba(11,13,20,0.92);
-            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-            border-bottom: 1px solid var(--border);
-        }
-        .nav-inner {
-            max-width: 1000px; margin: 0 auto; padding: 0 32px;
-            height: 62px; display: flex; align-items: center; justify-content: space-between;
-        }
-        .nav-logo { display: flex; align-items: center; gap: 10px; }
-        .logo-icon {
-            width: 36px; height: 36px;
-            background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border-radius: 10px; display: flex; align-items: center; justify-content: center;
-            font-size: 17px;
-        }
-        .nav-logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
-        .nav-links { display: flex; align-items: center; gap: 6px; }
-        .nav-links a {
-            font-size: 13px; font-weight: 500; color: var(--muted);
-            padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
-        }
-        .nav-links a:hover { color: var(--text); background: var(--surf2); }
-
-        .page-wrap { max-width: 1000px; margin: 0 auto; padding: 32px 32px 56px; position: relative; z-index: 1; }
-        h1 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; margin-bottom: 4px; }
-        h2 { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; }
-
-        .card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 16px; overflow: hidden; margin-bottom: 20px;
-        }
-        .card-header {
-            padding: 14px 18px; border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: space-between;
-            flex-wrap: wrap; row-gap: 8px; column-gap: 12px;
-        }
-        .card-body { padding: 18px; }
-
-        .session-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
-        .session-header .duration { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700; color: var(--acc2); }
-        .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge-active { background: rgba(52,211,153,0.15); color: var(--green); }
-        .badge-done { background: rgba(139,145,167,0.15); color: var(--muted); }
-
-        .notify-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; font-size: 13px; color: var(--muted); }
-
-        .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; }
-        .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-        .form-group input, .form-group select, .form-group textarea {
-            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text); padding: 7px 10px; font-size: 13px; font-family: inherit;
-            transition: border-color 0.15s;
-        }
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
-        .form-group.grow { flex: 1; min-width: 130px; }
-        .form-group.grow input, .form-group.grow select { width: 100%; }
-        .num-input { width: 90px; }
-
-        .btn {
-            padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
-            font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
-            white-space: nowrap;
-        }
-        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--acc2)); color: #0b0d14; border-color: transparent; }
-        .btn-primary:hover { opacity: 0.9; }
-        .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
-        .btn-ghost:hover { color: var(--text); border-color: var(--text); }
-        .btn-danger { background: transparent; color: var(--red); border-color: var(--red); }
-        .btn-danger:hover { background: rgba(251,113,133,0.1); }
-        .btn-sm { padding: 4px 10px; font-size: 12px; }
-        .icon-btn {
-            width: 32px; height: 32px; padding: 0; flex-shrink: 0;
-            display: inline-flex; align-items: center; justify-content: center; font-size: 14px;
-        }
-
-        .sets-list { margin-bottom: 12px; }
-        .set-row {
-            position: relative; overflow: hidden;
-            display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 0 -8px;
-            border-top: 1px solid var(--bord2); font-size: 13px;
-            border-left: 3px solid transparent; transition: opacity 0.15s, border-color 0.15s;
-        }
-        .set-row:first-child { border-top: none; }
-        .set-row.set-pending { opacity: 0.55; border-left-style: dashed; border-left-color: var(--bord2); }
-        .set-row.set-done { border-left-color: var(--green); background: rgba(52,211,153,0.08); }
-        .pending-hint { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
-        .stagnation-note { font-size: 12px; color: var(--red); background: rgba(251,113,133,0.1); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
-        .replace-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
-        .replace-details { margin-top: 12px; }
-        .replace-details summary { cursor: pointer; list-style: none; display: inline-block; }
-        .replace-details summary::-webkit-details-marker { display: none; }
-        .set-row > * { position: relative; z-index: 1; }
-        .set-index { width: 20px; color: var(--muted); }
-        .set-edit-form { display: flex; align-items: center; gap: 6px; flex: 1; }
-        .set-check {
-            width: 32px; height: 32px; flex-shrink: 0; border-radius: 999px;
-            border: 1px solid var(--border); background: var(--surf2); color: transparent;
-            font-size: 15px; font-weight: 700; line-height: 1; cursor: pointer; transition: all 0.15s;
-        }
-        .set-check.checked { background: var(--green); border-color: var(--green); color: #0b0d14; }
-        .num-input-sm {
-            width: 64px; background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text); padding: 5px 8px; font-size: 13px; font-family: inherit;
-        }
-        .num-input-sm:focus { outline: none; border-color: var(--accent); }
-        .unit { color: var(--muted); font-size: 12px; }
-        .set-value { font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
-
-        .rest-fill {
-            position: absolute; inset: 0; z-index: 0; width: 100%;
-            background: linear-gradient(90deg, rgba(109,106,246,0.35), rgba(34,211,238,0.25));
-        }
-
-        .exercise-card.dragging { position: relative; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,0.4); cursor: grabbing; touch-action: none; }
-        /* Higher specificity than .exercise-card.dragging (which the ghost also
-           carries, cloned from the real card) so this z-index actually wins --
-           needs to clear the sticky nav's z-index:100 or the nav paints over the
-           ghost while dragging near the top of the viewport. */
-        .exercise-card.dragging.drag-ghost { z-index: 200; }
-        #exercise-cards { user-select: none; -webkit-user-select: none; }
-        .rest-form { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-
-        .card-header-title-row { display: flex; align-items: center; gap: 6px; flex: 1 1 140px; min-width: 0; }
-        .card-title-area { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; touch-action: none; }
-        .card-title-area h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        #exercise-cards:not(.read-only) .card-title-area { cursor: grab; }
-        .exercise-card.dragging .card-title-area { cursor: grabbing; }
-        .exercise-card.collapsed .card-body { display: none; }
-
-        .progress-badge {
-            font-size: 11px; font-weight: 700; font-family: 'Space Grotesk', sans-serif; flex-shrink: 0;
-            color: var(--muted); background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 999px; padding: 2px 8px;
-        }
-        .progress-badge.all-done { color: var(--green); border-color: var(--green); background: rgba(52,211,153,0.12); }
-        .progress-open-btn {
-            background: transparent; border: none; color: var(--muted); font-size: 16px;
-            cursor: pointer; flex-shrink: 0; line-height: 1;
-            width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
-        }
-        .progress-open-btn:hover { color: var(--text); }
-
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
-        .modal-overlay.hidden { display: none; }
-        .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; max-width: 480px; width: 100%; max-height: 80vh; overflow-y: auto; }
-        .modal-header {
-            display: flex; align-items: center; justify-content: space-between; padding: 14px 18px;
-            border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface);
-        }
-        .modal-body { padding: 18px; }
-        .pr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-        .pr-card { background: var(--surf2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
-        .pr-card .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
-        .pr-card .val { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: var(--acc2); margin: 4px 0 2px; }
-        .pr-card .sub { font-size: 11px; color: var(--muted); }
-        .modal-chart-wrap { height: 200px; margin-bottom: 8px; }
-        .modal-position-note { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
-
-        .actions-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
-
-        .empty { text-align: center; padding: 24px; color: var(--muted); font-size: 13px; }
-
-        @media (max-width: 700px) {
-            .page-wrap { padding: 24px 16px 40px; }
-        }
-    </style>
+    <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
 </head>
 <body>
 
@@ -219,20 +28,9 @@
     </div>
 </div>
 
-<nav>
-    <div class="nav-inner">
-        <div class="nav-logo">
-            <div class="logo-icon">🏋️</div>
-            <span>Gym Tracker</span>
-        </div>
-        <div class="nav-links">
-            <a href="{{ url_for('gym.gym_dashboard') }}">Gym Übersicht</a>
-            <a href="/logout">Logout</a>
-        </div>
-    </div>
-</nav>
+{% include 'gym/_nav.html' %}
 
-<div class="page-wrap">
+<div class="gym-page-wrap">
     <div class="session-header">
         <div>
             <h1>{{ session.name or 'Workout' }}</h1>
@@ -265,6 +63,7 @@
     {% set completed_count = se.sets|selectattr('completed')|list|length %}
     {% set total_count = se.sets|length %}
     {% set all_done = total_count > 0 and completed_count == total_count %}
+    {% set resting_set = se.sets|selectattr('id', 'equalto', session.resting_set_id)|list|first if session.resting_set_id else none %}
     <div class="card exercise-card {{ 'collapsed' if all_done else '' }}" data-se-id="{{ se.id }}">
         <div class="card-header">
             <div class="card-header-title-row">
@@ -299,9 +98,6 @@
             <div class="sets-list">
                 {% for s in se.sets %}
                 <div class="set-row {{ 'set-done' if s.completed else 'set-pending' }}">
-                    {% if s.id == session.resting_set_id and not session.finished_at %}
-                    <div class="rest-fill" id="rest-fill" data-rest-ends="{{ session.rest_ends_at.isoformat() }}" data-rest-total="{{ se.rest_seconds or se.exercise.default_rest_seconds or 0 }}"></div>
-                    {% endif %}
                     <span class="set-index">{{ loop.index }}</span>
                     {% if not session.finished_at %}
                     <form method="post" action="{{ url_for('gym.gym_toggle_set_complete', set_id=s.id) }}" class="set-edit-form">
@@ -321,6 +117,13 @@
             </div>
             {% else %}
             <div class="empty">Noch keine Sätze protokolliert.</div>
+            {% endif %}
+
+            {% if resting_set and not session.finished_at %}
+            <div class="rest-bar">
+                <div class="rest-bar-top"><span>Pause</span><span class="rest-bar-label" id="rest-bar-label">--:--</span></div>
+                <div class="rest-bar-track"><div class="rest-bar-fill" id="rest-fill" data-rest-ends="{{ session.rest_ends_at.isoformat() }}" data-rest-total="{{ se.rest_seconds or se.exercise.default_rest_seconds or 0 }}"></div></div>
+            </div>
             {% endif %}
 
             {% if not session.finished_at %}
@@ -464,14 +267,22 @@ function startRestFillTick() {
     const restTotalSeconds = parseFloat(restFill.dataset.restTotal) || 0;
     function tick() {
         const el = document.getElementById('rest-fill');
+        const label = document.getElementById('rest-bar-label');
         if (!el) return; // removed by a newer refresh
         const diff = restEndsAt.getTime() - Date.now();
         if (diff <= 0 || restTotalSeconds <= 0) {
             el.style.width = '0%';
+            if (label) label.textContent = '0:00';
             return;
         }
         const pct = Math.max(0, Math.min(100, (diff / 1000 / restTotalSeconds) * 100));
         el.style.width = pct + '%';
+        if (label) {
+            const remain = Math.ceil(diff / 1000);
+            const m = Math.floor(remain / 60);
+            const s = remain % 60;
+            label.textContent = `${m}:${pad(s)}`;
+        }
         restFillTimer = setTimeout(tick, 1000);
     }
     tick();
@@ -505,8 +316,6 @@ function urlBase64ToUint8Array(base64String) {
 const notifyBtn = document.getElementById('notify-enable-btn');
 if (notifyBtn) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        // Explain why instead of just hiding everything -- an empty card with
-        // just a header (which is all that was left before) looks broken.
         const reason = window.isSecureContext
             ? 'Dein Browser unterstützt keine Push-Benachrichtigungen.'
             : 'Push-Benachrichtigungen brauchen eine sichere Verbindung (HTTPS). Über die lokale Netzwerk-Adresse (http://...) geht das nicht -- erst nach dem Deployment mit echtem HTTPS.';
@@ -540,32 +349,9 @@ if (notifyBtn) {
 }
 
 (function setupDragReorder() {
-    // Delegated entirely on document (not bound to specific elements) so it
-    // keeps working after #exercise-cards gets replaced wholesale by the
-    // AJAX refresh below. A pointerdown on the card title starts "pending"
-    // only -- it becomes an actual drag once the pointer moves past a small
-    // threshold; released before that, it's treated as a tap that toggles
-    // the card open/closed instead. This lets the same title area serve
-    // both purposes without separate icons.
-    //
-    // The real card element NEVER moves visually during a drag -- it stays
-    // exactly where normal document flow puts it (just invisible), so it
-    // keeps contributing its height to the layout and nothing shifts except
-    // when an actual swap happens, same as before. All the *visual* motion
-    // happens on a separate floating clone ("ghost"), fixed-positioned and
-    // living outside #exercise-cards entirely, that does nothing but track
-    // the pointer. Since the ghost has no document-flow role, no scroll
-    // interaction, and nothing else ever touches its position, there is no
-    // "flow drift" left to compensate for -- which is what three separate
-    // attempts at patching a transform-on-a-flow-element approach kept
-    // failing to fully cover (collapsing siblings, DOM reordering, page
-    // scroll, the browser's own scroll clamping/rubber-banding near a
-    // boundary). The ghost's `top` is set exactly once, at creation; every
-    // frame after that moves it via `transform` instead (compositor-only,
-    // no layout recalculation), which is what keeps it smooth.
     const DRAG_THRESHOLD = 8;
-    const SCROLL_EDGE_ZONE = 80;   // px from the viewport top/bottom that triggers auto-scroll
-    const SCROLL_MAX_SPEED = 16;   // px per animation frame at the very edge
+    const SCROLL_EDGE_ZONE = 80;
+    const SCROLL_MAX_SPEED = 16;
     let dragCard = null;
     let dragGhost = null;
     let titleArea = null;
@@ -574,8 +360,8 @@ if (notifyBtn) {
     let startY = 0;
     let lastClientY = 0;
     let dragStarted = false;
-    let dragGrabOffsetY = 0;   // finger's offset from the card's top edge, captured at grab time
-    let dragGhostBaseTop = 0;  // the fixed `top` the ghost was created at; all movement after that is via `transform`
+    let dragGrabOffsetY = 0;
+    let dragGhostBaseTop = 0;
     let dragGhostBaseClientY = 0;
     let openIdsBeforeDrag = null;
     let autoScrollRAF = null;
@@ -584,9 +370,6 @@ if (notifyBtn) {
         dragStarted = true;
         try { titleArea.setPointerCapture(activePointerId); } catch (err) {}
 
-        // Collapse every card for the duration of the drag -- much easier to
-        // reorder short cards than ones full of sets. Remember which were
-        // open so they can be restored afterward.
         const container = document.getElementById('exercise-cards');
         if (container) {
             openIdsBeforeDrag = new Set();
@@ -597,37 +380,18 @@ if (notifyBtn) {
         }
 
         const rect = dragCard.getBoundingClientRect();
-        // Collapsing cards above dragCard can shift its position -- recompute
-        // the grab offset against this post-collapse rect rather than trusting
-        // the one captured at pointerdown, or the ghost spawns wherever the
-        // card USED to be instead of where it actually is now.
         dragGrabOffsetY = lastClientY - rect.top;
         dragCard.classList.add('dragging');
         dragCard.style.visibility = 'hidden';
 
         dragGhost = dragCard.cloneNode(true);
-        // A card can contain id-bearing elements (e.g. the rest-timer fill
-        // bar) -- strip every id from the clone so it never duplicates one
-        // that's still live on the real (hidden) card while both exist.
         dragGhost.removeAttribute('id');
         dragGhost.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
         dragGhost.classList.add('drag-ghost');
-        // pointer-events:none (below) keeps mouse/touch/pen off the ghost, but
-        // has no effect on keyboard focus -- `inert` is what actually keeps its
-        // cloned buttons/forms out of the tab order, so a stray Tab+Enter during
-        // a drag can't trigger a real, un-intercepted submit from a form that
-        // lives outside #exercise-cards.
         dragGhost.setAttribute('inert', '');
         dragGhost.style.position = 'fixed';
         dragGhost.style.left = rect.left + 'px';
         dragGhost.style.width = rect.width + 'px';
-        // `top` is set ONCE here and never touched again -- all subsequent
-        // movement is driven by `transform` (see updateDragPosition), which
-        // the browser can animate on the compositor without recomputing
-        // layout on every frame. Doing this via `top` on every pointermove
-        // forces a synchronous layout each time, which is slow enough on a
-        // real phone to look laggy/stuttery instead of smoothly following
-        // the finger.
         dragGhostBaseClientY = lastClientY;
         dragGhostBaseTop = lastClientY - dragGrabOffsetY;
         dragGhost.style.top = dragGhostBaseTop + 'px';
@@ -655,8 +419,6 @@ if (notifyBtn) {
         if (titleArea && activePointerId !== null) {
             try { titleArea.releasePointerCapture(activePointerId); } catch (err) {}
         }
-        // Restore each card to whatever open/collapsed state it had before
-        // the drag -- they were all force-collapsed for easier dragging.
         if (openIdsBeforeDrag) {
             const container = document.getElementById('exercise-cards');
             if (container) {
@@ -672,14 +434,6 @@ if (notifyBtn) {
         dragStarted = false;
     }
 
-    // Moves the ghost to follow the pointer and checks whether it has
-    // crossed an immediate neighbor's center, reordering the real (hidden)
-    // card accordingly. Shared by onMove (real pointer movement) and the
-    // auto-scroll loop (pointer held still near an edge while the page
-    // scrolls underneath it -- cards still need to keep swapping). Only the
-    // immediate neighbors are ever checked -- crossing more than one in a
-    // single call just means it'll cross the next one on the following
-    // call/frame too, converging the same way a multi-step move always has.
     function updateDragPosition(clientY) {
         const container = document.getElementById('exercise-cards');
         if (!container || !dragGhost) return;
@@ -708,12 +462,6 @@ if (notifyBtn) {
         }
     }
 
-    // Runs every frame while dragging. If the pointer is sitting near the
-    // top/bottom edge of the viewport, scrolls the page so a list longer
-    // than one screen can still be reordered -- without this, dragging the
-    // last of e.g. 15 exercises to the top is simply impossible. The ghost
-    // is fixed-positioned so scrolling never moves it on its own; only the
-    // (still-in-flow) siblings move, which is exactly what should happen.
     function autoScrollTick() {
         if (!dragStarted || !dragCard) {
             autoScrollRAF = null;
@@ -738,9 +486,6 @@ if (notifyBtn) {
         lastClientY = e.clientY;
 
         if (!dragStarted) {
-            // Reordering is disabled for finished (read-only) sessions -- stay
-            // "pending" forever so a release always falls through to a tap
-            // (collapse toggle) instead of ever starting a drag.
             if (SESSION_FINISHED) return;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
@@ -761,9 +506,6 @@ if (notifyBtn) {
         resetDragState();
 
         if (wasDragging) {
-            // The DOM was already live-mutated during the drag regardless of
-            // how it ended, so always persist -- there's no clean undo, and
-            // skipping this on cancel would leave client and server disagreeing.
             if (order && order.length) {
                 fetch('{{ url_for("gym.gym_reorder_session_exercises", session_id=session.id) }}', {
                     method: 'POST',
@@ -775,8 +517,6 @@ if (notifyBtn) {
                     .then(refreshExerciseCards);
             }
         } else if (!isCancel) {
-            // never crossed the drag threshold, and this was a genuine
-            // release (not an aborted gesture) -- treat it as a tap
             card.classList.toggle('collapsed');
         }
     }
@@ -790,8 +530,6 @@ if (notifyBtn) {
         startX = e.clientX;
         startY = e.clientY;
         lastClientY = e.clientY;
-        // dragGrabOffsetY is computed in beginDrag() instead, once collapsing
-        // has settled the card's real on-screen position.
         dragStarted = false;
         e.preventDefault();
     });
@@ -800,22 +538,11 @@ if (notifyBtn) {
     document.addEventListener('pointercancel', () => finish(true));
 })();
 
-// Intercept form submissions inside #exercise-cards (toggle/save a set,
-// delete a set, add a set, remove an exercise, change rest time) and send
-// them via fetch instead of a normal navigation, then splice the freshly
-// rendered #exercise-cards back in. This is what actually fixes "the page
-// reloads and jumps to the top" -- those are the actions tapped constantly
-// mid-workout. Rarer actions (finish workout, save/add-exercise, templates)
-// stay as normal page loads since a reload there is a non-issue.
 function refreshExerciseCards(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const newCards = doc.getElementById('exercise-cards');
     const oldCards = document.getElementById('exercise-cards');
     if (newCards && oldCards) {
-        // Carry over each card's current collapsed/open state across the
-        // swap (whether that's the auto-collapsed default or a manual
-        // click), keyed by session-exercise id so it survives even though
-        // the whole fragment just got replaced with fresh server HTML.
         const collapsedIds = new Set();
         const openIds = new Set();
         oldCards.querySelectorAll('.exercise-card').forEach((c) => {
@@ -841,14 +568,6 @@ document.addEventListener('submit', (e) => {
         .then(refreshExerciseCards);
 });
 
-// The rest-time field is the one input on this page with its own separate
-// save step (type a value, then tap its own checkmark) instead of being
-// saved together with a higher-frequency action. That's a trap now that
-// #exercise-cards gets replaced wholesale by other taps (checking off a
-// set, adding a set) with no visible reload to signal it -- an unsaved
-// rest-time edit sitting in the field gets silently discarded. Auto-save
-// it the moment you leave the field instead, so there's no window where
-// that can happen.
 document.addEventListener('change', (e) => {
     const input = e.target;
     if (input.name !== 'rest_seconds') return;
@@ -858,19 +577,16 @@ document.addEventListener('change', (e) => {
 
 // Quick per-exercise progress modal -- PRs + recent history without leaving
 // the workout. Fetches JSON (not HTML) so nothing needs script-execution
-// tricks for content injected via innerHTML.
+// tricks for content injected via innerHTML. Chart rendering delegates to
+// the shared GymChart helper (gym.js) so this modal's chart and the full
+// exercise-detail page's chart never drift into two different looks.
 (function setupProgressModal() {
     const modal = document.getElementById('progress-modal');
     const title = document.getElementById('progress-modal-title');
     const body = document.getElementById('progress-modal-body');
     if (!modal) return;
 
-    function esc(s) {
-        const div = document.createElement('div');
-        div.textContent = s == null ? '' : String(s);
-        return div.innerHTML;
-    }
-
+    const esc = window.GymUtils.escapeHtml;
     let modalChart = null;
 
     function render(data) {
@@ -899,54 +615,11 @@ document.addEventListener('change', (e) => {
             modalChart = null;
         }
         if (data.chart_labels && data.chart_labels.length) {
-            modalChart = new Chart(document.getElementById('modal-chart'), {
-                type: 'line',
-                data: {
-                    labels: data.chart_labels,
-                    datasets: [
-                        {
-                            label: 'Bestes Gewicht (kg)',
-                            data: data.chart_weights,
-                            borderColor: '#6d6af6',
-                            backgroundColor: 'rgba(109,106,246,0.12)',
-                            tension: 0.3,
-                            fill: true,
-                            yAxisID: 'y',
-                        },
-                        {
-                            label: 'Leichtestes Gewicht (kg)',
-                            data: data.chart_min_weights,
-                            borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245,158,11,0.08)',
-                            borderDash: [5, 4],
-                            tension: 0.3,
-                            fill: false,
-                            yAxisID: 'y',
-                        },
-                        {
-                            label: 'Volumen (kg)',
-                            data: data.chart_volumes,
-                            borderColor: '#22d3ee',
-                            backgroundColor: 'rgba(34,211,238,0.08)',
-                            tension: 0.3,
-                            fill: false,
-                            yAxisID: 'y1',
-                        },
-                    ],
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    scales: {
-                        x: { ticks: { color: '#8b91a7', maxRotation: 0 }, grid: { color: '#1e2333' } },
-                        y: { position: 'left', ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' } },
-                        y1: { position: 'right', ticks: { color: '#8b91a7' }, grid: { display: false } },
-                    },
-                    plugins: {
-                        legend: { labels: { color: '#eef0f7', boxWidth: 12, font: { size: 10 } } },
-                    },
-                },
+            modalChart = GymChart.renderProgressChart(document.getElementById('modal-chart'), {
+                labels: data.chart_labels,
+                weights: data.chart_weights,
+                minWeights: data.chart_min_weights,
+                volumes: data.chart_volumes,
             });
         }
     }
