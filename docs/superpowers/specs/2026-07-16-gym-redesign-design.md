@@ -53,8 +53,17 @@ A separate muted red (existing `--red`-equivalent, e.g. `#fb7185`) is kept only 
 - **Rest timer** renders as a slim lime bar/badge pinned under the active exercise card — not a full-screen takeover, since the user is mid-workout and other exercises/sets must stay reachable.
 - **Stagnation nudge** (existing `STAGNATION_THRESHOLD` logic, 4+ sessions without a new e1RM PR) renders as a small lime-outlined pill on the exercise header (e.g. "4 Sessions ohne PR") — visible but not a blocking popup.
 - **Exercise reorder:** stays drag-handle based (existing interaction/endpoint `gym_reorder_session_exercises`), restyled to the new component set.
-- **Exercise replace:** stays the same modal/dropdown flow (existing endpoint `gym_replace_session_exercise`), restyled to match the dense-table row style.
+- **Exercise card collapse/expand:** stays the same tap-to-collapse behavior on the card header, restyled toggle affordance.
 - **Add set / toggle complete / delete set:** same endpoints and data, restyled controls.
+
+### Modals and Inline Controls
+
+Auditing the current markup, there is exactly **one** true modal in the gym pages — everything else is an inline disclosure or native browser dialog:
+
+- **Quick-glance progress modal** (`#progress-modal`, backed by `gym_exercise_progress_json`): opened from an exercise card mid-workout to see PRs + a recent-history chart without leaving the active session. Restyled as a dark bento modal box (same surface/border/radius as other tiles), with the **same best/worst-band chart style** chosen for the full Exercise Detail page — one chart treatment used consistently everywhere a progress chart appears, not a second chart style invented just for the modal. Same open/close triggers (click to open, ✕/outside-click/Escape to close) and same data contract (`progress.json` response shape unchanged).
+- **Exercise replace** (`gym_replace_session_exercise`): **not a modal** — it's an inline `<details>` disclosure on the exercise card (a small expand/collapse, not an overlay). Corrected from the earlier draft of this spec, which mis-described it as a modal/dropdown. Redesign keeps it as an inline disclosure, restyled to match the dense-table row system, with no new overlay introduced.
+- **Add-exercise form** (`gym_add_session_exercise`): plain inline form pinned at the bottom of the exercise list — not a modal today, stays that way, restyled.
+- **Delete confirmations** (workout/template/exercise/session-exercise): use the browser's native `confirm()` dialog today. Left as native — it's OS-rendered chrome outside the page's control, so there's nothing to visually redesign here; noting it explicitly so it isn't mistaken for a missed component.
 
 ### Session Summary
 
