@@ -4,6 +4,9 @@
 {% include '_head.html' %}
     html { scroll-behavior: smooth; }
 
+    .ops-fd  { font-family: 'Big Shoulders Display', sans-serif; }
+    .ops-mono{ font-family: 'JetBrains Mono', monospace; }
+
     /* ── OPS HERO ── */
     .ops-hero {
         background: var(--ops-bg);
@@ -17,40 +20,56 @@
             linear-gradient(180deg, rgba(217,164,65,.05) 0%, transparent 40%),
             radial-gradient(ellipse 50% 60% at 100% 0%, rgba(144,102,232,.06) 0%, transparent 65%);
     }
-    .ops-hero-stack {
+    .ops-hero-grid {
         max-width: 1400px; margin: 0 auto; position: relative; z-index: 1;
-        display: flex; flex-direction: column; gap: 36px;
+        display: grid; grid-template-columns: 1.3fr 1fr; gap: 56px; align-items: start;
     }
 
-    /* ── YOU BAND ── */
-    .you-identity { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
-    .you-name {
-        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 24px;
-        letter-spacing: .3px; text-transform: uppercase; color: var(--ops-ink);
+    /* badge + eyebrow */
+    .ops-badge-row { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+    .hex-badge {
+        width: 60px; height: 52px; flex-shrink: 0; padding: 2px;
+        background: linear-gradient(150deg, var(--ops-gold), #8a6224);
+        clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
     }
-    .you-th-badge {
-        font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--ops-gold);
-        background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 5px; padding: 3px 9px;
+    .hex-badge-inner {
+        width: 100%; height: 100%; background: var(--ops-surface);
+        clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
     }
-    .you-league { font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--ops-ink-dim); }
+    .hex-badge-inner img { width: 76%; height: 76%; object-fit: contain; }
+    .hex-badge-inner svg { width: 60%; height: 60%; }
+    .ops-eyebrow {
+        font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 11px;
+        letter-spacing: 1.6px; text-transform: uppercase; color: var(--ops-ink-dim);
+    }
+    .ops-eyebrow b { color: var(--ops-ink); font-weight: 700; }
+    .ops-eyebrow .sep { color: var(--ops-gold); margin: 0 2px; }
 
-    .you-chip-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 18px; }
-    .you-chip {
-        background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 8px;
-        padding: 11px 14px; text-decoration: none; display: block; transition: border-color .15s;
+    .ops-h1 {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+        font-size: clamp(32px, 4vw, 48px); line-height: 1.04; letter-spacing: .2px;
+        color: var(--ops-ink); margin-bottom: 8px;
     }
-    .you-chip:hover { border-color: var(--tick, var(--ops-ink-dim)); }
-    .you-chip .k {
-        font-family: 'Manrope', sans-serif; font-size: 10px; text-transform: uppercase;
-        letter-spacing: .5px; color: var(--ops-ink-dim); margin-bottom: 5px;
+    .ops-h1 .who { color: var(--ops-gold); }
+    .ops-rank {
+        font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700;
+        color: var(--ops-ink-dim); margin-bottom: 22px; display: flex; align-items: center; gap: 8px;
     }
-    .you-chip .v { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 18px; }
+    .ops-rank .th { color: var(--ops-gold); }
+    .ops-lede { font-family: 'Manrope', sans-serif; font-size: 15px; color: var(--ops-ink-dim); line-height: 1.7; max-width: 460px; margin-bottom: 26px; }
 
-    .you-guest {
-        font-family: 'Manrope', sans-serif; font-size: 13.5px; color: var(--ops-ink-dim);
-        padding: 14px 0;
+    /* personal stat rows */
+    .ops-stat-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 18px; }
+    .ops-stat-row {
+        display: flex; align-items: baseline; gap: 11px; padding: 7px 0 7px 12px;
+        border-left: 2px solid var(--ops-line); text-decoration: none;
+        transition: border-color .15s;
     }
-    .you-guest a { color: var(--ops-gold); font-weight: 600; }
+    .ops-stat-row:hover { border-left-color: var(--tick, var(--ops-ink-dim)); }
+    .ops-stat-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 17px; min-width: 28px; text-align: right; flex-shrink: 0; }
+    .ops-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); transition: color .15s; }
+    .ops-stat-row:hover .ops-stat-lbl { color: var(--ops-ink); }
 
     /* ore strip */
     .ops-ore-strip {
@@ -65,22 +84,13 @@
     .ops-ore-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; line-height: 1; }
     .ops-ore-sub { font-family: 'Manrope', sans-serif; font-size: 10px; color: var(--ops-ink-dim); margin-top: 5px; }
 
-    /* ── CLAN BAND ── */
+    /* ── STATUS COLUMN ── */
     .ops-status-lbl {
         font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700;
         letter-spacing: 1.6px; text-transform: uppercase; color: var(--ops-ink-dim);
-        margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+        margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
     }
     .ops-status-lbl::after { content: ''; flex: 1; height: 1px; background: var(--ops-line); }
-
-    .clan-ticket-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 18px; }
-
-    .clan-empty {
-        background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 8px;
-        padding: 16px 20px; text-align: center; font-family: 'Manrope', sans-serif;
-        font-size: 13px; color: var(--ops-ink-dim); margin-bottom: 18px;
-    }
-    .clan-empty a { color: var(--ops-gold); font-weight: 600; }
 
     .ops-ticket {
         background: var(--ops-surface); border: 1px solid var(--ops-line);
@@ -89,8 +99,7 @@
         transition: border-color .15s, transform .15s;
     }
     .ops-ticket:hover { transform: translateX(2px); }
-    .ops-ticket.idle-result { border-left-color: var(--ops-ink-dim); }
-    .ops-ticket.idle-result .ops-ticket-state { background: transparent; border-color: var(--ops-line); color: var(--ops-ink-dim); }
+    .ops-ticket + .ops-ticket { margin-top: 10px; }
     .ops-ticket-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
     .ops-ticket-mode {
         font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700;
@@ -131,10 +140,10 @@
     .ops-goto { font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .5px; color: var(--ops-ink-dim); }
     .ops-ticket:hover .ops-goto { color: var(--mode); }
 
-    /* pulse strip (always shown, not just when idle) */
+    /* pulse (idle) card */
     .ops-pulse { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 8px; padding: 22px 18px; }
-    .ops-pulse-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); }
-    .ops-pulse-item { text-align: center; padding: 0 8px; border-left: 1px solid var(--ops-line); text-decoration: none; }
+    .ops-pulse-row { display: flex; }
+    .ops-pulse-item { flex: 1; text-align: center; padding: 0 8px; border-left: 1px solid var(--ops-line); text-decoration: none; }
     .ops-pulse-item:first-child { border-left: none; }
     .ops-pulse-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 26px; color: var(--ops-ink); }
     .ops-pulse-lbl { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); margin-top: 8px; line-height: 1.4; }
@@ -202,6 +211,7 @@
     }
     @media (max-width: 900px) {
         .ops-hero { padding: 40px 20px 36px; }
+        .ops-hero-grid { grid-template-columns: 1fr; gap: 30px; }
         .ops-board { padding: 52px 20px; }
         .ops-footer { padding: 32px 20px 20px; }
     }
@@ -219,38 +229,58 @@
 
 <!-- Ops Hero -->
 <section class="ops-hero">
-    <div class="ops-hero-stack">
-
-        {% if current_user and current_user.linked_player %}
+    <div class="ops-hero-grid">
         <div>
-            <div class="you-identity">
-                <span class="you-name">{{ current_user.linked_player.name }}</span>
-                {% if player_th %}<span class="you-th-badge">TH{{ player_th }}</span>{% endif %}
-                <span class="you-league">{{ player_league or 'Unranked' }}</span>
+            <div class="ops-badge-row">
+                <div class="hex-badge">
+                    <div class="hex-badge-inner">
+                        {% if clan_badge_url %}
+                        <img src="{{ clan_badge_url }}" alt="{{ clan_name }} badge">
+                        {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
+                            <path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                            <path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/>
+                            <path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/>
+                            <path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/>
+                            <path d="M15.5 9H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5S16.33 9 15.5 9z"/>
+                            <path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/>
+                            <path d="M8.5 15H10v-1.5c0-.83-.67-1.5-1.5-1.5S7 12.67 7 13.5 7.67 15 8.5 15z"/>
+                        </svg>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="ops-eyebrow">Clan Ops <span class="sep">/</span> <b>{{ clan_name }}</b></div>
             </div>
 
-            <div class="you-chip-row">
+            {% if current_user and current_user.linked_player %}
+            <h1 class="ops-h1">Welcome back,<br><span class="who">{{ current_user.linked_player.name }}</span></h1>
+            {% if player_th %}
+            <div class="ops-rank"><span class="th">TH{{ player_th }}</span> · {{ player_league or 'Unranked' }}</div>
+            {% endif %}
+
+            <div class="ops-stat-list">
                 {% if player_ranked_left is not none %}
                 {% set rl_color = 'var(--ops-win)' if player_ranked_left == 0 else ('var(--ops-gold)' if player_ranked_left <= 3 else 'var(--ops-raid)') %}
-                <a href="/ranked" class="you-chip" style="--tick:{{ rl_color }};">
-                    <div class="k">Ranked left</div>
-                    <div class="v" style="color:{{ rl_color }};">{{ player_ranked_left }}</div>
+                <a href="/ranked" class="ops-stat-row" style="--tick:{{ rl_color }};">
+                    <span class="ops-stat-num" style="color:{{ rl_color }};">{{ player_ranked_left }}</span>
+                    <span class="ops-stat-lbl">ranked attacks left this week</span>
                 </a>
                 {% endif %}
-                <a href="/battles" class="you-chip" style="--tick:var(--ops-ink-dim);">
-                    <div class="k">Since {{ week_start_name }}</div>
-                    <div class="v" style="color:{{ 'var(--ops-win)' if player_attacks_this_week > 0 else 'var(--ops-ink-dim)' }};">{{ player_attacks_this_week }} atk</div>
+                <a href="/battles" class="ops-stat-row" style="--tick:var(--ops-ink-dim);">
+                    <span class="ops-stat-num" style="color:{{ 'var(--ops-win)' if player_attacks_this_week > 0 else 'var(--ops-ink-dim)' }};">{{ player_attacks_this_week }}</span>
+                    <span class="ops-stat-lbl">attacks since {{ week_start_name }}</span>
                 </a>
                 {% if player_war_stats.attacks > 0 %}
-                <a href="/war" class="you-chip" style="--tick:var(--ops-gold);">
-                    <div class="k">War · {{ player_war_stats.wars }} war{{ 's' if player_war_stats.wars != 1 else '' }} · 30d</div>
-                    <div class="v" style="color:var(--ops-gold);">{{ player_war_stats.attacks }} atk</div>
+                <a href="/war" class="ops-stat-row" style="--tick:var(--ops-gold);">
+                    <span class="ops-stat-num" style="color:var(--ops-gold);">{{ player_war_stats.attacks }}</span>
+                    <span class="ops-stat-lbl">war attacks · {{ player_war_stats.wars }} war{{ 's' if player_war_stats.wars != 1 else '' }} · last 30d</span>
                 </a>
                 {% endif %}
                 {% if player_cwl_stats.attacks > 0 %}
-                <a href="/cwl" class="you-chip" style="--tick:var(--ops-elixir);">
-                    <div class="k">CWL · {{ player_cwl_stats.wars }} round{{ 's' if player_cwl_stats.wars != 1 else '' }}</div>
-                    <div class="v" style="color:var(--ops-elixir);">{{ player_cwl_stats.attacks }} atk</div>
+                <a href="/cwl" class="ops-stat-row" style="--tick:var(--ops-elixir);">
+                    <span class="ops-stat-num" style="color:var(--ops-elixir);">{{ player_cwl_stats.attacks }}</span>
+                    <span class="ops-stat-lbl">CWL · {{ player_cwl_stats.wars }} round{{ 's' if player_cwl_stats.wars != 1 else '' }} · last season</span>
                 </a>
                 {% endif %}
             </div>
@@ -272,207 +302,130 @@
                     <div class="ops-ore-sub"><span id="pog-starry-d">—</span>/d · <span id="pog-starry-m">—</span>/mo</div>
                 </div>
             </a>
+
+            {% else %}
+            <h1 class="ops-h1"><span class="who">{{ clan_name }}</span><br>Analytics</h1>
+            <p class="ops-lede">Live performance tracking for the clan — ranked seasons, war scoreboards, CWL standings and raid weekends, updated automatically.</p>
+            {% endif %}
         </div>
-        {% elif current_user %}
-        <div class="you-guest">Your account isn't linked to a player yet — see <a href="/profile">your profile</a> for details.</div>
-        {% else %}
-        <div class="you-guest"><a href="/login">Log in</a> to see your personal stats.</div>
-        {% endif %}
 
         <div>
-            <div class="ops-status-lbl">Clan</div>
+            <div class="ops-status-lbl">{% if active_war or active_cwl_season or active_raid %}Live Right Now{% else %}Clan Pulse{% endif %}</div>
 
-            {% set any_war = active_war or last_war %}
-            {% set any_cwl = active_cwl_season or last_cwl_war %}
-            {% set any_raid = active_raid or last_raid %}
-
-            {% if any_war or any_cwl or any_raid %}
-            <div class="clan-ticket-grid">
-
-                {% if active_war %}
-                <a href="/war" class="ops-ticket" style="--mode:var(--ops-gold);">
-                    <div class="ops-ticket-head">
-                        <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if active_war.state == 'inWar' }}"></span>War</span>
-                        <span class="ops-ticket-state">{% if active_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+            {% if active_war %}
+            <a href="/war" class="ops-ticket" style="--mode:var(--ops-gold);">
+                <div class="ops-ticket-head">
+                    <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if active_war.state == 'inWar' }}"></span>War</span>
+                    <span class="ops-ticket-state">{% if active_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+                </div>
+                {% if active_war.state == 'inWar' %}
+                <div class="ops-score-row">
+                    <div class="ops-score-side">
+                        <div class="ops-score-num ops-win-txt">{{ active_war.clan_stars or 0 }}★</div>
+                        <div class="ops-score-atk">{{ active_war.clan_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
+                        <div class="ops-score-lbl">{{ active_war.clan_name or 'Us' }}</div>
                     </div>
-                    {% if active_war.state == 'inWar' %}
-                    <div class="ops-score-row">
-                        <div class="ops-score-side">
-                            <div class="ops-score-num ops-win-txt">{{ active_war.clan_stars or 0 }}★</div>
-                            <div class="ops-score-atk">{{ active_war.clan_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
-                            <div class="ops-score-lbl">{{ active_war.clan_name or 'Us' }}</div>
-                        </div>
-                        <div class="ops-score-sep">VS</div>
-                        <div class="ops-score-side">
-                            <div class="ops-score-num ops-loss-txt">{{ active_war.opponent_stars or 0 }}★</div>
-                            <div class="ops-score-atk">{{ active_war.opponent_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
-                            <div class="ops-score-lbl">{{ active_war.opponent_name or 'Them' }}</div>
-                        </div>
+                    <div class="ops-score-sep">VS</div>
+                    <div class="ops-score-side">
+                        <div class="ops-score-num ops-loss-txt">{{ active_war.opponent_stars or 0 }}★</div>
+                        <div class="ops-score-atk">{{ active_war.opponent_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
+                        <div class="ops-score-lbl">{{ active_war.opponent_name or 'Them' }}</div>
                     </div>
-                    {% else %}
-                    <div class="ops-idle-msg">War starts {{ active_war.start_time | local_dt('%d.%m · %H:%M') if active_war.start_time else 'soon' }}</div>
-                    {% endif %}
-                    <div class="ops-ticket-meta">
-                        <span>vs <strong>{{ active_war.opponent_name or '?' }}</strong>{% if active_war.team_size %} · {{ active_war.team_size }}v{{ active_war.team_size }}{% endif %}</span>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            {% if active_war.end_time %}<span>Ends {{ active_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
-                            <span class="ops-goto">Go to →</span>
-                        </div>
-                    </div>
-                </a>
-                {% elif last_war %}
-                {% set lw_result = 'Won' if last_war.clan_stars > last_war.opponent_stars else ('Lost' if last_war.clan_stars < last_war.opponent_stars else 'Tied') %}
-                <a href="/war" class="ops-ticket idle-result" style="--mode:var(--ops-ink-dim);">
-                    <div class="ops-ticket-head">
-                        <span class="ops-ticket-mode">War</span>
-                        <span class="ops-ticket-state">Last War</span>
-                    </div>
-                    <div class="ops-score-row">
-                        <div class="ops-score-side">
-                            <div class="ops-score-num {{ 'ops-win-txt' if lw_result == 'Won' else ('ops-loss-txt' if lw_result == 'Lost' else '') }}">{{ last_war.clan_stars or 0 }}★</div>
-                            <div class="ops-score-lbl">{{ last_war.clan_name or 'Us' }}</div>
-                        </div>
-                        <div class="ops-score-sep">{{ lw_result }}</div>
-                        <div class="ops-score-side">
-                            <div class="ops-score-num {{ 'ops-win-txt' if lw_result == 'Lost' else ('ops-loss-txt' if lw_result == 'Won' else '') }}">{{ last_war.opponent_stars or 0 }}★</div>
-                            <div class="ops-score-lbl">{{ last_war.opponent_name or 'Them' }}</div>
-                        </div>
-                    </div>
-                    <div class="ops-ticket-meta">
-                        <span>vs <strong>{{ last_war.opponent_name or '?' }}</strong></span>
-                        <span>Ended {{ last_war.end_time | local_dt('%d.%m · %H:%M') }}</span>
-                    </div>
-                </a>
+                </div>
+                {% else %}
+                <div class="ops-idle-msg">War starts {{ active_war.start_time | local_dt('%d.%m · %H:%M') if active_war.start_time else 'soon' }}</div>
                 {% endif %}
-
-                {% if active_cwl_season %}
-                <a href="/cwl" class="ops-ticket" style="--mode:var(--ops-elixir);">
-                    <div class="ops-ticket-head">
-                        <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if active_cwl_war and active_cwl_war.state == 'inWar' }}"></span>War League</span>
-                        <span class="ops-ticket-state">{% if active_cwl_war and active_cwl_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+                <div class="ops-ticket-meta">
+                    <span>vs <strong>{{ active_war.opponent_name or '?' }}</strong>{% if active_war.team_size %} · {{ active_war.team_size }}v{{ active_war.team_size }}{% endif %}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        {% if active_war.end_time %}<span>Ends {{ active_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        <span class="ops-goto">Go to →</span>
                     </div>
-
-                    {% if active_cwl_war and active_cwl_war.state == 'inWar' %}
-                    {% set our_side = active_cwl_war.clan_tag == CLAN_TAG %}
-                    {% set our_stars  = active_cwl_war.clan_stars   if our_side else active_cwl_war.opp_stars %}
-                    {% set our_atk    = active_cwl_war.clan_attacks  if our_side else active_cwl_war.opp_attacks %}
-                    {% set our_name   = active_cwl_war.clan_name    if our_side else active_cwl_war.opp_name %}
-                    {% set opp_stars  = active_cwl_war.opp_stars    if our_side else active_cwl_war.clan_stars %}
-                    {% set opp_atk    = active_cwl_war.opp_attacks   if our_side else active_cwl_war.clan_attacks %}
-                    {% set opp_name   = active_cwl_war.opp_name     if our_side else active_cwl_war.clan_name %}
-                    {% set our_s = our_stars or 0 %}
-                    {% set opp_s = opp_stars or 0 %}
-                    <div class="ops-score-row">
-                        <div class="ops-score-side">
-                            <div class="ops-score-num {{ 'ops-win-txt' if our_s > opp_s else ('ops-loss-txt' if our_s < opp_s else '') }}">{{ our_s }}★</div>
-                            <div class="ops-score-atk">{{ our_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
-                            <div class="ops-score-lbl">{{ our_name or clan_name }}</div>
-                        </div>
-                        <div class="ops-score-sep">{% if our_s > opp_s %}WINNING{% elif our_s < opp_s %}LOSING{% else %}TIED{% endif %}</div>
-                        <div class="ops-score-side">
-                            <div class="ops-score-num {{ 'ops-win-txt' if opp_s > our_s else ('ops-loss-txt' if opp_s < our_s else '') }}">{{ opp_s }}★</div>
-                            <div class="ops-score-atk">{{ opp_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
-                            <div class="ops-score-lbl">{{ opp_name or 'Opponent' }}</div>
-                        </div>
-                    </div>
-                    {% if cwl_win_status %}
-                    <div style="text-align:center;margin-bottom:2px;">
-                        {% if cwl_win_status == 'safe_win' %}<span class="ops-ticket-state" style="--mode:var(--ops-win);color:var(--ops-win);border-color:rgba(62,192,106,.35);background:rgba(62,192,106,.12);">Safe Win</span>
-                        {% elif cwl_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:rgba(226,72,63,.35);background:rgba(226,72,63,.12);">Out of Reach</span>
-                        {% elif cwl_win_status == 'contested' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:rgba(217,164,65,.35);background:rgba(217,164,65,.12);">Undecided</span>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                    {% else %}
-                    <div class="ops-idle-msg">
-                        {% if active_cwl_war and active_cwl_war.start_time %}War starts {{ active_cwl_war.start_time | local_dt('%d.%m · %H:%M') }}
-                        {% else %}Season {{ active_cwl_season.season }} · {{ active_cwl_season.league_name or 'CWL' }}{% endif %}
-                    </div>
-                    {% endif %}
-
-                    <div class="ops-ticket-meta">
-                        <span>{{ active_cwl_season.season }}{% if active_cwl_season.league_name %} · {{ active_cwl_season.league_name }}{% endif %}{% if active_cwl_war %} · Round {{ active_cwl_war.round_number }}{% endif %}</span>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            {% if active_cwl_war and active_cwl_war.end_time %}<span>Ends {{ active_cwl_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
-                            <span class="ops-goto">Go to →</span>
-                        </div>
-                    </div>
-                </a>
-                {% elif last_cwl_war %}
-                {% set lc_side = last_cwl_war.clan_tag == CLAN_TAG %}
-                {% set lc_our_s = (last_cwl_war.clan_stars if lc_side else last_cwl_war.opp_stars) or 0 %}
-                {% set lc_opp_s = (last_cwl_war.opp_stars if lc_side else last_cwl_war.clan_stars) or 0 %}
-                {% set lc_our_name = last_cwl_war.clan_name if lc_side else last_cwl_war.opp_name %}
-                {% set lc_opp_name = last_cwl_war.opp_name if lc_side else last_cwl_war.clan_name %}
-                {% set lc_result = 'Won' if lc_our_s > lc_opp_s else ('Lost' if lc_our_s < lc_opp_s else 'Tied') %}
-                <a href="/cwl" class="ops-ticket idle-result" style="--mode:var(--ops-ink-dim);">
-                    <div class="ops-ticket-head">
-                        <span class="ops-ticket-mode">War League</span>
-                        <span class="ops-ticket-state">Last Round</span>
-                    </div>
-                    <div class="ops-score-row">
-                        <div class="ops-score-side">
-                            <div class="ops-score-num {{ 'ops-win-txt' if lc_result == 'Won' else ('ops-loss-txt' if lc_result == 'Lost' else '') }}">{{ lc_our_s }}★</div>
-                            <div class="ops-score-lbl">{{ lc_our_name or clan_name }}</div>
-                        </div>
-                        <div class="ops-score-sep">{{ lc_result }}</div>
-                        <div class="ops-score-side">
-                            <div class="ops-score-num {{ 'ops-win-txt' if lc_result == 'Lost' else ('ops-loss-txt' if lc_result == 'Won' else '') }}">{{ lc_opp_s }}★</div>
-                            <div class="ops-score-lbl">{{ lc_opp_name or 'Opponent' }}</div>
-                        </div>
-                    </div>
-                    <div class="ops-ticket-meta">
-                        <span>Round {{ last_cwl_war.round_number }}</span>
-                        <span>Ended {{ last_cwl_war.end_time | local_dt('%d.%m · %H:%M') }}</span>
-                    </div>
-                </a>
-                {% endif %}
-
-                {% if active_raid %}
-                <a href="/raid" class="ops-ticket" style="--mode:var(--ops-raid);">
-                    <div class="ops-ticket-head">
-                        <span class="ops-ticket-mode"><span class="ops-live-dot on"></span>Raid Weekend</span>
-                        <span class="ops-ticket-state">Ongoing</span>
-                    </div>
-                    <div class="ops-big-stat">
-                        {% if active_raid_est_medals %}
-                        <div class="ops-big-num">≈{{ active_raid_est_medals }}</div>
-                        <div class="ops-big-lbl">Est. medals (off. + avg def.)</div>
-                        {% else %}
-                        <div class="ops-big-num" style="color:var(--ops-ink-dim);">—</div>
-                        <div class="ops-big-lbl">Est. medals</div>
-                        {% endif %}
-                    </div>
-                    <div class="ops-ticket-meta">
-                        <span>Started {{ active_raid.start_time.strftime('%d.%m') if active_raid.start_time else '—' }}</span>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            {% if active_raid.end_time %}<span>Ends {{ active_raid.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
-                            <span class="ops-goto">Go to →</span>
-                        </div>
-                    </div>
-                </a>
-                {% elif last_raid %}
-                <a href="/raid" class="ops-ticket idle-result" style="--mode:var(--ops-ink-dim);">
-                    <div class="ops-ticket-head">
-                        <span class="ops-ticket-mode">Raid Weekend</span>
-                        <span class="ops-ticket-state">Last Raid</span>
-                    </div>
-                    <div class="ops-big-stat">
-                        <div class="ops-big-num">{{ "{:,}".format((last_raid.offensive_reward or 0) + (last_raid.defensive_reward or 0)) }}</div>
-                        <div class="ops-big-lbl">Medals earned</div>
-                    </div>
-                    <div class="ops-ticket-meta">
-                        <span>{{ last_raid.start_time.strftime('%d.%m') if last_raid.start_time else '—' }}</span>
-                        <span>Ended {{ last_raid.end_time | local_dt('%d.%m · %H:%M') }}</span>
-                    </div>
-                </a>
-                {% endif %}
-
-            </div>
-            {% else %}
-            <div class="clan-empty">No activity yet — <a href="/war">War</a> · <a href="/cwl">CWL</a> · <a href="/raid">Raid</a></div>
+                </div>
+            </a>
             {% endif %}
 
+            {% if active_cwl_season %}
+            <a href="/cwl" class="ops-ticket" style="--mode:var(--ops-elixir);">
+                <div class="ops-ticket-head">
+                    <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if active_cwl_war and active_cwl_war.state == 'inWar' }}"></span>War League</span>
+                    <span class="ops-ticket-state">{% if active_cwl_war and active_cwl_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+                </div>
+
+                {% if active_cwl_war and active_cwl_war.state == 'inWar' %}
+                {% set our_side = active_cwl_war.clan_tag == CLAN_TAG %}
+                {% set our_stars  = active_cwl_war.clan_stars   if our_side else active_cwl_war.opp_stars %}
+                {% set our_atk    = active_cwl_war.clan_attacks  if our_side else active_cwl_war.opp_attacks %}
+                {% set our_name   = active_cwl_war.clan_name    if our_side else active_cwl_war.opp_name %}
+                {% set opp_stars  = active_cwl_war.opp_stars    if our_side else active_cwl_war.clan_stars %}
+                {% set opp_atk    = active_cwl_war.opp_attacks   if our_side else active_cwl_war.clan_attacks %}
+                {% set opp_name   = active_cwl_war.opp_name     if our_side else active_cwl_war.clan_name %}
+                {% set our_s = our_stars or 0 %}
+                {% set opp_s = opp_stars or 0 %}
+                <div class="ops-score-row">
+                    <div class="ops-score-side">
+                        <div class="ops-score-num {{ 'ops-win-txt' if our_s > opp_s else ('ops-loss-txt' if our_s < opp_s else '') }}">{{ our_s }}★</div>
+                        <div class="ops-score-atk">{{ our_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
+                        <div class="ops-score-lbl">{{ our_name or clan_name }}</div>
+                    </div>
+                    <div class="ops-score-sep">{% if our_s > opp_s %}WINNING{% elif our_s < opp_s %}LOSING{% else %}TIED{% endif %}</div>
+                    <div class="ops-score-side">
+                        <div class="ops-score-num {{ 'ops-win-txt' if opp_s > our_s else ('ops-loss-txt' if opp_s < our_s else '') }}">{{ opp_s }}★</div>
+                        <div class="ops-score-atk">{{ opp_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
+                        <div class="ops-score-lbl">{{ opp_name or 'Opponent' }}</div>
+                    </div>
+                </div>
+                {% if cwl_win_status %}
+                <div style="text-align:center;margin-bottom:2px;">
+                    {% if cwl_win_status == 'safe_win' %}<span class="ops-ticket-state" style="--mode:var(--ops-win);color:var(--ops-win);border-color:rgba(62,192,106,.35);background:rgba(62,192,106,.12);">Safe Win</span>
+                    {% elif cwl_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:rgba(226,72,63,.35);background:rgba(226,72,63,.12);">Out of Reach</span>
+                    {% elif cwl_win_status == 'contested' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:rgba(217,164,65,.35);background:rgba(217,164,65,.12);">Undecided</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="ops-idle-msg">
+                    {% if active_cwl_war and active_cwl_war.start_time %}War starts {{ active_cwl_war.start_time | local_dt('%d.%m · %H:%M') }}
+                    {% else %}Season {{ active_cwl_season.season }} · {{ active_cwl_season.league_name or 'CWL' }}{% endif %}
+                </div>
+                {% endif %}
+
+                <div class="ops-ticket-meta">
+                    <span>{{ active_cwl_season.season }}{% if active_cwl_season.league_name %} · {{ active_cwl_season.league_name }}{% endif %}{% if active_cwl_war %} · Round {{ active_cwl_war.round_number }}{% endif %}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        {% if active_cwl_war and active_cwl_war.end_time %}<span>Ends {{ active_cwl_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        <span class="ops-goto">Go to →</span>
+                    </div>
+                </div>
+            </a>
+            {% endif %}
+
+            {% if active_raid %}
+            <a href="/raid" class="ops-ticket" style="--mode:var(--ops-raid);">
+                <div class="ops-ticket-head">
+                    <span class="ops-ticket-mode"><span class="ops-live-dot on"></span>Raid Weekend</span>
+                    <span class="ops-ticket-state">Ongoing</span>
+                </div>
+                <div class="ops-big-stat">
+                    {% if active_raid_est_medals %}
+                    <div class="ops-big-num">≈{{ active_raid_est_medals }}</div>
+                    <div class="ops-big-lbl">Est. medals (off. + avg def.)</div>
+                    {% else %}
+                    <div class="ops-big-num" style="color:var(--ops-ink-dim);">—</div>
+                    <div class="ops-big-lbl">Est. medals</div>
+                    {% endif %}
+                </div>
+                <div class="ops-ticket-meta">
+                    <span>Started {{ active_raid.start_time.strftime('%d.%m') if active_raid.start_time else '—' }}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        {% if active_raid.end_time %}<span>Ends {{ active_raid.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        <span class="ops-goto">Go to →</span>
+                    </div>
+                </div>
+            </a>
+            {% endif %}
+
+            {% if not (active_war or active_cwl_season or active_raid) %}
             <div class="ops-pulse">
                 <div class="ops-pulse-row">
                     <a href="/clan" class="ops-pulse-item">
@@ -489,8 +442,8 @@
                     </a>
                 </div>
             </div>
+            {% endif %}
         </div>
-
     </div>
 </section>
 
