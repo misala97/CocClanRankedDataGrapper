@@ -34,75 +34,6 @@ DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest 
 
 STAGNATION_THRESHOLD = 4  # sessions without a new estimated-1RM PR before nudging toward progressive overload
 
-# Parses the "Strong app" text-share format:
-#   <workout name>
-#   <weekday>, <day>. <German month> <year> um <HH:MM>
-#   (blank line)
-#   <exercise name>
-#   Set 1: <weight> kg × <reps>
-#   ...
-GERMAN_MONTHS = {
-    'januar': 1, 'februar': 2, 'märz': 3, 'april': 4, 'mai': 5, 'juni': 6,
-    'juli': 7, 'august': 8, 'september': 9, 'oktober': 10, 'november': 11, 'dezember': 12,
-}
-IMPORT_DATE_LINE_RE = re.compile(r'^\w+,\s*(\d{1,2})\.\s*(\w+)\s+(\d{4})\s+um\s+(\d{1,2}):(\d{2})$', re.IGNORECASE)
-IMPORT_SET_LINE_RE = re.compile(r'^Set\s+\d+:\s*([\d.,]+)\s*kg\s*[×x]\s*(\d+)\s*$', re.IGNORECASE)
-
-
-def _parse_german_datetime(line):
-    m = IMPORT_DATE_LINE_RE.match(line.strip())
-    if not m:
-        return None
-    day, month_name, year, hour, minute = m.groups()
-    month = GERMAN_MONTHS.get(month_name.lower())
-    if not month:
-        return None
-    try:
-        return dt.datetime(int(year), month, int(day), int(hour), int(minute))
-    except ValueError:
-        return None
-
-
-def _parse_import_text(text):
-    """Splits pasted text into one or more workouts. A "<name>\\n<date line>"
-    pair starts a new workout; anything else is treated as an exercise name
-    (if followed by "Set N: ..." lines) or a set line."""
-    lines = [l.strip() for l in text.splitlines()]
-    workouts = []
-    i = 0
-    n = len(lines)
-    current_workout = None
-    current_exercise = None
-
-    while i < n:
-        line = lines[i]
-        if not line:
-            i += 1
-            continue
-
-        if i + 1 < n:
-            started_at = _parse_german_datetime(lines[i + 1])
-            if started_at:
-                current_workout = {'name': line, 'started_at': started_at, 'exercises': []}
-                workouts.append(current_workout)
-                current_exercise = None
-                i += 2
-                continue
-
-        set_match = IMPORT_SET_LINE_RE.match(line)
-        if set_match and current_exercise is not None:
-            weight = float(set_match.group(1).replace(',', '.'))
-            reps = int(set_match.group(2))
-            current_exercise['sets'].append({'weight': weight, 'reps': reps})
-            i += 1
-            continue
-
-        if current_workout is not None:
-            current_exercise = {'name': line, 'sets': []}
-            current_workout['exercises'].append(current_exercise)
-        i += 1
-
-    return workouts
 
 
 def _to_float(value, fallback=None):
@@ -431,6 +362,26 @@ def _session_summary_data(session_):
     }
 
 
+def _group_exercises_by_muscle(exercises):
+    """Buckets exercises by MUSCLE_GROUPS (in that fixed vocabulary's
+    order), with anything that doesn't match a current group -- no
+    muscle_group set, or a legacy free-text value from before the enum
+    existed -- collected into a trailing "Sonstige" bucket instead of being
+    silently dropped. `exercises` is expected pre-sorted by name (as
+    gym_dashboard already queries it), so each bucket stays alphabetical."""
+    grouped = {mg: [] for mg in MUSCLE_GROUPS}
+    other = []
+    for e in exercises:
+        if e.muscle_group in grouped:
+            grouped[e.muscle_group].append(e)
+        else:
+            other.append(e)
+    result = [(mg, grouped[mg]) for mg in MUSCLE_GROUPS if grouped[mg]]
+    if other:
+        result.append(('Sonstige', other))
+    return result
+
+
 @gym_bp.route('/gym', strict_slashes=False)
 @login_required
 def gym_dashboard():
@@ -448,64 +399,12 @@ def gym_dashboard():
         'gym/dashboard.html',
         active_session=active_session,
         exercises=exercises,
+        exercises_by_group=_group_exercises_by_muscle(exercises),
         templates=templates,
         past_sessions=past_sessions,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
     )
-
-
-@gym_bp.route('/gym/import', methods=['POST'])
-@login_required
-def gym_import():
-    parsed_workouts = _parse_import_text(request.form.get('text', ''))
-
-    imported = 0
-    skipped = 0
-    total_sets = 0
-
-    for w in parsed_workouts:
-        if not w['exercises']:
-            continue
-        # Same name + exact same timestamp already imported -- skip rather
-        # than create a duplicate if the same text gets pasted twice.
-        if WorkoutSession.query.filter_by(name=w['name'], started_at=w['started_at']).first():
-            skipped += 1
-            continue
-
-        session_ = WorkoutSession(name=w['name'], started_at=w['started_at'], finished_at=w['started_at'])
-        position = 1
-        for ex in w['exercises']:
-            if not ex['sets']:
-                continue
-            # Fall back to matching on previous_name -- text pasted from an
-            # older export can still use a name that's since been renamed via
-            # gym_update_exercise, and without this fallback that would
-            # silently create a duplicate Exercise instead of matching the
-            # existing one.
-            exercise = (
-                Exercise.query.filter_by(name=ex['name']).first()
-                or Exercise.query.filter_by(previous_name=ex['name']).first()
-            )
-            if not exercise:
-                exercise = Exercise(name=ex['name'], default_rest_seconds=DEFAULT_REST_SECONDS)
-                db.session.add(exercise)
-                db.session.flush()
-            session_exercise = SessionExercise(exercise_id=exercise.id, position=position)
-            position += 1
-            for j, s in enumerate(ex['sets'], start=1):
-                # completed=True -- these are historical sets that already
-                # happened, not suggestions waiting to be confirmed.
-                session_exercise.sets.append(SessionSet(position=j, weight=s['weight'], reps=s['reps'], completed=True))
-            session_.exercises.append(session_exercise)
-            total_sets += len(ex['sets'])
-
-        if session_.exercises:
-            db.session.add(session_)
-            imported += 1
-
-    db.session.commit()
-    return redirect(url_for('gym.gym_dashboard', imported=imported, skipped=skipped, imported_sets=total_sets))
 
 
 @gym_bp.route('/gym/start', methods=['POST'])

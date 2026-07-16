@@ -9,153 +9,18 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
-    <meta name="theme-color" content="#0b0d14">
+    <meta name="theme-color" content="#0a0a0a">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg:      #0b0d14;
-            --surface: #131722;
-            --surf2:   #1a1f2e;
-            --border:  #272c3d;
-            --bord2:   #1e2333;
-            --text:    #eef0f7;
-            --muted:   #8b91a7;
-            --accent:  #6d6af6;
-            --acc2:    #22d3ee;
-            --green:   #34d399;
-            --red:     #fb7185;
-        }
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        body::before {
-            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-            background:
-                radial-gradient(ellipse 60% 40% at 15% 0%, rgba(109,106,246,0.10) 0%, transparent 60%),
-                radial-gradient(ellipse 50% 40% at 100% 20%, rgba(34,211,238,0.07) 0%, transparent 60%);
-        }
-        a { text-decoration: none; color: inherit; }
-
-        nav {
-            position: sticky; top: 0; z-index: 100;
-            background: rgba(11,13,20,0.92);
-            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-            border-bottom: 1px solid var(--border);
-        }
-        .nav-inner {
-            max-width: 1000px; margin: 0 auto; padding: 0 32px;
-            height: 62px; display: flex; align-items: center; justify-content: space-between;
-        }
-        .nav-logo { display: flex; align-items: center; gap: 10px; }
-        .logo-icon {
-            width: 36px; height: 36px;
-            background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border-radius: 10px; display: flex; align-items: center; justify-content: center;
-            font-size: 17px;
-        }
-        .nav-logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
-        .nav-links { display: flex; align-items: center; gap: 6px; }
-        .nav-links a {
-            font-size: 13px; font-weight: 500; color: var(--muted);
-            padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
-        }
-        .nav-links a:hover { color: var(--text); background: var(--surf2); }
-
-        .page-wrap { max-width: 1000px; margin: 0 auto; padding: 32px 32px 56px; position: relative; z-index: 1; }
-        h1 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; margin-bottom: 4px; }
-        h2 { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; }
-
-        .card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 16px; overflow: hidden; margin-bottom: 20px;
-        }
-        .card-header {
-            padding: 14px 18px; border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .card-body { padding: 18px; }
-
-        .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; }
-        .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-        .form-group input, .form-group select, .form-group textarea {
-            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text); padding: 7px 10px; font-size: 13px; font-family: inherit;
-            transition: border-color 0.15s;
-        }
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
-        .form-group.grow { flex: 1; min-width: 130px; }
-        .form-group.grow input, .form-group.grow select { width: 100%; }
-        .num-input { width: 90px; }
-
-        .btn {
-            padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
-            font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
-            white-space: nowrap;
-        }
-        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--acc2)); color: #0b0d14; border-color: transparent; }
-        .btn-primary:hover { opacity: 0.9; }
-        .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
-        .btn-ghost:hover { color: var(--text); border-color: var(--text); }
-        .btn-danger { background: transparent; color: var(--red); border-color: var(--red); }
-        .btn-danger:hover { background: rgba(251,113,133,0.1); }
-        .btn-sm { padding: 4px 10px; font-size: 12px; }
-
-        .active-session { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; }
-        .active-session .name { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; }
-        .active-session .elapsed { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700; color: var(--acc2); }
-
-        .list-row {
-            display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            padding: 10px 18px; border-bottom: 1px solid var(--bord2); font-size: 13px;
-        }
-        .list-row:last-child { border-bottom: none; }
-        .list-row .main { font-weight: 600; }
-        .list-row .meta { font-size: 11px; color: var(--muted); }
-        .list-row .actions { display: flex; align-items: center; gap: 8px; }
-
-        .empty { text-align: center; padding: 36px; color: var(--muted); font-size: 14px; }
-
-        @media (max-width: 700px) {
-            .page-wrap { padding: 24px 16px 40px; }
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
 </head>
 <body>
 
-<nav>
-    <div class="nav-inner">
-        <div class="nav-logo">
-            <div class="logo-icon">🏋️</div>
-            <span>Gym Tracker</span>
-        </div>
-        <div class="nav-links">
-            <a href="/">Übersicht</a>
-            <a href="/logout">Logout</a>
-        </div>
-    </div>
-</nav>
+{% include 'gym/_nav.html' %}
 
-<div class="page-wrap">
+<div class="gym-page-wrap">
     <h1>Gym Tracker</h1>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:24px">Workouts, Sätze und Fortschritt verfolgen</p>
-
-    {% if request.args.get('imported') is not none %}
-    <div class="card" style="border-color:var(--accent)">
-        <div class="card-body">
-            {% set imported = request.args.get('imported', 0)|int %}
-            {% set skipped = request.args.get('skipped', 0)|int %}
-            {% set imported_sets = request.args.get('imported_sets', 0)|int %}
-            {% if imported %}
-            <span>{{ imported }} Workout{{ 's' if imported != 1 }} importiert ({{ imported_sets }} Sätze){% if skipped %} · {{ skipped }} übersprungen (bereits importiert){% endif %}</span>
-            {% elif skipped %}
-            <span>Nichts importiert -- {{ skipped }} Workout{{ 's' if skipped != 1 }} bereits vorhanden.</span>
-            {% else %}
-            <span>Keine Workouts im eingefügten Text erkannt. Bitte im Format der Quell-App einfügen (Name, Datum, dann Übungen mit "Set 1: Gewicht kg × Wdh.").</span>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
+    <p style="color:var(--gym-muted);font-size:14px;margin-bottom:24px">Workouts, Sätze und Fortschritt verfolgen</p>
 
     {% if active_session %}
     <div class="card">
@@ -194,7 +59,7 @@
     </div>
     {% endif %}
 
-    <div class="card">
+    <div class="card" id="history">
         <div class="card-header"><h2>Vergangene Workouts</h2></div>
         {% if past_sessions %}
         <div>
@@ -241,30 +106,35 @@
         {% endif %}
     </div>
 
-    <div class="card">
+    <div class="card" id="exercises">
         <div class="card-header"><h2>Übungen</h2></div>
-        {% if exercises %}
-        <div>
-            {% for e in exercises %}
-            <div class="list-row">
-                <a href="{{ url_for('gym.exercise_detail', exercise_id=e.id) }}">
-                    <div class="main">{{ e.name }}</div>
-                    <div class="meta">{{ e.muscle_group or '—' }}{% if e.default_rest_seconds %} · {{ e.default_rest_seconds }}s Pause{% endif %}</div>
-                </a>
-                <div class="actions">
-                    {% if not e.session_exercises and not e.template_exercises %}
-                    <form method="post" action="{{ url_for('gym.gym_delete_exercise', exercise_id=e.id) }}" onsubmit="return confirm('Übung löschen?')">
-                        <button type="submit" class="btn btn-danger btn-sm">Löschen</button>
-                    </form>
-                    {% endif %}
+        {% if exercises_by_group %}
+        {% for group_name, group_exercises in exercises_by_group %}
+        <div class="gym-muscle-section">
+            <div class="gym-muscle-header">{{ group_name }} ({{ group_exercises|length }})</div>
+            <div class="gym-muscle-rows">
+                {% for e in group_exercises %}
+                <div class="list-row">
+                    <a href="{{ url_for('gym.exercise_detail', exercise_id=e.id) }}">
+                        <div class="main">{{ e.name }}</div>
+                        <div class="meta">{% if e.default_rest_seconds %}{{ e.default_rest_seconds }}s Pause{% endif %}</div>
+                    </a>
+                    <div class="actions">
+                        {% if not e.session_exercises and not e.template_exercises %}
+                        <form method="post" action="{{ url_for('gym.gym_delete_exercise', exercise_id=e.id) }}" onsubmit="return confirm('Übung löschen?')">
+                            <button type="submit" class="btn btn-danger btn-sm">Löschen</button>
+                        </form>
+                        {% endif %}
+                    </div>
                 </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
+        {% endfor %}
         {% else %}
         <div class="empty">Noch keine Übungen im Katalog.</div>
         {% endif %}
-        <div class="card-body" style="border-top:1px solid var(--border)">
+        <div class="card-body" style="border-top:1px solid var(--gym-border)">
             <form method="post" action="{{ url_for('gym.gym_add_exercise') }}">
                 <div class="form-row">
                     <div class="form-group grow">
@@ -291,22 +161,6 @@
                         </label>
                     </div>
                     <button type="submit" class="btn btn-primary">Hinzufügen</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header"><h2>Workouts importieren</h2></div>
-        <div class="card-body">
-            <p style="color:var(--muted);font-size:12px;margin-bottom:10px">
-                Text aus einer anderen App einfügen (z.B. "Strong"-Freigabe-Format). Mehrere Workouts können auf einmal eingefügt werden.
-                Erwartetes Format: Workout-Name, dann Datum ("Sonntag, 14. Juni 2026 um 13:24"), dann pro Übung "Set 1: 30 kg × 10".
-            </p>
-            <form method="post" action="{{ url_for('gym.gym_import') }}">
-                <textarea name="text" rows="6" style="width:100%;resize:vertical;font-family:inherit;font-size:13px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px" placeholder="Workout-Text hier einfügen…" required></textarea>
-                <div style="margin-top:10px">
-                    <button type="submit" class="btn btn-primary">Importieren</button>
                 </div>
             </form>
         </div>
