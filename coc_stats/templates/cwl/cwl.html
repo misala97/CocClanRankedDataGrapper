@@ -1778,7 +1778,7 @@ function buildVerdictDetails(v) {
             <span style="font-weight:600;">${escapeHTML(atk.defender_name)}</span>
             <span style="color:var(--muted);font-size:11px;">TH${atk.defender_th}</span>
             <span style="font-weight:700;font-size:11px;color:${diffColor};">(${diffStr})</span>
-            <span style="margin-left:auto;font-size:15px;">${renderStars(actual, false)}</span>
+            <span style="margin-left:auto;font-size:15px;">${renderStars(actual, { size: '1.0em' })}</span>
             <span style="color:var(--muted);font-size:12px;">${atk.pct}%</span>
         </div>
 

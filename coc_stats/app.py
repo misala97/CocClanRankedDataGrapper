@@ -121,6 +121,13 @@ def _newbie_check_count():
     except Exception:
         return 0
 
+def _clan_badge_url():
+    try:
+        latest_war = ClanWar.query.order_by(ClanWar.start_time.desc()).first()
+        return latest_war.clan_badge if latest_war and latest_war.clan_badge else None
+    except Exception:
+        return None
+
 @app.context_processor
 def inject_auth():
     return {
@@ -131,6 +138,7 @@ def inject_auth():
         'can_edit_clan_war': _can_edit_clan_war(),
         'nav_task_status': _nav_task_status(),
         'newbie_check_count': _newbie_check_count(),
+        'clan_badge_url': _clan_badge_url(),
     }
 
 # ── Core routes ───────────────────────────────────────────────────────────────

@@ -8,9 +8,14 @@
     {% if chartjs %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endif %}
     {% if chartjs_adapter %}<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>{% endif %}
     <script src="/static/js/float_tooltip.js"></script>
+    <script src="/static/js/render_stars.js"></script>
     <script>
         window.VERDICT_LABELS = {'badge-godlike':'Godlike','badge-dominant':'Dominant','badge-wow':'Very Good','badge-good':'Good','badge-warning':'Bad','badge-suck':'Disaster','badge-useless':'Useless','badge-inactive':'Inactive'};
         window.VERDICT_COLORS = {'badge-godlike':'#bc8cff','badge-dominant':'#f0a500','badge-wow':'#3fb950','badge-good':'#58a6ff','badge-warning':'#e8793a','badge-suck':'#f85149','badge-useless':'#8b949e','badge-inactive':'#3d4f66'};
+        function debounce(fn, delay = 200) {
+            let t;
+            return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+        }
     </script>
     <style>
         /* Canonical sitewide palette. Names are kept stable on purpose — dozens of
@@ -126,7 +131,7 @@
             .page-header { padding: 13px 0; }
             .page-header-inner { padding: 0 20px; }
             .page-header-controls .controls { padding: 0 20px; }
-            .page-header h1 { letter-spacing: .2px; }
+            .page-header h1 { font-size: 36px; letter-spacing: .2px; }
             .page-controls { padding: 0 20px 12px; }
         }
         @media (max-width: 480px) {

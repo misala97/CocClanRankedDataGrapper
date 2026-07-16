@@ -941,13 +941,6 @@ function avg(arr) { return arr.length ? arr.reduce((a,b) => a+b,0) / arr.length 
 function clamp(v,lo,hi) { return Math.max(lo, Math.min(hi, v)); }
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 
-function renderStars(n, big) {
-    n = parseInt(n) || 0;
-    const sz = big ? '1.18em' : '1.0em';
-    return `<span style="font-size:${sz};letter-spacing:1px;color:var(--yellow)">${'★'.repeat(n)}</span>`
-         + `<span style="font-size:${sz};letter-spacing:1px;color:var(--muted);opacity:.4">${'☆'.repeat(3-n)}</span>`;
-}
-
 const ATTACK_LABEL_MAP = {
     'clear':           ['Clear',          'ap-clear'],
     'failed_clear':    ['Failed Clear',    'ap-failed-clear'],
@@ -1129,7 +1122,7 @@ function buildAttackLogHTML(attacks) {
             <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.defender_pos}</td>
             <td style="font-weight:600">${escapeHTML(a.defender_name)}</td>
             <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.defender_th}</td>
-            <td>${renderStars(a.stars)}</td>
+            <td>${renderStars(a.stars, { size: '1.0em' })}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-weight:700;color:${sc}">${a.pct}%</td>
             <td>${renderAttackLabel(a.label)}</td>
         </tr>`;

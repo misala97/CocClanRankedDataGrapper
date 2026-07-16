@@ -2,10 +2,6 @@
 <html lang="en">
 {% set page_title = 'Raid Weekend – CoC Analytics' %}
 {% include '_head.html' %}
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=JetBrains+Mono:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
         /* This page lives entirely under the Raid identity (--ops-raid, already
            reserved for it on the homepage tiles), so its shared chrome is retinted
            red via body.raid-page — _head.html / _nav.html stay untouched for
@@ -300,7 +296,7 @@
     </select>
 </form>
 <div class="ctrl-divider" style="margin-left:auto;"></div>
-<input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="buildTable()" style="min-width:180px;">
+<input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="debouncedBuildTable()" style="min-width:180px;">
 {% endif %}
 {% endset %}
 {% include '_page_header.html' %}
@@ -464,13 +460,6 @@ function escapeHTML(s) {
     return String(s || '').replace(/[&<>"']/g, c =>
         ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
     );
-}
-
-function renderStars(n) {
-    n = parseInt(n) || 0;
-    const filled = `<span style="color:var(--yellow);">${'★'.repeat(n)}</span>`;
-    const empty  = `<span style="color:var(--ops-ink-dim);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
-    return `<span style="font-size:1.18em;letter-spacing:1px;">${filled}${empty}</span>`;
 }
 
 const MAX_ATTACKS = 6;
@@ -656,7 +645,7 @@ function buildTable() {
         row.innerHTML = `
             <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="${profileUrl}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftBadge}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
             <td><span class="att-count">${p.att_count}</span></td>
-            <td><span class="loot-cell">${p.capital_loot ? p.capital_loot.toLocaleString() : '—'}</span></td>
+            <td><span class="loot-cell">${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'}</span></td>
             <td><span class="avgpct-cell" style="color:var(--blue);">${p.avg_pct}%</span></td>
             <td><span class="solowipe-cell" style="color:var(--green);">${p.solo_wipes}</span></td>
             <td><span class="solowipe-cell" style="color:var(--ops-ink-dim);">${p.cleanup_count}</span></td>
@@ -696,6 +685,7 @@ function buildTable() {
     document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown · ${soloWipes} solo wipe${soloWipes !== 1 ? 's' : ''}${totalLoot > 0 ? ' · ' + totalLoot.toLocaleString() + ' capital loot' : ''}`;
     updateSortHeaders();
 }
+const debouncedBuildTable = debounce(buildTable, 200);
 
 function buildMobileCards(rows) {
     const list = document.getElementById('mobileList');
@@ -722,7 +712,7 @@ function buildMobileCards(rows) {
             </div>
             <div class="mc-verdict"><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:.6;font-size:.9em;">·</span> ${p.score_100}` : ''}</span></div>
             <div class="mc-stats">
-                <div class="mc-stat"><div class="mc-stat-lbl">Loot</div><div class="mc-stat-val" style="color:var(--ops-gold);">${p.capital_loot ? p.capital_loot.toLocaleString() : '—'}</div></div>
+                <div class="mc-stat"><div class="mc-stat-lbl">Loot</div><div class="mc-stat-val" style="color:var(--ops-gold);">${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'}</div></div>
                 <div class="mc-stat"><div class="mc-stat-lbl">Avg %</div><div class="mc-stat-val" style="color:var(--blue);">${p.avg_pct}%</div></div>
                 <div class="mc-stat"><div class="mc-stat-lbl">Solo Wipes</div><div class="mc-stat-val" style="color:var(--green);">${p.solo_wipes}</div></div>
                 <div class="mc-stat"><div class="mc-stat-lbl">Cleanups</div><div class="mc-stat-val" style="color:var(--ops-ink-dim);">${p.cleanup_count}</div></div>

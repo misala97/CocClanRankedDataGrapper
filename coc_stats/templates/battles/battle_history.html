@@ -226,7 +226,7 @@
 <div class="ctrl-divider" style="margin-left:auto;"></div>
 <button type="button" id="toggleLeftBtn" class="action-btn" onclick="toggleLeftFilter()">Show left</button>
 <div class="ctrl-divider"></div>
-<input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="buildTable()" style="min-width:180px;">
+<input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="debouncedBuildTable()" style="min-width:180px;">
 {% endset %}
 {% include '_page_header.html' %}
 
@@ -359,11 +359,6 @@
         return `<span class="type-badge type-other">${escapeHTML(t || '–')}</span>`;
     }
 
-    function renderStars(n) {
-        n = Math.min(parseInt(n) || 0, 3);
-        return `<span style="font-size:1.18em;letter-spacing:1px;color:var(--loot-gold);">${'★'.repeat(n)}</span><span style="font-size:1.18em;letter-spacing:1px;color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
-    }
-
     function parseLocalTime(ts) {
         // ts = "2025-05-15T14:32:00+02:00" — already server-local time.
         // Avoid new Date() which would re-interpret in browser TZ.
@@ -466,7 +461,7 @@
             <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-weight:600;">${escapeHTML(l.time)}</td>
             <td>${escapeHTML(l.opponent_tag)}</td>
             <td>${formatType(l.type)}</td>
-            <td>${renderStars(l.stars)}</td>
+            <td>${renderStars(l.stars, { filled: 'var(--loot-gold)' })}</td>
             <td>${l.percentage ?? 0}%</td>
             <td style="color:var(--loot-gold);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.gold)}</td>
             <td style="color:var(--loot-elixir);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.elixir)}</td>
@@ -513,7 +508,7 @@
                 <td style="font-weight:600;">${escapeHTML(l.player_name)}</td>
                 <td>${escapeHTML(l.opponent_tag)}</td>
                 <td>${formatType(l.type)}</td>
-                <td>${renderStars(l.stars)}</td>
+                <td>${renderStars(l.stars, { filled: 'var(--loot-gold)' })}</td>
                 <td>${l.percentage ?? 0}%</td>
                 <td style="color:var(--loot-gold);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.gold)}</td>
                 <td style="color:var(--loot-elixir);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.elixir)}</td>
@@ -649,6 +644,7 @@
         document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown · ${totalAttacks} attack${totalAttacks !== 1 ? 's' : ''}`;
         updateSortHeaders();
     }
+    const debouncedBuildTable = debounce(buildTable, 200);
 
     function sortTable(col) {
         if (currentSort.column === col) {

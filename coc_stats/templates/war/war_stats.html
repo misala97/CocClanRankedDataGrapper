@@ -456,13 +456,6 @@ function esc(s) { const d=document.createElement('div'); d.appendChild(document.
 
 function medal(i) { return i===0?'🥇':i===1?'🥈':i===2?'🥉':''; }
 
-function renderStars(n) {
-    n = parseInt(n) || 0;
-    const filled = `<span style="color:var(--yellow);">${'★'.repeat(n)}</span>`;
-    const empty  = `<span style="color:var(--muted);opacity:0.4;">${'☆'.repeat(3 - n)}</span>`;
-    return `<span style="font-size:1.18em;letter-spacing:1px;">${filled}${empty}</span>`;
-}
-
 function starPips(avg) {
     return `<div class="star-pips">${renderStars(Math.round(avg))}</div>`;
 }
