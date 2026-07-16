@@ -1,6 +1,5 @@
 import datetime as dt
 import os
-import re
 
 from flask import Blueprint, current_app, jsonify, render_template, request, redirect, send_from_directory, url_for
 from sqlalchemy.exc import IntegrityError
@@ -366,9 +365,10 @@ def _group_exercises_by_muscle(exercises):
     """Buckets exercises by MUSCLE_GROUPS (in that fixed vocabulary's
     order), with anything that doesn't match a current group -- no
     muscle_group set, or a legacy free-text value from before the enum
-    existed -- collected into a trailing "Sonstige" bucket instead of being
-    silently dropped. `exercises` is expected pre-sorted by name (as
-    gym_dashboard already queries it), so each bucket stays alphabetical."""
+    existed -- collected into a trailing "Ohne Muskelgruppe" bucket instead
+    of being silently dropped. `exercises` is expected pre-sorted by name
+    (as gym_dashboard already queries it), so each bucket stays
+    alphabetical."""
     grouped = {mg: [] for mg in MUSCLE_GROUPS}
     other = []
     for e in exercises:
@@ -378,7 +378,7 @@ def _group_exercises_by_muscle(exercises):
             other.append(e)
     result = [(mg, grouped[mg]) for mg in MUSCLE_GROUPS if grouped[mg]]
     if other:
-        result.append(('Sonstige', other))
+        result.append(('Ohne Muskelgruppe', other))
     return result
 
 
@@ -398,7 +398,6 @@ def gym_dashboard():
     return render_template(
         'gym/dashboard.html',
         active_session=active_session,
-        exercises=exercises,
         exercises_by_group=_group_exercises_by_muscle(exercises),
         templates=templates,
         past_sessions=past_sessions,
@@ -886,9 +885,9 @@ def gym_update_exercise(exercise_id):
         if Exercise.query.filter_by(name=new_name).first():
             name_taken = True  # surfaced to the user below instead of silently skipping the rename
         else:
-            # Remember the old name so a later import of text that still uses
-            # it (e.g. an older saved export) finds this exercise instead of
-            # creating a duplicate -- see gym_import's lookup.
+            # Remember the old name so anything still referencing it (e.g.
+            # historical data, or a rename made by mistake) can still
+            # resolve to this exercise instead of creating a duplicate.
             exercise.previous_name = exercise.name
             exercise.name = new_name
     exercise.muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''), current=exercise.muscle_group)
