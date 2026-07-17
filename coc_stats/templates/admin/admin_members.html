@@ -83,9 +83,10 @@
 {% include '_nav.html' %}
 
 {% set page_header_title = 'Member <span>Administration</span>' %}
-{% set page_header_desc = (players | length) ~ ' active members · Comments and group chat status' %}
+{% set page_header_desc = 'Comments and group chat status' %}
+{% set page_header_meta = [{'value': players | length, 'label': 'Active members'}] %}
 {% set page_controls %}
-<input type="search" class="selector" id="search" placeholder="🔍 Search player…" oninput="filterTable()" style="min-width:280px;">
+<input type="search" class="selector" id="search" placeholder="Search player…" oninput="filterTable()" style="min-width:280px;">
 <span class="count-label" id="countLabel" style="color:var(--muted);font-size:13px;margin-left:4px;">{{ players | length }} members</span>
 {% endset %}
 {% include '_page_header.html' %}

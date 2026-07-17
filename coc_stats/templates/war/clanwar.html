@@ -560,7 +560,7 @@
 
 {% set page_header_title = 'Clan <span>War</span>' %}
 {% set page_header_desc = 'Attack logs, star counts and member performance per war.' %}
-{% set page_controls %}
+{% set page_primary_control %}
 {% if war_options %}
 <label>War</label>
 <form method="GET" style="display:contents;">
@@ -571,6 +571,8 @@
     </select>
 </form>
 {% endif %}
+{% endset %}
+{% set page_controls %}
 {% if war and members_our and members_opp %}
 <button class="compare-btn" onclick="openWarMatchupRates()" style="margin-left:auto;">📊 TH Matchup Rates</button>
 <button class="compare-btn" onclick="openWarPlayerRates()">👤 Player Rates</button>

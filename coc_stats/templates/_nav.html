@@ -98,7 +98,7 @@
 
     /* ── STATUS STRIP: row 2. A hairline when every sync is healthy; expands only
        to name what's not. ResizeObserver below keeps --nav-h in sync so every
-       sticky-below-nav element (.page-header, .page-controls, per-page .controls)
+       sticky-below-nav element (.page-toolbar, per-page .controls)
        tracks the real height instead of assuming a fixed bar. ── */
     .nav-status { height: 4px; }
     .nav-status[data-expanded="true"] { height: auto; }
@@ -349,7 +349,7 @@
 (function () {
     // Keeps --nav-h in sync with the real rendered nav height (row 1 + the
     // status strip, whichever state it's in) so every sticky-below-nav
-    // element sitewide (.page-header, .page-controls, per-page .controls)
+    // element sitewide (.page-toolbar, per-page .controls)
     // sits flush against the bar instead of assuming a fixed height.
     var navEl = document.querySelector('nav');
     if (!navEl) return;

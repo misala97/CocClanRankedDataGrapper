@@ -79,13 +79,17 @@
 
 {% set period_labels = {'week': 'last 7 days', 'month': 'last 30 days', '6months': 'last 6 months'} %}
 {% set page_header_title = 'Clan <span>Roster</span>' %}
-{% set page_header_desc = (player_cards|length)|string ~ ' members · ' ~ period_labels.get(period, period) %}
-{% set page_controls %}
+{% set page_header_meta = [
+    {'value': player_cards|length, 'label': 'Members'},
+    {'value': period_labels.get(period, period), 'label': 'Window'},
+] %}
+{% set page_primary_control %}
 <label>Period</label>
 <a href="?period=week"    class="action-btn{% if period == 'week' %} active{% endif %}">1 Week</a>
 <a href="?period=month"   class="action-btn{% if period == 'month' %} active{% endif %}">1 Month</a>
 <a href="?period=6months" class="action-btn{% if period == '6months' %} active{% endif %}">6 Months</a>
-<div class="ctrl-divider"></div>
+{% endset %}
+{% set page_controls %}
 <input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="debouncedApplyFilters()" style="min-width:180px;">
 <span id="resultCount" class="result-count"></span>
 <div class="ctrl-divider" style="margin-left:auto;"></div>

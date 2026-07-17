@@ -422,7 +422,7 @@
 
 {% set page_header_title = 'Clan War <span>League</span>' %}
 {% set page_header_desc = 'Season standings and per-round war performance.' %}
-{% set page_controls %}
+{% set page_primary_control %}
 {% if seasons %}
 <label>Season</label>
 <form method="GET" style="display:contents;">
@@ -435,8 +435,14 @@
     </select>
 </form>
 {% endif %}
-{% if season and season.state == 'ended' %}<button class="compare-btn" onclick="openCWLOverview()" style="margin-left:auto;">🏆 Season Overview</button>{% else %}<span style="margin-left:auto;"></span>{% endif %}
+{% endset %}
+{% set page_controls %}
+{% if season and season.state == 'ended' %}
+<button class="compare-btn" onclick="openCWLOverview()" style="margin-left:auto;">🏆 Season Overview</button>
 <button class="compare-btn" onclick="openMatchupRates()">📊 TH Matchup Rates</button>
+{% else %}
+<button class="compare-btn" onclick="openMatchupRates()" style="margin-left:auto;">📊 TH Matchup Rates</button>
+{% endif %}
 <button class="compare-btn" onclick="openCWLPlayerRates()">👤 Player Rates</button>
 {% endset %}
 {% include '_page_header.html' %}

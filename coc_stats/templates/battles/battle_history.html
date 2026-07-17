@@ -293,8 +293,8 @@
 {% include '_nav.html' %}
 
 {% set page_header_title = 'Battle <span>History</span>' %}
-{% set page_header_desc = week_label ~ ' · Attacks only' %}
-{% set page_controls %}
+{% set page_header_desc = 'Per-attack log for the selected week · attacks only' %}
+{% set page_primary_control %}
 <form method="GET" style="display:contents;">
     <label>Week</label>
     <select name="week" class="selector week-sel" onchange="this.form.submit()">
@@ -316,7 +316,8 @@
         <option value="homeVillage" {% if selected_type == 'homeVillage' %}selected{% endif %}>Home Battle</option>
     </select>
 </form>
-<div class="ctrl-divider" style="margin-left:auto;"></div>
+{% endset %}
+{% set page_controls %}
 <button type="button" id="toggleLeftBtn" class="action-btn" onclick="toggleLeftFilter()">Show left</button>
 <div class="ctrl-divider"></div>
 <input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="debouncedBuildTable()" style="min-width:180px;">

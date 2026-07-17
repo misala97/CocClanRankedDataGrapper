@@ -71,54 +71,76 @@
             font-family: 'Manrope', sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,.5); max-width: 320px;
         }
 
-        /* ── PAGE HEADER ── */
-        .page-header {
-            position: sticky;
-            top: var(--nav-h, 63px);
-            z-index: 99;
-            background: var(--bg);
-            padding: 15px 0;
-            border-bottom: 1px solid color-mix(in oklch, var(--accent) 15%, transparent);
-        }
-        .page-header-controls { padding: 0; }
-        .page-header-controls .controls { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
-        .page-header::before {
-            content: ''; position: absolute; inset: 0;
-            background: radial-gradient(ellipse 45% 150% at 5% 50%, color-mix(in oklch, var(--accent) 9%, transparent), transparent 65%);
-            pointer-events: none;
-        }
-        .page-header-inner {
-            max-width: 1400px; margin: 0 auto;
-            padding: 0 32px;
+        /* ── PAGE HEADER ──
+           Title + desc + meta readout scroll away; only the controls toolbar
+           pins under the nav (see .page-toolbar). No accent side-stripe or glow —
+           the display type and the mono readout carry the identity, per the
+           DESIGN.md bans (no >1px colored side stripe, no decorative glow). */
+        .page-header { padding: 26px 0 0; }
+        .page-header-inner { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+        .page-header-top {
             display: flex; align-items: flex-start; justify-content: space-between;
-            gap: 20px; flex-wrap: wrap; position: relative; z-index: 1;
+            gap: 18px 28px; flex-wrap: wrap;
         }
+        .page-header-headings { min-width: 0; }
         .page-header h1 {
             font-family: 'Big Shoulders Display', sans-serif; font-size: clamp(30px, 6vw, 52px); font-weight: 800;
-            letter-spacing: .5px; line-height: 1; text-transform: uppercase;
-            margin-bottom: 10px; position: relative; padding-left: 20px;
-        }
-        .page-header h1::before {
-            content: ''; position: absolute; left: 0; top: 0.08em; bottom: 0.08em;
-            width: 4px; background: linear-gradient(180deg, var(--accent), var(--acc2));
-            border-radius: 2px; box-shadow: 0 0 16px color-mix(in oklch, var(--accent) 50%, transparent);
+            letter-spacing: .5px; line-height: 1; text-transform: uppercase; text-wrap: balance;
         }
         .page-header h1 span { color: var(--accent); }
-        .page-header p, .page-sub { font-family: 'Manrope', sans-serif; color: var(--muted); font-size: 14px; padding-left: 20px; margin-top: 6px; }
-        .page-controls { padding: 0 32px 16px; position: sticky; top: var(--nav-h, 63px); z-index: 99; background: var(--bg); }
-        .page-controls .controls { max-width: 1400px; margin: 0 auto; margin-bottom: 0; position: static; }
+        .page-header p, .page-sub {
+            font-family: 'Manrope', sans-serif; color: var(--muted); font-size: 14px;
+            margin-top: 9px; max-width: 75ch;
+        }
+        .page-header-right { flex-shrink: 0; }
+
+        /* ── HEADER READOUT (mono figures — the signature moment) ── */
+        .readout {
+            display: flex; flex-wrap: wrap; align-items: stretch;
+            margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border);
+        }
+        .readout .fig { display: flex; flex-direction: column; gap: 6px; padding: 2px 22px; }
+        .readout .fig:first-child { padding-left: 0; }
+        .readout .fig + .fig { border-left: 1px solid var(--border); }
+        .readout .fig .v {
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 21px;
+            color: var(--text); line-height: 1;
+        }
+        .readout .fig .l {
+            font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 10.5px;
+            letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); line-height: 1;
+        }
+        .readout .fig .v.win  { color: var(--green); }
+        .readout .fig .v.loss { color: var(--red); }
+        .readout .fig .v.mode { color: var(--mode, var(--blue)); }
+
+        /* ── STICKY CONTROLS TOOLBAR (the only part that pins on scroll) ── */
+        .page-toolbar {
+            position: sticky; top: var(--nav-h, 63px); z-index: 30;
+            background: var(--bg); margin-top: 20px; padding-bottom: 14px;
+            border-bottom: 1px solid color-mix(in oklch, var(--accent) 10%, transparent);
+        }
+        .page-toolbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
 
         /* ── CONTROLS BAR ── */
         .controls {
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-            background: var(--surface); padding: 12px 18px;
-            border-radius: 10px; border: 1px solid var(--border); margin-bottom: 0;
+            background: var(--surface); padding: 11px 16px;
+            border-radius: 10px; border: 1px solid var(--border);
         }
+        .controls-primary { display: flex; align-items: center; gap: 9px; }
+        .controls-primary label {
+            font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+            letter-spacing: 1px; text-transform: uppercase; color: var(--muted); white-space: nowrap;
+        }
+        .controls-primary .selector { padding: 9px 15px; font-size: 13.5px; font-weight: 600; }
+        .controls-secondary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
         .controls label {
             font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted);
             text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
         }
         .ctrl-divider { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+        .ctrl-divider-primary { height: 28px; margin: 0 2px; }
         .selector {
             padding: 7px 13px; border: 1px solid var(--border); border-radius: 7px;
             font-size: 13px; font-family: 'Manrope', sans-serif;
@@ -138,33 +160,38 @@
 
         /* ── ACCESSIBILITY: sitewide keyboard focus ring ── */
         :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) {
+            .selector, .action-btn { transition: none; }
+        }
 
         @media (max-width: 900px) {
-            .page-header { padding: 13px 0; }
-            .page-header-inner { padding: 0 20px; }
-            .page-header-controls .controls { padding: 0 20px; }
+            .page-header { padding: 20px 0 0; }
+            .page-header-inner, .page-toolbar-inner { padding: 0 20px; }
             .page-header h1 { font-size: 36px; letter-spacing: .2px; }
-            .page-controls { padding: 0 20px 12px; }
         }
         @media (max-width: 480px) {
-            .controls { padding: 10px 14px; gap: 8px; }
-            .ctrl-divider { display: none; }
+            .controls { padding: 10px 12px; gap: 8px; }
             .selector { font-size: 12px; padding: 6px 10px; }
         }
-        /* ── MOBILE HEADER + CONTROLS (shared by every page using _page_header.html).
-           The sticky header was eating ~46% of the phone viewport (nav 59px +
-           header ~317px, all pinned). Un-stick the whole block so it scrolls away,
-           and shrink each piece. Controls rules use `.page-header-controls .controls`
-           (0,2,0) so they win over any page that re-declares `.controls` for its own
-           theme/stickiness — no per-page edits needed for the bar. ── */
+        /* ── MOBILE HEADER (≤640): un-stick the whole block so it scrolls away —
+           the sticky header otherwise ate ~46% of the phone viewport — and shrink
+           each piece. Primary control goes full-width; secondary cluster wraps
+           beneath it; in-bar dividers collapse. ── */
         @media (max-width: 640px) {
-            .page-header { position: static; padding: 11px 0 9px; }
-            .page-header h1 { font-size: 26px; letter-spacing: .4px; margin-bottom: 4px; }
-            .page-header p, .page-sub { font-size: 11.5px; margin-top: 2px; line-height: 1.3; }
-            .page-controls { position: static; }
-            .page-header-controls .controls { position: static; gap: 7px 8px; }
+            .page-header { padding: 14px 0 0; }
+            .page-header h1 { font-size: 26px; letter-spacing: .4px; }
+            .page-header p, .page-sub { font-size: 12px; margin-top: 6px; line-height: 1.35; }
+            .readout { margin-top: 12px; padding-top: 11px; }
+            .readout .fig { padding: 0 13px; gap: 4px; }
+            .readout .fig:first-child { padding-left: 0; }
+            .readout .fig .v { font-size: 17px; }
+            .readout .fig .l { font-size: 9.5px; letter-spacing: 1px; }
+            .page-toolbar { position: static; margin-top: 14px; padding-bottom: 0; border-bottom: none; }
+            .controls { gap: 7px 8px; }
+            .controls-primary { flex: 1 1 100%; }
+            .controls-primary .selector { flex: 1; padding: 7px 12px; }
+            .ctrl-divider { display: none; }
             .controls label { font-size: 10px; }
-            .controls .ctrl-divider { display: none; }
             .controls .selector { font-size: 12px; padding: 6px 10px; }
             .controls .action-btn { padding: 5px 11px; font-size: 10.5px; }
         }

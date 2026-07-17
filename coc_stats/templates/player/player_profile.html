@@ -31,8 +31,8 @@
         .badge-out { background: rgba(226,72,63,.12);  color: var(--red);   border: 1px solid rgba(226,72,63,.25); }
         .you-pill {
             font-size: 10px; font-weight: 700; font-family: 'Manrope', sans-serif; letter-spacing: .5px; text-transform: uppercase;
-            padding: 1px 7px; border-radius: 4px; background: rgba(217,164,65,.15); color: var(--accent);
-            border: 1px solid rgba(217,164,65,.35); vertical-align: middle;
+            padding: 1px 7px; border-radius: 4px; background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent);
+            border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent); vertical-align: middle;
         }
 
         /* ── TYPE BADGES (Recent Battles) ── */
@@ -176,7 +176,10 @@
 {% else %}
 {% set is_me = current_user and current_user.linked_player_tag == player.tag %}
 {% set page_header_title %}{{ player.name | e }}<span>.</span>{% if is_me %} <span class="you-pill">You</span>{% endif %}{% endset %}
-{% set page_header_desc %}{{ player.tag }} <span style="color:var(--border);">·</span> {% if player.in_clan %}<span class="badge badge-in">In Clan</span>{% else %}<span class="badge badge-out">Left Clan</span>{% endif %}{% if player.join_date %} <span style="color:var(--border);">·</span> joined {{ player.join_date.strftime('%d %b %Y') }}{% endif %}{% endset %}
+{% set _pmeta = [{'value': player.tag, 'label': 'Tag'}] %}
+{% if player.in_clan %}{% set _pmeta = _pmeta + [{'value': 'In Clan', 'label': 'Status', 'tone': 'win'}] %}{% else %}{% set _pmeta = _pmeta + [{'value': 'Left Clan', 'label': 'Status', 'tone': 'loss'}] %}{% endif %}
+{% if player.join_date %}{% set _pmeta = _pmeta + [{'value': player.join_date.strftime('%d %b %Y'), 'label': 'Joined'}] %}{% endif %}
+{% set page_header_meta = _pmeta %}
 {% set page_header_right %}
 <div class="id-chip">
     <div class="id-chip-part">
@@ -190,7 +193,7 @@
     </div>
 </div>
 {% endset %}
-{% set page_controls %}
+{% set page_primary_control %}
 <label>Period</label>
 <span id="periodToggle" style="display:contents;"></span>
 {% endset %}

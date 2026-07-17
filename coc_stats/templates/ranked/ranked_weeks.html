@@ -6,19 +6,11 @@
         /* This page lives entirely under the Ranked mode identity, so its
            shared chrome (header/controls) is retinted cyan via body.rw-page —
            _head.html / _nav.html stay untouched for every other page. */
-        body.rw-page .page-header { border-bottom-color: rgba(53,194,209,.18); }
-        body.rw-page .page-header::before {
-            background: radial-gradient(ellipse 45% 150% at 5% 50%, rgba(53,194,209,.09), transparent 65%);
-        }
-        body.rw-page .page-header h1 {
-            font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; text-transform: uppercase;
-        }
-        body.rw-page .page-header h1::before { background: linear-gradient(180deg, var(--ops-ranked), var(--ops-elixir)); box-shadow: 0 0 16px rgba(53,194,209,.45); }
-        body.rw-page .page-header h1 span {
-            background: linear-gradient(135deg, var(--ops-ranked) 0%, #7fe3ee 50%, var(--ops-ranked) 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        body.rw-page .page-header p.page-sub { font-family: 'Manrope', sans-serif; }
+        /* Ranked mode identity (recon cyan): retint the accent word and the
+           sticky toolbar hairline. No stripe/glow, no gradient text — DESIGN.md
+           bans both; the mode color is carried as a solid. */
+        body.rw-page .page-header h1 span { color: var(--ops-ranked); }
+        body.rw-page .page-toolbar { border-bottom-color: rgba(53,194,209,.20); }
         body.rw-page .controls { background: var(--ops-surface); border-color: var(--ops-line); }
         body.rw-page .controls label { font-family: 'Manrope', sans-serif; color: var(--ops-ink-dim); }
         body.rw-page * { scrollbar-color: var(--ops-line) transparent; }
@@ -26,36 +18,10 @@
 
         /* ── NAV: see _nav.html ── */
 
-        /* ── COMMAND STRIP ── */
-        .controls {
-            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-            background: var(--ops-surface); padding: 12px 18px;
-            border-radius: 10px; border: 1px solid var(--ops-line); margin-bottom: 20px;
-            position: sticky; top: var(--nav-h, 63px); z-index: 99;
-        }
-        .controls label {
-            font-size: 11px; font-weight: 700; color: var(--ops-ink-dim);
-            text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
-        }
-        .ctrl-divider { width: 1px; height: 22px; background: var(--ops-line); flex-shrink: 0; }
-        .selector {
-            padding: 7px 13px; border: 1px solid var(--ops-line); border-radius: 7px;
-            font-size: 13px; font-family: 'Manrope', sans-serif;
-            background: var(--ops-surface-2); color: var(--ops-ink);
-            cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
-            appearance: none; -webkit-appearance: none;
-        }
-        .selector:focus { outline: none; border-color: var(--ops-gold); box-shadow: 0 0 0 3px rgba(217,164,65,0.12); }
-
-        /* ── ACTION BUTTON ── */
-        .action-btn {
-            padding: 6px 14px; background: transparent; color: var(--ops-gold);
-            border: 1px solid rgba(217,164,65,0.35); border-radius: 6px;
-            font-weight: 700; font-size: 11px; font-family: 'JetBrains Mono', monospace;
-            letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; transition: all 0.15s; white-space: nowrap;
-        }
-        .action-btn:hover { background: rgba(217,164,65,0.1); border-color: var(--ops-gold); box-shadow: 0 0 12px rgba(217,164,65,0.18); }
-        .action-btn.is-on { background: rgba(217,164,65,0.14); border-color: var(--ops-gold); }
+        /* Controls, selector and action buttons inherit the shared magenta
+           system from _head.html; body.rw-page retints only the surface. The
+           page's toggles use .is-on (JS), so map it to the shared active look. */
+        .action-btn.is-on { background: color-mix(in oklch, var(--accent) 12%, transparent); border-color: var(--accent); color: var(--accent); }
 
         /* ── DEBRIEF BAND (signature: replaces the old bar+donut chart pair) ── */
         .rw-debrief {
@@ -471,7 +437,7 @@
 
 {% set page_header_title = 'Ranked Week <span>Performance</span>' %}
 {% set page_header_desc = 'Promotion and relegation zones, verdicts and full history for every member this week.' %}
-{% set page_controls %}
+{% set page_primary_control %}
 <label>Week</label>
 <form method="GET" style="display:contents;">
     <select name="week_id" id="week-select" class="selector" style="min-width:220px;" onchange="this.form.submit()">
@@ -486,7 +452,8 @@
         {% endif %}
     </select>
 </form>
-<div class="ctrl-divider"></div>
+{% endset %}
+{% set page_controls %}
 <input id="searchInput" class="selector" type="search" placeholder="Search player, league, rank…" oninput="debouncedUpdateTable()" style="min-width:200px; flex:1;">
 <select id="rankFilter" class="selector" onchange="updateTable()">
     <option value="all">All players</option>
