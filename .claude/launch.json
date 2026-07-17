@@ -7,6 +7,13 @@
       "runtimeArgs": ["app.py"],
       "cwd": "coc_stats",
       "port": 5000
+    },
+    {
+      "name": "personal_apps",
+      "runtimeExecutable": "flask",
+      "runtimeArgs": ["run", "--port", "5001"],
+      "cwd": "personal_apps",
+      "port": 5001
     }
   ]
 }
