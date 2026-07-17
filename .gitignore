@@ -9,3 +9,4 @@ personal_apps/static/quizbank_uploads/
 /.impeccable/
 .playwright-mcp/
 coc_stats/.impeccable/live/
+.claude/skills/
