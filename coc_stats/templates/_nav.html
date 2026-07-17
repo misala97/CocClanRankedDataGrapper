@@ -1,7 +1,7 @@
 <style>
     nav {
         position: sticky; top: 0; z-index: 100;
-        background: rgba(13,16,19,0.94);
+        background: oklch(0.10 0.004 330 / 0.94);
         backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
         border-bottom: 1px solid var(--border);
     }
@@ -43,44 +43,8 @@
         transition: color .12s, background .12s;
     }
     .nl:hover { color: var(--text); background: rgba(255,255,255,.05); }
-    .nl-active { color: var(--accent) !important; background: rgba(217,164,65,.1); }
-    .nav-right { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
-
-    /* Task dots — the ops-room pulse: per-feature sync health at a glance */
-    .nav-tasks { display: flex; align-items: center; gap: 6px; }
-    .ntd-group { display: flex; align-items: center; gap: 5px; }
-    .ntd {
-        width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
-        cursor: default; position: relative;
-    }
-    .ntd-good { background: var(--green); box-shadow: 0 0 5px rgba(62,192,106,.55); }
-    .ntd-warn { background: var(--yellow); }
-    .ntd-bad  { background: var(--red);   box-shadow: 0 0 5px rgba(226,72,63,.5); }
-    .ntd-none { background: #454c56; }
-    .ntd-current {
-        width: 9px; height: 9px;
-        box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px rgba(255,255,255,.5) !important;
-    }
-    .ntd-tip {
-        display: none; position: absolute; top: calc(100% + 10px); left: 50%;
-        transform: translateX(-50%); z-index: 300;
-        background: var(--surface); border: 1px solid var(--border);
-        border-radius: 8px; padding: 7px 11px; white-space: nowrap;
-        font-size: 11px; color: var(--text); pointer-events: none;
-        box-shadow: 0 8px 24px rgba(0,0,0,.55);
-    }
-    .ntd-tip-name { font-weight: 700; margin-bottom: 2px; font-family: 'Manrope', sans-serif; font-size: 12px; }
-    .ntd-tip-time { color: var(--muted); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
-    .ntd:hover .ntd-tip { display: block; }
-    .ntd-inline-time {
-        font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
-        letter-spacing: .2px;
-    }
-    .ntd-inline-good { color: var(--green); }
-    .ntd-inline-warn { color: var(--yellow); }
-    .ntd-inline-bad  { color: var(--red); }
-    .ntd-inline-none { color: var(--muted); }
-    .ntd-sep { width: 1px; height: 15px; background: var(--border); flex-shrink: 0; }
+    .nl-active { color: var(--accent) !important; background: color-mix(in oklch, var(--accent) 10%, transparent); }
+    .nav-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
     /* User chip + dropdown */
     .nav-user-wrap { position: relative; flex-shrink: 0; }
@@ -90,12 +54,12 @@
         background: var(--surf2); border: 1px solid var(--border);
         cursor: pointer; user-select: none; transition: border-color .15s;
     }
-    .nav-user:hover, .nav-user-wrap.open .nav-user { border-color: rgba(217,164,65,.35); }
+    .nav-user:hover, .nav-user-wrap.open .nav-user { border-color: color-mix(in oklch, var(--accent) 35%, transparent); }
     .nav-avatar {
         width: 20px; height: 20px; border-radius: 50%;
         background: linear-gradient(135deg, var(--accent), var(--acc2));
         display: flex; align-items: center; justify-content: center;
-        font-size: 10px; font-weight: 800; color: #0d1013;
+        font-size: 10px; font-weight: 800; color: var(--text);
         font-family: 'Big Shoulders Display', sans-serif; flex-shrink: 0;
     }
     .nav-uname { font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
@@ -123,41 +87,41 @@
     .nav-dd-item svg { width: 14px; height: 14px; flex-shrink: 0; opacity: .65; }
     .nav-dd-sep { height: 1px; background: var(--bord2); margin: 4px 0; }
     .nav-dd-signout { color: var(--muted); }
-    .nav-dd-signout:hover { color: var(--red) !important; background: rgba(226,72,63,.08) !important; }
+    .nav-dd-signout:hover { color: var(--red) !important; background: color-mix(in oklch, var(--red) 8%, transparent) !important; }
 
     .nav-login {
         font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted);
         padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
         text-decoration: none; transition: all .12s; flex-shrink: 0;
     }
-    .nav-login:hover { color: var(--accent); border-color: rgba(217,164,65,.4); background: rgba(217,164,65,.06); }
+    .nav-login:hover { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, transparent); background: color-mix(in oklch, var(--accent) 6%, transparent); }
 
-    /* Mode-link dropdown (Ranked / Battles / Raids / War / CWL / Tools) */
-    .nl-wrap { position: relative; display: inline-flex; }
-    .nl-wrap .nl { display: flex; align-items: center; gap: 4px; }
-    .nl-wrap .nl-caret {
-        width: 10px; height: 10px; color: var(--muted); flex-shrink: 0;
-        transition: transform .15s;
+    /* ── STATUS STRIP: row 2. A hairline when every sync is healthy; expands only
+       to name what's not. ResizeObserver below keeps --nav-h in sync so every
+       sticky-below-nav element (.page-header, .page-controls, per-page .controls)
+       tracks the real height instead of assuming a fixed bar. ── */
+    .nav-status { height: 4px; }
+    .nav-status[data-expanded="true"] { height: auto; }
+    .nav-status-line {
+        height: 4px; width: 100%;
+        background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--green) 30%, transparent), transparent);
     }
-    .nl-wrap:hover .nl-caret { transform: rotate(180deg); }
-    .nl-submenu {
-        display: none; position: absolute; top: 100%; left: 0;
-        min-width: 168px; z-index: 400;
-        padding-top: 6px;
+    .nav-status-inner {
+        max-width: 1400px; margin: 0 auto; padding: 5px 28px;
+        display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+        min-height: 30px;
     }
-    .nl-submenu-inner {
-        background: var(--surface); border: 1px solid var(--border);
-        border-radius: 9px; padding: 4px;
-        box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    .ns-item {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600;
+        white-space: nowrap;
     }
-    .nl-wrap:hover .nl-submenu { display: block; }
-    .nl-sub-item {
-        display: block; padding: 8px 11px; border-radius: 6px;
-        font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 500; color: var(--muted);
-        text-decoration: none; white-space: nowrap; transition: color .1s, background .1s;
-    }
-    .nl-sub-item:hover { color: var(--text); background: rgba(255,255,255,.06); }
-    .nl-sub-item.nl-sub-active { color: var(--accent); }
+    .ns-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .ns-warn .ns-dot { background: var(--yellow); box-shadow: 0 0 5px color-mix(in oklch, var(--yellow) 50%, transparent); }
+    .ns-bad  .ns-dot { background: var(--red);    box-shadow: 0 0 5px color-mix(in oklch, var(--red) 50%, transparent); }
+    .ns-warn { color: var(--yellow); }
+    .ns-bad  { color: var(--red); }
+    .ns-time { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--muted); }
 
     /* ── MOBILE BURGER + PANEL ── */
     .nav-burger {
@@ -170,7 +134,7 @@
     .nav-burger .icon-close { display: none; }
     .nav-burger.open .icon-menu { display: none; }
     .nav-burger.open .icon-close { display: block; }
-    .nav-burger.open { border-color: rgba(217,164,65,.4); color: var(--accent); }
+    .nav-burger.open { border-color: color-mix(in oklch, var(--accent) 40%, transparent); color: var(--accent); }
 
     .nav-mobile-panel {
         display: none;
@@ -181,37 +145,23 @@
         padding: 6px 14px 20px;
     }
     .nav-mobile-panel.open { display: block; }
-    .nmp-group { border-bottom: 1px solid var(--bord2); padding: 4px 0; }
-    .nmp-group:last-of-type { border-bottom: none; }
     .nmp-link {
-        display: block; padding: 12px 10px 4px; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700;
+        display: block; padding: 13px 10px; font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700;
         color: var(--text); text-decoration: none; border-radius: 8px;
-        border-left: 3px solid transparent;
+        border-bottom: 1px solid var(--bord2);
     }
-    .nmp-link.nmp-single { padding: 12px 10px; }
+    .nmp-link:last-child { border-bottom: none; }
     .nmp-link.nmp-active {
-        color: var(--accent); border-left-color: var(--accent);
-        background: rgba(217,164,65,.07); padding-left: 9px;
+        color: var(--accent); background: color-mix(in oklch, var(--accent) 8%, transparent);
     }
-    .nmp-sublink {
-        display: block; padding: 10px 10px 10px 22px; font-family: 'Manrope', sans-serif; font-size: 13.5px; font-weight: 500;
-        color: var(--muted); text-decoration: none;
-    }
-    .nmp-sublink.nmp-active { color: var(--accent); }
-    .nmp-section-label {
-        padding: 16px 10px 7px; font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted);
-        text-transform: uppercase; letter-spacing: .8px;
-    }
-    .nmp-task-row { display: flex; align-items: center; gap: 9px; padding: 9px 10px; font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--text); }
-    .nmp-task-time { margin-left: auto; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
 
     @media (max-width: 900px) {
         .nav-sep   { display: none; }
         .nav-links { display: none; }
-        .nav-tasks { display: none; }
         .nav-burger { display: inline-flex; }
         .nav-inner { padding: 0 16px; gap: 10px; }
         .nav-logo-text { font-size: 16px; }
+        .nav-status-inner { padding: 5px 16px; }
     }
     @media (max-width: 400px) {
         .nav-logo-text { display: none; }
@@ -219,7 +169,9 @@
 </style>
 
 {% set _p = request.path %}
-{% set _task_pages = {'Battles': '/battles', 'Ranked': '/ranked', 'Members': '/clan', 'Raids': '/raid', 'War': '/war', 'CWL': '/cwl'} %}
+{% set _bad_tasks = [] %}
+{% for t in nav_task_status %}{% if t.status in ('warn', 'bad') %}{% set _ = _bad_tasks.append(t) %}{% endif %}{% endfor %}
+
 <nav>
     <div class="nav-inner">
         <a href="/" class="nav-logo">
@@ -247,85 +199,14 @@
         <div class="nav-sep"></div>
 
         <div class="nav-links">
-            <a href="/"        class="nl {% if _p == '/' %}nl-active{% endif %}">Home</a>
-            <div class="nl-wrap">
-                <a href="/ranked" class="nl {% if _p.startswith('/ranked') %}nl-active{% endif %}">Ranked
-                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="4 6 8 10 12 6"/>
-                    </svg>
-                </a>
-                <div class="nl-submenu">
-                    <div class="nl-submenu-inner">
-                        <a href="/ranked"       class="nl-sub-item {% if _p == '/ranked' %}nl-sub-active{% endif %}">Current Season</a>
-                        <a href="/ranked/stats" class="nl-sub-item {% if _p.startswith('/ranked/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
-                    </div>
-                </div>
-            </div>
-            <div class="nl-wrap">
-                <a href="/battles" class="nl {% if _p.startswith('/battles') %}nl-active{% endif %}">Battles
-                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="4 6 8 10 12 6"/>
-                    </svg>
-                </a>
-                <div class="nl-submenu">
-                    <div class="nl-submenu-inner">
-                        <a href="/battles"       class="nl-sub-item {% if _p == '/battles' %}nl-sub-active{% endif %}">Battle History</a>
-                        <a href="/battles/stats" class="nl-sub-item {% if _p.startswith('/battles/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
-                    </div>
-                </div>
-            </div>
-            <div class="nl-wrap">
-                <a href="/raid" class="nl {% if _p.startswith('/raid') %}nl-active{% endif %}">Raids
-                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="4 6 8 10 12 6"/>
-                    </svg>
-                </a>
-                <div class="nl-submenu">
-                    <div class="nl-submenu-inner">
-                        <a href="/raid"       class="nl-sub-item {% if _p == '/raid' %}nl-sub-active{% endif %}">Current Weekend</a>
-                        <a href="/raid/stats" class="nl-sub-item {% if _p.startswith('/raid/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
-                    </div>
-                </div>
-            </div>
-            <div class="nl-wrap">
-                <a href="/war" class="nl {% if _p.startswith('/war') %}nl-active{% endif %}">War
-                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="4 6 8 10 12 6"/>
-                    </svg>
-                </a>
-                <div class="nl-submenu">
-                    <div class="nl-submenu-inner">
-                        <a href="/war"       class="nl-sub-item {% if _p == '/war' %}nl-sub-active{% endif %}">Current War</a>
-                        <a href="/war/stats" class="nl-sub-item {% if _p.startswith('/war/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
-                    </div>
-                </div>
-            </div>
-            <div class="nl-wrap">
-                <a href="/cwl" class="nl {% if _p.startswith('/cwl') %}nl-active{% endif %}">CWL
-                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="4 6 8 10 12 6"/>
-                    </svg>
-                </a>
-                <div class="nl-submenu">
-                    <div class="nl-submenu-inner">
-                        <a href="/cwl"       class="nl-sub-item {% if _p == '/cwl' %}nl-sub-active{% endif %}">Current Season</a>
-                        <a href="/cwl/stats" class="nl-sub-item {% if _p.startswith('/cwl/stats') %}nl-sub-active{% endif %}">Long Term Stats</a>
-                    </div>
-                </div>
-            </div>
-            <div class="nl-wrap">
-                <a href="/tools/equipment" class="nl {% if _p.startswith('/tools') %}nl-active{% endif %}">Tools
-                    <svg class="nl-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="4 6 8 10 12 6"/>
-                    </svg>
-                </a>
-                <div class="nl-submenu">
-                    <div class="nl-submenu-inner">
-                        <a href="/tools/equipment" class="nl-sub-item {% if _p == '/tools/equipment' %}nl-sub-active{% endif %}">Equipment Calculator</a>
-                    </div>
-                </div>
-            </div>
-            <a href="/clan"    class="nl {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nl-active{% endif %}">Clan</a>
+            <a href="/"                class="nl {% if _p == '/' %}nl-active{% endif %}">Home</a>
+            <a href="/ranked"          class="nl {% if _p.startswith('/ranked') %}nl-active{% endif %}">Ranked</a>
+            <a href="/battles"         class="nl {% if _p.startswith('/battles') %}nl-active{% endif %}">Battles</a>
+            <a href="/raid"            class="nl {% if _p.startswith('/raid') %}nl-active{% endif %}">Raids</a>
+            <a href="/war"             class="nl {% if _p.startswith('/war') %}nl-active{% endif %}">War</a>
+            <a href="/cwl"             class="nl {% if _p.startswith('/cwl') %}nl-active{% endif %}">CWL</a>
+            <a href="/tools/equipment" class="nl {% if _p.startswith('/tools') %}nl-active{% endif %}">Tools</a>
+            <a href="/clan"            class="nl {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nl-active{% endif %}">Clan</a>
             {% if is_super_admin %}
             <a href="/admin" class="nl {% if _p.startswith('/admin') %}nl-active{% endif %}" style="position:relative;">
                 Admin{% if newbie_check_count > 0 %}<span style="position:absolute;top:0px;right:-2px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:15px;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
@@ -342,27 +223,23 @@
             </svg>
         </button>
 
-        <div class="nav-right">
-            {% if nav_task_status %}
-            <div class="nav-tasks">
-                {% for t in nav_task_status %}
-                {% set _tpath = _task_pages.get(t.label, '') %}
-                {% set _is_cur = _tpath and _p.startswith(_tpath) %}
-                <div class="ntd-group">
-                    <div class="ntd ntd-{{ t.status }}{% if _is_cur %} ntd-current{% endif %}">
-                        <div class="ntd-tip">
-                            <div class="ntd-tip-name">{{ t.label }}</div>
-                            <div class="ntd-tip-time">{{ t.time_str }}</div>
-                        </div>
-                    </div>
-                    {% if _is_cur %}<span class="ntd-inline-time ntd-inline-{{ t.status }}">{{ t.time_str }}</span>{% endif %}
-                </div>
-                {% if not loop.last %}<span class="ntd-sep"></span>{% endif %}
-                {% endfor %}
-            </div>
-            <div class="nav-sep"></div>
+        <div class="nav-mobile-panel" id="navMobilePanel">
+            <a href="/"                class="nmp-link {% if _p == '/' %}nmp-active{% endif %}">Home</a>
+            <a href="/ranked"          class="nmp-link {% if _p.startswith('/ranked') %}nmp-active{% endif %}">Ranked</a>
+            <a href="/battles"         class="nmp-link {% if _p.startswith('/battles') %}nmp-active{% endif %}">Battles</a>
+            <a href="/raid"            class="nmp-link {% if _p.startswith('/raid') %}nmp-active{% endif %}">Raids</a>
+            <a href="/war"             class="nmp-link {% if _p.startswith('/war') %}nmp-active{% endif %}">War</a>
+            <a href="/cwl"             class="nmp-link {% if _p.startswith('/cwl') %}nmp-active{% endif %}">CWL</a>
+            <a href="/tools/equipment" class="nmp-link {% if _p.startswith('/tools') %}nmp-active{% endif %}">Tools</a>
+            <a href="/clan"            class="nmp-link {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nmp-active{% endif %}">Clan</a>
+            {% if is_super_admin %}
+            <a href="/admin" class="nmp-link {% if _p.startswith('/admin') %}nmp-active{% endif %}" style="position:relative;">
+                Admin{% if newbie_check_count > 0 %} <span style="display:inline-block;min-width:16px;padding:1px 5px;border-radius:8px;background:var(--red);color:#fff;font-size:10px;font-weight:700;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
+            </a>
             {% endif %}
+        </div>
 
+        <div class="nav-right">
             {% if current_user %}
             <div class="nav-user-wrap" id="navUserWrap">
                 <div class="nav-user" id="navUserBtn">
@@ -412,70 +289,36 @@
             <a href="/login" class="nav-login">Login</a>
             {% endif %}
         </div>
+    </div>
 
-        <div class="nav-mobile-panel" id="navMobilePanel">
-            <div class="nmp-group">
-                <a href="/" class="nmp-link nmp-single {% if _p == '/' %}nmp-active{% endif %}">Home</a>
-            </div>
-            <div class="nmp-group">
-                <a href="/ranked" class="nmp-link {% if _p.startswith('/ranked') %}nmp-active{% endif %}">Ranked</a>
-                <a href="/ranked/stats" class="nmp-sublink {% if _p.startswith('/ranked/stats') %}nmp-active{% endif %}">Long Term Stats</a>
-            </div>
-            <div class="nmp-group">
-                <a href="/battles" class="nmp-link {% if _p.startswith('/battles') %}nmp-active{% endif %}">Battles</a>
-                <a href="/battles/stats" class="nmp-sublink {% if _p.startswith('/battles/stats') %}nmp-active{% endif %}">Long Term Stats</a>
-            </div>
-            <div class="nmp-group">
-                <a href="/raid" class="nmp-link {% if _p.startswith('/raid') %}nmp-active{% endif %}">Raids</a>
-                <a href="/raid/stats" class="nmp-sublink {% if _p.startswith('/raid/stats') %}nmp-active{% endif %}">Long Term Stats</a>
-            </div>
-            <div class="nmp-group">
-                <a href="/war" class="nmp-link {% if _p.startswith('/war') %}nmp-active{% endif %}">War</a>
-                <a href="/war/stats" class="nmp-sublink {% if _p.startswith('/war/stats') %}nmp-active{% endif %}">Long Term Stats</a>
-            </div>
-            <div class="nmp-group">
-                <a href="/cwl" class="nmp-link {% if _p.startswith('/cwl') %}nmp-active{% endif %}">CWL</a>
-                <a href="/cwl/stats" class="nmp-sublink {% if _p.startswith('/cwl/stats') %}nmp-active{% endif %}">Long Term Stats</a>
-            </div>
-            <div class="nmp-group">
-                <a href="/tools/equipment" class="nmp-link nmp-single {% if _p.startswith('/tools') %}nmp-active{% endif %}">Tools · Equipment Calculator</a>
-            </div>
-            <div class="nmp-group">
-                <a href="/clan" class="nmp-link nmp-single {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nmp-active{% endif %}">Clan</a>
-                {% if is_super_admin %}
-                <a href="/admin" class="nmp-link nmp-single {% if _p.startswith('/admin') %}nmp-active{% endif %}">
-                    Admin{% if newbie_check_count > 0 %} <span style="display:inline-block;min-width:16px;padding:1px 5px;border-radius:8px;background:var(--red);color:#fff;font-size:10px;font-weight:700;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
-                </a>
-                {% endif %}
-            </div>
-            {% if nav_task_status %}
-            <div class="nmp-section-label">System Status</div>
-            <div class="nmp-group">
-                {% for t in nav_task_status %}
-                <div class="nmp-task-row">
-                    <span class="ntd ntd-{{ t.status }}" style="position:static;"></span>
-                    <span>{{ t.label }}</span>
-                    <span class="nmp-task-time ntd-inline-{{ t.status }}">{{ t.time_str }}</span>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
+    <div class="nav-status" id="navStatus" data-expanded="{{ 'true' if _bad_tasks else 'false' }}">
+        {% if _bad_tasks %}
+        <div class="nav-status-inner">
+            {% for t in _bad_tasks %}
+            <span class="ns-item ns-{{ t.status }}">
+                <span class="ns-dot" aria-hidden="true"></span>{{ t.label }} sync <span class="ns-time">{{ t.time_str }}</span>
+            </span>
+            {% endfor %}
         </div>
+        {% else %}
+        <div class="nav-status-line"></div>
+        {% endif %}
     </div>
 </nav>
 
 <script>
 (function () {
     var wrap = document.getElementById('navUserWrap');
-    if (!wrap) return;
-    var btn = document.getElementById('navUserBtn');
-    btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        wrap.classList.toggle('open');
-    });
-    document.addEventListener('click', function () {
-        wrap.classList.remove('open');
-    });
+    if (wrap) {
+        var btn = document.getElementById('navUserBtn');
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            wrap.classList.toggle('open');
+        });
+        document.addEventListener('click', function () {
+            wrap.classList.remove('open');
+        });
+    }
 })();
 
 (function () {
@@ -498,6 +341,23 @@
     document.addEventListener('click', function (e) {
         if (!panel.contains(e.target) && !burger.contains(e.target)) close();
     });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && panel.classList.contains('open')) { close(); burger.focus(); }
+    });
+})();
+
+(function () {
+    // Keeps --nav-h in sync with the real rendered nav height (row 1 + the
+    // status strip, whichever state it's in) so every sticky-below-nav
+    // element sitewide (.page-header, .page-controls, per-page .controls)
+    // sits flush against the bar instead of assuming a fixed height.
+    var navEl = document.querySelector('nav');
+    if (!navEl) return;
+    var root = document.documentElement;
+    // offsetHeight (border-box) rather than contentRect.height (content-box) —
+    // nav has a 1px border-bottom that contentRect would otherwise drop.
+    function sync() { root.style.setProperty('--nav-h', navEl.offsetHeight + 'px'); }
+    sync();
+    if (window.ResizeObserver) new ResizeObserver(sync).observe(navEl);
 })();
 </script>
