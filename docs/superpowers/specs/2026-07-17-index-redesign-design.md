@@ -46,36 +46,50 @@ ranked/war/raid pages.
 
 ## Structure
 
-Information hierarchy, decided fresh from the data above and confirmed with
-the user: **You → Events → Clan**, each a full-width band, stacked in that
-order, comparable visual weight (no band is shrunk to a "strip" relative to
-the others).
+Information hierarchy, decided fresh from the data above, then revised
+twice by the user after seeing the live build. Final structure: **Clan band
+(full-width) → You + Events band (two columns, side by side)**.
 
 ```
-┌────────────────────────────────────────────┐
-│ YOU                                         │
-│ TH · League      Ore: shiny/glowy/starry    │
-│ Attacks this wk    Ranked attacks left      │
-│ War: attacks/wars   CWL: attacks/wars       │
-│ Projected ore this cycle (war + CWL)        │
-└────────────────────────────────────────────┘
-┌───────────────┬───────────────┬────────────┐
-│ WAR            │ RAID          │ CWL        │
-│ state, verdict │ state, medals │ state, ver.│
-└───────────────┴───────────────┴────────────┘
 ┌────────────────────────────────────────────┐
 │ CLAN — name + badge, member count           │
 │ war attacks this wk · ranked battles this wk│
 │ · week resets <week_start_name>             │
 └────────────────────────────────────────────┘
+┌────────────────────────┬─────────────────────┐
+│ YOU                     │ WAR ROOM             │
+│ TH · League              │ ┌─────────────────┐ │
+│ Ore: shiny/glowy/starry  │ │ WAR — state, ver.│ │
+│ Attacks this wk           │ └─────────────────┘ │
+│ Ranked attacks left       │ ┌─────────────────┐ │
+│ War: attacks/wars         │ │ CWL — state, ver.│ │
+│ CWL: attacks/wars         │ └─────────────────┘ │
+│ Projected ore this cycle  │ ┌─────────────────┐ │
+│                            │ │ RAID — medals    │ │
+│                            │ └─────────────────┘ │
+└────────────────────────┴─────────────────────┘
 ```
 
-Reasoning for the order: the user's own status is the most immediate
-question a visitor has landing on the page; what needs action (live
-war/raid/CWL) is next; the clan-wide aggregate is contextual and lowest
-priority, but still gets full-band treatment rather than being visually
-demoted, since it serves the leadership-decision-making audience named in
-`PRODUCT.md`.
+Original brainstorm order was You → Events → Clan, each full-width
+(personal status first). First revision: Clan → You → Events, still all
+full-width bands. Second revision, after seeing that live: merge You and
+Events into one band, side by side — personal stats on the left (wider,
+1.3fr), event tickets stacked vertically on the right (narrower, 1fr) —
+closer to the original page's hero layout, using the full band width
+instead of three stacked tickets under a mostly-empty You band.
+
+**Solo fallback**: when only one side has content (You hidden because no
+linked player, or Events empty because the clan has no war/raid/CWL history
+at all), that side's column takes the full band width — and the event
+tickets revert to the 3-across grid (only cramped into a single stacked
+column when they're actually sharing the band with the You column).
+
+### Clan band
+
+- Fields: `clan_name`, `clan_badge_url`, `total_members`,
+  `battle_logs_this_week`, `ranked_battles_this_week`, `week_start_name`.
+- No empty state concern — `clan_name` already defaults to "Our Clan" and
+  `total_members` is always a real count. Always the first band on the page.
 
 ### You band
 
@@ -85,8 +99,8 @@ demoted, since it serves the leadership-decision-making audience named in
   `player_war_stats_json`/`player_cwl_stats_json`/`player_gain_settings_json`
   via the existing Ore Gain calculator — reuse that JS, don't reimplement).
 - **Empty state**: if there's no logged-in user, or the logged-in user has no
-  `linked_player`, **hide the band entirely**. The page opens directly on
-  Events. No zeroed-out placeholder, no login prompt card.
+  `linked_player`, **hide the band entirely**. No zeroed-out placeholder, no
+  login prompt card.
 
 ### Events band
 
@@ -109,12 +123,17 @@ the route's existing active/last fallback logic:
   record (e.g. the clan has never done a raid), omit that ticket — the row
   renders with fewer columns rather than showing an empty placeholder card.
 
-### Clan band
+### Command Deck
 
-- Fields: `clan_name`, `clan_badge_url`, `total_members`,
-  `battle_logs_this_week`, `ranked_battles_this_week`, `week_start_name`.
-- No empty state concern — `clan_name` already defaults to "Our Clan" and
-  `total_members` is always a real count.
+A fourth section, added after the live build was reviewed (not part of the
+original data-driven brainstorm — flagged here after the fact rather than
+before, which was the mistake: it was silently dropped during the initial
+build on the reasoning that the top nav already reaches every linked page,
+without asking first). The user asked for it back. Static tile grid —
+Ranked, Battle History, Raid Weekend, Clan War, War League, Clan Overview,
+and (super-admin only) Admin Hub with the `newbie_check_count` alert badge.
+Not driven by route data (no new backend field), sits after the Events band
+and before the footer.
 
 ## Responsive strategy
 

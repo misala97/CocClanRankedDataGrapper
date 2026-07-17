@@ -76,7 +76,7 @@ app.register_blueprint(tools_bp)
 
 # ── Template filters ─────────────────────────────────────────────────────────
 
-from services.helpers import to_local as _to_local, compute_cwl_win_status
+from services.helpers import to_local as _to_local, compute_cwl_win_status, compute_war_win_status
 
 @app.template_filter('local_dt')
 def local_dt_filter(value, fmt='%d.%m.%Y %H:%M'):
@@ -179,6 +179,7 @@ def index():
     active_war  = ClanWar.query.filter(
         ClanWar.state.in_(['preparation', 'inWar'])
     ).order_by(ClanWar.start_time.desc()).first()
+    war_win_status = compute_war_win_status(active_war, CLAN_TAG) if active_war else None
 
     active_raid = RaidWeekend.query.filter(
         RaidWeekend.state == 'ongoing'
@@ -312,6 +313,7 @@ def index():
         ranked_battles_this_week=ranked_battles_this_week,
         week_start_name=week_start_name,
         active_war=active_war,
+        war_win_status=war_win_status,
         active_raid=active_raid,
         active_raid_est_medals=active_raid_est_medals,
         active_cwl_season=active_cwl_season,

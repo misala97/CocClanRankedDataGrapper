@@ -7,29 +7,39 @@
     .ops-fd  { font-family: 'Big Shoulders Display', sans-serif; }
     .ops-mono{ font-family: 'JetBrains Mono', monospace; }
 
-    /* ── OPS HERO ── */
-    .ops-hero {
-        background: var(--ops-bg);
-        padding: 48px 32px 44px;
-        position: relative;
-        overflow: hidden;
-    }
-    .ops-hero::before {
-        content: ''; position: absolute; inset: 0; pointer-events: none;
-        background:
-            linear-gradient(180deg, rgba(217,164,65,.05) 0%, transparent 40%),
-            radial-gradient(ellipse 50% 60% at 100% 0%, rgba(144,102,232,.06) 0%, transparent 65%);
-    }
-    .ops-hero-grid {
-        max-width: 1400px; margin: 0 auto; position: relative; z-index: 1;
-        display: grid; grid-template-columns: 1.3fr 1fr; gap: 56px; align-items: start;
+    /* ── MOTION ── */
+    /* One shared easing curve for every hover/press transition, plus a single signature
+       hero-load moment on the crest + clan stats ("sensor lock-on": outline draw, scanline
+       sweep, numbers count up) — the one deliberate exception to feedback-only motion,
+       since this is the first thing anyone sees. Implemented as progressive enhancement:
+       the real crest and numbers are always in the DOM at full opacity/value; JS only
+       dips them to animate, so a JS failure or `prefers-reduced-motion: reduce` just
+       means "no animation," never "broken/missing content." See the script block near
+       the clan band and the reduced-motion override below. */
+    :root { --ease: cubic-bezier(0.25, 1, 0.5, 1); }
+    .hero-scan-hex { position: absolute; inset: 0; pointer-events: none; }
+    .hero-scanline {
+        position: absolute; top: 0; bottom: 0; left: -80px; width: 80px;
+        background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--ops-gold) 35%, transparent), transparent);
+        pointer-events: none; opacity: 0;
     }
 
-    /* badge + eyebrow */
-    .ops-badge-row { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+    /* ── SHARED BAND CHROME ── */
+    .ops-band { padding: 44px 32px; border-bottom: 1px solid var(--ops-line); }
+    .ops-band-inner { max-width: 1400px; margin: 0 auto; }
+    .ops-band-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 26px; flex-wrap: wrap; }
+    .ops-band-head h2 {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; text-transform: uppercase;
+        font-size: clamp(22px, 2.6vw, 30px); letter-spacing: .4px; color: var(--ops-ink); line-height: 1;
+    }
+    .ops-band-sub { font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--ops-ink-dim); }
+
+    /* ── CLAN BAND ── */
+    .ops-clan-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; position: relative; overflow: hidden; }
+    .ops-clan-id { display: flex; align-items: center; gap: 16px; }
     .hex-badge {
-        width: 60px; height: 52px; flex-shrink: 0; padding: 2px;
-        background: linear-gradient(150deg, var(--ops-gold), #8a6224);
+        width: 56px; height: 48px; flex-shrink: 0; padding: 2px; position: relative;
+        background: linear-gradient(150deg, var(--ops-gold), var(--acc2));
         clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
     }
     .hex-badge-inner {
@@ -39,76 +49,94 @@
     }
     .hex-badge-inner img { width: 76%; height: 76%; object-fit: contain; }
     .hex-badge-inner svg { width: 60%; height: 60%; }
-    .ops-eyebrow {
+    .ops-clan-name { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; text-transform: uppercase; font-size: clamp(22px, 2.6vw, 30px); color: var(--ops-ink); line-height: 1; }
+    .ops-clan-sub { font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--ops-ink-dim); margin-top: 6px; }
+    .ops-clan-stats { display: flex; gap: 0; border: 1px solid var(--ops-line); border-radius: 10px; overflow: hidden; }
+    .ops-clan-stat { padding: 12px 22px; text-align: center; border-left: 1px solid var(--ops-line); text-decoration: none; transition: background .15s var(--ease), transform .15s var(--ease); }
+    .ops-clan-stat:first-child { border-left: none; }
+    .ops-clan-stat:hover { background: var(--ops-surface); transform: translateY(-1px); }
+    .ops-clan-stat:active { transform: translateY(-1px) scale(0.97); transition-duration: .1s; }
+    .ops-clan-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 22px; color: var(--ops-ink); }
+    .ops-clan-lbl { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); margin-top: 4px; }
+
+    /* ── HERO ZONE (Clan band + You/Events band share one continuous top glow,
+       instead of each section restarting its own — the glow belongs to the
+       top of the page, not to any one band) ── */
+    .ops-hero-zone { position: relative; overflow: hidden; background: var(--ops-bg); }
+    .ops-hero-zone::before {
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse 55% 100% at 0% 0%, color-mix(in oklch, var(--ops-gold) 10%, transparent), transparent 65%);
+    }
+    .ops-hero-zone .ops-band { position: relative; z-index: 1; }
+
+    /* ── YOU + EVENTS BAND (side by side, like the personal/status split before) ── */
+    .ops-you-events-grid {
+        display: grid; grid-template-columns: 1.3fr 1fr; gap: 40px; align-items: start;
+        position: relative; z-index: 1;
+    }
+    .ops-you-events-grid.solo { grid-template-columns: 1fr; }
+    .ops-events-col-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .ops-events-col-head h2 {
         font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 11px;
-        letter-spacing: 1.6px; text-transform: uppercase; color: var(--ops-ink-dim);
+        letter-spacing: 1.4px; text-transform: uppercase; color: var(--ops-ink-dim);
     }
-    .ops-eyebrow b { color: var(--ops-ink); font-weight: 700; }
-    .ops-eyebrow .sep { color: var(--ops-gold); margin: 0 2px; }
-
-    .ops-h1 {
-        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
-        font-size: clamp(32px, 4vw, 48px); line-height: 1.04; letter-spacing: .2px;
-        color: var(--ops-ink); margin-bottom: 8px;
-    }
-    .ops-h1 .who { color: var(--ops-gold); }
-    .ops-rank {
+    .ops-events-grid--paired { grid-template-columns: 1fr; gap: 12px; }
+    .ops-who { color: var(--ops-gold); }
+    .ops-you-rank {
         font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700;
-        color: var(--ops-ink-dim); margin-bottom: 22px; display: flex; align-items: center; gap: 8px;
+        color: var(--ops-ink-dim); margin-top: 6px; margin-bottom: 28px; display: flex; align-items: center; gap: 8px;
     }
-    .ops-rank .th { color: var(--ops-gold); }
-    .ops-lede { font-family: 'Manrope', sans-serif; font-size: 15px; color: var(--ops-ink-dim); line-height: 1.7; max-width: 460px; margin-bottom: 26px; }
+    .ops-you-rank .th { color: var(--ops-gold); }
 
-    /* personal stat rows */
-    .ops-stat-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 18px; }
-    .ops-stat-row {
-        display: flex; align-items: baseline; gap: 11px; padding: 7px 0 7px 12px;
-        border-left: 2px solid var(--ops-line); text-decoration: none;
-        transition: border-color .15s;
+    .ops-you-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 2px; margin-bottom: 20px; border: 1px solid var(--ops-line); border-radius: 10px; overflow: hidden;
     }
-    .ops-stat-row:hover { border-left-color: var(--tick, var(--ops-ink-dim)); }
-    .ops-stat-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 17px; min-width: 28px; text-align: right; flex-shrink: 0; }
-    .ops-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); transition: color .15s; }
-    .ops-stat-row:hover .ops-stat-lbl { color: var(--ops-ink); }
+    .ops-you-stat {
+        background: var(--ops-surface); padding: 18px 20px; text-decoration: none;
+        transition: background .15s var(--ease), transform .15s var(--ease);
+    }
+    .ops-you-stat:hover { background: var(--ops-surface-2); transform: translateY(-1px); }
+    .ops-you-stat:active { transform: translateY(-1px) scale(0.98); transition-duration: .1s; }
+    .ops-you-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 28px; line-height: 1; }
+    .ops-you-lbl { font-family: 'Manrope', sans-serif; font-size: 12px; color: var(--ops-ink-dim); margin-top: 8px; line-height: 1.4; }
 
-    /* ore strip */
     .ops-ore-strip {
-        display: flex; border: 1px solid var(--ops-line); border-radius: 8px;
-        overflow: hidden; text-decoration: none; max-width: 420px;
-        transition: border-color .15s;
+        display: flex; border: 1px solid var(--ops-line); border-radius: 10px;
+        overflow: hidden; text-decoration: none; max-width: 460px;
+        transition: border-color .15s var(--ease), transform .15s var(--ease);
     }
-    .ops-ore-strip:hover { border-color: rgba(217,164,65,.4); }
-    .ops-ore-cell { flex: 1; padding: 12px 10px; text-align: center; border-right: 1px solid var(--ops-line); }
+    .ops-ore-strip:hover { border-color: color-mix(in oklch, var(--ops-gold) 40%, transparent); transform: translateY(-1px); }
+    .ops-ore-strip:active { transform: translateY(-1px) scale(0.99); transition-duration: .1s; }
+    .ops-ore-cell { flex: 1; padding: 14px 12px; text-align: center; border-right: 1px solid var(--ops-line); }
     .ops-ore-cell:last-child { border-right: none; }
-    .ops-ore-icon { width: 15px; height: 15px; object-fit: contain; margin-bottom: 6px; }
-    .ops-ore-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; line-height: 1; }
-    .ops-ore-sub { font-family: 'Manrope', sans-serif; font-size: 10px; color: var(--ops-ink-dim); margin-top: 5px; }
+    .ops-ore-icon { width: 16px; height: 16px; object-fit: contain; margin-bottom: 7px; }
+    .ops-ore-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px; line-height: 1; }
+    .ops-ore-sub { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); margin-top: 5px; }
 
-    /* ── STATUS COLUMN ── */
-    .ops-status-lbl {
-        font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700;
-        letter-spacing: 1.6px; text-transform: uppercase; color: var(--ops-ink-dim);
-        margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+    /* ── EVENTS BAND (WAR ROOM) ── */
+    .ops-events-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;
     }
-    .ops-status-lbl::after { content: ''; flex: 1; height: 1px; background: var(--ops-line); }
-
     .ops-ticket {
-        background: var(--ops-surface); border: 1px solid var(--ops-line);
-        border-left: 3px solid var(--mode); border-radius: 8px;
-        padding: 16px 18px; text-decoration: none; display: block;
-        transition: border-color .15s, transform .15s;
+        background: var(--ops-surface); border: 1px solid color-mix(in oklch, var(--mode) 30%, var(--ops-line));
+        border-radius: 10px; padding: 18px 20px; text-decoration: none; display: block;
+        position: relative; overflow: hidden;
+        transition: border-color .15s var(--ease), transform .15s var(--ease), background .15s var(--ease);
     }
-    .ops-ticket:hover { transform: translateX(2px); }
-    .ops-ticket + .ops-ticket { margin-top: 10px; }
-    .ops-ticket-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .ops-ticket::before {
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background: color-mix(in oklch, var(--mode) 5%, transparent);
+    }
+    .ops-ticket:hover { transform: translateY(-2px); background: var(--ops-surface-2); }
+    .ops-ticket:active { transform: translateY(-2px) scale(0.99); transition-duration: .1s; }
+    .ops-ticket-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; position: relative; z-index: 1; }
     .ops-ticket-mode {
         font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700;
         letter-spacing: 1.3px; text-transform: uppercase; color: var(--mode);
         display: flex; align-items: center; gap: 7px;
     }
-    .ops-live-dot {
-        width: 6px; height: 6px; border-radius: 50%; background: var(--mode); flex-shrink: 0;
-    }
+    .ops-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mode); flex-shrink: 0; }
     @media (prefers-reduced-motion: no-preference) {
         .ops-live-dot.on { animation: ops-pulse 1.8s ease-in-out infinite; }
     }
@@ -116,10 +144,10 @@
     .ops-ticket-state {
         font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700;
         padding: 2px 9px; border-radius: 3px; text-transform: uppercase; letter-spacing: .4px;
-        background: color-mix(in srgb, var(--mode) 14%, transparent);
-        color: var(--mode); border: 1px solid color-mix(in srgb, var(--mode) 32%, transparent);
+        background: color-mix(in oklch, var(--mode) 14%, transparent);
+        color: var(--mode); border: 1px solid color-mix(in oklch, var(--mode) 32%, transparent);
     }
-    .ops-score-row { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 4px; }
+    .ops-score-row { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 4px; position: relative; z-index: 1; }
     .ops-score-side { text-align: center; flex: 1; }
     .ops-score-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 30px; line-height: 1; }
     .ops-score-atk { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); margin-top: 3px; }
@@ -127,99 +155,138 @@
     .ops-score-sep { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--ops-ink-dim); }
     .ops-win-txt  { color: var(--ops-win) !important; }
     .ops-loss-txt { color: var(--ops-raid) !important; }
-    .ops-idle-msg { text-align: center; padding: 10px 0 14px; color: var(--ops-ink-dim); font-family: 'Manrope', sans-serif; font-size: 12.5px; }
-    .ops-big-stat { text-align: center; margin-bottom: 4px; }
+    .ops-tie-txt  { color: var(--yellow) !important; }
+    .ops-idle-msg { text-align: center; padding: 10px 0 14px; color: var(--ops-ink-dim); font-family: 'Manrope', sans-serif; font-size: 12.5px; position: relative; z-index: 1; }
+    .ops-verdict-row { text-align: center; margin-bottom: 2px; position: relative; z-index: 1; }
+    .ops-big-stat { text-align: center; margin-bottom: 4px; position: relative; z-index: 1; }
     .ops-big-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 32px; color: var(--mode); line-height: 1; }
     .ops-big-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); margin-top: 4px; }
     .ops-ticket-meta {
         display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
         font-family: 'Manrope', sans-serif; font-size: 11.5px; color: var(--ops-ink-dim);
         margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ops-line);
+        position: relative; z-index: 1;
     }
     .ops-ticket-meta strong { color: var(--ops-ink); font-weight: 600; }
-    .ops-goto { font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .5px; color: var(--ops-ink-dim); }
+    .ops-goto { font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .5px; color: var(--ops-ink-dim); transition: color .15s var(--ease); display: inline-block; }
     .ops-ticket:hover .ops-goto { color: var(--mode); }
 
-    /* pulse (idle) card */
-    .ops-pulse { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 8px; padding: 22px 18px; }
-    .ops-pulse-row { display: flex; }
-    .ops-pulse-item { flex: 1; text-align: center; padding: 0 8px; border-left: 1px solid var(--ops-line); text-decoration: none; }
-    .ops-pulse-item:first-child { border-left: none; }
-    .ops-pulse-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 26px; color: var(--ops-ink); }
-    .ops-pulse-lbl { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); margin-top: 8px; line-height: 1.4; }
-
-    /* ── COMMAND DECK (features) ── */
-    .ops-board { padding: 68px 32px; border-top: 1px solid var(--ops-line); background: var(--ops-bg); }
-    .ops-board-head { max-width: 1400px; margin: 0 auto 40px; }
-    .ops-board-eyebrow {
-        font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 11px;
-        letter-spacing: 1.6px; text-transform: uppercase; color: var(--ops-gold); margin-bottom: 10px;
-    }
-    .ops-board-head h2 {
-        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; text-transform: uppercase;
-        font-size: clamp(26px, 3vw, 34px); letter-spacing: .5px; color: var(--ops-ink); margin-bottom: 8px;
-    }
-    .ops-board-head p { font-family: 'Manrope', sans-serif; font-size: 14px; color: var(--ops-ink-dim); }
-
-    .ops-tile-grid { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    /* ── COMMAND DECK ── */
+    /* Two tiers, not one flat repeated grid: the 4 live modes are featured tiles;
+       the reports/tools that back them up are a quieter, compact row underneath. */
+    .ops-tile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .ops-tile-tag-row { display: flex; align-items: center; gap: 6px; padding-top: 3px; }
     .ops-tile {
-        background: var(--ops-surface); border: 1px solid var(--ops-line); border-left: 3px solid var(--mode, var(--ops-line));
-        border-radius: 8px; padding: 22px 24px; display: block; text-decoration: none;
-        transition: border-color .15s, transform .15s, background .15s;
+        background: var(--ops-surface); border: 1px solid color-mix(in oklch, var(--mode, var(--ops-line)) 28%, var(--ops-line));
+        border-radius: 10px; padding: 22px 24px; display: block; text-decoration: none;
+        position: relative; overflow: hidden;
+        transition: border-color .15s var(--ease), transform .15s var(--ease), background .15s var(--ease);
+    }
+    .ops-tile::before {
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background: color-mix(in oklch, var(--mode, transparent) 4%, transparent);
     }
     .ops-tile.active:hover { transform: translateY(-2px); background: var(--ops-surface-2); }
+    .ops-tile.active:active { transform: translateY(-2px) scale(0.99); transition-duration: .1s; }
     .ops-tile.disabled { opacity: .4; cursor: not-allowed; }
-    .ops-tile-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+    .ops-tile-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; position: relative; z-index: 1; }
     .ops-tile-icon {
         width: 40px; height: 40px; border-radius: 8px; background: var(--ops-surface-2);
         border: 1px solid var(--ops-line); display: flex; align-items: center; justify-content: center; font-size: 19px;
-        position: relative;
+        position: relative; transition: transform .15s var(--ease);
     }
+    .ops-tile.active:hover .ops-tile-icon { transform: scale(1.08); }
     .ops-tile-icon img { width: 21px; height: 21px; object-fit: contain; }
     .ops-tile-tag {
         font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px;
-        text-transform: uppercase; color: var(--mode, var(--ops-ink-dim)); padding-top: 3px;
+        text-transform: uppercase; color: var(--mode, var(--ops-ink-dim));
     }
-    .ops-tile h3 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 700; font-size: 19px; color: var(--ops-ink); margin-bottom: 7px; }
-    .ops-tile p { font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); line-height: 1.6; }
+    .ops-tile h3 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 700; font-size: 19px; color: var(--ops-ink); margin-bottom: 7px; position: relative; z-index: 1; }
+    .ops-tile p { font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); line-height: 1.6; position: relative; z-index: 1; }
     .ops-tile-alert {
         position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px;
         border-radius: 8px; background: var(--ops-raid); color: #fff; font-size: 10px; font-weight: 700;
-        font-family: 'JetBrains Mono', monospace; line-height: 16px; text-align: center;
+        font-family: 'JetBrains Mono', monospace; line-height: 16px; text-align: center; z-index: 2;
     }
+    @media (max-width: 1100px) { .ops-tile-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px)  { .ops-tile-grid { grid-template-columns: 1fr; } }
+
+    .ops-tile-section-label {
+        font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 1.2px;
+        text-transform: uppercase; color: var(--ops-ink-dim); margin: 28px 0 12px;
+    }
+    .ops-tile-grid-secondary { display: flex; flex-wrap: wrap; gap: 10px; }
+    .ops-tile-mini {
+        display: flex; align-items: center; gap: 12px; flex: 1; min-width: 220px;
+        background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 8px;
+        padding: 12px 16px; text-decoration: none; transition: background .15s var(--ease), border-color .15s var(--ease), transform .15s var(--ease);
+    }
+    .ops-tile-mini:hover { background: var(--ops-surface-2); border-color: color-mix(in oklch, var(--ops-ink-dim) 40%, var(--ops-line)); transform: translateY(-1px); }
+    .ops-tile-mini:active { transform: translateY(-1px) scale(0.98); transition-duration: .1s; }
+    .ops-tile-mini-icon {
+        width: 30px; height: 30px; border-radius: 7px; background: var(--ops-surface-2);
+        border: 1px solid var(--ops-line); display: flex; align-items: center; justify-content: center;
+        color: var(--ops-ink-dim); flex-shrink: 0; position: relative; transition: transform .15s var(--ease);
+    }
+    .ops-tile-mini:hover .ops-tile-mini-icon { transform: scale(1.08); }
+    .ops-tile-mini-icon img { width: 16px; height: 16px; object-fit: contain; }
+    .ops-tile-mini-icon svg { width: 16px; height: 16px; }
+    .ops-tile-mini-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .ops-tile-mini-text strong { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 13px; color: var(--ops-ink); }
+    .ops-tile-mini-text span { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* ── FOOTER ── */
-    .ops-footer { background: var(--ops-surface); border-top: 1px solid var(--ops-line); padding: 40px 32px 24px; }
+    .ops-footer { background: var(--ops-surface); border-top: 1px solid var(--ops-line); padding: 32px 32px 22px; }
     .ops-footer-inner { max-width: 1400px; margin: 0 auto; }
-    .ops-footer-top { display: flex; justify-content: space-between; gap: 40px; flex-wrap: wrap; padding-bottom: 26px; border-bottom: 1px solid var(--ops-line); }
-    .ops-footer-brand h4 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: .4px; color: var(--ops-ink); margin-bottom: 8px; text-transform: uppercase; }
+    .ops-footer-top { display: flex; justify-content: space-between; gap: 40px; flex-wrap: wrap; padding-bottom: 20px; }
+    .ops-footer-brand h3 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: .4px; color: var(--ops-ink); margin-bottom: 8px; text-transform: uppercase; }
     .ops-footer-brand p { font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--ops-ink-dim); line-height: 1.6; max-width: 420px; }
     .ops-status-dot { display: inline-flex; align-items: center; gap: 7px; font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); margin-top: 14px; }
-    .ops-status-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ops-win); box-shadow: 0 0 6px rgba(62,192,106,.55); flex-shrink: 0; }
+    .ops-status-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ops-win); box-shadow: 0 0 6px color-mix(in oklch, var(--ops-win) 55%, transparent); flex-shrink: 0; }
     .ops-footer-links { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-    .ops-footer-links a { font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ops-ink-dim); transition: color .15s; }
+    .ops-footer-links a { font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ops-ink-dim); transition: color .15s var(--ease); }
     .ops-footer-links a:hover { color: var(--ops-ink); }
-    .ops-footer-stats { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ops-ink-dim); text-align: right; margin-top: 8px; line-height: 1.8; }
-    .ops-footer-bottom { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 18px; font-family: 'Manrope', sans-serif; font-size: 11.5px; color: var(--ops-ink-dim); }
+    .ops-footer-bottom { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 18px; border-top: 1px solid var(--ops-line); font-family: 'Manrope', sans-serif; font-size: 11.5px; color: var(--ops-ink-dim); }
 
-    /* ── FOCUS / RESPONSIVE ── */
-    .ops-hero a:focus-visible, .ops-tile:focus-visible, .ops-ticket:focus-visible, .ops-ore-strip:focus-visible {
+    /* ── FOCUS ── */
+    .ops-you-events a:focus-visible, .ops-ticket:focus-visible, .ops-ore-strip:focus-visible, .ops-clan-stat:focus-visible, .ops-tile:focus-visible, .ops-tile-mini:focus-visible {
         outline: 2px solid var(--ops-gold); outline-offset: 2px; border-radius: 6px;
+        transition: outline-offset .15s var(--ease);
     }
-    @media (max-width: 1100px) {
-        .ops-tile-grid { grid-template-columns: repeat(2, 1fr); }
+
+    /* Hover/press motion is feedback, not decoration — but still motion. Respect the OS
+       preference by dropping straight to the resting position instead of easing there. */
+    @media (prefers-reduced-motion: reduce) {
+        .ops-clan-stat:hover, .ops-clan-stat:active,
+        .ops-you-stat:hover, .ops-you-stat:active,
+        .ops-ore-strip:hover, .ops-ore-strip:active,
+        .ops-ticket:hover, .ops-ticket:active,
+        .ops-tile.active:hover, .ops-tile.active:active,
+        .ops-tile-mini:hover, .ops-tile-mini:active {
+            transform: none;
+        }
+        .ops-tile.active:hover .ops-tile-icon, .ops-tile-mini:hover .ops-tile-mini-icon {
+            transform: none;
+        }
+        .hero-scan-hex, .hero-scanline { display: none !important; }
     }
+
+    /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
-        .ops-hero { padding: 40px 20px 36px; }
-        .ops-hero-grid { grid-template-columns: 1fr; gap: 30px; }
-        .ops-board { padding: 52px 20px; }
-        .ops-footer { padding: 32px 20px 20px; }
+        .ops-band { padding: 32px 20px; }
+        .ops-footer { padding: 28px 20px 18px; }
+        .ops-you-events-grid { grid-template-columns: 1fr; gap: 28px; }
+        /* Below 900px, auto-fit(300px,1fr) lands on exactly 2 columns and orphans a 3rd
+           ticket alone on a half-empty row — the one range where "fluid" stops being fluid.
+           Skip straight from 3-up to 1-up instead of passing through that dead zone. */
+        .ops-events-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
-        .ops-tile-grid { grid-template-columns: 1fr; }
+        .ops-clan-inner { flex-direction: column; align-items: flex-start; }
+        .ops-clan-stats { width: 100%; }
+        .ops-clan-stat { flex: 1; padding: 12px 8px; }
         .ops-footer-top { flex-direction: column; }
         .ops-footer-links { align-items: flex-start; }
-        .ops-footer-stats { text-align: left; }
     }
 </style>
 </head>
@@ -227,17 +294,18 @@
 
 {% include '_nav.html' %}
 
-<!-- Ops Hero -->
-<section class="ops-hero">
-    <div class="ops-hero-grid">
-        <div>
-            <div class="ops-badge-row">
+<div class="ops-hero-zone">
+<!-- Clan band -->
+<section class="ops-band">
+    <div class="ops-band-inner">
+        <div class="ops-clan-inner">
+            <div class="ops-clan-id">
                 <div class="hex-badge">
                     <div class="hex-badge-inner">
                         {% if clan_badge_url %}
                         <img src="{{ clan_badge_url }}" alt="{{ clan_name }} badge">
                         {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--ops-gold)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
                             <path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
                             <path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/>
@@ -249,158 +317,277 @@
                         </svg>
                         {% endif %}
                     </div>
+                    <svg class="hero-scan-hex" id="heroScanHex" viewBox="0 0 56 48" aria-hidden="true">
+                        <polygon points="14,1.4 42,1.4 56,24 42,46.6 14,46.6 0,24" fill="none" stroke="var(--ops-gold)" stroke-width="2"/>
+                    </svg>
                 </div>
-                <div class="ops-eyebrow">Clan Ops <span class="sep">/</span> <b>{{ clan_name }}</b></div>
+                <div>
+                    <h1 class="ops-clan-name">{{ clan_name }}</h1>
+                    <div class="ops-clan-sub">{{ total_members }} member{{ 's' if total_members != 1 else '' }} tracked · week resets {{ week_start_name }}</div>
+                </div>
             </div>
-
-            {% if current_user and current_user.linked_player %}
-            <h1 class="ops-h1">Welcome back,<br><span class="who">{{ current_user.linked_player.name }}</span></h1>
-            {% if player_th %}
-            <div class="ops-rank"><span class="th">TH{{ player_th }}</span> · {{ player_league or 'Unranked' }}</div>
-            {% endif %}
-
-            <div class="ops-stat-list">
-                {% if player_ranked_left is not none %}
-                {% set rl_color = 'var(--ops-win)' if player_ranked_left == 0 else ('var(--ops-gold)' if player_ranked_left <= 3 else 'var(--ops-raid)') %}
-                <a href="/ranked" class="ops-stat-row" style="--tick:{{ rl_color }};">
-                    <span class="ops-stat-num" style="color:{{ rl_color }};">{{ player_ranked_left }}</span>
-                    <span class="ops-stat-lbl">ranked attacks left this week</span>
+            <div class="ops-clan-stats" id="heroClanStats">
+                <a href="/clan" class="ops-clan-stat">
+                    <div class="ops-clan-num">{{ total_members }}</div>
+                    <div class="ops-clan-lbl">Members</div>
                 </a>
-                {% endif %}
-                <a href="/battles" class="ops-stat-row" style="--tick:var(--ops-ink-dim);">
-                    <span class="ops-stat-num" style="color:{{ 'var(--ops-win)' if player_attacks_this_week > 0 else 'var(--ops-ink-dim)' }};">{{ player_attacks_this_week }}</span>
-                    <span class="ops-stat-lbl">attacks since {{ week_start_name }}</span>
+                <a href="/battles" class="ops-clan-stat">
+                    <div class="ops-clan-num" style="color:var(--ops-war);">{{ battle_logs_this_week }}</div>
+                    <div class="ops-clan-lbl">War attacks<br>this week</div>
                 </a>
-                {% if player_war_stats.attacks > 0 %}
-                <a href="/war" class="ops-stat-row" style="--tick:var(--ops-gold);">
-                    <span class="ops-stat-num" style="color:var(--ops-gold);">{{ player_war_stats.attacks }}</span>
-                    <span class="ops-stat-lbl">war attacks · {{ player_war_stats.wars }} war{{ 's' if player_war_stats.wars != 1 else '' }} · last 30d</span>
+                <a href="/ranked" class="ops-clan-stat">
+                    <div class="ops-clan-num" style="color:var(--ops-ranked);">{{ ranked_battles_this_week }}</div>
+                    <div class="ops-clan-lbl">Ranked attacks<br>this week</div>
                 </a>
-                {% endif %}
-                {% if player_cwl_stats.attacks > 0 %}
-                <a href="/cwl" class="ops-stat-row" style="--tick:var(--ops-elixir);">
-                    <span class="ops-stat-num" style="color:var(--ops-elixir);">{{ player_cwl_stats.attacks }}</span>
-                    <span class="ops-stat-lbl">CWL · {{ player_cwl_stats.wars }} round{{ 's' if player_cwl_stats.wars != 1 else '' }} · last season</span>
-                </a>
-                {% endif %}
             </div>
-
-            <a href="/tools/equipment" class="ops-ore-strip" title="Ore balance — open the equipment planner">
-                <div class="ops-ore-cell">
-                    <img src="/static/img/shiny.png" class="ops-ore-icon">
-                    <div class="ops-ore-val" style="color:var(--ops-gold);">{{ "{:,}".format(player_ore.shiny) }}</div>
-                    <div class="ops-ore-sub"><span id="pog-shiny-d">—</span>/d · <span id="pog-shiny-m">—</span>/mo</div>
-                </div>
-                <div class="ops-ore-cell">
-                    <img src="/static/img/glowy.png" class="ops-ore-icon">
-                    <div class="ops-ore-val" style="color:var(--ops-win);">{{ "{:,}".format(player_ore.glowy) }}</div>
-                    <div class="ops-ore-sub"><span id="pog-glowy-d">—</span>/d · <span id="pog-glowy-m">—</span>/mo</div>
-                </div>
-                <div class="ops-ore-cell">
-                    <img src="/static/img/starry.png" class="ops-ore-icon">
-                    <div class="ops-ore-val" style="color:var(--ops-elixir);">{{ player_ore.starry }}</div>
-                    <div class="ops-ore-sub"><span id="pog-starry-d">—</span>/d · <span id="pog-starry-m">—</span>/mo</div>
-                </div>
-            </a>
-
-            {% else %}
-            <h1 class="ops-h1"><span class="who">{{ clan_name }}</span><br>Analytics</h1>
-            <p class="ops-lede">Live performance tracking for the clan — ranked seasons, war scoreboards, CWL standings and raid weekends, updated automatically.</p>
-            {% endif %}
+            <div class="hero-scanline" id="heroScanline" aria-hidden="true"></div>
         </div>
+    </div>
+</section>
+<script>
+(function () {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var hex = document.getElementById('heroScanHex');
+    var poly = hex && hex.querySelector('polygon');
+    var badge = document.querySelector('.hex-badge');
+    var scanline = document.getElementById('heroScanline');
+    var statsWrap = document.getElementById('heroClanStats');
+    if (!hex || !poly || !badge || !scanline || !statsWrap) return;
 
-        <div>
-            <div class="ops-status-lbl">{% if active_war or active_cwl_season or active_raid %}Live Right Now{% else %}Clan Pulse{% endif %}</div>
+    // Captured once, up front, before anything gets zeroed — this is also the
+    // safety net's source of truth if rAF/transitions never get to run (a
+    // background tab throttles both; the real numbers must still land).
+    var nums = Array.prototype.map.call(statsWrap.querySelectorAll('.ops-clan-num'), function (el) {
+        return { el: el, target: parseInt(el.textContent, 10) || 0 };
+    });
 
-            {% if active_war %}
-            <a href="/war" class="ops-ticket" style="--mode:var(--ops-gold);">
-                <div class="ops-ticket-head">
-                    <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if active_war.state == 'inWar' }}"></span>War</span>
-                    <span class="ops-ticket-state">{% if active_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+    function countUp(duration) {
+        nums.forEach(function (n) { n.el.textContent = '0'; });
+        var start = performance.now();
+        function tick(now) {
+            var p = Math.min(1, (now - start) / duration);
+            var eased = 1 - Math.pow(1 - p, 3);
+            nums.forEach(function (n) { n.el.textContent = Math.round(eased * n.target); });
+            if (p < 1) requestAnimationFrame(tick); else nums.forEach(function (n) { n.el.textContent = n.target; });
+        }
+        requestAnimationFrame(tick);
+    }
+
+    function settle() {
+        nums.forEach(function (n) { n.el.textContent = n.target; });
+        badge.style.transition = 'none'; badge.style.opacity = '1';
+        hex.style.transition = 'none'; hex.style.opacity = '0';
+        scanline.style.transition = 'none'; scanline.style.opacity = '0';
+    }
+    // Guaranteed correct end-state even if rAF/transitions are throttled
+    // (e.g. the page loaded in a background tab) — real content always wins.
+    setTimeout(settle, 1800);
+
+    try {
+        var len = poly.getTotalLength();
+        poly.style.strokeDasharray = len;
+        poly.style.strokeDashoffset = len;
+        badge.style.opacity = '0';
+        badge.style.transition = 'opacity 300ms ' + getComputedStyle(document.documentElement).getPropertyValue('--ease');
+        requestAnimationFrame(function () {
+            poly.style.transition = 'stroke-dashoffset 550ms cubic-bezier(0.16,1,0.3,1)';
+            poly.style.strokeDashoffset = '0';
+            setTimeout(function () { badge.style.opacity = '1'; }, 220);
+        });
+        setTimeout(function () {
+            scanline.style.transition = 'left 450ms var(--ease), opacity 450ms';
+            scanline.style.opacity = '1';
+            scanline.style.left = 'calc(100% + 80px)';
+        }, 350);
+        setTimeout(function () { countUp(550); }, 500);
+        setTimeout(function () { hex.style.transition = 'opacity 250ms'; hex.style.opacity = '0'; }, 700);
+    } catch (e) {
+        badge.style.opacity = '1';
+    }
+})();
+</script>
+
+{% set show_you = current_user and current_user.linked_player %}
+{% set show_events = active_war or last_war or active_raid or last_raid or active_cwl_season or last_cwl_war %}
+{% if show_you or show_events %}
+<!-- You + Events band -->
+<section class="ops-band ops-you-events">
+    <div class="ops-band-inner">
+        <div class="ops-you-events-grid {{ '' if (show_you and show_events) else 'solo' }}">
+
+            {% if show_you %}
+            <div class="ops-you-col">
+                <div class="ops-band-head">
+                    <h2>Welcome back, <span class="ops-who">{{ current_user.linked_player.name }}</span></h2>
                 </div>
-                {% if active_war.state == 'inWar' %}
+                {% if player_th %}
+                <div class="ops-you-rank"><span class="th">TH{{ player_th }}</span> · {{ player_league or 'Unranked' }}</div>
+                {% endif %}
+
+                <div class="ops-you-grid">
+                    {% if player_ranked_left is not none %}
+                    {% set rl_color = 'var(--ops-win)' if player_ranked_left == 0 else ('var(--ops-gold)' if player_ranked_left <= 3 else 'var(--ops-raid)') %}
+                    <a href="/ranked" class="ops-you-stat">
+                        <div class="ops-you-num" style="color:{{ rl_color }};">{{ player_ranked_left }}</div>
+                        <div class="ops-you-lbl">ranked attacks left this week</div>
+                    </a>
+                    {% endif %}
+                    <a href="/battles" class="ops-you-stat">
+                        <div class="ops-you-num" style="color:{{ 'var(--ops-win)' if player_attacks_this_week > 0 else 'var(--ops-ink-dim)' }};">{{ player_attacks_this_week }}</div>
+                        <div class="ops-you-lbl">attacks since {{ week_start_name }}</div>
+                    </a>
+                    {% if player_war_stats.attacks > 0 %}
+                    <a href="/war" class="ops-you-stat">
+                        <div class="ops-you-num" style="color:var(--ops-war);">{{ player_war_stats.attacks }}</div>
+                        <div class="ops-you-lbl">war attacks · {{ player_war_stats.wars }} war{{ 's' if player_war_stats.wars != 1 else '' }} · last 30d</div>
+                    </a>
+                    {% endif %}
+                    {% if player_cwl_stats.attacks > 0 %}
+                    <a href="/cwl" class="ops-you-stat">
+                        <div class="ops-you-num" style="color:var(--ops-elixir);">{{ player_cwl_stats.attacks }}</div>
+                        <div class="ops-you-lbl">CWL · {{ player_cwl_stats.wars }} round{{ 's' if player_cwl_stats.wars != 1 else '' }} · last season</div>
+                    </a>
+                    {% endif %}
+                </div>
+
+                <a href="/tools/equipment" class="ops-ore-strip" title="Ore balance — open the equipment planner">
+                    <div class="ops-ore-cell">
+                        <img src="/static/img/shiny.png" class="ops-ore-icon" alt="">
+                        <div class="ops-ore-val" style="color:var(--ops-gold);">{{ "{:,}".format(player_ore.shiny) }}</div>
+                        <div class="ops-ore-sub"><span id="pog-shiny-d">—</span>/d · <span id="pog-shiny-m">—</span>/mo</div>
+                    </div>
+                    <div class="ops-ore-cell">
+                        <img src="/static/img/glowy.png" class="ops-ore-icon" alt="">
+                        <div class="ops-ore-val" style="color:var(--ops-win);">{{ "{:,}".format(player_ore.glowy) }}</div>
+                        <div class="ops-ore-sub"><span id="pog-glowy-d">—</span>/d · <span id="pog-glowy-m">—</span>/mo</div>
+                    </div>
+                    <div class="ops-ore-cell">
+                        <img src="/static/img/starry.png" class="ops-ore-icon" alt="">
+                        <div class="ops-ore-val" style="color:var(--ops-elixir);">{{ player_ore.starry }}</div>
+                        <div class="ops-ore-sub"><span id="pog-starry-d">—</span>/d · <span id="pog-starry-m">—</span>/mo</div>
+                    </div>
+                </a>
+            </div>
+            {% endif %}
+
+            {% if show_events %}
+            {% set war_active = active_war is not none %}
+            {% set cwl_active = active_cwl_season is not none %}
+            {% set raid_active = active_raid is not none %}
+            {% set any_active = war_active or cwl_active or raid_active %}
+            {% set any_last_only = (last_war and not war_active) or (last_cwl_war and not cwl_active) or (last_raid and not raid_active) %}
+            <div class="ops-events-col">
+                <div class="ops-events-col-head">
+                    <h2>War Room</h2>
+                    <span class="ops-band-sub">{% if any_active %}What's live right now{% else %}Nothing live — last completed rounds{% endif %}</span>
+                </div>
+
+                {% if any_active %}
+                <div class="ops-events-grid {{ 'ops-events-grid--paired' if show_you else '' }}">
+
+            {% if war_active %}
+            {% set war = active_war %}
+            <a href="/war" class="ops-ticket" style="--mode:var(--ops-war);">
+                <div class="ops-ticket-head">
+                    <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if war.state == 'inWar' }}"></span>War</span>
+                    <span class="ops-ticket-state">{% if war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+                </div>
+
+                {% if war.state == 'inWar' %}
                 <div class="ops-score-row">
                     <div class="ops-score-side">
-                        <div class="ops-score-num ops-win-txt">{{ active_war.clan_stars or 0 }}★</div>
-                        <div class="ops-score-atk">{{ active_war.clan_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
-                        <div class="ops-score-lbl">{{ active_war.clan_name or 'Us' }}</div>
+                        <div class="ops-score-num ops-win-txt">{{ war.clan_stars or 0 }}★</div>
+                        <div class="ops-score-atk">{{ war.clan_attacks or 0 }}/{{ (war.team_size or 0) * 2 }} atk</div>
+                        <div class="ops-score-lbl">{{ war.clan_name or 'Us' }}</div>
                     </div>
                     <div class="ops-score-sep">VS</div>
                     <div class="ops-score-side">
-                        <div class="ops-score-num ops-loss-txt">{{ active_war.opponent_stars or 0 }}★</div>
-                        <div class="ops-score-atk">{{ active_war.opponent_attacks or 0 }}/{{ (active_war.team_size or 0) * 2 }} atk</div>
-                        <div class="ops-score-lbl">{{ active_war.opponent_name or 'Them' }}</div>
+                        <div class="ops-score-num ops-loss-txt">{{ war.opponent_stars or 0 }}★</div>
+                        <div class="ops-score-atk">{{ war.opponent_attacks or 0 }}/{{ (war.team_size or 0) * 2 }} atk</div>
+                        <div class="ops-score-lbl">{{ war.opponent_name or 'Them' }}</div>
                     </div>
                 </div>
-                {% else %}
-                <div class="ops-idle-msg">War starts {{ active_war.start_time | local_dt('%d.%m · %H:%M') if active_war.start_time else 'soon' }}</div>
+                {% if war_win_status %}
+                <div class="ops-verdict-row">
+                    {% if war_win_status == 'safe_win' %}<span class="ops-ticket-state" style="--mode:var(--ops-win);color:var(--ops-win);border-color:color-mix(in oklch, var(--ops-win) 35%, transparent);background:color-mix(in oklch, var(--ops-win) 12%, transparent);">Safe Win</span>
+                    {% elif war_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:color-mix(in oklch, var(--ops-raid) 35%, transparent);background:color-mix(in oklch, var(--ops-raid) 12%, transparent);">Out of Reach</span>
+                    {% elif war_win_status == 'undecided' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:color-mix(in oklch, var(--ops-gold) 35%, transparent);background:color-mix(in oklch, var(--ops-gold) 12%, transparent);">Undecided</span>
+                    {% endif %}
+                </div>
                 {% endif %}
+                {% else %}
+                <div class="ops-idle-msg">War starts {{ war.start_time | local_dt('%d.%m · %H:%M') if war.start_time else 'soon' }}</div>
+                {% endif %}
+
                 <div class="ops-ticket-meta">
-                    <span>vs <strong>{{ active_war.opponent_name or '?' }}</strong>{% if active_war.team_size %} · {{ active_war.team_size }}v{{ active_war.team_size }}{% endif %}</span>
+                    <span>vs <strong>{{ war.opponent_name or '?' }}</strong>{% if war.team_size %} · {{ war.team_size }}v{{ war.team_size }}{% endif %}</span>
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        {% if active_war.end_time %}<span>Ends {{ active_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        {% if war.end_time %}<span>Ends {{ war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
                         <span class="ops-goto">Go to →</span>
                     </div>
                 </div>
             </a>
             {% endif %}
 
-            {% if active_cwl_season %}
+            {% if cwl_active %}
+            {% set cwl_war = active_cwl_war %}
+            {% set cwl_season = active_cwl_season %}
             <a href="/cwl" class="ops-ticket" style="--mode:var(--ops-elixir);">
                 <div class="ops-ticket-head">
-                    <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if active_cwl_war and active_cwl_war.state == 'inWar' }}"></span>War League</span>
-                    <span class="ops-ticket-state">{% if active_cwl_war and active_cwl_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
+                    <span class="ops-ticket-mode"><span class="ops-live-dot {{ 'on' if cwl_war and cwl_war.state == 'inWar' }}"></span>CWL</span>
+                    <span class="ops-ticket-state">{% if cwl_war and cwl_war.state == 'inWar' %}In War{% else %}Preparation{% endif %}</span>
                 </div>
 
-                {% if active_cwl_war and active_cwl_war.state == 'inWar' %}
-                {% set our_side = active_cwl_war.clan_tag == CLAN_TAG %}
-                {% set our_stars  = active_cwl_war.clan_stars   if our_side else active_cwl_war.opp_stars %}
-                {% set our_atk    = active_cwl_war.clan_attacks  if our_side else active_cwl_war.opp_attacks %}
-                {% set our_name   = active_cwl_war.clan_name    if our_side else active_cwl_war.opp_name %}
-                {% set opp_stars  = active_cwl_war.opp_stars    if our_side else active_cwl_war.clan_stars %}
-                {% set opp_atk    = active_cwl_war.opp_attacks   if our_side else active_cwl_war.clan_attacks %}
-                {% set opp_name   = active_cwl_war.opp_name     if our_side else active_cwl_war.clan_name %}
+                {% if cwl_war and cwl_war.state == 'inWar' %}
+                {% set our_side = cwl_war.clan_tag == CLAN_TAG %}
+                {% set our_stars  = cwl_war.clan_stars   if our_side else cwl_war.opp_stars %}
+                {% set our_atk    = cwl_war.clan_attacks  if our_side else cwl_war.opp_attacks %}
+                {% set our_name   = cwl_war.clan_name    if our_side else cwl_war.opp_name %}
+                {% set opp_stars  = cwl_war.opp_stars    if our_side else cwl_war.clan_stars %}
+                {% set opp_atk    = cwl_war.opp_attacks   if our_side else cwl_war.clan_attacks %}
+                {% set opp_name   = cwl_war.opp_name     if our_side else cwl_war.clan_name %}
                 {% set our_s = our_stars or 0 %}
                 {% set opp_s = opp_stars or 0 %}
                 <div class="ops-score-row">
                     <div class="ops-score-side">
                         <div class="ops-score-num {{ 'ops-win-txt' if our_s > opp_s else ('ops-loss-txt' if our_s < opp_s else '') }}">{{ our_s }}★</div>
-                        <div class="ops-score-atk">{{ our_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
+                        <div class="ops-score-atk">{{ our_atk or 0 }}/{{ cwl_war.team_size or 0 }} atk</div>
                         <div class="ops-score-lbl">{{ our_name or clan_name }}</div>
                     </div>
                     <div class="ops-score-sep">{% if our_s > opp_s %}WINNING{% elif our_s < opp_s %}LOSING{% else %}TIED{% endif %}</div>
                     <div class="ops-score-side">
                         <div class="ops-score-num {{ 'ops-win-txt' if opp_s > our_s else ('ops-loss-txt' if opp_s < our_s else '') }}">{{ opp_s }}★</div>
-                        <div class="ops-score-atk">{{ opp_atk or 0 }}/{{ active_cwl_war.team_size or 0 }} atk</div>
+                        <div class="ops-score-atk">{{ opp_atk or 0 }}/{{ cwl_war.team_size or 0 }} atk</div>
                         <div class="ops-score-lbl">{{ opp_name or 'Opponent' }}</div>
                     </div>
                 </div>
                 {% if cwl_win_status %}
-                <div style="text-align:center;margin-bottom:2px;">
-                    {% if cwl_win_status == 'safe_win' %}<span class="ops-ticket-state" style="--mode:var(--ops-win);color:var(--ops-win);border-color:rgba(62,192,106,.35);background:rgba(62,192,106,.12);">Safe Win</span>
-                    {% elif cwl_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:rgba(226,72,63,.35);background:rgba(226,72,63,.12);">Out of Reach</span>
-                    {% elif cwl_win_status == 'contested' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:rgba(217,164,65,.35);background:rgba(217,164,65,.12);">Undecided</span>
+                <div class="ops-verdict-row">
+                    {% if cwl_win_status == 'safe_win' %}<span class="ops-ticket-state" style="color:var(--ops-win);border-color:color-mix(in oklch, var(--ops-win) 35%, transparent);background:color-mix(in oklch, var(--ops-win) 12%, transparent);">Safe Win</span>
+                    {% elif cwl_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:color-mix(in oklch, var(--ops-raid) 35%, transparent);background:color-mix(in oklch, var(--ops-raid) 12%, transparent);">Out of Reach</span>
+                    {% elif cwl_win_status == 'undecided' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:color-mix(in oklch, var(--ops-gold) 35%, transparent);background:color-mix(in oklch, var(--ops-gold) 12%, transparent);">Undecided</span>
                     {% endif %}
                 </div>
                 {% endif %}
                 {% else %}
                 <div class="ops-idle-msg">
-                    {% if active_cwl_war and active_cwl_war.start_time %}War starts {{ active_cwl_war.start_time | local_dt('%d.%m · %H:%M') }}
-                    {% else %}Season {{ active_cwl_season.season }} · {{ active_cwl_season.league_name or 'CWL' }}{% endif %}
+                    {% if cwl_war and cwl_war.start_time %}War starts {{ cwl_war.start_time | local_dt('%d.%m · %H:%M') }}
+                    {% else %}Season {{ cwl_season.season }} · {{ cwl_season.league_name or 'CWL' }}{% endif %}
                 </div>
                 {% endif %}
 
                 <div class="ops-ticket-meta">
-                    <span>{{ active_cwl_season.season }}{% if active_cwl_season.league_name %} · {{ active_cwl_season.league_name }}{% endif %}{% if active_cwl_war %} · Round {{ active_cwl_war.round_number }}{% endif %}</span>
+                    <span>{{ cwl_season.season }}{% if cwl_season.league_name %} · {{ cwl_season.league_name }}{% endif %}{% if cwl_war %} · Round {{ cwl_war.round_number }}{% endif %}</span>
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        {% if active_cwl_war and active_cwl_war.end_time %}<span>Ends {{ active_cwl_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        {% if cwl_war and cwl_war.end_time %}<span>Ends {{ cwl_war.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
                         <span class="ops-goto">Go to →</span>
                     </div>
                 </div>
             </a>
             {% endif %}
 
-            {% if active_raid %}
+            {% if raid_active %}
+            {% set raid = active_raid %}
             <a href="/raid" class="ops-ticket" style="--mode:var(--ops-raid);">
                 <div class="ops-ticket-head">
                     <span class="ops-ticket-mode"><span class="ops-live-dot on"></span>Raid Weekend</span>
@@ -416,114 +603,163 @@
                     {% endif %}
                 </div>
                 <div class="ops-ticket-meta">
-                    <span>Started {{ active_raid.start_time.strftime('%d.%m') if active_raid.start_time else '—' }}</span>
+                    <span>Started {{ raid.start_time | local_dt('%d.%m') if raid.start_time else '—' }}</span>
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        {% if active_raid.end_time %}<span>Ends {{ active_raid.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
+                        {% if raid.end_time %}<span>Ends {{ raid.end_time | local_dt('%d.%m · %H:%M') }}</span>{% endif %}
                         <span class="ops-goto">Go to →</span>
                     </div>
                 </div>
             </a>
             {% endif %}
 
-            {% if not (active_war or active_cwl_season or active_raid) %}
-            <div class="ops-pulse">
-                <div class="ops-pulse-row">
-                    <a href="/clan" class="ops-pulse-item">
-                        <div class="ops-pulse-num">{{ total_members }}</div>
-                        <div class="ops-pulse-lbl">Active<br>members</div>
-                    </a>
-                    <a href="/battles" class="ops-pulse-item">
-                        <div class="ops-pulse-num" style="color:var(--ops-gold);">{{ battle_logs_this_week }}</div>
-                        <div class="ops-pulse-lbl">Attacks tracked<br>since {{ week_start_name }}</div>
-                    </a>
-                    <a href="/ranked" class="ops-pulse-item">
-                        <div class="ops-pulse-num" style="color:var(--ops-ranked);">{{ ranked_battles_this_week }}</div>
-                        <div class="ops-pulse-lbl">Ranked attacks<br>this week</div>
-                    </a>
                 </div>
+                {% endif %}
+
+                {% if any_last_only %}
+                <div class="ops-tile-section-label" style="margin-top: {{ '20px' if any_active else '0' }};">Last completed</div>
+                <div class="ops-tile-grid-secondary">
+
+                    {% if last_war and not war_active %}
+                    {% set won = (last_war.clan_stars or 0) > (last_war.opponent_stars or 0) or ((last_war.clan_stars or 0) == (last_war.opponent_stars or 0) and (last_war.clan_destruction_pct or 0) > (last_war.opponent_destruction_pct or 0)) %}
+                    {% set lost = (last_war.clan_stars or 0) < (last_war.opponent_stars or 0) or ((last_war.clan_stars or 0) == (last_war.opponent_stars or 0) and (last_war.clan_destruction_pct or 0) < (last_war.opponent_destruction_pct or 0)) %}
+                    <a href="/war" class="ops-tile-mini" style="--mode:var(--ops-war);">
+                        <div class="ops-tile-mini-icon"><img src="/static/img/defense.png" alt=""></div>
+                        <div class="ops-tile-mini-text">
+                            <strong>War</strong>
+                            <span>{% if won %}Won{% elif lost %}Lost{% else %}Tied{% endif %} {{ last_war.clan_stars or 0 }}★-{{ last_war.opponent_stars or 0 }}★ vs {{ last_war.opponent_name or '?' }}</span>
+                        </div>
+                    </a>
+                    {% endif %}
+
+                    {% if last_cwl_war and not cwl_active %}
+                    {% set _our_side = last_cwl_war.clan_tag == CLAN_TAG %}
+                    {% set _our_s = (last_cwl_war.clan_stars if _our_side else last_cwl_war.opp_stars) or 0 %}
+                    {% set _opp_s = (last_cwl_war.opp_stars if _our_side else last_cwl_war.clan_stars) or 0 %}
+                    <a href="/cwl" class="ops-tile-mini" style="--mode:var(--ops-elixir);">
+                        <div class="ops-tile-mini-icon"><img src="/static/img/star.png" alt=""></div>
+                        <div class="ops-tile-mini-text">
+                            <strong>CWL</strong>
+                            <span>{% if _our_s > _opp_s %}Won{% elif _our_s < _opp_s %}Lost{% else %}Tied{% endif %} {{ _our_s }}★-{{ _opp_s }}★ · Round {{ last_cwl_war.round_number }}</span>
+                        </div>
+                    </a>
+                    {% endif %}
+
+                    {% if last_raid and not raid_active %}
+                    <a href="/raid" class="ops-tile-mini" style="--mode:var(--ops-raid);">
+                        <div class="ops-tile-mini-icon"><img src="/static/img/raidMedal.png" alt=""></div>
+                        <div class="ops-tile-mini-text">
+                            <strong>Raid Weekend</strong>
+                            <span>{{ (last_raid.offensive_reward or 0) + (last_raid.defensive_reward or 0) }} final medals</span>
+                        </div>
+                    </a>
+                    {% endif %}
+
+                </div>
+                {% endif %}
             </div>
             {% endif %}
+
         </div>
     </div>
 </section>
+{% endif %}
+</div>
 
 <!-- Command Deck -->
-<section id="features" class="ops-board">
-    <div class="ops-board-head">
-        <div class="ops-board-eyebrow">Command Deck</div>
-        <h2>Where to look next</h2>
-        <p>Four live modes — Ranked, War, CWL and Raid Weekend — plus the reports that back them up.</p>
-    </div>
-    <div class="ops-tile-grid">
+<section class="ops-band">
+    <div class="ops-band-inner">
+        <div class="ops-band-head">
+            <h2>Command Deck</h2>
+            <span class="ops-band-sub">Four live modes — plus the reports that back them up</span>
+        </div>
+        <div class="ops-tile-grid">
 
-        <a href="/ranked" class="ops-tile active" style="--mode:var(--ops-ranked);">
-            <div class="ops-tile-top">
-                <div class="ops-tile-icon">📊</div>
-                <span class="ops-tile-tag">Ranked</span>
-            </div>
-            <h3>Ranked Week</h3>
-            <p>Seasonal ladder standings, trophies and streaks.</p>
-        </a>
+            <a href="/ranked" class="ops-tile active" style="--mode:var(--ops-ranked);">
+                <div class="ops-tile-top">
+                    <div class="ops-tile-icon"><img src="/static/img/crown.png" alt=""></div>
+                    <span class="ops-tile-tag-row"><span class="ops-tile-tag">Ranked</span></span>
+                </div>
+                <h3>Ranked Week</h3>
+                <p>Seasonal ladder standings, trophies and streaks.</p>
+            </a>
 
-        <a href="/battles" class="ops-tile active">
-            <div class="ops-tile-top">
-                <div class="ops-tile-icon"><img src="/static/img/battle.png"></div>
-                <span class="ops-tile-tag">Log</span>
-            </div>
-            <h3>Battle History</h3>
-            <p>Every attack and defense — stars, percentage, loot.</p>
-        </a>
+            <a href="/war" class="ops-tile active" style="--mode:var(--ops-war);">
+                <div class="ops-tile-top">
+                    <div class="ops-tile-icon"><img src="/static/img/defense.png" alt=""></div>
+                    <span class="ops-tile-tag-row">
+                        {% if active_war %}<span class="ops-live-dot on"></span>{% endif %}
+                        <span class="ops-tile-tag">War</span>
+                    </span>
+                </div>
+                <h3>Clan War</h3>
+                <p>Live scoreboard and full attack breakdown.</p>
+            </a>
 
-        <a href="/raid" class="ops-tile active" style="--mode:var(--ops-raid);">
-            <div class="ops-tile-top">
-                <div class="ops-tile-icon"><img src="/static/img/raidMedal.png"></div>
-                <span class="ops-tile-tag">Raid</span>
-            </div>
-            <h3>Raid Weekend</h3>
-            <p>Capital loot, district cleanup and medal totals.</p>
-        </a>
+            <a href="/cwl" class="ops-tile active" style="--mode:var(--ops-elixir);">
+                <div class="ops-tile-top">
+                    <div class="ops-tile-icon"><img src="/static/img/star.png" alt=""></div>
+                    <span class="ops-tile-tag-row">
+                        {% if active_cwl_season %}<span class="ops-live-dot on"></span>{% endif %}
+                        <span class="ops-tile-tag">CWL</span>
+                    </span>
+                </div>
+                <h3>CWL</h3>
+                <p>Standings, rosters and results across all 8 clans.</p>
+            </a>
 
-        <a href="/war" class="ops-tile active" style="--mode:var(--ops-gold);">
-            <div class="ops-tile-top">
-                <div class="ops-tile-icon"><img src="/static/img/defense.png"></div>
-                <span class="ops-tile-tag">War</span>
-            </div>
-            <h3>Clan War</h3>
-            <p>Live scoreboard and full attack breakdown.</p>
-        </a>
+            <a href="/raid" class="ops-tile active" style="--mode:var(--ops-raid);">
+                <div class="ops-tile-top">
+                    <div class="ops-tile-icon"><img src="/static/img/raidMedal.png" alt=""></div>
+                    <span class="ops-tile-tag-row">
+                        {% if active_raid %}<span class="ops-live-dot on"></span>{% endif %}
+                        <span class="ops-tile-tag">Raid</span>
+                    </span>
+                </div>
+                <h3>Raid Weekend</h3>
+                <p>Capital loot, district cleanup and medal totals.</p>
+            </a>
 
-        <a href="/cwl" class="ops-tile active" style="--mode:var(--ops-elixir);">
-            <div class="ops-tile-top">
-                <div class="ops-tile-icon">🏆</div>
-                <span class="ops-tile-tag">CWL</span>
-            </div>
-            <h3>War League</h3>
-            <p>Standings, rosters and results across all 8 clans.</p>
-        </a>
+        </div>
 
-        <a href="/clan" class="ops-tile active">
-            <div class="ops-tile-top">
-                <div class="ops-tile-icon">👥</div>
-                <span class="ops-tile-tag">Roster</span>
-            </div>
-            <h3>Clan Overview</h3>
-            <p>Activity and skill score for every member, side by side.</p>
-        </a>
+        <div class="ops-tile-section-label">Reports &amp; Tools</div>
+        <div class="ops-tile-grid-secondary">
 
-        {% if is_super_admin %}
-        <a href="/admin" class="ops-tile active">
-            <div class="ops-tile-top">
-                <div class="ops-tile-icon" style="position:relative;">
-                    ⚙️
+            <a href="/battles" class="ops-tile-mini">
+                <div class="ops-tile-mini-icon"><img src="/static/img/battle.png" alt=""></div>
+                <div class="ops-tile-mini-text">
+                    <strong>Battle History</strong>
+                    <span>Every attack and defense</span>
+                </div>
+            </a>
+
+            <a href="/clan" class="ops-tile-mini">
+                <div class="ops-tile-mini-icon">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+                    </svg>
+                </div>
+                <div class="ops-tile-mini-text">
+                    <strong>Clan Overview</strong>
+                    <span>Activity and skill score, side by side</span>
+                </div>
+            </a>
+
+            {% if is_super_admin %}
+            <a href="/admin" class="ops-tile-mini">
+                <div class="ops-tile-mini-icon">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.6M8 12.9v1.6M14.5 8h-1.6M3.1 8H1.5M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1M12.5 12.5l-1.1-1.1M4.6 4.6L3.5 3.5"/>
+                    </svg>
                     {% if newbie_check_count > 0 %}<span class="ops-tile-alert">{{ newbie_check_count }}</span>{% endif %}
                 </div>
-                <span class="ops-tile-tag">Admin</span>
-            </div>
-            <h3>Admin Hub</h3>
-            <p>Member management, sync and configuration.{% if newbie_check_count > 0 %} <strong style="color:var(--ops-raid);">{{ newbie_check_count }} unchecked.</strong>{% endif %}</p>
-        </a>
-        {% endif %}
+                <div class="ops-tile-mini-text">
+                    <strong>Admin Hub</strong>
+                    <span>{% if newbie_check_count > 0 %}{{ newbie_check_count }} unchecked{% else %}Member management, sync{% endif %}</span>
+                </div>
+            </a>
+            {% endif %}
 
+        </div>
     </div>
 </section>
 
@@ -532,30 +768,22 @@
     <div class="ops-footer-inner">
         <div class="ops-footer-top">
             <div class="ops-footer-brand">
-                <h4>CoC Analytics</h4>
+                <h3>CoC Analytics</h3>
                 <p>Real-time Clash of Clans analytics for <strong style="color:var(--ops-ink)">{{ clan_name }}</strong> — ranked battles, attack history and member progress, tracked automatically.</p>
                 <div class="ops-status-dot">All systems operational</div>
             </div>
-            <div>
-                <div class="ops-footer-links">
-                    <a href="/ranked">Ranked Week</a>
-                    <a href="/battles">Battle History</a>
-                    <a href="/raid">Raid Weekend</a>
-                    <a href="/war">Clan War</a>
-                    <a href="/cwl">War League</a>
-                    <a href="/clan">Clan Overview</a>
-                    {% if is_super_admin %}<a href="/admin">Admin Hub</a>{% endif %}
-                </div>
-                <div class="ops-footer-stats">
-                    {{ total_members }} members tracked<br>
-                    {{ battle_logs_this_week }} attacks this week<br>
-                    {{ ranked_battles_this_week }} ranked battles
-                </div>
+            <div class="ops-footer-links">
+                <a href="/ranked">Ranked Week</a>
+                <a href="/battles">Battle History</a>
+                <a href="/raid">Raid Weekend</a>
+                <a href="/war">Clan War</a>
+                <a href="/cwl">CWL</a>
+                <a href="/clan">Clan Overview</a>
+                {% if is_super_admin %}<a href="/admin">Admin Hub</a>{% endif %}
             </div>
         </div>
         <div class="ops-footer-bottom">
             <span>&copy; 2026 CoC Analytics &mdash; Unofficial fan project, not affiliated with Supercell.</span>
-            <span>6 features live</span>
         </div>
     </div>
 </footer>
@@ -571,5 +799,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
-</body>
-</html>
+</body></html>

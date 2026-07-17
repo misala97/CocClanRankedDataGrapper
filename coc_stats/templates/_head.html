@@ -11,7 +11,7 @@
     <script src="/static/js/render_stars.js"></script>
     <script>
         window.VERDICT_LABELS = {'badge-godlike':'Godlike','badge-dominant':'Dominant','badge-wow':'Very Good','badge-good':'Good','badge-warning':'Bad','badge-suck':'Disaster','badge-useless':'Useless','badge-inactive':'Inactive'};
-        window.VERDICT_COLORS = {'badge-godlike':'#bc8cff','badge-dominant':'#f0a500','badge-wow':'#3fb950','badge-good':'#58a6ff','badge-warning':'#e8793a','badge-suck':'#f85149','badge-useless':'#8b949e','badge-inactive':'#3d4f66'};
+        window.VERDICT_COLORS = {'badge-godlike':'oklch(0.62 0.170 290)','badge-dominant':'oklch(0.62 0.190 330)','badge-wow':'oklch(0.72 0.150 165)','badge-good':'oklch(0.68 0.140 230)','badge-warning':'oklch(0.68 0.170 55)','badge-suck':'oklch(0.60 0.200 25)','badge-useless':'oklch(0.66 0.014 330)','badge-inactive':'oklch(0.34 0.014 330)'};
         function debounce(fn, delay = 200) {
             let t;
             return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
@@ -20,30 +20,45 @@
     <style>
         /* Canonical sitewide palette. Names are kept stable on purpose — dozens of
            not-yet-migrated templates reference these directly — only the values move
-           onto the "ops" identity established in index.html / ranked_weeks.html.
-           The --ops-* aliases below let newly migrated pages drop their own local
-           :root duplicate and just point here instead. */
+           onto the "night-ops thermal scope" identity established in the 2026-07-17
+           index redesign. The --ops-* aliases below let newly migrated pages drop
+           their own local :root duplicate and just point here instead.
+           Strategy: Committed. Primary (--accent) is a magenta-red "hostile/urgent"
+           signal at hue 330; --green is recomposed as a cyan-green "friendly/positive"
+           counter-signal (IFF-style), not a generic success green. Neutrals carry a
+           faint 330 tint (matte gunmetal under a dim signal light) rather than pure
+           chroma-0 black. */
         :root {
-            --bg:      #0d1013;
-            --surface: #161a20;
-            --surf2:   #1d2229;
-            --border:  #262c35;
-            --bord2:   #20252c;
-            --text:    #edf0f4;
-            --muted:   #838d9a;
-            --accent:  #d9a441;
-            --acc2:    #8a6224;
-            --green:   #3ec06a;
-            --blue:    #35c2d1;
-            --red:     #e2483f;
-            --yellow:  #e6b83d;
-            --purple:  #9066e8;
-            --orange:  #d2891f;
+            --bg:      oklch(0.10 0.004 330);
+            --surface: oklch(0.16 0.010 330);
+            --surf2:   oklch(0.21 0.012 330);
+            --border:  oklch(0.28 0.014 330);
+            --bord2:   oklch(0.24 0.012 330);
+            --text:    oklch(0.95 0.006 330);
+            --muted:   oklch(0.66 0.014 330);
+            --accent:  oklch(0.62 0.190 330);
+            --acc2:    oklch(0.42 0.150 330);
+            --green:   oklch(0.72 0.150 165);
+            --blue:    oklch(0.68 0.140 230);
+            --red:     oklch(0.60 0.200 25);
+            --yellow:  oklch(0.78 0.150 85);
+            --purple:  oklch(0.62 0.170 290);
+            --orange:  oklch(0.68 0.170 55);
 
             --ops-bg: var(--bg); --ops-surface: var(--surface); --ops-surface-2: var(--surf2);
             --ops-line: var(--border); --ops-ink: var(--text); --ops-ink-dim: var(--muted);
             --ops-gold: var(--accent); --ops-elixir: var(--purple); --ops-raid: var(--red);
-            --ops-ranked: var(--blue); --ops-win: var(--green); --ops-star: #ffcf3d;
+            --ops-ranked: var(--blue); --ops-win: var(--green); --ops-star: oklch(0.83 0.165 90);
+            /* --ops-gold doubles as the sitewide interactive/primary accent (nav-active, focus
+               rings, links) — War gets its own hue so "this is War" and "this is selected/focused"
+               aren't the same signal. */
+            --ops-war: var(--orange);
+
+            /* Real height of the sitewide nav (row 1 + status strip), kept in sync
+               by _nav.html's ResizeObserver. Every sticky-below-nav element reads
+               this instead of a hardcoded 58/59px so the status strip can expand
+               without pushing content under it. */
+            --nav-h: 63px;
         }
 
         html { overflow-y: scroll; }
@@ -59,17 +74,17 @@
         /* ── PAGE HEADER ── */
         .page-header {
             position: sticky;
-            top: 59px;
+            top: var(--nav-h, 63px);
             z-index: 99;
             background: var(--bg);
             padding: 15px 0;
-            border-bottom: 1px solid rgba(217,164,65,.15);
+            border-bottom: 1px solid color-mix(in oklch, var(--accent) 15%, transparent);
         }
         .page-header-controls { padding: 0; }
         .page-header-controls .controls { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
         .page-header::before {
             content: ''; position: absolute; inset: 0;
-            background: radial-gradient(ellipse 45% 150% at 5% 50%, rgba(217,164,65,.09), transparent 65%);
+            background: radial-gradient(ellipse 45% 150% at 5% 50%, color-mix(in oklch, var(--accent) 9%, transparent), transparent 65%);
             pointer-events: none;
         }
         .page-header-inner {
@@ -86,14 +101,11 @@
         .page-header h1::before {
             content: ''; position: absolute; left: 0; top: 0.08em; bottom: 0.08em;
             width: 4px; background: linear-gradient(180deg, var(--accent), var(--acc2));
-            border-radius: 2px; box-shadow: 0 0 16px rgba(217,164,65,.5);
+            border-radius: 2px; box-shadow: 0 0 16px color-mix(in oklch, var(--accent) 50%, transparent);
         }
-        .page-header h1 span {
-            background: linear-gradient(135deg, var(--accent) 0%, #f0d590 50%, var(--accent) 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
+        .page-header h1 span { color: var(--accent); }
         .page-header p, .page-sub { font-family: 'Manrope', sans-serif; color: var(--muted); font-size: 14px; padding-left: 20px; margin-top: 6px; }
-        .page-controls { padding: 0 32px 16px; position: sticky; top: 58px; z-index: 99; background: var(--bg); }
+        .page-controls { padding: 0 32px 16px; position: sticky; top: var(--nav-h, 63px); z-index: 99; background: var(--bg); }
         .page-controls .controls { max-width: 1400px; margin: 0 auto; margin-bottom: 0; position: static; }
 
         /* ── CONTROLS BAR ── */
@@ -114,15 +126,15 @@
             cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
             appearance: none; -webkit-appearance: none;
         }
-        .selector:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(217,164,65,0.14); }
+        .selector:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent); }
         .action-btn {
             padding: 7px 14px; background: transparent; color: var(--accent);
-            border: 1px solid rgba(217,164,65,0.35); border-radius: 6px;
+            border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent); border-radius: 6px;
             font-weight: 700; font-size: 12px; font-family: 'JetBrains Mono', monospace;
             letter-spacing: 0.4px; text-transform: uppercase; cursor: pointer; transition: all 0.15s; white-space: nowrap;
         }
-        .action-btn:hover { background: rgba(217,164,65,0.1); border-color: var(--accent); box-shadow: 0 0 12px rgba(217,164,65,0.18); }
-        .action-btn.active { background: rgba(217,164,65,0.12); border-color: var(--accent); color: var(--accent); }
+        .action-btn:hover { background: color-mix(in oklch, var(--accent) 10%, transparent); border-color: var(--accent); box-shadow: 0 0 12px color-mix(in oklch, var(--accent) 18%, transparent); }
+        .action-btn.active { background: color-mix(in oklch, var(--accent) 12%, transparent); border-color: var(--accent); color: var(--accent); }
 
         /* ── ACCESSIBILITY: sitewide keyboard focus ring ── */
         :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -166,12 +178,12 @@
 
         /* ── JUDGMENT BADGES ── */
         .judgment { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; letter-spacing: 0.4px; font-family: 'Rajdhani', sans-serif; text-transform: uppercase; }
-        .badge-godlike  { background: rgba(188,140,255,0.15); color: var(--purple); border: 1px solid rgba(188,140,255,0.4); }
-        .badge-dominant { background: rgba(240,165,0,0.15);   color: var(--accent); border: 1px solid rgba(240,165,0,0.35); }
-        .badge-wow      { background: rgba(63,185,80,0.12);   color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
-        .badge-good     { background: rgba(88,166,255,0.12);  color: var(--blue);   border: 1px solid rgba(88,166,255,0.25); }
-        .badge-warning  { background: rgba(210,153,34,0.12);  color: var(--orange); border: 1px solid rgba(210,153,34,0.3); }
-        .badge-suck     { background: rgba(248,81,73,0.12);   color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
-        .badge-useless  { background: rgba(139,148,158,0.08); color: var(--muted);  border: 1px solid rgba(139,148,158,0.2); }
-        .badge-inactive { background: rgba(139,148,158,0.08); color: var(--muted);  border: 1px solid rgba(139,148,158,0.15); }
-        .badge-undefined { background: rgba(139,148,158,0.06); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); border-style: dashed; }
+        .badge-godlike  { background: color-mix(in oklch, var(--purple) 15%, transparent); color: var(--purple); border: 1px solid color-mix(in oklch, var(--purple) 40%, transparent); }
+        .badge-dominant { background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent); border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent); }
+        .badge-wow      { background: color-mix(in oklch, var(--green) 15%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 32%, transparent); }
+        .badge-good     { background: color-mix(in oklch, var(--blue) 14%, transparent);   color: var(--blue);   border: 1px solid color-mix(in oklch, var(--blue) 28%, transparent); }
+        .badge-warning  { background: color-mix(in oklch, var(--orange) 15%, transparent); color: var(--orange); border: 1px solid color-mix(in oklch, var(--orange) 32%, transparent); }
+        .badge-suck     { background: color-mix(in oklch, var(--red) 14%, transparent);    color: var(--red);    border: 1px solid color-mix(in oklch, var(--red) 32%, transparent); }
+        .badge-useless  { background: color-mix(in oklch, var(--muted) 10%, transparent);  color: var(--muted);  border: 1px solid color-mix(in oklch, var(--muted) 22%, transparent); }
+        .badge-inactive { background: color-mix(in oklch, var(--muted) 10%, transparent);  color: var(--muted);  border: 1px solid color-mix(in oklch, var(--muted) 16%, transparent); }
+        .badge-undefined { background: color-mix(in oklch, var(--muted) 7%, transparent); color: var(--muted); border: 1px solid color-mix(in oklch, var(--muted) 22%, transparent); border-style: dashed; }
