@@ -599,6 +599,37 @@ def gym_delete_session_exercise(session_exercise_id):
     return redirect(url_for('gym.session_detail', session_id=session_id))
 
 
+@gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/skip', methods=['POST'])
+@login_required
+def gym_toggle_skip_session_exercise(session_exercise_id):
+    """Skip: mark this exercise as intentionally not done this session,
+    without deleting it -- unlike gym_delete_session_exercise, the row stays
+    in session_.exercises, so _template_exercises_from_session still picks
+    it up if this session is later saved/updated as a template (no change
+    needed there: it already includes every non-substitute row). Toggling
+    back off (undo) re-derives pending sets the same way a fresh template
+    start does, but only if nothing is left over from before the skip."""
+    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_ = session_exercise.session
+    if session_.finished_at:
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
+
+    session_exercise.skipped = not session_exercise.skipped
+    if session_exercise.skipped:
+        # Drop only the not-yet-confirmed sets -- anything already completed
+        # (e.g. 2 of 4 sets done, then the lifter decides to skip the rest)
+        # stays untouched, still counting toward that exercise's history.
+        for s in list(session_exercise.sets):
+            if not s.completed:
+                db.session.delete(s)
+    elif not session_exercise.sets:
+        for j, prev_set in enumerate(_last_full_performance(session_exercise.exercise_id, position=session_exercise.position), start=1):
+            session_exercise.sets.append(SessionSet(position=j, weight=prev_set['weight'], reps=prev_set['reps'], completed=False))
+
+    db.session.commit()
+    return redirect(url_for('gym.session_detail', session_id=session_.id))
+
+
 @gym_bp.route('/gym/set/<int:set_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_set(set_id):
