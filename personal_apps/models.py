@@ -212,6 +212,7 @@ class SessionExercise(db.Model):
     position     = db.Column(db.Integer, nullable=False, default=0)
     rest_seconds = db.Column(db.Integer, nullable=True)  # rest time for this exercise in this workout; seeded from Exercise.default_rest_seconds, editable per session
     replaces_id  = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True, unique=True)  # set when this row is a mid-workout substitute for another exercise in the same slot; unique so at most one substitute can ever point at a given original
+    skipped      = db.Column(db.Boolean, nullable=False, default=False)  # True when this exercise is intentionally not being done this session; the row (and any already-completed sets) is kept as-is so a later "save/update as template" still includes it
 
     session  = db.relationship('WorkoutSession', back_populates='exercises')
     exercise = db.relationship('Exercise', back_populates='session_exercises')
