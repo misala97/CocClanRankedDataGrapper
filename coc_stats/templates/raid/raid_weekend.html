@@ -100,9 +100,14 @@
         .you-nudge.done { color: var(--green); }
         @media (max-width: 640px) { .you { gap: 14px; } .you-nudge { margin-left: 0; width: 100%; } }
 
-        /* ── CONSOLE (two-column action tier) ── */
-        .console { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); gap: 14px; align-items: start; margin-bottom: 20px; }
-        .console-right { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+        /* ── CONSOLE (two-column action tier; equal-height panes on desktop) ── */
+        .console { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); gap: 14px; align-items: start; margin-bottom: 14px; }
+        .console-left, .console-right { min-width: 0; }
+        .console-panel { display: flex; flex-direction: column; }
+        @media (min-width: 901px) {
+            .console-left > .panel, .console-right > .panel { height: 640px; }
+            .console-panel .panel-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+        }
         @media (max-width: 900px) { .console { grid-template-columns: 1fr; } }
 
         /* ── WAR-ROOM ── */
@@ -162,29 +167,40 @@
         .siege-cleared-badge { color: var(--ops-win); font-weight: 700; margin-left: 8px; }
         .siege-card-cleared { border-color: rgba(62,192,106,.35); box-shadow: 0 0 0 1px rgba(62,192,106,.12); }
 
-        .capital-pyramid { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 10px; background: radial-gradient(ellipse at top, rgba(226,72,63,.08), transparent 65%); }
-        .capital-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
-        .capital-tile { display: flex; flex-direction: column; align-items: center; gap: 0; width: 54px; }
-        .capital-tile-top { min-height: 22px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
-        .capital-tile-pct { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 10px; color: var(--ops-ink); line-height: 1; }
-        .capital-tile-stars { font-size: 0.5em; line-height: 1; }
-        .capital-tile-icon { position: relative; width: 28px; height: 25px; margin: 1px 0 2px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
-        .capital-tile-roof { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-bottom: 10px solid var(--tile-color, var(--ops-ink-dim)); }
-        .capital-tile-body { position: absolute; bottom: 0; left: 2px; right: 2px; height: 15px; background: var(--tile-color, var(--ops-ink-dim)); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; color: rgba(0,0,0,0.55); box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15); }
-        .capital-tile.finished-good { --tile-color: var(--green); }
-        .capital-tile.finished-ok   { --tile-color: var(--orange); }
-        .capital-tile.finished-bad  { --tile-color: var(--red); }
-        .capital-tile.partial   { --tile-color: var(--blue); }
-        .capital-tile.untouched { --tile-color: #4a5260; }
-        .capital-tile[title] .capital-tile-icon { cursor: help; }
-        .capital-tile.untouched .capital-tile-body { color: var(--ops-ink-dim); }
-        .capital-tile.peak .capital-tile-icon { width: 34px; height: 30px; }
-        .capital-tile.peak .capital-tile-roof { border-left-width: 18px; border-right-width: 18px; border-bottom-width: 12px; }
-        .capital-tile.peak .capital-tile-body { height: 18px; font-size: 10px; }
-        .capital-tile.peak .capital-tile-pct { font-size: 11px; }
-        .capital-tile-name { font-family: 'Manrope', sans-serif; font-size: 8px; font-weight: 600; color: var(--ops-ink); text-align: center; line-height: 1.05; max-width: 54px; }
-        .capital-tile-level { font-family: 'JetBrains Mono', monospace; font-size: 7px; color: var(--ops-ink-dim); font-weight: 600; }
-        .capital-tile-medals { font-family: 'JetBrains Mono', monospace; font-size: 7px; color: var(--ops-gold); font-weight: 700; }
+        /* ── SIEGE DISTRICT NODES: destruction-readout cells ──
+           Each district is a scope cell. The bottom-up fill = how destroyed it is;
+           the border/number color = efficiency (green efficient → red wasteful, blue
+           in-progress, dim untouched). The readout inside is attacks-to-clear (done),
+           live % (in progress) or the medal prize (untouched). The Capital Peak is
+           enlarged and turns gold while it's still standing — the prize on the board. */
+        .capital-pyramid { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 16px 12px 18px; background: var(--ops-surface); }
+        .capital-row { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+        .sd { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 58px; }
+        .sd[title] { cursor: help; }
+        .sd-cell {
+            position: relative; width: 48px; height: 48px; border-radius: 11px; overflow: hidden;
+            background: var(--ops-surface-2);
+            border: 1px solid color-mix(in oklch, var(--sd-color, var(--ops-line)) 52%, var(--ops-line));
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .sd-fill { position: absolute; left: 0; right: 0; bottom: 0; height: var(--sd-fill, 0%); background: color-mix(in oklch, var(--sd-color, var(--ops-line)) 26%, transparent); }
+        .sd-big { position: relative; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; line-height: 1; color: var(--sd-color, var(--ops-ink)); }
+        .sd-unit { position: relative; font-family: 'Manrope', sans-serif; font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ops-ink-dim); margin-top: 2px; }
+        .sd-stars { position: relative; font-size: 8px; line-height: 1; margin-top: 2px; }
+        .sd-medal { position: relative; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; color: var(--ops-gold); }
+        .sd-dot { position: relative; width: 5px; height: 5px; border-radius: 50%; background: color-mix(in oklch, var(--ops-ink-dim) 45%, transparent); }
+        .sd-name { font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 600; color: var(--ops-ink); text-align: center; line-height: 1.1; max-width: 58px; }
+        .sd-lvl { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--ops-ink-dim); font-weight: 600; }
+        .sd.good     { --sd-color: var(--green); }
+        .sd.ok       { --sd-color: var(--orange); }
+        .sd.bad      { --sd-color: var(--red); }
+        .sd.partial  { --sd-color: var(--blue); }
+        .sd.untouched { --sd-color: color-mix(in oklch, var(--ops-ink-dim) 55%, var(--ops-line)); }
+        .sd.untouched .sd-cell { border-style: dashed; }
+        .sd.peak .sd-cell { width: 58px; height: 58px; border-radius: 13px; border-width: 1.5px; }
+        .sd.peak .sd-big { font-size: 19px; }
+        .sd.peak.untouched { --sd-color: var(--ops-star); }
+        .sd.peak.untouched .sd-medal { font-size: 14px; }
 
         .capital-legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; padding: 4px 12px 10px; }
         .cl-item { display: flex; align-items: center; gap: 5px; font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); font-weight: 600; }
@@ -207,8 +223,13 @@
         .siege-sum-body.open { display: block; }
         .siege-cleared-tick { color: var(--ops-win); font-weight: 700; }
 
-        /* ── FEED (recent attacks, quiet ticker) ── */
-        .feed-body { max-height: 360px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        /* ── FEED (recent attacks — full-width, collapsed by default) ── */
+        .feed-panel { margin-bottom: 20px; }
+        .feed-toggle { width: 100%; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; text-align: left; transition: background .12s; }
+        .feed-toggle:hover { background: var(--ops-surface-2); }
+        .feed-chev { font-size: 11px; color: var(--ops-ink-dim); transition: transform .2s; }
+        .feed-toggle.open .feed-chev { transform: rotate(180deg); }
+        .feed-body { max-height: 440px; overflow-y: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid var(--ops-line); }
 
         /* ── LEADERBOARD ── */
         .board-lead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -333,7 +354,7 @@
         @media (prefers-reduced-motion: reduce) {
             .hz-live-dot { animation: none; }
             .wr-progress-fill { transition: none; }
-            .wr-done .chev, .siege-sum-chev, .noshow > summary::before { transition: none; }
+            .wr-done .chev, .siege-sum-chev, .feed-chev, .noshow-tail > summary::before { transition: none; }
         }
     </style>
 </head>
@@ -508,11 +529,12 @@
             {% set remaining = roster_status | rejectattr('attacks_left', 'equalto', 0) | list | sort(attribute='attacks_left', reverse=True) %}
             {% set possible = roster_total * 6 %}
             {% set used_total = possible - clan_attacks_remaining %}
-            <div class="panel">
+            <div class="panel console-panel">
                 <div class="panel-head">
                     <span class="panel-title"><img src="/static/img/battle.png" alt="">War Room</span>
                     <span class="panel-meta">{{ participation_pct }}% joined</span>
                 </div>
+                <div class="panel-scroll">
                 <div class="wr-agg">
                     <div class="wr-agg-top"><span class="wr-agg-big">{{ clan_attacks_remaining }}</span><span class="wr-agg-lbl">attacks remaining · {{ remaining|length }} member{{ 's' if remaining|length != 1 else '' }}</span></div>
                     <div class="wr-progress"><div class="wr-progress-fill" data-pct="{{ (used_total / possible * 100) if possible else 0 }}"></div></div>
@@ -543,11 +565,13 @@
                     {% endfor %}
                 </div>
                 {% endif %}
+                </div>
             </div>
             {% elif is_ended and highlights and highlights.mvp %}
             {% set mvp = highlights.mvp %}
-            <div class="panel">
+            <div class="panel console-panel">
                 <div class="panel-head"><span class="panel-title"><img src="/static/img/crown.png" alt="">Highlights</span></div>
+                <div class="panel-scroll">
                 <div class="mvp">
                     <div class="mvp-crown"><img src="/static/img/crown.png" alt="MVP"></div>
                     <div class="mvp-body">
@@ -589,30 +613,35 @@
                     </div>
                     {% endif %}
                 </div>
+                </div>
             </div>
             {% endif %}
         </div>
 
-        {# RIGHT: siege map + recent-attacks feed #}
+        {# RIGHT: siege map (recent-attacks feed lives full-width below the console) #}
         <div class="console-right">
             {% if player_data %}
-            <div class="panel">
+            <div class="panel console-panel">
                 <div class="panel-head">
                     <span class="panel-title"><img src="/static/img/townHall.png" alt="">Capital Siege Map</span>
                     <span class="panel-meta">{% if is_ended %}final{% else %}live{% endif %}</span>
                 </div>
-                <div id="siegeBody"></div>
-            </div>
-            <div class="panel">
-                <div class="panel-head">
-                    <span class="panel-title"><img src="/static/img/battle.png" alt="">Recent Attacks</span>
-                    <span class="panel-meta">last 20</span>
-                </div>
-                <div class="feed-body" id="recentBody"></div>
+                <div id="siegeBody" class="panel-scroll"></div>
             </div>
             {% endif %}
         </div>
     </div>
+
+    {# ── RECENT ATTACKS (full width, collapsed by default) ── #}
+    {% if player_data %}
+    <div class="panel feed-panel" id="feedCard">
+        <button type="button" class="feed-toggle" onclick="toggleFeed()" aria-expanded="false">
+            <span class="panel-title"><img src="/static/img/battle.png" alt="">Recent Attacks&nbsp;<span class="panel-meta" style="text-transform:none;letter-spacing:0;">· last 20</span></span>
+            <span class="feed-chev">▾</span>
+        </button>
+        <div class="feed-body" id="recentBody" style="display:none;"></div>
+    </div>
+    {% endif %}
     {% endif %}
 
     {# ── LEADERBOARD ─────────────────────────────────────────────────────── #}
@@ -634,7 +663,7 @@
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
                         <th class="sortable" onclick="sortTable('capital_loot')"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;" alt=""> Loot</th>
                         <th class="sortable" onclick="sortTable('solo_wipes')">Solo Wipes</th>
-                        <th class="sortable" onclick="sortTable('overall_impact')" style="text-align:center;" title="Your weighted share of impact on the raid's whole medal pool, vs. the raid-wide average. Tap a row for the full breakdown.">Impact</th>
+                        <th class="sortable" onclick="sortTable('overall_baseline_shift')" style="text-align:center;" title="How many medals/attack your own attacks pulled the raid-wide average up or down by — your personal footprint on the clan's rate. Tap a row for the full impact breakdown.">Shift</th>
                         <th class="sortable" onclick="sortTable('score_100')">Verdict</th>
                         <th>Details</th>
                     </tr>
@@ -705,14 +734,14 @@ function impactBreakdown(p) {
     if (BASELINES.combined != null) base.push(`Combined <b>${BASELINES.combined.toFixed(2)}</b>`);
     if (BASELINES.district != null) base.push(`District <b>${BASELINES.district.toFixed(2)}</b>`);
     if (BASELINES.peak != null)     base.push(`Peak <b>${BASELINES.peak.toFixed(2)}</b>`);
-    const shift = p.overall_baseline_shift;
-    const shiftSign = shift > 0 ? '+' : '';
+    const imp = p.overall_impact;
+    const impSign = imp > 0 ? '+' : '';
     return `<div class="detail-section">
         <h4>Medal Impact Breakdown</h4>
         <div class="ibreak">
             <div class="ibreak-cell"><div class="ibreak-lbl">Medals / Atk</div>${fmtRate(p.medals_per_attack, p.net_medal_impact)}</div>
             <div class="ibreak-cell"><div class="ibreak-lbl">Peak Medals / Atk</div>${fmtRate(p.peak_medals_per_attack, p.peak_medal_impact)}</div>
-            <div class="ibreak-cell"><div class="ibreak-lbl">Overall Shift</div><div class="ibreak-val ${deltaClass(shift)}" style="color:${shift>0?'var(--green)':shift<0?'var(--red)':'var(--ops-ink-dim)'};">${shiftSign}${(shift ?? 0).toFixed(2)}</div><div class="ibreak-delta zero">you moved the average</div></div>
+            <div class="ibreak-cell"><div class="ibreak-lbl">Overall Impact</div><div class="ibreak-val" style="color:${imp>0?'var(--green)':imp<0?'var(--red)':'var(--ops-ink-dim)'};">${impSign}${(imp ?? 0).toFixed(2)}</div><div class="ibreak-delta zero">vs raid average</div></div>
             <div class="ibreak-cell"><div class="ibreak-lbl">Avg Destruction</div><div class="ibreak-val" style="color:var(--blue);">${p.avg_pct}%</div></div>
         </div>
         ${base.length ? `<div class="ibase">Raid baselines — ${base.join(' · ')} medals/atk</div>` : ''}
@@ -849,7 +878,7 @@ function buildTable() {
             <td><span class="att-count">${p.att_count}</span><span class="att-sub">/6</span>${p.cleanup_count ? `<div class="att-sub">${p.cleanup_count} cleanup</div>` : ''}</td>
             <td><span class="loot-cell">${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'}</span></td>
             <td><span class="solowipe-cell" style="color:${p.solo_wipes ? 'var(--green)' : 'var(--ops-ink-dim)'};">${p.solo_wipes}</span></td>
-            <td style="text-align:center;">${signedImpact(p.overall_impact)}</td>
+            <td style="text-align:center;">${signedImpact(p.overall_baseline_shift)}</td>
             <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
             <td><button type="button" class="action-btn details-toggle">Details</button></td>`;
 
@@ -898,7 +927,7 @@ function buildMobileCards(rows) {
                 </div>
                 <div class="mc-attacks"><div class="mc-attacks-val">${p.att_count}<span style="font-size:12px;color:var(--ops-ink-dim);">/6</span></div><div class="mc-attacks-lbl">Attacks</div></div>
             </div>
-            <div class="mc-verdict"><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:.6;font-size:.9em;">·</span> ${p.score_100}` : ''}</span>${signedImpact(p.overall_impact)}</div>
+            <div class="mc-verdict"><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:.6;font-size:.9em;">·</span> ${p.score_100}` : ''}</span>${signedImpact(p.overall_baseline_shift)}</div>
             <div class="mc-stats">
                 <div class="mc-stat"><div class="mc-stat-lbl">Loot</div><div class="mc-stat-val" style="color:var(--ops-gold);">${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'}</div></div>
                 <div class="mc-stat"><div class="mc-stat-lbl">Avg %</div><div class="mc-stat-val" style="color:var(--blue);">${p.avg_pct}%</div></div>
@@ -939,6 +968,16 @@ function toggleDone(btn) {
     const open = list.style.display === 'none';
     list.style.display = open ? '' : 'none';
     btn.classList.toggle('open', open);
+}
+
+function toggleFeed() {
+    const body = document.getElementById('recentBody');
+    const btn = document.querySelector('#feedCard .feed-toggle');
+    const open = body.style.display === 'none';
+    if (open && !body.dataset.built) { buildRecentAttacks(); body.dataset.built = '1'; }
+    body.style.display = open ? '' : 'none';
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 function buildRecentAttacks() {
@@ -988,19 +1027,27 @@ function attackersTooltip(d) {
     if (!d.attackers || !d.attackers.length) return '';
     return d.attackers.map(a => `${a.name} — ${a.percentage}% ${'★'.repeat(a.stars)}${'☆'.repeat(3 - a.stars)}`).join('\n');
 }
+const SD_CLASS = { 'finished-good': 'good', 'finished-ok': 'ok', 'finished-bad': 'bad', 'partial': 'partial', 'untouched': 'untouched' };
 function capitalTile(d, isPeak) {
     const pct = d.destroyed ? 100 : (d.last_pct_total || 0);
     const stars = pct >= 100 ? 3 : pct >= 50 ? 2 : pct > 0 ? 1 : 0;
     const statusClass = districtStatusClass(d, isPeak);
+    const cls = SD_CLASS[statusClass] || 'untouched';
     const tooltip = (d.attackers && d.attackers.length) ? ` title="${escapeHTML(attackersTooltip(d))}"` : '';
-    const medals = d.destroyed ? 0 : medalValue(d.level, isPeak);
-    const medalHtml = medals ? `<div class="capital-tile-medals">${medals}🏅</div>` : '';
-    const pctStarsHtml = statusClass === 'partial' ? `<div class="capital-tile-pct">${pct}%</div><div class="capital-tile-stars">${renderStars(stars)}</div>` : '';
-    return `<div class="capital-tile ${statusClass}${isPeak ? ' peak' : ''}"${tooltip}>
-        <div class="capital-tile-top">${pctStarsHtml}</div>
-        <div class="capital-tile-icon"><div class="capital-tile-roof"></div><div class="capital-tile-body">${d.attacks || ''}</div></div>
-        <div class="capital-tile-name">${escapeHTML(d.name)}</div>
-        <div class="capital-tile-level">Lvl ${d.level || '—'}</div>${medalHtml}</div>`;
+    let center;
+    if (d.destroyed) {
+        center = `<span class="sd-big">${d.attacks}</span><span class="sd-unit">hit${d.attacks !== 1 ? 's' : ''}</span>`;
+    } else if (statusClass === 'partial') {
+        center = `<span class="sd-big">${pct}%</span><span class="sd-stars">${renderStars(stars)}</span>`;
+    } else {
+        const medals = medalValue(d.level, isPeak);
+        center = medals ? `<span class="sd-medal">${medals}</span><span class="sd-unit">medals</span>` : `<span class="sd-dot"></span>`;
+    }
+    return `<div class="sd ${cls}${isPeak ? ' peak' : ''}"${tooltip}>
+        <div class="sd-cell"><span class="sd-fill" style="height:${pct}%;"></span>${center}</div>
+        <div class="sd-name">${escapeHTML(d.name)}</div>
+        <div class="sd-lvl">Lvl ${d.level || '—'}</div>
+    </div>`;
 }
 function clanPyramidHtml(clan) {
     const peakHtml = `<div class="capital-row">${capitalTile(clan.peakDistrict, true)}</div>`;
@@ -1099,7 +1146,6 @@ function buildSiegeMap() {
 document.addEventListener('DOMContentLoaded', () => {
     buildTable();
     buildSiegeMap();
-    buildRecentAttacks();
     document.querySelectorAll('.wr-progress-fill').forEach(el => {
         const pct = parseFloat(el.dataset.pct) || 0;
         requestAnimationFrame(() => { el.style.width = pct + '%'; });
