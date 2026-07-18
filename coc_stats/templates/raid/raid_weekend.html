@@ -2,89 +2,159 @@
 <html lang="en">
 {% set page_title = 'Raid Weekend – CoC Analytics' %}
 {% include '_head.html' %}
-        /* This page lives entirely under the Raid identity (--ops-raid, already
-           reserved for it on the homepage tiles), so its shared chrome is retinted
-           red via body.raid-page — _head.html / _nav.html stay untouched for
-           every other page. */
-        /* Raid mode identity (raid red): retint the accent word and the sticky
-           toolbar hairline. No stripe/glow, no gradient text — DESIGN.md bans
-           both; the mode color is carried as a solid. */
+        /* ═══ RAID COMMAND SCOPE ═══
+           This page runs under the Raid identity (--ops-raid, red). Its shared
+           chrome is retinted via body.raid-page; _head.html / _nav.html stay
+           untouched for every other page. Two power-states share one skeleton:
+           ONGOING reads as a live contact (pulsing token, provisional numbers,
+           war-room); ENDED reads as an after-action report (resolved verdict
+           delta, crowned MVP, no pulse). No new hue is introduced — raid-red is
+           the mode accent, magenta (--accent) stays interactive/primary, and
+           green/red carry verdict semantics. */
         body.raid-page .page-header h1 span { color: var(--ops-raid); }
         body.raid-page .page-toolbar { border-bottom-color: rgba(226,72,63,.20); }
         body.raid-page .raid-sel { min-width: 230px; }
 
-        /* ── NAV / CONTROLS: see _nav.html / _head.html — this page adds nothing new there ── */
-
-        /* ── STATE BADGE ── */
-        .badge {
-            display: inline-block; padding: 2px 9px; border-radius: 20px;
-            font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
-            letter-spacing: 0.4px; text-transform: uppercase;
+        /* ── LIVE CONTACT TOKEN (header readout, ongoing only) ── */
+        .hz-live { display: inline-flex; align-items: center; gap: 7px; color: var(--ops-raid); }
+        .hz-live-dot {
+            width: 9px; height: 9px; border-radius: 50%; background: var(--ops-raid);
+            box-shadow: 0 0 6px color-mix(in oklch, var(--ops-raid) 55%, transparent);
+            animation: hz-pulse 1.8s ease-in-out infinite;
         }
-        .badge-ended       { background: rgba(62,192,106,.12); color: var(--ops-win);    border: 1px solid rgba(62,192,106,.3); }
-        .badge-ongoing     { background: rgba(226,72,63,.12); color: var(--ops-raid);    border: 1px solid rgba(226,72,63,.3); }
-        .badge-preparation { background: rgba(53,194,209,.12); color: var(--ops-ranked); border: 1px solid rgba(53,194,209,.3); }
-        .badge-cleanup     { background: rgba(62,192,106,.12); color: var(--ops-win);    border: 1px solid rgba(62,192,106,.3); }
+        @keyframes hz-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
-        /* ── LEDGER ── */
-        .ledger {
+        /* ── SHARED PANEL SHELL (war-room / highlights / siege / feed) ── */
+        .panel { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 10px; overflow: hidden; }
+        .panel-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            padding: 12px 16px; border-bottom: 1px solid var(--ops-line);
+        }
+        .panel-title {
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1px; color: var(--ops-ink-dim);
+            display: flex; align-items: center; gap: 8px; min-width: 0;
+        }
+        .panel-title img { width: 15px; height: 15px; flex-shrink: 0; }
+        .panel-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--ops-ink-dim); white-space: nowrap; }
+        .panel-body { padding: 14px 16px; }
+
+        /* ── REPORT BAND (state-aware headline figures) ── */
+        .report {
             display: flex; align-items: stretch; background: var(--ops-surface);
-            border: 1px solid var(--ops-line); border-left: 3px solid var(--ops-raid);
-            border-radius: 10px; margin-bottom: 6px; overflow: hidden;
+            border: 1px solid var(--ops-line); border-radius: 10px; overflow: hidden; margin-bottom: 14px;
         }
-        .ledger-attacks {
+        .report-feat {
             padding: 18px 26px; display: flex; flex-direction: column; justify-content: center;
-            border-right: 1px solid var(--ops-line); min-width: 168px;
+            border-right: 1px solid var(--ops-line); min-width: 184px;
         }
-        .ledger-attacks-val { font-family: 'JetBrains Mono', monospace; font-size: 34px; font-weight: 700; color: var(--ops-ink); line-height: 1; }
-        .ledger-attacks-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: .8px; margin-top: 6px; }
-        .ledger-cells { flex: 1; display: flex; flex-wrap: wrap; }
-        .ledger-cell {
-            flex: 1; min-width: 150px; padding: 18px 22px; display: flex; align-items: center; gap: 14px;
-            border-right: 1px solid var(--ops-line);
+        .report-feat-val { font-family: 'JetBrains Mono', monospace; font-size: 34px; font-weight: 700; line-height: 1; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+        .report-feat-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: .8px; margin-top: 7px; }
+        .report-cells { flex: 1; display: flex; flex-wrap: wrap; }
+        .report-cell { flex: 1; min-width: 150px; padding: 18px 22px; display: flex; align-items: center; gap: 14px; border-right: 1px solid var(--ops-line); }
+        .report-cell:last-child { border-right: none; }
+        .report-cell-icon { width: 34px; height: 34px; flex-shrink: 0; object-fit: contain; }
+        .report-cell-val { font-family: 'JetBrains Mono', monospace; font-size: 21px; font-weight: 700; line-height: 1; }
+        .report-cell-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); font-weight: 600; margin-top: 4px; }
+        .delta-chip {
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .2px;
+            padding: 2px 8px; border-radius: 20px; white-space: nowrap;
         }
-        .ledger-cell:last-child { border-right: none; }
-        .ledger-cell-icon { width: 36px; height: 36px; flex-shrink: 0; object-fit: contain; }
-        .ledger-cell-val { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; line-height: 1; }
-        .ledger-cell-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); font-weight: 600; margin-top: 4px; cursor: help; }
+        .delta-chip.pos  { color: var(--green); background: color-mix(in oklch, var(--green) 13%, transparent); border: 1px solid color-mix(in oklch, var(--green) 30%, transparent); }
+        .delta-chip.neg  { color: var(--red);   background: color-mix(in oklch, var(--red) 13%, transparent);   border: 1px solid color-mix(in oklch, var(--red) 30%, transparent); }
+        .delta-chip.even { color: var(--ops-ink-dim); background: color-mix(in oklch, var(--ops-ink-dim) 10%, transparent); border: 1px solid color-mix(in oklch, var(--ops-ink-dim) 22%, transparent); }
+        .report-prov { color: var(--yellow); }
         @media (max-width: 900px) {
-            .ledger { flex-direction: column; }
-            .ledger-attacks { border-right: none; border-bottom: 1px solid var(--ops-line); flex-direction: row; align-items: baseline; gap: 10px; }
-            .ledger-cells { flex-wrap: wrap; }
-            .ledger-cell { min-width: 45%; border-bottom: 1px solid var(--ops-line); }
+            .report { flex-direction: column; }
+            .report-feat { border-right: none; border-bottom: 1px solid var(--ops-line); flex-direction: row; align-items: baseline; gap: 12px; }
+            .report-cell { min-width: 45%; border-bottom: 1px solid var(--ops-line); }
         }
-        @media (max-width: 480px) { .ledger-cell { min-width: 100%; } }
+        @media (max-width: 480px) { .report-cell { min-width: 100%; } }
 
-        /* ── BASELINE STRIP: quiet reference line for the Medals/Atk columns below —
-           context, not a headline, so it's small print rather than another stat card. ── */
-        .baseline-strip { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 10px 4px 20px; }
-        .bl-item { display: flex; align-items: baseline; gap: 6px; }
-        .bl-lbl { font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: .5px; }
-        .bl-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--ops-ink); }
-        .bl-hint { font-family: 'Manrope', sans-serif; font-size: 11.5px; color: var(--ops-ink-dim); margin-left: auto; }
-        @media (max-width: 640px) { .bl-hint { margin-left: 0; width: 100%; } }
+        /* ── 6-PIP ATTACK METER (signature micro-component; war-room + you-band) ──
+           Filled = attacks spent (quiet); outlined = attacks still available (raid-
+           tinted, the thing to act on). A no-show reads as six loud outlines. ── */
+        .pips { display: inline-flex; gap: 3px; align-items: center; }
+        .pip { width: 9px; height: 9px; border-radius: 2.5px; box-sizing: border-box; flex-shrink: 0; }
+        .pip.spent { background: color-mix(in oklch, var(--ops-ink-dim) 55%, transparent); }
+        .pip.left  { background: transparent; border: 1.5px solid color-mix(in oklch, var(--ops-raid) 62%, transparent); }
 
-        /* ── COLLAPSIBLE CARDS (Siege Map + Recent Attacks share this shell) ── */
-        .flip-card {
-            background: var(--ops-surface); border: 1px solid var(--ops-line); border-left: 3px solid var(--ops-raid);
-            border-radius: 10px; margin-bottom: 20px; overflow: hidden;
+        /* ── YOU BAND ── */
+        .you {
+            background: color-mix(in oklch, var(--ops-raid) 6%, var(--ops-surface));
+            border: 1px solid color-mix(in oklch, var(--ops-raid) 24%, var(--ops-line));
+            border-radius: 10px; padding: 14px 18px; margin-bottom: 14px;
+            display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
         }
-        .flip-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; transition: background .15s; }
-        .flip-header:hover { background: var(--ops-surface-2); }
-        .flip-header-title { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
-        .flip-header-title img { width: 14px; height: 14px; }
-        .flip-chevron { font-size: 11px; color: var(--ops-ink-dim); transition: transform .2s; }
-        .flip-chevron.open { transform: rotate(180deg); }
-        .flip-body { border-top: 1px solid var(--ops-line); }
+        .you-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .you-tag { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ops-raid); }
+        .you-name { font-family: 'Big Shoulders Display', sans-serif; font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; line-height: 1; color: var(--ops-ink); }
+        .you-figs { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .you-fig { display: flex; flex-direction: column; gap: 5px; }
+        .you-fig-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ops-ink-dim); }
+        .you-fig-val { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; color: var(--ops-ink); line-height: 1; display: flex; align-items: center; gap: 8px; }
+        .you-nudge {
+            margin-left: auto; font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 700;
+            color: var(--ops-raid); display: inline-flex; align-items: center; gap: 7px;
+        }
+        .you-nudge.done { color: var(--green); }
+        @media (max-width: 640px) { .you { gap: 14px; } .you-nudge { margin-left: 0; width: 100%; } }
 
-        /* ── CAPITAL SIEGE MAP (signature) ── */
-        .siege-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; padding: 12px; }
+        /* ── CONSOLE (two-column action tier) ── */
+        .console { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); gap: 14px; align-items: start; margin-bottom: 20px; }
+        .console-right { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+        @media (max-width: 900px) { .console { grid-template-columns: 1fr; } }
+
+        /* ── WAR-ROOM ── */
+        .wr-agg { padding: 12px 16px 14px; border-bottom: 1px solid var(--ops-line); }
+        .wr-agg-top { display: flex; align-items: baseline; gap: 8px; }
+        .wr-agg-big { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; color: var(--ops-raid); line-height: 1; }
+        .wr-agg-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ops-ink-dim); }
+        .wr-progress { margin-top: 11px; height: 6px; border-radius: 4px; background: var(--ops-surface-2); overflow: hidden; }
+        .wr-progress-fill { height: 100%; border-radius: 4px; background: var(--ops-win); width: 0; transition: width .9s cubic-bezier(0.22,1,0.36,1); }
+        .wr-progress-cap { margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ops-ink-dim); }
+        .wr-list { display: flex; flex-direction: column; }
+        .wr-row { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--bord2); }
+        .wr-row:last-child { border-bottom: none; }
+        .wr-row.noshow { background: color-mix(in oklch, var(--ops-raid) 5%, transparent); }
+        .wr-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--ops-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .wr-name a { color: inherit; }
+        .wr-name a:hover { color: var(--ops-raid); }
+        .wr-left { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--ops-raid); white-space: nowrap; min-width: 48px; text-align: right; }
+        .wr-done { border: none; background: transparent; width: 100%; text-align: left; cursor: pointer; padding: 11px 16px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--ops-ink-dim); border-top: 1px solid var(--ops-line); display: flex; align-items: center; gap: 8px; transition: background .12s; }
+        .wr-done:hover { background: var(--ops-surface-2); color: var(--ops-ink); }
+        .wr-done .chev { transition: transform .2s; font-size: 10px; }
+        .wr-done.open .chev { transform: rotate(180deg); }
+        .wr-done-list .wr-left { color: var(--green); }
+        .wr-empty { padding: 20px 16px; text-align: center; font-size: 13px; color: var(--ops-ink-dim); }
+
+        /* ── HIGHLIGHTS (post-raid recap) ── */
+        .mvp { display: flex; align-items: center; gap: 16px; padding: 16px; border-bottom: 1px solid var(--ops-line); }
+        .mvp-crown { width: 42px; height: 42px; border-radius: 9px; background: color-mix(in oklch, var(--ops-star) 14%, transparent); border: 1px solid color-mix(in oklch, var(--ops-star) 34%, transparent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .mvp-crown img { width: 24px; height: 24px; }
+        .mvp-body { min-width: 0; flex: 1; }
+        .mvp-kicker { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.4px; color: var(--ops-star); }
+        .mvp-name { font-family: 'Big Shoulders Display', sans-serif; font-size: 26px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; line-height: 1.02; color: var(--ops-ink); margin: 2px 0 6px; }
+        .mvp-name a { color: inherit; }
+        .mvp-name a:hover { color: var(--ops-raid); }
+        .mvp-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .mvp-stat { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--ops-ink-dim); }
+        .award-rail { display: flex; flex-direction: column; }
+        .award { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--bord2); }
+        .award:last-child { border-bottom: none; }
+        .award-ic { width: 26px; text-align: center; font-size: 16px; flex-shrink: 0; }
+        .award-txt { flex: 1; min-width: 0; }
+        .award-lbl { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--ops-ink-dim); }
+        .award-name { font-size: 13.5px; font-weight: 600; color: var(--ops-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .award-val { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; color: var(--ops-ink-dim); white-space: nowrap; }
+        .award.triple { background: color-mix(in oklch, var(--ops-star) 8%, transparent); }
+        .award.triple .award-name { color: var(--ops-star); }
+        .award.triple .award-val, .award.triple .award-lbl { color: color-mix(in oklch, var(--ops-star) 78%, var(--ops-ink-dim)); }
+
+        /* ── SIEGE: legend + full pyramids (ongoing) ── */
+        .siege-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; padding: 12px; }
         .siege-card { background: var(--ops-surface-2); border: 1px solid var(--ops-line); border-radius: 8px; overflow: hidden; }
-        .siege-card-header {
-            display: flex; flex-direction: column; gap: 3px;
-            padding: 6px 12px; border-bottom: 1px solid var(--ops-line);
-            background: rgba(255,255,255,0.02);
-        }
+        .siege-card-header { display: flex; flex-direction: column; gap: 3px; padding: 6px 12px; border-bottom: 1px solid var(--ops-line); background: rgba(255,255,255,0.02); }
         .siege-card-header-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
         .siege-card-header-top img { width: 22px !important; height: 22px !important; }
         .siege-card-name { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 12px; color: var(--ops-ink); line-height: 1.2; }
@@ -92,29 +162,15 @@
         .siege-cleared-badge { color: var(--ops-win); font-weight: 700; margin-left: 8px; }
         .siege-card-cleared { border-color: rgba(62,192,106,.35); box-shadow: 0 0 0 1px rgba(62,192,106,.12); }
 
-        .capital-pyramid {
-            display: flex; flex-direction: column; align-items: center; gap: 4px;
-            padding: 8px 10px 8px;
-            background: radial-gradient(ellipse at top, rgba(226,72,63,.08), transparent 65%);
-        }
+        .capital-pyramid { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 10px; background: radial-gradient(ellipse at top, rgba(226,72,63,.08), transparent 65%); }
         .capital-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
         .capital-tile { display: flex; flex-direction: column; align-items: center; gap: 0; width: 54px; }
         .capital-tile-top { min-height: 22px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
         .capital-tile-pct { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 10px; color: var(--ops-ink); line-height: 1; }
         .capital-tile-stars { font-size: 0.5em; line-height: 1; }
         .capital-tile-icon { position: relative; width: 28px; height: 25px; margin: 1px 0 2px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
-        .capital-tile-roof {
-            position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-            width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent;
-            border-bottom: 10px solid var(--tile-color, var(--ops-ink-dim));
-        }
-        .capital-tile-body {
-            position: absolute; bottom: 0; left: 2px; right: 2px; height: 15px;
-            background: var(--tile-color, var(--ops-ink-dim)); border-radius: 3px;
-            display: flex; align-items: center; justify-content: center;
-            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; color: rgba(0,0,0,0.55);
-            box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15);
-        }
+        .capital-tile-roof { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-bottom: 10px solid var(--tile-color, var(--ops-ink-dim)); }
+        .capital-tile-body { position: absolute; bottom: 0; left: 2px; right: 2px; height: 15px; background: var(--tile-color, var(--ops-ink-dim)); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; color: rgba(0,0,0,0.55); box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15); }
         .capital-tile.finished-good { --tile-color: var(--green); }
         .capital-tile.finished-ok   { --tile-color: var(--orange); }
         .capital-tile.finished-bad  { --tile-color: var(--red); }
@@ -130,73 +186,72 @@
         .capital-tile-level { font-family: 'JetBrains Mono', monospace; font-size: 7px; color: var(--ops-ink-dim); font-weight: 600; }
         .capital-tile-medals { font-family: 'JetBrains Mono', monospace; font-size: 7px; color: var(--ops-gold); font-weight: 700; }
 
-        .capital-legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; padding: 8px 12px 0; }
+        .capital-legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; padding: 4px 12px 10px; }
         .cl-item { display: flex; align-items: center; gap: 5px; font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); font-weight: 600; }
         .cl-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
-        /* ── TABLE (desktop ≥641px only — mobile gets card list below) ── */
-        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--ops-line); border-top: 3px solid var(--ops-raid); }
-        .table-wrapper { background: var(--ops-surface); min-width: 1120px; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
-        col.col-player     { width: auto; }
-        col.col-attacks    { width: 68px; }
-        col.col-loot       { width: 100px; }
-        col.col-avgpct     { width: 68px; }
-        col.col-solowipes  { width: 86px; }
-        col.col-cleanups   { width: 86px; }
-        col.col-medals     { width: 94px; }
-        col.col-peak       { width: 104px; }
-        col.col-impact     { width: 104px; }
-        col.col-shift      { width: 94px; }
-        col.col-verdict    { width: 130px; }
-        col.col-action     { width: 120px; }
-        thead { background: var(--ops-surface-2); border-bottom: 1px solid var(--ops-line); }
-        thead th {
-            padding: 10px 10px; text-align: left; font-weight: 600; color: var(--ops-ink-dim);
-            font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; white-space: nowrap; overflow: hidden;
-            font-family: 'Manrope', sans-serif;
-        }
-        tbody tr { border-bottom: 1px solid var(--bord2); transition: background 0.12s; }
-        tbody tr:last-child { border-bottom: none; }
-        tbody tr:hover { background: rgba(255,255,255,0.03); }
-        tbody td { padding: 10px 10px; vertical-align: middle; overflow: hidden; }
+        /* ── SIEGE: compact per-clan summary rows (ended) ── */
+        .siege-sum { border-bottom: 1px solid var(--bord2); }
+        .siege-sum:last-child { border-bottom: none; }
+        .siege-sum-head { width: 100%; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 11px 16px; text-align: left; transition: background .12s; }
+        .siege-sum-head:hover { background: var(--ops-surface-2); }
+        .siege-sum-badge { width: 26px; height: 26px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
+        .siege-sum-id { flex: 1; min-width: 0; }
+        .siege-sum-name { font-size: 13px; font-weight: 700; color: var(--ops-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .siege-sum-meta { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ops-ink-dim); font-weight: 600; }
+        .siege-dots { display: inline-flex; gap: 3px; flex-shrink: 0; }
+        .siege-dot { width: 8px; height: 8px; border-radius: 2px; }
+        .siege-sum-chev { font-size: 10px; color: var(--ops-ink-dim); transition: transform .2s; flex-shrink: 0; }
+        .siege-sum-head.open .siege-sum-chev { transform: rotate(180deg); }
+        .siege-sum-body { display: none; padding: 0 8px 8px; }
+        .siege-sum-body.open { display: block; }
+        .siege-cleared-tick { color: var(--ops-win); font-weight: 700; }
 
-        /* ── GROUP SEPARATORS: after Attacks(2), Cleanups(6), Overall Shift(10) ── */
-        #statsTable > thead > tr > th:nth-child(2), #statsTable > tbody > tr > td:nth-child(2),
-        #statsTable > thead > tr > th:nth-child(6), #statsTable > tbody > tr > td:nth-child(6),
-        #statsTable > thead > tr > th:nth-child(10), #statsTable > tbody > tr > td:nth-child(10) {
-            border-right: 3px solid var(--ops-line);
-        }
+        /* ── FEED (recent attacks, quiet ticker) ── */
+        .feed-body { max-height: 360px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+        /* ── LEADERBOARD ── */
+        .board-lead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+        .board-title { font-family: 'Big Shoulders Display', sans-serif; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--ops-ink); }
+        .board-hint { font-family: 'Manrope', sans-serif; font-size: 11.5px; color: var(--ops-ink-dim); }
+
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--ops-line); }
+        .table-wrapper { background: var(--ops-surface); min-width: 760px; overflow: hidden; }
+        table#statsTable { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+        col.col-player  { width: auto; }
+        col.col-attacks { width: 92px; }
+        col.col-loot    { width: 116px; }
+        col.col-wipes   { width: 92px; }
+        col.col-impact  { width: 104px; }
+        col.col-verdict { width: 150px; }
+        col.col-action  { width: 96px; }
+        #statsTable thead { background: var(--ops-surface-2); border-bottom: 1px solid var(--ops-line); }
+        #statsTable thead th { padding: 11px 12px; text-align: left; font-weight: 600; color: var(--ops-ink-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; white-space: nowrap; overflow: hidden; font-family: 'Manrope', sans-serif; }
+        #statsTable tbody tr { border-bottom: 1px solid var(--bord2); transition: background 0.12s; }
+        #statsTable tbody tr:last-child { border-bottom: none; }
+        #statsTable tbody tr.prow:hover { background: rgba(255,255,255,0.03); }
+        #statsTable tbody td { padding: 11px 12px; vertical-align: middle; overflow: hidden; }
 
         .player-cell  { display: flex; align-items: center; gap: 10px; }
         .player-info  { display: flex; flex-direction: column; gap: 2px; }
+        .player-rank  { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--ops-ink-dim); min-width: 20px; }
         .player-name { font-weight: 600; color: var(--ops-ink); font-size: 14.5px; }
         .player-tag  { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ops-ink-dim); }
         .player-link { color: inherit; text-decoration: none; transition: color 0.15s; }
         .player-link:hover { color: var(--ops-raid); }
         .player-link-arrow { font-size: 10px; color: var(--ops-ink-dim); opacity: 0.4; transition: opacity 0.15s, color 0.15s; vertical-align: super; }
         .player-link:hover .player-link-arrow { opacity: 1; color: var(--ops-raid); }
-        .player-left-tag {
-            font-size: 10px; font-family: 'Manrope', sans-serif; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
-            padding: 1px 6px; border-radius: 4px; background: rgba(131,141,154,.1); color: var(--ops-ink-dim);
-            border: 1px solid rgba(131,141,154,.25); vertical-align: middle;
-        }
+        .player-left-tag { font-size: 10px; font-family: 'Manrope', sans-serif; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: rgba(131,141,154,.1); color: var(--ops-ink-dim); border: 1px solid rgba(131,141,154,.25); vertical-align: middle; }
         .att-count  { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; }
+        .att-sub    { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ops-ink-dim); }
         .loot-cell  { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 600; color: var(--ops-gold); }
-        .avgpct-cell, .solowipe-cell { font-family: 'JetBrains Mono', monospace; font-size: 14.5px; font-weight: 600; }
-
-        /* ── IMPACT / SHIFT CELLS ── */
-        .impact-rate { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; color: var(--ops-ink); }
-        .impact-delta { margin-top: 2px; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; }
-        .impact-delta.pos, .shift-val.pos { color: var(--green); }
-        .impact-delta.neg, .shift-val.neg { color: var(--red); }
-        .impact-delta.zero, .shift-val.zero { color: var(--ops-ink-dim); }
-        .shift-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; }
+        .solowipe-cell { font-family: 'JetBrains Mono', monospace; font-size: 14.5px; font-weight: 600; }
+        .impact-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; }
+        .impact-num.pos { color: var(--green); }
+        .impact-num.neg { color: var(--red); }
+        .impact-num.zero { color: var(--ops-ink-dim); }
         .mono-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
-        .mini-badge {
-            display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 700;
-            font-family: 'Manrope', sans-serif; letter-spacing: .4px; text-transform: uppercase;
-        }
+        .mini-badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 700; font-family: 'Manrope', sans-serif; letter-spacing: .4px; text-transform: uppercase; }
         .mini-badge.solo { background: rgba(144,102,232,.15); color: var(--purple); border: 1px solid rgba(144,102,232,.35); }
 
         .sortable { cursor: pointer; user-select: none; }
@@ -205,39 +260,49 @@
         .sort-active.asc::after  { content: ' \2191'; font-size: 0.85em; }
         .sort-active.desc::after { content: ' \2193'; font-size: 0.85em; }
 
-        /* ── DETAIL ROW (Verdict Breakdown) ── */
+        /* ── DETAIL ROW (impact breakdown + verdict) ── */
         .detail-row { display: none; }
         .detail-row.expanded { display: table-row; }
         .detail-cell { padding: 0; border: none; background: var(--ops-bg); border-bottom: 1px solid var(--ops-line) !important; }
         .detail-inner { padding: 16px; }
         .detail-section { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 8px; padding: 16px; }
-        .detail-section h4 {
-            margin-bottom: 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
-            font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: 0.8px;
-        }
+        .detail-section + .detail-section { margin-top: 12px; }
+        .detail-section h4 { margin-bottom: 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: 0.8px; }
+        .ibreak { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: var(--ops-line); border: 1px solid var(--ops-line); border-radius: 8px; overflow: hidden; }
+        .ibreak-cell { background: var(--ops-surface); padding: 11px 13px; }
+        .ibreak-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ops-ink-dim); }
+        .ibreak-val { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--ops-ink); margin-top: 5px; }
+        .ibreak-delta { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; margin-top: 2px; }
+        .ibreak-delta.pos { color: var(--green); } .ibreak-delta.neg { color: var(--red); } .ibreak-delta.zero { color: var(--ops-ink-dim); }
+        .ibase { margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ops-ink-dim); display: flex; gap: 14px; flex-wrap: wrap; }
+        .ibase b { color: var(--ops-ink); font-weight: 700; }
         .detail-table { table-layout: auto; width: 100%; min-width: max-content; border-collapse: collapse; font-size: 12.5px; }
         .detail-table th, .detail-table td { padding: 7px 10px; border-bottom: 1px solid var(--bord2); text-align: center; }
-        .detail-table th:first-child, .detail-table td:first-child,
-        .detail-table th:nth-child(2), .detail-table td:nth-child(2) { text-align: left; }
+        .detail-table th:first-child, .detail-table td:first-child, .detail-table th:nth-child(2), .detail-table td:nth-child(2) { text-align: left; }
         .detail-table tbody tr:last-child td { border-bottom: none; }
-        .detail-table th {
-            font-size: 11px; font-weight: 700; color: var(--ops-ink-dim);
-            text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Manrope', sans-serif;
-        }
+        .detail-table th { font-size: 11px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Manrope', sans-serif; }
         .detail-table td { color: var(--ops-ink); }
         .detail-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.4px; text-transform: uppercase; }
+        .badge-cleanup { background: rgba(62,192,106,.12); color: var(--ops-win); border: 1px solid rgba(62,192,106,.3); }
+
+        /* ── NO-SHOW TAIL (ongoing) ── */
+        .noshow-tail { margin-top: 8px; border: 1px solid var(--ops-line); border-radius: 10px; background: var(--ops-surface); overflow: hidden; }
+        .noshow-tail > summary { cursor: pointer; padding: 12px 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .4px; color: var(--ops-ink-dim); list-style: none; display: flex; align-items: center; gap: 8px; }
+        .noshow-tail > summary::-webkit-details-marker { display: none; }
+        .noshow-tail > summary::before { content: '\25B8'; font-size: 10px; transition: transform .2s; }
+        .noshow-tail[open] > summary::before { transform: rotate(90deg); }
+        .noshow-list { padding: 4px 16px 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+        .noshow-name { font-size: 12.5px; color: var(--ops-ink); background: var(--ops-surface-2); border: 1px solid var(--bord2); border-radius: 6px; padding: 4px 10px; }
 
         /* ── FOOTER / EMPTY ── */
         .page-footer { text-align: center; padding: 18px; color: var(--ops-ink-dim); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: 0.3px; }
-        .empty-state { text-align: center; padding: 80px 24px; color: var(--ops-ink-dim); }
+        .empty-state { text-align: center; padding: 70px 24px; color: var(--ops-ink-dim); }
         .empty-state p { font-size: 15px; font-family: 'Manrope', sans-serif; }
 
-        /* ── MOBILE CARDS — the real player list below 641px ── */
+        /* ── MOBILE CARDS (leaderboard below 641px) ── */
         #mobileList { display: none; flex-direction: column; gap: 8px; }
-        .mc {
-            background: var(--ops-surface); border: 1px solid var(--ops-line); border-left: 3px solid var(--ops-raid);
-            border-radius: 10px; overflow: hidden; cursor: pointer; transition: background .12s;
-        }
+        .mc { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 10px; overflow: hidden; cursor: pointer; transition: background .12s; }
         .mc:active { background: var(--ops-surface-2); }
         .mc-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
         .mc-player { flex: 1; min-width: 0; }
@@ -246,14 +311,13 @@
         .mc-attacks { text-align: right; flex-shrink: 0; }
         .mc-attacks-val { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--ops-ink); line-height: 1; }
         .mc-attacks-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
-        .mc-verdict { padding: 0 14px 10px; }
+        .mc-verdict { padding: 0 14px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .mc-stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ops-line); }
-        .mc-impact { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--ops-line); }
-        .mc-stat, .mc-impact-cell { padding: 9px 8px; text-align: center; border-right: 1px solid var(--ops-line); }
-        .mc-stat:last-child, .mc-impact-cell:last-child { border-right: none; }
+        .mc-stat { padding: 9px 8px; text-align: center; border-right: 1px solid var(--ops-line); }
+        .mc-stat:last-child { border-right: none; }
         .mc-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
         .mc-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
-        .mc-detail { display: none; border-top: 1px solid var(--ops-line); padding: 16px 14px; }
+        .mc-detail { display: none; border-top: 1px solid var(--ops-line); }
         .mc-detail.expanded { display: block; }
         .mc-tap-hint { text-align: center; padding: 7px 0 2px; font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); }
 
@@ -265,6 +329,12 @@
             .table-scroll { display: none !important; }
             #mobileList { display: flex; }
         }
+
+        @media (prefers-reduced-motion: reduce) {
+            .hz-live-dot { animation: none; }
+            .wr-progress-fill { transition: none; }
+            .wr-done .chev, .siege-sum-chev, .noshow > summary::before { transition: none; }
+        }
     </style>
 </head>
 <body class="raid-page">
@@ -274,10 +344,18 @@
 {% set page_header_title = 'Raid <span>Weekend</span>' %}
 {% if selected_raid %}
 {% set _rs = (selected_raid.state or '')|lower %}
+{% set _dates = (selected_raid.start_time | local_dt('%d.%m')) ~ ' – ' ~ (selected_raid.end_time | local_dt('%d.%m.%Y')) %}
+{% if _rs == 'ongoing' %}
 {% set page_header_meta = [
-    {'value': (selected_raid.start_time | local_dt('%d.%m')) ~ ' – ' ~ (selected_raid.end_time | local_dt('%d.%m.%Y')), 'label': 'Weekend'},
-    {'value': (_rs|capitalize) if _rs else '—', 'label': 'Status', 'tone': ('win' if _rs == 'ongoing' else '') },
+    {'value': _dates, 'label': 'Weekend'},
+    {'value': '<span class="hz-live"><span class="hz-live-dot"></span>Live</span>', 'label': 'Status'},
 ] %}
+{% else %}
+{% set page_header_meta = [
+    {'value': _dates, 'label': 'Weekend'},
+    {'value': (_rs|capitalize) if _rs else '—', 'label': 'Status'},
+] %}
+{% endif %}
 {% else %}
 {% set page_header_desc = 'No raid weekend data available' %}
 {% endif %}
@@ -296,132 +374,267 @@
 {% endif %}
 {% endset %}
 {% set page_controls %}
-{% if raid_options %}
+{% if player_data %}
 <input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="debouncedBuildTable()" style="min-width:180px;">
 {% endif %}
 {% endset %}
 {% include '_page_header.html' %}
 
+{%- macro pips(used, total=6) -%}
+<span class="pips" aria-hidden="true">{% for i in range(total) %}<span class="pip {{ 'spent' if i < used else 'left' }}"></span>{% endfor %}</span>
+{%- endmacro -%}
+
 <div class="container">
 
     {% if selected_raid %}
-    <!-- Ledger -->
-    <div class="ledger">
-        <div class="ledger-attacks">
-            <div class="ledger-attacks-val">{{ total_log_attacks }}</div>
-            <div class="ledger-attacks-lbl">Attacks Tracked</div>
-        </div>
-        <div class="ledger-cells">
-            <div class="ledger-cell">
-                <img src="/static/img/raidCapitalGold.png" class="ledger-cell-icon">
-                <div>
-                    <div class="ledger-cell-val" style="color:var(--ops-gold);" title="{{ '{:,}'.format(selected_raid.capital_total_loot or 0) }}">
-                        {%- set loot = selected_raid.capital_total_loot or 0 -%}
-                        {%- if loot >= 1000000 %}{{ '%.1fM' | format(loot / 1000000) }}
-                        {%- elif loot >= 1000 %}{{ '%.1fK' | format(loot / 1000) }}
-                        {%- else %}{{ loot }}{%- endif %}
-                    </div>
-                    <div class="ledger-cell-lbl">Capital loot</div>
-                </div>
+    {% set is_ongoing = (selected_raid.state or '')|lower == 'ongoing' %}
+    {% set is_ended   = (selected_raid.state or '')|lower == 'ended' %}
+
+    {# ── REPORT BAND ─────────────────────────────────────────────────────── #}
+    {% set loot = selected_raid.capital_total_loot or 0 %}
+    {% set districts = selected_raid.enemy_districts_destroyed or 0 %}
+    {% set tot_attacks = selected_raid.total_attacks or 0 %}
+    {% set actual_medals = (selected_raid.defensive_reward or 0) + (selected_raid.offensive_reward or 0) * 6 %}
+    <div class="report">
+        {% if is_ended %}
+        {# actual_medals comes from the recorded offensive/defensive payout. Recent
+           raids sometimes end before the sync captures those (both fields 0), which
+           would render a dishonest "0 earned · −N vs est". When there's no recorded
+           payout, fall back to our post-hoc estimate, marked as an estimate, with no
+           vs-est delta (comparing the estimate to itself is meaningless). #}
+        <div class="report-feat">
+            {% if actual_medals > 0 %}
+            <div class="report-feat-val" style="color:var(--purple);">
+                {{ actual_medals }}
+                {% if est_medals_6atk is not none %}
+                {% set medal_diff = actual_medals - est_medals_6atk %}
+                <span class="delta-chip {{ 'pos' if medal_diff > 5 else ('neg' if medal_diff < -5 else 'even') }}">{{ '%+d'|format(medal_diff) }} vs est</span>
+                {% endif %}
             </div>
-            <div class="ledger-cell">
-                <img src="/static/img/raidMedal.png" class="ledger-cell-icon">
-                {% set raid_is_ended = (selected_raid.state or '')|lower == 'ended' %}
-                {% set actual_medals = (selected_raid.defensive_reward or 0) + (selected_raid.offensive_reward or 0) * 6 %}
-                {% if raid_is_ended %}
-                {% set medal_diff = actual_medals - est_medals_6atk if est_medals_6atk is not none else none %}
-                <div>
-                    <div class="ledger-cell-val" style="color:var(--purple);" {% if medal_diff is not none %}title="{{ '%+d'|format(medal_diff) }} vs. pre-raid estimate"{% endif %}>{{ actual_medals }}</div>
-                    <div class="ledger-cell-lbl">Raid medals</div>
+            <div class="report-feat-lbl">Raid medals earned</div>
+            {% else %}
+            <div class="report-feat-val report-prov">{{ ('≈' + est_medals_6atk|string) if est_medals_6atk is not none else '—' }}</div>
+            <div class="report-feat-lbl">Raid medals (est.)</div>
+            {% endif %}
+        </div>
+        <div class="report-cells">
+            <div class="report-cell">
+                <img src="/static/img/raidCapitalGold.png" class="report-cell-icon" alt="">
+                <div><div class="report-cell-val" style="color:var(--ops-gold);" title="{{ '{:,}'.format(loot) }}">{% if loot >= 1000000 %}{{ '%.1fM'|format(loot/1000000) }}{% elif loot >= 1000 %}{{ '%.1fK'|format(loot/1000) }}{% else %}{{ loot }}{% endif %}</div><div class="report-cell-lbl">Capital loot</div></div>
+            </div>
+            <div class="report-cell">
+                <img src="/static/img/townHall.png" class="report-cell-icon" alt="">
+                <div><div class="report-cell-val" style="color:var(--blue);">{{ districts }}</div><div class="report-cell-lbl">Districts destroyed</div></div>
+            </div>
+            <div class="report-cell">
+                <img src="/static/img/battle.png" class="report-cell-icon" alt="">
+                <div><div class="report-cell-val" style="color:var(--ops-ink);">{{ (tot_attacks / districts) | round(1) if districts else '—' }}</div><div class="report-cell-lbl">Avg attacks / district</div></div>
+            </div>
+        </div>
+        {% else %}
+        <div class="report-feat">
+            <div class="report-feat-val" style="color:var(--ops-raid);">{{ clan_attacks_remaining }}</div>
+            <div class="report-feat-lbl">Attacks remaining</div>
+        </div>
+        <div class="report-cells">
+            <div class="report-cell">
+                <img src="/static/img/raidCapitalGold.png" class="report-cell-icon" alt="">
+                <div><div class="report-cell-val" style="color:var(--ops-gold);" title="{{ '{:,}'.format(loot) }}">{% if loot >= 1000000 %}{{ '%.1fM'|format(loot/1000000) }}{% elif loot >= 1000 %}{{ '%.1fK'|format(loot/1000) }}{% else %}{{ loot }}{% endif %}</div><div class="report-cell-lbl">Capital loot so far</div></div>
+            </div>
+            <div class="report-cell">
+                <img src="/static/img/townHall.png" class="report-cell-icon" alt="">
+                <div><div class="report-cell-val" style="color:var(--blue);">{{ districts }}</div><div class="report-cell-lbl">Districts destroyed</div></div>
+            </div>
+            <div class="report-cell">
+                <img src="/static/img/raidMedal.png" class="report-cell-icon" alt="">
+                <div><div class="report-cell-val report-prov" {% if est_off_6atk is not none %}title="{{ est_off_6atk }} projected offense + {{ est_avg_defensive }} avg. defense"{% endif %}>{{ ('≈' + est_medals_6atk|string) if est_medals_6atk is not none else '—' }}</div><div class="report-cell-lbl">Projected medals</div></div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── YOU BAND ────────────────────────────────────────────────────────── #}
+    {% set my_tag = current_user.linked_player_tag if (current_user and current_user.is_authenticated and current_user.linked_player_tag) else None %}
+    {% if my_tag %}
+    {% set me = (player_data | selectattr('player_tag', 'equalto', my_tag) | list | first) %}
+    {% set me_roster = (roster_status | selectattr('player_tag', 'equalto', my_tag) | list | first) %}
+    {% if me or me_roster %}
+    {% set my_used = me.att_count if me else 0 %}
+    {% set my_left = me_roster.attacks_left if me_roster else (6 - my_used) %}
+    <div class="you">
+        <div class="you-id">
+            <span class="you-tag">Your raid</span>
+            <span class="you-name">{{ (me.player_name if me else me_roster.player_name) }}</span>
+        </div>
+        <div class="you-figs">
+            <div class="you-fig">
+                <span class="you-fig-lbl">Attacks</span>
+                <span class="you-fig-val">{{ pips(my_used) }} {{ my_used }}/6</span>
+            </div>
+            {% if me %}
+            <div class="you-fig">
+                <span class="you-fig-lbl">Verdict</span>
+                <span class="you-fig-val"><span class="judgment {{ me.badge_class }}">{{ me.judge_label.split('(')[0].strip() }}{% if me.score_100 > 0 %} · {{ me.score_100 }}{% endif %}</span></span>
+            </div>
+            <div class="you-fig">
+                <span class="you-fig-lbl">Loot</span>
+                <span class="you-fig-val" style="color:var(--ops-gold);">{{ '{:,}'.format(me.capital_loot) if me.capital_loot else '—' }}</span>
+            </div>
+            <div class="you-fig">
+                <span class="you-fig-lbl">Impact</span>
+                <span class="you-fig-val {{ 'impact-num pos' if me.overall_impact > 0 else ('impact-num neg' if me.overall_impact < 0 else 'impact-num zero') }}">{{ '%+.2f'|format(me.overall_impact) }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% if is_ongoing and my_left > 0 %}
+        <span class="you-nudge">▸ {{ my_left }} attack{{ 's' if my_left != 1 else '' }} remaining — go finish</span>
+        {% elif is_ongoing and my_left == 0 %}
+        <span class="you-nudge done">✓ All attacks used</span>
+        {% elif is_ended and not me %}
+        <span class="you-nudge" style="color:var(--ops-ink-dim);">You didn't attack this raid</span>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+    {% endif %}
+
+    {# ── CONSOLE (two-column action tier) ────────────────────────────────── #}
+    {% if player_data or (selected_raid and roster_status) %}
+    <div class="console">
+        {# LEFT: war-room (ongoing) or highlights (ended) #}
+        <div class="console-left">
+            {% if is_ongoing %}
+            {% set done = roster_status | selectattr('attacks_left', 'equalto', 0) | list %}
+            {% set remaining = roster_status | rejectattr('attacks_left', 'equalto', 0) | list | sort(attribute='attacks_left', reverse=True) %}
+            {% set possible = roster_total * 6 %}
+            {% set used_total = possible - clan_attacks_remaining %}
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title"><img src="/static/img/battle.png" alt="">War Room</span>
+                    <span class="panel-meta">{{ participation_pct }}% joined</span>
+                </div>
+                <div class="wr-agg">
+                    <div class="wr-agg-top"><span class="wr-agg-big">{{ clan_attacks_remaining }}</span><span class="wr-agg-lbl">attacks remaining · {{ remaining|length }} member{{ 's' if remaining|length != 1 else '' }}</span></div>
+                    <div class="wr-progress"><div class="wr-progress-fill" data-pct="{{ (used_total / possible * 100) if possible else 0 }}"></div></div>
+                    <div class="wr-progress-cap">{{ used_total }} / {{ possible }} attacks used</div>
+                </div>
+                {% if remaining %}
+                <div class="wr-list">
+                    {% for r in remaining %}
+                    <div class="wr-row {{ 'noshow' if not r.has_attacked }}">
+                        <span class="wr-name"><a href="/player/{{ r.player_tag|replace('#','') }}">{{ r.player_name }}</a></span>
+                        {{ pips(r.attacks_used) }}
+                        <span class="wr-left">{{ r.attacks_left }} left</span>
+                    </div>
+                    {% endfor %}
                 </div>
                 {% else %}
-                <div>
-                    <div class="ledger-cell-val" style="color:var(--yellow);" {% if est_off_6atk is not none %}title="{{ est_off_6atk }} projected offense + {{ est_avg_defensive }} avg. defense"{% endif %}>{{ ('≈' + est_medals_6atk|string) if est_medals_6atk is not none else '—' }}</div>
-                    <div class="ledger-cell-lbl">Est. medals</div>
+                <div class="wr-empty">Every member has used all 6 attacks. ✓</div>
+                {% endif %}
+                {% if done %}
+                <button type="button" class="wr-done" onclick="toggleDone(this)"><span class="chev">▾</span> {{ done|length }} member{{ 's' if done|length != 1 else '' }} done</button>
+                <div class="wr-list wr-done-list" style="display:none;">
+                    {% for r in done %}
+                    <div class="wr-row">
+                        <span class="wr-name"><a href="/player/{{ r.player_tag|replace('#','') }}">{{ r.player_name }}</a></span>
+                        {{ pips(r.attacks_used) }}
+                        <span class="wr-left">done</span>
+                    </div>
+                    {% endfor %}
                 </div>
                 {% endif %}
             </div>
-            <div class="ledger-cell">
-                <img src="/static/img/townHall.png" class="ledger-cell-icon">
-                {%- set districts = selected_raid.enemy_districts_destroyed or 0 -%}
-                {%- set attacks = selected_raid.total_attacks or 0 -%}
-                <div>
-                    <div class="ledger-cell-val" style="color:var(--blue);">{{ (attacks / districts) | round(1) if districts else '—' }}</div>
-                    <div class="ledger-cell-lbl">Avg attacks / district</div>
+            {% elif is_ended and highlights and highlights.mvp %}
+            {% set mvp = highlights.mvp %}
+            <div class="panel">
+                <div class="panel-head"><span class="panel-title"><img src="/static/img/crown.png" alt="">Highlights</span></div>
+                <div class="mvp">
+                    <div class="mvp-crown"><img src="/static/img/crown.png" alt="MVP"></div>
+                    <div class="mvp-body">
+                        <div class="mvp-kicker">Raid MVP</div>
+                        <div class="mvp-name"><a href="/player/{{ mvp.player_tag|replace('#','') }}">{{ mvp.player_name }}</a></div>
+                        <div class="mvp-meta">
+                            <span class="judgment {{ mvp.badge_class }}">{{ mvp.judge_label.split('(')[0].strip() }}{% if mvp.score_100 > 0 %} · {{ mvp.score_100 }}{% endif %}</span>
+                            <span class="mvp-stat">{{ mvp.att_count }} atk · {{ '%+.2f'|format(mvp.overall_impact) }} impact{% if mvp.solo_wipes %} · {{ mvp.solo_wipes }} solo{% endif %}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="award-rail">
+                    {% if highlights.triple_wipers %}
+                    <div class="award triple">
+                        <span class="award-ic">⚡</span>
+                        <div class="award-txt"><div class="award-lbl">Triple Solo Wipe</div><div class="award-name">{{ highlights.triple_wipers | join(', ') }}</div></div>
+                        <span class="award-val">3+ wipes</span>
+                    </div>
+                    {% endif %}
+                    {% if highlights.biggest_carry %}
+                    <div class="award">
+                        <span class="award-ic">🏋️</span>
+                        <div class="award-txt"><div class="award-lbl">Biggest Carry</div><div class="award-name">{{ highlights.biggest_carry.player_name }}</div></div>
+                        <span class="award-val">{{ '%+.2f'|format(highlights.biggest_carry.overall_baseline_shift) }} shift</span>
+                    </div>
+                    {% endif %}
+                    {% if highlights.cleanup_hero %}
+                    <div class="award">
+                        <span class="award-ic">🧹</span>
+                        <div class="award-txt"><div class="award-lbl">Cleanup Hero</div><div class="award-name">{{ highlights.cleanup_hero.player_name }}</div></div>
+                        <span class="award-val">{{ highlights.cleanup_hero.cleanup_count }} cleanups</span>
+                    </div>
+                    {% endif %}
+                    {% if highlights.peak_slayer %}
+                    <div class="award">
+                        <span class="award-ic">⛰️</span>
+                        <div class="award-txt"><div class="award-lbl">Peak Slayer</div><div class="award-name">{{ highlights.peak_slayer.player_name }}</div></div>
+                        <span class="award-val">{{ '%.2f'|format(highlights.peak_slayer.peak_medals_per_attack) }} / atk</span>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
+        </div>
+
+        {# RIGHT: siege map + recent-attacks feed #}
+        <div class="console-right">
+            {% if player_data %}
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title"><img src="/static/img/townHall.png" alt="">Capital Siege Map</span>
+                    <span class="panel-meta">{% if is_ended %}final{% else %}live{% endif %}</span>
+                </div>
+                <div id="siegeBody"></div>
+            </div>
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title"><img src="/static/img/battle.png" alt="">Recent Attacks</span>
+                    <span class="panel-meta">last 20</span>
+                </div>
+                <div class="feed-body" id="recentBody"></div>
+            </div>
+            {% endif %}
         </div>
     </div>
-
-    {% if combined_baseline is not none or regular_baseline is not none or peak_baseline is not none %}
-    <div class="baseline-strip">
-        {% if combined_baseline is not none %}
-        <div class="bl-item"><span class="bl-lbl">Combined</span><span class="bl-val">{{ '%.2f'|format(combined_baseline) }}</span></div>
-        {% endif %}
-        {% if regular_baseline is not none %}
-        <div class="bl-item"><span class="bl-lbl">District</span><span class="bl-val">{{ '%.2f'|format(regular_baseline) }}</span></div>
-        {% endif %}
-        {% if peak_baseline is not none %}
-        <div class="bl-item"><span class="bl-lbl">Peak</span><span class="bl-val">{{ '%.2f'|format(peak_baseline) }}</span></div>
-        {% endif %}
-        <span class="bl-hint">medals per attack this raid — the baseline Impact / Shift below are measured against</span>
-    </div>
-    {% endif %}
     {% endif %}
 
-    <!-- Capital Siege Map -->
+    {# ── LEADERBOARD ─────────────────────────────────────────────────────── #}
     {% if player_data %}
-    <div class="flip-card" id="siegeCard">
-        <div class="flip-header" onclick="toggleSiege()">
-            <span class="flip-header-title"><img src="/static/img/townHall.png"> Capital Siege Map</span>
-            <span class="flip-chevron" id="siegeChevron">▼</span>
-        </div>
-        <div class="flip-body" id="siegeBody" style="display:none;"></div>
+    <div class="board-lead">
+        <span class="board-title">Attack Leaderboard</span>
+        <span class="board-hint">Sorted by verdict — tap a row for the medal-impact breakdown</span>
     </div>
-    {% endif %}
-
-    <!-- Recent Attacks -->
-    {% if player_data %}
-    <div class="flip-card" id="recentCard">
-        <div class="flip-header" onclick="toggleRecent()">
-            <span class="flip-header-title"><img src="/static/img/battle.png"> 20 Most Recent Attacks</span>
-            <span class="flip-chevron" id="recentChevron">▼</span>
-        </div>
-        <div class="flip-body" id="recentBody" style="display:none;"></div>
-    </div>
-    {% endif %}
-
-    <!-- Player Table -->
-    {% if player_data %}
     <div class="table-scroll">
         <div class="table-wrapper">
             <table id="statsTable">
                 <colgroup>
-                    <col class="col-player">
-                    <col class="col-attacks">
-                    <col class="col-loot">
-                    <col class="col-avgpct">
-                    <col class="col-solowipes">
-                    <col class="col-cleanups">
-                    <col class="col-medals">
-                    <col class="col-peak">
-                    <col class="col-impact">
-                    <col class="col-shift">
-                    <col class="col-verdict">
-                    <col class="col-action">
+                    <col class="col-player"><col class="col-attacks"><col class="col-loot">
+                    <col class="col-wipes"><col class="col-impact"><col class="col-verdict"><col class="col-action">
                 </colgroup>
                 <thead>
                     <tr>
                         <th class="sortable" onclick="sortTable('player')">Player</th>
                         <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
-                        <th class="sortable" onclick="sortTable('capital_loot')"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;"> Loot</th>
-                        <th class="sortable" onclick="sortTable('avg_pct')">Avg %</th>
+                        <th class="sortable" onclick="sortTable('capital_loot')"><img src="/static/img/raidCapitalGold.png" style="width:14px;height:14px;vertical-align:middle;" alt=""> Loot</th>
                         <th class="sortable" onclick="sortTable('solo_wipes')">Solo Wipes</th>
-                        <th class="sortable" onclick="sortTable('cleanup_count')">Cleanups</th>
-                        <th class="sortable" onclick="sortTable('net_medal_impact')" style="text-align:center;" title="Your medal credit per attack on regular districts, vs. the raid-wide average">Medals / Atk</th>
-                        <th class="sortable" onclick="sortTable('peak_medal_impact')" style="text-align:center;" title="Your medal credit per attack on the Capital Peak, vs. the raid-wide average">Peak Medals / Atk</th>
-                        <th class="sortable" onclick="sortTable('overall_impact')" style="text-align:center;" title="Medals/Atk and Peak Medals/Atk combined, weighted by each bucket's share of total medal value">Overall Impact</th>
-                        <th class="sortable" onclick="sortTable('overall_baseline_shift')" style="text-align:center;" title="How many medals/attack YOUR OWN attacks pulled the raid-wide average up or down by — baseline with you minus baseline without you. Different from Overall Impact: that's how far your rate is FROM the average, this is how much you personally MOVED it.">Overall Shift</th>
+                        <th class="sortable" onclick="sortTable('overall_impact')" style="text-align:center;" title="Your weighted share of impact on the raid's whole medal pool, vs. the raid-wide average. Tap a row for the full breakdown.">Impact</th>
                         <th class="sortable" onclick="sortTable('score_100')">Verdict</th>
                         <th>Details</th>
                     </tr>
@@ -431,18 +644,23 @@
         </div>
     </div>
     <div id="mobileList"></div>
+
+    {% if is_ongoing %}
+    {% set noshow = roster_status | rejectattr('has_attacked') | list %}
+    {% if noshow %}
+    <details class="noshow-tail">
+        <summary>{{ noshow|length }} member{{ 's' if noshow|length != 1 else '' }} haven't attacked yet</summary>
+        <div class="noshow-list">
+            {% for r in noshow %}<a class="noshow-name" href="/player/{{ r.player_tag|replace('#','') }}">{{ r.player_name }}</a>{% endfor %}
+        </div>
+    </details>
+    {% endif %}
+    {% endif %}
+
     {% elif selected_raid %}
-    <div class="table-scroll">
-        <div class="table-wrapper">
-            <div class="empty-state"><p>No attack logs recorded for this raid weekend.</p></div>
-        </div>
-    </div>
+    <div class="table-scroll"><div class="table-wrapper"><div class="empty-state"><p>No attack logs recorded for this raid weekend.</p></div></div></div>
     {% else %}
-    <div class="table-scroll">
-        <div class="table-wrapper">
-            <div class="empty-state"><p>No raid weekend data available yet.</p></div>
-        </div>
-    </div>
+    <div class="table-scroll"><div class="table-wrapper"><div class="empty-state"><p>No raid weekend data available yet.</p></div></div></div>
     {% endif %}
 
 </div>
@@ -454,39 +672,51 @@
 const playerData = {{ player_data | tojson | safe }};
 const myPlayerTag = {{ (current_user.linked_player_tag if current_user and current_user.linked_player_tag else None) | tojson }};
 const RAID_MEDAL_TABLES = {{ raid_medal_tables_json | safe }};
+const RAID_STATE = {{ ((selected_raid.state or '')|lower) | tojson }};
+const BASELINES = {
+    combined: {{ combined_baseline | tojson }},
+    district: {{ regular_baseline | tojson }},
+    peak:     {{ peak_baseline | tojson }},
+};
 
 let currentSort = { column: 'score_100', direction: 'desc' };
 
 function escapeHTML(s) {
-    return String(s || '').replace(/[&<>"']/g, c =>
-        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
-    );
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-
 const MAX_ATTACKS = 6;
-
 function deltaClass(v) { return v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'; }
 
-function impactCell(rate, impact) {
-    if (impact == null) return `<span style="color:var(--ops-ink-dim);">—</span>`;
-    const sign = impact > 0 ? '+' : '';
-    return `<div class="impact-rate">${rate.toFixed(2)}</div>
-            <div class="impact-delta ${deltaClass(impact)}">${sign}${impact.toFixed(2)}</div>`;
-}
-
-// Unlike impactCell, there's no "rate" to pair this with — baseline shift isn't a
-// comparison of your rate to anything, it's literally how many medals/attack your own
-// attacks moved the shared bucket average by (baseline with you minus without you).
-function shiftCell(shift) {
-    if (shift == null) return `<span style="color:var(--ops-ink-dim);">—</span>`;
-    const sign = shift > 0 ? '+' : '';
-    return `<div class="shift-val ${deltaClass(shift)}">${sign}${shift.toFixed(2)}</div>`;
-}
-
-function impactValueOnly(v) {
-    if (v == null) return `<div class="mc-stat-val" style="color:var(--ops-ink-dim);">—</div>`;
+function signedImpact(v) {
+    if (v == null) return `<span class="impact-num zero">—</span>`;
     const sign = v > 0 ? '+' : '';
-    return `<div class="mc-stat-val shift-val ${deltaClass(v)}">${sign}${v.toFixed(2)}</div>`;
+    return `<span class="impact-num ${deltaClass(v)}">${sign}${v.toFixed(2)}</span>`;
+}
+function fmtRate(rate, impact) {
+    if (rate == null) return `<span style="color:var(--ops-ink-dim);">—</span>`;
+    const sign = impact > 0 ? '+' : '';
+    const dCls = impact == null ? 'zero' : deltaClass(impact);
+    const dTxt = impact == null ? '' : `<div class="ibreak-delta ${dCls}">${sign}${impact.toFixed(2)} vs avg</div>`;
+    return `<div class="ibreak-val">${rate.toFixed(2)}</div>${dTxt}`;
+}
+
+function impactBreakdown(p) {
+    const base = [];
+    if (BASELINES.combined != null) base.push(`Combined <b>${BASELINES.combined.toFixed(2)}</b>`);
+    if (BASELINES.district != null) base.push(`District <b>${BASELINES.district.toFixed(2)}</b>`);
+    if (BASELINES.peak != null)     base.push(`Peak <b>${BASELINES.peak.toFixed(2)}</b>`);
+    const shift = p.overall_baseline_shift;
+    const shiftSign = shift > 0 ? '+' : '';
+    return `<div class="detail-section">
+        <h4>Medal Impact Breakdown</h4>
+        <div class="ibreak">
+            <div class="ibreak-cell"><div class="ibreak-lbl">Medals / Atk</div>${fmtRate(p.medals_per_attack, p.net_medal_impact)}</div>
+            <div class="ibreak-cell"><div class="ibreak-lbl">Peak Medals / Atk</div>${fmtRate(p.peak_medals_per_attack, p.peak_medal_impact)}</div>
+            <div class="ibreak-cell"><div class="ibreak-lbl">Overall Shift</div><div class="ibreak-val ${deltaClass(shift)}" style="color:${shift>0?'var(--green)':shift<0?'var(--red)':'var(--ops-ink-dim)'};">${shiftSign}${(shift ?? 0).toFixed(2)}</div><div class="ibreak-delta zero">you moved the average</div></div>
+            <div class="ibreak-cell"><div class="ibreak-lbl">Avg Destruction</div><div class="ibreak-val" style="color:var(--blue);">${p.avg_pct}%</div></div>
+        </div>
+        ${base.length ? `<div class="ibase">Raid baselines — ${base.join(' · ')} medals/atk</div>` : ''}
+    </div>`;
 }
 
 function buildVerdictDetails(p) {
@@ -495,7 +725,6 @@ function buildVerdictDetails(p) {
     const effectiveMax = p.effective_max ?? MAX_ATTACKS;
     const missing = Math.max(0, MAX_ATTACKS - p.att_count);
 
-    // Group logs by district (preserve order of first appearance)
     const districtOrder = [];
     const districtGroups = {};
     logs.forEach(l => {
@@ -504,121 +733,94 @@ function buildVerdictDetails(p) {
         districtGroups[key].push(l);
     });
 
-    // Determine district type and stats
-    const districtType  = {};
-    const districtTotal = {};
+    const districtType = {}, districtTotal = {};
     districtOrder.forEach(key => {
-        const attacks   = districtGroups[key];
-        const done      = attacks.some(l => l.percentage_total === 100);
-        const pctTotal  = attacks.reduce((s, l) => s + l.percentage, 0);
-        const adjTotal  = attacks.reduce((s, l) => s + l.adj_score, 0);
+        const attacks = districtGroups[key];
+        const done = attacks.some(l => l.percentage_total === 100);
+        const pctTotal = attacks.reduce((s, l) => s + l.percentage, 0);
+        const adjTotal = attacks.reduce((s, l) => s + l.adj_score, 0);
         const isCleanup = attacks.length === 1 && attacks[0].is_clean_up;
-        districtType[key]  = isCleanup ? 'cleanup' : (done && pctTotal === 100) ? 'solo_wipe' : 'normal';
+        districtType[key] = isCleanup ? 'cleanup' : (done && pctTotal === 100) ? 'solo_wipe' : 'normal';
         districtTotal[key] = { pct: pctTotal, adj: adjTotal };
     });
 
     const soloWipeCount = districtOrder.filter(k => districtType[k] === 'solo_wipe').length;
-    const tripleWipe    = soloWipeCount >= 3;
+    const tripleWipe = soloWipeCount >= 3;
 
     let rows = '';
     districtOrder.forEach(key => {
         const attacks = districtGroups[key];
-        const type    = districtType[key];
-        const span    = attacks.length;
-        const totals  = districtTotal[key];
-        const first   = attacks[0];
-
+        const type = districtType[key];
+        const span = attacks.length;
+        const totals = districtTotal[key];
+        const first = attacks[0];
         const districtNameCell = `<td rowspan="${span}" style="font-weight:600;vertical-align:middle;border-right:1px solid var(--bord2);">
             ${escapeHTML(first.district_name)}
-            <div style="font-size:11px;color:var(--ops-ink-dim);font-weight:400;margin-top:2px;">Lvl ${first.district_level} · ${first.level_mult.toFixed(2)}×</div>
-        </td>`;
-
+            <div style="font-size:11px;color:var(--ops-ink-dim);font-weight:400;margin-top:2px;">Lvl ${first.district_level} · ${first.level_mult.toFixed(2)}×</div></td>`;
         let summaryContent = '';
         if (type === 'solo_wipe') {
-            summaryContent = `
-                <span class="mini-badge solo">⚡ Solo Wipe</span>
+            summaryContent = `<span class="mini-badge solo">⚡ Solo Wipe</span>
                 <div style="margin-top:5px;" class="mono-num" style="font-size:12px;color:var(--purple);">${totals.pct}% · ${totals.adj.toFixed(2)} adj</div>`;
         } else if (type === 'cleanup') {
-            summaryContent = `
-                <span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>
+            summaryContent = `<span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>
                 <div style="margin-top:5px;font-size:12px;color:var(--ops-ink-dim);">${totals.pct}% raw</div>`;
         } else {
-            summaryContent = `
-                <div class="mono-num" style="font-size:13px;color:var(--blue);">${totals.pct}%</div>
+            summaryContent = `<div class="mono-num" style="font-size:13px;color:var(--blue);">${totals.pct}%</div>
                 <div class="mono-num" style="font-size:13px;color:var(--ops-gold);">${totals.adj.toFixed(2)} adj</div>`;
         }
         const summaryCell = `<td rowspan="${span}" style="vertical-align:middle;border-left:1px solid var(--bord2);padding:8px 12px;">${summaryContent}</td>`;
-
         attacks.forEach((l, i) => {
-            const adjColor     = type === 'cleanup' ? 'var(--ops-ink-dim)' : 'var(--ops-gold)';
-            const rowBg        = type === 'cleanup' ? 'opacity:0.5;' : type === 'solo_wipe' ? 'background:rgba(144,102,232,0.05);box-shadow:inset 3px 0 0 var(--purple);' : '';
+            const adjColor = type === 'cleanup' ? 'var(--ops-ink-dim)' : 'var(--ops-gold)';
+            const rowBg = type === 'cleanup' ? 'opacity:0.5;' : type === 'solo_wipe' ? 'background:rgba(144,102,232,0.05);box-shadow:inset 3px 0 0 var(--purple);' : '';
             const borderBottom = i < span - 1 ? 'border-bottom:1px dashed var(--bord2);' : '';
             rows += `<tr style="${rowBg}${borderBottom}">
                 ${i === 0 ? districtNameCell : ''}
                 <td style="text-align:center;">${renderStars(l.stars)}</td>
                 <td class="mono-num" style="text-align:center;font-size:14px;color:var(--blue);">${l.percentage}%</td>
                 <td class="mono-num" style="text-align:center;font-size:14px;color:${adjColor};">${l.adj_score.toFixed(2)}</td>
-                ${i === 0 ? summaryCell : ''}
-            </tr>`;
+                ${i === 0 ? summaryCell : ''}</tr>`;
         });
     });
-
     for (let i = 0; i < missing; i++) {
         rows += `<tr style="opacity:0.4;">
             <td style="color:var(--red);border-right:1px solid var(--bord2);">— missing —</td>
             <td>${renderStars(0)}</td><td>—</td><td class="mono-num">0.00</td>
-            <td style="border-left:1px solid var(--bord2);"></td>
-        </tr>`;
+            <td style="border-left:1px solid var(--bord2);"></td></tr>`;
     }
-
     const tripleWipeBanner = tripleWipe ? `
-        <div style="margin-bottom:12px;padding:8px 14px;border-radius:8px;background:linear-gradient(90deg,rgba(144,102,232,0.15),rgba(144,102,232,0.05));border:1px solid rgba(144,102,232,0.4);display:flex;align-items:center;gap:10px;">
-            <img src="/static/img/crown.png" style="width:18px;height:18px;vertical-align:middle;">
-            <span class="mono-num" style="font-size:13px;color:var(--purple);text-transform:uppercase;letter-spacing:1px;">Triple Solo Wipe${soloWipeCount > 3 ? ` ×${soloWipeCount}` : ''}</span>
-            <span style="font-size:12px;color:var(--ops-ink-dim);">every district destroyed single-handedly</span>
-        </div>` : '';
+        <div style="margin-bottom:12px;padding:8px 14px;border-radius:8px;background:color-mix(in oklch,var(--ops-star) 12%,transparent);border:1px solid color-mix(in oklch,var(--ops-star) 34%,transparent);display:flex;align-items:center;gap:10px;">
+            <img src="/static/img/crown.png" style="width:18px;height:18px;" alt="">
+            <span class="mono-num" style="font-size:13px;color:var(--ops-star);text-transform:uppercase;letter-spacing:1px;">Triple Solo Wipe${soloWipeCount > 3 ? ` ×${soloWipeCount}` : ''}</span>
+            <span style="font-size:12px;color:var(--ops-ink-dim);">every district destroyed single-handedly</span></div>` : '';
 
-    return `<div style="padding:0 16px 16px;">
-        <div class="detail-section">
-            <h4>Verdict Breakdown – Level-Adjusted Score</h4>
-            ${tripleWipeBanner}
-            <div style="margin-bottom:10px;font-size:12px;color:var(--ops-ink-dim);display:flex;gap:16px;flex-wrap:wrap;">
-                ${p.solo_wipes > 0
-                    ? `<span>Score: <span class="mono-num" style="color:var(--ops-gold);">${p.adj_per_attack.toFixed(2)}</span> = Σ adj. % / ${effectiveMax} attacks × <span class="mono-num" style="color:var(--green);">1.18<sup>${p.solo_wipes}</sup></span> <span style="color:var(--green);">(solo wipe bonus)</span></span>`
-                    : `<span>Score: <span class="mono-num" style="color:var(--ops-gold);">${p.adj_per_attack.toFixed(2)}</span> = Σ adj. % / ${effectiveMax} attacks</span>`
-                }
-                <span>Verdict: <span class="judgment ${p.badge_class}" style="font-size:10px;padding:2px 8px;">${verdictName}${p.score_100 > 0 ? ` · ${p.score_100}` : ''}</span></span>
-            </div>
-            <div class="detail-table-scroll">
-            <table class="detail-table">
-                <thead><tr>
-                    <th>District</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Result</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table>
-            </div>
+    return `${impactBreakdown(p)}
+    <div class="detail-section">
+        <h4>Verdict Breakdown – Level-Adjusted Score</h4>
+        ${tripleWipeBanner}
+        <div style="margin-bottom:10px;font-size:12px;color:var(--ops-ink-dim);display:flex;gap:16px;flex-wrap:wrap;">
+            ${p.solo_wipes > 0
+                ? `<span>Score: <span class="mono-num" style="color:var(--ops-gold);">${p.adj_per_attack.toFixed(2)}</span> = Σ adj. % / ${effectiveMax} attacks × <span class="mono-num" style="color:var(--green);">1.18<sup>${p.solo_wipes}</sup></span> <span style="color:var(--green);">(solo wipe bonus)</span></span>`
+                : `<span>Score: <span class="mono-num" style="color:var(--ops-gold);">${p.adj_per_attack.toFixed(2)}</span> = Σ adj. % / ${effectiveMax} attacks</span>`}
+            <span>Verdict: <span class="judgment ${p.badge_class}" style="font-size:10px;padding:2px 8px;">${verdictName}${p.score_100 > 0 ? ` · ${p.score_100}` : ''}</span></span>
+        </div>
+        <div class="detail-table-scroll">
+        <table class="detail-table">
+            <thead><tr><th>District</th><th>Stars</th><th>%</th><th>Adj. %</th><th>Result</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
         </div>
     </div>`;
 }
 
 function buildTable() {
-    const expandedTags = new Set(
-        [...document.querySelectorAll('#statsBody .detail-row.expanded')]
-            .map(r => r.dataset.playerTag).filter(Boolean)
-    );
-
-    const search = (document.getElementById('searchInput').value || '').toLowerCase();
-    let rows = playerData.filter(p =>
-        !search || (p.player_name || '').toLowerCase().includes(search) || (p.player_tag || '').toLowerCase().includes(search)
-    );
+    const expandedTags = new Set([...document.querySelectorAll('#statsBody .detail-row.expanded')].map(r => r.dataset.playerTag).filter(Boolean));
+    const search = (document.getElementById('searchInput')?.value || '').toLowerCase();
+    let rows = playerData.filter(p => !search || (p.player_name || '').toLowerCase().includes(search) || (p.player_tag || '').toLowerCase().includes(search));
 
     if (currentSort.column && currentSort.direction) {
         const colKey = currentSort.column === 'player' ? 'player_name' : currentSort.column;
         rows.sort((a, b) => {
             let av = a[colKey], bv = b[colKey];
-            // Missing (null) values — e.g. a player with no peak/regular attacks this raid —
-            // always sort to the bottom regardless of direction, rather than coercing to 0
-            // and getting interleaved with players who genuinely scored near zero.
             const aMissing = av == null, bMissing = bv == null;
             if (aMissing && bMissing) return 0;
             if (aMissing) return 1;
@@ -633,35 +835,28 @@ function buildTable() {
 
     const tbody = document.getElementById('statsBody');
     tbody.innerHTML = '';
-
-    rows.forEach(p => {
+    rows.forEach((p, idx) => {
         const profileUrl = '/player/' + encodeURIComponent((p.player_tag || '').replace('#', ''));
         const leftBadge = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
         const row = document.createElement('tr');
+        row.className = 'prow';
         if (myPlayerTag && p.player_tag === myPlayerTag) {
-            row.style.background = 'rgba(226,72,63,0.08)';
-            row.style.boxShadow = 'inset 3px 0 0 var(--ops-raid)';
+            row.style.background = 'color-mix(in oklch, var(--ops-raid) 8%, transparent)';
         }
         row.style.cursor = 'pointer';
         row.innerHTML = `
-            <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="${profileUrl}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftBadge}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
-            <td><span class="att-count">${p.att_count}</span></td>
+            <td><div class="player-cell"><span class="player-rank">${idx + 1}</span><div class="player-info"><div class="player-name"><a href="${profileUrl}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftBadge}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
+            <td><span class="att-count">${p.att_count}</span><span class="att-sub">/6</span>${p.cleanup_count ? `<div class="att-sub">${p.cleanup_count} cleanup</div>` : ''}</td>
             <td><span class="loot-cell">${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'}</span></td>
-            <td><span class="avgpct-cell" style="color:var(--blue);">${p.avg_pct}%</span></td>
-            <td><span class="solowipe-cell" style="color:var(--green);">${p.solo_wipes}</span></td>
-            <td><span class="solowipe-cell" style="color:var(--ops-ink-dim);">${p.cleanup_count}</span></td>
-            <td style="text-align:center;">${impactCell(p.medals_per_attack, p.net_medal_impact)}</td>
-            <td style="text-align:center;">${impactCell(p.peak_medals_per_attack, p.peak_medal_impact)}</td>
-            <td style="text-align:center;">${impactCell(p.overall_rate, p.overall_impact)}</td>
-            <td style="text-align:center;">${shiftCell(p.overall_baseline_shift)}</td>
+            <td><span class="solowipe-cell" style="color:${p.solo_wipes ? 'var(--green)' : 'var(--ops-ink-dim)'};">${p.solo_wipes}</span></td>
+            <td style="text-align:center;">${signedImpact(p.overall_impact)}</td>
             <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
-            <td><button type="button" class="action-btn details-toggle">Details</button></td>
-        `;
+            <td><button type="button" class="action-btn details-toggle">Details</button></td>`;
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'detail-row';
         detailRow.dataset.playerTag = p.player_tag;
-        detailRow.innerHTML = `<td class="detail-cell" colspan="12"><div class="detail-inner"></div></td>`;
+        detailRow.innerHTML = `<td class="detail-cell" colspan="7"><div class="detail-inner"></div></td>`;
 
         const toggleButton = row.querySelector('.details-toggle');
         row.addEventListener('click', () => {
@@ -672,15 +867,12 @@ function buildTable() {
             const expanded = detailRow.classList.toggle('expanded');
             toggleButton.textContent = expanded ? 'Close' : 'Details';
         });
-
         tbody.appendChild(row);
         tbody.appendChild(detailRow);
-
         if (expandedTags.has(p.player_tag)) row.click();
     });
 
     buildMobileCards(rows);
-
     const totalLoot = rows.reduce((s, p) => s + (p.capital_loot || 0), 0);
     const soloWipes = rows.reduce((s, p) => s + p.solo_wipes, 0);
     document.getElementById('playerCount').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown · ${soloWipes} solo wipe${soloWipes !== 1 ? 's' : ''}${totalLoot > 0 ? ' · ' + totalLoot.toLocaleString() + ' capital loot' : ''}`;
@@ -691,42 +883,29 @@ const debouncedBuildTable = debounce(buildTable, 200);
 function buildMobileCards(rows) {
     const list = document.getElementById('mobileList');
     if (!list) return;
-    const expandedTags = new Set(
-        [...list.querySelectorAll('.mc-detail.expanded')].map(d => d.dataset.playerTag).filter(Boolean)
-    );
+    const expandedTags = new Set([...list.querySelectorAll('.mc-detail.expanded')].map(d => d.dataset.playerTag).filter(Boolean));
     list.innerHTML = '';
     rows.forEach(p => {
         const leftTag = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
         const card = document.createElement('div');
         card.className = 'mc';
-        if (myPlayerTag && p.player_tag === myPlayerTag) card.style.background = 'rgba(226,72,63,0.08)';
+        if (myPlayerTag && p.player_tag === myPlayerTag) card.style.background = 'color-mix(in oklch, var(--ops-raid) 8%, transparent)';
         card.innerHTML = `
             <div class="mc-header">
                 <div class="mc-player">
                     <div class="mc-player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftTag}</div>
                     <div class="mc-player-tag">${escapeHTML(p.player_tag)}</div>
                 </div>
-                <div class="mc-attacks">
-                    <div class="mc-attacks-val">${p.att_count}</div>
-                    <div class="mc-attacks-lbl">Attacks</div>
-                </div>
+                <div class="mc-attacks"><div class="mc-attacks-val">${p.att_count}<span style="font-size:12px;color:var(--ops-ink-dim);">/6</span></div><div class="mc-attacks-lbl">Attacks</div></div>
             </div>
-            <div class="mc-verdict"><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:.6;font-size:.9em;">·</span> ${p.score_100}` : ''}</span></div>
+            <div class="mc-verdict"><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:.6;font-size:.9em;">·</span> ${p.score_100}` : ''}</span>${signedImpact(p.overall_impact)}</div>
             <div class="mc-stats">
                 <div class="mc-stat"><div class="mc-stat-lbl">Loot</div><div class="mc-stat-val" style="color:var(--ops-gold);">${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'}</div></div>
                 <div class="mc-stat"><div class="mc-stat-lbl">Avg %</div><div class="mc-stat-val" style="color:var(--blue);">${p.avg_pct}%</div></div>
-                <div class="mc-stat"><div class="mc-stat-lbl">Solo Wipes</div><div class="mc-stat-val" style="color:var(--green);">${p.solo_wipes}</div></div>
-                <div class="mc-stat"><div class="mc-stat-lbl">Cleanups</div><div class="mc-stat-val" style="color:var(--ops-ink-dim);">${p.cleanup_count}</div></div>
-                <div class="mc-stat"><div class="mc-stat-lbl">Medals/Atk</div><div class="mc-stat-val">${p.medals_per_attack != null ? p.medals_per_attack.toFixed(2) : '—'}</div></div>
-                <div class="mc-stat"><div class="mc-stat-lbl">Peak Medals/Atk</div><div class="mc-stat-val">${p.peak_medals_per_attack != null ? p.peak_medals_per_attack.toFixed(2) : '—'}</div></div>
+                <div class="mc-stat"><div class="mc-stat-lbl">Solo Wipes</div><div class="mc-stat-val" style="color:${p.solo_wipes ? 'var(--green)' : 'var(--ops-ink-dim)'};">${p.solo_wipes}</div></div>
             </div>
-            <div class="mc-impact">
-                <div class="mc-impact-cell"><div class="mc-stat-lbl">Overall Impact</div>${impactValueOnly(p.overall_impact)}</div>
-                <div class="mc-impact-cell"><div class="mc-stat-lbl">Overall Shift</div>${impactValueOnly(p.overall_baseline_shift)}</div>
-            </div>
-            <div class="mc-tap-hint">Tap for verdict breakdown</div>
-            <div class="mc-detail" data-player-tag="${escapeHTML(p.player_tag)}"></div>
-        `;
+            <div class="mc-tap-hint">Tap for medal-impact & verdict breakdown</div>
+            <div class="mc-detail" data-player-tag="${escapeHTML(p.player_tag)}"></div>`;
         const detail = card.querySelector('.mc-detail');
         card.addEventListener('click', () => {
             if (!detail.dataset.built) { detail.innerHTML = buildVerdictDetails(p); detail.dataset.built = 'true'; }
@@ -739,22 +918,12 @@ function buildMobileCards(rows) {
 
 function sortTable(col) {
     if (currentSort.column === col) {
-        if (currentSort.direction === 'asc') {
-            currentSort.direction = 'desc';
-        } else if (currentSort.direction === 'desc') {
-            currentSort.column = null;
-            currentSort.direction = null;
-        } else {
-            currentSort.column = col;
-            currentSort.direction = 'asc';
-        }
-    } else {
-        currentSort.column = col;
-        currentSort.direction = 'asc';
-    }
+        if (currentSort.direction === 'asc') currentSort.direction = 'desc';
+        else if (currentSort.direction === 'desc') { currentSort.column = null; currentSort.direction = null; }
+        else { currentSort.column = col; currentSort.direction = 'asc'; }
+    } else { currentSort.column = col; currentSort.direction = 'asc'; }
     buildTable();
 }
-
 function updateSortHeaders() {
     document.querySelectorAll('#statsTable th').forEach(th => {
         th.classList.remove('sort-active', 'asc', 'desc');
@@ -765,263 +934,179 @@ function updateSortHeaders() {
     });
 }
 
+function toggleDone(btn) {
+    const list = btn.nextElementSibling;
+    const open = list.style.display === 'none';
+    list.style.display = open ? '' : 'none';
+    btn.classList.toggle('open', open);
+}
+
 function buildRecentAttacks() {
     const all = [];
-    playerData.forEach(p => {
-        (p.attack_logs || []).forEach(l => all.push({
-            ...l,
-            player_name: p.player_name,
-            player_tag:  p.player_tag,
-        }));
-    });
+    playerData.forEach(p => (p.attack_logs || []).forEach(l => all.push({ ...l, player_name: p.player_name, player_tag: p.player_tag })));
     all.sort((a, b) => (b.log_id || 0) - (a.log_id || 0));
     const top20 = all.slice(0, 20);
     const body = document.getElementById('recentBody');
-    if (!top20.length) {
-        body.innerHTML = '<div style="padding:16px;color:var(--ops-ink-dim);font-size:13px;">No attacks recorded.</div>';
-        return;
-    }
+    if (!body) return;
+    if (!top20.length) { body.innerHTML = '<div style="padding:16px;color:var(--ops-ink-dim);font-size:13px;">No attacks recorded.</div>'; return; }
     body.innerHTML = `<div class="detail-table-scroll"><table class="detail-table">
-        <thead><tr>
-            <th>Player</th><th>District</th><th>Lvl</th><th>Stars</th><th>%</th><th>Cleanup</th>
-        </tr></thead>
+        <thead><tr><th>Player</th><th>District</th><th>Lvl</th><th>Stars</th><th>%</th><th>Cleanup</th></tr></thead>
         <tbody>${top20.map(l => {
-            const cleanupCell = l.is_clean_up
-                ? `<span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>`
-                : `<span style="color:var(--ops-ink-dim);font-size:12px;">—</span>`;
+            const cleanupCell = l.is_clean_up ? `<span class="badge badge-cleanup" style="font-size:10px;padding:1px 6px;">Cleanup</span>` : `<span style="color:var(--ops-ink-dim);font-size:12px;">—</span>`;
             return `<tr${l.is_clean_up ? ' style="opacity:0.55;"' : ''}>
                 <td style="font-weight:600;"><a href="/player/${encodeURIComponent((l.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(l.player_name)} <span class="player-link-arrow">↗</span></a></td>
                 <td style="font-weight:600;">${escapeHTML(l.district_name)}</td>
                 <td class="mono-num" style="color:var(--ops-ink-dim);">Lvl ${l.district_level}</td>
                 <td>${renderStars(l.stars)}</td>
                 <td class="mono-num" style="font-size:14px;color:var(--blue);">${l.percentage}%</td>
-                <td>${cleanupCell}</td>
-            </tr>`;
-        }).join('')}</tbody>
-    </table></div>`;
+                <td>${cleanupCell}</td></tr>`;
+        }).join('')}</tbody></table></div>`;
 }
 
-function toggleRecent() {
-    const body = document.getElementById('recentBody');
-    const chevron = document.getElementById('recentChevron');
-    const open = body.style.display === 'none';
-    if (open && !body.dataset.built) { buildRecentAttacks(); body.dataset.built = '1'; }
-    body.style.display = open ? '' : 'none';
-    chevron.classList.toggle('open', open);
+// ── SIEGE MAP ────────────────────────────────────────────────────────────
+const isPeakName = n => n === 'Capital Peak' || n === 'Capital Peaks';
+const DISTRICT_UNLOCK_ORDER = ['Barbarian Camp', 'Wizard Valley', 'Balloon Lagoon', "Builder's Workshop", 'Dragon Cliffs', 'Golem Quarry', 'Skeleton Park', 'Goblin Mines'];
+const FINISHED_THRESHOLDS = { nonPeak: { good: 2, ok: 3 }, peak: { good: 3, ok: 4 } };
+function medalValue(level, isPeak) { return (isPeak ? RAID_MEDAL_TABLES.peak : RAID_MEDAL_TABLES.district)[level] || 0; }
+function finishedColorClass(attacks, isPeak) {
+    const t = isPeak ? FINISHED_THRESHOLDS.peak : FINISHED_THRESHOLDS.nonPeak;
+    if (attacks <= t.good) return 'finished-good';
+    if (attacks === t.ok) return 'finished-ok';
+    return 'finished-bad';
 }
-
+function districtStatusClass(d, isPeak) {
+    return d.destroyed ? finishedColorClass(d.attacks, isPeak) : ((d.last_pct_total || 0) > 0 ? 'partial' : 'untouched');
+}
+function pyramidRows(n) {
+    if (n <= 0) return [];
+    const rows = []; let remaining = n;
+    while (remaining > 0) { const take = remaining >= 3 ? 3 : remaining; rows.push(take); remaining -= take; }
+    if (rows.length >= 2 && rows[rows.length - 1] === 1) { rows[rows.length - 2] -= 1; rows[rows.length - 1] += 1; }
+    return rows.reverse();
+}
+function attackersTooltip(d) {
+    if (!d.attackers || !d.attackers.length) return '';
+    return d.attackers.map(a => `${a.name} — ${a.percentage}% ${'★'.repeat(a.stars)}${'☆'.repeat(3 - a.stars)}`).join('\n');
+}
+function capitalTile(d, isPeak) {
+    const pct = d.destroyed ? 100 : (d.last_pct_total || 0);
+    const stars = pct >= 100 ? 3 : pct >= 50 ? 2 : pct > 0 ? 1 : 0;
+    const statusClass = districtStatusClass(d, isPeak);
+    const tooltip = (d.attackers && d.attackers.length) ? ` title="${escapeHTML(attackersTooltip(d))}"` : '';
+    const medals = d.destroyed ? 0 : medalValue(d.level, isPeak);
+    const medalHtml = medals ? `<div class="capital-tile-medals">${medals}🏅</div>` : '';
+    const pctStarsHtml = statusClass === 'partial' ? `<div class="capital-tile-pct">${pct}%</div><div class="capital-tile-stars">${renderStars(stars)}</div>` : '';
+    return `<div class="capital-tile ${statusClass}${isPeak ? ' peak' : ''}"${tooltip}>
+        <div class="capital-tile-top">${pctStarsHtml}</div>
+        <div class="capital-tile-icon"><div class="capital-tile-roof"></div><div class="capital-tile-body">${d.attacks || ''}</div></div>
+        <div class="capital-tile-name">${escapeHTML(d.name)}</div>
+        <div class="capital-tile-level">Lvl ${d.level || '—'}</div>${medalHtml}</div>`;
+}
+function clanPyramidHtml(clan) {
+    const peakHtml = `<div class="capital-row">${capitalTile(clan.peakDistrict, true)}</div>`;
+    let idx = 0;
+    const rowsHtml = pyramidRows(clan.otherDistricts.length).map(size => {
+        const rowDistricts = clan.otherDistricts.slice(idx, idx + size); idx += size;
+        return `<div class="capital-row">${rowDistricts.map(d => capitalTile(d, false)).join('')}</div>`;
+    }).join('');
+    return `<div class="capital-pyramid">${peakHtml}${rowsHtml}</div>`;
+}
+function clanCardHtml(clan) {
+    const badgeHtml = clan.badge ? `<img src="${escapeHTML(clan.badge)}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0;" alt="">` : '';
+    const leagueHtml = clan.league ? `<span style="font-size:10px;color:var(--ops-ink-dim);font-family:'JetBrains Mono',monospace;font-weight:700;white-space:nowrap;">${escapeHTML(clan.league)}</span>` : '';
+    const clearedBadge = clan.remaining === 0 ? `<span class="siege-cleared-badge">✓ Cleared</span>` : '';
+    return `<div class="siege-card${clan.remaining === 0 ? ' siege-card-cleared' : ''}">
+        <div class="siege-card-header">
+            <div class="siege-card-header-top">${badgeHtml}<div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span class="siege-card-name">${escapeHTML(clan.name)}</span>${leagueHtml}</div></div>
+            <span class="siege-card-meta">avg ${clan.avgAtk} · ${clan.totalAtk} atk · ${clan.destroyedCount}/${clan.districtCount} districts${clearedBadge}</span>
+        </div>${clanPyramidHtml(clan)}</div>`;
+}
+function siegeDot(d, isPeak) {
+    const cls = districtStatusClass(d, isPeak);
+    const color = cls === 'finished-good' ? 'var(--green)' : cls === 'finished-ok' ? 'var(--orange)' : cls === 'finished-bad' ? 'var(--red)' : cls === 'partial' ? 'var(--blue)' : '#4a5260';
+    return `<span class="siege-dot" style="background:${color};"></span>`;
+}
+function clanSummaryHtml(clan) {
+    const badgeHtml = clan.badge ? `<img src="${escapeHTML(clan.badge)}" class="siege-sum-badge" alt="">` : `<span class="siege-sum-badge" style="background:var(--ops-surface-2);"></span>`;
+    const dots = [siegeDot(clan.peakDistrict, true), ...clan.otherDistricts.map(d => siegeDot(d, false))].join('');
+    const cleared = clan.remaining === 0 ? ` <span class="siege-cleared-tick">✓</span>` : '';
+    return `<div class="siege-sum">
+        <button type="button" class="siege-sum-head" onclick="toggleSiegeSum(this)">
+            ${badgeHtml}
+            <div class="siege-sum-id"><div class="siege-sum-name">${escapeHTML(clan.name)}${cleared}</div><div class="siege-sum-meta">${clan.destroyedCount}/${clan.districtCount} districts · avg ${clan.avgAtk}</div></div>
+            <span class="siege-dots">${dots}</span>
+            <span class="siege-sum-chev">▾</span>
+        </button>
+        <div class="siege-sum-body">${clanPyramidHtml(clan)}</div>
+    </div>`;
+}
+function toggleSiegeSum(btn) {
+    const body = btn.nextElementSibling;
+    const open = !body.classList.contains('open');
+    body.classList.toggle('open', open);
+    btn.classList.toggle('open', open);
+}
 function buildSiegeMap() {
-    // Group all attacks by enemy clan → district
     const clans = {};
-    playerData.forEach(p => {
-        (p.attack_logs || []).forEach(l => {
-            const cKey = l.defender_tag || l.defender_name || '—';
-            if (!clans[cKey]) clans[cKey] = { name: l.defender_name || '—', tag: l.defender_tag || '', badge: l.defender_badge || null, league: l.defender_league || null, leagueBadge: l.defender_league_badge || null, districts: {}, lastLogId: l.log_id ?? -Infinity };
-            if ((l.log_id ?? -Infinity) > clans[cKey].lastLogId) clans[cKey].lastLogId = l.log_id;
-            const dKey = l.district_name || '—';
-            if (!clans[cKey].districts[dKey]) {
-                clans[cKey].districts[dKey] = {
-                    name: dKey, level: l.district_level || 0,
-                    attacks: 0, destroyed: false, last_pct_total: 0, attackers: [],
-                };
-            }
-            const d = clans[cKey].districts[dKey];
-            d.attacks++;
-            d.attackers.push({ name: p.player_name, percentage: l.percentage || 0, stars: l.stars || 0 });
-            if ((l.percentage_total || 0) >= 100) d.destroyed = true;
-            if ((l.percentage_total || 0) > d.last_pct_total) d.last_pct_total = l.percentage_total || 0;
-        });
-    });
-
+    playerData.forEach(p => (p.attack_logs || []).forEach(l => {
+        const cKey = l.defender_tag || l.defender_name || '—';
+        if (!clans[cKey]) clans[cKey] = { name: l.defender_name || '—', tag: l.defender_tag || '', badge: l.defender_badge || null, league: l.defender_league || null, districts: {}, lastLogId: l.log_id ?? -Infinity };
+        if ((l.log_id ?? -Infinity) > clans[cKey].lastLogId) clans[cKey].lastLogId = l.log_id;
+        const dKey = l.district_name || '—';
+        if (!clans[cKey].districts[dKey]) clans[cKey].districts[dKey] = { name: dKey, level: l.district_level || 0, attacks: 0, destroyed: false, last_pct_total: 0, attackers: [] };
+        const d = clans[cKey].districts[dKey];
+        d.attacks++;
+        d.attackers.push({ name: p.player_name, percentage: l.percentage || 0, stars: l.stars || 0 });
+        if ((l.percentage_total || 0) >= 100) d.destroyed = true;
+        if ((l.percentage_total || 0) > d.last_pct_total) d.last_pct_total = l.percentage_total || 0;
+    }));
     const clanList = Object.values(clans);
-    if (!clanList.length) {
-        document.getElementById('siegeBody').innerHTML = '<div style="padding:16px;color:var(--ops-ink-dim);font-size:13px;">No enemy data recorded.</div>';
-        return;
-    }
+    const siegeBody = document.getElementById('siegeBody');
+    if (!siegeBody) return;
+    if (!clanList.length) { siegeBody.innerHTML = '<div style="padding:16px;color:var(--ops-ink-dim);font-size:13px;">No enemy data recorded yet.</div>'; return; }
 
-    const isPeakName = n => n === 'Capital Peak' || n === 'Capital Peaks';
-
-    // Capital districts unlock strictly in this order as Capital Hall rises — a clan can't
-    // have Skeleton Park without already having Dragon Cliffs, Balloon Lagoon, etc. So
-    // observing ANY district in our logs lets us deduce every earlier-order district also
-    // exists for that clan, even if our own members never happened to attack it. (Anything
-    // AFTER the highest observed district is genuinely unknown — it may or may not exist —
-    // so those are left out rather than guessed.)
-    const DISTRICT_UNLOCK_ORDER = [
-        'Barbarian Camp', 'Wizard Valley', 'Balloon Lagoon', "Builder's Workshop",
-        'Dragon Cliffs', 'Golem Quarry', 'Skeleton Park', 'Goblin Mines',
-    ];
-
-    // Sourced from services/helpers.py's RAID_DISTRICT_MEDALS / RAID_CAPITAL_PEAK_MEDALS
-    // via the route, rather than duplicated here — see raid_medal_tables_json below.
-    function medalValue(level, isPeak) {
-        return (isPeak ? RAID_MEDAL_TABLES.peak : RAID_MEDAL_TABLES.district)[level] || 0;
-    }
-
-    // Every capital has exactly one peak, even if nobody in our clan has attacked it yet —
-    // build a placeholder rather than silently omitting it. Computed once per clan up front
-    // so both the sort order below and the card rendering can reuse the same totals.
     clanList.forEach(clan => {
-        const districts = Object.values(clan.districts).sort((a, b) => {
-            if (isPeakName(a.name)) return -1;
-            if (isPeakName(b.name)) return 1;
-            return a.name.localeCompare(b.name);
-        });
-        clan.peakDistrict = districts.find(d => isPeakName(d.name))
-            || { name: 'Capital Peak', level: 0, attacks: 0, destroyed: false, last_pct_total: 0, attackers: [] };
-
+        const districts = Object.values(clan.districts);
+        clan.peakDistrict = districts.find(d => isPeakName(d.name)) || { name: 'Capital Peak', level: 0, attacks: 0, destroyed: false, last_pct_total: 0, attackers: [] };
         const touchedOthers = districts.filter(d => !isPeakName(d.name));
         const touchedNames = new Set(touchedOthers.map(d => d.name));
-        const highestIdx = touchedOthers.reduce((max, d) => {
-            const idx = DISTRICT_UNLOCK_ORDER.indexOf(d.name);
-            return idx > max ? idx : max;
-        }, -1);
+        const highestIdx = touchedOthers.reduce((max, d) => { const idx = DISTRICT_UNLOCK_ORDER.indexOf(d.name); return idx > max ? idx : max; }, -1);
         const inferredDistricts = [];
-        for (let i = 0; i < highestIdx; i++) {
-            const name = DISTRICT_UNLOCK_ORDER[i];
-            if (!touchedNames.has(name)) {
-                inferredDistricts.push({ name, level: 0, attacks: 0, destroyed: false, last_pct_total: 0, attackers: [] });
-            }
-        }
+        for (let i = 0; i < highestIdx; i++) { const name = DISTRICT_UNLOCK_ORDER[i]; if (!touchedNames.has(name)) inferredDistricts.push({ name, level: 0, attacks: 0, destroyed: false, last_pct_total: 0, attackers: [] }); }
         clan.otherDistricts = touchedOthers.concat(inferredDistricts).sort((a, b) => a.name.localeCompare(b.name));
-
-        clan.districtCount  = clan.otherDistricts.length + 1;
-        clan.totalAtk       = clan.otherDistricts.reduce((s, d) => s + d.attacks, 0) + clan.peakDistrict.attacks;
+        clan.districtCount = clan.otherDistricts.length + 1;
+        clan.totalAtk = clan.otherDistricts.reduce((s, d) => s + d.attacks, 0) + clan.peakDistrict.attacks;
         clan.destroyedCount = clan.otherDistricts.filter(d => d.destroyed).length + (clan.peakDistrict.destroyed ? 1 : 0);
-        clan.remaining      = clan.districtCount - clan.destroyedCount;
-        clan.avgAtk         = (clan.totalAtk / clan.districtCount).toFixed(1);
+        clan.remaining = clan.districtCount - clan.destroyedCount;
+        clan.avgAtk = (clan.totalAtk / clan.districtCount).toFixed(1);
     });
-
-    // The clan most recently attacked — i.e. the one currently being worked on — surfaces
-    // first, so whoever's mid-raid sees their current target at the top of the list.
     clanList.sort((a, b) => b.lastLogId - a.lastLogId);
 
-    // Splits the non-peak districts into rows that widen going down the
-    // pyramid, mirroring the in-game capital layout (e.g. 8 districts -> 2/3/3).
-    function pyramidRows(n) {
-        if (n <= 0) return [];
-        const rows = [];
-        let remaining = n;
-        while (remaining > 0) {
-            const take = remaining >= 3 ? 3 : remaining;
-            rows.push(take);
-            remaining -= take;
-        }
-        if (rows.length >= 2 && rows[rows.length - 1] === 1) {
-            rows[rows.length - 2] -= 1;
-            rows[rows.length - 1] += 1;
-        }
-        return rows.reverse();
+    if (RAID_STATE === 'ended') {
+        siegeBody.innerHTML = clanList.map(clanSummaryHtml).join('');
+    } else {
+        const { nonPeak: npT, peak: pT } = FINISHED_THRESHOLDS;
+        const legendHtml = `<div class="capital-legend">
+            <span class="cl-item"><span class="cl-dot" style="background:var(--green);"></span>Efficient (&le;${npT.good} atk · peak &le;${pT.good})</span>
+            <span class="cl-item"><span class="cl-dot" style="background:var(--orange);"></span>${npT.ok} atk · peak ${pT.ok}</span>
+            <span class="cl-item"><span class="cl-dot" style="background:var(--red);"></span>${npT.ok + 1}+ atk · peak ${pT.ok + 1}+</span>
+            <span class="cl-item"><span class="cl-dot" style="background:var(--blue);"></span>In progress</span>
+            <span class="cl-item"><span class="cl-dot" style="background:var(--bord2);"></span>Untouched</span></div>`;
+        siegeBody.innerHTML = `${legendHtml}<div class="siege-grid">${clanList.map(clanCardHtml).join('')}</div>`;
     }
-
-    // A finished district's color tells you how efficiently it died: too many
-    // attacks burned on one district means fewer attacks left for the rest of
-    // the raid, so it's flagged orange/red even though the outcome (100%) is
-    // identical to a clean 1-2 hit clear. The legend text below is generated
-    // from these same numbers so the two can't drift out of sync.
-    const FINISHED_THRESHOLDS = { nonPeak: { good: 2, ok: 3 }, peak: { good: 3, ok: 4 } };
-    function finishedColorClass(attacks, isPeak) {
-        const t = isPeak ? FINISHED_THRESHOLDS.peak : FINISHED_THRESHOLDS.nonPeak;
-        if (attacks <= t.good) return 'finished-good';
-        if (attacks === t.ok) return 'finished-ok';
-        return 'finished-bad';
-    }
-
-    function attackersTooltip(d) {
-        if (!d.attackers || !d.attackers.length) return '';
-        return d.attackers
-            .map(a => `${a.name} — ${a.percentage}% ${'★'.repeat(a.stars)}${'☆'.repeat(3 - a.stars)}`)
-            .join('\n');
-    }
-
-    function capitalTile(d, isPeak) {
-        const pct = d.destroyed ? 100 : (d.last_pct_total || 0);
-        const stars = pct >= 100 ? 3 : pct >= 50 ? 2 : pct > 0 ? 1 : 0;
-        const statusClass = d.destroyed
-            ? finishedColorClass(d.attacks, isPeak)
-            : (pct > 0 ? 'partial' : 'untouched');
-        // Attacker breakdown is useful for any district someone has actually hit —
-        // not just finished ones — so coordinating remaining attacks doesn't require
-        // guessing who already chipped away at a district still in progress.
-        const tooltip = (d.attackers && d.attackers.length)
-            ? ` title="${escapeHTML(attackersTooltip(d))}"` : '';
-        // Medal value helps prioritize which untouched/in-progress district to hit next;
-        // once destroyed the value is already secured, so it'd just be clutter.
-        const medals = d.destroyed ? 0 : medalValue(d.level, isPeak);
-        const medalHtml = medals ? `<div class="capital-tile-medals">${medals}🏅</div>` : '';
-        // A finished district's color already says "100%, done", and an untouched one has
-        // nothing to report yet — "0% ☆☆☆" on every still-grey tile is pure noise. Only a
-        // district actually in progress has something this line needs to say. The wrapper
-        // itself always renders though (just empty otherwise), at a fixed min-height —
-        // otherwise a tile with nothing above it sits higher than its neighbors that do,
-        // throwing off the row's icon alignment.
-        const pctStarsHtml = statusClass === 'partial' ? `
-            <div class="capital-tile-pct">${pct}%</div>
-            <div class="capital-tile-stars">${renderStars(stars)}</div>` : '';
-        return `<div class="capital-tile ${statusClass}${isPeak ? ' peak' : ''}"${tooltip}>
-            <div class="capital-tile-top">${pctStarsHtml}</div>
-            <div class="capital-tile-icon">
-                <div class="capital-tile-roof"></div>
-                <div class="capital-tile-body">${d.attacks || ''}</div>
-            </div>
-            <div class="capital-tile-name">${escapeHTML(d.name)}</div>
-            <div class="capital-tile-level">Lvl ${d.level || '—'}</div>
-            ${medalHtml}
-        </div>`;
-    }
-
-    const { nonPeak: npT, peak: pT } = FINISHED_THRESHOLDS;
-    const legendHtml = `<div class="capital-legend">
-        <span class="cl-item"><span class="cl-dot" style="background:var(--green);"></span>Efficient clear (&le;${npT.good} atk · peak &le;${pT.good})</span>
-        <span class="cl-item"><span class="cl-dot" style="background:var(--orange);"></span>${npT.ok} atk · peak ${pT.ok}</span>
-        <span class="cl-item"><span class="cl-dot" style="background:var(--red);"></span>${npT.ok + 1}+ atk · peak ${pT.ok + 1}+</span>
-        <span class="cl-item"><span class="cl-dot" style="background:var(--blue);"></span>In progress</span>
-        <span class="cl-item"><span class="cl-dot" style="background:var(--bord2);"></span>Untouched</span>
-    </div>`;
-
-    const cards = clanList.map(clan => {
-        const { peakDistrict, otherDistricts, districtCount, totalAtk, destroyedCount, avgAtk, remaining } = clan;
-
-        const peakHtml = `<div class="capital-row">${capitalTile(peakDistrict, true)}</div>`;
-        let idx = 0;
-        const rowsHtml = pyramidRows(otherDistricts.length).map(size => {
-            const rowDistricts = otherDistricts.slice(idx, idx + size);
-            idx += size;
-            return `<div class="capital-row">${rowDistricts.map(d => capitalTile(d, false)).join('')}</div>`;
-        }).join('');
-
-        const badgeHtml = clan.badge
-            ? `<img src="${escapeHTML(clan.badge)}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0;" alt="">`
-            : '';
-        const leagueHtml = clan.league
-            ? `<span style="font-size:10px;color:var(--ops-ink-dim);font-family:'JetBrains Mono',monospace;font-weight:700;white-space:nowrap;">${escapeHTML(clan.league)}</span>`
-            : '';
-        const clearedBadge = remaining === 0 ? `<span class="siege-cleared-badge">✓ Fully Cleared</span>` : '';
-        return `<div class="siege-card${remaining === 0 ? ' siege-card-cleared' : ''}">
-            <div class="siege-card-header">
-                <div class="siege-card-header-top">${badgeHtml}<div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span class="siege-card-name">${escapeHTML(clan.name)}</span>${leagueHtml}</div></div>
-                <span class="siege-card-meta">avg ${avgAtk} · ${totalAtk} atk · ${destroyedCount}/${districtCount} districts${clearedBadge}</span>
-            </div>
-            <div class="capital-pyramid">${peakHtml}${rowsHtml}</div>
-        </div>`;
-    }).join('');
-
-    document.getElementById('siegeBody').innerHTML = `${legendHtml}<div class="siege-grid">${cards}</div>`;
 }
 
-function toggleSiege() {
-    const body = document.getElementById('siegeBody');
-    const chevron = document.getElementById('siegeChevron');
-    const open = body.style.display === 'none';
-    if (open && !body.dataset.built) { buildSiegeMap(); body.dataset.built = '1'; }
-    body.style.display = open ? '' : 'none';
-    chevron.classList.toggle('open', open);
-}
-
-document.addEventListener('DOMContentLoaded', buildTable);
+document.addEventListener('DOMContentLoaded', () => {
+    buildTable();
+    buildSiegeMap();
+    buildRecentAttacks();
+    document.querySelectorAll('.wr-progress-fill').forEach(el => {
+        const pct = parseFloat(el.dataset.pct) || 0;
+        requestAnimationFrame(() => { el.style.width = pct + '%'; });
+    });
+});
 </script>
 {% endif %}
-
 
 </body>
 </html>
