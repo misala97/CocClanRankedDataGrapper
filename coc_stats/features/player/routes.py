@@ -17,6 +17,7 @@ from services.helpers import (
 
 from features.war.war_combos import classify_attack, get_war_verdict, get_attack_context, get_cwl_verdict
 from features.cwl.routes import _build_cwl_matchup_rates, cwl_attack_verdict
+from features.auth.routes import _is_super_admin
 
 player_bp = Blueprint('player', __name__)
 
@@ -184,7 +185,7 @@ def calculate_activity_score(player_tag, period='week'):
 
     if total >= 80:   label, color = 'Active',   'green'
     elif total >= 50: label, color = 'Regular',  'blue'
-    elif total >= 20: label, color = 'Casual',   'accent'
+    elif total >= 20: label, color = 'Casual',   'yellow'
     else:             label, color = 'Inactive', 'red'
 
     has_data     = total_eligible_seasons > 0 or battles_in_window > 0 or eligible_raid_count > 0
@@ -368,7 +369,7 @@ def calculate_skill_score(player_tag, period='month'):
     if total >= 80:   label, color = 'Elite',   'purple'
     elif total >= 60: label, color = 'Strong',  'green'
     elif total >= 40: label, color = 'Average', 'blue'
-    elif total >= 20: label, color = 'Weak',    'accent'
+    elif total >= 20: label, color = 'Weak',    'yellow'
     else:             label, color = 'Novice',  'muted'
 
     has_data = bool(skill_components)
@@ -653,7 +654,7 @@ def calculate_scores_all_periods(player_tag, cwl_matchup_rates):
 
         if   act_total >= 80: act_label, act_color = 'Active',   'green'
         elif act_total >= 50: act_label, act_color = 'Regular',  'blue'
-        elif act_total >= 20: act_label, act_color = 'Casual',   'accent'
+        elif act_total >= 20: act_label, act_color = 'Casual',   'yellow'
         else:                 act_label, act_color = 'Inactive', 'red'
 
         activity_periods[period] = {
@@ -685,7 +686,7 @@ def calculate_scores_all_periods(player_tag, cwl_matchup_rates):
         if   sk_total >= 80: sk_label, sk_color = 'Elite',   'purple'
         elif sk_total >= 60: sk_label, sk_color = 'Strong',  'green'
         elif sk_total >= 40: sk_label, sk_color = 'Average', 'blue'
-        elif sk_total >= 20: sk_label, sk_color = 'Weak',    'accent'
+        elif sk_total >= 20: sk_label, sk_color = 'Weak',    'yellow'
         else:                sk_label, sk_color = 'Novice',  'muted'
 
         skill_periods[period] = {
@@ -1154,7 +1155,7 @@ def _calculate_scores_bulk(player_tags, period='month'):
         act_total = round(sum(act_components) / len(act_components))
         if act_total >= 80:   act_label, act_color = 'Active',   'green'
         elif act_total >= 50: act_label, act_color = 'Regular',  'blue'
-        elif act_total >= 20: act_label, act_color = 'Casual',   'accent'
+        elif act_total >= 20: act_label, act_color = 'Casual',   'yellow'
         else:                 act_label, act_color = 'Inactive', 'red'
 
         # --- skill ---
@@ -1218,7 +1219,7 @@ def _calculate_scores_bulk(player_tags, period='month'):
         if sk_total >= 80:   sk_label, sk_color = 'Elite',   'purple'
         elif sk_total >= 60: sk_label, sk_color = 'Strong',  'green'
         elif sk_total >= 40: sk_label, sk_color = 'Average', 'blue'
-        elif sk_total >= 20: sk_label, sk_color = 'Weak',    'accent'
+        elif sk_total >= 20: sk_label, sk_color = 'Weak',    'yellow'
         else:                sk_label, sk_color = 'Novice',  'muted'
 
         results[tag] = {
@@ -1252,8 +1253,9 @@ def clan_overview():
     if period not in ('week', 'month', '6months'):
         period = 'month'
 
-    players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
-    scores  = _calculate_scores_bulk([p.tag for p in players], period)
+    players    = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
+    scores     = _calculate_scores_bulk([p.tag for p in players], period)
+    show_wpref = _is_super_admin()
 
     player_cards = []
     for player in players:
@@ -1262,7 +1264,7 @@ def clan_overview():
                                       'ranked_score': 0, 'battle_score': 0, 'raid_score': 0, 'has_data': False})
         skill    = s.get('skill',    {'score': 0, 'label': 'Novice',   'label_color': 'muted',
                                       'ranked_skill': 0, 'battle_skill': 0, 'raid_skill': 0, 'has_data': False})
-        player_cards.append({
+        card = {
             'name':        player.name or player.tag,
             'tag':         player.tag,
             'tag_url':     player.tag.replace('#', ''),
@@ -1271,7 +1273,12 @@ def clan_overview():
             'activity':    activity,
             'skill':       skill,
             'combined':    activity['score'] + skill['score'],
-        })
+        }
+        if show_wpref:
+            war_pref = player.war_preference_custom or player.war_preference_in_game or None
+            if war_pref:
+                card['war_pref'] = war_pref
+        player_cards.append(card)
     player_cards.sort(key=lambda x: (-x['combined'], x['name']))
 
     return render_template('player/clan_overview.html', player_cards=player_cards, period=period)

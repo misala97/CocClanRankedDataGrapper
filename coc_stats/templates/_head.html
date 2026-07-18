@@ -192,8 +192,9 @@
             .controls-primary .selector { flex: 1; padding: 7px 12px; }
             .ctrl-divider { display: none; }
             .controls label { font-size: 10px; }
-            .controls .selector { font-size: 12px; padding: 6px 10px; }
-            .controls .action-btn { padding: 5px 11px; font-size: 10.5px; }
+            /* 44px min-height: touch target floor, verified failing at 26px pre-fix. */
+            .controls .selector { font-size: 12px; padding: 6px 10px; min-height: 44px; box-sizing: border-box; }
+            .controls .action-btn { padding: 5px 11px; font-size: 10.5px; min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box; }
         }
 
         /* ── GLOBAL RESETS ── */
