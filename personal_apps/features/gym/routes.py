@@ -809,6 +809,76 @@ def gym_delete_template(template_id):
     return redirect(url_for('gym.gym_dashboard'))
 
 
+@gym_bp.route('/gym/export')
+@login_required
+def gym_export():
+    """Downloadable JSON of finished workout history in a date range, for
+    feeding into an external analysis tool later. Full detail (every set,
+    not just aggregates) so nothing useful is thrown away up front. Both
+    original and substitute SessionExercise rows are exported (mirroring
+    what a finished session's own detail view already shows -- see
+    session_detail's visible_exercises computation), each carrying
+    replaces/replaced_by exercise names so a swap is fully traceable."""
+    date_from = request.args.get('from', '')
+    date_to = request.args.get('to', '')
+    try:
+        from_date = dt.datetime.strptime(date_from, '%Y-%m-%d') if date_from else dt.datetime.min
+    except ValueError:
+        from_date = dt.datetime.min
+    try:
+        to_date = dt.datetime.strptime(date_to, '%Y-%m-%d') if date_to else dt.datetime.utcnow()
+    except ValueError:
+        to_date = dt.datetime.utcnow()
+    to_date_exclusive = to_date + dt.timedelta(days=1)  # 'to' is inclusive of that whole calendar day
+
+    sessions = (
+        WorkoutSession.query
+        .filter(
+            WorkoutSession.finished_at.isnot(None),
+            WorkoutSession.started_at >= from_date,
+            WorkoutSession.started_at < to_date_exclusive,
+        )
+        .order_by(WorkoutSession.started_at.asc())
+        .all()
+    )
+
+    payload = {
+        'exported_at': dt.datetime.utcnow().isoformat() + 'Z',
+        'range': {'from': date_from or None, 'to': date_to or None},
+        'sessions': [
+            {
+                'id': s.id,
+                'name': s.name,
+                'template_name': s.template.name if s.template else None,
+                'started_at': s.started_at.isoformat(),
+                'finished_at': s.finished_at.isoformat(),
+                'exercises': [
+                    {
+                        'exercise_name': se.exercise.name,
+                        'muscle_group': se.exercise.muscle_group,
+                        'position': se.position,
+                        'rest_seconds': se.rest_seconds,
+                        'skipped': se.skipped,
+                        'replaces': se.replaces.exercise.name if se.replaces else None,
+                        'replaced_by': se.replaced_by.exercise.name if se.replaced_by else None,
+                        'sets': [
+                            {'position': st.position, 'weight': st.weight, 'reps': st.reps, 'completed': st.completed}
+                            for st in se.sets
+                        ],
+                    }
+                    for se in s.exercises
+                ],
+            }
+            for s in sessions
+        ],
+    }
+
+    resp = jsonify(payload)
+    filename = f"gym-export-{date_from or 'all'}_{date_to or 'now'}.json"
+    resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return resp
+
+
 def _exercise_progress_data(exercise, position=None):
     """Shared by the full exercise-history page and the in-workout progress
     modal. Only counts *completed* sets -- a pending/unconfirmed set (e.g.
