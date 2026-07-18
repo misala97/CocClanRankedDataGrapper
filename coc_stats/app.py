@@ -109,11 +109,38 @@ def _nav_task_status():
                 status = 'good' if mins < 15 else ('warn' if mins < 60 else 'bad')
                 time_str = f'{mins}m ago' if mins < 60 else f'{mins // 60}h ago'
             else:
-                status, time_str = 'none', 'No data'
-            result.append({'label': label, 'status': status, 'time_str': time_str})
+                status, time_str, mins = 'none', 'No data', None
+            result.append({'label': label, 'status': status, 'time_str': time_str, 'mins': mins})
         return result
     except Exception:
         return []
+
+def _fmt_age(mins):
+    if mins is None:
+        return None
+    if mins < 60:
+        return f'{mins}m ago'
+    if mins < 60 * 24:
+        return f'{mins // 60}h ago'
+    return f'{mins // (60 * 24)}d ago'
+
+def _nav_health(tasks):
+    """Overall sync health for the honest footer status line. 'bad' if any
+    source is stale/missing, 'warn' if any is merely delayed, else 'good'. The
+    age is time since the *freshest* successful sync — i.e. how long the system
+    has been dark."""
+    if not tasks:
+        return {'level': 'good', 'age_str': None, 'down': 0}
+    statuses = [t['status'] for t in tasks]
+    ages = [t['mins'] for t in tasks if t['mins'] is not None]
+    if any(s in ('bad', 'none') for s in statuses):
+        level = 'bad'
+    elif any(s == 'warn' for s in statuses):
+        level = 'warn'
+    else:
+        level = 'good'
+    down = sum(1 for s in statuses if s in ('bad', 'none'))
+    return {'level': level, 'age_str': _fmt_age(min(ages)) if ages else None, 'down': down}
 
 def _newbie_check_count():
     try:
@@ -130,13 +157,15 @@ def _clan_badge_url():
 
 @app.context_processor
 def inject_auth():
+    _nav_status = _nav_task_status()
     return {
         'current_user':  _current_user(),
         'is_super_admin': _is_super_admin(),
         'is_env_admin':   _is_env_admin(),
         'can_create_reminder_ranked': _can_create_reminder_ranked(),
         'can_edit_clan_war': _can_edit_clan_war(),
-        'nav_task_status': _nav_task_status(),
+        'nav_task_status': _nav_status,
+        'nav_health': _nav_health(_nav_status),
         'newbie_check_count': _newbie_check_count(),
         'clan_badge_url': _clan_badge_url(),
     }
@@ -176,14 +205,25 @@ def index():
     ).count() if current_season else 0
     week_start_name = week_start.strftime('%A')
 
+    # Data can go stale (the sync daemon stops and a war's `state` is frozen at
+    # 'inWar' indefinitely). Never present a round whose clock has already run
+    # out as "live" — if its end_time is in the past, treat it as finished so the
+    # War Room falls through to the honest "last completed" tier. Rounds with no
+    # end_time are left as-is (unknown, not provably stale).
+    now = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+
     active_war  = ClanWar.query.filter(
         ClanWar.state.in_(['preparation', 'inWar'])
     ).order_by(ClanWar.start_time.desc()).first()
+    if active_war and active_war.end_time and active_war.end_time <= now:
+        active_war = None
     war_win_status = compute_war_win_status(active_war, CLAN_TAG) if active_war else None
 
     active_raid = RaidWeekend.query.filter(
         RaidWeekend.state == 'ongoing'
     ).order_by(RaidWeekend.start_time.desc()).first()
+    if active_raid and active_raid.end_time and active_raid.end_time <= now:
+        active_raid = None
 
     active_cwl_season = CWLSeason.query.filter(
         CWLSeason.state.in_(['preparation', 'inWar'])
@@ -192,13 +232,19 @@ def index():
     active_cwl_war = None
     cwl_win_status = None
     if active_cwl_season:
-        active_cwl_war = CWLWar.query.filter(
+        _cwl_candidate = CWLWar.query.filter(
             CWLWar.season_id == active_cwl_season.id,
             CWLWar.state.in_(['preparation', 'inWar']),
             db.or_(CWLWar.clan_tag == CLAN_TAG, CWLWar.opp_tag == CLAN_TAG)
         ).first()
-        if active_cwl_war:
-            cwl_win_status = compute_cwl_win_status(active_cwl_war, CLAN_TAG)
+        if _cwl_candidate and _cwl_candidate.end_time and _cwl_candidate.end_time <= now:
+            # The current round's clock has run out but sync froze it 'inWar' →
+            # the whole season is stale, not live. Fall through to last completed.
+            active_cwl_season = None
+        else:
+            active_cwl_war = _cwl_candidate
+            if active_cwl_war:
+                cwl_win_status = compute_cwl_win_status(active_cwl_war, CLAN_TAG)
 
     active_raid_est_medals = None
     if active_raid:

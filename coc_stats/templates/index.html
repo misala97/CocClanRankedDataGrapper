@@ -24,6 +24,78 @@
         pointer-events: none; opacity: 0;
     }
 
+    /* ── COMMAND-DECK BOOT SEQUENCE ──
+       Deliberate exception to the product-register "no page-load choreography"
+       rule, for the landing page only: the first home load of a browser session
+       "powers on" the deck (Variant A — boot-readout overlay, then a band-by-band
+       cascade); every later visit in the session runs the lighter in-page cascade
+       (Variant B, no overlay). Progressive enhancement: all content is in the DOM
+       at full opacity; a head-level flag only dips it when motion is allowed AND
+       the tab is visible, with a 4s failsafe that always restores it — a
+       background tab, reduced motion, a JS error, or a throttled timeline can
+       never ship a blank page. */
+    .coc-booting [data-boot],
+    .coc-booting #cmdDeck .ops-tile,
+    .coc-booting #cmdDeck .ops-tile-section-label,
+    .coc-booting #cmdDeck .ops-tile-mini,
+    .coc-booting .ops-footer { opacity: 0; }
+
+    .tac-grid {
+        position: fixed; inset: 0; pointer-events: none; z-index: 39; opacity: 0;
+        background:
+            linear-gradient(color-mix(in oklch, var(--ops-gold) 6%, transparent) 1px, transparent 1px) 0 0 / 100% 46px,
+            linear-gradient(90deg, color-mix(in oklch, var(--ops-gold) 6%, transparent) 1px, transparent 1px) 0 0 / 46px 100%;
+        -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 0%, transparent 75%);
+        mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 0%, transparent 75%);
+        transition: opacity .5s var(--ease);
+    }
+    .tac-grid.up { opacity: 1; }
+    .crt-sweep {
+        position: fixed; left: 0; right: 0; top: 0; height: 26vh; z-index: 40; pointer-events: none; opacity: 0;
+        background: linear-gradient(to bottom, transparent, color-mix(in oklch, var(--ops-gold) 16%, transparent) 55%, color-mix(in oklch, var(--ops-gold) 42%, transparent) 92%, color-mix(in oklch, var(--ops-star) 60%, transparent));
+        border-bottom: 1px solid color-mix(in oklch, var(--ops-star) 70%, transparent); filter: blur(.5px);
+    }
+
+    .ops-tile.ignite, .ops-ticket.ignite {
+        border-color: color-mix(in oklch, var(--mode) 85%, transparent);
+        box-shadow: 0 0 0 1px color-mix(in oklch, var(--mode) 45%, transparent), 0 0 22px color-mix(in oklch, var(--mode) 40%, transparent);
+    }
+
+    .boot-overlay {
+        position: fixed; inset: 0; z-index: 120; background: var(--ops-bg);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+        opacity: 0; visibility: hidden;
+    }
+    .boot-overlay.show { opacity: 1; visibility: visible; }
+    .boot-overlay::after {
+        content: ''; position: absolute; left: 0; right: 0; top: -30vh; height: 30vh; pointer-events: none;
+        background: linear-gradient(to bottom, transparent, color-mix(in oklch, var(--ops-gold) 22%, transparent));
+    }
+    .boot-title {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; text-transform: uppercase;
+        font-size: clamp(28px, 5vw, 46px); letter-spacing: 1px; display: flex; align-items: center; gap: 14px; color: var(--ops-ink);
+    }
+    .boot-title .caret { color: var(--ops-gold); }
+    .boot-title .sub { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 3px; color: var(--ops-gold); align-self: flex-end; padding-bottom: 8px; }
+    .boot-log { width: min(440px, 82vw); font-family: 'JetBrains Mono', monospace; font-size: 12.5px; display: flex; flex-direction: column; gap: 9px; }
+    .boot-line { display: flex; align-items: center; gap: 8px; opacity: 0; transform: translateY(4px); }
+    .boot-line .lbl { color: var(--ops-ink-dim); white-space: nowrap; }
+    .boot-line .lead { flex: 1; border-bottom: 1px dotted color-mix(in oklch, var(--ops-ink-dim) 40%, transparent); height: 1px; margin: 0 2px 3px; }
+    .boot-line .st { color: var(--ops-ink-dim); font-weight: 700; white-space: nowrap; transition: color .2s var(--ease), text-shadow .2s var(--ease); }
+    .boot-line.done { opacity: 1; transform: none; }
+    .boot-line.done .st { color: var(--ops-win); text-shadow: 0 0 10px color-mix(in oklch, var(--ops-win) 55%, transparent); }
+    .boot-prog { width: min(440px, 82vw); height: 3px; background: var(--bord2); border-radius: 2px; overflow: hidden; }
+    .boot-prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--ops-gold), var(--ops-star)); box-shadow: 0 0 10px color-mix(in oklch, var(--ops-gold) 60%, transparent); }
+
+    @media (prefers-reduced-motion: reduce) {
+        .tac-grid, .crt-sweep, .boot-overlay { display: none !important; }
+        .coc-booting [data-boot],
+        .coc-booting #cmdDeck .ops-tile,
+        .coc-booting #cmdDeck .ops-tile-section-label,
+        .coc-booting #cmdDeck .ops-tile-mini,
+        .coc-booting .ops-footer { opacity: 1 !important; }
+    }
+
     /* ── SHARED BAND CHROME ── */
     .ops-band { padding: 44px 32px; border-bottom: 1px solid var(--ops-line); }
     .ops-band-inner { max-width: 1400px; margin: 0 auto; }
@@ -144,7 +216,10 @@
     .ops-ticket-state {
         font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700;
         padding: 2px 9px; border-radius: 3px; text-transform: uppercase; letter-spacing: .4px;
-        background: color-mix(in oklch, var(--mode) 14%, transparent);
+        /* 8% (was 14%): same-hue text on a same-hue tint was the low-contrast
+           culprit — a fainter fill keeps the mode-color text clear of AA on every
+           mode (violet "In War" and the gold verdict chips were the two that missed). */
+        background: color-mix(in oklch, var(--mode) 8%, transparent);
         color: var(--mode); border: 1px solid color-mix(in oklch, var(--mode) 32%, transparent);
     }
     .ops-score-row { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 4px; position: relative; z-index: 1; }
@@ -243,6 +318,19 @@
     .ops-footer-brand p { font-family: 'Manrope', sans-serif; font-size: 13px; color: var(--ops-ink-dim); line-height: 1.6; max-width: 420px; }
     .ops-status-dot { display: inline-flex; align-items: center; gap: 7px; font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim); margin-top: 14px; }
     .ops-status-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ops-win); box-shadow: 0 0 6px color-mix(in oklch, var(--ops-win) 55%, transparent); flex-shrink: 0; }
+    /* Honest status: the dot follows real sync health, not a hardcoded green. */
+    .ops-status-dot--warn::before { background: var(--yellow);   box-shadow: 0 0 6px color-mix(in oklch, var(--yellow) 55%, transparent); }
+    .ops-status-dot--bad::before  { background: var(--ops-raid); box-shadow: 0 0 6px color-mix(in oklch, var(--ops-raid) 55%, transparent); }
+
+    /* ── SOLO-STATE CTA (shown where the "You" column would be, when the visitor
+       isn't a linked player — the landing must serve members, not only leaders) ── */
+    .ops-cta { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 10px; padding: 26px 28px; }
+    .ops-cta-title { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; text-transform: uppercase; font-size: clamp(21px, 2.4vw, 27px); letter-spacing: .4px; color: var(--ops-ink); line-height: 1; }
+    .ops-cta-text { font-family: 'Manrope', sans-serif; font-size: 13.5px; color: var(--ops-ink-dim); line-height: 1.65; margin: 12px 0 20px; max-width: 46ch; }
+    .ops-cta-btn { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; box-sizing: border-box; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12.5px; letter-spacing: .4px; text-transform: uppercase; color: var(--ops-gold); border: 1px solid color-mix(in oklch, var(--ops-gold) 40%, transparent); border-radius: 7px; padding: 11px 18px; transition: background .15s var(--ease), border-color .15s var(--ease), transform .1s var(--ease); }
+    .ops-cta-btn:hover { background: color-mix(in oklch, var(--ops-gold) 10%, transparent); border-color: var(--ops-gold); }
+    .ops-cta-btn:active { transform: scale(.98); transition-duration: .1s; }
+    .ops-cta-btn:focus-visible { outline: 2px solid var(--ops-gold); outline-offset: 2px; }
     .ops-footer-links { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
     .ops-footer-links a { font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ops-ink-dim); transition: color .15s var(--ease); }
     .ops-footer-links a:hover { color: var(--ops-ink); }
@@ -292,11 +380,41 @@
 </head>
 <body>
 
+<script>
+/* Pre-paint: pick the boot variant and dip content before the first paint, but
+   only when it's safe (motion allowed + visible tab). The failsafe timer always
+   un-dips, so a thrown error or a dead timeline can never leave the page blank.
+   The main engine at the end of <body> takes over and removes the class earlier. */
+(function () {
+    try {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        if (document.visibilityState === 'hidden') return;
+        var r = document.documentElement;
+        r.classList.add('coc-booting');
+        window.__cocBootVariant = sessionStorage.getItem('cocBooted') ? 'B' : 'A';
+        setTimeout(function () { r.classList.remove('coc-booting'); }, 4000);
+    } catch (e) {}
+})();
+</script>
+
+<div class="tac-grid" id="tacGrid" aria-hidden="true"></div>
+<div class="crt-sweep" id="crtSweep" aria-hidden="true"></div>
+<div class="boot-overlay" id="bootOverlay" aria-hidden="true">
+    <div class="boot-title"><span class="caret">&#9702;</span> Command Deck <span class="sub">INITIALIZING</span></div>
+    <div class="boot-log" id="bootLog">
+        <div class="boot-line"><span class="lbl">SENSOR ARRAY</span><span class="lead"></span><span class="st">STANDBY</span></div>
+        <div class="boot-line"><span class="lbl">CLAN DATALINK</span><span class="lead"></span><span class="st">STANDBY</span></div>
+        <div class="boot-line"><span class="lbl">WAR ROOM</span><span class="lead"></span><span class="st">STANDBY</span></div>
+        <div class="boot-line"><span class="lbl">COMMAND DECK</span><span class="lead"></span><span class="st">STANDBY</span></div>
+    </div>
+    <div class="boot-prog"><i id="bootProg"></i></div>
+</div>
+
 {% include '_nav.html' %}
 
 <div class="ops-hero-zone">
 <!-- Clan band -->
-<section class="ops-band">
+<section class="ops-band" data-boot="clan">
     <div class="ops-band-inner">
         <div class="ops-clan-inner">
             <div class="ops-clan-id">
@@ -344,79 +462,30 @@
         </div>
     </div>
 </section>
-<script>
-(function () {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    var hex = document.getElementById('heroScanHex');
-    var poly = hex && hex.querySelector('polygon');
-    var badge = document.querySelector('.hex-badge');
-    var scanline = document.getElementById('heroScanline');
-    var statsWrap = document.getElementById('heroClanStats');
-    if (!hex || !poly || !badge || !scanline || !statsWrap) return;
-
-    // Captured once, up front, before anything gets zeroed — this is also the
-    // safety net's source of truth if rAF/transitions never get to run (a
-    // background tab throttles both; the real numbers must still land).
-    var nums = Array.prototype.map.call(statsWrap.querySelectorAll('.ops-clan-num'), function (el) {
-        return { el: el, target: parseInt(el.textContent, 10) || 0 };
-    });
-
-    function countUp(duration) {
-        nums.forEach(function (n) { n.el.textContent = '0'; });
-        var start = performance.now();
-        function tick(now) {
-            var p = Math.min(1, (now - start) / duration);
-            var eased = 1 - Math.pow(1 - p, 3);
-            nums.forEach(function (n) { n.el.textContent = Math.round(eased * n.target); });
-            if (p < 1) requestAnimationFrame(tick); else nums.forEach(function (n) { n.el.textContent = n.target; });
-        }
-        requestAnimationFrame(tick);
-    }
-
-    function settle() {
-        nums.forEach(function (n) { n.el.textContent = n.target; });
-        badge.style.transition = 'none'; badge.style.opacity = '1';
-        hex.style.transition = 'none'; hex.style.opacity = '0';
-        scanline.style.transition = 'none'; scanline.style.opacity = '0';
-    }
-    // Guaranteed correct end-state even if rAF/transitions are throttled
-    // (e.g. the page loaded in a background tab) — real content always wins.
-    setTimeout(settle, 1800);
-
-    try {
-        var len = poly.getTotalLength();
-        poly.style.strokeDasharray = len;
-        poly.style.strokeDashoffset = len;
-        badge.style.opacity = '0';
-        badge.style.transition = 'opacity 300ms ' + getComputedStyle(document.documentElement).getPropertyValue('--ease');
-        requestAnimationFrame(function () {
-            poly.style.transition = 'stroke-dashoffset 550ms cubic-bezier(0.16,1,0.3,1)';
-            poly.style.strokeDashoffset = '0';
-            setTimeout(function () { badge.style.opacity = '1'; }, 220);
-        });
-        setTimeout(function () {
-            scanline.style.transition = 'left 450ms var(--ease), opacity 450ms';
-            scanline.style.opacity = '1';
-            scanline.style.left = 'calc(100% + 80px)';
-        }, 350);
-        setTimeout(function () { countUp(550); }, 500);
-        setTimeout(function () { hex.style.transition = 'opacity 250ms'; hex.style.opacity = '0'; }, 700);
-    } catch (e) {
-        badge.style.opacity = '1';
-    }
-})();
-</script>
+{# Hero crest-draw + clan count-up now run inside the unified boot engine at the
+   end of <body> (it needs the whole page in the DOM to cascade the lower bands). #}
 
 {% set show_you = current_user and current_user.linked_player %}
 {% set show_events = active_war or last_war or active_raid or last_raid or active_cwl_season or last_cwl_war %}
-{% if show_you or show_events %}
+{# A visitor who isn't a linked player still needs a reason to be here: show an
+   on-ramp in the "You" slot instead of dropping the whole half. #}
+{% set show_cta = not show_you %}
+{% if show_you or show_cta or show_events %}
 <!-- You + Events band -->
 <section class="ops-band ops-you-events">
     <div class="ops-band-inner">
-        <div class="ops-you-events-grid {{ '' if (show_you and show_events) else 'solo' }}">
+        <div class="ops-you-events-grid {{ '' if ((show_you or show_cta) and show_events) else 'solo' }}">
 
-            {% if show_you %}
-            <div class="ops-you-col">
+            {% if show_cta %}
+            <div class="ops-you-col" data-boot="you">
+                <div class="ops-cta">
+                    <h2 class="ops-cta-title">{{ 'Link your player' if current_user else 'See your own week' }}</h2>
+                    <p class="ops-cta-text">{% if current_user %}Connect your in-game account to track your ranked attacks left, war record and ore income right here — not just the clan totals.{% else %}Log in and link your account to see your ranked attacks left, war record and ore income for the week — your own numbers alongside the clan's.{% endif %}</p>
+                    <a href="{{ '/profile' if current_user else '/login' }}" class="ops-cta-btn">{{ 'Link account' if current_user else 'Log in' }} &rarr;</a>
+                </div>
+            </div>
+            {% elif show_you %}
+            <div class="ops-you-col" data-boot="you">
                 <div class="ops-band-head">
                     <h2>Welcome back, <span class="ops-who">{{ current_user.linked_player.name }}</span></h2>
                 </div>
@@ -476,7 +545,7 @@
             {% set raid_active = active_raid is not none %}
             {% set any_active = war_active or cwl_active or raid_active %}
             {% set any_last_only = (last_war and not war_active) or (last_cwl_war and not cwl_active) or (last_raid and not raid_active) %}
-            <div class="ops-events-col">
+            <div class="ops-events-col" data-boot="events">
                 <div class="ops-events-col-head">
                     <h2>War Room</h2>
                     <span class="ops-band-sub">{% if any_active %}What's live right now{% else %}Nothing live — last completed rounds{% endif %}</span>
@@ -509,9 +578,9 @@
                 </div>
                 {% if war_win_status %}
                 <div class="ops-verdict-row">
-                    {% if war_win_status == 'safe_win' %}<span class="ops-ticket-state" style="--mode:var(--ops-win);color:var(--ops-win);border-color:color-mix(in oklch, var(--ops-win) 35%, transparent);background:color-mix(in oklch, var(--ops-win) 12%, transparent);">Safe Win</span>
-                    {% elif war_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:color-mix(in oklch, var(--ops-raid) 35%, transparent);background:color-mix(in oklch, var(--ops-raid) 12%, transparent);">Out of Reach</span>
-                    {% elif war_win_status == 'undecided' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:color-mix(in oklch, var(--ops-gold) 35%, transparent);background:color-mix(in oklch, var(--ops-gold) 12%, transparent);">Undecided</span>
+                    {% if war_win_status == 'safe_win' %}<span class="ops-ticket-state" style="--mode:var(--ops-win);color:var(--ops-win);border-color:color-mix(in oklch, var(--ops-win) 35%, transparent);background:color-mix(in oklch, var(--ops-win) 8%, transparent);">Safe Win</span>
+                    {% elif war_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:color-mix(in oklch, var(--ops-raid) 35%, transparent);background:color-mix(in oklch, var(--ops-raid) 8%, transparent);">Out of Reach</span>
+                    {% elif war_win_status == 'undecided' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:color-mix(in oklch, var(--ops-gold) 35%, transparent);background:color-mix(in oklch, var(--ops-gold) 8%, transparent);">Undecided</span>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -563,9 +632,9 @@
                 </div>
                 {% if cwl_win_status %}
                 <div class="ops-verdict-row">
-                    {% if cwl_win_status == 'safe_win' %}<span class="ops-ticket-state" style="color:var(--ops-win);border-color:color-mix(in oklch, var(--ops-win) 35%, transparent);background:color-mix(in oklch, var(--ops-win) 12%, transparent);">Safe Win</span>
-                    {% elif cwl_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:color-mix(in oklch, var(--ops-raid) 35%, transparent);background:color-mix(in oklch, var(--ops-raid) 12%, transparent);">Out of Reach</span>
-                    {% elif cwl_win_status == 'undecided' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:color-mix(in oklch, var(--ops-gold) 35%, transparent);background:color-mix(in oklch, var(--ops-gold) 12%, transparent);">Undecided</span>
+                    {% if cwl_win_status == 'safe_win' %}<span class="ops-ticket-state" style="color:var(--ops-win);border-color:color-mix(in oklch, var(--ops-win) 35%, transparent);background:color-mix(in oklch, var(--ops-win) 8%, transparent);">Safe Win</span>
+                    {% elif cwl_win_status == 'cant_win' %}<span class="ops-ticket-state" style="color:var(--ops-raid);border-color:color-mix(in oklch, var(--ops-raid) 35%, transparent);background:color-mix(in oklch, var(--ops-raid) 8%, transparent);">Out of Reach</span>
+                    {% elif cwl_win_status == 'undecided' %}<span class="ops-ticket-state" style="color:var(--ops-gold);border-color:color-mix(in oklch, var(--ops-gold) 35%, transparent);background:color-mix(in oklch, var(--ops-gold) 8%, transparent);">Undecided</span>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -666,9 +735,9 @@
 </div>
 
 <!-- Command Deck -->
-<section class="ops-band">
+<section class="ops-band" id="cmdDeck">
     <div class="ops-band-inner">
-        <div class="ops-band-head">
+        <div class="ops-band-head" data-boot="deckhead">
             <h2>Command Deck</h2>
             <span class="ops-band-sub">Four live modes — plus the reports that back them up</span>
         </div>
@@ -770,7 +839,14 @@
             <div class="ops-footer-brand">
                 <h3>CoC Analytics</h3>
                 <p>Real-time Clash of Clans analytics for <strong style="color:var(--ops-ink)">{{ clan_name }}</strong> — ranked battles, attack history and member progress, tracked automatically.</p>
-                <div class="ops-status-dot">All systems operational</div>
+                {% set _h = nav_health | default({'level': 'good', 'age_str': none, 'down': 0}) %}
+                <div class="ops-status-dot ops-status-dot--{{ _h.level }}">
+                    {%- if _h.level == 'good' %}All systems operational
+                    {%- elif _h.level == 'warn' %}Sensors delayed{% if _h.age_str %} · last sync {{ _h.age_str }}{% endif %}
+                    {%- elif _h.age_str %}Sensors stale · last sync {{ _h.age_str }}
+                    {%- else %}Sensors offline · no recent sync
+                    {%- endif %}
+                </div>
             </div>
             <div class="ops-footer-links">
                 <a href="/ranked">Ranked Week</a>
@@ -799,4 +875,184 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
+
+<script>
+/* ── Command-deck boot engine ──
+   Runs only when the pre-paint script armed a boot (`.coc-booting` on <html>);
+   otherwise every element is already at its resting, fully-visible state and we
+   do nothing. Variant chosen in the pre-paint script: 'A' (overlay + cascade) on
+   the first home load of a session, 'B' (in-page cascade) on every later load.
+   All rAF/transition work is backed by a hard settle timer, so a throttled
+   background tab still lands on the correct, fully-visible page. */
+(function () {
+    var root = document.documentElement;
+    if (!root.classList.contains('coc-booting')) return;
+
+    var variant = window.__cocBootVariant || 'A';
+    try { sessionStorage.setItem('cocBooted', '1'); } catch (e) {}
+
+    // Time scale. Variant A (first-in-session showpiece) plays at full length;
+    // variant B (every later load) runs the same choreography compressed, so the
+    // repeat entrance stays alive without making you wait for it.
+    var K = (variant === 'A') ? 1 : 0.6;
+
+    var tacGrid   = document.getElementById('tacGrid');
+    var crt       = document.getElementById('crtSweep');
+    var overlay   = document.getElementById('bootOverlay');
+    var prog      = document.getElementById('bootProg');
+    var logLines  = Array.prototype.slice.call(document.querySelectorAll('#bootLog .boot-line'));
+    var hex       = document.getElementById('heroScanHex');
+    var poly      = hex && hex.querySelector('polygon');
+    var badge     = document.querySelector('.hex-badge');
+    var clanScan  = document.getElementById('heroScanline');
+    var statsWrap = document.getElementById('heroClanStats');
+    var clanNums  = statsWrap ? Array.prototype.map.call(statsWrap.querySelectorAll('.ops-clan-num'), function (el) {
+        return { el: el, target: parseInt(el.textContent, 10) || 0 };
+    }) : [];
+
+    var clanBand  = document.querySelector('[data-boot="clan"]');
+    var youCol    = document.querySelector('[data-boot="you"]');
+    var eventsCol = document.querySelector('[data-boot="events"]');
+    var deckHead  = document.querySelector('[data-boot="deckhead"]');
+    var repLabel  = document.querySelector('#cmdDeck .ops-tile-section-label');
+    var tiles     = Array.prototype.slice.call(document.querySelectorAll('#cmdDeck .ops-tile'));
+    var minis     = Array.prototype.slice.call(document.querySelectorAll('#cmdDeck .ops-tile-mini'));
+    var footer    = document.querySelector('.ops-footer');
+    var tickets   = eventsCol ? Array.prototype.slice.call(eventsCol.querySelectorAll('.ops-ticket')) : [];
+    var liveDots  = Array.prototype.slice.call(document.querySelectorAll('.ops-live-dot.on'));
+
+    var hidden = [clanBand, youCol, eventsCol, deckHead, repLabel, footer].concat(tiles).concat(minis).filter(Boolean);
+    var timers = [];
+    function after(ms, fn) { timers.push(setTimeout(fn, ms * K)); }
+
+    function settleAll() {
+        timers.forEach(clearTimeout); timers = [];
+        root.classList.remove('coc-booting');
+        hidden.forEach(function (el) { el.style.transition = 'none'; el.style.opacity = '1'; el.style.transform = 'none'; el.classList.remove('ignite'); });
+        liveDots.forEach(function (d) { d.style.cssText = ''; });
+        if (tacGrid) tacGrid.classList.remove('up');
+        if (overlay) overlay.classList.remove('show');
+        if (crt) crt.style.opacity = '0';
+        if (hex) hex.style.opacity = '0';
+        if (clanScan) clanScan.style.opacity = '0';
+        clanNums.forEach(function (n) { n.el.textContent = n.target; });
+    }
+    // Guaranteed correct end-state even if the timeline is throttled — longer
+    // than the full sequence for the running variant.
+    setTimeout(settleAll, variant === 'A' ? 4200 : 3200);
+
+    function show(el) { el.style.transition = 'opacity ' + (500 * K) + 'ms var(--ease), transform ' + (550 * K) + 'ms cubic-bezier(0.16,1,0.3,1)'; el.style.opacity = '1'; el.style.transform = 'none'; }
+    function hide(el, dist) { el.style.transition = 'none'; el.style.opacity = '0'; el.style.transform = 'translateY(' + dist + 'px)'; }
+    function ignite(el) { el.classList.add('ignite'); after(560, function () { el.classList.remove('ignite'); }); }
+
+    function countUp(duration) {
+        if (!clanNums.length) return;
+        clanNums.forEach(function (n) { n.el.textContent = '0'; });
+        var start = performance.now();
+        (function tick(now) {
+            var p = Math.min(1, (now - start) / duration), e = 1 - Math.pow(1 - p, 3);
+            clanNums.forEach(function (n) { n.el.textContent = Math.round(e * n.target); });
+            if (p < 1) requestAnimationFrame(tick); else clanNums.forEach(function (n) { n.el.textContent = n.target; });
+        })(performance.now());
+    }
+    function drawCrest() {
+        if (!poly || !hex) return;
+        try {
+            var len = poly.getTotalLength();
+            poly.style.transition = 'none'; poly.style.strokeDasharray = len; poly.style.strokeDashoffset = len; hex.style.opacity = '1';
+            if (badge) { badge.style.opacity = '0'; badge.style.transition = 'opacity ' + (300 * K) + 'ms var(--ease)'; }
+            requestAnimationFrame(function () {
+                poly.style.transition = 'stroke-dashoffset ' + (550 * K) + 'ms cubic-bezier(0.16,1,0.3,1)'; poly.style.strokeDashoffset = '0';
+                if (badge) after(220, function () { badge.style.opacity = '1'; });
+            });
+            after(650, function () { hex.style.transition = 'opacity ' + (250 * K) + 'ms'; hex.style.opacity = '0'; });
+        } catch (e) { if (badge) badge.style.opacity = '1'; }
+    }
+    function clanScanSweep() {
+        if (!clanScan) return;
+        clanScan.style.transition = 'none'; clanScan.style.left = '-80px'; clanScan.style.opacity = '0';
+        requestAnimationFrame(function () {
+            clanScan.style.transition = 'left ' + (480 * K) + 'ms var(--ease), opacity ' + (480 * K) + 'ms'; clanScan.style.opacity = '1'; clanScan.style.left = 'calc(100% + 80px)';
+        });
+        after(560, function () { clanScan.style.opacity = '0'; });
+    }
+    function crtSweep() {
+        if (!crt) return;
+        crt.style.transition = 'none'; crt.style.top = '-26vh'; crt.style.opacity = '0';
+        requestAnimationFrame(function () {
+            crt.style.transition = 'top ' + (720 * K) + 'ms var(--ease), opacity ' + (720 * K) + 'ms var(--ease)'; crt.style.opacity = '1'; crt.style.top = '104vh';
+        });
+        after(760, function () { crt.style.opacity = '0'; });
+    }
+    function strikeLiveDots() {
+        liveDots.forEach(function (d) {
+            d.style.animation = 'none'; d.style.transition = 'none'; d.style.opacity = '0'; d.style.transform = 'scale(0)';
+            requestAnimationFrame(function () {
+                d.style.transition = 'opacity ' + (250 * K) + 'ms var(--ease), transform ' + (300 * K) + 'ms cubic-bezier(0.16,1,0.3,1)'; d.style.opacity = '1'; d.style.transform = 'scale(1)';
+                after(340, function () { d.style.cssText = ''; });
+            });
+        });
+    }
+
+    function cascade(t0) {
+        after(t0, function () { if (tacGrid) tacGrid.classList.add('up'); crtSweep(); });
+        after(t0 + 900, function () { if (tacGrid) tacGrid.classList.remove('up'); });
+        if (clanBand) after(t0 + 120, function () { show(clanBand); drawCrest(); clanScanSweep(); });
+        after(t0 + 360, function () { countUp(620 * K); });
+        strikeLiveDots();
+
+        var t = t0 + 480;
+        if (youCol)    { (function (el, d) { after(d, function () { show(el); }); })(youCol, t); t += 150; }
+        if (eventsCol) {
+            (function (el, d) { after(d, function () { show(el); }); })(eventsCol, t);
+            tickets.forEach(function (tk, i) { after(t + 120 + i * 120, function () { ignite(tk); }); });
+            t += 150 + tickets.length * 120;
+        }
+        if (deckHead) { (function (el, d) { after(d, function () { show(el); }); })(deckHead, t); t += 140; }
+        tiles.forEach(function (tl, i) { after(t + i * 110, function () { show(tl); ignite(tl); }); });
+        t += tiles.length * 110 + 120;
+        if (repLabel) { (function (el, d) { after(d, function () { show(el); }); })(repLabel, t); t += 90; }
+        minis.forEach(function (m, i) { after(t + i * 70, function () { show(m); }); });
+        t += minis.length * 70 + 120;
+        if (footer) after(t, function () { show(footer); });
+    }
+
+    function runOverlay(done) {
+        if (!overlay) { done(); return; }
+        overlay.classList.add('show');
+        if (prog) {
+            prog.style.transition = 'none'; prog.style.width = '0';
+            requestAnimationFrame(function () { prog.style.transition = 'width 1000ms var(--ease)'; prog.style.width = '100%'; });
+        }
+        var words = ['ONLINE', 'ESTABLISHED', 'SYNCED', 'READY'];
+        logLines.forEach(function (line, i) {
+            after(140 + i * 180, function () {
+                line.classList.add('done');
+                var st = line.querySelector('.st'); if (st) st.textContent = words[i] || 'READY';
+            });
+        });
+        after(1050, function () {
+            overlay.style.transition = 'opacity 360ms var(--ease), transform 360ms var(--ease), filter 360ms var(--ease)';
+            overlay.style.opacity = '0'; overlay.style.transform = 'scale(1.04)'; overlay.style.filter = 'blur(6px)';
+            after(360, function () { overlay.classList.remove('show'); done(); });
+        });
+    }
+
+    // Dip everything now (inline), matching the CSS pre-hide, then release the
+    // class so inline styles own the elements from here.
+    if (clanBand) hide(clanBand, 0);
+    if (youCol) hide(youCol, 16);
+    if (eventsCol) hide(eventsCol, 16);
+    if (deckHead) hide(deckHead, 12);
+    if (repLabel) hide(repLabel, 10);
+    tiles.forEach(function (el) { hide(el, 16); });
+    minis.forEach(function (el) { hide(el, 10); });
+    if (footer) hide(footer, 12);
+    root.classList.remove('coc-booting');
+    void document.body.offsetWidth;
+
+    if (variant === 'A') runOverlay(function () { cascade(0); });
+    else cascade(0);
+})();
+</script>
 </body></html>
