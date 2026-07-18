@@ -676,6 +676,25 @@ def gym_toggle_set_complete(set_id):
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
+@gym_bp.route('/gym/set/<int:set_id>/update', methods=['POST'])
+@login_required
+def gym_update_set(set_id):
+    """Edit-history: correct a typo'd weight/reps on a set from a finished
+    session. Deliberately narrow -- unlike gym_toggle_set_complete, this
+    never touches `completed`, and works regardless of session.finished_at
+    (that route's edit form is only shown for active sessions; this one's
+    form is only shown for finished ones, in session_detail.html)."""
+    set_ = db.get_or_404(SessionSet, set_id)
+    weight = _to_float(request.form.get('weight', ''))
+    reps = _to_int(request.form.get('reps', ''))
+    if weight is not None:
+        set_.weight = weight
+    if reps is not None:
+        set_.reps = reps
+    db.session.commit()
+    return redirect(url_for('gym.session_detail', session_id=set_.session_exercise.session_id))
+
+
 @gym_bp.route('/gym/session/<int:session_id>/exercises/reorder', methods=['POST'])
 @login_required
 def gym_reorder_session_exercises(session_id):
