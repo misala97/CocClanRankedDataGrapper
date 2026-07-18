@@ -208,6 +208,8 @@ h2 { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 17px; lette
 }
 .set-check.checked { background: var(--gym-lime); border-color: var(--gym-lime); color: #0a0a0a; }
 .set-value { font-family: 'Outfit', sans-serif; font-weight: 700; }
+.edit-set-btn { flex-shrink: 0; }
+.set-value.hidden, .edit-set-btn.hidden, .edit-set-form.hidden { display: none; }
 
 /* ===== Active workout: rest timer (card-level bar, not a per-row overlay) ===== */
 .rest-bar { margin: 4px 0 12px; }

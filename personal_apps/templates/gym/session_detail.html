@@ -663,6 +663,20 @@ document.addEventListener('change', (e) => {
         if (e.key === 'Escape') modal.classList.add('hidden');
     });
 })();
+
+(function setupEditSetForms() {
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.edit-set-btn');
+        if (!btn) return;
+        const row = btn.closest('.set-row');
+        if (!row) return;
+        const valueEl = row.querySelector('[data-set-value]');
+        const formEl = row.querySelector('.edit-set-form');
+        if (valueEl) valueEl.classList.add('hidden');
+        btn.classList.add('hidden');
+        if (formEl) formEl.classList.remove('hidden');
+    });
+})();
 </script>
 
 </body>
