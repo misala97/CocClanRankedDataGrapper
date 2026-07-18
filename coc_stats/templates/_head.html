@@ -63,6 +63,33 @@
 
         html { overflow-y: scroll; }
 
+        /* ── IN-PAGE SCROLL REGIONS: thin, inset, theme-tinted — never the native
+           OS bar over the flat surfaces. The document scrollbar (html, above) stays
+           the browser default; only in-page containers are restyled. Canonical
+           recipe — see DESIGN.md → Components → Scrollbars. New scroll wrappers
+           should reuse one of these class names (or copy the recipe). ── */
+        .table-scroll, .detail-table-scroll, .heat-scroll, .recent-table-scroll, .nav-mobile-panel {
+            scrollbar-width: thin;
+            scrollbar-color: color-mix(in oklch, var(--muted) 45%, transparent) transparent;
+        }
+        .table-scroll::-webkit-scrollbar, .detail-table-scroll::-webkit-scrollbar,
+        .heat-scroll::-webkit-scrollbar, .recent-table-scroll::-webkit-scrollbar,
+        .nav-mobile-panel::-webkit-scrollbar { width: 11px; height: 11px; }
+        .table-scroll::-webkit-scrollbar-track, .detail-table-scroll::-webkit-scrollbar-track,
+        .heat-scroll::-webkit-scrollbar-track, .recent-table-scroll::-webkit-scrollbar-track,
+        .nav-mobile-panel::-webkit-scrollbar-track { background: transparent; }
+        .table-scroll::-webkit-scrollbar-thumb, .detail-table-scroll::-webkit-scrollbar-thumb,
+        .heat-scroll::-webkit-scrollbar-thumb, .recent-table-scroll::-webkit-scrollbar-thumb,
+        .nav-mobile-panel::-webkit-scrollbar-thumb {
+            background: color-mix(in oklch, var(--muted) 38%, transparent);
+            border-radius: 6px; border: 3px solid transparent; background-clip: padding-box;
+        }
+        .table-scroll::-webkit-scrollbar-thumb:hover, .detail-table-scroll::-webkit-scrollbar-thumb:hover,
+        .heat-scroll::-webkit-scrollbar-thumb:hover, .recent-table-scroll::-webkit-scrollbar-thumb:hover,
+        .nav-mobile-panel::-webkit-scrollbar-thumb:hover {
+            background: color-mix(in oklch, var(--muted) 62%, transparent); background-clip: padding-box;
+        }
+
         /* ── FLOATING TOOLTIP (shared by every hover-info element site-wide) ── */
         .float-tooltip {
             position: fixed; z-index: 9999; display: none; pointer-events: none;
