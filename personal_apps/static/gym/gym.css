@@ -180,6 +180,8 @@ h2 { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 17px; lette
 .session-header .duration { font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 800; color: var(--gym-lime); }
 .notify-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; font-size: 13px; color: var(--gym-muted); }
 
+.reorder-lock-row { margin-bottom: 12px; }
+
 .sets-list { margin-bottom: 12px; }
 .set-row {
     position: relative; overflow: hidden;

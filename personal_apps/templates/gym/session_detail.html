@@ -58,6 +58,12 @@
     </div>
     {% endif %}
 
+    {% if not session.finished_at %}
+    <div class="reorder-lock-row">
+        <button type="button" class="btn btn-ghost btn-sm" id="reorder-lock-btn">🔒 Reihenfolge gesperrt</button>
+    </div>
+    {% endif %}
+
     <div id="exercise-cards" class="{{ 'read-only' if session.finished_at else '' }}">
     {% for se in visible_exercises %}
     {% set completed_count = se.sets|selectattr('completed')|list|length %}
@@ -256,6 +262,22 @@
 function pad(n) { return String(n).padStart(2, '0'); }
 
 const SESSION_FINISHED = {{ 'true' if session.finished_at else 'false' }};
+
+let reorderUnlocked = false;
+const reorderLockBtn = document.getElementById('reorder-lock-btn');
+function updateReorderLockButton() {
+    if (!reorderLockBtn) return;
+    reorderLockBtn.textContent = reorderUnlocked ? '🔓 Entsperrt — ziehen zum Sortieren' : '🔒 Reihenfolge gesperrt';
+    reorderLockBtn.classList.toggle('btn-primary', reorderUnlocked);
+    reorderLockBtn.classList.toggle('btn-ghost', !reorderUnlocked);
+}
+if (reorderLockBtn) {
+    reorderLockBtn.addEventListener('click', () => {
+        reorderUnlocked = !reorderUnlocked;
+        updateReorderLockButton();
+    });
+    updateReorderLockButton();
+}
 
 {% if not session.finished_at %}
 const startedAt = new Date(document.getElementById('session-duration').dataset.started + 'Z');
@@ -502,7 +524,7 @@ if (notifyBtn) {
         lastClientY = e.clientY;
 
         if (!dragStarted) {
-            if (SESSION_FINISHED) return;
+            if (SESSION_FINISHED || !reorderUnlocked) return;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
             if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
