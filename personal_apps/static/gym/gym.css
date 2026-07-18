@@ -234,6 +234,7 @@ h2 { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 17px; lette
     border-radius: 999px; padding: 2px 8px;
 }
 .progress-badge.all-done { color: var(--gym-lime); border-color: var(--gym-lime); background: rgba(212,255,63,0.1); }
+.exercise-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin-top: 12px; }
 .progress-open-btn {
     background: transparent; border: none; color: var(--gym-muted); font-size: 16px;
     cursor: pointer; flex-shrink: 0; line-height: 1;

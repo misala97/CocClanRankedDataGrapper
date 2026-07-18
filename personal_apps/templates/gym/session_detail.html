@@ -69,7 +69,9 @@
             <div class="card-header-title-row">
                 <div class="card-title-area">
                     <h2>{{ se.exercise.name }}</h2>
-                    {% if total_count %}
+                    {% if se.skipped %}
+                    <span class="badge badge-done">Übersprungen</span>
+                    {% elif total_count %}
                     <span class="progress-badge {{ 'all-done' if all_done else '' }}">{{ completed_count }}/{{ total_count }}</span>
                     {% endif %}
                 </div>
@@ -110,12 +112,19 @@
                         <button type="submit" class="btn btn-ghost icon-btn">✕</button>
                     </form>
                     {% else %}
-                    <span class="set-value">{{ s.weight }} kg × {{ s.reps }}</span>
+                    <span class="set-value" data-set-value>{{ s.weight }} kg × {{ s.reps }}</span>
+                    <button type="button" class="btn btn-ghost icon-btn edit-set-btn" data-set-id="{{ s.id }}" title="Wert bearbeiten">✏️</button>
+                    <form method="post" action="{{ url_for('gym.gym_update_set', set_id=s.id) }}" class="set-edit-form edit-set-form hidden">
+                        <input type="number" name="weight" step="0.5" min="0" class="num-input-sm" value="{{ s.weight }}">
+                        <span class="unit">kg ×</span>
+                        <input type="number" name="reps" min="0" class="num-input-sm" value="{{ s.reps }}">
+                        <button type="submit" class="btn btn-ghost icon-btn" title="Speichern">💾</button>
+                    </form>
                     {% endif %}
                 </div>
                 {% endfor %}
             </div>
-            {% else %}
+            {% elif not se.skipped %}
             <div class="empty">Noch keine Sätze protokolliert.</div>
             {% endif %}
 
@@ -127,6 +136,7 @@
             {% endif %}
 
             {% if not session.finished_at %}
+            {% if not se.skipped %}
             {% set suggestion = suggestions.get(se.id) %}
             {% if se.id in stagnation_counts %}
             <div class="stagnation-note">💡 {{ stagnation_counts[se.id] }} Workouts ohne neuen e1RM-PR — mehr Gewicht oder Wdh. versuchen (progressive overload)</div>
@@ -149,30 +159,36 @@
             {% if suggestion and not se.sets %}
             <div class="empty" style="padding-top:8px">Letzte Leistung: {{ suggestion.weight }} kg × {{ suggestion.reps }}</div>
             {% endif %}
-            <details class="replace-details">
-                <summary class="btn btn-ghost btn-sm">🔁 Übung ersetzen</summary>
-                <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}" style="margin-top:8px">
-                    <div class="form-row">
-                        <div class="form-group grow">
-                            <label>Ersatzübung</label>
-                            <select name="exercise_id">
-                                <option value="">— Neue Übung —</option>
-                                {% for e in exercises if e.muscle_group == se.exercise.muscle_group and e.id != se.exercise_id %}
-                                <option value="{{ e.id }}">{{ e.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group grow">
-                            <label>Name der neuen Übung</label>
-                            <input type="text" name="new_exercise_name" placeholder="z.B. Kabelzug">
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-sm">Ersetzen</button>
-                    </div>
+            {% endif %}
+            <div class="exercise-actions">
+                <form method="post" action="{{ url_for('gym.gym_toggle_skip_session_exercise', session_exercise_id=se.id) }}">
+                    <button type="submit" class="btn btn-ghost btn-sm">{{ '↩️ Rückgängig' if se.skipped else '⏭️ Überspringen' }}</button>
                 </form>
-            </details>
-            <form method="post" action="{{ url_for('gym.gym_delete_session_exercise', session_exercise_id=se.id) }}" data-confirm="Übung aus Workout entfernen?" style="margin-top:12px">
-                <button type="submit" class="btn btn-ghost btn-sm">Übung entfernen</button>
-            </form>
+                <details class="replace-details">
+                    <summary class="btn btn-ghost btn-sm">🔁 Übung ersetzen</summary>
+                    <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}" style="margin-top:8px">
+                        <div class="form-row">
+                            <div class="form-group grow">
+                                <label>Ersatzübung</label>
+                                <select name="exercise_id">
+                                    <option value="">— Neue Übung —</option>
+                                    {% for e in exercises if e.muscle_group == se.exercise.muscle_group and e.id != se.exercise_id %}
+                                    <option value="{{ e.id }}">{{ e.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group grow">
+                                <label>Name der neuen Übung</label>
+                                <input type="text" name="new_exercise_name" placeholder="z.B. Kabelzug">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm">Ersetzen</button>
+                        </div>
+                    </form>
+                </details>
+                <form method="post" action="{{ url_for('gym.gym_delete_session_exercise', session_exercise_id=se.id) }}" data-confirm="Übung aus Workout entfernen?">
+                    <button type="submit" class="btn btn-ghost btn-sm">Übung entfernen</button>
+                </form>
+            </div>
             {% endif %}
         </div>
     </div>
