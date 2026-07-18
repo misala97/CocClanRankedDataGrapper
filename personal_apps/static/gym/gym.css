@@ -96,6 +96,8 @@ h2 { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 17px; lette
     flex-wrap: wrap; row-gap: 8px; column-gap: 12px;
 }
 .card-body { padding: 18px; }
+.export-panel { padding: 14px 18px; border-bottom: 1px solid var(--gym-border); }
+.export-presets { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 
 /* ===== Buttons ===== */
 .btn {

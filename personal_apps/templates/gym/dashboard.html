@@ -61,6 +61,24 @@
 
     <div class="card" id="history">
         <div class="card-header"><h2>Vergangene Workouts</h2></div>
+        <div class="export-panel">
+            <div class="export-presets">
+                <button type="button" class="btn btn-ghost btn-sm export-preset" data-days="30">Letzte 30 Tage</button>
+                <button type="button" class="btn btn-ghost btn-sm export-preset" data-days="90">Letzte 90 Tage</button>
+                <button type="button" class="btn btn-ghost btn-sm export-preset" data-days="">Alle</button>
+            </div>
+            <form method="get" action="{{ url_for('gym.gym_export') }}" class="form-row">
+                <div class="form-group">
+                    <label>Von</label>
+                    <input type="date" name="from" id="export-from">
+                </div>
+                <div class="form-group">
+                    <label>Bis</label>
+                    <input type="date" name="to" id="export-to">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Exportieren (JSON)</button>
+            </form>
+        </div>
         {% if past_sessions %}
         <div>
             {% for s in past_sessions %}
@@ -182,6 +200,22 @@ function tick() {
 tick();
 setInterval(tick, 1000);
 {% endif %}
+document.querySelectorAll('.export-preset').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        const days = btn.dataset.days;
+        const toInput = document.getElementById('export-to');
+        const fromInput = document.getElementById('export-from');
+        const today = new Date();
+        toInput.value = today.toISOString().slice(0, 10);
+        if (days) {
+            const from = new Date(today);
+            from.setDate(from.getDate() - parseInt(days, 10));
+            fromInput.value = from.toISOString().slice(0, 10);
+        } else {
+            fromInput.value = '';
+        }
+    });
+});
 </script>
 
 </body>
