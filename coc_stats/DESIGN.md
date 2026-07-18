@@ -213,6 +213,15 @@ Quiet at rest, decisive on interaction: every interactive element in this system
 - **Hover:** fills to a low-opacity Threat Magenta wash, border goes solid, adds a soft magenta glow (`box-shadow`).
 - **Use:** shared controls bar (filters, period toggles) on other pages built on this same token system.
 
+### Scrollbars
+- **Any internal scroll region** — equal-height console panes, capped feeds, overflow lists — uses a **thin, inset, theme-tinted** scrollbar, never the native OS bar. The chunky native bar reads as "stuck on" over the flat gunmetal surfaces.
+- **Recipe:** `scrollbar-width: thin` + `scrollbar-color` (Firefox); an 11px `::-webkit-scrollbar` with a transparent track and a thumb of `color-mix(in oklch, var(--muted) 38%, transparent)`, `border: 3px solid transparent; background-clip: padding-box` so the thumb floats inset, going to ~62% on hover.
+- The page's own (document) scrollbar stays the browser default — only *in-page* scroll containers get restyled.
+
+### Mobile Roster (responsive data table)
+- When a dense desktop table (many players × many stats) drops below its breakpoint, it becomes a **single bordered container of divided rows** — one player per row (`.mr`), two tight lines: identity + verdict/chevron on top, a wrap of Mono stats below, tap-to-expand for detail. **Never** a stack of full-width per-player cards.
+- **Why:** the table's whole value is scanning many players at a glance; a card-per-player spends a full block of vertical space on each and destroys that. This is the shared pattern across every data-table page (battles, raid) — reuse it, don't reinvent a card layout per page (see Don'ts).
+
 ## 6. Do's and Don'ts
 
 ### Do:
@@ -231,3 +240,5 @@ Quiet at rest, decisive on interaction: every interactive element in this system
 - **Don't** let raw text emoji stand in for an icon anywhere. Every icon slot is either a real image asset or an `aria-hidden` inline SVG matching the existing line-icon language (stroke-based, `currentColor`, 16–24px).
 - **Don't** let Threat Magenta answer more than one question on a single screen. It means "interactive/primary" — if a mode-specific color is also needed there, it must be a distinct hue (see War Amber).
 - **Don't** ship a hover-only interaction with no keyboard equivalent. The nav's mode dropdowns are the one place this system currently fails that rule — fix forward from here, don't repeat it.
+- **Don't** reflow a dense data table into a stack of spacious per-player cards on mobile. The table's whole value is at-a-glance comparison across rows; a card-per-player loses it. Drop to the divided roster-row list instead (see Components → Mobile Roster). This has been re-introduced and removed more than once — it is a standing preference, not a per-page judgment call.
+- **Don't** let the native OS scrollbar show on an in-page scroll container — restyle it thin and inset (see Components → Scrollbars).
