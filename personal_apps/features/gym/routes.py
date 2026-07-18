@@ -822,9 +822,9 @@ def gym_export():
     date_from = request.args.get('from', '')
     date_to = request.args.get('to', '')
     try:
-        from_date = dt.datetime.strptime(date_from, '%Y-%m-%d') if date_from else dt.datetime.min
+        from_date = dt.datetime.strptime(date_from, '%Y-%m-%d') if date_from else dt.datetime(1970, 1, 1)
     except ValueError:
-        from_date = dt.datetime.min
+        from_date = dt.datetime(1970, 1, 1)
     try:
         to_date = dt.datetime.strptime(date_to, '%Y-%m-%d') if date_to else dt.datetime.utcnow()
     except ValueError:
@@ -850,8 +850,8 @@ def gym_export():
                 'id': s.id,
                 'name': s.name,
                 'template_name': s.template.name if s.template else None,
-                'started_at': s.started_at.isoformat(),
-                'finished_at': s.finished_at.isoformat(),
+                'started_at': s.started_at.isoformat() + 'Z',
+                'finished_at': s.finished_at.isoformat() + 'Z',
                 'exercises': [
                     {
                         'exercise_name': se.exercise.name,
