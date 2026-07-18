@@ -6,3 +6,7 @@ logs/
 locks/
 personal_apps/static/quizbank_uploads/
 .superpowers/
+/.impeccable/
+.playwright-mcp/
+coc_stats/.impeccable/live/
+.claude/skills/
