@@ -577,6 +577,7 @@ if (notifyBtn) {
 })();
 
 function refreshExerciseCards(html) {
+    const scrollY = window.scrollY;
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const newCards = doc.getElementById('exercise-cards');
     const oldCards = document.getElementById('exercise-cards');
@@ -591,6 +592,7 @@ function refreshExerciseCards(html) {
             if (collapsedIds.has(c.dataset.seId)) c.classList.add('collapsed');
             else if (openIds.has(c.dataset.seId)) c.classList.remove('collapsed');
         });
+        window.scrollTo(0, scrollY);
     }
     startRestFillTick();
 }
