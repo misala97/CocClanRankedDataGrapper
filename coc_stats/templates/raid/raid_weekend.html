@@ -364,10 +364,33 @@
             #mobileList { display: flex; }
         }
 
+        /* ── MOTION: siege fill-rise on reveal, house hover, crown moment, expand fades ──
+           Fills start collapsed only once JS confirms it can animate (#siegeBody.anim-ready),
+           so with no JS / reduced motion the fill is visible by default — never gated on a
+           class that might not fire. All easings are ease-out-quint (no bounce/elastic). */
+        .sd-house { transition: transform .18s cubic-bezier(0.22, 1, 0.36, 1); }
+        .sd:hover .sd-house { transform: translateY(-2px); filter: drop-shadow(0 3px 5px color-mix(in oklch, var(--sd-color) 32%, transparent)); }
+
+        /* Additive glow only — box-shadow, so the crown icon itself is always visible;
+           at 0% (or if frozen) there's simply no glow, never a hidden icon. */
+        @keyframes crown-lit { 0% { box-shadow: 0 0 0 0 transparent; } 40% { box-shadow: 0 0 18px 2px color-mix(in oklch, var(--ops-star) 55%, transparent); } 100% { box-shadow: 0 0 7px 0 color-mix(in oklch, var(--ops-star) 24%, transparent); } }
+        .mvp-crown.lit { animation: crown-lit 1.1s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+        /* Expand reveal animates TRANSFORM ONLY (not opacity) so the content is never
+           hidden — at the animation's 0% (or if it's ever frozen/skipped) it's still
+           fully opaque, just offset a few px. Enhancement, never a visibility gate. */
+        @keyframes reveal-in { from { transform: translateY(-6px); } to { transform: none; } }
+        .detail-row.expanded .detail-inner, .mr-detail.expanded, .siege-sum-body.open, #recentBody, .wr-done-list { animation: reveal-in .18s cubic-bezier(0.22, 1, 0.36, 1); }
+        @media (max-width: 900px) { .console-panel .panel-collapse.open { animation: reveal-in .2s cubic-bezier(0.22, 1, 0.36, 1); } }
+
         @media (prefers-reduced-motion: reduce) {
             .hz-live-dot { animation: none; }
             .wr-progress-fill { transition: none; }
             .wr-done .chev, .siege-sum-chev, .feed-chev, .panel-chev, .mr-chev, .noshow-tail > summary::before { transition: none; }
+            .sd-house { transition: none !important; }
+            .sd:hover .sd-house { transform: none !important; filter: none !important; }
+            .mvp-crown.lit { animation: none !important; }
+            .detail-row.expanded .detail-inner, .mr-detail.expanded, .siege-sum-body.open, #recentBody, .wr-done-list, .console-panel .panel-collapse.open { animation: none !important; }
         }
     </style>
 </head>
@@ -1200,6 +1223,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const pct = parseFloat(el.dataset.pct) || 0;
         requestAnimationFrame(() => { el.style.width = pct + '%'; });
     });
+
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // MVP crown: one-time gold glow moment shortly after the recap paints. Additive
+    // (glow only, no content is gated on it), so it's safe to fire on a timer.
+    const crown = document.querySelector('.mvp-crown');
+    if (crown && !reduceMotion) {
+        setTimeout(() => crown.classList.add('lit'), 220);
+    }
 });
 </script>
 {% endif %}
