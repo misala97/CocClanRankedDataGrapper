@@ -100,13 +100,32 @@
         .you-nudge.done { color: var(--green); }
         @media (max-width: 640px) { .you { gap: 14px; } .you-nudge { margin-left: 0; width: 100%; } }
 
-        /* ── CONSOLE (two-column action tier; equal-height panes on desktop) ── */
+        /* ── CONSOLE (two-column action tier; equal-height panes on desktop,
+           collapsible war-room / siege on mobile so the leaderboard is reachable) ── */
         .console { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); gap: 14px; align-items: start; margin-bottom: 14px; }
         .console-left, .console-right { min-width: 0; }
         .console-panel { display: flex; flex-direction: column; }
+        .panel-toggle { width: 100%; border: none; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+        .panel-head-right { display: flex; align-items: center; gap: 10px; }
+        .panel-chev { font-size: 11px; color: var(--ops-ink-dim); transition: transform .2s; flex-shrink: 0; }
+        .panel-toggle.open .panel-chev { transform: rotate(180deg); }
+        .panel-collapse { display: none; }
+        .panel-collapse.open { display: block; }
+        .panel-fill { display: block; }
+        /* thin, inset scrollbars — the native chunky ones read as "stuck on" the flat panels */
+        .panel-collapse, .panel-fill, .feed-body { scrollbar-width: thin; scrollbar-color: color-mix(in oklch, var(--ops-ink-dim) 45%, transparent) transparent; }
+        .panel-collapse::-webkit-scrollbar, .panel-fill::-webkit-scrollbar, .feed-body::-webkit-scrollbar { width: 11px; height: 11px; }
+        .panel-collapse::-webkit-scrollbar-track, .panel-fill::-webkit-scrollbar-track, .feed-body::-webkit-scrollbar-track { background: transparent; }
+        .panel-collapse::-webkit-scrollbar-thumb, .panel-fill::-webkit-scrollbar-thumb, .feed-body::-webkit-scrollbar-thumb {
+            background: color-mix(in oklch, var(--ops-ink-dim) 38%, transparent);
+            border-radius: 6px; border: 3px solid transparent; background-clip: padding-box;
+        }
+        .panel-collapse::-webkit-scrollbar-thumb:hover, .panel-fill::-webkit-scrollbar-thumb:hover, .feed-body::-webkit-scrollbar-thumb:hover { background: color-mix(in oklch, var(--ops-ink-dim) 62%, transparent); background-clip: padding-box; }
         @media (min-width: 901px) {
             .console-left > .panel, .console-right > .panel { height: 640px; }
-            .console-panel .panel-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+            .console-panel .panel-collapse, .console-panel .panel-fill { display: block !important; flex: 1; min-height: 0; overflow-y: auto; }
+            .panel-toggle { cursor: default; pointer-events: none; }
+            .panel-chev { display: none; }
         }
         @media (max-width: 900px) { .console { grid-template-columns: 1fr; } }
 
@@ -167,40 +186,35 @@
         .siege-cleared-badge { color: var(--ops-win); font-weight: 700; margin-left: 8px; }
         .siege-card-cleared { border-color: rgba(62,192,106,.35); box-shadow: 0 0 0 1px rgba(62,192,106,.12); }
 
-        /* ── SIEGE DISTRICT NODES: destruction-readout cells ──
-           Each district is a scope cell. The bottom-up fill = how destroyed it is;
-           the border/number color = efficiency (green efficient → red wasteful, blue
-           in-progress, dim untouched). The readout inside is attacks-to-clear (done),
-           live % (in progress) or the medal prize (untouched). The Capital Peak is
-           enlarged and turns gold while it's still standing — the prize on the board. */
-        .capital-pyramid { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 16px 12px 18px; background: var(--ops-surface); }
-        .capital-row { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
-        .sd { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 58px; }
+        /* ── SIEGE DISTRICT NODES: little houses (SVG), filled by destruction ──
+           Each district is a building. The house fills bottom-up with the status
+           colour = how destroyed it is; the outline + readout colour = efficiency
+           (green efficient → red wasteful, blue in-progress, dim untouched). The
+           readout is attacks-to-clear (done), live % (in progress) or the medal
+           prize (untouched). The Capital Peak is the big house — gold while it stands. */
+        .capital-pyramid { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 12px 18px; background: var(--ops-surface); }
+        .capital-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .sd { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 60px; --sd-color: var(--ops-ink-dim); }
         .sd[title] { cursor: help; }
-        .sd-cell {
-            position: relative; width: 48px; height: 48px; border-radius: 11px; overflow: hidden;
-            background: var(--ops-surface-2);
-            border: 1px solid color-mix(in oklch, var(--sd-color, var(--ops-line)) 52%, var(--ops-line));
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        .sd-house { position: relative; width: 46px; height: 44px; }
+        .sd-house svg { width: 100%; height: 100%; display: block; color: var(--sd-color); }
+        .sd-read {
+            position: absolute; left: 0; right: 0; top: 58%; transform: translateY(-50%); text-align: center;
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12.5px; line-height: 1;
+            color: var(--sd-color); pointer-events: none;
         }
-        .sd-fill { position: absolute; left: 0; right: 0; bottom: 0; height: var(--sd-fill, 0%); background: color-mix(in oklch, var(--sd-color, var(--ops-line)) 26%, transparent); }
-        .sd-big { position: relative; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; line-height: 1; color: var(--sd-color, var(--ops-ink)); }
-        .sd-unit { position: relative; font-family: 'Manrope', sans-serif; font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ops-ink-dim); margin-top: 2px; }
-        .sd-stars { position: relative; font-size: 8px; line-height: 1; margin-top: 2px; }
-        .sd-medal { position: relative; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; color: var(--ops-gold); }
-        .sd-dot { position: relative; width: 5px; height: 5px; border-radius: 50%; background: color-mix(in oklch, var(--ops-ink-dim) 45%, transparent); }
-        .sd-name { font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 600; color: var(--ops-ink); text-align: center; line-height: 1.1; max-width: 58px; }
+        .sd-read .u { display: block; font-family: 'Manrope', sans-serif; font-size: 6.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--ops-ink-dim); margin-top: 2px; }
+        .sd-read.gold { color: var(--ops-gold); }
+        .sd-name { font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 600; color: var(--ops-ink); text-align: center; line-height: 1.1; max-width: 60px; }
         .sd-lvl { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--ops-ink-dim); font-weight: 600; }
         .sd.good     { --sd-color: var(--green); }
         .sd.ok       { --sd-color: var(--orange); }
         .sd.bad      { --sd-color: var(--red); }
         .sd.partial  { --sd-color: var(--blue); }
-        .sd.untouched { --sd-color: color-mix(in oklch, var(--ops-ink-dim) 55%, var(--ops-line)); }
-        .sd.untouched .sd-cell { border-style: dashed; }
-        .sd.peak .sd-cell { width: 58px; height: 58px; border-radius: 13px; border-width: 1.5px; }
-        .sd.peak .sd-big { font-size: 19px; }
+        .sd.untouched { --sd-color: color-mix(in oklch, var(--ops-ink-dim) 62%, var(--ops-line)); }
+        .sd.peak .sd-house { width: 58px; height: 55px; }
+        .sd.peak .sd-read { font-size: 15px; top: 60%; }
         .sd.peak.untouched { --sd-color: var(--ops-star); }
-        .sd.peak.untouched .sd-medal { font-size: 14px; }
 
         .capital-legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; padding: 4px 12px 10px; }
         .cl-item { display: flex; align-items: center; gap: 5px; font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--ops-ink-dim); font-weight: 600; }
@@ -237,7 +251,7 @@
         .board-hint { font-family: 'Manrope', sans-serif; font-size: 11.5px; color: var(--ops-ink-dim); }
 
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--ops-line); }
-        .table-wrapper { background: var(--ops-surface); min-width: 760px; overflow: hidden; }
+        .table-wrapper { background: var(--ops-surface); min-width: 700px; overflow: hidden; }
         table#statsTable { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
         col.col-player  { width: auto; }
         col.col-attacks { width: 92px; }
@@ -321,26 +335,25 @@
         .empty-state { text-align: center; padding: 70px 24px; color: var(--ops-ink-dim); }
         .empty-state p { font-size: 15px; font-family: 'Manrope', sans-serif; }
 
-        /* ── MOBILE CARDS (leaderboard below 641px) ── */
-        #mobileList { display: none; flex-direction: column; gap: 8px; }
-        .mc { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 10px; overflow: hidden; cursor: pointer; transition: background .12s; }
-        .mc:active { background: var(--ops-surface-2); }
-        .mc-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
-        .mc-player { flex: 1; min-width: 0; }
-        .mc-player-name { font-weight: 700; font-size: 15px; color: var(--ops-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mc-player-tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ops-ink-dim); margin-top: 1px; }
-        .mc-attacks { text-align: right; flex-shrink: 0; }
-        .mc-attacks-val { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--ops-ink); line-height: 1; }
-        .mc-attacks-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
-        .mc-verdict { padding: 0 14px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .mc-stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ops-line); }
-        .mc-stat { padding: 9px 8px; text-align: center; border-right: 1px solid var(--ops-line); }
-        .mc-stat:last-child { border-right: none; }
-        .mc-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 700; color: var(--ops-ink-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
-        .mc-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
-        .mc-detail { display: none; border-top: 1px solid var(--ops-line); }
-        .mc-detail.expanded { display: block; }
-        .mc-tap-hint { text-align: center; padding: 7px 0 2px; font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); }
+        /* ── MOBILE ROSTER — a dense divided list below 641px, not spacious cards.
+           The table's value is scanning many players at a glance; one row per player,
+           two tight lines, keeps that density (matches the /battles mobile pattern). ── */
+        #mobileList { display: none; flex-direction: column; background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: 10px; overflow: hidden; }
+        .mr { padding: 10px 14px; border-bottom: 1px solid var(--bord2); cursor: pointer; transition: background .12s; }
+        #mobileList .mr:last-child { border-bottom: none; }
+        .mr:active { background: var(--ops-surface-2); }
+        .mr.is-you { background: color-mix(in oklch, var(--ops-raid) 8%, transparent); }
+        .mr-top { display: flex; align-items: center; gap: 8px; }
+        .mr-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; color: var(--ops-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mr-name a { color: inherit; }
+        .mr-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ops-ink-dim); font-weight: 400; margin-left: 5px; }
+        .mr-chev { color: var(--ops-ink-dim); flex-shrink: 0; display: flex; transition: transform .15s, color .15s; }
+        .mr-chev svg { width: 11px; height: 11px; display: block; }
+        .mr.expanded .mr-chev { transform: rotate(90deg); color: var(--ops-raid); }
+        .mr-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 14px; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--ops-ink); }
+        .mr-stats .mru { color: var(--ops-ink-dim); font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 9.5px; letter-spacing: .4px; text-transform: uppercase; margin-right: 3px; }
+        .mr-detail { display: none; }
+        .mr-detail.expanded { display: block; border-top: 1px solid var(--bord2); margin-top: 9px; }
 
         /* ── RESPONSIVE ── */
         @media (max-width: 900px) { .container { padding-left: 20px; padding-right: 20px; } }
@@ -354,7 +367,7 @@
         @media (prefers-reduced-motion: reduce) {
             .hz-live-dot { animation: none; }
             .wr-progress-fill { transition: none; }
-            .wr-done .chev, .siege-sum-chev, .feed-chev, .noshow-tail > summary::before { transition: none; }
+            .wr-done .chev, .siege-sum-chev, .feed-chev, .panel-chev, .mr-chev, .noshow-tail > summary::before { transition: none; }
         }
     </style>
 </head>
@@ -530,11 +543,11 @@
             {% set possible = roster_total * 6 %}
             {% set used_total = possible - clan_attacks_remaining %}
             <div class="panel console-panel">
-                <div class="panel-head">
+                <button type="button" class="panel-head panel-toggle" onclick="togglePanel(this)" aria-expanded="false">
                     <span class="panel-title"><img src="/static/img/battle.png" alt="">War Room</span>
-                    <span class="panel-meta">{{ participation_pct }}% joined</span>
-                </div>
-                <div class="panel-scroll">
+                    <span class="panel-head-right"><span class="panel-meta">{{ clan_attacks_remaining }} left · {{ participation_pct }}% joined</span><span class="panel-chev">▾</span></span>
+                </button>
+                <div class="panel-collapse">
                 <div class="wr-agg">
                     <div class="wr-agg-top"><span class="wr-agg-big">{{ clan_attacks_remaining }}</span><span class="wr-agg-lbl">attacks remaining · {{ remaining|length }} member{{ 's' if remaining|length != 1 else '' }}</span></div>
                     <div class="wr-progress"><div class="wr-progress-fill" data-pct="{{ (used_total / possible * 100) if possible else 0 }}"></div></div>
@@ -571,7 +584,7 @@
             {% set mvp = highlights.mvp %}
             <div class="panel console-panel">
                 <div class="panel-head"><span class="panel-title"><img src="/static/img/crown.png" alt="">Highlights</span></div>
-                <div class="panel-scroll">
+                <div class="panel-fill">
                 <div class="mvp">
                     <div class="mvp-crown"><img src="/static/img/crown.png" alt="MVP"></div>
                     <div class="mvp-body">
@@ -622,11 +635,11 @@
         <div class="console-right">
             {% if player_data %}
             <div class="panel console-panel">
-                <div class="panel-head">
+                <button type="button" class="panel-head panel-toggle" onclick="togglePanel(this)" aria-expanded="false">
                     <span class="panel-title"><img src="/static/img/townHall.png" alt="">Capital Siege Map</span>
-                    <span class="panel-meta">{% if is_ended %}final{% else %}live{% endif %}</span>
-                </div>
-                <div id="siegeBody" class="panel-scroll"></div>
+                    <span class="panel-head-right"><span class="panel-meta">{% if is_ended %}final{% else %}live{% endif %}</span><span class="panel-chev">▾</span></span>
+                </button>
+                <div id="siegeBody" class="panel-collapse"></div>
             </div>
             {% endif %}
         </div>
@@ -909,39 +922,54 @@ function buildTable() {
 }
 const debouncedBuildTable = debounce(buildTable, 200);
 
+function fmtShort(n) {
+    if (n == null) return '—';
+    n = +n;
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(n);
+}
+function shiftInline(v) {
+    if (v == null) return '—';
+    const c = v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--ops-ink-dim)';
+    return `<span style="color:${c};">${v > 0 ? '+' : ''}${v.toFixed(2)}</span>`;
+}
+const MR_CHEV = `<span class="mr-chev" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 4 10 8 6 12"/></svg></span>`;
+
+// Dense divided list (one row per player), not spacious cards — matches the /battles
+// mobile pattern so many players stay scannable at a glance.
 function buildMobileCards(rows) {
     const list = document.getElementById('mobileList');
     if (!list) return;
-    const expandedTags = new Set([...list.querySelectorAll('.mc-detail.expanded')].map(d => d.dataset.playerTag).filter(Boolean));
+    const expandedTags = new Set([...list.querySelectorAll('.mr-detail.expanded')].map(d => d.dataset.playerTag).filter(Boolean));
     list.innerHTML = '';
     rows.forEach(p => {
+        const isYou = myPlayerTag && p.player_tag === myPlayerTag;
         const leftTag = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
-        const card = document.createElement('div');
-        card.className = 'mc';
-        if (myPlayerTag && p.player_tag === myPlayerTag) card.style.background = 'color-mix(in oklch, var(--ops-raid) 8%, transparent)';
-        card.innerHTML = `
-            <div class="mc-header">
-                <div class="mc-player">
-                    <div class="mc-player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftTag}</div>
-                    <div class="mc-player-tag">${escapeHTML(p.player_tag)}</div>
-                </div>
-                <div class="mc-attacks"><div class="mc-attacks-val">${p.att_count}<span style="font-size:12px;color:var(--ops-ink-dim);">/6</span></div><div class="mc-attacks-lbl">Attacks</div></div>
+        const verdict = escapeHTML(p.judge_label.split('(')[0].trim()) + (p.att_count > 0 && p.score_100 > 0 ? ` · ${p.score_100}` : '');
+        const row = document.createElement('div');
+        row.className = 'mr' + (isYou ? ' is-you' : '');
+        row.innerHTML = `
+            <div class="mr-top">
+                <div class="mr-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)}</a><span class="mr-tag">${escapeHTML(p.player_tag)}</span>${leftTag}</div>
+                <span class="judgment ${p.badge_class}" style="font-size:10px;padding:3px 9px;">${verdict}</span>
+                ${MR_CHEV}
             </div>
-            <div class="mc-verdict"><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:.6;font-size:.9em;">·</span> ${p.score_100}` : ''}</span>${signedImpact(p.overall_baseline_shift)}</div>
-            <div class="mc-stats">
-                <div class="mc-stat"><div class="mc-stat-lbl">Loot</div><div class="mc-stat-val" style="color:var(--ops-gold);">${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'}</div></div>
-                <div class="mc-stat"><div class="mc-stat-lbl">Avg %</div><div class="mc-stat-val" style="color:var(--blue);">${p.avg_pct}%</div></div>
-                <div class="mc-stat"><div class="mc-stat-lbl">Solo Wipes</div><div class="mc-stat-val" style="color:${p.solo_wipes ? 'var(--green)' : 'var(--ops-ink-dim)'};">${p.solo_wipes}</div></div>
+            <div class="mr-stats">
+                <span title="Attacks used"><span class="mru">Atk</span>${p.att_count}/6</span>
+                <span title="Overall Shift"><span class="mru">Shift</span>${shiftInline(p.overall_baseline_shift)}</span>
+                <span style="color:var(--ops-gold);" title="${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'} capital loot"><span class="mru">Loot</span>${fmtShort(p.capital_loot)}</span>
+                <span title="Solo wipes"><span class="mru">Wipes</span><span style="color:${p.solo_wipes ? 'var(--green)' : 'var(--ops-ink-dim)'};">${p.solo_wipes}</span></span>
             </div>
-            <div class="mc-tap-hint">Tap for medal-impact & verdict breakdown</div>
-            <div class="mc-detail" data-player-tag="${escapeHTML(p.player_tag)}"></div>`;
-        const detail = card.querySelector('.mc-detail');
-        card.addEventListener('click', () => {
+            <div class="mr-detail" data-player-tag="${escapeHTML(p.player_tag)}"></div>`;
+        const detail = row.querySelector('.mr-detail');
+        row.addEventListener('click', () => {
             if (!detail.dataset.built) { detail.innerHTML = buildVerdictDetails(p); detail.dataset.built = 'true'; }
             detail.classList.toggle('expanded');
+            row.classList.toggle('expanded');
         });
-        list.appendChild(card);
-        if (expandedTags.has(p.player_tag)) card.click();
+        list.appendChild(row);
+        if (expandedTags.has(p.player_tag)) row.click();
     });
 }
 
@@ -968,6 +996,17 @@ function toggleDone(btn) {
     const open = list.style.display === 'none';
     list.style.display = open ? '' : 'none';
     btn.classList.toggle('open', open);
+}
+
+// Collapsible console panels (war-room / siege) — only interactive on mobile; on
+// desktop the head is inert (pointer-events:none) and the body is force-shown by CSS.
+function togglePanel(btn) {
+    const body = btn.parentElement.querySelector('.panel-collapse');
+    if (!body) return;
+    const open = !body.classList.contains('open');
+    body.classList.toggle('open', open);
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 function toggleFeed() {
@@ -1028,23 +1067,34 @@ function attackersTooltip(d) {
     return d.attackers.map(a => `${a.name} — ${a.percentage}% ${'★'.repeat(a.stars)}${'☆'.repeat(3 - a.stars)}`).join('\n');
 }
 const SD_CLASS = { 'finished-good': 'good', 'finished-ok': 'ok', 'finished-bad': 'bad', 'partial': 'partial', 'untouched': 'untouched' };
+// A little house, drawn as one SVG path (peak → eaves → walls → floor). Crisp roof
+// instead of the old CSS-border triangle; the interior fills bottom-up = destruction.
+const HOUSE_PATH = 'M22 3 L41 18 L37 18 L37 39 L7 39 L7 18 L3 18 Z';
+let sdUid = 0;
 function capitalTile(d, isPeak) {
     const pct = d.destroyed ? 100 : (d.last_pct_total || 0);
-    const stars = pct >= 100 ? 3 : pct >= 50 ? 2 : pct > 0 ? 1 : 0;
     const statusClass = districtStatusClass(d, isPeak);
     const cls = SD_CLASS[statusClass] || 'untouched';
     const tooltip = (d.attackers && d.attackers.length) ? ` title="${escapeHTML(attackersTooltip(d))}"` : '';
-    let center;
+    const fh = pct / 100 * 36;        // house interior spans y 3..39 (height 36)
+    const fy = (39 - fh).toFixed(1);
+    const uid = 'sdh' + (++sdUid);
+    let read;
     if (d.destroyed) {
-        center = `<span class="sd-big">${d.attacks}</span><span class="sd-unit">hit${d.attacks !== 1 ? 's' : ''}</span>`;
+        read = `<span class="sd-read">${d.attacks}<span class="u">hit${d.attacks !== 1 ? 's' : ''}</span></span>`;
     } else if (statusClass === 'partial') {
-        center = `<span class="sd-big">${pct}%</span><span class="sd-stars">${renderStars(stars)}</span>`;
+        read = `<span class="sd-read">${pct}%</span>`;
     } else {
         const medals = medalValue(d.level, isPeak);
-        center = medals ? `<span class="sd-medal">${medals}</span><span class="sd-unit">medals</span>` : `<span class="sd-dot"></span>`;
+        read = medals ? `<span class="sd-read gold">${medals}<span class="u">medals</span></span>` : '';
     }
+    const svg = `<svg viewBox="0 0 44 42" aria-hidden="true">`
+        + `<defs><clipPath id="${uid}"><path d="${HOUSE_PATH}"/></clipPath></defs>`
+        + `<rect clip-path="url(#${uid})" x="0" y="${fy}" width="44" height="${fh.toFixed(1)}" fill="currentColor" opacity="0.24"/>`
+        + `<path d="${HOUSE_PATH}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.92"/>`
+        + `</svg>`;
     return `<div class="sd ${cls}${isPeak ? ' peak' : ''}"${tooltip}>
-        <div class="sd-cell"><span class="sd-fill" style="height:${pct}%;"></span>${center}</div>
+        <div class="sd-house">${svg}${read}</div>
         <div class="sd-name">${escapeHTML(d.name)}</div>
         <div class="sd-lvl">Lvl ${d.level || '—'}</div>
     </div>`;
