@@ -135,7 +135,9 @@
         .wr-agg-big { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; color: var(--ops-raid); line-height: 1; }
         .wr-agg-lbl { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ops-ink-dim); }
         .wr-progress { margin-top: 11px; height: 6px; border-radius: 4px; background: var(--ops-surface-2); overflow: hidden; }
-        .wr-progress-fill { height: 100%; border-radius: 4px; background: var(--ops-win); width: 0; transition: width .9s cubic-bezier(0.22,1,0.36,1); }
+        /* Fill animates via transform (scaleX), not width — transform composites off the
+           main thread and never triggers layout. Rests at scaleX(0); JS sets the real value. */
+        .wr-progress-fill { height: 100%; width: 100%; border-radius: 4px; background: var(--ops-win); transform: scaleX(0); transform-origin: left center; transition: transform .9s cubic-bezier(0.22,1,0.36,1); }
         .wr-progress-cap { margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ops-ink-dim); }
         .wr-list { display: flex; flex-direction: column; }
         .wr-row { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--bord2); }
@@ -330,10 +332,46 @@
         .noshow-list { padding: 4px 16px 14px; display: flex; flex-wrap: wrap; gap: 8px; }
         .noshow-name { font-size: 12.5px; color: var(--ops-ink); background: var(--ops-surface-2); border: 1px solid var(--bord2); border-radius: 6px; padding: 4px 10px; }
 
+        /* ── ACCESSIBLE DISCLOSURE — keyboard/touch paths for data that used to live
+           only in hover tooltips. Popovers render in the native top layer, so they
+           escape the siege panel's overflow clip without a portal or z-index juggling. ── */
+        button.sd { border: none; background: transparent; font: inherit; text-align: center; cursor: pointer; }
+        button.sd:focus-visible { outline-offset: 4px; border-radius: 6px; }
+
+        .siege-pop, .info-pop {
+            position: fixed; margin: 0; inset: auto;
+            background: var(--ops-surface-2); border: 1px solid var(--ops-line); border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.5); padding: 10px 12px; color: var(--ops-ink);
+            font-family: 'Manrope', sans-serif;
+        }
+        .siege-pop::backdrop, .info-pop::backdrop { background: transparent; }
+        .siege-pop { max-width: 260px; }
+        .info-pop  { max-width: 300px; font-size: 12px; line-height: 1.55; }
+        .siege-pop-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ops-ink-dim); margin-bottom: 7px; }
+        .siege-pop-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 12.5px; padding: 3px 0; }
+        .siege-pop-row .nm { color: var(--ops-ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .siege-pop-row .vl { font-family: 'JetBrains Mono', monospace; color: var(--ops-ink-dim); white-space: nowrap; flex-shrink: 0; }
+        .siege-pop-row .st { color: var(--ops-star); letter-spacing: 1px; }
+
+        /* Small round "i" — a persistent, tappable entry to help text (not a hover-only title). */
+        .info-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 16px; height: 16px; border-radius: 50%; vertical-align: middle; margin-left: 6px; flex-shrink: 0;
+            border: 1px solid color-mix(in oklch, var(--ops-ink-dim) 50%, transparent); background: transparent;
+            color: var(--ops-ink-dim); font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700;
+            font-style: normal; line-height: 1; cursor: pointer; transition: color .12s, border-color .12s;
+        }
+        .info-btn:hover { color: var(--ops-ink); border-color: var(--ops-ink-dim); }
+
+        /* Chevron is a real button so the mobile roster row is keyboard/SR-operable
+           (the row itself stays tap-to-expand for mouse/touch convenience). */
+        .mr-chev-btn { border: none; background: transparent; padding: 4px; margin: -4px -4px -4px 0; color: var(--ops-ink-dim); cursor: pointer; display: flex; flex-shrink: 0; border-radius: 5px; }
+
         /* ── FOOTER / EMPTY ── */
         .page-footer { text-align: center; padding: 18px; color: var(--ops-ink-dim); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: 0.3px; }
         .empty-state { text-align: center; padding: 70px 24px; color: var(--ops-ink-dim); }
-        .empty-state p { font-size: 15px; font-family: 'Manrope', sans-serif; }
+        .empty-state p { font-size: 15px; font-family: 'Manrope', sans-serif; color: var(--ops-ink); }
+        .empty-sub { font-size: 12.5px; color: var(--ops-ink-dim); margin-top: 9px; max-width: 52ch; margin-left: auto; margin-right: auto; line-height: 1.5; }
 
         /* ── MOBILE ROSTER — a dense divided list below 641px, not spacious cards.
            The table's value is scanning many players at a glance; one row per player,
@@ -599,7 +637,7 @@
                 <div class="wr-empty">Every member has used all 6 attacks. ✓</div>
                 {% endif %}
                 {% if done %}
-                <button type="button" class="wr-done" onclick="toggleDone(this)"><span class="chev">▾</span> {{ done|length }} member{{ 's' if done|length != 1 else '' }} done</button>
+                <button type="button" class="wr-done" onclick="toggleDone(this)" aria-expanded="false"><span class="chev">▾</span> {{ done|length }} member{{ 's' if done|length != 1 else '' }} done</button>
                 <div class="wr-list wr-done-list" style="display:none;">
                     {% for r in done %}
                     <div class="wr-row">
@@ -693,7 +731,7 @@
     {% if player_data %}
     <div class="board-lead">
         <span class="board-title">Attack Leaderboard</span>
-        <span class="board-hint">Sorted by verdict — tap a row for the medal-impact breakdown</span>
+        <span class="board-hint">Sorted by verdict · tap a row for the medal-impact breakdown <button type="button" class="info-btn" aria-label="How the verdict score and Shift are calculated" onclick="showScoreInfo(this)">i</button></span>
     </div>
     <div class="table-scroll">
         <div class="table-wrapper">
@@ -732,9 +770,9 @@
     {% endif %}
 
     {% elif selected_raid %}
-    <div class="table-scroll"><div class="table-wrapper"><div class="empty-state"><p>No attack logs recorded for this raid weekend.</p></div></div></div>
+    <div class="table-scroll"><div class="table-wrapper"><div class="empty-state"><p>No attacks logged for this raid weekend.</p><p class="empty-sub">The attack leaderboard and siege map fill in here as members hit the enemy capital during the weekend. Check back once the raid is underway.</p></div></div></div>
     {% else %}
-    <div class="table-scroll"><div class="table-wrapper"><div class="empty-state"><p>No raid weekend data available yet.</p></div></div></div>
+    <div class="table-scroll"><div class="table-wrapper"><div class="empty-state"><p>No raid weekend data yet.</p><p class="empty-sub">Once a raid weekend syncs, its after-action report lands here — headline loot and medals, the capital siege map, and a per-player attack leaderboard.</p></div></div></div>
     {% endif %}
 
 </div>
@@ -845,7 +883,9 @@ function buildVerdictDetails(p) {
         const summaryCell = `<td rowspan="${span}" style="vertical-align:middle;border-left:1px solid var(--bord2);padding:8px 12px;">${summaryContent}</td>`;
         attacks.forEach((l, i) => {
             const adjColor = type === 'cleanup' ? 'var(--ops-ink-dim)' : 'var(--ops-gold)';
-            const rowBg = type === 'cleanup' ? 'opacity:0.5;' : type === 'solo_wipe' ? 'background:rgba(144,102,232,0.05);box-shadow:inset 3px 0 0 var(--purple);' : '';
+            // Solo-wipe rows read as such via the purple wash + the "⚡ Solo Wipe" summary
+            // badge — no left inset stripe (that recreates the banned >1px side-stripe accent).
+            const rowBg = type === 'cleanup' ? 'opacity:0.5;' : type === 'solo_wipe' ? 'background:color-mix(in oklch, var(--purple) 10%, transparent);' : '';
             const borderBottom = i < span - 1 ? 'border-bottom:1px dashed var(--bord2);' : '';
             rows += `<tr style="${rowBg}${borderBottom}">
                 ${i === 0 ? districtNameCell : ''}
@@ -911,6 +951,7 @@ function buildTable() {
     tbody.innerHTML = '';
     rows.forEach((p, idx) => {
         const profileUrl = '/player/' + encodeURIComponent((p.player_tag || '').replace('#', ''));
+        const detId = 'raiddet-' + (p.player_tag || '').replace(/[^\w-]/g, '');
         const leftBadge = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
         const row = document.createElement('tr');
         row.className = 'prow';
@@ -925,12 +966,12 @@ function buildTable() {
             <td><span class="solowipe-cell" style="color:${p.solo_wipes ? 'var(--green)' : 'var(--ops-ink-dim)'};">${p.solo_wipes}</span></td>
             <td style="text-align:center;">${signedImpact(p.overall_baseline_shift)}</td>
             <td><span class="judgment ${p.badge_class}">${escapeHTML(p.judge_label.split('(')[0].trim())}${p.att_count > 0 && p.score_100 > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${p.score_100}` : ''}</span></td>
-            <td><button type="button" class="action-btn details-toggle">Details</button></td>`;
+            <td><button type="button" class="action-btn details-toggle" aria-expanded="false" aria-controls="${detId}">Details</button></td>`;
 
         const detailRow = document.createElement('tr');
         detailRow.className = 'detail-row';
         detailRow.dataset.playerTag = p.player_tag;
-        detailRow.innerHTML = `<td class="detail-cell" colspan="7"><div class="detail-inner"></div></td>`;
+        detailRow.innerHTML = `<td class="detail-cell" colspan="7"><div class="detail-inner" id="${detId}"></div></td>`;
 
         const toggleButton = row.querySelector('.details-toggle');
         row.addEventListener('click', () => {
@@ -940,6 +981,7 @@ function buildTable() {
             }
             const expanded = detailRow.classList.toggle('expanded');
             toggleButton.textContent = expanded ? 'Close' : 'Details';
+            toggleButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         });
         tbody.appendChild(row);
         tbody.appendChild(detailRow);
@@ -966,7 +1008,7 @@ function shiftInline(v) {
     const c = v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--ops-ink-dim)';
     return `<span style="color:${c};">${v > 0 ? '+' : ''}${v.toFixed(2)}</span>`;
 }
-const MR_CHEV = `<span class="mr-chev" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 4 10 8 6 12"/></svg></span>`;
+const MR_CHEV_SVG = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 4 10 8 6 12"/></svg>`;
 
 // Dense divided list (one row per player), not spacious cards — matches the /battles
 // mobile pattern so many players stay scannable at a glance.
@@ -979,13 +1021,14 @@ function buildMobileCards(rows) {
         const isYou = myPlayerTag && p.player_tag === myPlayerTag;
         const leftTag = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
         const verdict = escapeHTML(p.judge_label.split('(')[0].trim()) + (p.att_count > 0 && p.score_100 > 0 ? ` · ${p.score_100}` : '');
+        const detailId = 'mrd-' + (p.player_tag || '').replace(/[^\w-]/g, '');
         const row = document.createElement('div');
         row.className = 'mr' + (isYou ? ' is-you' : '');
         row.innerHTML = `
             <div class="mr-top">
                 <div class="mr-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)}</a><span class="mr-tag">${escapeHTML(p.player_tag)}</span>${leftTag}</div>
                 <span class="judgment ${p.badge_class}" style="font-size:10px;padding:3px 9px;">${verdict}</span>
-                ${MR_CHEV}
+                <button type="button" class="mr-chev-btn" aria-expanded="false" aria-controls="${detailId}" aria-label="Toggle breakdown for ${escapeHTML(p.player_name)}"><span class="mr-chev" aria-hidden="true">${MR_CHEV_SVG}</span></button>
             </div>
             <div class="mr-stats">
                 <span title="Attacks used"><span class="mru">Atk</span>${p.att_count}/6</span>
@@ -993,15 +1036,20 @@ function buildMobileCards(rows) {
                 <span style="color:var(--ops-gold);" title="${p.capital_loot != null ? p.capital_loot.toLocaleString() : '—'} capital loot"><span class="mru">Loot</span>${fmtShort(p.capital_loot)}</span>
                 <span title="Solo wipes"><span class="mru">Wipes</span><span style="color:${p.solo_wipes ? 'var(--green)' : 'var(--ops-ink-dim)'};">${p.solo_wipes}</span></span>
             </div>
-            <div class="mr-detail" data-player-tag="${escapeHTML(p.player_tag)}"></div>`;
+            <div class="mr-detail" id="${detailId}" data-player-tag="${escapeHTML(p.player_tag)}"></div>`;
         const detail = row.querySelector('.mr-detail');
-        row.addEventListener('click', () => {
+        const chevBtn = row.querySelector('.mr-chev-btn');
+        const toggleRow = () => {
             if (!detail.dataset.built) { detail.innerHTML = buildVerdictDetails(p); detail.dataset.built = 'true'; }
-            detail.classList.toggle('expanded');
-            row.classList.toggle('expanded');
-        });
+            const open = detail.classList.toggle('expanded');
+            row.classList.toggle('expanded', open);
+            chevBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        };
+        // Row stays tap-to-expand for mouse/touch; the chevron button is the keyboard/SR path.
+        row.addEventListener('click', e => { if (e.target.closest('a') || e.target.closest('.mr-chev-btn')) return; toggleRow(); });
+        chevBtn.addEventListener('click', e => { e.stopPropagation(); toggleRow(); });
         list.appendChild(row);
-        if (expandedTags.has(p.player_tag)) row.click();
+        if (expandedTags.has(p.player_tag)) toggleRow();
     });
 }
 
@@ -1016,10 +1064,13 @@ function sortTable(col) {
 function updateSortHeaders() {
     document.querySelectorAll('#statsTable th').forEach(th => {
         th.classList.remove('sort-active', 'asc', 'desc');
-        if (!currentSort.column || !currentSort.direction) return;
+        th.removeAttribute('aria-sort');
         const fn = th.getAttribute('onclick') || '';
         const m = fn.match(/'([^']+)'/);
-        if (m && m[1] === currentSort.column) th.classList.add('sort-active', currentSort.direction);
+        if (m && currentSort.column && currentSort.direction && m[1] === currentSort.column) {
+            th.classList.add('sort-active', currentSort.direction);
+            th.setAttribute('aria-sort', currentSort.direction === 'asc' ? 'ascending' : 'descending');
+        }
     });
 }
 
@@ -1028,6 +1079,7 @@ function toggleDone(btn) {
     const open = list.style.display === 'none';
     list.style.display = open ? '' : 'none';
     btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 // Collapsible console panels (war-room / siege) — only interactive on mobile; on
@@ -1103,6 +1155,8 @@ const SD_CLASS = { 'finished-good': 'good', 'finished-ok': 'ok', 'finished-bad':
 // instead of the old CSS-border triangle; the interior fills bottom-up = destruction.
 const HOUSE_PATH = 'M22 3 L41 18 L37 18 L37 39 L7 39 L7 18 L3 18 Z';
 let sdUid = 0;
+const siegeAtk = {};   // uid → attacker list, for the disclosure popover
+const siegeMeta = {};  // uid → { name, level }
 function capitalTile(d, isPeak) {
     const pct = d.destroyed ? 100 : (d.last_pct_total || 0);
     const statusClass = districtStatusClass(d, isPeak);
@@ -1125,11 +1179,20 @@ function capitalTile(d, isPeak) {
         + `<rect clip-path="url(#${uid})" x="0" y="${fy}" width="44" height="${fh.toFixed(1)}" fill="currentColor" opacity="0.24"/>`
         + `<path d="${HOUSE_PATH}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.92"/>`
         + `</svg>`;
-    return `<div class="sd ${cls}${isPeak ? ' peak' : ''}"${tooltip}>
-        <div class="sd-house">${svg}${read}</div>
+    const inner = `<div class="sd-house">${svg}${read}</div>
         <div class="sd-name">${escapeHTML(d.name)}</div>
-        <div class="sd-lvl">Lvl ${d.level || '—'}</div>
-    </div>`;
+        <div class="sd-lvl">Lvl ${d.level || '—'}</div>`;
+    // Touched districts carry an attacker breakdown that used to hide in a hover-only
+    // title. Render those as a real <button> that opens a keyboard/touch popover; leave
+    // untouched tiles (no hidden data — the readout already shows the medal prize) inert.
+    if (d.attackers && d.attackers.length) {
+        siegeAtk[uid] = d.attackers;
+        siegeMeta[uid] = { name: d.name, level: d.level };
+        const statusText = d.destroyed ? `destroyed in ${d.attacks} hit${d.attacks !== 1 ? 's' : ''}`
+                         : (statusClass === 'partial' ? `${pct}% destroyed` : 'untouched');
+        return `<button type="button" class="sd ${cls}${isPeak ? ' peak' : ''}" data-uid="${uid}" aria-expanded="false" aria-label="${escapeHTML(d.name)}, ${statusText}. Show attackers">${inner}</button>`;
+    }
+    return `<div class="sd ${cls}${isPeak ? ' peak' : ''}"${tooltip}>${inner}</div>`;
 }
 function clanPyramidHtml(clan) {
     const peakHtml = `<div class="capital-row">${capitalTile(clan.peakDistrict, true)}</div>`;
@@ -1152,7 +1215,7 @@ function clanCardHtml(clan) {
 }
 function siegeDot(d, isPeak) {
     const cls = districtStatusClass(d, isPeak);
-    const color = cls === 'finished-good' ? 'var(--green)' : cls === 'finished-ok' ? 'var(--orange)' : cls === 'finished-bad' ? 'var(--red)' : cls === 'partial' ? 'var(--blue)' : '#4a5260';
+    const color = cls === 'finished-good' ? 'var(--green)' : cls === 'finished-ok' ? 'var(--orange)' : cls === 'finished-bad' ? 'var(--red)' : cls === 'partial' ? 'var(--blue)' : 'var(--bord2)';
     return `<span class="siege-dot" style="background:${color};"></span>`;
 }
 function clanSummaryHtml(clan) {
@@ -1160,7 +1223,7 @@ function clanSummaryHtml(clan) {
     const dots = [siegeDot(clan.peakDistrict, true), ...clan.otherDistricts.map(d => siegeDot(d, false))].join('');
     const cleared = clan.remaining === 0 ? ` <span class="siege-cleared-tick">✓</span>` : '';
     return `<div class="siege-sum">
-        <button type="button" class="siege-sum-head" onclick="toggleSiegeSum(this)">
+        <button type="button" class="siege-sum-head" onclick="toggleSiegeSum(this)" aria-expanded="false">
             ${badgeHtml}
             <div class="siege-sum-id"><div class="siege-sum-name">${escapeHTML(clan.name)}${cleared}</div><div class="siege-sum-meta">${clan.destroyedCount}/${clan.districtCount} districts · avg ${clan.avgAtk}</div></div>
             <span class="siege-dots">${dots}</span>
@@ -1174,7 +1237,72 @@ function toggleSiegeSum(btn) {
     const open = !body.classList.contains('open');
     body.classList.toggle('open', open);
     btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
+// ── DISCLOSURE POPOVERS (native top-layer, so they escape the siege panel's overflow
+//    clip). Keyboard + touch reachable — the a11y replacement for hover-only tooltips. ──
+let siegeOpenBtn = null;
+function positionPop(pop, btn) {
+    const r = btn.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    let left = r.left + r.width / 2 - pr.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - pr.width - 8));
+    let top = r.top - pr.height - 8;
+    if (top < 8) top = r.bottom + 8;              // flip below when there's no room above
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+}
+function getSiegePop() {
+    let pop = document.getElementById('siegePop');
+    if (!pop) {
+        pop = document.createElement('div');
+        pop.id = 'siegePop';
+        pop.className = 'siege-pop';
+        pop.setAttribute('popover', 'auto');
+        document.body.appendChild(pop);
+        pop.addEventListener('toggle', e => {
+            if (e.newState === 'closed' && siegeOpenBtn) { siegeOpenBtn.setAttribute('aria-expanded', 'false'); siegeOpenBtn = null; }
+        });
+    }
+    return pop;
+}
+function openSiegePop(btn) {
+    const uid = btn.dataset.uid;
+    const list = siegeAtk[uid] || [];
+    const meta = siegeMeta[uid] || { name: '—' };
+    const pop = getSiegePop();
+    pop.innerHTML = `<div class="siege-pop-title">${escapeHTML(meta.name)}${meta.level ? ' · Lvl ' + meta.level : ''}</div>` +
+        (list.length
+            ? list.map(a => `<div class="siege-pop-row"><span class="nm">${escapeHTML(a.name)}</span><span class="vl">${a.percentage}% <span class="st">${'★'.repeat(a.stars)}${'☆'.repeat(Math.max(0, 3 - a.stars))}</span></span></div>`).join('')
+            : `<div class="siege-pop-row"><span class="nm" style="color:var(--ops-ink-dim);">No attackers recorded</span></div>`);
+    if (pop.matches(':popover-open')) pop.hidePopover();
+    pop.showPopover();
+    positionPop(pop, btn);
+    if (siegeOpenBtn && siegeOpenBtn !== btn) siegeOpenBtn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-expanded', 'true');
+    siegeOpenBtn = btn;
+}
+
+const SCORE_INFO = "Verdict scores each player's raid: the sum of their level-adjusted destruction %, divided by 6 attacks, with a compounding bonus for solo-wiping whole districts — then mapped to a word (Godlike → Useless). Shift is separate: how much your own attacks pulled the clan's medals-per-attack average up (green) or down (red). Open any row for the full breakdown.";
+function getInfoPop() {
+    let pop = document.getElementById('infoPop');
+    if (!pop) {
+        pop = document.createElement('div');
+        pop.id = 'infoPop';
+        pop.className = 'info-pop';
+        pop.setAttribute('popover', 'auto');
+        document.body.appendChild(pop);
+    }
+    return pop;
+}
+function showScoreInfo(btn) {
+    const pop = getInfoPop();
+    if (pop.matches(':popover-open')) { pop.hidePopover(); return; }
+    pop.textContent = SCORE_INFO;
+    pop.showPopover();
+    positionPop(pop, btn);
+}
+
 function buildSiegeMap() {
     const clans = {};
     playerData.forEach(p => (p.attack_logs || []).forEach(l => {
@@ -1192,7 +1320,7 @@ function buildSiegeMap() {
     const clanList = Object.values(clans);
     const siegeBody = document.getElementById('siegeBody');
     if (!siegeBody) return;
-    if (!clanList.length) { siegeBody.innerHTML = '<div style="padding:16px;color:var(--ops-ink-dim);font-size:13px;">No enemy data recorded yet.</div>'; return; }
+    if (!clanList.length) { siegeBody.innerHTML = '<div style="padding:16px;color:var(--ops-ink-dim);font-size:13px;line-height:1.5;">No enemy capitals logged yet — the siege map draws each district as a little house and fills it as your attacks land.</div>'; return; }
 
     clanList.forEach(clan => {
         const districts = Object.values(clan.districts);
@@ -1211,26 +1339,56 @@ function buildSiegeMap() {
     });
     clanList.sort((a, b) => b.lastLogId - a.lastLogId);
 
-    if (RAID_STATE === 'ended') {
-        siegeBody.innerHTML = clanList.map(clanSummaryHtml).join('');
+    // Legend renders in BOTH states — the ended after-action view encodes clear-efficiency
+    // by colour too (summary dots + tile outlines), so it needs the key just as much as the
+    // live view did. Omit the "In progress" swatch once the raid has ended (moot by then).
+    const { nonPeak: npT, peak: pT } = FINISHED_THRESHOLDS;
+    const ended = RAID_STATE === 'ended';
+    const legendHtml = `<div class="capital-legend">
+        <span class="cl-item"><span class="cl-dot" style="background:var(--green);"></span>Efficient (&le;${npT.good} atk · peak &le;${pT.good})</span>
+        <span class="cl-item"><span class="cl-dot" style="background:var(--orange);"></span>${npT.ok} atk · peak ${pT.ok}</span>
+        <span class="cl-item"><span class="cl-dot" style="background:var(--red);"></span>${npT.ok + 1}+ atk · peak ${pT.ok + 1}+</span>
+        ${ended ? '' : '<span class="cl-item"><span class="cl-dot" style="background:var(--blue);"></span>In progress</span>'}
+        <span class="cl-item"><span class="cl-dot" style="background:var(--bord2);"></span>Untouched</span></div>`;
+
+    if (ended) {
+        siegeBody.innerHTML = `${legendHtml}${clanList.map(clanSummaryHtml).join('')}`;
     } else {
-        const { nonPeak: npT, peak: pT } = FINISHED_THRESHOLDS;
-        const legendHtml = `<div class="capital-legend">
-            <span class="cl-item"><span class="cl-dot" style="background:var(--green);"></span>Efficient (&le;${npT.good} atk · peak &le;${pT.good})</span>
-            <span class="cl-item"><span class="cl-dot" style="background:var(--orange);"></span>${npT.ok} atk · peak ${pT.ok}</span>
-            <span class="cl-item"><span class="cl-dot" style="background:var(--red);"></span>${npT.ok + 1}+ atk · peak ${pT.ok + 1}+</span>
-            <span class="cl-item"><span class="cl-dot" style="background:var(--blue);"></span>In progress</span>
-            <span class="cl-item"><span class="cl-dot" style="background:var(--bord2);"></span>Untouched</span></div>`;
         siegeBody.innerHTML = `${legendHtml}<div class="siege-grid">${clanList.map(clanCardHtml).join('')}</div>`;
+    }
+
+    // Delegated tile-click → attacker popover. Bound once on the stable container.
+    if (!siegeBody.dataset.popBound) {
+        siegeBody.dataset.popBound = '1';
+        siegeBody.addEventListener('click', e => {
+            const btn = e.target.closest('.sd[data-uid]');
+            if (!btn || !siegeBody.contains(btn)) return;
+            if (siegeOpenBtn === btn) { getSiegePop().hidePopover(); return; }
+            openSiegePop(btn);
+        });
+        // A click-anchored popover shouldn't hang in place while the panel scrolls under it.
+        siegeBody.addEventListener('scroll', () => {
+            const p = document.getElementById('siegePop');
+            if (p && p.matches(':popover-open')) p.hidePopover();
+        }, true);
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     buildTable();
     buildSiegeMap();
+
+    // Sortable column headers are keyboard-operable (Enter/Space) and announce their
+    // sort state; th stays a columnheader (no role override) so table semantics hold.
+    document.querySelectorAll('#statsTable th.sortable').forEach(th => {
+        th.setAttribute('tabindex', '0');
+        th.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); th.click(); }
+        });
+    });
     document.querySelectorAll('.wr-progress-fill').forEach(el => {
         const pct = parseFloat(el.dataset.pct) || 0;
-        requestAnimationFrame(() => { el.style.width = pct + '%'; });
+        requestAnimationFrame(() => { el.style.transform = 'scaleX(' + (pct / 100).toFixed(4) + ')'; });
     });
 
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
