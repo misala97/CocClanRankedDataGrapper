@@ -204,7 +204,7 @@ Quiet at rest, decisive on interaction: every interactive element in this system
 
 ### Navigation
 - **Style:** sticky top bar, `backdrop-filter: blur(20px)` over a semi-transparent Gunmetal Black — the one sanctioned use of glass-style blur in the system, justified because it's a functional always-on-top sticky header, not decoration.
-- **Active state:** background tint only (`color-mix` of Threat Magenta at low opacity) on desktop; **never** a side-stripe border, even though one variant of the mobile nav currently still needs that fix applied.
+- **Active state:** background tint only (`color-mix` of Threat Magenta at low opacity), on desktop (`.nl-active`) and mobile (`.nmp-active`) alike; **never** a side-stripe border.
 - **Status dots:** 7px filled circles, color = sync-health state, each keyboard-focusable with a spoken-word `aria-label` ("War sync: Error, 481h ago") rather than relying on the hover-only visual tooltip alone.
 - **Mobile:** collapses to a full-width slide-down panel below 900px; dropdown submenus are hover-only on desktop (a known gap, not yet keyboard-reachable — see Do's and Don'ts).
 
@@ -231,13 +231,14 @@ Quiet at rest, decisive on interaction: every interactive element in this system
 - **Do** give every interactive card the full state chain: resting, hover (lift + tonal shift), focus-visible (2px Threat Magenta outline), active/press (scale-down, faster transition). A card missing `:active` feedback is an unfinished component here.
 - **Do** respect `prefers-reduced-motion: reduce` for every transform-based hover/press effect and the live-dot pulse — drop straight to the resting position, don't just shorten the transition.
 - **Do** reuse the Compact Row component wherever a section needs a quiet secondary tier, instead of inventing a new small-card pattern per page.
+- **Do** confine gradient fills to the **brand marks only** — the nav crest and the user-avatar chip (small identity glyphs), plus the status-strip health hairline. Every surface, card, and heading stays flat; depth is tonal (bg → surface → raised), never a gradient. (Gradient *text* is separately banned below.)
 
 ### Don't:
-- **Don't** use a `border-left`/`border-right` stripe greater than 1px as a colored accent on any card, list item, or nav-active state — this is PRODUCT.md and this system's explicit absolute ban. (One known violation remains on the mobile nav's active-link state; treat it as a bug, not precedent.)
+- **Don't** use a `border-left`/`border-right` stripe greater than 1px as a colored accent on any card, list item, or nav-active state — this is PRODUCT.md and this system's explicit absolute ban.
 - **Don't** use `background-clip: text` gradient text for any heading — emphasis comes from color, weight, or size, never a gradient fill.
 - **Don't** reach for a drop shadow to make a card read as "elevated" or "clickable." Depth is tonal (bg → surface → raised surface); shadows are reserved for chrome that's genuinely floating (dropdowns, tooltips) or small colored status glows.
 - **Don't** build a flat grid of 6+ identically-shaped icon+heading+text cards. If a section has more than ~4 meaningfully different items, split into a featured tier (Featured Tile) and a quiet tier (Compact Row) instead — this is the direct fix for the "identical card grids" AI-slop tell.
-- **Don't** let raw text emoji stand in for an icon anywhere. Every icon slot is either a real image asset or an `aria-hidden` inline SVG matching the existing line-icon language (stroke-based, `currentColor`, 16–24px).
+- **Don't** use raw text emoji as a **functional UI icon** — nav, controls, buttons, form fields, stat labels. Those are always a real image asset or an `aria-hidden` inline SVG matching the line-icon language (stroke-based, `currentColor`, 16–24px). **Sanctioned exception:** emoji are allowed as a deliberate accent in **celebratory / personality moments** — award chips, the MVP crown, a triple-wipe honor — where they carry the warmth PRODUCT.md explicitly asks for ("inviting, not sterile"). The line: an emoji may decorate a *moment*, never label a *control*.
 - **Don't** let Threat Magenta answer more than one question on a single screen. It means "interactive/primary" — if a mode-specific color is also needed there, it must be a distinct hue (see War Amber).
 - **Don't** ship a hover-only interaction with no keyboard equivalent. The nav's mode dropdowns are the one place this system currently fails that rule — fix forward from here, don't repeat it.
 - **Don't** reflow a dense data table into a stack of spacious per-player cards on mobile. The table's whole value is at-a-glance comparison across rows; a card-per-player loses it. Drop to the divided roster-row list instead (see Components → Mobile Roster). This has been re-introduced and removed more than once — it is a standing preference, not a per-page judgment call.
