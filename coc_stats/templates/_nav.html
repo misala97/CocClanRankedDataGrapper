@@ -209,7 +209,7 @@
             <a href="/clan"            class="nl {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nl-active{% endif %}">Clan</a>
             {% if is_super_admin %}
             <a href="/admin" class="nl {% if _p.startswith('/admin') %}nl-active{% endif %}" style="position:relative;">
-                Admin{% if newbie_check_count > 0 %}<span style="position:absolute;top:0px;right:-2px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:15px;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
+                Admin{% if newbie_check_count > 0 %}<span style="position:absolute;top:0px;right:-2px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--red-solid);color:#fff;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:15px;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
             </a>
             {% endif %}
         </div>
@@ -234,7 +234,7 @@
             <a href="/clan"            class="nmp-link {% if _p.startswith('/clan') and not _p.startswith('/clan/') %}nmp-active{% endif %}">Clan</a>
             {% if is_super_admin %}
             <a href="/admin" class="nmp-link {% if _p.startswith('/admin') %}nmp-active{% endif %}" style="position:relative;">
-                Admin{% if newbie_check_count > 0 %} <span style="display:inline-block;min-width:16px;padding:1px 5px;border-radius:8px;background:var(--red);color:#fff;font-size:10px;font-weight:700;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
+                Admin{% if newbie_check_count > 0 %} <span style="display:inline-block;min-width:16px;padding:1px 5px;border-radius:8px;background:var(--red-solid);color:#fff;font-size:10px;font-weight:700;text-align:center;">{{ newbie_check_count }}</span>{% endif %}
             </a>
             {% endif %}
         </div>
