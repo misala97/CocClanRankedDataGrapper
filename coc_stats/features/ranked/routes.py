@@ -196,6 +196,13 @@ def ranked_weeks_page():
             'group_total_attacks':  ranked_week.group_total_attacks  if ranked_week else None,
             'group_full_attackers': ranked_week.group_full_attackers if ranked_week else None,
             'league_tier_prev': prev_ranked_week.league_tier if prev_ranked_week else None,
+            # Week-over-week movement on the standing spine. prev_ranked_week is already
+            # loaded (its season is in season_filter), so this is a free passthrough — the
+            # roster row shows rank/trophy delta vs last week. rank_prev is only meaningful
+            # when the league is unchanged (a new league group = a different 1–100 ladder);
+            # the template suppresses the rank delta when league_tier_prev != league_tier.
+            'rank_prev': rank_prev,
+            'trophies_prev': prev_ranked_week.trophies if prev_ranked_week else None,
         })
 
     week_data.sort(key=lambda item: (item['rank'] or 9999, item['player_name'] or ''))
