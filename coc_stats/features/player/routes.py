@@ -933,11 +933,19 @@ def player_profile(tag):
                 'judge_label':      judge_l,
             })
 
+    # Clan standing (approved backend addition): rank the viewed player among
+    # clanmates on Activity + Skill for each period, so the hero can show a
+    # "#5 / 42 · top 12%" flex that updates client-side with the period toggle.
+    in_clan_tags     = [r.tag for r in Player.query.filter(Player.in_clan == True)
+                        .with_entities(Player.tag).all()]
+    standing_periods = _clan_standing_all_periods(actual_tag, in_clan_tags)
+
     return render_template('player/player_profile.html',
                            player=player,
                            activity=activity,
                            activity_periods=activity_periods,
                            skill_periods=skill_periods,
+                           standing_periods=standing_periods,
                            ranked_history=ranked_history,
                            battle_history=battle_history,
                            raid_history=raid_history,
@@ -1245,6 +1253,66 @@ def _calculate_scores_bulk(player_tags, period='month'):
         }
 
     return results
+
+
+# Clan-wide bulk scores are identical for every profile viewed and only change
+# when the underlying logs re-sync, so recomputing them on each page load (3
+# periods × ~0.26s = ~0.8s) is pure waste. Cache per (period, roster) with a
+# short TTL: the first view after a sync warms it, the rest reuse it. Keyed on a
+# hash of the roster so a join/leave auto-invalidates; TTL bounds staleness.
+_BULK_STANDING_CACHE = {}          # (period, roster_hash) -> (expires_at, results)
+_BULK_STANDING_TTL   = 300         # seconds
+
+
+def _bulk_scores_cached(in_clan_tags, period):
+    key = (period, hash(frozenset(in_clan_tags)))
+    now = dt.datetime.now().timestamp()
+    hit = _BULK_STANDING_CACHE.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+    results = _calculate_scores_bulk(in_clan_tags, period)
+    _BULK_STANDING_CACHE[key] = (now + _BULK_STANDING_TTL, results)
+    return results
+
+
+def _clan_standing_all_periods(player_tag, in_clan_tags):
+    """Rank the viewed player among clanmates on Activity + Skill, per period.
+
+    Reuses the (cached) /clan bulk path. A dimension is ranked only among players
+    who HAVE data for it, so a no-data player doesn't inflate the field or get a
+    phantom placement. A left-clan player (not in the roster) is scored on its own
+    and folded into the field so it still gets a placement.
+
+    Returns {period: {activity_rank, activity_size, activity_pct, activity_has_data,
+                      skill_rank, skill_size, skill_pct, skill_has_data}}.
+    Rank is standard competition ranking: 1 + count of strictly-higher scores.
+    """
+    out = {}
+    for period in ('week', 'month', '6months'):
+        bulk = _bulk_scores_cached(in_clan_tags, period)
+        in_roster = player_tag in bulk
+        me = bulk.get(player_tag) or _calculate_scores_bulk([player_tag], period).get(player_tag, {})
+        row = {}
+        for dim in ('activity', 'skill'):
+            me_dim = me.get(dim, {})
+            has    = bool(me_dim.get('has_data'))
+            if has:
+                my_score = me_dim.get('score', 0)
+                scores   = [d[dim]['score'] for d in bulk.values()
+                            if d.get(dim, {}).get('has_data')]
+                if not in_roster:
+                    scores = scores + [my_score]   # count the viewed player in the field
+                size = len(scores)
+                rank = 1 + sum(1 for s in scores if s > my_score)
+                pct  = round(rank / size * 100) if size else 0
+            else:
+                size = rank = pct = 0
+            row[f'{dim}_rank']     = rank
+            row[f'{dim}_size']     = size
+            row[f'{dim}_pct']      = pct
+            row[f'{dim}_has_data'] = has
+        out[period] = row
+    return out
 
 
 @player_bp.route('/clan')

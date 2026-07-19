@@ -45,6 +45,14 @@
             --purple:  oklch(0.62 0.170 290);
             --orange:  oklch(0.68 0.170 55);
 
+            /* Real in-game loot hues, canonical sitewide (OKLCH). A player's gold /
+               elixir / dark reads identically on every page that shows loot — Battle
+               History and the Player profile both point here instead of redefining
+               hex locally. */
+            --loot-gold:   oklch(0.80 0.148 82);
+            --loot-elixir: oklch(0.64 0.216 341);
+            --loot-dark:   oklch(0.67 0.093 297);
+
             --ops-bg: var(--bg); --ops-surface: var(--surface); --ops-surface-2: var(--surf2);
             --ops-line: var(--border); --ops-ink: var(--text); --ops-ink-dim: var(--muted);
             --ops-gold: var(--accent); --ops-elixir: var(--purple); --ops-raid: var(--red);

@@ -3,12 +3,10 @@
 {% set page_title = 'Battle History – CoC Analytics' %}
 {% include '_head.html' %}
 
-        /* Real in-game loot hues — this page is a ledger of the three resources,
-           so they get their own accurate palette rather than reusing UI tokens. */
+        /* --loot-gold / --loot-elixir / --loot-dark are canonical sitewide tokens
+           now (see _head.html) so a player's loot reads identically here and on the
+           Player profile. Only the page-specific dark-elixir fill + easing stay local. */
         :root {
-            --loot-gold:      #f5b921;
-            --loot-elixir:    #d954d1;
-            --loot-dark:      #9d8fd4;
             --loot-dark-fill: #4a2f66;
             --ease: cubic-bezier(0.25, 1, 0.5, 1);
         }
