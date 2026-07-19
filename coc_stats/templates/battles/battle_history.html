@@ -90,7 +90,7 @@
             flex-shrink: 0; text-align: right; padding-right: 6px;
             position: sticky; left: 0; background: var(--bg); z-index: 1;
         }
-        .heat-cell { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; cursor: default; transition: transform .1s, outline-color .1s; outline: 1px solid transparent; }
+        .heat-cell { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; cursor: default; transition: transform .1s, outline-color .1s, opacity .35s var(--ease) calc(var(--c, 0) * 14ms); outline: 1px solid transparent; }
         .heat-cell:hover { transform: scale(1.15); outline: 1px solid color-mix(in oklch, var(--accent) 60%, transparent); }
         .heat-cell:focus-visible { transform: scale(1.15); outline: 2px solid var(--accent); outline-offset: 1px; z-index: 2; position: relative; }
 
@@ -181,7 +181,10 @@
         .star-dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
         .sd-label { font-size: 1.05em; letter-spacing: 1px; width: 46px; flex-shrink: 0; }
         .sd-bar-wrap { flex: 1; height: 8px; background: var(--surf2); border-radius: 4px; overflow: hidden; }
-        .sd-bar { height: 100%; width: 100%; border-radius: 4px; transform-origin: left; transform: scaleX(0); transition: transform .3s var(--ease); }
+        /* Rests at its real fill (scaleX(--fill)) — full/correct by default. The sweep is
+           played by temporarily adding .sweep-bars (→ scaleX(0)) then removing it, so the
+           bar transitions up to its fill; if that never animates it still rests full. */
+        .sd-bar { height: 100%; width: 100%; border-radius: 4px; transform-origin: left; transform: scaleX(var(--fill, 1)); transition: transform .35s var(--ease); }
         .sd-pct { width: 36px; text-align: right; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 11px; flex-shrink: 0; }
         .sd-count { width: 30px; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 10px; flex-shrink: 0; }
         .qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
@@ -283,6 +286,32 @@
             .container { padding-top: 20px; padding-bottom: 20px; }
             .table-scroll { display: none !important; }
             #mobileList { display: flex; }
+        }
+
+        /* ── MOTION: detail reveal-slide, star-bar sweep, heatmap brighten-wave, card hover.
+           Everything here is interaction-triggered (a detail opens) or transition-based, so
+           it degrades to the visible resting state and never gates data on an animation
+           firing. reveal-in animates transform only (content stays visible if frozen);
+           .sd-bar / heatmap use transitions (jump to the end value if frozen). */
+        @keyframes reveal-in { from { transform: translateY(-6px); } to { transform: none; } }
+        .detail-row.expanded .detail-inner, .mc-detail.expanded, #recentBody { animation: reveal-in .18s var(--ease); }
+
+        /* Heatmap cells brighten in a left-to-right wave when a detail opens. Resting opacity
+           is 1; .heat-in only dims them while JS arms the wave, then it's removed — a frozen
+           renderer or no-JS still ends with the full heatmap shown. Same base-full + temp-dim
+           pattern arms the star bars (.sweep-bars). */
+        .heat-in .heat-cell { opacity: 0; }
+        .sweep-bars .sd-bar { transform: scaleX(0); }
+
+        .qs-card { transition: transform .15s var(--ease), border-color .15s var(--ease), background .15s var(--ease); }
+        .qs-card:hover { transform: translateY(-1px); border-color: color-mix(in oklch, var(--accent) 38%, var(--bord2)); background: color-mix(in oklch, var(--accent) 5%, var(--surf2)); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .sd-bar { transition: none; }
+            .heat-cell { transition: transform .1s, outline-color .1s; }
+            .heat-in .heat-cell { opacity: 1; }
+            .detail-row.expanded .detail-inner, .mc-detail.expanded, #recentBody { animation: none; }
+            .qs-card:hover { transform: none; }
         }
     </style>
 </head>
@@ -541,7 +570,7 @@
             const cells = Array.from({length: 24}, (_, h) => {
                 const c = grid[di][h];
                 const tip = c === 0 ? `${day} ${h}:00 — no attacks` : `${day} ${h}:00 — ${c} attack${c > 1 ? 's' : ''}`;
-                return `<div class="heat-cell" style="background:${heatColor(c, maxCount)};" title="${tip}" tabindex="0" role="img" aria-label="${tip}"></div>`;
+                return `<div class="heat-cell" style="--c:${h};background:${heatColor(c, maxCount)};" title="${tip}" tabindex="0" role="img" aria-label="${tip}"></div>`;
             }).join('');
             return `<div class="heat-row"><span class="heat-day">${day}</span>${cells}</div>`;
         }).join('');
@@ -572,7 +601,7 @@
             const pct  = total ? Math.round(cnt / total * 100) : 0;
             return `<div class="star-dist-row">
                 <span class="sd-label">${STAR_LABELS[s]}</span>
-                <div class="sd-bar-wrap"><div class="sd-bar" style="transform:scaleX(${pct / 100});background:${STAR_COLORS[s]}"></div></div>
+                <div class="sd-bar-wrap"><div class="sd-bar" style="--fill:${pct / 100};background:${STAR_COLORS[s]}"></div></div>
                 <span class="sd-pct">${pct}%</span>
                 <span class="sd-count">${cnt}×</span>
             </div>`;
@@ -693,6 +722,26 @@
         chevron.classList.toggle('open', open);
     }
 
+    // Replays the detail's entrance micro-motion each time it opens: the star-distribution
+    // bars sweep 0 -> their share, and the heatmap brightens in a left-to-right wave. Both
+    // use transitions (not keyframes), so a frozen renderer lands on the full/visible resting
+    // state — never blank. reduced-motion: set the final values with no transition.
+    // Plays the detail's entrance micro-motion: star bars sweep to their fill, heatmap
+    // brightens in a wave. Both rest at their FULL value in CSS; we only arm a temporary
+    // "empty" class, force a reflow, then release it so the transition runs — triggered
+    // synchronously (no rAF, which doesn't fire in offscreen renderers), and if the
+    // transition can't animate the element simply stays at its full resting state.
+    function animateDetail(container) {
+        if (!container) return;
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;  // rests full already
+        const grid = container.querySelector('.heat-grid');
+        container.classList.add('sweep-bars');
+        if (grid) grid.classList.add('heat-in');
+        void container.offsetWidth;                     // commit the empty/dim state
+        container.classList.remove('sweep-bars');       // → bars transition to their --fill
+        if (grid) grid.classList.remove('heat-in');     // → heatmap brightens in a wave
+    }
+
     function buildMobileCards(rows) {
         const list = document.getElementById('mobileList');
         if (!list) return;
@@ -728,8 +777,9 @@
                     detail.innerHTML = buildDetailTable(p.attack_logs);
                     detail.dataset.built = 'true';
                 }
-                detail.classList.toggle('expanded');
+                const expanded = detail.classList.toggle('expanded');
                 row.classList.toggle('expanded');
+                if (expanded) animateDetail(detail);
             });
             list.appendChild(row);
             if (expandedTags.has(p.player_tag)) row.click();
@@ -793,6 +843,7 @@
                 }
                 const expanded = detailRow.classList.toggle('expanded');
                 toggleButton.textContent = expanded ? 'Close' : 'Details';
+                if (expanded) animateDetail(detailRow.querySelector('.detail-inner'));
             });
 
             tbody.appendChild(row);
