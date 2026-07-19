@@ -370,6 +370,14 @@
            class that might not fire. All easings are ease-out-quint (no bounce/elastic). */
         .sd-house { transition: transform .18s cubic-bezier(0.22, 1, 0.36, 1); }
         .sd:hover .sd-house { transform: translateY(-2px); filter: drop-shadow(0 3px 5px color-mix(in oklch, var(--sd-color) 32%, transparent)); }
+        /* Houses fill on load — the fill rises from empty. SAFE because the RESTING
+           state is the full fill (scaleY 1, no animation): JS adds .filling to play the
+           rise, then removes it on a timer, so if animations are frozen (offscreen /
+           headless) or JS is off, the fill still ends up shown — never a blank siege.
+           `backwards` gives staggered houses a collapsed start (no full→collapse flash). */
+        #siegeBody rect[clip-path] { transform-box: fill-box; transform-origin: 50% 100%; }
+        @keyframes fill-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+        #siegeBody.filling rect[clip-path] { animation: fill-rise .55s cubic-bezier(0.22, 1, 0.36, 1) backwards; animation-delay: var(--fill-delay, 0ms); }
 
         /* Additive glow only — box-shadow, so the crown icon itself is always visible;
            at 0% (or if frozen) there's simply no glow, never a hidden icon. */
@@ -389,6 +397,7 @@
             .wr-done .chev, .siege-sum-chev, .feed-chev, .panel-chev, .mr-chev, .noshow-tail > summary::before { transition: none; }
             .sd-house { transition: none !important; }
             .sd:hover .sd-house { transform: none !important; filter: none !important; }
+            #siegeBody.filling rect[clip-path] { animation: none !important; }
             .mvp-crown.lit { animation: none !important; }
             .detail-row.expanded .detail-inner, .mr-detail.expanded, .siege-sum-body.open, #recentBody, .wr-done-list, .console-panel .panel-collapse.open { animation: none !important; }
         }
@@ -1225,6 +1234,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Houses fill on load: .filling plays the rise; removing it on a timer restores the
+    // resting (full) fill, so a frozen/headless renderer — or no JS — still ends up with
+    // the fill shown, never blank. Real users see the rise; the removal is seamless
+    // because the animation has already settled at full by then.
+    const siegeBody = document.getElementById('siegeBody');
+    if (siegeBody && !reduceMotion) {
+        siegeBody.querySelectorAll('.sd').forEach((el, i) => el.style.setProperty('--fill-delay', (Math.min(i, 12) * 30) + 'ms'));
+        siegeBody.classList.add('filling');
+        setTimeout(() => siegeBody.classList.remove('filling'), 1200);
+    }
 
     // MVP crown: one-time gold glow moment shortly after the recap paints. Additive
     // (glow only, no content is gated on it), so it's safe to fire on a timer.
