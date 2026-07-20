@@ -2,167 +2,249 @@
 <html lang="en">
 {% set page_title = (player.name if player else 'Player Not Found') ~ ' – CoC Analytics' %}
 {% include '_head.html' %}
-        /* Real in-game loot hues — same palette Battle History uses, so a
-           player's own loot reads identically wherever it shows up. */
-        :root {
-            --loot-gold:      #f5b921;
-            --loot-elixir:    #d954d1;
-            --loot-dark:      #9d8fd4;
-        }
-        /* ── NAV: see _nav.html ── */
+        /* ── PLAYER PROFILE ─────────────────────────────────────────────────
+           Extends the sitewide "Night Ops Scope" system (see DESIGN.md). One
+           focal object — the Standing scorecard — then a tabbed verdict-history
+           and a recent-battles strip. No side-stripe accents; verdicts carry the
+           sitewide .judgment badges; loot uses the sitewide OKLCH --loot-* tokens. */
+        :root { --ease: cubic-bezier(0.22, 1, 0.36, 1); }
 
-        /* ── ID CHIP (page_header_right): the two facts that identify any
-           CoC player at a glance — league and town hall. ── */
-        .id-chip { display: flex; align-items: center; gap: 16px; padding: 6px 4px; }
+        /* ── HEADER IDENTITY (page_header_right slot) ── */
+        .id-chip { display: flex; align-items: center; gap: 16px; padding: 4px 2px; }
         .id-chip-part { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-        .id-chip-league-icon { width: 52px; height: 52px; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,.4)); }
+        .id-chip-league-icon { width: 50px; height: 50px; object-fit: contain; }
         .id-chip-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; white-space: nowrap; }
         .id-chip-div { width: 1px; height: 40px; background: var(--border); flex-shrink: 0; }
-        .id-chip-th { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
-        @media (max-width: 640px) { .id-chip { gap: 12px; } .id-chip-league-icon { width: 40px; height: 40px; } .id-chip-th { font-size: 21px; } }
-
-        /* ── STATUS BADGES ── */
-        .badge {
-            display: inline-block; padding: 2px 9px; border-radius: 20px;
-            font-size: 11px; font-weight: 700; font-family: 'Manrope', sans-serif;
-            letter-spacing: 0.4px; text-transform: uppercase;
-        }
-        .badge-in  { background: rgba(62,192,106,.12); color: var(--green); border: 1px solid rgba(62,192,106,.25); }
-        .badge-out { background: rgba(226,72,63,.12);  color: var(--red);   border: 1px solid rgba(226,72,63,.25); }
+        .id-chip-th { font-family: 'JetBrains Mono', monospace; font-size: 25px; font-weight: 700; color: var(--text); line-height: 1; }
         .you-pill {
-            font-size: 10px; font-weight: 700; font-family: 'Manrope', sans-serif; letter-spacing: .5px; text-transform: uppercase;
-            padding: 1px 7px; border-radius: 4px; background: rgba(217,164,65,.15); color: var(--accent);
-            border: 1px solid rgba(217,164,65,.35); vertical-align: middle;
+            font-size: 12px; font-weight: 700; font-family: 'Rajdhani', sans-serif; letter-spacing: .6px; text-transform: uppercase;
+            padding: 2px 9px; border-radius: 20px; background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent);
+            border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent); vertical-align: middle; margin-left: 4px;
         }
+        @media (max-width: 640px) { .id-chip { gap: 12px; } .id-chip-league-icon { width: 38px; height: 38px; } .id-chip-th { font-size: 20px; } }
 
-        /* ── TYPE BADGES (Recent Battles) ── */
-        .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'Manrope', sans-serif; letter-spacing: 0.4px; text-transform: uppercase; }
-        .type-ranked { background: rgba(217,164,65,.12); color: var(--accent); border: 1px solid rgba(217,164,65,.3); }
-        .type-home   { background: rgba(53,194,209,.1);  color: var(--blue);   border: 1px solid rgba(53,194,209,.25); }
-        .type-other  { background: rgba(131,141,154,.1); color: var(--muted); border: 1px solid rgba(131,141,154,.2); }
-
-        /* ── PERIOD TOGGLE (single instance, lives in page_controls) ── */
-        .period-btn.action-btn { }
-
-        /* ── SCORE CARDS: the reason this page exists — both halves always
-           visible, no click required. ── */
-        .summary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-        @media (max-width: 900px) { .summary-row { grid-template-columns: 1fr; } }
-        .score-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-        .score-card-header {
-            display: flex; align-items: center; justify-content: space-between;
+        /* ── STANDING SCORECARD (the signature moment) ── */
+        /* Shared grid geometry so the Activity|Skill divider is ONE continuous
+           vertical line down the scores AND the strength map (same columns, same
+           horizontal padding → same divider x). */
+        /* Column widths make each half exactly 50% (the 128px mode-name column is
+           subtracted from the Activity bar column, the 32px info column from the
+           Skill bar column) so the Activity|Skill divider sits dead center AND the
+           bars stay capped/equal. gap = 16px is baked into the calc. */
+        .standing { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 18px; --map-cols: 128px calc(50% - 160px) calc(50% - 48px) 32px; --std-pad-x: 20px; }
+        .standing-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap;
             padding: 12px 20px; border-bottom: 1px solid var(--bord2); background: var(--surf2);
         }
-        .score-card-title { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
-        .score-card-body { padding: 26px 28px; display: grid; grid-template-columns: 150px 1fr; gap: 30px; align-items: center; }
-        @media (max-width: 900px) { .score-card-body { grid-template-columns: 1fr; gap: 20px; } .score-left { text-align: left !important; display: flex; align-items: center; gap: 18px; } }
-        .score-left { text-align: center; }
-        .score-number { font-family: 'JetBrains Mono', monospace; font-size: 56px; font-weight: 700; line-height: 1; margin-bottom: 2px; }
-        .score-label-text { font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
-        .score-out-of { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--muted); margin-top: 3px; }
-        .score-sub { margin-top: 9px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 2px; }
-        @media (max-width: 900px) { .score-sub { justify-content: flex-start; } }
-        .score-component { margin-bottom: 13px; }
-        .score-component:last-child { margin-bottom: 0; }
-        .score-component-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; gap: 8px; }
-        .score-component-name { font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600; }
-        .score-component-pts { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; flex-shrink: 0; }
-        .score-bar-track { height: 6px; border-radius: 3px; background: var(--bord2); overflow: hidden; }
-        .score-bar-nodata { height: 6px; border-radius: 3px; background: repeating-linear-gradient(-45deg, var(--bord2) 0px, var(--bord2) 3px, var(--bg) 3px, var(--bg) 6px); }
-        .score-bar-fill { height: 100%; border-radius: 3px; transition: width .5s cubic-bezier(.4,0,.2,1); }
-        .score-detail { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--muted); margin-top: 4px; }
-
-        /* ── HISTORY SECTIONS ── */
-        .sections-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; align-items: start; }
-        @media (max-width: 700px) { .sections-row { grid-template-columns: 1fr; } }
-        .section-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: clip; min-width: 0; }
-        .section-card.full-width { grid-column: 1 / -1; }
-        .section-header { padding: 13px 18px; border-bottom: 1px solid var(--bord2); background: var(--surf2); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .section-header h3 { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--text); }
-        .section-count { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap; }
-
-        .table-scroll-wrap { max-height: 320px; overflow-y: auto; overflow-x: hidden; }
-        .table-scroll-wrap::-webkit-scrollbar { width: 4px; }
-        .table-scroll-wrap::-webkit-scrollbar-track { background: transparent; }
-        .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-        .sections-row .table-scroll-wrap { max-height: 220px; }
-
-        /* ── HISTORY ENTRIES ── */
-        .hist-entry {
-            display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--bord2);
-            cursor: pointer; transition: background .12s; border-left: 3px solid transparent;
+        .standing-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+        .standing-eyebrow b { color: var(--text); font-weight: 700; }
+        .peak-chip {
+            display: inline-flex; align-items: center; gap: 7px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text);
+            background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px;
         }
-        .hist-entry:hover { background: rgba(255,255,255,.025); }
-        .hist-entry:last-child { border-bottom: none; }
-        .hist-entry.row-absent { opacity: .4; }
-        .hist-entry.row-absent:hover { opacity: .6; }
-        .bl-godlike  { border-left-color: var(--purple); }
-        .bl-dominant { border-left-color: var(--accent); }
-        .bl-wow      { border-left-color: var(--green); }
-        .bl-good     { border-left-color: var(--blue); }
-        .bl-warning  { border-left-color: var(--orange); }
-        .bl-suck     { border-left-color: var(--red); }
-        .bl-useless, .bl-inactive, .bl-undefined { border-left-color: var(--border); }
-        .hist-thumb { width: 34px; height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-        .hist-thumb img { width: 34px; height: 34px; object-fit: contain; }
-        .hist-thumb-ltr {
-            width: 34px; height: 34px; border-radius: 8px; background: var(--surf2);
-            display: flex; align-items: center; justify-content: center;
-            font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .5px;
-        }
-        .hist-body { flex: 1; min-width: 0; }
-        .hist-title { font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 700; color: var(--text); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .hist-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
-        .hm { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
-        .hm.val  { color: var(--text); }
-        .hm.pos  { color: var(--green); }
-        .hm.neg  { color: var(--red); }
-        .hm.acc  { color: var(--accent); }
-        .hm.blu  { color: var(--blue); }
-        .hm.pur  { color: var(--purple); }
-        .hm-sep  { color: var(--border); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
-        .hist-verdict { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-        .hist-score { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--muted); }
-        .hist-empty { padding: 24px; text-align: center; color: var(--muted); font-family: 'Manrope', sans-serif; font-size: 13px; }
+        .peak-chip .pk-l { color: var(--muted); }
+        .peak-chip svg { width: 12px; height: 12px; color: var(--ops-star); flex-shrink: 0; }
+        .peak-chip[hidden] { display: none; }
 
-        /* ── EXPAND-TO-FULLSCREEN ── */
-        .expand-btn {
-            background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer;
-            padding: 3px 5px; display: flex; align-items: center; justify-content: center;
-            transition: color .12s, border-color .12s; flex-shrink: 0; line-height: 0;
-        }
-        .expand-btn:hover { color: var(--text); border-color: var(--muted); }
-        .expand-btn .icon-collapse { display: none; }
-        .section-card.fs-open .expand-btn .icon-expand { display: none; }
-        .section-card.fs-open .expand-btn .icon-collapse { display: flex; }
-        .fs-backdrop { display: none; position: fixed; inset: 0; z-index: 999; background: rgba(13,16,19,.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-        .fs-backdrop.active { display: block; }
-        .section-card.fs-open {
-            position: fixed; top: 15%; bottom: 15%; left: 50%; transform: translateX(-50%);
-            width: calc(100% - 48px); max-width: 1400px; z-index: 1000; border-radius: 12px;
-            display: flex; flex-direction: column; overflow: hidden;
-        }
-        .section-card.fs-open .table-scroll-wrap { flex: 1; max-height: none; overflow-y: auto; }
-        @media (max-width: 640px) { .section-card.fs-open { top: 6%; bottom: 6%; width: calc(100% - 24px); } }
+        .scores { display: grid; grid-template-columns: var(--map-cols); column-gap: 16px; padding: 0 var(--std-pad-x); }
+        .score-block { padding: 22px 0; min-width: 0; }
+        .scores > .score-block:first-child { grid-column: 1 / 3; }
+        .scores > .score-block:last-child  { grid-column: 3 / 5; border-left: 1px solid var(--bord2); padding-left: 16px; }
+        .sb-dim { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
+        .sb-main { display: flex; align-items: baseline; gap: 12px; margin: 9px 0 3px; }
+        .sb-num { font-family: 'JetBrains Mono', monospace; font-size: clamp(46px, 7vw, 62px); font-weight: 700; line-height: .85; letter-spacing: -1.5px; }
+        .sb-verdict { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+        .sb-outof { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); }
+        .sb-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 13px; min-height: 20px; }
+        .sb-standing { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+        .sb-standing b { color: var(--text); font-weight: 700; }
+        .sb-standing .pct { color: var(--accent); font-weight: 700; }
+        .sb-trend { display: inline-flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+        .sb-trend svg { width: 9px; height: 9px; }
+        .sb-trend[hidden] { display: none; }
+        .trend-up   { color: var(--green); background: color-mix(in oklch, var(--green) 12%, transparent); }
+        .trend-down { color: color-mix(in oklch, var(--red) 70%, var(--text)); background: color-mix(in oklch, var(--red) 14%, transparent); }
+        .trend-flat { color: var(--muted); background: color-mix(in oklch, var(--muted) 12%, transparent); }
 
-        /* ── RECENT BATTLES (reuses the sitewide detail-table shell) ── */
-        .detail-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .detail-table { table-layout: auto; width: 100%; min-width: max-content; border-collapse: collapse; font-size: 12.5px; }
-        .detail-table th, .detail-table td { padding: 9px 14px; border-bottom: 1px solid var(--bord2); text-align: center; white-space: nowrap; }
+        .hero-empty { padding: 30px 26px; font-family: 'Manrope', sans-serif; font-size: 14px; color: var(--muted); }
+
+        /* ── STRENGTH MAP ── */
+        .map { border-top: 1px solid var(--bord2); padding: 15px var(--std-pad-x) 18px; }
+        .map-head, .map-row { display: grid; grid-template-columns: var(--map-cols); align-items: center; gap: 16px; }
+        .map-head { padding-bottom: 11px; }
+        .map-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+        .map-collabel { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+        .map-row { padding: 9px 0; border-top: 1px solid color-mix(in oklch, var(--border) 50%, transparent); }
+        .mode { display: flex; align-items: center; gap: 9px; min-width: 0; }
+        .mode-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--mh); }
+        .mode-name { font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cell { display: flex; align-items: center; gap: 11px; }
+        /* Cap the bar so full-vs-near-full is legible instead of a ~350px slab where
+           100/90/85 look identical. Mode-tinted fill carries each row's identity
+           (wayfinding by hue, per DESIGN.md) alongside the dot. */
+        .bar-track { flex: 1; max-width: 200px; height: 6px; border-radius: 3px; background: var(--bord2); overflow: hidden; }
+        /* Resting state IS the final fill — no reveal gating visibility (a scaleX(0)
+           entrance freezes empty in headless/inactive renders). The number count-up
+           carries the load motion; bar width is correct with zero animation. */
+        .bar-fill { height: 100%; border-radius: 3px; background: color-mix(in oklch, var(--mh) 82%, transparent); transform: scaleX(var(--v, 0)); transform-origin: left; }
+        /* Column divider so Activity | Skill read as two columns, not one smear. */
+        .map-row .cell + .cell, .map-head .map-collabel + .map-collabel { border-left: 1px solid var(--bord2); padding-left: 16px; }
+        .cell-score { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; color: var(--text); width: 26px; text-align: right; flex-shrink: 0; }
+        .cell.nd .cell-score { color: var(--muted); font-size: 11px; }
+        .cell.nd .bar-track { background: transparent; border: 1px dashed color-mix(in oklch, var(--border) 80%, transparent); }
+        .cell-info {
+            position: relative; justify-self: end; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; padding: 0;
+            background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+            cursor: pointer; transition: color .12s var(--ease), border-color .12s var(--ease), transform .12s var(--ease);
+        }
+        .cell-info:hover { color: var(--text); border-color: var(--muted); }
+        .cell-info svg { width: 12px; height: 12px; }
+
+        /* ── DETAIL POPOVER (keyboard + touch reachable; escapes panel clip) ── */
+        .detail-pop {
+            position: fixed; margin: 0; inset: auto; background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px 14px; max-width: 268px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+            color: var(--text); font-family: 'Manrope', sans-serif; z-index: 9999;
+        }
+        .detail-pop h5 { display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--text); margin-bottom: 9px; }
+        .detail-pop h5 .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .detail-pop .dp-block + .dp-block { margin-top: 9px; }
+        .detail-pop .dp-k { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+        .detail-pop .dp-v { font-family: 'Manrope', sans-serif; font-size: 12px; color: var(--text); line-height: 1.45; margin-top: 2px; }
+
+        /* ── HISTORY PANEL ── */
+        .hist, .battles { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 18px; }
+        .panel-head { padding: 12px 16px; border-bottom: 1px solid var(--bord2); background: var(--surf2); display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
+        .panel-head h2 { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text); }
+        .panel-count { font-family: 'Manrope', sans-serif; font-size: 11px; color: var(--muted); font-weight: 600; }
+        .hist-tabs { display: flex; gap: 7px; flex-wrap: wrap; margin-left: auto; }
+        /* Inactive tabs are NEUTRAL; the selected tab is the only magenta-filled one,
+           driven off [aria-selected] so it's correct on first server paint (not just
+           after a JS click). Magenta = "selected/interactive" per the One-Hue rule. */
+        .htab { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); border-color: var(--border); background: transparent; }
+        .htab:hover { color: var(--text); border-color: var(--muted); background: transparent; box-shadow: none; }
+        .htab .td { width: 7px; height: 7px; border-radius: 50%; background: var(--mh); flex-shrink: 0; opacity: .5; }
+        .htab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); background: color-mix(in oklch, var(--accent) 15%, transparent); }
+        .htab[aria-selected="true"]:hover { color: var(--accent); border-color: var(--accent); background: color-mix(in oklch, var(--accent) 18%, transparent); }
+        .htab[aria-selected="true"] .td { opacity: 1; }
+
+        .hist-panel { display: none; }
+        .hist-panel.active { display: block; }
+
+        .hrow { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-top: 1px solid var(--bord2); }
+        .hist-panel .hrow:first-child { border-top: none; }
+        a.hrow { transition: background .12s var(--ease); }
+        a.hrow:hover { background: var(--surf2); }
+        .hrow.absent { opacity: .5; }
+        .hrow-main { flex: 1; min-width: 0; }
+        .hrow-title { font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .hrow-meta { display: flex; flex-wrap: wrap; gap: 3px 9px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+        .hrow-meta .v { color: var(--text); }
+        .hrow-meta .pos { color: var(--green); }
+        .hrow-meta .neg { color: var(--red); }
+        .hrow-meta .star { color: var(--ops-star); }
+        .hrow-meta .sep { color: var(--border); }
+        .hrow-verdict { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; text-align: right; }
+        .hrow-score { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--muted); }
+        .hrow-note { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--muted); }
+        .hist-empty { padding: 28px 16px; text-align: center; color: var(--muted); font-family: 'Manrope', sans-serif; font-size: 13px; }
+
+        /* ── RECENT BATTLES ── */
+        .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'Manrope', sans-serif; letter-spacing: 0.3px; text-transform: uppercase; white-space: nowrap; }
+        .type-ranked { background: color-mix(in oklch, var(--blue) 12%, transparent);  color: var(--blue);  border: 1px solid color-mix(in oklch, var(--blue) 28%, transparent); }
+        .type-home   { background: color-mix(in oklch, var(--green) 12%, transparent); color: var(--green); border: 1px solid color-mix(in oklch, var(--green) 26%, transparent); }
+        .type-other  { background: color-mix(in oklch, var(--muted) 10%, transparent); color: var(--muted); border: 1px solid color-mix(in oklch, var(--muted) 22%, transparent); }
+        .dir { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .dir.atk { color: var(--green); }
+        .dir.def { color: var(--red); }
+
+        .battles-table-wrap { overflow-x: auto; }
+        .detail-table { width: 100%; min-width: max-content; border-collapse: collapse; font-size: 12.5px; }
+        .detail-table th, .detail-table td { padding: 10px 14px; border-bottom: 1px solid var(--bord2); text-align: center; white-space: nowrap; }
         .detail-table tbody tr:last-child td { border-bottom: none; }
-        .detail-table tbody tr:hover td { background: rgba(255,255,255,.025); }
-        .detail-table th { font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; background: var(--surf2); }
+        .detail-table tbody tr:hover td { background: var(--surf2); }
+        .detail-table th { font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; background: var(--surf2); position: sticky; top: 0; }
+        .detail-table td.tl { text-align: left; }
         .detail-table td { color: var(--text); }
+        .t-time { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 11px; }
+        .t-opp  { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+        .t-stars { letter-spacing: 1px; font-size: 14px; }
+        .t-stars .on { color: var(--ops-star); } .t-stars .off { color: var(--muted); opacity: .35; }
+        .t-dmg  { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
         .res-gold   { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--loot-gold); }
         .res-elixir { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--loot-elixir); }
         .res-dark   { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--loot-dark); }
-        .empty-row td { color: var(--muted); text-align: center; padding: 24px; font-family: 'Manrope', sans-serif; font-size: 13px; }
+        .loot-ico { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
+        .battles-empty { padding: 28px 16px; text-align: center; color: var(--muted); font-family: 'Manrope', sans-serif; font-size: 13px; }
 
-        .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: .3px; }
+        /* Mobile roster rows for the battles table (shared idiom, not per-player cards) */
+        .mobile-battles { display: none; }
+        .mb-row { padding: 11px 16px; border-top: 1px solid var(--bord2); }
+        .mobile-battles .mb-row:first-child { border-top: none; }
+        .mb-top { display: flex; align-items: center; gap: 8px; }
+        .mb-opp { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--text); margin-right: auto; }
+        .mb-time { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
+        .mb-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 600; }
+        .mb-stats .mru { color: var(--muted); font-weight: 700; margin-right: 3px; font-size: 10px; }
 
+        .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--bord2); font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: .3px; }
+
+        /* ── MOTION: interaction-driven only. Load-time animations freeze in some
+           renderers, so nothing here gates content visibility (the one keyframe
+           animates transform with opacity held at 1 — a frozen frame is still
+           readable). Product register: 150–250ms, motion conveys state. Every
+           transform/filter is dropped under reduced motion. */
+        .map-row { transition: background .16s var(--ease); }
+        .map-row:hover { background: color-mix(in oklch, var(--surf2) 55%, transparent); }
+        .map-row:hover .mode-dot { box-shadow: 0 0 7px var(--mh); }
+        .map-row:hover .bar-fill { filter: brightness(1.18); }
+        .cell-info:hover { transform: scale(1.12); }
+        .cell-info:active { transform: scale(0.9); }
+        a.hrow { transition: background .16s var(--ease), transform .16s var(--ease); }
+        a.hrow:hover { background: var(--surf2); transform: translateX(3px); }
+        .htab:active, #periodToggle .action-btn:active { transform: scale(0.95); }
+        @media (prefers-reduced-motion: no-preference) {
+            .hist-panel.active { animation: panelIn .22s var(--ease); }
+        }
+        @keyframes panelIn { from { transform: translateY(6px); } }
+        @media (prefers-reduced-motion: reduce) {
+            .map-row, a.hrow { transition: none; }
+            .map-row:hover .bar-fill { filter: none; }
+            .map-row:hover .mode-dot { box-shadow: none; }
+            a.hrow:hover, .cell-info:hover, .cell-info:active,
+            .htab:active, #periodToggle .action-btn:active { transform: none; }
+            .hist-panel.active { animation: none; }
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 760px) {
+            .battles-table-wrap { display: none; }
+            .mobile-battles { display: block; }
+        }
         @media (max-width: 640px) {
-            .score-number { font-size: 42px; }
-            .container { padding-top: 20px; padding-bottom: 20px; }
+            .standing { --map-cols: 66px 1fr 1fr 28px; --std-pad-x: 14px; }
+            .score-block { padding: 16px 0; }
+            .sb-num { font-size: 40px; letter-spacing: -1px; }
+            .sb-verdict { font-size: 17px; }
+            /* Phone: equal 50/50 score columns, no divider (the map keeps its own).
+               The asymmetric map grid would starve the Skill block and clip its
+               trend chip; two labeled numbers read fine without a rule between them. */
+            .scores { grid-template-columns: 1fr 1fr; column-gap: 12px; }
+            .scores > .score-block:first-child { grid-column: 1; }
+            .scores > .score-block:last-child  { grid-column: 2; border-left: none; padding-left: 0; }
+            .map { padding: 13px var(--std-pad-x) 16px; }
+            .map-head, .map-row { gap: 9px; }
+            .mode-name { font-size: 11.5px; }
+            .cell { gap: 7px; }
+            .cell-score { width: 22px; font-size: 12.5px; }
+            .map-title { font-size: 10px; letter-spacing: .8px; }
+            .standing-head { padding: 11px 14px; }
+            /* 44px touch floor on the phone: expand the info-button hit area without
+               enlarging the 12px glyph, and give tabs real height. */
+            .cell-info::before { content: ''; position: absolute; inset: -12px; }
+            .htab { min-height: 44px; }
+            .map-row .cell + .cell, .map-head .map-collabel + .map-collabel { padding-left: 9px; }
         }
     </style>
 </head>
@@ -175,8 +257,11 @@
 {% set page_header_desc = 'No player found with tag ' ~ player_tag %}
 {% else %}
 {% set is_me = current_user and current_user.linked_player_tag == player.tag %}
-{% set page_header_title %}{{ player.name | e }}<span>.</span>{% if is_me %} <span class="you-pill">You</span>{% endif %}{% endset %}
-{% set page_header_desc %}{{ player.tag }} <span style="color:var(--border);">·</span> {% if player.in_clan %}<span class="badge badge-in">In Clan</span>{% else %}<span class="badge badge-out">Left Clan</span>{% endif %}{% if player.join_date %} <span style="color:var(--border);">·</span> joined {{ player.join_date.strftime('%d %b %Y') }}{% endif %}{% endset %}
+{% set page_header_title %}{{ player.name | e }}<span>.</span>{% if is_me %}<span class="you-pill">You</span>{% endif %}{% endset %}
+{% set _pmeta = [{'value': player.tag, 'label': 'Tag'}] %}
+{% if player.in_clan %}{% set _pmeta = _pmeta + [{'value': 'In Clan', 'label': 'Status', 'tone': 'win'}] %}{% else %}{% set _pmeta = _pmeta + [{'value': 'Left Clan', 'label': 'Status', 'tone': 'loss'}] %}{% endif %}
+{% if player.join_date %}{% set _pmeta = _pmeta + [{'value': player.join_date.strftime('%d %b %Y'), 'label': 'Joined'}] %}{% endif %}
+{% set page_header_meta = _pmeta %}
 {% set page_header_right %}
 <div class="id-chip">
     <div class="id-chip-part">
@@ -190,9 +275,9 @@
     </div>
 </div>
 {% endset %}
-{% set page_controls %}
-<label>Period</label>
-<span id="periodToggle" style="display:contents;"></span>
+{% set page_primary_control %}
+<label id="periodLabel">Period</label>
+<span id="periodToggle" role="group" aria-labelledby="periodLabel" style="display:contents;"></span>
 {% endset %}
 {% endif %}
 {% include '_page_header.html' %}
@@ -200,394 +285,471 @@
 {% if player %}
 <div class="container">
 
-    <div class="summary-row">
-
-        <!-- Activity Card -->
-        <div class="score-card">
-            <div class="score-card-header"><span class="score-card-title">Activity Score</span></div>
-            <div class="score-card-body">
-                <div class="score-left">
-                    <div id="act-score" class="score-number"></div>
-                    <div id="act-label" class="score-label-text"></div>
-                    <div class="score-out-of">out of 100</div>
-                    <div id="act-sub" class="score-sub"></div>
-                </div>
-                <div class="score-right"><div id="act-components"></div></div>
-            </div>
+    <!-- ── STANDING SCORECARD ─────────────────────────────────────────── -->
+    <section class="standing" aria-label="Standing">
+        <div class="standing-head">
+            <span class="standing-eyebrow">Where you stand · <b id="std-period">this month</b></span>
+            <span class="peak-chip" id="peak-chip" hidden>
+                <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 0 L7.5 4.5 L12 6 L7.5 7.5 L6 12 L4.5 7.5 L0 6 L4.5 4.5 Z" fill="currentColor"/></svg>
+                <span class="pk-l">Top</span>&nbsp;<span id="peak-body"></span>
+            </span>
         </div>
 
-        <!-- Skill Card -->
-        <div class="score-card">
-            <div class="score-card-header"><span class="score-card-title">Skill Score</span></div>
-            <div class="score-card-body">
-                <div class="score-left" id="sk-left">
-                    <div id="sk-score" class="score-number"></div>
-                    <div id="sk-label" class="score-label-text"></div>
-                    <div class="score-out-of">out of 100</div>
-                    <div id="sk-sub" class="score-sub"></div>
-                </div>
-                <div class="score-right"><div id="sk-components"></div></div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- History Section -->
-    <div class="sections-row">
-
-        <!-- Ranked History -->
-        <div class="section-card">
-            <div class="section-header">
-                <h3>Ranked History</h3>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <span class="section-count">last {{ ranked_history|length }} seasons</span>
-                    <button class="expand-btn" onclick="toggleExpand(this)" title="Expand">
-                        <svg class="icon-expand" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 5V1.5C1 1.22 1.22 1 1.5 1H5M8 1h3.5c.28 0 .5.22.5.5V5M12 8v3.5c0 .28-.22.5-.5.5H8M5 12H1.5c-.28 0-.5-.22-.5-.5V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                        <svg class="icon-collapse" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M5 1v3.5c0 .28-.22.5-.5.5H1M8 1v3.5c0 .28.22.5.5.5H12M1 8h3.5c.28 0 .5.22.5.5V12M12 8H8.5c-.28 0-.5.22-.5.5V12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                    </button>
-                </div>
-            </div>
-            <div class="table-scroll-wrap">
-            {% for rw in ranked_history %}
-            <div class="hist-entry bl-{{ rw.badge_class | replace('badge-', '') }} {% if rw.att_count == 0 %}row-absent{% endif %}"
-                 onclick="window.location.href='/ranked?week_id={{ rw.league_season_id }}'">
-                <div class="hist-thumb">
-                    {% if rw.league_icon %}
-                    <img src="{{ rw.league_icon }}" alt="{{ rw.league_tier }}" title="{{ rw.league_tier }}">
-                    {% else %}
-                    <div class="hist-thumb-ltr">RK</div>
-                    {% endif %}
-                </div>
-                <div class="hist-body">
-                    <div class="hist-title">{{ rw.start_day }} — {{ rw.end_day }}</div>
-                    <div class="hist-meta">
-                        {% if rw.rank %}<span class="hm val">#{{ rw.rank }}</span><span class="hm-sep">·</span>{% endif %}
-                        {% if rw.trophies %}<span class="hm acc">{{ rw.trophies }} trophies</span><span class="hm-sep">·</span>{% endif %}
-                        <span class="hm {% if rw.att_count == rw.att_max %}pos{% elif rw.att_count == 0 %}neg{% endif %}">{{ rw.att_count }}/{{ rw.att_max }} atk</span>
-                        <span class="hm-sep">·</span>
-                        <span class="hm blu">★ {{ rw.att_avg }} avg</span>
-                        {% if rw.def_count %}
-                        <span class="hm-sep">·</span>
-                        <span class="hm">{{ rw.def_count }} def · {{ rw.def_avg }}★</span>
-                        {% endif %}
+        <div id="hero-body">
+            <div class="scores">
+                <div class="score-block">
+                    <div class="sb-dim">Activity</div>
+                    <div class="sb-main">
+                        <span class="sb-num" id="act-num">–</span>
+                        <span class="sb-verdict" id="act-verdict"></span>
+                    </div>
+                    <div class="sb-outof">out of 100</div>
+                    <div class="sb-foot">
+                        <span class="sb-standing" id="act-standing"></span>
+                        <span class="sb-trend" id="act-trend" hidden></span>
                     </div>
                 </div>
-                <div class="hist-verdict">
+                <div class="score-block">
+                    <div class="sb-dim">Skill</div>
+                    <div class="sb-main">
+                        <span class="sb-num" id="sk-num">–</span>
+                        <span class="sb-verdict" id="sk-verdict"></span>
+                    </div>
+                    <div class="sb-outof">out of 100</div>
+                    <div class="sb-foot">
+                        <span class="sb-standing" id="sk-standing"></span>
+                        <span class="sb-trend" id="sk-trend" hidden></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="map">
+                <div class="map-head">
+                    <span class="map-title">Strength Map</span>
+                    <span class="map-collabel">Activity</span>
+                    <span class="map-collabel">Skill</span>
+                    <span></span>
+                </div>
+                <div id="map-rows"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── VERDICT HISTORY (tabbed) ───────────────────────────────────── -->
+    {% set default_tab = 'ranked' if ranked_history else ('raid' if raid_history else ('war' if war_history else ('cwl' if cwl_history else 'ranked'))) %}
+    <section class="hist" aria-label="History">
+        <div class="panel-head">
+            <h2>History</h2>
+            <div class="hist-tabs" role="tablist" aria-label="History mode">
+                <button class="action-btn htab" role="tab" id="tab-ranked" aria-controls="panel-ranked" aria-selected="{{ 'true' if default_tab=='ranked' else 'false' }}" tabindex="{{ '0' if default_tab=='ranked' else '-1' }}" style="--mh:var(--blue);" onclick="switchTab('ranked')"><span class="td" aria-hidden="true"></span>Ranked</button>
+                <button class="action-btn htab" role="tab" id="tab-raid" aria-controls="panel-raid" aria-selected="{{ 'true' if default_tab=='raid' else 'false' }}" tabindex="{{ '0' if default_tab=='raid' else '-1' }}" style="--mh:var(--red);" onclick="switchTab('raid')"><span class="td" aria-hidden="true"></span>Raid</button>
+                {% if war_history %}<button class="action-btn htab" role="tab" id="tab-war" aria-controls="panel-war" aria-selected="{{ 'true' if default_tab=='war' else 'false' }}" tabindex="{{ '0' if default_tab=='war' else '-1' }}" style="--mh:var(--orange);" onclick="switchTab('war')"><span class="td" aria-hidden="true"></span>War</button>{% endif %}
+                {% if cwl_history %}<button class="action-btn htab" role="tab" id="tab-cwl" aria-controls="panel-cwl" aria-selected="{{ 'true' if default_tab=='cwl' else 'false' }}" tabindex="{{ '0' if default_tab=='cwl' else '-1' }}" style="--mh:var(--purple);" onclick="switchTab('cwl')"><span class="td" aria-hidden="true"></span>CWL</button>{% endif %}
+            </div>
+        </div>
+
+        <!-- Ranked -->
+        <div class="hist-panel {{ 'active' if default_tab=='ranked' }}" id="panel-ranked" role="tabpanel" aria-labelledby="tab-ranked" {{ 'hidden' if default_tab!='ranked' }}>
+            {% for rw in ranked_history %}
+            <a class="hrow {{ 'absent' if rw.att_count == 0 }}" href="/ranked?week_id={{ rw.league_season_id }}">
+                <div class="hrow-main">
+                    <div class="hrow-title">{{ rw.start_day }} – {{ rw.end_day }}</div>
+                    <div class="hrow-meta">
+                        {% if rw.rank %}<span class="v">#{{ rw.rank }}</span><span class="sep">·</span>{% endif %}
+                        {% if rw.trophies %}<span>{{ rw.trophies }} tr</span><span class="sep">·</span>{% endif %}
+                        <span class="{% if rw.att_count == rw.att_max %}pos{% elif rw.att_count == 0 %}neg{% endif %}">{{ rw.att_count }}/{{ rw.att_max }} atk</span>
+                        {% if rw.att_count %}<span class="sep">·</span><span class="star">★ {{ rw.att_avg }}</span>{% endif %}
+                        {% if rw.def_count %}<span class="sep">·</span><span>{{ rw.def_count }} def · {{ rw.def_avg }}★</span>{% endif %}
+                    </div>
+                </div>
+                <div class="hrow-verdict">
                     {% if rw.att_count > 0 %}
                     <span class="judgment {{ rw.badge_class }}">{{ rw.judge_label.split('(')[0].strip() }}</span>
-                    {% if rw.score_100 > 0 %}<span class="hist-score">{{ rw.score_100 }} / 100</span>{% endif %}
-                    {% else %}
-                    <span class="hm">No attacks</span>
-                    {% endif %}
+                    {% if rw.score_100 > 0 %}<span class="hrow-score">{{ rw.score_100 }} / 100</span>{% endif %}
+                    {% else %}<span class="hrow-note">No attacks</span>{% endif %}
                 </div>
-            </div>
+            </a>
             {% else %}
-            <div class="hist-empty">No ranked history.</div>
+            <div class="hist-empty">No ranked history yet.</div>
             {% endfor %}
-            </div>
         </div>
 
-        <!-- Raid Weekend History -->
-        <div class="section-card">
-            <div class="section-header">
-                <h3>Raid Weekend History</h3>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <span class="section-count">{{ raid_history|selectattr('participated')|list|length }}/{{ raid_history|length }} participated</span>
-                    <button class="expand-btn" onclick="toggleExpand(this)" title="Expand">
-                        <svg class="icon-expand" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 5V1.5C1 1.22 1.22 1 1.5 1H5M8 1h3.5c.28 0 .5.22.5.5V5M12 8v3.5c0 .28-.22.5-.5.5H8M5 12H1.5c-.28 0-.5-.22-.5-.5V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                        <svg class="icon-collapse" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M5 1v3.5c0 .28-.22.5-.5.5H1M8 1v3.5c0 .28.22.5.5.5H12M1 8h3.5c.28 0 .5.22.5.5V12M12 8H8.5c-.28 0-.5.22-.5.5V12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                    </button>
-                </div>
-            </div>
-            <div class="table-scroll-wrap">
+        <!-- Raid -->
+        <div class="hist-panel {{ 'active' if default_tab=='raid' }}" id="panel-raid" role="tabpanel" aria-labelledby="tab-raid" {{ 'hidden' if default_tab!='raid' }}>
             {% for r in raid_history %}
-            <div class="hist-entry bl-{{ r.badge_class | replace('badge-', '') }} {% if not r.participated %}row-absent{% endif %}"
-                 onclick="window.location.href='/raid?raid_id={{ r.raid_id }}'">
-                <div class="hist-thumb"><div class="hist-thumb-ltr">RD</div></div>
-                <div class="hist-body">
-                    <div class="hist-title">{{ r.start }} — {{ r.end }}</div>
-                    <div class="hist-meta">
+            <a class="hrow {{ 'absent' if not r.participated }}" href="/raid?raid_id={{ r.raid_id }}">
+                <div class="hrow-main">
+                    <div class="hrow-title">{{ r.start }} – {{ r.end }}</div>
+                    <div class="hrow-meta">
                         {% if r.participated %}
-                        <span class="hm {% if r.att_count == 6 %}pos{% elif not r.att_count %}neg{% endif %}">{{ r.att_count or 0 }}/6 atk</span>
-                        <span class="hm-sep">·</span>
-                        <span class="hm blu">{{ r.avg_pct }}% avg</span>
-                        {% if r.solo_wipes %}
-                        <span class="hm-sep">·</span>
-                        <span class="hm pur">{{ r.solo_wipes }} solo wipe{{ 's' if r.solo_wipes != 1 }}</span>
-                        {% endif %}
-                        {% if r.cleanups %}
-                        <span class="hm-sep">·</span>
-                        <span class="hm">{{ r.cleanups }} cleanup{{ 's' if r.cleanups != 1 }}</span>
-                        {% endif %}
-                        {% else %}
-                        <span class="hm neg">Did not participate</span>
-                        {% endif %}
+                        <span class="{% if r.att_count == 6 %}pos{% elif not r.att_count %}neg{% endif %}">{{ r.att_count or 0 }}/6 atk</span>
+                        <span class="sep">·</span><span>{{ r.avg_pct }}% avg</span>
+                        {% if r.solo_wipes %}<span class="sep">·</span><span class="v">{{ r.solo_wipes }} solo wipe{{ 's' if r.solo_wipes != 1 }}</span>{% endif %}
+                        {% if r.cleanups %}<span class="sep">·</span><span>{{ r.cleanups }} cleanup{{ 's' if r.cleanups != 1 }}</span>{% endif %}
+                        {% else %}<span class="neg">Did not participate</span>{% endif %}
                     </div>
                 </div>
-                <div class="hist-verdict">
+                <div class="hrow-verdict">
                     {% if r.participated %}
                     <span class="judgment {{ r.badge_class }}">{{ r.judge_label.split('(')[0].strip() }}</span>
-                    {% if r.score_100 > 0 %}<span class="hist-score">{{ r.score_100 }} / 100</span>{% endif %}
-                    {% else %}
-                    <span class="hm">Skipped</span>
-                    {% endif %}
+                    {% if r.score_100 > 0 %}<span class="hrow-score">{{ r.score_100 }} / 100</span>{% endif %}
+                    {% else %}<span class="hrow-note">Skipped</span>{% endif %}
                 </div>
-            </div>
+            </a>
             {% else %}
-            <div class="hist-empty">No raid data available.</div>
+            <div class="hist-empty">No raid weekends recorded yet.</div>
             {% endfor %}
-            </div>
         </div>
 
-        <!-- Clan War History -->
+        <!-- War -->
         {% if war_history %}
-        <div class="section-card">
-            <div class="section-header">
-                <h3>Clan War History</h3>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <span class="section-count">last {{ war_history|length }} wars selected for</span>
-                    <button class="expand-btn" onclick="toggleExpand(this)" title="Expand">
-                        <svg class="icon-expand" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 5V1.5C1 1.22 1.22 1 1.5 1H5M8 1h3.5c.28 0 .5.22.5.5V5M12 8v3.5c0 .28-.22.5-.5.5H8M5 12H1.5c-.28 0-.5-.22-.5-.5V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                        <svg class="icon-collapse" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M5 1v3.5c0 .28-.22.5-.5.5H1M8 1v3.5c0 .28.22.5.5.5H12M1 8h3.5c.28 0 .5.22.5.5V12M12 8H8.5c-.28 0-.5.22-.5.5V12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                    </button>
-                </div>
-            </div>
-            <div class="table-scroll-wrap">
+        <div class="hist-panel {{ 'active' if default_tab=='war' }}" id="panel-war" role="tabpanel" aria-labelledby="tab-war" {{ 'hidden' if default_tab!='war' }}>
             {% for w in war_history %}
-            <div class="hist-entry bl-{{ w.badge_class | replace('badge-', '') }} {% if w.att_count == 0 %}row-absent{% endif %}"
-                 onclick="window.location.href='/war?war_id={{ w.war_id }}'">
-                <div class="hist-thumb"><div class="hist-thumb-ltr">CW</div></div>
-                <div class="hist-body">
-                    <div class="hist-title">vs {{ w.opponent }}</div>
-                    <div class="hist-meta">
-                        <span class="hm">{{ w.start }} – {{ w.end }}</span>
-                        <span class="hm-sep">·</span>
-                        <span class="hm {% if w.att_count == w.att_max %}pos{% elif w.att_count == 0 %}neg{% endif %}">{{ w.att_count }}/{{ w.att_max }} atk</span>
-                        {% if w.att_count %}
-                        <span class="hm-sep">·</span>
-                        <span class="hm blu">★ {{ w.avg_stars }} avg</span>
-                        {% endif %}
+            <a class="hrow {{ 'absent' if w.att_count == 0 }}" href="/war?war_id={{ w.war_id }}">
+                <div class="hrow-main">
+                    <div class="hrow-title">vs {{ w.opponent }}</div>
+                    <div class="hrow-meta">
+                        <span>{{ w.start }}</span><span class="sep">·</span>
+                        <span class="{% if w.att_count == w.att_max %}pos{% elif w.att_count == 0 %}neg{% endif %}">{{ w.att_count }}/{{ w.att_max }} atk</span>
+                        {% if w.att_count %}<span class="sep">·</span><span class="star">★ {{ w.avg_stars }}</span>{% endif %}
                     </div>
                 </div>
-                <div class="hist-verdict">
+                <div class="hrow-verdict">
                     {% if w.att_count %}
                     <span class="judgment {{ w.badge_class }}">{{ w.judge_label.split('(')[0].strip() }}</span>
-                    {% if w.score_100 > 0 %}<span class="hist-score">{{ w.score_100 }} / 100</span>{% endif %}
-                    {% else %}
-                    <span class="hm">No attacks</span>
-                    {% endif %}
+                    {% if w.score_100 > 0 %}<span class="hrow-score">{{ w.score_100 }} / 100</span>{% endif %}
+                    {% else %}<span class="hrow-note">No attacks</span>{% endif %}
                 </div>
-            </div>
+            </a>
             {% endfor %}
-            </div>
         </div>
         {% endif %}
 
-        <!-- CWL History -->
+        <!-- CWL -->
         {% if cwl_history %}
-        <div class="section-card">
-            <div class="section-header">
-                <h3>CWL History</h3>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <span class="section-count">{{ cwl_history|selectattr('participated')|list|length }}/{{ cwl_history|length }} active</span>
-                    <button class="expand-btn" onclick="toggleExpand(this)" title="Expand">
-                        <svg class="icon-expand" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 5V1.5C1 1.22 1.22 1 1.5 1H5M8 1h3.5c.28 0 .5.22.5.5V5M12 8v3.5c0 .28-.22.5-.5.5H8M5 12H1.5c-.28 0-.5-.22-.5-.5V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                        <svg class="icon-collapse" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M5 1v3.5c0 .28-.22.5-.5.5H1M8 1v3.5c0 .28.22.5.5.5H12M1 8h3.5c.28 0 .5.22.5.5V12M12 8H8.5c-.28 0-.5.22-.5.5V12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                    </button>
-                </div>
-            </div>
-            <div class="table-scroll-wrap">
+        <div class="hist-panel {{ 'active' if default_tab=='cwl' }}" id="panel-cwl" role="tabpanel" aria-labelledby="tab-cwl" {{ 'hidden' if default_tab!='cwl' }}>
             {% for c in cwl_history %}
-            <div class="hist-entry bl-{{ c.badge_class | replace('badge-', '') }} {% if not c.participated %}row-absent{% endif %}"
-                 onclick="window.location.href='/cwl?season_id={{ c.season_id }}'">
-                <div class="hist-thumb"><div class="hist-thumb-ltr">CWL</div></div>
-                <div class="hist-body">
-                    <div class="hist-title">{{ c.season }}</div>
-                    <div class="hist-meta">
+            <a class="hrow {{ 'absent' if not c.participated }}" href="/cwl?season_id={{ c.season_id }}">
+                <div class="hrow-main">
+                    <div class="hrow-title">{{ c.season }}</div>
+                    <div class="hrow-meta">
                         {% if c.participated %}
-                        <span class="hm">{{ c.rounds_selected }} round{{ 's' if c.rounds_selected != 1 }}</span>
-                        <span class="hm-sep">·</span>
-                        <span class="hm {% if c.att_used == c.att_possible %}pos{% elif c.att_used == 0 %}neg{% endif %}">{{ c.att_used }}/{{ c.att_possible }} atk</span>
-                        <span class="hm-sep">·</span>
-                        <span class="hm blu">★ {{ c.avg_stars }} avg</span>
-                        {% else %}
-                        <span class="hm neg">Not selected</span>
-                        {% endif %}
+                        <span>{{ c.rounds_selected }} round{{ 's' if c.rounds_selected != 1 }}</span><span class="sep">·</span>
+                        <span class="{% if c.att_used == c.att_possible %}pos{% elif c.att_used == 0 %}neg{% endif %}">{{ c.att_used }}/{{ c.att_possible }} atk</span>
+                        <span class="sep">·</span><span class="star">★ {{ c.avg_stars }}</span>
+                        {% else %}<span class="neg">Not selected</span>{% endif %}
                     </div>
                 </div>
-                <div class="hist-verdict">
+                <div class="hrow-verdict">
                     {% if c.participated %}
                     <span class="judgment {{ c.badge_class }}">{{ c.judge_label }}</span>
-                    {% if c.score_100 > 0 %}<span class="hist-score">{{ c.score_100 }} / 100</span>{% endif %}
-                    {% else %}
-                    <span class="hm">Skipped</span>
-                    {% endif %}
+                    {% if c.score_100 > 0 %}<span class="hrow-score">{{ c.score_100 }} / 100</span>{% endif %}
+                    {% else %}<span class="hrow-note">Skipped</span>{% endif %}
                 </div>
-            </div>
-            {% else %}
-            <div class="hist-empty">No CWL data.</div>
+            </a>
             {% endfor %}
-            </div>
         </div>
         {% endif %}
+    </section>
 
-    </div>
-
-    <!-- Recent Battles -->
-    <div class="section-card full-width">
-        <div class="section-header">
-            <h3>Recent Battles</h3>
-            <span class="section-count">last {{ battle_history|length }}</span>
+    <!-- ── RECENT BATTLES ─────────────────────────────────────────────── -->
+    <section class="battles" aria-label="Recent battles">
+        <div class="panel-head">
+            <h2>Recent Battles</h2>
+            <span class="panel-count">last {{ battle_history|length }}</span>
         </div>
-        <div class="detail-table-scroll"><table class="detail-table">
-            <thead>
-                <tr>
-                    <th>Time</th><th>Type</th><th>Dir</th><th>Opponent</th><th>Stars</th><th>Damage %</th>
-                    <th><img src="/static/img/gold.png" style="width:14px;height:14px;vertical-align:middle;"> Gold</th>
-                    <th><img src="/static/img/elixir.png" style="width:14px;height:14px;vertical-align:middle;"> Elixir</th>
-                    <th><img src="/static/img/darkElixir.png" style="width:14px;height:14px;vertical-align:middle;"> Dark</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for b in battle_history %}
-            <tr>
-                <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-weight:600;font-size:11px;">{{ b.time | local_dt('%d.%m %H:%M') }}</td>
-                <td>
+
+        <div class="battles-table-wrap detail-table-scroll">
+            <table class="detail-table">
+                <thead>
+                    <tr>
+                        <th class="tl">Time</th><th>Type</th><th>Dir</th><th class="tl">Opponent</th><th>Stars</th><th>Dmg %</th>
+                        <th><img src="/static/img/gold.png" class="loot-ico" alt="">Gold</th>
+                        <th><img src="/static/img/elixir.png" class="loot-ico" alt="">Elixir</th>
+                        <th><img src="/static/img/darkElixir.png" class="loot-ico" alt="">Dark</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for b in battle_history %}
+                    <tr>
+                        <td class="tl t-time">{{ b.time | local_dt('%d.%m %H:%M') }}</td>
+                        <td>
+                            {% if b.type == 'ranked' %}<span class="type-badge type-ranked">Ranked</span>
+                            {% elif b.type == 'homeVillage' %}<span class="type-badge type-home">Home</span>
+                            {% else %}<span class="type-badge type-other">{{ b.type }}</span>{% endif %}
+                        </td>
+                        <td><span class="dir {{ 'atk' if b.attack else 'def' }}">{{ 'ATK' if b.attack else 'DEF' }}</span></td>
+                        <td class="tl t-opp">{{ b.opponent_tag }}</td>
+                        <td class="t-stars"><span class="on">{{ '★' * b.stars }}</span><span class="off">{{ '★' * (3 - b.stars) }}</span></td>
+                        <td class="t-dmg">{{ b.percentage }}%</td>
+                        <td class="res-gold">{{ '{:,}'.format(b.gold) }}</td>
+                        <td class="res-elixir">{{ '{:,}'.format(b.elixir) }}</td>
+                        <td class="res-dark">{{ '{:,}'.format(b.dark) }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td class="battles-empty" colspan="9">No battles recorded yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mobile-battles">
+        {% for b in battle_history %}
+            <div class="mb-row">
+                <div class="mb-top">
+                    <span class="mb-opp">{{ b.opponent_tag }}</span>
                     {% if b.type == 'ranked' %}<span class="type-badge type-ranked">Ranked</span>
                     {% elif b.type == 'homeVillage' %}<span class="type-badge type-home">Home</span>
                     {% else %}<span class="type-badge type-other">{{ b.type }}</span>{% endif %}
-                </td>
-                <td>
-                    {% if b.attack %}<span style="color:var(--green);font-weight:700;font-size:11px;font-family:'JetBrains Mono',monospace;">↗ ATK</span>
-                    {% else %}<span style="color:var(--red);font-weight:700;font-size:11px;font-family:'JetBrains Mono',monospace;">↙ DEF</span>{% endif %}
-                </td>
-                <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px;">{{ b.opponent_tag }}</td>
-                <td style="font-size:1.18em;letter-spacing:1px;">
-                    <span style="color:var(--yellow);">{{ '★' * b.stars }}</span><span style="color:var(--muted);opacity:0.4;">{{ '☆' * (3 - b.stars) }}</span>
-                </td>
-                <td style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--blue);">{{ b.percentage }}%</td>
-                <td class="res-gold">{{ '{:,}'.format(b.gold) }}</td>
-                <td class="res-elixir">{{ '{:,}'.format(b.elixir) }}</td>
-                <td class="res-dark">{{ '{:,}'.format(b.dark) }}</td>
-            </tr>
-            {% else %}
-            <tr class="empty-row"><td colspan="9">No battles recorded.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table></div>
-    </div>
+                    <span class="dir {{ 'atk' if b.attack else 'def' }}">{{ 'ATK' if b.attack else 'DEF' }}</span>
+                    <span class="mb-time">{{ b.time | local_dt('%d.%m %H:%M') }}</span>
+                </div>
+                <div class="mb-stats">
+                    <span class="t-stars"><span class="on">{{ '★' * b.stars }}</span><span class="off">{{ '★' * (3 - b.stars) }}</span></span>
+                    <span class="t-dmg">{{ b.percentage }}%</span>
+                    <span class="res-gold"><span class="mru">G</span>{{ '{:,}'.format(b.gold) }}</span>
+                    <span class="res-elixir"><span class="mru">E</span>{{ '{:,}'.format(b.elixir) }}</span>
+                    <span class="res-dark"><span class="mru">D</span>{{ '{:,}'.format(b.dark) }}</span>
+                </div>
+            </div>
+        {% else %}
+            <div class="battles-empty">No battles recorded yet.</div>
+        {% endfor %}
+        </div>
+    </section>
 
 </div>
 
 <div class="page-footer">CoC Analytics · {{ player.name | e }}</div>
 
 <script>
-    const periodLabels    = { week: '1 Week', month: '1 Month', '6months': '6 Months' };
-    const periodOrder     = ['week', 'month', '6months'];
     const activityPeriods = {{ activity_periods | tojson | safe }};
     const skillPeriods    = {{ skill_periods    | tojson | safe }};
-    const sharedAvailable = periodOrder.filter(p => activityPeriods[p] || skillPeriods[p]);
-    let   sharedPeriod    = sharedAvailable.includes('month') ? 'month' : (sharedAvailable[0] || 'month');
+    const standingPeriods = {{ standing_periods | tojson | safe }};
 
-    // Canonical per-mode identity colors, matching the homepage hub tiles
-    // (/ranked=cyan, /raid=red, /war=gold, /cwl=purple) — Farm Attacks has no
-    // reserved identity of its own, so it keeps the neutral green it always had here.
-    const MODE_COLOR = { ranked: 'var(--blue)', raid: 'var(--red)', battle: 'var(--green)', war: 'var(--accent)', cwl: 'var(--purple)' };
+    const PERIOD_ORDER  = ['week', 'month', '6months'];
+    const PERIOD_LABEL  = { week: '1 Week', month: '1 Month', '6months': '6 Months' };
+    const PERIOD_PHRASE = { week: 'this week', month: 'this month', '6months': 'the last 6 months' };
+    const PERIOD_AVG    = { week: 'week avg', month: 'month avg', '6months': '6-month avg' };
+    const available = PERIOD_ORDER.filter(p => activityPeriods[p] || skillPeriods[p]);
+    let current = available.includes('month') ? 'month' : (available[0] || 'month');
 
-    function renderCard(periodsData, scoreId, labelId, subId, componentsId, componentDefs, leftId) {
-        const d = periodsData[sharedPeriod];
-        if (!d) {
-            if (leftId) document.getElementById(leftId).style.display = 'none';
-            document.getElementById(componentsId).innerHTML = `
-                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 0;text-align:center;width:100%;">
-                    <div style="font-size:34px;opacity:0.15;">📊</div>
-                    <div style="font-family:'Manrope',sans-serif;font-size:13px;color:var(--muted);">Not enough data for this period</div>
-                </div>`;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Each mode: identity hue, and how to pull its Activity/Skill value + data flag + detail.
+    const MODES = [
+        { key:'ranked', name:'Ranked',   hue:'var(--blue)',   aKey:'ranked_score', aHas:null,                  sKey:'ranked_skill', sHas:'ranked_skill_has_data' },
+        { key:'raid',   name:'Raid',     hue:'var(--red)',    aKey:'raid_score',   aHas:null,                  sKey:'raid_skill',   sHas:'raid_skill_has_data' },
+        { key:'battle', name:'Farm',     hue:'var(--green)',  aKey:'battle_score', aHas:null,                  sKey:'battle_skill', sHas:'battle_skill_has_data' },
+        { key:'war',    name:'Clan War', hue:'var(--orange)', aKey:'war_score',    aHas:'war_score_has_data',  sKey:'war_skill',    sHas:'war_skill_has_data' },
+        { key:'cwl',    name:'CWL',      hue:'var(--purple)', aKey:'cwl_score',    aHas:'cwl_score_has_data',  sKey:'cwl_skill',    sHas:'cwl_skill_has_data' },
+    ];
+    const DETAIL = { ranked:'ranked_detail', raid:'raid_detail', battle:'battle_detail', war:'war_detail', cwl:'cwl_detail' };
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const arrowSVG = dir => dir === 'up'
+        ? '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1 L9 8 L1 8 Z" fill="currentColor"/></svg>'
+        : dir === 'down'
+        ? '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 9 L1 2 L9 2 Z" fill="currentColor"/></svg>'
+        : '<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1" y="4.2" width="8" height="1.6" fill="currentColor"/></svg>';
+
+    function animateNum(el, to) {
+        const from = parseInt(el.textContent, 10) || 0;
+        if (reduceMotion) { el.textContent = to; return; }
+        el.textContent = from;
+        const t0 = performance.now(), dur = 600;
+        function step(now) {
+            const p = Math.min(1, (now - t0) / dur);
+            el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+            if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+        // Guarantee the resting value even where rAF is throttled (inactive/headless tab).
+        setTimeout(() => { el.textContent = to; }, dur + 80);
+    }
+
+    function longerPeriod(p) {
+        const i = PERIOD_ORDER.indexOf(p);
+        for (let j = i + 1; j < PERIOD_ORDER.length; j++) {
+            if (available.includes(PERIOD_ORDER[j])) return PERIOD_ORDER[j];
+        }
+        return null;
+    }
+
+    function renderScore(dim, data) {
+        const numEl = $(dim + '-num'), verdEl = $(dim + '-verdict');
+        if (!data) { numEl.textContent = '–'; numEl.style.color = 'var(--muted)'; verdEl.textContent = ''; return; }
+        const col = 'var(--' + data.label_color + ')';
+        animateNum(numEl, data.score);
+        numEl.style.color = col;
+        verdEl.textContent = data.label;
+        verdEl.style.color = col;
+    }
+
+    function renderStanding(dim, pfx, periods) {
+        const st = standingPeriods[current] || {};
+        const el = $(pfx + '-standing');
+        if (st[dim + '_has_data']) {
+            el.innerHTML = '<b>#' + st[dim + '_rank'] + '</b> / ' + st[dim + '_size']
+                + ' &nbsp;·&nbsp; <span class="pct">top ' + Math.max(1, st[dim + '_pct']) + '%</span>';
+        } else {
+            el.innerHTML = '';
+        }
+        // Trend: selected window vs the next-longer available window (recent vs average).
+        const tEl = $(pfx + '-trend');
+        const lp = longerPeriod(current);
+        const cur = periods[current], lng = lp ? periods[lp] : null;
+        if (cur && lng) {
+            const d = cur.score - lng.score;
+            const dir = d > 0 ? 'up' : d < 0 ? 'down' : 'flat';
+            tEl.hidden = false;
+            tEl.className = 'sb-trend trend-' + dir;
+            tEl.innerHTML = arrowSVG(dir) + (d > 0 ? '+' + d : d < 0 ? d : 'even') + ' vs ' + PERIOD_AVG[lp];
+        } else {
+            tEl.hidden = true;
+        }
+    }
+
+    function renderMap() {
+        const a = activityPeriods[current], s = skillPeriods[current];
+        const rows = MODES.map(m => {
+            const aHas = m.aHas ? !!(a && a[m.aHas]) : !!a;
+            const sHas = !!(s && s[m.sHas]);
+            const aVal = a ? (a[m.aKey] || 0) : 0;
+            const sVal = s ? (s[m.sKey] || 0) : 0;
+            const cell = (has, val) => has
+                ? '<div class="cell"><div class="bar-track"><div class="bar-fill" style="--v:' + (val / 100) + '"></div></div><span class="cell-score">' + val + '</span></div>'
+                : '<div class="cell nd"><div class="bar-track"></div><span class="cell-score">N/A</span></div>';
+            return '<div class="map-row" style="--mh:' + m.hue + '">'
+                + '<div class="mode"><span class="mode-dot"></span><span class="mode-name">' + m.name + '</span></div>'
+                + cell(aHas, aVal) + cell(sHas, sVal)
+                + '<button class="cell-info" data-mode="' + m.key + '" aria-label="' + esc(m.name) + ' detail" aria-haspopup="dialog">'
+                + '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.3"/><rect x="7.2" y="6.8" width="1.6" height="4.4" rx="0.8" fill="currentColor"/><rect x="7.2" y="4.2" width="1.6" height="1.7" rx="0.8" fill="currentColor"/></svg>'
+                + '</button></div>';
+        }).join('');
+        $('map-rows').innerHTML = rows;
+    }
+
+    function renderPeak() {
+        const a = activityPeriods[current], s = skillPeriods[current];
+        let best = null;
+        MODES.forEach(m => {
+            const aHas = m.aHas ? !!(a && a[m.aHas]) : !!a;
+            const sHas = !!(s && s[m.sHas]);
+            if (aHas && a) { const v = a[m.aKey] || 0; if (!best || v > best.v) best = { v, name: m.name, dim: 'Activity' }; }
+            if (sHas && s) { const v = s[m.sKey] || 0; if (!best || v > best.v) best = { v, name: m.name, dim: 'Skill' }; }
+        });
+        const chip = $('peak-chip');
+        if (best && best.v > 0) {
+            $('peak-body').innerHTML = esc(best.name) + ' ' + best.dim + ' <b style="color:var(--text)">' + best.v + '</b>';
+            chip.hidden = false;
+        } else {
+            chip.hidden = true;
+        }
+    }
+
+    function render() {
+        const a = activityPeriods[current], s = skillPeriods[current];
+        $('std-period').textContent = PERIOD_PHRASE[current] || 'this month';
+        if (!a && !s) {
+            $('hero-body').innerHTML = '<div class="hero-empty">Not enough tracked data yet for a standing. Play a few ranked, raid, war, or CWL rounds and this fills in.</div>';
             return;
         }
-        if (leftId) document.getElementById(leftId).style.display = '';
-        const col = `var(--${d.label_color})`;
-        document.getElementById(scoreId).textContent = d.score;
-        document.getElementById(scoreId).style.color = col;
-        document.getElementById(labelId).textContent = d.label;
-        document.getElementById(labelId).style.color = col;
-        const comps = componentDefs(d);
-        document.getElementById(subId).innerHTML = comps.map(c =>
-            `<span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:${c.color};">${c.score}</span>`
-        ).join('<span style="color:var(--border);margin:0 5px;">·</span>');
-        document.getElementById(componentsId).innerHTML = comps.map(c => {
-            if (c.hasData === false) return `
-            <div class="score-component">
-                <div class="score-component-header">
-                    <span class="score-component-name">${c.name}</span>
-                    <span style="font-family:'Manrope',sans-serif;font-size:12px;color:var(--muted);font-style:italic;">No data</span>
-                </div>
-                <div class="score-bar-nodata"></div>
-            </div>`;
-            return `
-            <div class="score-component">
-                <div class="score-component-header">
-                    <span class="score-component-name">${c.name}</span>
-                    <span class="score-component-pts" style="color:${c.color};">${c.score}/${c.max}</span>
-                </div>
-                <div class="score-bar-track">
-                    <div class="score-bar-fill" style="width:${c.max ? Math.round(c.score/c.max*100) : 0}%;background:${c.color};"></div>
-                </div>
-                <div class="score-detail">${c.detail}</div>
-            </div>`;
-        }).join('');
+        renderScore('act', a);
+        renderScore('sk', s);
+        renderStanding('activity', 'act', activityPeriods);
+        renderStanding('skill', 'sk', skillPeriods);
+        renderMap();
+        renderPeak();
     }
 
     function renderPeriodToggle() {
-        document.getElementById('periodToggle').innerHTML = sharedAvailable.map(p =>
-            `<button class="action-btn${p === sharedPeriod ? ' active' : ''}" onclick="switchPeriod('${p}')">${periodLabels[p]}</button>`
+        $('periodToggle').innerHTML = available.map(p =>
+            '<button class="action-btn' + (p === current ? ' active' : '') + '" aria-pressed="' + (p === current) + '" onclick="switchPeriod(\'' + p + '\')">' + PERIOD_LABEL[p] + '</button>'
         ).join('');
     }
+    function switchPeriod(p) { current = p; renderPeriodToggle(); render(); }
 
-    function renderAll() {
-        renderPeriodToggle();
-        renderCard(activityPeriods, 'act-score', 'act-label', 'act-sub', 'act-components', d => [
-            { name: 'Ranked',       score: d.ranked_score, max: d.ranked_max, detail: d.ranked_detail, color: MODE_COLOR.ranked },
-            { name: 'Raid',         score: d.raid_score,   max: d.raid_max,   detail: d.raid_detail,   color: MODE_COLOR.raid },
-            { name: 'Farm Attacks', score: d.battle_score, max: d.battle_max, detail: d.battle_detail, color: MODE_COLOR.battle },
-            { name: 'Clan War',     score: d.war_score  || 0, max: d.war_max  || 100, detail: d.war_detail  || '', color: MODE_COLOR.war, hasData: d.war_score_has_data },
-            { name: 'CWL',          score: d.cwl_score  || 0, max: d.cwl_max  || 100, detail: d.cwl_detail  || '', color: MODE_COLOR.cwl, hasData: d.cwl_score_has_data },
-        ]);
-        renderCard(skillPeriods, 'sk-score', 'sk-label', 'sk-sub', 'sk-components', d => [
-            { name: 'Ranked',       score: d.ranked_skill, max: d.ranked_max, detail: d.ranked_detail, color: MODE_COLOR.ranked, hasData: d.ranked_skill_has_data },
-            { name: 'Raid',         score: d.raid_skill,   max: d.raid_max,   detail: d.raid_detail,   color: MODE_COLOR.raid,   hasData: d.raid_skill_has_data },
-            { name: 'Farm Attacks', score: d.battle_skill, max: d.battle_max, detail: d.battle_detail, color: MODE_COLOR.battle, hasData: d.battle_skill_has_data },
-            { name: 'Clan War',     score: d.war_skill,    max: d.war_max,    detail: d.war_detail,    color: MODE_COLOR.war,    hasData: d.war_skill_has_data },
-            { name: 'CWL',          score: d.cwl_skill,    max: d.cwl_max,    detail: d.cwl_detail,    color: MODE_COLOR.cwl,    hasData: d.cwl_skill_has_data },
-        ], 'sk-left');
+    // ── History tabs (WAI-ARIA tablist: roving tabindex + arrow-key nav) ──
+    function switchTab(key, focusTab) {
+        document.querySelectorAll('.htab').forEach(t => {
+            const on = t.id === 'tab-' + key;
+            t.setAttribute('aria-selected', on);
+            t.classList.toggle('active', on);
+            t.tabIndex = on ? 0 : -1;
+            if (on && focusTab) t.focus();
+        });
+        document.querySelectorAll('.hist-panel').forEach(p => {
+            const on = p.id === 'panel-' + key;
+            p.classList.toggle('active', on);
+            p.hidden = !on;
+        });
+    }
+    function tabKeydown(e) {
+        const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End'];
+        if (!keys.includes(e.key)) return;
+        const tabs = Array.from(document.querySelectorAll('.htab'));
+        const i = Math.max(0, tabs.findIndex(t => t.getAttribute('aria-selected') === 'true'));
+        let n = i;
+        if (e.key === 'ArrowRight') n = (i + 1) % tabs.length;
+        else if (e.key === 'ArrowLeft') n = (i - 1 + tabs.length) % tabs.length;
+        else if (e.key === 'Home') n = 0;
+        else if (e.key === 'End') n = tabs.length - 1;
+        e.preventDefault();
+        switchTab(tabs[n].id.replace('tab-', ''), true);
     }
 
-    function switchPeriod(p) { sharedPeriod = p; renderAll(); }
-
-    function toggleExpand(btn) {
-        const card = btn.closest('.section-card');
-        const backdrop = document.getElementById('fs-backdrop');
-        const isOpen = card.classList.contains('fs-open');
-        document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
-        backdrop.classList.remove('active');
-        if (!isOpen) { card.classList.add('fs-open'); backdrop.classList.add('active'); }
+    // ── Strength-map detail popover (keyboard + touch) ──
+    let detailPop;
+    function ensurePop() {
+        if (!detailPop) {
+            detailPop = document.createElement('div');
+            detailPop.className = 'detail-pop';
+            detailPop.setAttribute('popover', 'auto');
+            detailPop.setAttribute('role', 'dialog');
+            document.body.appendChild(detailPop);
+        }
+        return detailPop;
     }
+    function openDetail(btn) {
+        const key = btn.dataset.mode;
+        const mode = MODES.find(m => m.key === key);
+        const a = activityPeriods[current], s = skillPeriods[current];
+        const aDetail = a ? (a[DETAIL[key]] || '—') : '—';
+        const sDetail = s ? (s[DETAIL[key]] || '—') : '—';
+        const p = ensurePop();
+        const wasMine = p._owner === btn && p.matches(':popover-open');
+        if (p.matches(':popover-open')) p.hidePopover();
+        if (wasMine) { p._owner = null; return; }
+        p.innerHTML = '<h5><span class="dot" style="background:' + mode.hue + '"></span>' + esc(mode.name) + '</h5>'
+            + '<div class="dp-block"><div class="dp-k">Activity</div><div class="dp-v">' + esc(aDetail) + '</div></div>'
+            + '<div class="dp-block"><div class="dp-k">Skill</div><div class="dp-v">' + esc(sDetail) + '</div></div>';
+        p.setAttribute('aria-label', mode.name + ' activity and skill detail');
+        p._owner = btn;
+        p.showPopover();
+        const r = btn.getBoundingClientRect();
+        const w = 268;
+        p.style.left = Math.max(12, Math.min(window.innerWidth - w - 12, r.right - w)) + 'px';
+        p.style.top = (r.bottom + 6) + 'px';
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
-        renderAll();
-        document.getElementById('fs-backdrop').addEventListener('click', function () {
-            document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
-            this.classList.remove('active');
+        renderPeriodToggle();
+        render();
+        // Delegated info-button clicks (map rebuilds on period switch, so bind on the stable container).
+        $('map-rows').addEventListener('click', e => {
+            const btn = e.target.closest('.cell-info');
+            if (btn) openDetail(btn);
         });
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                document.querySelectorAll('.section-card.fs-open').forEach(c => c.classList.remove('fs-open'));
-                document.getElementById('fs-backdrop').classList.remove('active');
-            }
-        });
+        const tl = document.querySelector('.hist-tabs');
+        if (tl) tl.addEventListener('keydown', tabKeydown);
+        // A viewport-anchored popover shouldn't hang in place while the page scrolls under it.
+        window.addEventListener('scroll', () => {
+            if (detailPop && detailPop.matches(':popover-open')) detailPop.hidePopover();
+        }, { passive: true });
     });
 </script>
-
-<div id="fs-backdrop" class="fs-backdrop"></div>
 
 {% endif %}
 

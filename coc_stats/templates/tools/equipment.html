@@ -4,7 +4,6 @@
 {% include '_head.html' %}
 
         .container { max-width: 100%; }
-        .page-header { position: static; }
 
         .no-link {
             background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
@@ -116,7 +115,7 @@
 
         /* ── Sticky Panel ── */
         .sp-panel {
-            position: sticky; top: 59px; z-index: 50;
+            position: sticky; top: var(--nav-h, 63px); z-index: 50;
             display: grid; grid-template-columns: auto 1px 1fr;
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 14px; margin-bottom: 16px;
@@ -361,7 +360,7 @@
 
 {% include '_nav.html' %}
 
-{% set page_header_title = '🛡️ Equipment <span>Calculator</span>' %}
+{% set page_header_title = 'Equipment <span>Calculator</span>' %}
 {% set page_header_desc = 'Hero equipment levels for your linked account.' %}
 {% include '_page_header.html' %}
 

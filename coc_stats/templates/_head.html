@@ -4,14 +4,14 @@
     <title>{{ page_title }}</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>{{ favicon_icon | default('⚔️') }}</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&family=Big+Shoulders+Display:wght@700;800&family=JetBrains+Mono:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Big+Shoulders+Display:wght@700;800&family=JetBrains+Mono:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
     {% if chartjs %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endif %}
     {% if chartjs_adapter %}<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>{% endif %}
     <script src="/static/js/float_tooltip.js"></script>
     <script src="/static/js/render_stars.js"></script>
     <script>
         window.VERDICT_LABELS = {'badge-godlike':'Godlike','badge-dominant':'Dominant','badge-wow':'Very Good','badge-good':'Good','badge-warning':'Bad','badge-suck':'Disaster','badge-useless':'Useless','badge-inactive':'Inactive'};
-        window.VERDICT_COLORS = {'badge-godlike':'#bc8cff','badge-dominant':'#f0a500','badge-wow':'#3fb950','badge-good':'#58a6ff','badge-warning':'#e8793a','badge-suck':'#f85149','badge-useless':'#8b949e','badge-inactive':'#3d4f66'};
+        window.VERDICT_COLORS = {'badge-godlike':'oklch(0.62 0.170 290)','badge-dominant':'oklch(0.62 0.190 330)','badge-wow':'oklch(0.72 0.150 165)','badge-good':'oklch(0.68 0.140 230)','badge-warning':'oklch(0.68 0.170 55)','badge-suck':'oklch(0.60 0.200 25)','badge-useless':'oklch(0.66 0.014 330)','badge-inactive':'oklch(0.34 0.014 330)'};
         function debounce(fn, delay = 200) {
             let t;
             return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
@@ -20,33 +20,89 @@
     <style>
         /* Canonical sitewide palette. Names are kept stable on purpose — dozens of
            not-yet-migrated templates reference these directly — only the values move
-           onto the "ops" identity established in index.html / ranked_weeks.html.
-           The --ops-* aliases below let newly migrated pages drop their own local
-           :root duplicate and just point here instead. */
+           onto the "night-ops thermal scope" identity established in the 2026-07-17
+           index redesign. The --ops-* aliases below let newly migrated pages drop
+           their own local :root duplicate and just point here instead.
+           Strategy: Committed. Primary (--accent) is a magenta-red "hostile/urgent"
+           signal at hue 330; --green is recomposed as a cyan-green "friendly/positive"
+           counter-signal (IFF-style), not a generic success green. Neutrals carry a
+           faint 330 tint (matte gunmetal under a dim signal light) rather than pure
+           chroma-0 black. */
         :root {
-            --bg:      #0d1013;
-            --surface: #161a20;
-            --surf2:   #1d2229;
-            --border:  #262c35;
-            --bord2:   #20252c;
-            --text:    #edf0f4;
-            --muted:   #838d9a;
-            --accent:  #d9a441;
-            --acc2:    #8a6224;
-            --green:   #3ec06a;
-            --blue:    #35c2d1;
-            --red:     #e2483f;
-            --yellow:  #e6b83d;
-            --purple:  #9066e8;
-            --orange:  #d2891f;
+            --bg:      oklch(0.10 0.004 330);
+            --surface: oklch(0.16 0.010 330);
+            --surf2:   oklch(0.21 0.012 330);
+            --border:  oklch(0.28 0.014 330);
+            --bord2:   oklch(0.24 0.012 330);
+            --text:    oklch(0.95 0.006 330);
+            --muted:   oklch(0.66 0.014 330);
+            --accent:  oklch(0.62 0.190 330);
+            --acc2:    oklch(0.42 0.150 330);
+            --green:   oklch(0.72 0.150 165);
+            --blue:    oklch(0.68 0.140 230);
+            --red:     oklch(0.63 0.200 25);
+            /* Deeper red reserved for SOLID fills that carry white/light text
+               (the nav + admin count badges). --red above is tuned lighter so
+               red-on-dark TEXT clears WCAG AA 4.5:1; that same value is too light
+               under #fff, so those filled pills use this darker ground instead
+               (white-on-red ≈5:1). */
+            --red-solid: oklch(0.56 0.200 25);
+            --yellow:  oklch(0.78 0.150 85);
+            --purple:  oklch(0.62 0.170 290);
+            --orange:  oklch(0.68 0.170 55);
+
+            /* Real in-game loot hues, canonical sitewide (OKLCH). A player's gold /
+               elixir / dark reads identically on every page that shows loot — Battle
+               History and the Player profile both point here instead of redefining
+               hex locally. */
+            --loot-gold:   oklch(0.80 0.148 82);
+            --loot-elixir: oklch(0.64 0.216 341);
+            --loot-dark:   oklch(0.67 0.093 297);
 
             --ops-bg: var(--bg); --ops-surface: var(--surface); --ops-surface-2: var(--surf2);
             --ops-line: var(--border); --ops-ink: var(--text); --ops-ink-dim: var(--muted);
             --ops-gold: var(--accent); --ops-elixir: var(--purple); --ops-raid: var(--red);
-            --ops-ranked: var(--blue); --ops-win: var(--green); --ops-star: #ffcf3d;
+            --ops-ranked: var(--blue); --ops-win: var(--green); --ops-star: oklch(0.83 0.165 90);
+            /* --ops-gold doubles as the sitewide interactive/primary accent (nav-active, focus
+               rings, links) — War gets its own hue so "this is War" and "this is selected/focused"
+               aren't the same signal. */
+            --ops-war: var(--orange);
+
+            /* Real height of the sitewide nav (row 1 + status strip), kept in sync
+               by _nav.html's ResizeObserver. Every sticky-below-nav element reads
+               this instead of a hardcoded 58/59px so the status strip can expand
+               without pushing content under it. */
+            --nav-h: 63px;
         }
 
         html { overflow-y: scroll; }
+
+        /* ── IN-PAGE SCROLL REGIONS: thin, inset, theme-tinted — never the native
+           OS bar over the flat surfaces. The document scrollbar (html, above) stays
+           the browser default; only in-page containers are restyled. Canonical
+           recipe — see DESIGN.md → Components → Scrollbars. New scroll wrappers
+           should reuse one of these class names (or copy the recipe). ── */
+        .table-scroll, .detail-table-scroll, .heat-scroll, .recent-table-scroll, .nav-mobile-panel {
+            scrollbar-width: thin;
+            scrollbar-color: color-mix(in oklch, var(--muted) 45%, transparent) transparent;
+        }
+        .table-scroll::-webkit-scrollbar, .detail-table-scroll::-webkit-scrollbar,
+        .heat-scroll::-webkit-scrollbar, .recent-table-scroll::-webkit-scrollbar,
+        .nav-mobile-panel::-webkit-scrollbar { width: 11px; height: 11px; }
+        .table-scroll::-webkit-scrollbar-track, .detail-table-scroll::-webkit-scrollbar-track,
+        .heat-scroll::-webkit-scrollbar-track, .recent-table-scroll::-webkit-scrollbar-track,
+        .nav-mobile-panel::-webkit-scrollbar-track { background: transparent; }
+        .table-scroll::-webkit-scrollbar-thumb, .detail-table-scroll::-webkit-scrollbar-thumb,
+        .heat-scroll::-webkit-scrollbar-thumb, .recent-table-scroll::-webkit-scrollbar-thumb,
+        .nav-mobile-panel::-webkit-scrollbar-thumb {
+            background: color-mix(in oklch, var(--muted) 38%, transparent);
+            border-radius: 6px; border: 3px solid transparent; background-clip: padding-box;
+        }
+        .table-scroll::-webkit-scrollbar-thumb:hover, .detail-table-scroll::-webkit-scrollbar-thumb:hover,
+        .heat-scroll::-webkit-scrollbar-thumb:hover, .recent-table-scroll::-webkit-scrollbar-thumb:hover,
+        .nav-mobile-panel::-webkit-scrollbar-thumb:hover {
+            background: color-mix(in oklch, var(--muted) 62%, transparent); background-clip: padding-box;
+        }
 
         /* ── FLOATING TOOLTIP (shared by every hover-info element site-wide) ── */
         .float-tooltip {
@@ -56,57 +112,76 @@
             font-family: 'Manrope', sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,.5); max-width: 320px;
         }
 
-        /* ── PAGE HEADER ── */
-        .page-header {
-            position: sticky;
-            top: 59px;
-            z-index: 99;
-            background: var(--bg);
-            padding: 15px 0;
-            border-bottom: 1px solid rgba(217,164,65,.15);
-        }
-        .page-header-controls { padding: 0; }
-        .page-header-controls .controls { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
-        .page-header::before {
-            content: ''; position: absolute; inset: 0;
-            background: radial-gradient(ellipse 45% 150% at 5% 50%, rgba(217,164,65,.09), transparent 65%);
-            pointer-events: none;
-        }
-        .page-header-inner {
-            max-width: 1400px; margin: 0 auto;
-            padding: 0 32px;
+        /* ── PAGE HEADER ──
+           Title + desc + meta readout scroll away; only the controls toolbar
+           pins under the nav (see .page-toolbar). No accent side-stripe or glow —
+           the display type and the mono readout carry the identity, per the
+           DESIGN.md bans (no >1px colored side stripe, no decorative glow). */
+        .page-header { padding: 26px 0 0; }
+        .page-header-inner { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+        .page-header-top {
             display: flex; align-items: flex-start; justify-content: space-between;
-            gap: 20px; flex-wrap: wrap; position: relative; z-index: 1;
+            gap: 18px 28px; flex-wrap: wrap;
         }
+        .page-header-headings { min-width: 0; }
         .page-header h1 {
             font-family: 'Big Shoulders Display', sans-serif; font-size: clamp(30px, 6vw, 52px); font-weight: 800;
-            letter-spacing: .5px; line-height: 1; text-transform: uppercase;
-            margin-bottom: 10px; position: relative; padding-left: 20px;
+            letter-spacing: .5px; line-height: 1; text-transform: uppercase; text-wrap: balance;
         }
-        .page-header h1::before {
-            content: ''; position: absolute; left: 0; top: 0.08em; bottom: 0.08em;
-            width: 4px; background: linear-gradient(180deg, var(--accent), var(--acc2));
-            border-radius: 2px; box-shadow: 0 0 16px rgba(217,164,65,.5);
+        .page-header h1 span { color: var(--accent); }
+        .page-header p, .page-sub {
+            font-family: 'Manrope', sans-serif; color: var(--muted); font-size: 14px;
+            margin-top: 9px; max-width: 75ch;
         }
-        .page-header h1 span {
-            background: linear-gradient(135deg, var(--accent) 0%, #f0d590 50%, var(--accent) 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        .page-header-right { flex-shrink: 0; }
+
+        /* ── HEADER READOUT (mono figures — the signature moment) ── */
+        .readout {
+            display: flex; flex-wrap: wrap; align-items: stretch;
+            margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border);
         }
-        .page-header p, .page-sub { font-family: 'Manrope', sans-serif; color: var(--muted); font-size: 14px; padding-left: 20px; margin-top: 6px; }
-        .page-controls { padding: 0 32px 16px; position: sticky; top: 58px; z-index: 99; background: var(--bg); }
-        .page-controls .controls { max-width: 1400px; margin: 0 auto; margin-bottom: 0; position: static; }
+        .readout .fig { display: flex; flex-direction: column; gap: 6px; padding: 2px 22px; }
+        .readout .fig:first-child { padding-left: 0; }
+        .readout .fig + .fig { border-left: 1px solid var(--border); }
+        .readout .fig .v {
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 21px;
+            color: var(--text); line-height: 1;
+        }
+        .readout .fig .l {
+            font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 10.5px;
+            letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); line-height: 1;
+        }
+        .readout .fig .v.win  { color: var(--green); }
+        .readout .fig .v.loss { color: var(--red); }
+        .readout .fig .v.mode { color: var(--mode, var(--blue)); }
+
+        /* ── STICKY CONTROLS TOOLBAR (the only part that pins on scroll) ── */
+        .page-toolbar {
+            position: sticky; top: var(--nav-h, 63px); z-index: 30;
+            background: var(--bg); margin-top: 20px; padding-bottom: 14px;
+            border-bottom: 1px solid color-mix(in oklch, var(--accent) 10%, transparent);
+        }
+        .page-toolbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
 
         /* ── CONTROLS BAR ── */
         .controls {
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-            background: var(--surface); padding: 12px 18px;
-            border-radius: 10px; border: 1px solid var(--border); margin-bottom: 0;
+            background: var(--surface); padding: 11px 16px;
+            border-radius: 10px; border: 1px solid var(--border);
         }
+        .controls-primary { display: flex; align-items: center; gap: 9px; }
+        .controls-primary label {
+            font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+            letter-spacing: 1px; text-transform: uppercase; color: var(--muted); white-space: nowrap;
+        }
+        .controls-primary .selector { padding: 9px 15px; font-size: 13.5px; font-weight: 600; }
+        .controls-secondary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
         .controls label {
             font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted);
             text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap;
         }
         .ctrl-divider { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+        .ctrl-divider-primary { height: 28px; margin: 0 2px; }
         .selector {
             padding: 7px 13px; border: 1px solid var(--border); border-radius: 7px;
             font-size: 13px; font-family: 'Manrope', sans-serif;
@@ -114,47 +189,53 @@
             cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
             appearance: none; -webkit-appearance: none;
         }
-        .selector:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(217,164,65,0.14); }
+        .selector:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent); }
         .action-btn {
             padding: 7px 14px; background: transparent; color: var(--accent);
-            border: 1px solid rgba(217,164,65,0.35); border-radius: 6px;
+            border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent); border-radius: 6px;
             font-weight: 700; font-size: 12px; font-family: 'JetBrains Mono', monospace;
             letter-spacing: 0.4px; text-transform: uppercase; cursor: pointer; transition: all 0.15s; white-space: nowrap;
         }
-        .action-btn:hover { background: rgba(217,164,65,0.1); border-color: var(--accent); box-shadow: 0 0 12px rgba(217,164,65,0.18); }
-        .action-btn.active { background: rgba(217,164,65,0.12); border-color: var(--accent); color: var(--accent); }
+        .action-btn:hover { background: color-mix(in oklch, var(--accent) 10%, transparent); border-color: var(--accent); box-shadow: 0 0 12px color-mix(in oklch, var(--accent) 18%, transparent); }
+        .action-btn.active { background: color-mix(in oklch, var(--accent) 12%, transparent); border-color: var(--accent); color: var(--accent); }
 
         /* ── ACCESSIBILITY: sitewide keyboard focus ring ── */
         :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) {
+            .selector, .action-btn { transition: none; }
+        }
 
         @media (max-width: 900px) {
-            .page-header { padding: 13px 0; }
-            .page-header-inner { padding: 0 20px; }
-            .page-header-controls .controls { padding: 0 20px; }
+            .page-header { padding: 20px 0 0; }
+            .page-header-inner, .page-toolbar-inner { padding: 0 20px; }
             .page-header h1 { font-size: 36px; letter-spacing: .2px; }
-            .page-controls { padding: 0 20px 12px; }
         }
         @media (max-width: 480px) {
-            .controls { padding: 10px 14px; gap: 8px; }
-            .ctrl-divider { display: none; }
+            .controls { padding: 10px 12px; gap: 8px; }
             .selector { font-size: 12px; padding: 6px 10px; }
         }
-        /* ── MOBILE HEADER + CONTROLS (shared by every page using _page_header.html).
-           The sticky header was eating ~46% of the phone viewport (nav 59px +
-           header ~317px, all pinned). Un-stick the whole block so it scrolls away,
-           and shrink each piece. Controls rules use `.page-header-controls .controls`
-           (0,2,0) so they win over any page that re-declares `.controls` for its own
-           theme/stickiness — no per-page edits needed for the bar. ── */
+        /* ── MOBILE HEADER (≤640): un-stick the whole block so it scrolls away —
+           the sticky header otherwise ate ~46% of the phone viewport — and shrink
+           each piece. Primary control goes full-width; secondary cluster wraps
+           beneath it; in-bar dividers collapse. ── */
         @media (max-width: 640px) {
-            .page-header { position: static; padding: 11px 0 9px; }
-            .page-header h1 { font-size: 26px; letter-spacing: .4px; margin-bottom: 4px; }
-            .page-header p, .page-sub { font-size: 11.5px; margin-top: 2px; line-height: 1.3; }
-            .page-controls { position: static; }
-            .page-header-controls .controls { position: static; gap: 7px 8px; }
+            .page-header { padding: 14px 0 0; }
+            .page-header h1 { font-size: 26px; letter-spacing: .4px; }
+            .page-header p, .page-sub { font-size: 12px; margin-top: 6px; line-height: 1.35; }
+            .readout { margin-top: 12px; padding-top: 11px; }
+            .readout .fig { padding: 0 13px; gap: 4px; }
+            .readout .fig:first-child { padding-left: 0; }
+            .readout .fig .v { font-size: 17px; }
+            .readout .fig .l { font-size: 9.5px; letter-spacing: 1px; }
+            .page-toolbar { position: static; margin-top: 14px; padding-bottom: 0; border-bottom: none; }
+            .controls { gap: 7px 8px; }
+            .controls-primary { flex: 1 1 100%; }
+            .controls-primary .selector { flex: 1; padding: 7px 12px; }
+            .ctrl-divider { display: none; }
             .controls label { font-size: 10px; }
-            .controls .ctrl-divider { display: none; }
-            .controls .selector { font-size: 12px; padding: 6px 10px; }
-            .controls .action-btn { padding: 5px 11px; font-size: 10.5px; }
+            /* 44px min-height: touch target floor, verified failing at 26px pre-fix. */
+            .controls .selector { font-size: 12px; padding: 6px 10px; min-height: 44px; box-sizing: border-box; }
+            .controls .action-btn { padding: 5px 11px; font-size: 10.5px; min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box; }
         }
 
         /* ── GLOBAL RESETS ── */
@@ -166,12 +247,15 @@
 
         /* ── JUDGMENT BADGES ── */
         .judgment { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; letter-spacing: 0.4px; font-family: 'Rajdhani', sans-serif; text-transform: uppercase; }
-        .badge-godlike  { background: rgba(188,140,255,0.15); color: var(--purple); border: 1px solid rgba(188,140,255,0.4); }
-        .badge-dominant { background: rgba(240,165,0,0.15);   color: var(--accent); border: 1px solid rgba(240,165,0,0.35); }
-        .badge-wow      { background: rgba(63,185,80,0.12);   color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
-        .badge-good     { background: rgba(88,166,255,0.12);  color: var(--blue);   border: 1px solid rgba(88,166,255,0.25); }
-        .badge-warning  { background: rgba(210,153,34,0.12);  color: var(--orange); border: 1px solid rgba(210,153,34,0.3); }
-        .badge-suck     { background: rgba(248,81,73,0.12);   color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
-        .badge-useless  { background: rgba(139,148,158,0.08); color: var(--muted);  border: 1px solid rgba(139,148,158,0.2); }
-        .badge-inactive { background: rgba(139,148,158,0.08); color: var(--muted);  border: 1px solid rgba(139,148,158,0.15); }
-        .badge-undefined { background: rgba(139,148,158,0.06); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); border-style: dashed; }
+        /* godlike/dominant/suck text lightened to L0.66 (hue+chroma unchanged) so
+           each tier clears AA 4.5:1 on its own pill — the other tiers already sit
+           in this 0.66–0.72 band. See _head.html contrast fix (2026-07). */
+        .badge-godlike  { background: color-mix(in oklch, var(--purple) 15%, transparent); color: oklch(0.66 0.170 290); border: 1px solid color-mix(in oklch, var(--purple) 40%, transparent); }
+        .badge-dominant { background: color-mix(in oklch, var(--accent) 15%, transparent); color: oklch(0.66 0.190 330); border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent); }
+        .badge-wow      { background: color-mix(in oklch, var(--green) 15%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 32%, transparent); }
+        .badge-good     { background: color-mix(in oklch, var(--blue) 14%, transparent);   color: var(--blue);   border: 1px solid color-mix(in oklch, var(--blue) 28%, transparent); }
+        .badge-warning  { background: color-mix(in oklch, var(--orange) 15%, transparent); color: var(--orange); border: 1px solid color-mix(in oklch, var(--orange) 32%, transparent); }
+        .badge-suck     { background: color-mix(in oklch, var(--red) 14%, transparent);    color: oklch(0.66 0.200 25);    border: 1px solid color-mix(in oklch, var(--red) 32%, transparent); }
+        .badge-useless  { background: color-mix(in oklch, var(--muted) 10%, transparent);  color: var(--muted);  border: 1px solid color-mix(in oklch, var(--muted) 22%, transparent); }
+        .badge-inactive { background: color-mix(in oklch, var(--muted) 10%, transparent);  color: var(--muted);  border: 1px solid color-mix(in oklch, var(--muted) 16%, transparent); }
+        .badge-undefined { background: color-mix(in oklch, var(--muted) 7%, transparent); color: var(--muted); border: 1px solid color-mix(in oklch, var(--muted) 22%, transparent); border-style: dashed; }

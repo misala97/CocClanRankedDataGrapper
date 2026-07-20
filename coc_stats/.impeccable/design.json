@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-17T01:20:00Z",
+  "title": "Design System: CoC Analytics",
+  "extensions": {
+    "colorMeta": {
+      "gunmetal-black": {
+        "role": "neutral",
+        "displayName": "Gunmetal Black",
+        "canonical": "oklch(0.10 0.004 330)",
+        "tonalRamp": [
+          "oklch(0.10 0.004 330)", "oklch(0.16 0.010 330)", "oklch(0.21 0.012 330)",
+          "oklch(0.28 0.014 330)", "oklch(0.42 0.012 330)", "oklch(0.58 0.010 330)",
+          "oklch(0.66 0.014 330)", "oklch(0.95 0.006 330)"
+        ]
+      },
+      "scope-housing": { "role": "neutral", "displayName": "Scope Housing", "canonical": "oklch(0.16 0.010 330)" },
+      "scope-housing-raised": { "role": "neutral", "displayName": "Scope Housing, Raised", "canonical": "oklch(0.21 0.012 330)" },
+      "bezel-line": { "role": "neutral", "displayName": "Bezel Line", "canonical": "oklch(0.28 0.014 330)" },
+      "bezel-line-2": { "role": "neutral", "displayName": "Bezel Line, Alt", "canonical": "oklch(0.24 0.012 330)" },
+      "readout-white": { "role": "neutral", "displayName": "Readout White", "canonical": "oklch(0.95 0.006 330)" },
+      "dim-readout": { "role": "neutral", "displayName": "Dim Readout", "canonical": "oklch(0.66 0.014 330)" },
+      "threat-magenta": {
+        "role": "primary",
+        "displayName": "Threat Magenta",
+        "canonical": "oklch(0.62 0.190 330)",
+        "tonalRamp": [
+          "oklch(0.18 0.10 330)", "oklch(0.30 0.14 330)", "oklch(0.42 0.17 330)",
+          "oklch(0.54 0.19 330)", "oklch(0.62 0.19 330)", "oklch(0.74 0.15 330)",
+          "oklch(0.86 0.08 330)", "oklch(0.95 0.02 330)"
+        ]
+      },
+      "threat-magenta-deep": { "role": "primary", "displayName": "Threat Magenta, Deep", "canonical": "oklch(0.42 0.150 330)" },
+      "iff-green": {
+        "role": "secondary",
+        "displayName": "IFF Green",
+        "canonical": "oklch(0.72 0.150 165)",
+        "tonalRamp": [
+          "oklch(0.18 0.08 165)", "oklch(0.30 0.11 165)", "oklch(0.42 0.13 165)",
+          "oklch(0.54 0.15 165)", "oklch(0.72 0.15 165)", "oklch(0.80 0.12 165)",
+          "oklch(0.88 0.07 165)", "oklch(0.95 0.02 165)"
+        ]
+      },
+      "war-amber": {
+        "role": "tertiary",
+        "displayName": "War Amber",
+        "canonical": "oklch(0.68 0.170 55)",
+        "tonalRamp": [
+          "oklch(0.18 0.09 55)", "oklch(0.30 0.13 55)", "oklch(0.42 0.16 55)",
+          "oklch(0.54 0.17 55)", "oklch(0.68 0.17 55)", "oklch(0.78 0.13 55)",
+          "oklch(0.88 0.07 55)", "oklch(0.95 0.02 55)"
+        ]
+      },
+      "raid-red": {
+        "role": "semantic",
+        "displayName": "Raid Red",
+        "canonical": "oklch(0.60 0.200 25)",
+        "tonalRamp": [
+          "oklch(0.18 0.12 25)", "oklch(0.30 0.16 25)", "oklch(0.42 0.19 25)",
+          "oklch(0.54 0.20 25)", "oklch(0.60 0.20 25)", "oklch(0.72 0.15 25)",
+          "oklch(0.84 0.08 25)", "oklch(0.95 0.02 25)"
+        ]
+      },
+      "cwl-violet": {
+        "role": "semantic",
+        "displayName": "CWL Violet",
+        "canonical": "oklch(0.62 0.170 290)",
+        "tonalRamp": [
+          "oklch(0.18 0.10 290)", "oklch(0.30 0.13 290)", "oklch(0.42 0.16 290)",
+          "oklch(0.54 0.17 290)", "oklch(0.62 0.17 290)", "oklch(0.74 0.13 290)",
+          "oklch(0.86 0.07 290)", "oklch(0.95 0.02 290)"
+        ]
+      },
+      "recon-blue": {
+        "role": "semantic",
+        "displayName": "Recon Blue",
+        "canonical": "oklch(0.68 0.140 230)",
+        "tonalRamp": [
+          "oklch(0.18 0.08 230)", "oklch(0.30 0.11 230)", "oklch(0.42 0.13 230)",
+          "oklch(0.54 0.14 230)", "oklch(0.68 0.14 230)", "oklch(0.78 0.11 230)",
+          "oklch(0.88 0.06 230)", "oklch(0.95 0.02 230)"
+        ]
+      },
+      "caution-amber": { "role": "semantic", "displayName": "Caution Amber", "canonical": "oklch(0.78 0.150 85)" },
+      "star-gold": { "role": "accent", "displayName": "Star Gold", "canonical": "oklch(0.83 0.165 90)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Sitewide page-header titles only." },
+      "headline": { "displayName": "Headline", "purpose": "Band-level section headers within a page." },
+      "title": { "displayName": "Title", "purpose": "Component-level headings (tile titles, card headers)." },
+      "body": { "displayName": "Body", "purpose": "Descriptions and prose; caption variant for meta text." },
+      "label": { "displayName": "Label", "purpose": "Uppercase tracked tags, chips, and section labels." },
+      "data": { "displayName": "Data", "purpose": "Every score, stat, and numeric readout on the page." }
+    },
+    "shadows": [
+      { "name": "overlay", "value": "0 8px 24px rgba(0,0,0,.5)", "purpose": "Dropdown menus and tooltips leaving document flow." },
+      { "name": "overlay-lg", "value": "0 12px 32px rgba(0,0,0,.55)", "purpose": "Larger floating chrome (mobile nav panel)." },
+      { "name": "status-glow", "value": "0 0 6px color-mix(in oklch, currentColor 55%, transparent)", "purpose": "Soft colored halo behind small status/pulse indicators." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Default easing for every hover/press transition on the page (ease-out-quart)." },
+      { "name": "duration-hover", "value": "150ms", "purpose": "Standard hover-state transition duration." },
+      { "name": "duration-press", "value": "100ms", "purpose": "Snappier duration for :active press feedback." },
+      { "name": "duration-pulse", "value": "1800ms", "purpose": "Live-indicator pulse cycle (ease-in-out, opacity 1 to .35)." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "640px" },
+      { "name": "tablet", "value": "900px" },
+      { "name": "desktop-wide", "value": "1100px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Ticket",
+      "kind": "card",
+      "refersTo": "ticket",
+      "description": "Live/last-completed event status card (War/CWL/Raid). Full mode-tinted border, no side-stripe.",
+      "html": "<a href=\"#\" class=\"ds-ticket\" style=\"--mode: oklch(0.68 0.170 55);\">\n  <div class=\"ds-ticket-head\">\n    <span class=\"ds-ticket-mode\"><span class=\"ds-live-dot\"></span>War</span>\n    <span class=\"ds-ticket-state\">In War</span>\n  </div>\n  <div class=\"ds-ticket-body\">26★ vs 22★</div>\n</a>",
+      "css": ".ds-ticket { display: block; background: oklch(0.16 0.010 330); border: 1px solid color-mix(in oklch, var(--mode) 30%, oklch(0.28 0.014 330)); border-radius: 10px; padding: 18px 20px; text-decoration: none; position: relative; transition: border-color .15s cubic-bezier(0.25,1,0.5,1), transform .15s cubic-bezier(0.25,1,0.5,1), background .15s cubic-bezier(0.25,1,0.5,1); } .ds-ticket:hover { transform: translateY(-2px); background: oklch(0.21 0.012 330); } .ds-ticket:active { transform: translateY(-2px) scale(0.99); transition-duration: .1s; } .ds-ticket-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; } .ds-ticket-mode { font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--mode); display: flex; align-items: center; gap: 7px; } .ds-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mode); } .ds-ticket-state { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 3px; text-transform: uppercase; background: color-mix(in oklch, var(--mode) 14%, transparent); color: var(--mode); border: 1px solid color-mix(in oklch, var(--mode) 32%, transparent); } .ds-ticket-body { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 20px; color: oklch(0.95 0.006 330); text-align: center; padding: 8px 0; }"
+    },
+    {
+      "name": "Featured Tile",
+      "kind": "card",
+      "refersTo": "featured-tile",
+      "description": "Primary Command Deck tile for one of the 4 bounded live modes.",
+      "html": "<a href=\"#\" class=\"ds-tile\" style=\"--mode: oklch(0.68 0.140 230);\">\n  <div class=\"ds-tile-top\">\n    <div class=\"ds-tile-icon\">R</div>\n    <span class=\"ds-tile-tag\">Ranked</span>\n  </div>\n  <h3 class=\"ds-tile-h3\">Ranked Week</h3>\n  <p class=\"ds-tile-p\">Seasonal ladder standings, trophies and streaks.</p>\n</a>",
+      "css": ".ds-tile { display: block; background: oklch(0.16 0.010 330); border: 1px solid color-mix(in oklch, var(--mode) 28%, oklch(0.28 0.014 330)); border-radius: 10px; padding: 22px 24px; text-decoration: none; transition: border-color .15s cubic-bezier(0.25,1,0.5,1), transform .15s cubic-bezier(0.25,1,0.5,1), background .15s cubic-bezier(0.25,1,0.5,1); } .ds-tile:hover { transform: translateY(-2px); background: oklch(0.21 0.012 330); } .ds-tile:active { transform: translateY(-2px) scale(0.99); transition-duration: .1s; } .ds-tile-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; } .ds-tile-icon { width: 40px; height: 40px; border-radius: 8px; background: oklch(0.21 0.012 330); border: 1px solid oklch(0.28 0.014 330); display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--mode); transition: transform .15s cubic-bezier(0.25,1,0.5,1); } .ds-tile:hover .ds-tile-icon { transform: scale(1.08); } .ds-tile-tag { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--mode); } .ds-tile-h3 { font-family: 'Big Shoulders Display', sans-serif; font-weight: 700; font-size: 19px; color: oklch(0.95 0.006 330); margin: 0 0 7px; } .ds-tile-p { font-family: 'Manrope', sans-serif; font-size: 12.5px; color: oklch(0.66 0.014 330); line-height: 1.6; margin: 0; }"
+    },
+    {
+      "name": "Compact Row",
+      "kind": "custom",
+      "refersTo": "compact-row",
+      "description": "Quiet secondary-tier row. Reused for 'Reports & Tools' and demoted 'Last completed' events.",
+      "html": "<a href=\"#\" class=\"ds-mini\">\n  <div class=\"ds-mini-icon\">B</div>\n  <div class=\"ds-mini-text\"><strong>Battle History</strong><span>Every attack and defense</span></div>\n</a>",
+      "css": ".ds-mini { display: flex; align-items: center; gap: 12px; background: oklch(0.16 0.010 330); border: 1px solid oklch(0.28 0.014 330); border-radius: 8px; padding: 12px 16px; text-decoration: none; transition: background .15s cubic-bezier(0.25,1,0.5,1), border-color .15s cubic-bezier(0.25,1,0.5,1), transform .15s cubic-bezier(0.25,1,0.5,1); } .ds-mini:hover { background: oklch(0.21 0.012 330); border-color: color-mix(in oklch, oklch(0.66 0.014 330) 40%, oklch(0.28 0.014 330)); transform: translateY(-1px); } .ds-mini:active { transform: translateY(-1px) scale(0.98); transition-duration: .1s; } .ds-mini-icon { width: 30px; height: 30px; border-radius: 7px; background: oklch(0.21 0.012 330); border: 1px solid oklch(0.28 0.014 330); display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; color: oklch(0.66 0.014 330); flex-shrink: 0; transition: transform .15s cubic-bezier(0.25,1,0.5,1); } .ds-mini:hover .ds-mini-icon { transform: scale(1.08); } .ds-mini-text { display: flex; flex-direction: column; gap: 2px; } .ds-mini-text strong { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 13px; color: oklch(0.95 0.006 330); } .ds-mini-text span { font-family: 'Manrope', sans-serif; font-size: 11px; color: oklch(0.66 0.014 330); }"
+    },
+    {
+      "name": "Judgment Badge",
+      "kind": "chip",
+      "refersTo": "judgment-badge",
+      "description": "Sitewide verdict pill. One color per tier, never re-themed per page.",
+      "html": "<span class=\"ds-judgment ds-badge-wow\">Very Good</span>",
+      "css": ".ds-judgment { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; font-family: 'Rajdhani', sans-serif; } .ds-badge-godlike { background: color-mix(in oklch, oklch(0.62 0.170 290) 15%, transparent); color: oklch(0.62 0.170 290); border: 1px solid color-mix(in oklch, oklch(0.62 0.170 290) 40%, transparent); } .ds-badge-dominant { background: color-mix(in oklch, oklch(0.62 0.190 330) 15%, transparent); color: oklch(0.62 0.190 330); border: 1px solid color-mix(in oklch, oklch(0.62 0.190 330) 35%, transparent); } .ds-badge-wow { background: color-mix(in oklch, oklch(0.72 0.150 165) 15%, transparent); color: oklch(0.72 0.150 165); border: 1px solid color-mix(in oklch, oklch(0.72 0.150 165) 32%, transparent); } .ds-badge-good { background: color-mix(in oklch, oklch(0.68 0.140 230) 14%, transparent); color: oklch(0.68 0.140 230); border: 1px solid color-mix(in oklch, oklch(0.68 0.140 230) 28%, transparent); } .ds-badge-warning { background: color-mix(in oklch, oklch(0.78 0.150 85) 15%, transparent); color: oklch(0.78 0.150 85); border: 1px solid color-mix(in oklch, oklch(0.78 0.150 85) 32%, transparent); } .ds-badge-suck { background: color-mix(in oklch, oklch(0.60 0.200 25) 14%, transparent); color: oklch(0.60 0.200 25); border: 1px solid color-mix(in oklch, oklch(0.60 0.200 25) 32%, transparent); }"
+    },
+    {
+      "name": "Stat Cell",
+      "kind": "custom",
+      "refersTo": "stat-cell",
+      "description": "Bordered number+label block used for clan/personal quick-stats.",
+      "html": "<a href=\"#\" class=\"ds-stat\">\n  <div class=\"ds-stat-num\">52</div>\n  <div class=\"ds-stat-lbl\">Members</div>\n</a>",
+      "css": ".ds-stat { display: block; padding: 12px 22px; text-align: center; text-decoration: none; background: oklch(0.16 0.010 330); border: 1px solid oklch(0.28 0.014 330); border-radius: 10px; transition: background .15s cubic-bezier(0.25,1,0.5,1), transform .15s cubic-bezier(0.25,1,0.5,1); } .ds-stat:hover { background: oklch(0.21 0.012 330); transform: translateY(-1px); } .ds-stat:active { transform: translateY(-1px) scale(0.97); transition-duration: .1s; } .ds-stat-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 22px; color: oklch(0.95 0.006 330); } .ds-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: oklch(0.66 0.014 330); margin-top: 4px; }"
+    },
+    {
+      "name": "Action Button",
+      "kind": "button",
+      "refersTo": "action-button",
+      "description": "Shared controls-bar button (filters, period toggles) used across pages.",
+      "html": "<button class=\"ds-btn-action\">1 WEEK</button>",
+      "css": ".ds-btn-action { padding: 7px 14px; background: transparent; color: oklch(0.62 0.190 330); border: 1px solid color-mix(in oklch, oklch(0.62 0.190 330) 35%, transparent); border-radius: 6px; font-weight: 700; font-size: 12px; font-family: 'JetBrains Mono', monospace; letter-spacing: .4px; text-transform: uppercase; cursor: pointer; transition: all .15s cubic-bezier(0.25,1,0.5,1); } .ds-btn-action:hover { background: color-mix(in oklch, oklch(0.62 0.190 330) 10%, transparent); border-color: oklch(0.62 0.190 330); box-shadow: 0 0 12px color-mix(in oklch, oklch(0.62 0.190 330) 18%, transparent); } .ds-btn-action:focus-visible { outline: 2px solid oklch(0.62 0.190 330); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Ops Scope",
+    "overview": "CoC Analytics reads as a thermal-scope readout, not a SaaS dashboard: a near-black gunmetal surface that everything else sits on top of, with color reserved for signal, not decoration. Two hues carry the identify-friend-or-foe logic that the whole page runs on — Threat Magenta flags urgency and primary interaction, IFF Green flags a positive or friendly result — and a small family of category hues (War Amber, Raid Red, CWL Violet, Recon Blue) let a clan leader tell which mode a card belongs to at a glance, without reading the label first. This is a product surface (PRODUCT.md), not a brand page: the system exists to serve fast, trustworthy verdicts for two audiences at once — the leader making a bench call and the member checking their own week — never to perform for its own sake.\n\nWhat this system explicitly rejects, per PRODUCT.md's anti-references: the flattened, generic bordered-stat-tile SaaS-dashboard cliché, and anything that reads as a cold, soulless spreadsheet. Precision is the personality here, not sterility — the page should invite clicking around, not feel like a data dump.",
+    "keyCharacteristics": [
+      "Committed color strategy on identity-driven surfaces: Threat Magenta carries real visual weight, not a 10%-of-screen accent dab.",
+      "Flat by default — depth comes from tonal layering (bg → surface → raised surface), not drop shadows.",
+      "One shared easing curve and a complete hover → focus → active state chain on every interactive card; quiet at rest, decisive on interaction.",
+      "A strict two-tier information hierarchy wherever a section would otherwise become a flat repeated grid: a small set of featured, live-aware cards, plus a visually quieter compact-row tier for everything secondary."
+    ],
+    "rules": [
+      { "name": "The One Hue, One Job Rule", "body": "Threat Magenta means \"interactive or primary,\" never \"this belongs to War.\" War, Raid, CWL, and Ranked each carry their own dedicated hue so a color never has to answer two different questions at once.", "section": "colors" },
+      { "name": "The Tonal Depth Rule", "body": "Depth is bg → surface → raised-surface, not shadow. If an element needs to read as \"above\" its neighbor, step it one tonal level up; reach for box-shadow only on floating overlay chrome that genuinely leaves the document flow.", "section": "colors" },
+      { "name": "The Numbers Are Mono Rule", "body": "Any value a user reads as data — a score, a count, a stat — renders in JetBrains Mono, full stop. Manrope carries everything else.", "section": "typography" },
+      { "name": "The Flat Deck Rule", "body": "Cards never cast a shadow to prove they're clickable. A card's clickability is carried by its border, its hover tonal-shift, and its cursor — not by pretending it's floating above the surface it's actually flush with.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use OKLCH for every color token — no hex, no HSL.",
+      "Do give every game mode its own dedicated hue, distinct from Threat Magenta.",
+      "Do carry a verdict, not just a number, wherever the underlying logic supports one.",
+      "Do give every interactive card the full state chain: resting, hover, focus-visible, active/press.",
+      "Do respect prefers-reduced-motion for every transform-based hover/press effect and the live-dot pulse.",
+      "Do reuse the Compact Row component wherever a section needs a quiet secondary tier."
+    ],
+    "donts": [
+      "Don't use a border-left/border-right stripe greater than 1px as a colored accent on any card, list item, or nav-active state.",
+      "Don't use background-clip: text gradient text for any heading.",
+      "Don't reach for a drop shadow to make a card read as elevated or clickable.",
+      "Don't build a flat grid of 6+ identically-shaped icon+heading+text cards.",
+      "Don't let raw text emoji stand in for an icon anywhere.",
+      "Don't let Threat Magenta answer more than one question on a single screen.",
+      "Don't ship a hover-only interaction with no keyboard equivalent."
+    ]
+  }
+}

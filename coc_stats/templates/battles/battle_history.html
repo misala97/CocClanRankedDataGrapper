@@ -3,21 +3,53 @@
 {% set page_title = 'Battle History – CoC Analytics' %}
 {% include '_head.html' %}
 
-        /* Real in-game loot hues — this page is a ledger of the three resources,
-           so they get their own accurate palette rather than reusing UI tokens. */
+        /* --loot-gold / --loot-elixir / --loot-dark are canonical sitewide tokens
+           now (see _head.html) so a player's loot reads identically here and on the
+           Player profile. Only the page-specific dark-elixir fill + easing stay local. */
         :root {
-            --loot-gold:      #f5b921;
-            --loot-elixir:    #d954d1;
-            --loot-dark:      #9d8fd4;
             --loot-dark-fill: #4a2f66;
+            --ease: cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .section-label {
+            font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 1.2px;
+            text-transform: uppercase; color: var(--muted); margin: 0 0 12px;
+        }
+
+        /* ── TOP ATTACKERS (featured tier — top 4 by attack count this period) ── */
+        .top-attackers-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+        .ta-tile {
+            background: var(--surface); border: 1px solid color-mix(in oklch, var(--accent) 26%, var(--border));
+            border-radius: 10px; padding: 18px 20px; text-decoration: none; display: block; position: relative;
+            transition: transform .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease);
+        }
+        .ta-tile:hover { transform: translateY(-2px); background: var(--surf2); border-color: color-mix(in oklch, var(--accent) 45%, var(--border)); }
+        .ta-tile:active { transform: translateY(-2px) scale(0.99); transition-duration: .1s; }
+        .ta-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .ta-rank {
+            position: absolute; top: 14px; right: 14px;
+            font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--muted);
+        }
+        .ta-name { font-weight: 700; font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 26px; }
+        .ta-tag { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); margin-top: 2px; margin-bottom: 16px; }
+        .ta-stats { display: flex; gap: 18px; }
+        .ta-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; line-height: 1; color: var(--text); }
+        .ta-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+        @media (max-width: 900px) {
+            .top-attackers-grid { grid-template-columns: repeat(2, 1fr); }
+            .ta-tile:nth-child(n+3) { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .ta-tile:hover, .ta-tile:active { transform: none; }
         }
 
         /* ── NAV / CONTROLS: see _nav.html / _head.html — this page adds nothing new there ── */
 
         /* ── LEDGER STRIP ── */
         .ledger {
-            display: flex; align-items: stretch; background: var(--surface);
-            border: 1px solid var(--border); border-left: 3px solid var(--accent);
+            display: flex; align-items: stretch;
+            background: color-mix(in oklch, var(--accent) 4%, var(--surface));
+            border: 1px solid color-mix(in oklch, var(--accent) 28%, var(--border));
             border-radius: 10px; margin-bottom: 20px; overflow: hidden;
         }
         .ledger-attacks {
@@ -48,7 +80,7 @@
         /* ── HEATMAP (per-player attack timing, inside detail rows only) ── */
         .heat-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
         .heat-grid { display: inline-flex; flex-direction: column; gap: 3px; min-width: 100%; }
-        .heat-hour-row { display: flex; gap: 3px; padding-left: 46px; margin-bottom: 1px; }
+        .heat-hour-row { display: flex; gap: 3px; padding-left: 43px; margin-bottom: 1px; }
         .heat-hour-lbl { width: 22px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--muted); text-align: center; flex-shrink: 0; }
         .heat-row { display: flex; align-items: center; gap: 3px; }
         .heat-day {
@@ -56,18 +88,23 @@
             flex-shrink: 0; text-align: right; padding-right: 6px;
             position: sticky; left: 0; background: var(--bg); z-index: 1;
         }
-        .heat-cell { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; cursor: default; transition: transform .1s, outline-color .1s; outline: 1px solid transparent; }
-        .heat-cell:hover { transform: scale(1.15); outline: 1px solid rgba(217,164,65,.6); }
+        .heat-cell { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; cursor: default; transition: transform .1s, outline-color .1s, opacity .35s var(--ease) calc(var(--c, 0) * 14ms); outline: 1px solid transparent; }
+        .heat-cell:hover { transform: scale(1.15); outline: 1px solid color-mix(in oklch, var(--accent) 60%, transparent); }
+        .heat-cell:focus-visible { transform: scale(1.15); outline: 2px solid var(--accent); outline-offset: 1px; z-index: 2; position: relative; }
 
-        /* ── COMPACT HEATMAP (the only size used now — lives inside player detail rows) ── */
-        .heat-mini .heat-cell, .heat-mini .heat-hour-lbl { width: 13px; }
-        .heat-mini .heat-cell { height: 13px; border-radius: 2px; }
+        /* ── COMPACT HEATMAP (the only size used now — lives inside player detail rows).
+           Cells flex to fill the column's actual allotted width instead of staying a
+           fixed 13px inside a much wider flex column — was leaving a large dead gap
+           to the right of every row. ── */
+        .heat-mini .heat-cell, .heat-mini .heat-hour-lbl { flex: 1; min-width: 0; width: auto; }
+        .heat-mini .heat-cell { aspect-ratio: 1; height: auto; border-radius: 3px; }
         .heat-mini .heat-day { width: 30px; font-size: 9.5px; }
-        .heat-mini .heat-hour-row { padding-left: 36px; }
+        .heat-mini .heat-hour-row { padding-left: 33px; }
 
         /* ── RECENT ATTACKS ── */
         .recent-card {
-            background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+            background: var(--surface);
+            border: 1px solid color-mix(in oklch, var(--accent) 22%, var(--border));
             border-radius: 10px; margin-bottom: 20px; overflow: hidden;
         }
         .recent-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; transition: background .15s; }
@@ -79,15 +116,26 @@
         .recent-body { border-top: 1px solid var(--border); }
 
         /* ── TABLE (desktop ≥641px only — mobile gets card list below) ── */
-        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; border: 1px solid var(--border); border-top: 3px solid var(--accent); }
+        .table-scroll {
+            overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px;
+            border: 1px solid color-mix(in oklch, var(--accent) 22%, var(--border));
+        }
         .table-wrapper { background: var(--surface); min-width: 520px; }
         table { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
         col.col-player  { width: auto; }
         col.col-attacks { width: 72px; }
+        col.col-three   { width: 84px; }
         col.col-gold, col.col-elixir, col.col-dark { width: 108px; }
         col.col-action  { width: 120px; }
         thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
-        thead th { padding: 11px 16px; text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .7px; white-space: nowrap; font-family: 'Manrope', sans-serif; }
+        thead th { padding: 0; text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .7px; white-space: nowrap; font-family: 'Manrope', sans-serif; }
+        thead th:last-child { padding: 11px 16px; }
+        .th-sort-btn {
+            display: block; width: 100%; padding: 11px 16px; text-align: left;
+            background: transparent; border: none; cursor: pointer;
+            font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit;
+        }
+        .th-sort-btn:hover { color: var(--text); }
         tbody tr { border-bottom: 1px solid var(--bord2); transition: background .12s; }
         tbody tr:last-child { border-bottom: none; }
         tbody tr:hover { background: rgba(255,255,255,.03); }
@@ -101,8 +149,12 @@
         .player-link:hover { color: var(--accent); }
         .player-link-arrow { font-size: 10px; color: var(--muted); opacity: .4; transition: opacity .15s, color .15s; vertical-align: super; }
         .player-link:hover .player-link-arrow { opacity: 1; color: var(--accent); }
-        .player-left-tag { font-size: 10px; font-family: 'Manrope', sans-serif; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: rgba(139,148,158,.1); color: var(--muted); border: 1px solid rgba(139,148,158,.25); vertical-align: middle; }
+        .player-left-tag { font-size: 10px; font-family: 'Manrope', sans-serif; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: color-mix(in oklch, var(--muted) 10%, transparent); color: var(--muted); border: 1px solid color-mix(in oklch, var(--muted) 25%, transparent); vertical-align: middle; }
+        /* "This is you" needs a visible marker, not just a background tint —
+           color alone fails colorblind users and is easy to miss scanning 30+ rows. */
+        .you-tag { font-size: 10px; font-family: 'Manrope', sans-serif; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent); border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent); vertical-align: middle; margin-left: 6px; }
         .att-count { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--text); }
+        .res-three  { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; color: var(--text); }
         .res-gold   { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; color: var(--loot-gold); }
         .res-elixir { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; color: var(--loot-elixir); }
         .res-dark   { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; color: var(--loot-dark); }
@@ -110,6 +162,7 @@
         .sortable { cursor: pointer; user-select: none; }
         .sortable:hover { color: var(--text); }
         .sort-active { color: var(--accent) !important; }
+        tbody tr.is-you { background: color-mix(in oklch, var(--accent) 8%, transparent); }
         .sort-active.asc::after  { content: ' \2191'; font-size: .85em; }
         .sort-active.desc::after { content: ' \2193'; font-size: .85em; }
 
@@ -126,7 +179,10 @@
         .star-dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
         .sd-label { font-size: 1.05em; letter-spacing: 1px; width: 46px; flex-shrink: 0; }
         .sd-bar-wrap { flex: 1; height: 8px; background: var(--surf2); border-radius: 4px; overflow: hidden; }
-        .sd-bar { height: 100%; border-radius: 4px; transition: width .3s; }
+        /* Rests at its real fill (scaleX(--fill)) — full/correct by default. The sweep is
+           played by temporarily adding .sweep-bars (→ scaleX(0)) then removing it, so the
+           bar transitions up to its fill; if that never animates it still rests full. */
+        .sd-bar { height: 100%; width: 100%; border-radius: 4px; transform-origin: left; transform: scaleX(var(--fill, 1)); transition: transform .35s var(--ease); }
         .sd-pct { width: 36px; text-align: right; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 11px; flex-shrink: 0; }
         .sd-count { width: 30px; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 10px; flex-shrink: 0; }
         .qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
@@ -134,10 +190,31 @@
         .qs-val { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--accent); line-height: 1; }
         .qs-lbl { font-family: 'Manrope', sans-serif; font-size: 10px; color: var(--muted); margin-top: 4px; }
 
-        .detail-table-scroll { max-height: 320px; overflow-y: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--bord2); border-radius: 6px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-        .detail-table-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
-        .detail-table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .detail-table-scroll { max-height: 320px; overflow-y: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--bord2); border-radius: 6px; }
         .recent-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 6px; }
+        /* Mobile gets its own dense row list instead of a 9-column table pinned to
+           horizontal scroll — same reasoning as the roster below: technically
+           scrollable isn't the same as usable, and most of "what happened" was
+           invisible without a swipe nobody was cued to make. */
+        .ra-list { display: none; flex-direction: column; }
+        .ra-row { padding: 8px 2px; border-bottom: 1px solid var(--bord2); }
+        .ra-row:last-child { border-bottom: none; }
+        .ra-top { display: flex; align-items: baseline; gap: 8px; }
+        .ra-time { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; color: var(--muted); flex-shrink: 0; }
+        .ra-player { font-weight: 700; font-size: 13.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .ra-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; color: var(--text); }
+        .ra-bottom .mru { color: var(--muted); font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 10.5px; margin-right: 2px; }
+        .ra-opp { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        /* Per-player attack log (opened by tapping a roster row/card) had the exact
+           same undiscoverable-horizontal-scroll problem as Recent Attacks, just never
+           fixed — and it's the higher-traffic one, hit on every single expansion. */
+        .detail-mobile-list { display: none; flex-direction: column; }
+        @media (max-width: 900px) {
+            .recent-table-scroll { display: none !important; }
+            .ra-list { display: flex; }
+            .detail-table-scroll { display: none !important; }
+            .detail-mobile-list { display: flex; }
+        }
         /* table-layout:fixed from the bare `table` selector above would otherwise force these
            9 columns into equal narrow slices on mobile, and unwrapped content bleeds outside
            its cell into neighboring columns — hence auto layout + nowrap + a scroll wrapper. */
@@ -148,39 +225,54 @@
         .detail-table th { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; position: sticky; top: 0; background: var(--surf2); z-index: 1; }
         .detail-table td { color: var(--text); }
         .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; letter-spacing: .4px; text-transform: uppercase; }
-        .type-ranked { background: rgba(217,164,65,.12); color: var(--accent); border: 1px solid rgba(217,164,65,.3); }
-        .type-home   { background: rgba(53,194,209,.1); color: var(--blue); border: 1px solid rgba(53,194,209,.25); }
-        .type-other  { background: rgba(131,141,154,.1); color: var(--muted); border: 1px solid rgba(131,141,154,.2); }
+        /* Recon Blue is DESIGN.md's Ranked identity color; Threat Magenta is reserved
+           sitewide for interactive/primary only, never a mode identity. Home Battle
+           isn't one of the four documented category hues, so it stays neutral rather
+           than borrowing a hue that belongs to something else. */
+        .type-ranked { background: color-mix(in oklch, var(--blue) 12%, transparent); color: var(--blue); border: 1px solid color-mix(in oklch, var(--blue) 30%, transparent); }
+        .type-home   { background: color-mix(in oklch, var(--muted) 10%, transparent); color: var(--muted); border: 1px solid color-mix(in oklch, var(--muted) 25%, transparent); }
+        .type-other  { background: color-mix(in oklch, var(--muted) 10%, transparent); color: var(--muted); border: 1px solid color-mix(in oklch, var(--muted) 20%, transparent); }
 
         /* ── FOOTER / EMPTY ── */
         .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: .3px; }
         .empty-state { text-align: center; padding: 80px 24px; color: var(--muted); }
         .empty-state p { font-size: 15px; font-family: 'Manrope', sans-serif; }
 
-        /* ── MOBILE CARDS — the real player list below 641px. No columns to lose
-           off the edge of the screen: every figure a phone user needs is laid
-           out top-to-bottom instead of left-to-right. ── */
-        #mobileList { display: none; flex-direction: column; gap: 8px; }
-        .mc {
-            background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
-            border-radius: 10px; overflow: hidden; cursor: pointer; transition: background .12s;
+        /* ── MOBILE ROSTER — a dense divided list below 641px, not a stack of
+           spacious cards. The desktop table's actual value is scanning many
+           players in one glance; a card-per-player loses that even with every
+           figure present, because each player costs a full block of vertical
+           space. One row per player, two tight lines, matches the table's
+           density instead of just reflowing its content top-to-bottom. ── */
+        #mobileList {
+            display: none; flex-direction: column;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
         }
-        .mc:active { background: var(--surf2); }
-        .mc-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
-        .mc-player { flex: 1; min-width: 0; }
-        .mc-player-name { font-weight: 700; font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mc-player-tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 1px; }
-        .mc-attacks { text-align: right; flex-shrink: 0; }
-        .mc-attacks-val { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--text); line-height: 1; }
-        .mc-attacks-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
-        .mc-stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); }
-        .mc-stat { padding: 9px 8px; text-align: center; border-right: 1px solid var(--border); }
-        .mc-stat:last-child { border-right: none; }
-        .mc-stat-lbl { font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
-        .mc-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
-        .mc-detail { display: none; border-top: 1px solid var(--border); padding: 16px 14px; }
-        .mc-detail.expanded { display: block; }
-        .mc-tap-hint { text-align: center; padding: 7px 0 2px; font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--muted); }
+        .mr {
+            padding: 9px 14px; border-bottom: 1px solid var(--bord2); cursor: pointer;
+            transition: background .12s var(--ease);
+        }
+        #mobileList .mr:last-child { border-bottom: none; }
+        .mr:active { background: var(--surf2); }
+        .mr.is-you { background: color-mix(in oklch, var(--accent) 8%, transparent); }
+        .mr-top { display: flex; align-items: center; gap: 8px; }
+        .mr-name {
+            flex: 1; min-width: 0; font-weight: 700; font-size: 14px; color: var(--text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .mr-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); font-weight: 400; margin-left: 5px; }
+        /* SVG, not a Unicode ▶ glyph — iOS renders that character via its emoji
+           font by default (a colored button, not a plain triangle). */
+        .mr-chev { color: var(--muted); flex-shrink: 0; display: flex; transition: transform .15s var(--ease), color .15s var(--ease); }
+        .mr-chev svg { width: 11px; height: 11px; display: block; }
+        .mr.expanded .mr-chev { transform: rotate(90deg); color: var(--accent); }
+        .mr-stats {
+            display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 4px;
+            font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; color: var(--text);
+        }
+        .mr-stats .mru { color: var(--muted); font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 10.5px; margin-right: 2px; }
+        .mc-detail { display: none; padding: 14px 0 4px; }
+        .mc-detail.expanded { display: block; border-top: 1px solid var(--bord2); margin-top: 8px; }
 
         /* ── RESPONSIVE ── */
         @media (max-width: 900px) {
@@ -193,6 +285,32 @@
             .table-scroll { display: none !important; }
             #mobileList { display: flex; }
         }
+
+        /* ── MOTION: detail reveal-slide, star-bar sweep, heatmap brighten-wave, card hover.
+           Everything here is interaction-triggered (a detail opens) or transition-based, so
+           it degrades to the visible resting state and never gates data on an animation
+           firing. reveal-in animates transform only (content stays visible if frozen);
+           .sd-bar / heatmap use transitions (jump to the end value if frozen). */
+        @keyframes reveal-in { from { transform: translateY(-6px); } to { transform: none; } }
+        .detail-row.expanded .detail-inner, .mc-detail.expanded, #recentBody { animation: reveal-in .18s var(--ease); }
+
+        /* Heatmap cells brighten in a left-to-right wave when a detail opens. Resting opacity
+           is 1; .heat-in only dims them while JS arms the wave, then it's removed — a frozen
+           renderer or no-JS still ends with the full heatmap shown. Same base-full + temp-dim
+           pattern arms the star bars (.sweep-bars). */
+        .heat-in .heat-cell { opacity: 0; }
+        .sweep-bars .sd-bar { transform: scaleX(0); }
+
+        .qs-card { transition: transform .15s var(--ease), border-color .15s var(--ease), background .15s var(--ease); }
+        .qs-card:hover { transform: translateY(-1px); border-color: color-mix(in oklch, var(--accent) 38%, var(--bord2)); background: color-mix(in oklch, var(--accent) 5%, var(--surf2)); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .sd-bar { transition: none; }
+            .heat-cell { transition: transform .1s, outline-color .1s; }
+            .heat-in .heat-cell { opacity: 1; }
+            .detail-row.expanded .detail-inner, .mc-detail.expanded, #recentBody { animation: none; }
+            .qs-card:hover { transform: none; }
+        }
     </style>
 </head>
 <body>
@@ -200,8 +318,8 @@
 {% include '_nav.html' %}
 
 {% set page_header_title = 'Battle <span>History</span>' %}
-{% set page_header_desc = week_label ~ ' · Attacks only' %}
-{% set page_controls %}
+{% set page_header_desc = 'Per-attack log for the selected week · attacks only' %}
+{% set page_primary_control %}
 <form method="GET" style="display:contents;">
     <label>Week</label>
     <select name="week" class="selector week-sel" onchange="this.form.submit()">
@@ -223,7 +341,8 @@
         <option value="homeVillage" {% if selected_type == 'homeVillage' %}selected{% endif %}>Home Battle</option>
     </select>
 </form>
-<div class="ctrl-divider" style="margin-left:auto;"></div>
+{% endset %}
+{% set page_controls %}
 <button type="button" id="toggleLeftBtn" class="action-btn" onclick="toggleLeftFilter()">Show left</button>
 <div class="ctrl-divider"></div>
 <input id="searchInput" class="selector" type="search" placeholder="Search player…" oninput="debouncedBuildTable()" style="min-width:180px;">
@@ -277,6 +396,31 @@
         </div>
     </div>
 
+    <!-- Top Attackers -->
+    {% if top_by_attacks %}
+    <div class="section-label">Top Attackers</div>
+    <div class="top-attackers-grid">
+        {% for p in top_by_attacks %}
+        <a href="/player/{{ p.player_tag.replace('#', '') }}" class="ta-tile">
+            <span class="ta-rank">#{{ loop.index }}</span>
+            <div class="ta-name">{{ p.player_name }}</div>
+            <div class="ta-tag">{{ p.player_tag }}</div>
+            <div class="ta-stats">
+                <div>
+                    <div class="ta-stat-val">{{ p.att_count }}</div>
+                    <div class="ta-stat-lbl">Attacks</div>
+                </div>
+                <div>
+                    {% set _3 = p.attack_logs | selectattr('stars', 'equalto', 3) | list | length %}
+                    <div class="ta-stat-val">{{ (_3 / p.att_count * 100) | round | int }}%</div>
+                    <div class="ta-stat-lbl">3★ rate</div>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <!-- Recent Attacks -->
     {% if player_data %}
     <div class="recent-card" id="recentCard">
@@ -296,6 +440,7 @@
                 <colgroup>
                     <col class="col-player">
                     <col class="col-attacks">
+                    <col class="col-three">
                     <col class="col-gold">
                     <col class="col-elixir">
                     <col class="col-dark">
@@ -303,11 +448,12 @@
                 </colgroup>
                 <thead>
                     <tr>
-                        <th class="sortable" onclick="sortTable('player')">Player</th>
-                        <th class="sortable" onclick="sortTable('att_count')">Attacks</th>
-                        <th class="sortable" onclick="sortTable('total_gold')">Gold</th>
-                        <th class="sortable" onclick="sortTable('total_elixir')">Elixir</th>
-                        <th class="sortable" onclick="sortTable('total_dark')">Dark Elixir</th>
+                        <th><button type="button" class="th-sort-btn sortable" onclick="sortTable('player')">Player</button></th>
+                        <th><button type="button" class="th-sort-btn sortable" onclick="sortTable('att_count')">Attacks</button></th>
+                        <th><button type="button" class="th-sort-btn sortable" onclick="sortTable('three_rate')">3★ Rate</button></th>
+                        <th><button type="button" class="th-sort-btn sortable" onclick="sortTable('total_gold')">Gold</button></th>
+                        <th><button type="button" class="th-sort-btn sortable" onclick="sortTable('total_elixir')">Elixir</button></th>
+                        <th><button type="button" class="th-sort-btn sortable" onclick="sortTable('total_dark')">Dark Elixir</button></th>
                         <th>Details</th>
                     </tr>
                 </thead>
@@ -333,6 +479,15 @@
     window.playerData  = {{ player_data|tojson|safe }};
     window.myPlayerTag = {{ (current_user.linked_player_tag if current_user and current_user.linked_player_tag else None) | tojson }};
 
+    // 3★ rate is derived from attack_logs (no schema change) and computed once
+    // here so every row/card can show it without re-deriving it, and so it's
+    // sortable like any other column.
+    window.playerData.forEach(p => {
+        const logs = p.attack_logs || [];
+        const threeStars = logs.filter(l => l.stars === 3).length;
+        p.three_rate = logs.length ? Math.round(threeStars / logs.length * 100) : 0;
+    });
+
     let currentSort = { column: null, direction: null };
     let showLeft = false;
     const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -346,6 +501,15 @@
     }
 
     function fmt(n) { return Number(n).toLocaleString(); }
+
+    // Abbreviated K/M form for the dense mobile row, where 6 numeric fields
+    // have to fit on one line — exact values stay one tap away via `title`.
+    function fmtShort(n) {
+        n = Number(n) || 0;
+        if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (n >= 1000)    return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+        return String(n);
+    }
 
     function escapeHTML(s) {
         return String(s || '').replace(/[&<>"']/g, c =>
@@ -391,11 +555,8 @@
     function heatColor(count, maxCount) {
         if (count === 0) return 'var(--surf2)';
         const frac = Math.sqrt(count / Math.max(1, maxCount));
-        const r = Math.round(217 + (255 - 217) * frac);
-        const g = Math.round(164 + (216 - 164) * frac);
-        const b = Math.round(65  + (117 - 65)  * frac);
-        const a = (0.28 + frac * 0.72).toFixed(2);
-        return `rgba(${r},${g},${b},${a})`;
+        const pct = Math.round((28 + frac * 72));
+        return `color-mix(in oklch, var(--accent) ${pct}%, var(--surf2))`;
     }
 
     function buildHeatGrid(grid, opts = {}) {
@@ -407,7 +568,7 @@
             const cells = Array.from({length: 24}, (_, h) => {
                 const c = grid[di][h];
                 const tip = c === 0 ? `${day} ${h}:00 — no attacks` : `${day} ${h}:00 — ${c} attack${c > 1 ? 's' : ''}`;
-                return `<div class="heat-cell" style="background:${heatColor(c, maxCount)};" title="${tip}"></div>`;
+                return `<div class="heat-cell" style="--c:${h};background:${heatColor(c, maxCount)};" title="${tip}" tabindex="0" role="img" aria-label="${tip}"></div>`;
             }).join('');
             return `<div class="heat-row"><span class="heat-day">${day}</span>${cells}</div>`;
         }).join('');
@@ -438,7 +599,7 @@
             const pct  = total ? Math.round(cnt / total * 100) : 0;
             return `<div class="star-dist-row">
                 <span class="sd-label">${STAR_LABELS[s]}</span>
-                <div class="sd-bar-wrap"><div class="sd-bar" style="width:${pct}%;background:${STAR_COLORS[s]}"></div></div>
+                <div class="sd-bar-wrap"><div class="sd-bar" style="--fill:${pct / 100};background:${STAR_COLORS[s]}"></div></div>
                 <span class="sd-pct">${pct}%</span>
                 <span class="sd-count">${cnt}×</span>
             </div>`;
@@ -489,6 +650,22 @@
             ${detailTableHead()}
             <tbody>${sorted.map(attackLogRow).join('')}</tbody>
         </table>
+        </div>
+        <div class="detail-mobile-list">${sorted.map(l => `
+            <div class="ra-row">
+                <div class="ra-top">
+                    <span class="ra-time">${escapeHTML(l.time)}</span>
+                    <span class="ra-opp">${escapeHTML(l.opponent_tag)}</span>
+                    ${formatType(l.type)}
+                </div>
+                <div class="ra-bottom">
+                    <span>${renderStars(l.stars, { filled: 'var(--loot-gold)' })}</span>
+                    <span><span class="mru">DMG</span>${l.percentage ?? 0}%</span>
+                    <span style="color:var(--loot-gold);">${fmtShort(l.gold)}</span>
+                    <span style="color:var(--loot-elixir);">${fmtShort(l.elixir)}</span>
+                    <span style="color:var(--loot-dark);">${fmtShort(l.dark)}</span>
+                </div>
+            </div>`).join('')}
         </div>`;
     }
 
@@ -514,7 +691,23 @@
                 <td style="color:var(--loot-elixir);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.elixir)}</td>
                 <td style="color:var(--loot-dark);font-family:'JetBrains Mono',monospace;font-weight:700;">${fmt(l.dark)}</td>
             </tr>`).join('')}</tbody>
-        </table></div>`;
+        </table></div>
+        <div class="ra-list">${top20.map(l => `
+            <div class="ra-row">
+                <div class="ra-top">
+                    <span class="ra-time">${escapeHTML(l.time)}</span>
+                    <span class="ra-player">${escapeHTML(l.player_name)}</span>
+                    ${formatType(l.type)}
+                </div>
+                <div class="ra-bottom">
+                    <span>${renderStars(l.stars, { filled: 'var(--loot-gold)' })}</span>
+                    <span><span class="mru">DMG</span>${l.percentage ?? 0}%</span>
+                    <span style="color:var(--loot-gold);">${fmtShort(l.gold)}</span>
+                    <span style="color:var(--loot-elixir);">${fmtShort(l.elixir)}</span>
+                    <span style="color:var(--loot-dark);">${fmtShort(l.dark)}</span>
+                </div>
+            </div>`).join('')}
+        </div>`;
     }
 
     let recentBuilt = false;
@@ -527,6 +720,26 @@
         chevron.classList.toggle('open', open);
     }
 
+    // Replays the detail's entrance micro-motion each time it opens: the star-distribution
+    // bars sweep 0 -> their share, and the heatmap brightens in a left-to-right wave. Both
+    // use transitions (not keyframes), so a frozen renderer lands on the full/visible resting
+    // state — never blank. reduced-motion: set the final values with no transition.
+    // Plays the detail's entrance micro-motion: star bars sweep to their fill, heatmap
+    // brightens in a wave. Both rest at their FULL value in CSS; we only arm a temporary
+    // "empty" class, force a reflow, then release it so the transition runs — triggered
+    // synchronously (no rAF, which doesn't fire in offscreen renderers), and if the
+    // transition can't animate the element simply stays at its full resting state.
+    function animateDetail(container) {
+        if (!container) return;
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;  // rests full already
+        const grid = container.querySelector('.heat-grid');
+        container.classList.add('sweep-bars');
+        if (grid) grid.classList.add('heat-in');
+        void container.offsetWidth;                     // commit the empty/dim state
+        container.classList.remove('sweep-bars');       // → bars transition to their --fill
+        if (grid) grid.classList.remove('heat-in');     // → heatmap brightens in a wave
+    }
+
     function buildMobileCards(rows) {
         const list = document.getElementById('mobileList');
         if (!list) return;
@@ -535,41 +748,39 @@
         );
         list.innerHTML = '';
         rows.forEach(p => {
+            const isYou = window.myPlayerTag && p.player_tag === window.myPlayerTag;
             const leftTag = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
-            const card = document.createElement('div');
-            card.className = 'mc';
-            if (window.myPlayerTag && p.player_tag === window.myPlayerTag) {
-                card.style.background = 'rgba(217,164,65,0.08)';
-            }
-            card.innerHTML = `
-                <div class="mc-header">
-                    <div class="mc-player">
-                        <div class="mc-player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftTag}</div>
-                        <div class="mc-player-tag">${escapeHTML(p.player_tag)}</div>
+            const youTag = isYou ? ' <span class="you-tag">You</span>' : '';
+            const row = document.createElement('div');
+            row.className = 'mr' + (isYou ? ' is-you' : '');
+            row.innerHTML = `
+                <div class="mr-top">
+                    <div class="mr-name">
+                        <a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)}</a><span class="mr-tag">${escapeHTML(p.player_tag)}</span>${youTag}${leftTag}
                     </div>
-                    <div class="mc-attacks">
-                        <div class="mc-attacks-val">${p.att_count}</div>
-                        <div class="mc-attacks-lbl">Attacks</div>
-                    </div>
+                    <span class="mr-chev" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 4 10 8 6 12"/></svg></span>
                 </div>
-                <div class="mc-stats">
-                    <div class="mc-stat"><div class="mc-stat-lbl">Gold</div><div class="mc-stat-val" style="color:var(--loot-gold);">${fmt(p.total_gold)}</div></div>
-                    <div class="mc-stat"><div class="mc-stat-lbl">Elixir</div><div class="mc-stat-val" style="color:var(--loot-elixir);">${fmt(p.total_elixir)}</div></div>
-                    <div class="mc-stat"><div class="mc-stat-lbl">Dark Elixir</div><div class="mc-stat-val" style="color:var(--loot-dark);">${fmt(p.total_dark)}</div></div>
+                <div class="mr-stats">
+                    <span title="Attacks"><span class="mru">ATK</span>${p.att_count}</span>
+                    <span title="3★ rate"><span class="mru">3★</span>${p.three_rate}%</span>
+                    <span style="color:var(--loot-gold);" title="${fmt(p.total_gold)} gold">${fmtShort(p.total_gold)}</span>
+                    <span style="color:var(--loot-elixir);" title="${fmt(p.total_elixir)} elixir">${fmtShort(p.total_elixir)}</span>
+                    <span style="color:var(--loot-dark);" title="${fmt(p.total_dark)} dark elixir">${fmtShort(p.total_dark)}</span>
                 </div>
-                <div class="mc-tap-hint">Tap for attack log</div>
                 <div class="mc-detail" data-player-tag="${escapeHTML(p.player_tag)}"></div>
             `;
-            const detail = card.querySelector('.mc-detail');
-            card.addEventListener('click', () => {
+            const detail = row.querySelector('.mc-detail');
+            row.addEventListener('click', () => {
                 if (!detail.dataset.built) {
                     detail.innerHTML = buildDetailTable(p.attack_logs);
                     detail.dataset.built = 'true';
                 }
-                detail.classList.toggle('expanded');
+                const expanded = detail.classList.toggle('expanded');
+                row.classList.toggle('expanded');
+                if (expanded) animateDetail(detail);
             });
-            list.appendChild(card);
-            if (expandedTags.has(p.player_tag)) card.click();
+            list.appendChild(row);
+            if (expandedTags.has(p.player_tag)) row.click();
         });
     }
 
@@ -601,16 +812,16 @@
         tbody.innerHTML = '';
 
         rows.forEach(p => {
+            const isYou = window.myPlayerTag && p.player_tag === window.myPlayerTag;
             const row = document.createElement('tr');
             row.style.cursor = 'pointer';
-            if (window.myPlayerTag && p.player_tag === window.myPlayerTag) {
-                row.style.background = 'rgba(217,164,65,0.08)';
-                row.style.boxShadow = 'inset 3px 0 0 var(--accent)';
-            }
+            if (isYou) row.classList.add('is-you');
             const leftTag = (p.in_clan === false || p.in_clan === 0) ? ' <span class="player-left-tag">Left</span>' : '';
+            const youTag = isYou ? ' <span class="you-tag">You</span>' : '';
             row.innerHTML = `
-                <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${leftTag}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
+                <td><div class="player-cell"><div class="player-info"><div class="player-name"><a href="/player/${encodeURIComponent((p.player_tag||'').replace('#',''))}" class="player-link" onclick="event.stopPropagation();">${escapeHTML(p.player_name)} <span class="player-link-arrow">↗</span></a>${youTag}${leftTag}</div><div class="player-tag">${escapeHTML(p.player_tag)}</div></div></div></td>
                 <td><span class="att-count">${p.att_count}</span></td>
+                <td><span class="res-three">${p.three_rate}%</span></td>
                 <td><span class="res-gold">${fmt(p.total_gold)}</span></td>
                 <td><span class="res-elixir">${fmt(p.total_elixir)}</span></td>
                 <td><span class="res-dark">${fmt(p.total_dark)}</span></td>
@@ -620,7 +831,7 @@
             const detailRow = document.createElement('tr');
             detailRow.className = 'detail-row';
             detailRow.dataset.playerTag = p.player_tag;
-            detailRow.innerHTML = `<td class="detail-cell" colspan="6"><div class="detail-inner"></div></td>`;
+            detailRow.innerHTML = `<td class="detail-cell" colspan="7"><div class="detail-inner"></div></td>`;
 
             const toggleButton = row.querySelector('.details-toggle');
             row.addEventListener('click', () => {
@@ -630,6 +841,7 @@
                 }
                 const expanded = detailRow.classList.toggle('expanded');
                 toggleButton.textContent = expanded ? 'Close' : 'Details';
+                if (expanded) animateDetail(detailRow.querySelector('.detail-inner'));
             });
 
             tbody.appendChild(row);
@@ -665,7 +877,8 @@
         document.querySelectorAll('#statsTable th').forEach(th => {
             th.classList.remove('sort-active', 'asc', 'desc');
             if (!currentSort.column || !currentSort.direction) return;
-            const fn = th.getAttribute('onclick') || '';
+            const btn = th.querySelector('.th-sort-btn');
+            const fn = (btn || th).getAttribute('onclick') || '';
             const m = fn.match(/'([^']+)'/);
             if (m && m[1] === currentSort.column) th.classList.add('sort-active', currentSort.direction);
         });

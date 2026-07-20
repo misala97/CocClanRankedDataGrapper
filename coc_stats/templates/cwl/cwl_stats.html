@@ -4,6 +4,9 @@
 {% set favicon_icon = '🏆' %}
 {% set chartjs = true %}
 {% include '_head.html' %}
+        /* CWL mode identity: the readout's tone:'mode' fact (League) renders in
+           CWL Violet on this page instead of the sitewide blue fallback. */
+        .page-header { --mode: var(--purple); }
         /* ── LAYOUT ── */
         .section { margin-bottom:28px; }
         .section-title { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin-bottom:14px; display:flex; align-items:center; gap:10px; }
@@ -172,7 +175,11 @@
 
 {% set page_header_title = 'CWL <span>History</span>' %}
 {% if not no_data %}
-{% set page_header_desc %}<strong>{{ total_seasons }}</strong> season{{ 's' if total_seasons != 1 else '' }} · since <strong>{{ first_season }}</strong> · current league: <strong>{{ latest_league }}</strong>{% endset %}
+{% set page_header_meta = [
+    {'value': total_seasons, 'label': 'Season' ~ ('s' if total_seasons != 1 else '')},
+    {'value': first_season, 'label': 'Since'},
+    {'value': latest_league, 'label': 'League', 'tone': 'mode'},
+] %}
 {% else %}
 {% set page_header_desc %}No CWL data recorded yet{% endset %}
 {% endif %}

@@ -119,7 +119,7 @@ def battle_history_page():
         })
 
     player_data = sorted(player_map.values(), key=lambda x: x['att_count'], reverse=True)
-    top_by_attacks = sorted(player_data, key=lambda x: x['att_count'], reverse=True)[:10]
+    top_by_attacks = sorted(player_map.values(), key=lambda x: x['att_count'], reverse=True)[:4]
 
     return render_template(
         'battles/battle_history.html',

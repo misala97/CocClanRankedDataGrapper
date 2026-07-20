@@ -3,7 +3,6 @@
 {% set page_title = 'War Statistics – CoC Analytics' %}
 {% set favicon_icon = '📊' %}
 {% include '_head.html' %}
-        .page-header p strong, .page-sub strong { color: var(--text); }
         .nav-back { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border:1px solid var(--border); border-radius:8px; background:var(--surf2); color:var(--muted); font-size:11px; font-weight:700; font-family:'Rajdhani',sans-serif; letter-spacing:.6px; text-transform:uppercase; transition:all .15s; }
         .nav-back:hover { color:var(--text); border-color:var(--accent); }
 
@@ -175,8 +174,6 @@
         .thb-avg { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; margin-top:2px; }
         .thb-stars { display:flex; gap:5px; flex-wrap:wrap; margin-top:4px; font-size:11px; font-family:'Rajdhani',sans-serif; font-weight:700; }
         .thb-farm { font-size:9px; color:var(--blue); margin-top:3px; font-family:'Rajdhani',sans-serif; }
-        .action-btn { padding:6px 14px; background:transparent; color:var(--accent); border:1px solid rgba(240,165,0,0.35); border-radius:6px; font-weight:700; font-size:11px; font-family:'Rajdhani',sans-serif; letter-spacing:.5px; text-transform:uppercase; cursor:pointer; transition:all .15s; white-space:nowrap; }
-        .action-btn:hover { background:rgba(240,165,0,0.1); border-color:var(--accent); box-shadow:0 0 12px rgba(240,165,0,0.18); }
         .player-link { color:inherit; text-decoration:none; transition:color .15s; }
         .player-link:hover { color:var(--accent); }
         .player-link-arrow { font-size:10px; color:var(--muted); opacity:.4; transition:opacity .15s, color .15s; vertical-align:super; }
@@ -191,15 +188,18 @@
 {% include '_nav.html' ignore missing %}
 
 {% set page_header_title = 'War <span>Statistics</span>' %}
-{% set page_header_desc %}<strong>{{ total_wars }}</strong> wars recorded{% if first_war_date %} · since <strong>{{ first_war_date }}</strong>{% endif %} · all-time clan war performance{% endset %}
-{% set page_controls %}
+{% set _war_meta = [{'value': total_wars, 'label': 'Wars'}] %}
+{% if first_war_date %}{% set _war_meta = _war_meta + [{'value': first_war_date, 'label': 'Since'}] %}{% endif %}
+{% set page_header_meta = _war_meta + [{'value': 'All-time', 'label': 'Scope'}] %}
+{% set page_primary_control %}
 <label>Attack Filter</label>
 <select class="selector" id="farmFilter" onchange="setFarm(this.value === 'all')">
     <option value="nofarm">Exclude Farm</option>
     <option value="all">All Attacks</option>
 </select>
 <span class="toggle-hint" id="toggleHint" style="color:var(--muted);font-size:12px;">Farm &amp; Failed Farm attacks excluded</span>
-<div class="ctrl-divider" style="margin-left:auto;"></div>
+{% endset %}
+{% set page_controls %}
 <a href="/war" class="action-btn">← Live War</a>
 {% endset %}
 {% include '_page_header.html' %}

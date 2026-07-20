@@ -1,19 +1,50 @@
-<div class="page-header">
+{#-
+  Sitewide page header. Zones (all optional except the title):
+    page_header_title   — required. One accent <span> allowed. No emoji.
+    page_header_desc     — one plain orientation line (no data facts / badges).
+    page_header_meta     — list of {value, label[, tone]} → mono readout figures.
+                           tone ∈ 'win' | 'loss' | 'mode' (optional color).
+    page_header_right    — optional right-aligned identity block (e.g. id-chip).
+    page_primary_control — the one primary selector (rendered first, emphasized).
+    page_controls        — the secondary control cluster (search / filters / actions).
+  Layout: title(+right) → desc → meta readout all scroll away; only the controls
+  toolbar pins under the nav on desktop (static on mobile).
+-#}
+<header class="page-header">
     <div class="page-header-inner">
-        {% if page_header_right %}
-        <div>
-            <h1>{{ page_header_title | safe }}</h1>
-            {% if page_header_desc %}<p class="page-sub">{{ page_header_desc | safe }}</p>{% endif %}
+        <div class="page-header-top">
+            <div class="page-header-headings">
+                <h1>{{ page_header_title | safe }}</h1>
+                {% if page_header_desc %}<p class="page-sub">{{ page_header_desc | safe }}</p>{% endif %}
+            </div>
+            {% if page_header_right %}<div class="page-header-right">{{ page_header_right | safe }}</div>{% endif %}
         </div>
-        <div>{{ page_header_right | safe }}</div>
-        {% else %}
-        <h1>{{ page_header_title | safe }}</h1>
-        {% if page_header_desc %}<p class="page-sub">{{ page_header_desc | safe }}</p>{% endif %}
+        {% if page_header_meta %}
+        <div class="readout">
+            {% for fact in page_header_meta %}
+            <div class="fig" role="group" aria-label="{{ fact.label }}: {{ fact.value | striptags }}">
+                <span class="v{% if fact.tone %} {{ fact.tone }}{% endif %}" aria-hidden="true">{{ fact.value | safe }}</span>
+                <span class="l" aria-hidden="true">{{ fact.label }}</span>
+            </div>
+            {% endfor %}
+        </div>
         {% endif %}
     </div>
-    {% if page_controls | default('') | trim %}
-    <div class="page-header-controls">
-        <div class="controls">{{ page_controls | safe }}</div>
+</header>
+{% if (page_primary_control | default('') | trim) or (page_controls | default('') | trim) %}
+<div class="page-toolbar">
+    <div class="page-toolbar-inner">
+        <div class="controls">
+            {% if page_primary_control | default('') | trim %}
+            <div class="controls-primary">{{ page_primary_control | safe }}</div>
+            {% endif %}
+            {% if (page_primary_control | default('') | trim) and (page_controls | default('') | trim) %}
+            <span class="ctrl-divider ctrl-divider-primary"></span>
+            {% endif %}
+            {% if page_controls | default('') | trim %}
+            <div class="controls-secondary">{{ page_controls | safe }}</div>
+            {% endif %}
+        </div>
     </div>
-    {% endif %}
 </div>
+{% endif %}

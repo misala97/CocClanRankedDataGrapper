@@ -33,6 +33,12 @@ def raid_weekend_page():
     regular_baseline = None
     peak_baseline = None
     combined_baseline = None
+    roster_status = []
+    clan_attacks_remaining = 0
+    participated = 0
+    roster_total = 0
+    participation_pct = 0
+    highlights = None
 
     if selected_raid:
         logs = (
@@ -313,6 +319,43 @@ def raid_weekend_page():
         total_log_attacks = sum(p['att_count'] for p in player_data)
         cleanup_count = sum(p['cleanup_count'] for p in player_data)
 
+        # ── Roster reconciliation (war-room: who still has attacks) ──────────────
+        # player_data is built purely from attack logs, so in-clan members who
+        # haven't swung yet are absent from it. Reconcile against the current
+        # in-clan roster so the mid-raid war-room can surface attacks-remaining and
+        # no-shows. NOTE: in_clan reflects the roster NOW, not at raid time — so the
+        # template only surfaces no-show *names* while the raid is ongoing (naming a
+        # since-left member on an old ended raid would be wrong); ended raids use
+        # only the aggregate participation count.
+        att_by_tag = {p['player_tag']: p['att_count'] for p in player_data}
+        clan_members = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
+        for m in clan_members:
+            used = min(att_by_tag.get(m.tag, 0), MAX_ATTACKS)
+            roster_status.append({
+                'player_name':  m.name or m.tag,
+                'player_tag':   m.tag,
+                'attacks_used': used,
+                'attacks_left': MAX_ATTACKS - used,
+                'has_attacked': used > 0,
+            })
+        roster_total           = len(roster_status)
+        participated           = sum(1 for r in roster_status if r['has_attacked'])
+        clan_attacks_remaining = sum(r['attacks_left'] for r in roster_status)
+        participation_pct      = round(participated / roster_total * 100) if roster_total else 0
+
+        # ── Post-raid highlights (all client-visible data; template shows only when
+        # the raid has ended). Each award renders only when it has a real winner. ──
+        def _top(key, predicate):
+            cands = [p for p in player_data if predicate(p) and p.get(key) is not None]
+            return max(cands, key=lambda p: p[key]) if cands else None
+        highlights = {
+            'mvp':           max(player_data, key=lambda p: (p['score_100'], p['overall_impact'])) if player_data else None,
+            'biggest_carry': _top('overall_baseline_shift', lambda p: (p.get('overall_baseline_shift') or 0) > 0),
+            'cleanup_hero':  _top('cleanup_count',          lambda p: p['cleanup_count'] > 0),
+            'peak_slayer':   _top('peak_medals_per_attack', lambda p: p.get('peak_medals_per_attack') is not None),
+            'triple_wipers': [p['player_name'] for p in player_data if p['solo_wipes'] >= 3],
+        }
+
         # ── Estimated raid medals ─────────────────────────────────────────────
         total_medals  = total_medals_now
         total_attacks = max(total_log_attacks, 1)
@@ -380,6 +423,12 @@ def raid_weekend_page():
         regular_baseline=regular_baseline,
         peak_baseline=peak_baseline,
         combined_baseline=combined_baseline,
+        roster_status=roster_status,
+        clan_attacks_remaining=clan_attacks_remaining,
+        participated=participated,
+        roster_total=roster_total,
+        participation_pct=participation_pct,
+        highlights=highlights,
         raid_medal_tables_json=json.dumps({
             'district': RAID_DISTRICT_MEDALS,
             'peak': RAID_CAPITAL_PEAK_MEDALS,

@@ -1,0 +1,19 @@
+{#- One CWL day's unit: the Day banner + the shared War Detail unit. Requires
+    `d` (a features/cwl _build_war_detail dict) and `round_num` in context.
+    Rendered both into the live #unitHost (active round) and into inert
+    <template>s, so goDay() can swap days client-side with no page reload. -#}
+{% set u = d %}
+{% set opt = {
+    'atks_per': 1,
+    'can_edit': can_edit_clan_war,
+    'me_tag': (current_user.linked_player_tag if current_user.is_authenticated else none),
+    'api_castle': '/cwl/api/war/' ~ d.war.id ~ '/castle-empty',
+    'api_member_prefix': '/cwl/api/member',
+} %}
+<div class="day-banner">
+    <span class="dn">Day {{ round_num }}</span>
+    <span class="vs">{{ d.our_clan_name }} vs {{ d.opp_clan_name }}</span>
+    <span class="st {{ d.war.state }}">{% if d.war.state == 'inWar' %}Live now{% elif d.war.state == 'warEnded' %}Final{% else %}Preparation{% endif %}</span>
+    {% if d.war.state in ('inWar','warEnded') %}<span class="sc"><span class="o">{{ d.our_stars }}</span><span class="x">★</span><span class="t">{{ d.opp_stars }}</span></span>{% endif %}
+</div>
+{% include 'war/_war_detail_unit.html' %}

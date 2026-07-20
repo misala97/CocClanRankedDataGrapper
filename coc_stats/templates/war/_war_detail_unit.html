@@ -1,0 +1,377 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+   SHARED War Detail unit — M1 Scoreboard · M2 Win Projection · M3 Roster
+   Ledger + Map · M4 Verdict Table · M5 Matchup · M6 Attack Log.
+   Rendered by BOTH /war (clanwar.html) and /cwl (cwl.html) — single source,
+   so the unit can never drift between pages. Driven by two context vars the
+   including template must {% set %} first:
+     u   — the detail dict (shape = features/cwl _build_war_detail output:
+           our_/opp_ stars·pct·attacks·clan_name·clan_badge·clan_tag·cwl_league·
+           avg_league·avg_th·wars_won·win_streak·war_log_public, members_our/opp,
+           attacks_by_attacker, attacks_on_defender, member_by_tag, war_verdicts,
+           all_attacks_json, and .war (state·id·team_size·start_time·end_time·
+           castle_empty). /war builds this same shape from its ClanWar object.
+     opt — {atks_per (2 war / 1 cwl), can_edit, me_tag, api_castle,
+           api_member_prefix}. Mode hue via --unit-mode on the wrapper.
+   The JS that drives these IDs (win engine, gauge, verdict table, matchup,
+   countdowns, map) lives per-page — the math differs (2 vs 1 attack).
+   ═══════════════════════════════════════════════════════════════════════ -#}
+{# ── M1 · SCOPE SCOREBOARD ── #}
+{% set _our_s = u.our_stars or 0 %}{% set _opp_s = u.opp_stars or 0 %}
+{% set _our_p = u.our_pct or 0 %}{% set _opp_p = u.opp_pct or 0 %}
+{% set _lead = 'win' if (_our_s > _opp_s or (_our_s == _opp_s and _our_p > _opp_p)) else ('loss' if (_opp_s > _our_s or (_our_s == _opp_s and _opp_p > _our_p)) else 'tie') %}
+<section class="w2-board">
+    <span class="w2-brk tl"></span><span class="w2-brk tr"></span><span class="w2-brk bl"></span><span class="w2-brk br"></span>
+    <div class="w2-grid">
+
+        {# our clan #}
+        <div class="w2-clan">
+            <div class="w2-ident">
+                {% if u.our_clan_badge %}<img src="{{ u.our_clan_badge }}" class="w2-badge" alt="">{% else %}<div class="w2-badge-ph">🛡️</div>{% endif %}
+                <div style="min-width:0;"><div class="w2-name" title="{{ u.our_clan_name }}">{{ u.our_clan_name or 'Our Clan' }}</div>{% if u.our_clan_tag %}<div class="w2-tag">{{ u.our_clan_tag }}</div>{% endif %}</div>
+            </div>
+            <div class="w2-prof">
+                <div class="w2-pf"><span class="k">CWL</span><span class="v cwl" title="{{ u.our_cwl_league or '' }}">{{ u.our_cwl_league or '—' }}</span></div>
+                <div class="w2-pf"><span class="k">Ø League</span><span class="v" title="{{ u.our_avg_league or '' }}">{{ u.our_avg_league or '—' }}</span></div>
+                <div class="w2-pf"><span class="k">Ø Town Hall</span><span class="v">{{ u.our_avg_th }}</span></div>
+                <div class="w2-pf"><span class="k">Wars Won</span><span class="v">{{ u.our_wars_won if u.our_wars_won is not none else '—' }}</span></div>
+                <div class="w2-pf"><span class="k">Win Streak</span><span class="v {% if u.our_win_streak %}hot{% endif %}">{{ u.our_win_streak or 0 }}</span></div>
+                <div class="w2-pf"><span class="k">War Log</span><span class="v {% if u.our_war_log_public %}pub{% endif %}">{% if u.our_war_log_public is none %}—{% else %}{{ 'Public' if u.our_war_log_public else 'Private' }}{% endif %}</span></div>
+            </div>
+            <div class="w2-score"><span>{{ _our_s }}</span><span class="st">★</span><span class="pct">{{ '%.1f'|format(_our_p) }}%</span></div>
+            <div class="w2-atk">{{ u.our_attacks }} / {{ (u.war.team_size or 0) * opt.atks_per }} attacks used</div>
+        </div>
+
+        {# center reticle #}
+        <div class="w2-center">
+            <div class="w2-reticle">
+                <svg viewBox="0 0 132 132" aria-hidden="true">
+                    <circle cx="66" cy="66" r="58" fill="none" stroke="var(--border)" stroke-width="1"/>
+                    <circle cx="66" cy="66" r="49" fill="none" stroke="var(--surf2)" stroke-width="9"/>
+                    <circle id="w2GaugeArc" class="w2-gauge-arc" cx="66" cy="66" r="49" fill="none"
+                            stroke="var(--unit-mode, var(--ops-war))" stroke-width="9" stroke-linecap="round"
+                            stroke-dasharray="308" stroke-dashoffset="308" transform="rotate(-90 66 66)"/>
+                    <line x1="66" y1="4" x2="66" y2="15" stroke="var(--unit-mode, var(--ops-war))" stroke-width="1.5"/>
+                    <line x1="66" y1="117" x2="66" y2="128" stroke="var(--unit-mode, var(--ops-war))" stroke-width="1.5"/>
+                    <line x1="4" y1="66" x2="15" y2="66" stroke="var(--unit-mode, var(--ops-war))" stroke-width="1.5"/>
+                    <line x1="117" y1="66" x2="128" y2="66" stroke="var(--unit-mode, var(--ops-war))" stroke-width="1.5"/>
+                </svg>
+                <div style="text-align:center;"><div class="w2-gv" id="w2GaugeVal">—</div><div class="w2-gl" id="w2GaugeLbl">{{ 'result' if u.war.state == 'warEnded' else 'win odds' }}</div></div>
+            </div>
+            <div class="w2-chip {% if u.war.state == 'preparation' %}prep{% else %}{{ _lead }}{% endif %}" id="w2Chip">
+                {% if u.war.state == 'inWar' %}<span class="w2-live-dot"></span>{% endif %}{% if u.war.state == 'preparation' %}Scouting{% elif u.war.state == 'inWar' %}{{ 'Winning' if _lead == 'win' else ('Losing' if _lead == 'loss' else 'Tied') }}{% else %}{{ 'Victory' if _lead == 'win' else ('Defeat' if _lead == 'loss' else 'Draw') }}{% endif %}
+            </div>
+            {% if u.war.state == 'preparation' %}<div class="w2-count" id="w2Upset" style="display:none;"></div>{% endif %}
+            <div class="w2-count"{% if u.war.state == 'preparation' and u.war.start_time %} data-cd="{{ u.war.start_time.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-cd-label="Starts"{% elif u.war.state == 'inWar' and u.war.end_time %} data-cd="{{ u.war.end_time.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-cd-label="Ends"{% endif %}>
+                {% if u.war.state == 'preparation' and u.war.start_time %}Starts <b>{{ u.war.start_time | local_dt('%d.%m %H:%M') }}</b>
+                {% elif u.war.state == 'inWar' and u.war.end_time %}Ends <b>{{ u.war.end_time | local_dt('%d.%m %H:%M') }}</b>
+                {% elif u.war.end_time %}Ended <b>{{ u.war.end_time | local_dt('%d.%m %H:%M') }}</b>{% endif %}
+            </div>
+            {% if opt.can_edit %}
+            <button class="war-flag {% if u.war.castle_empty %}flag-on{% else %}flag-off{% endif %}" id="castleEmptyBtn"
+                    onclick="event.stopPropagation()" ondblclick="toggleWarFlag(event, this, '{{ opt.api_castle }}')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px" aria-hidden="true"><path d="M5 21V8l2-2 2 2 2-2 2 2 2-2 2 2 2-2 2 2v13z"/><path d="M10 21v-4h4v4"/></svg>Castle Empty</button>
+            {% elif u.war.castle_empty %}<span class="war-flag flag-on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px" aria-hidden="true"><path d="M5 21V8l2-2 2 2 2-2 2 2 2-2 2 2 2-2 2 2v13z"/><path d="M10 21v-4h4v4"/></svg>Castle Empty</span>{% endif %}
+            <div class="w2-size">{{ u.war.team_size }}v{{ u.war.team_size }} · max {{ (u.war.team_size or 0) * 3 }}★</div>
+        </div>
+
+        {# opponent clan #}
+        <div class="w2-clan right">
+            <div class="w2-ident">
+                {% if u.opp_clan_badge %}<img src="{{ u.opp_clan_badge }}" class="w2-badge" alt="">{% else %}<div class="w2-badge-ph">🛡️</div>{% endif %}
+                <div style="min-width:0;"><div class="w2-name" title="{{ u.opp_clan_name }}">{{ u.opp_clan_name or 'Opponent' }}</div>{% if u.opp_clan_tag %}<div class="w2-tag">{{ u.opp_clan_tag }}</div>{% endif %}</div>
+            </div>
+            <div class="w2-prof">
+                <div class="w2-pf"><span class="k">CWL</span><span class="v cwl" title="{{ u.opp_cwl_league or '' }}">{{ u.opp_cwl_league or '—' }}</span></div>
+                <div class="w2-pf"><span class="k">Ø League</span><span class="v" title="{{ u.opp_avg_league or '' }}">{{ u.opp_avg_league or '—' }}</span></div>
+                <div class="w2-pf"><span class="k">Ø Town Hall</span><span class="v">{{ u.opp_avg_th }}</span></div>
+                <div class="w2-pf"><span class="k">Wars Won</span><span class="v">{{ u.opp_wars_won if u.opp_wars_won is not none else '—' }}</span></div>
+                <div class="w2-pf"><span class="k">Win Streak</span><span class="v {% if u.opp_win_streak %}hot{% endif %}">{{ u.opp_win_streak or 0 }}</span></div>
+                <div class="w2-pf"><span class="k">War Log</span><span class="v {% if u.opp_war_log_public %}pub{% endif %}">{% if u.opp_war_log_public is none %}—{% else %}{{ 'Public' if u.opp_war_log_public else 'Private' }}{% endif %}</span></div>
+            </div>
+            <div class="w2-score"><span>{{ _opp_s }}</span><span class="st">★</span><span class="pct">{{ '%.1f'|format(_opp_p) }}%</span></div>
+            <div class="w2-atk">{{ u.opp_attacks }} / {{ (u.war.team_size or 0) * opt.atks_per }} attacks used</div>
+        </div>
+
+    </div>
+</section>
+
+<div class="war-spine" data-state="{{ u.war.state }}">
+
+{# ── M5 · MATCHUP ANALYSIS (inline — replaces the retired Compare & Predict modal) ── #}
+{% if u.members_our and u.members_opp %}
+<div class="recent-card" id="matchupCard">
+    <h2><button type="button" class="recent-header" onclick="toggleMatchup()" aria-expanded="{{ 'true' if u.war.state == 'preparation' else 'false' }}" aria-controls="matchupBody">
+        <span class="recent-header-title">◎ Matchup Analysis · {{ u.our_clan_name or 'Us' }} vs {{ u.opp_clan_name or 'Them' }}</span>
+        <span class="recent-chevron{% if u.war.state == 'preparation' %} open{% endif %}" id="matchupChev">▼</span>
+    </button></h2>
+    <div class="recent-body" id="matchupBody"{% if u.war.state == 'preparation' %} style="display:block;"{% endif %}>
+        {# Key Statistics dropped — it duplicated War Prediction's factor cards
+           (same AVG TH / league / wars-won / streak numbers, second format) #}
+        <div id="m5-prediction" class="cmp-sec"></div>
+        <div id="m5-th"         class="cmp-sec"></div>
+        <div id="m5-lgdist"     class="cmp-sec"></div>
+        <div id="m5-matchup"    class="cmp-sec"></div>
+        <div id="m5-league"     class="cmp-sec"></div>
+    </div>
+</div>
+{% endif %}
+
+{# ── WIN PROBABILITY CARD (all 3 states — prep uses the same engine at 0 attacks / 0-0) ── #}
+{% if u.members_our and u.members_opp %}
+<div class="recent-card" id="wcWrap-0">
+    <h2><button type="button" class="recent-header" onclick="toggleWinCalc(0)" aria-expanded="false" aria-controls="wcBody-0" style="flex-direction:column;align-items:stretch;border-radius:10px 10px 0 0;padding:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span class="recent-header-title">Win Projection</span>
+                {% if u.war.state == 'preparation' %}
+                <div style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;background:color-mix(in oklch, var(--unit-mode, var(--ops-war)) 12%, transparent);color:var(--unit-mode, var(--ops-war));border:1px solid color-mix(in oklch, var(--unit-mode, var(--ops-war)) 30%, transparent);">Forecast</div>
+                {% elif u.war.state == 'inWar' %}
+                <div style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;background:color-mix(in oklch, var(--green) 12%, transparent);color:var(--green);border:1px solid color-mix(in oklch, var(--green) 30%, transparent);">Live</div>
+                {% else %}
+                <div style="margin-left:0;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;background:color-mix(in oklch, var(--muted) 10%, transparent);color:var(--muted);border:1px solid color-mix(in oklch, var(--muted) 25%, transparent);">Final</div>
+                {% endif %}
+            </div>
+            <span class="recent-chevron" id="wcChev-0">▼</span>
+        </div>
+        <div id="wcBarPreview-0" style="padding:0 16px 14px;display:none;"></div>
+    </button></h2>
+    <div class="recent-body" id="wcBody-0">
+        <div id="winCalc-0"></div>
+    </div>
+</div>
+{% endif %}
+
+{# ── WAR VERDICTS ── #}
+{% if u.war_verdicts %}
+<div class="recent-card" id="warVerdictCard">
+    <h2><button type="button" class="recent-header" onclick="toggleWarVerdicts()" aria-expanded="false" aria-controls="warVerdictBody">
+        <span class="recent-header-title">War Performance · {{ u.war_verdicts | length }} players</span>
+        <span class="recent-chevron" id="warVerdictChevron">▼</span>
+    </button></h2>
+    <div class="recent-body" id="warVerdictBody" style="display:none;">
+        <div class="vt-wrap">
+            <table class="vt-table" id="warVerdictTable">
+                <thead>
+                    <tr>
+                        <th class="vt-sortable" tabindex="0" onclick="sortWarVerdict('map_pos')" style="text-align:center;">#</th>
+                <th class="vt-sortable" tabindex="0" onclick="sortWarVerdict('player_name')">Player</th>
+                <th class="vt-sortable" tabindex="0" onclick="sortWarVerdict('league')">League</th>
+                <th class="vt-sortable" tabindex="0" onclick="sortWarVerdict('attacks_used')" style="text-align:center;">Attacks</th>
+                <th class="vt-sortable" tabindex="0" onclick="sortWarVerdict('score')" style="text-align:center;">Verdict</th>
+                <th></th>
+                    </tr>
+                </thead>
+                <tbody id="warVerdictTbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── ATTACK LOG ── #}
+{% if u.all_attacks_json %}
+<div class="recent-card" id="logCard">
+    <h2><button type="button" class="recent-header" onclick="toggleLog(0)" aria-expanded="false" aria-controls="logBody-0">
+        <span class="recent-header-title">Attack Log · {{ u.all_attacks_json | length }} attacks</span>
+        <span class="recent-chevron" id="logChevron-0">▼</span>
+    </button></h2>
+    <div class="recent-body" id="logBody-0"></div>
+</div>
+{% endif %}
+
+<div id="rosterSection">
+{# ── M3 · ROSTER (ledger default / positional map toggle) ── #}
+{% if u.members_our or u.members_opp %}
+<div class="w2-sec-row">
+    <h2 class="w2-sec-head">Roster</h2>
+    <div class="w2-vtoggle" role="group" aria-label="Roster view">
+        <button type="button" id="viewLedgerBtn" class="active" aria-pressed="true" onclick="switchRosterView('ledger')">Ledger</button>
+        <button type="button" id="viewMapBtn" aria-pressed="false" onclick="switchRosterView('map')">Map</button>
+    </div>
+    <span style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;">Ledger names targets · Map draws the attack lines</span>
+</div>
+
+{# ── LEDGER (default): one row per our player · actual target · defense ── #}
+<div id="ledgerView">
+    <div class="w2-led">
+        <div class="w2-led-head"><span></span><span>Our roster</span><span>Attacked →</span><span style="text-align:right;">Base defense</span></div>
+        {% for m in u.members_our %}
+        {% set my_attacks = u.attacks_by_attacker.get(m.player_tag, []) %}
+        {% set def = u.attacks_on_defender.get(m.player_tag, []) %}
+        <div class="w2-lrow">
+            <span class="w2-lpos">#{{ m.map_position }}</span>
+            <div class="w2-lwho">
+                <div class="n"><a href="/player/{{ m.player_tag | replace('#','') }}" class="player-link">{{ m.player_name }} <span class="player-link-arrow">↗</span></a></div>
+                <div class="th">TH{{ m.town_hall_level }}{% if m.ranked_league %} · {{ m.ranked_league }}{% endif %}</div>
+            </div>
+            <div class="w2-latk">
+                {% for a in my_attacks %}
+                {% set tgt = u.member_by_tag.get(a.defender_tag) %}
+                {% set off = ((m.map_position or 0) - (tgt.map_position or 0)) if tgt else 0 %}
+                <div class="a">
+                    <span class="st">{{ '★' * a.stars }}{{ '☆' * (3 - a.stars) }}</span>
+                    <span class="pc">{{ a.destruction_pct | int }}%</span>
+                    {% if tgt %}<span class="tgt">→ <bdi>{{ tgt.player_name | truncate(15, True, '…') }}</bdi> #{{ tgt.map_position }} {% if off > 0 %}<span class="w2-off-up">▲{{ off }}</span>{% elif off < 0 %}<span class="w2-off-dn">▼{{ -off }}</span>{% endif %}</span>{% endif %}
+                </div>
+                {% else %}
+                <div class="a none">{% if u.war.state == 'preparation' %}scouting — no attacks yet{% else %}{{ opt.atks_per - (my_attacks | length) }} attack{{ 's' if (opt.atks_per - (my_attacks | length)) != 1 else '' }} unused{% endif %}</div>
+                {% endfor %}
+            </div>
+            <div class="w2-ldef">
+                {% if def %}
+                    {% set best = def | map(attribute='stars') | max %}
+                    <span class="hit">{{ '★' * best }}{{ '☆' * (3 - best) }}</span><span class="hits">{{ def | length }}×</span>
+                {% elif u.war.state != 'preparation' %}
+                    <span class="held"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/></svg>held</span>
+                {% else %}
+                    <span style="color:var(--muted);opacity:.5;">—</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{# ── MAP (toggle): the positional two-column grid + drawn attack lines ── #}
+<div id="mapView" style="display:none;">
+<div class="w2m-hint">Click a base — attacks solid · hits taken blue-dashed · suggested targets amber-dashed.</div>
+<div class="roster-grid" id="rosterGrid-0" data-atk-per="2" style="position:relative">
+    <svg id="warConnections-0" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5;"></svg>
+
+    {# OUR SIDE #}
+    <div class="roster-card">
+        <div class="roster-card-header">
+            <span class="rh-left">{{ u.our_clan_name or 'Our Clan' }}</span>
+            <div class="rh-right">
+                <span class="rh-meta">{{ u.members_our | length }} members</span>
+                {% if u.our_avg_th %}<span class="rh-meta">· Ø TH {{ u.our_avg_th }}</span>{% endif %}
+                {% if u.our_avg_league %}<span class="league-pill lp-gold" style="font-size:10px;">{{ u.our_avg_league }}</span>{% endif %}
+            </div>
+        </div>
+        <div class="roster-col-hdr">
+            <span></span><span></span><span>Player</span>
+            <span class="rch-def">Defense</span>
+            <span class="rch-atk">Attacks</span>
+        </div>
+        {% for m in u.members_our %}
+        {% set my_attacks = u.attacks_by_attacker.get(m.player_tag, []) %}
+        {% set attacks_received = u.attacks_on_defender.get(m.player_tag, []) %}
+        <div class="member-row{% if opt.me_tag and opt.me_tag == m.player_tag %} row-me{% endif %}" data-tag="{{ m.player_tag }}" data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]' data-defended-by='[{% for a in attacks_received %}{"tag":"{{ a.attacker_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'>
+            <div class="map-pos">#{{ m.map_position }}</div>
+            <div class="th-badge">TH{{ m.town_hall_level }}</div>
+            <div class="member-info">
+                <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
+                {% if m.ranked_league %}<div class="member-sub-row"><span class="member-sub">{{ m.ranked_league }}</span></div>{% endif %}
+            </div>
+            <div class="def-col">
+                {% if attacks_received %}
+                    {% set best_stars = attacks_received | map(attribute='stars') | max %}
+                    <span class="def-stars"><span class="def-filled">{% for _ in range(best_stars) %}★{% endfor %}</span><span class="def-empty">{% for _ in range(3 - best_stars) %}☆{% endfor %}</span></span>
+                    <span class="def-hits">{{ attacks_received | length }}×</span>
+                {% elif u.war.state != 'preparation' %}
+                    <span class="def-safe"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:2px" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/></svg>Untouched</span>
+                {% else %}
+                    <span style="color:var(--muted);font-size:10px">—</span>
+                {% endif %}
+            </div>
+            <div class="attacks-col">
+                {% set war_atks_per = opt.atks_per %}{% set used = my_attacks | length %}
+                {% if u.war.state == 'preparation' %}
+                <span class="atk-count atk-prep">{{ war_atks_per - used }} left</span>
+                {% elif used == war_atks_per %}<span class="atk-count atk-full">{{ war_atks_per }}/{{ war_atks_per }}</span>
+                {% elif used > 0 %}<span class="atk-count atk-partial">{{ used }}/{{ war_atks_per }}</span>
+                {% else %}<span class="atk-count atk-none">0/{{ war_atks_per }}</span>
+                {% endif %}
+                <div class="atk-pills">
+                    {% for a in my_attacks %}
+                    {% set defender = u.member_by_tag.get(a.defender_tag) %}
+                    <span class="attack-pill attack-{{ a.stars }}" title="{{ a.destruction_pct }}% · {{ a.duration }}s">
+                        {% for _ in range(a.stars) %}★{% endfor %}{% for _ in range(3 - a.stars) %}☆{% endfor %}
+                        {{ a.destruction_pct | int }}%{% if defender %} → {{ defender.player_name | truncate(12, True, '…') }} TH{{ defender.town_hall_level }}{% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div style="padding:20px 18px;color:var(--muted);font-size:13px;">No member data yet.</div>
+        {% endfor %}
+    </div>
+
+    {# OPPONENT SIDE #}
+    <div class="roster-card">
+        <div class="roster-card-header">
+            <span class="rh-left">{{ u.opp_clan_name }}</span>
+            <div class="rh-right">
+                <span class="rh-meta">{{ u.members_opp | length }} members</span>
+                {% if u.opp_avg_th %}<span class="rh-meta">· Ø TH {{ u.opp_avg_th }}</span>{% endif %}
+                {% if u.opp_avg_league %}<span class="league-pill lp-gold" style="font-size:10px;">{{ u.opp_avg_league }}</span>{% endif %}
+            </div>
+        </div>
+        <div class="roster-col-hdr">
+            <span></span><span></span><span>Player</span>
+            <span class="rch-def">Defense</span>
+            <span class="rch-atk">Attacks</span>
+        </div>
+        {% for m in u.members_opp %}
+        {% set my_attacks = u.attacks_by_attacker.get(m.player_tag, []) %}
+        {% set attacks_received = u.attacks_on_defender.get(m.player_tag, []) %}
+        <div class="member-row{% if opt.me_tag and opt.me_tag == m.player_tag %} row-me{% endif %}" data-tag="{{ m.player_tag }}" data-attacks='[{% for a in my_attacks %}{"tag":"{{ a.defender_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]' data-defended-by='[{% for a in attacks_received %}{"tag":"{{ a.attacker_tag }}","stars":{{ a.stars }},"pct":{{ a.destruction_pct|int }}}{% if not loop.last %},{% endif %}{% endfor %}]'>
+            <div class="map-pos">#{{ m.map_position }}</div>
+            <div class="th-badge">TH{{ m.town_hall_level }}</div>
+            <div class="member-info">
+                <div class="member-name" title="{{ m.player_name }}">{{ m.player_name }}</div>
+                <div class="member-sub-row">
+                    {% if m.ranked_league %}<span class="member-sub">{{ m.ranked_league }}</span>{% endif %}
+                    {% if opt.can_edit %}
+                    <button class="war-flag {% if m.is_rushed %}flag-on{% else %}flag-off{% endif %}"
+                            onclick="event.stopPropagation()" ondblclick="toggleWarFlag(event, this, '{{ opt.api_member_prefix }}/{{ m.id }}/is-rushed')">Rushed</button>
+                    <button class="war-flag {% if m.is_troll %}flag-on{% else %}flag-off{% endif %}"
+                            onclick="event.stopPropagation()" ondblclick="toggleWarFlag(event, this, '{{ opt.api_member_prefix }}/{{ m.id }}/is-troll')">Troll</button>
+                    {% else %}
+                    {% if m.is_rushed %}<span class="war-flag flag-on">Rushed</span>{% endif %}
+                    {% if m.is_troll  %}<span class="war-flag flag-on">Troll</span>{% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="def-col">
+                {% if attacks_received %}
+                    {% set best_stars = attacks_received | map(attribute='stars') | max %}
+                    <span class="def-stars"><span class="def-filled">{% for _ in range(best_stars) %}★{% endfor %}</span><span class="def-empty">{% for _ in range(3 - best_stars) %}☆{% endfor %}</span></span>
+                    <span class="def-hits">{{ attacks_received | length }}×</span>
+                {% elif u.war.state != 'preparation' %}
+                    <span class="def-safe"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:2px" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/></svg>Untouched</span>
+                {% else %}
+                    <span style="color:var(--muted);font-size:10px">—</span>
+                {% endif %}
+            </div>
+            <div class="attacks-col">
+                {% set used = my_attacks | length %}
+                {% if used == opt.atks_per %}<span class="atk-count atk-full">{{ opt.atks_per }}/{{ opt.atks_per }}</span>
+                {% elif used > 0 %}<span class="atk-count atk-partial">{{ used }}/{{ opt.atks_per }}</span>
+                {% else %}<span class="atk-count atk-none">0/{{ opt.atks_per }}</span>
+                {% endif %}
+                <div class="atk-pills">
+                    {% for a in my_attacks %}
+                    {% set defender = u.member_by_tag.get(a.defender_tag) %}
+                    <span class="attack-pill attack-{{ a.stars }}" title="{{ a.destruction_pct }}% · {{ a.duration }}s">
+                        {% for _ in range(a.stars) %}★{% endfor %}{% for _ in range(3 - a.stars) %}☆{% endfor %}
+                        {{ a.destruction_pct | int }}%{% if defender %} → {{ defender.player_name | truncate(12, True, '…') }} TH{{ defender.town_hall_level }}{% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div style="padding:20px 18px;color:var(--muted);font-size:13px;">No member data yet.</div>
+        {% endfor %}
+    </div>
+
+</div>
+</div>{# /#mapView #}
+{% else %}
+<div style="text-align:center;padding:48px;color:var(--muted);font-size:14px;">
+    War found but no member data yet — run <code>task_update_clan_war</code> again.
+</div>
+{% endif %}
+</div>{# /#rosterSection #}
+</div>{# /.war-spine #}

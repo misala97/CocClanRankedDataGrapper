@@ -694,6 +694,27 @@ def compute_cwl_win_status(war, our_tag):
     return 'undecided'
 
 
+def compute_war_win_status(war, our_tag):
+    """Same logic as compute_cwl_win_status, for a regular ClanWar (different field names)."""
+    if war.state != 'inWar':
+        return None
+    our_side = war.clan_tag == our_tag
+    our_s    = (war.clan_stars  if our_side else war.opponent_stars)  or 0
+    opp_s    = (war.opponent_stars if our_side else war.clan_stars) or 0
+    our_done = (war.clan_attacks if our_side else war.opponent_attacks) or 0
+    opp_done = (war.opponent_attacks if our_side else war.clan_attacks) or 0
+    our_pct  = float((war.clan_destruction_pct if our_side else war.opponent_destruction_pct) or 0)
+    opp_pct  = float((war.opponent_destruction_pct if our_side else war.clan_destruction_pct) or 0)
+    size     = war.team_size or 15
+    our_max  = our_s + max(0, size - our_done) * 3
+    opp_max  = opp_s + max(0, size - opp_done) * 3
+    if our_s > opp_max or (our_s == opp_max and our_pct > opp_pct):
+        return 'safe_win'
+    if opp_s > our_max or (opp_s == our_max and opp_pct > our_pct):
+        return 'cant_win'
+    return 'undecided'
+
+
 def _raid_verdict(logs):
     if not logs:
         return 'badge-inactive', 'Skipped', 0
