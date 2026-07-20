@@ -136,6 +136,7 @@ def _build_war_detail(war, our_tag, matchup_rates=None):
             'defender_th':   dfn_th,
             'stars':         int(a.stars or 0),
             'pct':           int(a.destruction_pct or 0),
+            'duration':      int(a.duration or 0),
             'label':         label,
             'v_score':       v_score,
             'v_label':       v_label,
@@ -506,6 +507,20 @@ def cwl_page():
 
     sorted_rounds = sorted(rounds.items())
 
+    # ── Active round for the War Detail unit (lazy: one round's unit rendered at a
+    # time, switched via ?round=N — same reload model as /war's war picker). Default
+    # picks the round the viewer most likely wants: the live one, else the most recent
+    # ended, else the next preparation day. ─────────────────────────────────────────
+    _round_states = {rn: d['war'].state for rn, d in sorted_rounds}
+    active_round_num = request.args.get('round', type=int)
+    if active_round_num not in _round_states:
+        active_round_num = (
+            next((rn for rn, st in _round_states.items() if st == 'inWar'), None)
+            or next((rn for rn in sorted(_round_states, reverse=True) if _round_states[rn] == 'warEnded'), None)
+            or next((rn for rn in sorted(_round_states) if _round_states[rn] == 'preparation'), None)
+            or (sorted_rounds[0][0] if sorted_rounds else None)
+        )
+
     # ── Per-player CWL performance aggregate (all finished/live rounds) ───────
     _perf = {}
     for _, d in sorted_rounds:
@@ -865,6 +880,7 @@ def cwl_page():
         fought_clans=fought_clans,
         standings=sorted_standings,
         sorted_rounds=sorted_rounds,
+        active_round_num=active_round_num,
         our_player_perf=our_player_perf,
         all_player_perf=all_player_perf,
         season_overview_our=season_overview_our,
