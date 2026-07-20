@@ -78,6 +78,7 @@ def clan_war_page():
                 'defender_th':   dfn_th,
                 'stars':         int(a.stars or 0),
                 'pct':           int(a.destruction_pct or 0),
+                'duration':      int(a.duration or 0),
                 'label':         atk_label,
             })
 

@@ -1116,11 +1116,11 @@ function buildAttackLogHTML(attacks) {
         const sc = a.stars===3?'var(--green)':a.stars===2?'var(--yellow)':a.stars===1?'var(--accent)':'var(--muted)';
         return `<tr>
             <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.attacker_pos}</td>
-            <td style="font-weight:600;color:${nc}">${escapeHTML(a.attacker_name)}</td>
+            <td style="font-weight:600;color:${nc}"><bdi>${escapeHTML(a.attacker_name)}</bdi></td>
             <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.attacker_th}</td>
             <td style="color:var(--muted);text-align:center;font-size:13px">→</td>
             <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-align:center">${a.defender_pos}</td>
-            <td style="font-weight:600">${escapeHTML(a.defender_name)}</td>
+            <td style="font-weight:600"><bdi>${escapeHTML(a.defender_name)}</bdi></td>
             <td style="color:var(--muted);font-size:11px;text-align:center">TH${a.defender_th}</td>
             <td>${renderStars(a.stars, { size: '1.0em' })}</td>
             <td style="font-family:'Rajdhani',sans-serif;font-weight:700;color:${sc}">${a.pct}%</td>
@@ -1440,7 +1440,7 @@ function buildCompareHTML(our, opp, meta) {
     }
 
     const prediction = `
-        <div class="cmp-title">📊 War Prediction</div>
+        <div class="cmp-title">War Prediction</div>
         <div class="pred-verdict" style="margin-bottom:16px;">${verdict}</div>
         <div class="pred-factors-grid">
             ${factorCard('Avg TH', avgThOur.toFixed(1), avgThOpp.toFixed(1), thDiffAvg)}
@@ -1460,7 +1460,7 @@ function buildCompareHTML(our, opp, meta) {
     }
 
     const stats = `
-        <div class="cmp-title">📋 Key Statistics</div>
+        <div class="cmp-title">Key Statistics</div>
         <div style="display:grid;grid-template-columns:1fr 140px 1fr;margin-bottom:8px;">
             <span style="font-size:11px;font-weight:600;color:var(--green)">${ourNameSafe}</span>
             <span></span>
@@ -1510,7 +1510,7 @@ function buildCompareHTML(our, opp, meta) {
     }).join('');
 
     const league = cmpCollapsible(
-        '🎯 League Comparison',
+        'League Comparison',
         `<div class="matchup-summary">
             <div class="matchup-stat"><div class="mn mn-green">${lgBetter}</div><div class="ml">Ahead</div></div>
             <div class="matchup-stat"><div class="mn mn-muted">${lgEven}</div><div class="ml">Even</div></div>
@@ -1528,7 +1528,7 @@ function buildCompareHTML(our, opp, meta) {
     const lgDistMax   = Math.max(...allLeagues.map(l => Math.max(lgDistOur[l] || 0, lgDistOpp[l] || 0)), 1);
 
     const lgDist = cmpCollapsible(
-        '🏅 League Distribution',
+        'League Distribution',
         `<div style="display:grid;grid-template-columns:1fr 170px 1fr;margin-bottom:10px;">
             <span class="dist-our-lbl">${ourNameSafe}</span><span></span><span class="dist-opp-lbl">${oppNameSafe}</span>
          </div>

@@ -4,9 +4,9 @@
     {
       "name": "coc_stats",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["app.py"],
+      "runtimeArgs": ["dev_server.py"],
       "cwd": "coc_stats",
-      "port": 5000
+      "autoPort": true
     }
   ]
 }
