@@ -222,6 +222,11 @@ Quiet at rest, decisive on interaction: every interactive element in this system
 - When a dense desktop table (many players × many stats) drops below its breakpoint, it becomes a **single bordered container of divided rows** — one player per row (`.mr`), two tight lines: identity + verdict/chevron on top, a wrap of Mono stats below, tap-to-expand for detail. **Never** a stack of full-width per-player cards.
 - **Why:** the table's whole value is scanning many players at a glance; a card-per-player spends a full block of vertical space on each and destroys that. This is the shared pattern across every data-table page (battles, raid) — reuse it, don't reinvent a card layout per page (see Don'ts).
 
+### War Detail unit (shared, mode-parameterized)
+- The M1–M6 clan-war unit (scoreboard · win projection · roster ledger/map · verdict table · matchup · attack log) lives in one shared partial pair (`templates/war/_war_detail_unit.html` + `_war_unit_style.html`) rendered by **both** `/war` and `/cwl` — a single source so the two pages can't drift.
+- **Mode hue is parameterized:** the unit's CSS reads `var(--unit-mode, var(--ops-war))` throughout, so `/war` falls back to **War Amber** and `/cwl` sets `--unit-mode: var(--purple)` on its wrapper for **CWL Violet**. Reuse on a new page = include the partial, set `--unit-mode`, and pass the `u` (a `_build_war_detail`-shaped detail dict) + `opt` (attacks-per-war, editor flags, API endpoints) it expects.
+- Win/loss semantics stay independent of the mode hue: a win chip is IFF Green and a loss is Raid Red whether the unit renders Amber or Violet — the mode color answers "which game mode," never "what result."
+
 ## 6. Do's and Don'ts
 
 ### Do:
