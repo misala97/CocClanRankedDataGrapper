@@ -90,3 +90,67 @@ def build_week_records(weeks, season_ids):
     for records in out.values():
         records.sort(key=lambda r: order[r['season_id']])
     return out
+
+
+def reliability_word(sigma):
+    """Sigma rendered as a word. Bands are exclusive at the top."""
+    for cutoff, word in RELIABILITY_BANDS:
+        if cutoff is None or sigma < cutoff:
+            return word
+    return 'erratic'
+
+
+def score_trend(scores):
+    """Points of score gained or lost, comparing recent weeks to earlier ones.
+
+    Returns None below MIN_WEEKS_FOR_TREND — a two-week 'trend' is noise.
+    """
+    n = len(scores)
+    if n >= 6:
+        return round(sum(scores[-3:]) / 3 - sum(scores[-6:-3]) / 3, 1)
+    if n >= MIN_WEEKS_FOR_TREND:
+        return round(sum(scores[-2:]) / 2 - sum(scores[:2]) / 2, 1)
+    return None
+
+
+def player_aggregate(records):
+    """Window-level summary for one player, from their ordered week records."""
+    scores = [r['score'] for r in records]
+    n = len(scores)
+    mean = round(sum(scores) / n, 1) if n else 0.0
+    sigma = round(statistics.pstdev(scores), 1) if n > 1 else 0.0
+
+    attacks_max = sum(r['max_attacks'] for r in records)
+    attacks_used = sum(r['attacks_used'] for r in records)
+
+    ranked_weeks = [r for r in records if r['league_rank']]
+
+    verdict_record = {}
+    for r in records:
+        verdict_record[r['badge']] = verdict_record.get(r['badge'], 0) + 1
+
+    # The badge for the WINDOW MEAN, so the roster's mean cell is colored by the
+    # band that mean actually falls into. att_count=1, max_attacks=1 keeps
+    # _ranked_verdict from appending a missing-attacks suffix — attendance is
+    # reported separately and must not leak into this badge.
+    mean_badge, _, _ = _ranked_verdict(int(round(mean)), 1, 1) if n else ('badge-useless', '', 0)
+
+    return {
+        'weeks_played':    n,
+        'mean':            mean,
+        'mean_badge':      mean_badge,
+        'sigma':           sigma,
+        'reliability':     reliability_word(sigma),
+        'trend':           score_trend(scores),
+        'attendance':      round(attacks_used / attacks_max, 4) if attacks_max else 0.0,
+        'attacks_used':    attacks_used,
+        'attacks_max':     attacks_max,
+        'attacks_wasted':  attacks_max - attacks_used,
+        'league_move':     (ranked_weeks[-1]['league_rank'] - ranked_weeks[0]['league_rank'])
+                           if ranked_weeks else 0,
+        'league_now':      ranked_weeks[-1]['league_tier'] if ranked_weeks else '',
+        'league_rank_now': ranked_weeks[-1]['league_rank'] if ranked_weeks else 0,
+        'best':            max(scores) if scores else 0,
+        'worst':           min(scores) if scores else 0,
+        'verdict_record':  verdict_record,
+    }
