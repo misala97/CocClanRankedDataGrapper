@@ -1,3 +1,4 @@
+import copy
 import datetime as dt
 import json
 import threading
@@ -305,13 +306,19 @@ _RECORD_TTL   = 300         # seconds
 
 
 def _record_page_cached(clan_players, window):
-    """Clan-wide aggregates are viewer-invariant, so cache per (window, roster)."""
+    """Clan-wide aggregates are viewer-invariant, so cache per (window, roster).
+
+    Callers get a deep copy: the payload goes straight into a Jinja context,
+    and Jinja can call mutating methods on it. Handing out the cached objects
+    themselves would let one render corrupt every later viewer's page until
+    the TTL lapsed.
+    """
     tags = frozenset(p.tag for p in clan_players)
-    key = (window, hash(tags))
+    key = (window, tags)
     now = dt.datetime.now().timestamp()
     hit = _RECORD_CACHE.get(key)
     if hit and hit[0] > now:
-        return hit[1]
+        return copy.deepcopy(hit[1])
 
     weeks = (
         RankedWeek.query
@@ -322,7 +329,7 @@ def _record_page_cached(clan_players, window):
 
     payload = build_record_page(clan_players, weeks, window)
     _RECORD_CACHE[key] = (now + _RECORD_TTL, payload)
-    return payload
+    return copy.deepcopy(payload)
 
 
 @ranked_bp.route('/ranked/stats')
