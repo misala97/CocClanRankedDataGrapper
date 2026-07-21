@@ -5,80 +5,82 @@
 {% set chartjs_adapter = true %}
 {% include '_head.html' %}
 
-        /* ═══ TASK MONITOR — verdict-led, exceptions-first ═══
-           Answers one question: is the pipeline healthy, what broke, since when,
-           can I kick it. The verdict leads; only broken tasks get loud; healthy
-           tasks are a quiet ledger you expand for detail. */
+        /* ═══ TASK MONITOR — one status-ordered console ═══
+           The verdict lives in the panel header; a single task list sorts
+           worst-first, broken rows run "hot" with their since-when / error /
+           re-run inline, healthy rows stay quiet, any row expands for detail.
+           Two-tier by STATE, not by section — no banner, no duplicated band. */
         .container { padding-bottom: 72px; }
-
-        .mon-band { margin-top: 28px; }
-        .mon-band-label {
-            font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700;
-            letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted);
-            margin-bottom: 13px; display: flex; align-items: center; gap: 12px;
-        }
-        .mon-band-label::after { content: ''; flex: 1; height: 1px; background: var(--bord2); }
 
         .mon-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
         .mon-dot.up      { background: var(--green);  box-shadow: 0 0 6px color-mix(in oklch, var(--green) 55%, transparent); }
         .mon-dot.warning { background: var(--yellow); box-shadow: 0 0 6px color-mix(in oklch, var(--yellow) 55%, transparent); }
-        .mon-dot.down    { background: var(--red);    box-shadow: 0 0 6px color-mix(in oklch, var(--red) 55%, transparent); }
+        .mon-dot.down,
+        .mon-dot.errored { background: var(--red);    box-shadow: 0 0 6px color-mix(in oklch, var(--red) 55%, transparent); }
         .mon-dot.unknown { background: var(--muted); }
 
-        /* ── Verdict headline ── */
-        .mon-verdict {
-            display: flex; align-items: center; gap: 15px; flex-wrap: wrap;
-            margin-top: 24px; padding: 20px 24px; border-radius: 14px; border: 1px solid var(--border);
-            background: var(--surface);
+        /* ── Console header = the verdict, one line ── */
+        .mon-console { margin-top: 26px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); }
+        .mon-console-head {
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            padding: 15px 20px; border-bottom: 1px solid var(--border);
+            background: color-mix(in oklch, var(--surf2) 40%, var(--surface));
         }
-        .mon-verdict.good { border-color: color-mix(in oklch, var(--green) 32%, transparent);  background: color-mix(in oklch, var(--green) 6%, var(--surface)); }
-        .mon-verdict.warn { border-color: color-mix(in oklch, var(--yellow) 32%, transparent); background: color-mix(in oklch, var(--yellow) 5%, var(--surface)); }
-        .mon-verdict.bad  { border-color: color-mix(in oklch, var(--red) 34%, transparent);    background: color-mix(in oklch, var(--red) 6%, var(--surface)); }
-        .mon-verdict-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; }
-        .mon-verdict.good .mon-verdict-dot { background: var(--green); box-shadow: 0 0 10px color-mix(in oklch, var(--green) 60%, transparent); }
-        .mon-verdict.warn .mon-verdict-dot { background: var(--yellow); box-shadow: 0 0 10px color-mix(in oklch, var(--yellow) 60%, transparent); }
-        .mon-verdict.bad  .mon-verdict-dot { background: var(--red); box-shadow: 0 0 10px color-mix(in oklch, var(--red) 60%, transparent); }
-        .mon-verdict-text {
-            font-family: 'Big Shoulders Display', sans-serif; font-size: clamp(22px, 3.4vw, 30px);
-            font-weight: 800; text-transform: uppercase; letter-spacing: .5px; line-height: 1;
-        }
-        .mon-verdict.good .mon-verdict-text { color: var(--green); }
-        .mon-verdict.warn .mon-verdict-text { color: var(--yellow); }
-        .mon-verdict.bad  .mon-verdict-text { color: var(--red); }
-        .mon-verdict-sub {
-            margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px;
-            color: var(--muted); text-align: right;
-        }
+        .mon-verdict { display: flex; align-items: center; gap: 11px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; }
+        .mon-verdict .vdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+        .mon-verdict .down { color: var(--red); } .mon-verdict .delayed { color: var(--yellow); }
+        .mon-verdict .errored { color: var(--red); } .mon-verdict .ok { color: var(--green); } .mon-verdict .nodata { color: var(--muted); }
+        .mon-verdict .sep { color: var(--bord2); margin: 0 1px; }
+        .mon-console-sub { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--muted); }
 
-        /* ── Attention (broken tasks only) ── */
-        .mon-att-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
-        .mon-att {
-            border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
-            display: flex; flex-direction: column; gap: 10px; background: var(--surface);
+        /* ── Task rows ── */
+        .mon-row { border-bottom: 1px solid var(--bord2); }
+        .mon-row:last-child { border-bottom: none; }
+        .mon-row.hot-red  { background: color-mix(in oklch, var(--red) 6%, transparent); }
+        .mon-row.hot-amber { background: color-mix(in oklch, var(--yellow) 5%, transparent); }
+        .mon-row-head {
+            display: flex; align-items: center; gap: 16px; padding: 13px 20px; width: 100%;
+            background: none; border: none; color: var(--text); text-align: left; cursor: pointer;
+            transition: background .12s;
         }
-        .mon-att.down    { border-color: color-mix(in oklch, var(--red) 34%, transparent);    background: color-mix(in oklch, var(--red) 5%, var(--surface)); }
-        .mon-att.warning { border-color: color-mix(in oklch, var(--yellow) 32%, transparent); background: color-mix(in oklch, var(--yellow) 4%, var(--surface)); }
-        .mon-att-top { display: flex; align-items: center; gap: 10px; }
-        .mon-att-name { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }
-        .mon-att-since { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text); }
-        .mon-att-since .dim { color: var(--muted); }
-        .mon-att-err { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--red); word-break: break-word; line-height: 1.5; }
-        .mon-clear { display: flex; align-items: center; gap: 12px; padding: 15px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; font-size: 13px; color: var(--muted); }
-        .mon-clear strong { color: var(--text); font-weight: 700; }
-
+        .mon-row-head:hover { background: color-mix(in oklch, var(--text) 3%, transparent); }
+        .mon-rname { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; flex: 1 1 130px; min-width: 0; }
+        .mon-rname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mon-badge {
             padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; flex-shrink: 0;
             font-family: 'JetBrains Mono', monospace; letter-spacing: .4px; text-transform: uppercase;
         }
         .mon-badge.up      { background: color-mix(in oklch, var(--green) 14%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 30%, transparent); }
         .mon-badge.warning { background: color-mix(in oklch, var(--yellow) 15%, transparent); color: var(--yellow); border: 1px solid color-mix(in oklch, var(--yellow) 30%, transparent); }
-        .mon-badge.down    { background: color-mix(in oklch, var(--red) 14%, transparent);    color: var(--red);    border: 1px solid color-mix(in oklch, var(--red) 30%, transparent); }
+        .mon-badge.down,
+        .mon-badge.errored { background: color-mix(in oklch, var(--red) 14%, transparent);    color: var(--red);    border: 1px solid color-mix(in oklch, var(--red) 30%, transparent); }
         .mon-badge.unknown { background: color-mix(in oklch, var(--muted) 10%, transparent);  color: var(--muted);  border: 1px solid color-mix(in oklch, var(--muted) 20%, transparent); }
+        .mon-rlast { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text); flex-shrink: 0; min-width: 74px; text-align: right; }
+        .mon-rcad { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); flex-shrink: 0; min-width: 82px; }
+        .mon-spark { flex-shrink: 0; width: 92px; height: 26px; display: flex; align-items: center; }
+        .mon-spark svg { display: block; }
+        .mon-chev { flex-shrink: 0; color: var(--muted); display: flex; transition: transform .2s; }
+        .mon-chev.open { transform: rotate(180deg); }
+        .mon-chev svg { width: 15px; height: 15px; }
+
+        /* ── Hot strip: the actionable line for broken rows, inline (no expand needed) ── */
+        .mon-hot {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 0 20px 13px 46px; margin-top: -4px;
+        }
+        .mon-hot-since { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text); }
+        .mon-hot-since .dim { color: var(--muted); }
+        .mon-hot-err {
+            font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--red);
+            max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            padding: 2px 8px; border-radius: 6px; background: color-mix(in oklch, var(--red) 8%, transparent);
+        }
+        .mon-hot .mon-run { margin-left: auto; }
 
         /* ── Run button ── */
         .mon-run {
             display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-            padding: 7px 14px; background: transparent; color: var(--muted);
+            padding: 6px 13px; background: transparent; color: var(--muted);
             border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
             font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .3px;
             transition: color .15s, border-color .15s, background .15s, transform .1s; white-space: nowrap;
@@ -91,34 +93,13 @@
         .mon-run[data-state="done"] { color: var(--green);  border-color: color-mix(in oklch, var(--green) 45%, transparent); }
         .mon-run[data-state="busy"] { color: var(--yellow); border-color: color-mix(in oklch, var(--yellow) 45%, transparent); }
         .mon-run[data-state="err"]  { color: var(--red);    border-color: color-mix(in oklch, var(--red) 45%, transparent); }
-        .mon-att .mon-run { align-self: flex-start; }
 
-        /* ── All-tasks ledger ── */
-        .mon-ledger { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
-        .mon-row { border-bottom: 1px solid var(--bord2); }
-        .mon-row:last-child { border-bottom: none; }
-        .mon-row-head {
-            display: flex; align-items: center; gap: 16px; padding: 13px 18px; width: 100%;
-            background: none; border: none; color: var(--text); text-align: left; cursor: pointer;
-            transition: background .12s;
-        }
-        .mon-row-head:hover { background: var(--surf2); }
-        .mon-rname { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; flex: 1 1 140px; min-width: 0; }
-        .mon-rname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .mon-rlast { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text); flex-shrink: 0; min-width: 74px; text-align: right; }
-        .mon-rcad { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); flex-shrink: 0; min-width: 92px; }
-        .mon-spark { flex-shrink: 0; width: 92px; height: 26px; display: flex; align-items: center; }
-        .mon-spark svg { display: block; }
-        .mon-chev { flex-shrink: 0; color: var(--muted); display: flex; transition: transform .2s; }
-        .mon-chev.open { transform: rotate(180deg); }
-        .mon-chev svg { width: 15px; height: 15px; }
-
-        .mon-detail { display: none; padding: 0 18px 18px; border-top: 1px solid var(--bord2); background: color-mix(in oklch, var(--surf2) 45%, var(--surface)); }
+        /* ── Expanded detail ── */
+        .mon-detail { display: none; padding: 0 20px 18px 46px; }
         .mon-detail.open { display: block; }
-        .mon-detail-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; padding-top: 16px; }
+        .mon-detail-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; padding-top: 4px; }
         .mon-detail-label { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
         .mon-trend-wrap { position: relative; height: 120px; }
-        .mon-runs { display: flex; flex-direction: column; gap: 0; }
         .mon-runrow { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--bord2); font-size: 11.5px; }
         .mon-runrow:last-child { border-bottom: none; }
         .mon-runrow .rt { font-family: 'JetBrains Mono', monospace; color: var(--muted); flex-shrink: 0; }
@@ -128,26 +109,25 @@
         .mon-gaps { margin-top: 14px; }
         .mon-gap-item { font-size: 11px; color: var(--muted); padding: 6px 10px; line-height: 1.5; background: color-mix(in oklch, var(--red) 6%, transparent); border: 1px solid color-mix(in oklch, var(--red) 18%, transparent); border-radius: 6px; margin-bottom: 4px; }
         .mon-gap-item strong { color: var(--red); }
-        .mon-detail-foot { margin-top: 14px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
-        .mon-detail-stats { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--muted); }
+        .mon-detail-stats { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--muted); }
         .mon-detail-stats .err { color: var(--red); }
 
-        .mon-empty { text-align: center; padding: 56px 20px; color: var(--muted); }
-        .mon-empty svg { width: 40px; height: 40px; opacity: .5; margin-bottom: 14px; }
-        .mon-empty .t { font-size: 15px; font-weight: 600; color: var(--text); }
-        .mon-empty .s { font-size: 13px; margin-top: 6px; }
-
-        .mon-debug { margin-top: 30px; }
+        .mon-debug { margin-top: 26px; }
         .page-footer {
             text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
             margin-top: 30px; border-top: 1px solid var(--bord2);
             font-family: 'Manrope', sans-serif; font-weight: 600; letter-spacing: .3px;
         }
 
-        @media (max-width: 720px) {
+        @media (max-width: 760px) {
             .mon-detail-grid { grid-template-columns: 1fr; gap: 16px; }
             .mon-rcad, .mon-spark { display: none; }
-            .mon-verdict-sub { margin-left: 0; width: 100%; text-align: left; }
+            .mon-console-sub { margin-left: 0; width: 100%; }
+            .mon-row-head { gap: 10px; padding: 13px 16px; }
+            .mon-rname { flex-basis: 90px; }
+            .mon-rlast { min-width: 0; }
+            .mon-hot { padding-left: 16px; padding-right: 16px; }
+            .mon-detail { padding-left: 16px; padding-right: 16px; }
         }
         @media (prefers-reduced-motion: reduce) { .mon-run, .mon-chev, .mon-row-head { transition: none; } }
     </style>
@@ -180,135 +160,106 @@
         ['task_update_clan_war',     'Clan War'],
         ['task_update_cwl',          'CWL'],
     ] %}
-    {% set ns = namespace(down=0, delayed=0, up=0, nodata=0, freshest=None) %}
-    {% for fn_key, name in known_functions %}
-        {% set st = function_stats.get(fn_key, {}).get('status', 'unknown') %}
-        {% if st == 'down' %}{% set ns.down = ns.down + 1 %}
-        {% elif st == 'warning' %}{% set ns.delayed = ns.delayed + 1 %}
-        {% elif st == 'up' %}{% set ns.up = ns.up + 1 %}
-        {% else %}{% set ns.nodata = ns.nodata + 1 %}{% endif %}
-        {% set ms = function_stats.get(fn_key, {}).get('minutes_since') %}
-        {% if ms is not none and (ns.freshest is none or ms < ns.freshest) %}{% set ns.freshest = ms %}{% endif %}
-    {% endfor %}
 
-    {% set level = 'bad' if ns.down else ('warn' if ns.delayed else ('good' if ns.up == known_functions|length else 'warn')) %}
-
-    {# ── Verdict ── #}
-    <div class="mon-verdict {{ level }}">
-        <span class="mon-verdict-dot"></span>
-        <span class="mon-verdict-text">
-            {%- if ns.down %}{{ ns.down }} Down{% if ns.delayed %} · {{ ns.delayed }} Delayed{% endif %}
-            {%- elif ns.delayed %}{{ ns.delayed }} Delayed
-            {%- elif ns.up == known_functions|length %}All Systems Operational
-            {%- else %}No Recent Data{%- endif %}
-        </span>
-        <span class="mon-verdict-sub">
-            {{ ns.up }}/{{ known_functions|length }} operational · last {{ selected_days }}d
-            {% if ns.freshest is not none %}<br>freshest sync <span class="time-since" data-mins="{{ ns.freshest }}"></span>{% endif %}
-        </span>
-    </div>
-
-    {# ── Needs Attention — broken / delayed / erroring only ── #}
-    {% set attention = [] %}
+    {# classify each task; severity drives worst-first order + hot styling #}
+    {% set rows = [] %}
+    {% set ns = namespace(down=0, delayed=0, errored=0, ok=0, nodata=0, freshest=None) %}
     {% for fn_key, name in known_functions %}
         {% set s = function_stats.get(fn_key, {}) %}
-        {% if s.get('status') in ('down', 'warning') or s.get('last_status') == 'error' %}{{ attention.append((fn_key, name, s)) or '' }}{% endif %}
+        {% set st = s.get('status', 'unknown') %}
+        {% if st == 'down' %}{% set eff = 'down' %}{% set sev = 0 %}{% set ns.down = ns.down + 1 %}
+        {% elif st == 'warning' %}{% set eff = 'warning' %}{% set sev = 1 %}{% set ns.delayed = ns.delayed + 1 %}
+        {% elif st == 'up' and s.get('last_status') == 'error' %}{% set eff = 'errored' %}{% set sev = 2 %}{% set ns.errored = ns.errored + 1 %}
+        {% elif st == 'up' %}{% set eff = 'up' %}{% set sev = 3 %}{% set ns.ok = ns.ok + 1 %}
+        {% else %}{% set eff = 'unknown' %}{% set sev = 4 %}{% set ns.nodata = ns.nodata + 1 %}{% endif %}
+        {% set ms = s.get('minutes_since') %}
+        {% if ms is not none and (ns.freshest is none or ms < ns.freshest) %}{% set ns.freshest = ms %}{% endif %}
+        {{ rows.append({'key': fn_key, 'name': name, 'eff': eff, 'sev': sev}) or '' }}
     {% endfor %}
-    <section class="mon-band">
-        <div class="mon-band-label">Needs Attention</div>
-        {% if attention %}
-        <div class="mon-att-grid">
-            {% for fn_key, name, s in attention %}
-            {% set st = s.get('status', 'unknown') %}
-            <div class="mon-att {{ st }}">
-                <div class="mon-att-top">
-                    <span class="mon-att-name"><span class="mon-dot {{ st }}"></span><span>{{ name }}</span></span>
-                    <span class="mon-badge {{ st }}">
-                        {%- if st == 'down' %}Down{% elif st == 'warning' %}Delayed{% elif s.get('last_status') == 'error' %}Errored{% else %}Check{% endif %}
-                    </span>
-                </div>
-                <div class="mon-att-since">
-                    {% if s.last_run %}Last ran <span class="time-ago" data-time="{{ s.last_run }}">{{ s.last_run }}</span>{% else %}<span class="dim">No runs in period</span>{% endif %}
+    {% set rows = rows | sort(attribute='sev') %}
+    {% set overall = 'bad' if (ns.down or ns.errored) else ('warn' if ns.delayed else ('good' if ns.ok == known_functions|length else 'unknown')) %}
+
+    <section class="mon-console">
+        <div class="mon-console-head">
+            <div class="mon-verdict">
+                <span class="vdot mon-dot {{ 'down' if overall == 'bad' else ('warning' if overall == 'warn' else ('up' if overall == 'good' else 'unknown')) }}"></span>
+                {% set shown = namespace(first=true) %}
+                {% for cnt, cls, lbl in [(ns.down,'down','down'),(ns.delayed,'delayed','delayed'),(ns.errored,'errored','errored'),(ns.ok,'ok','operational'),(ns.nodata,'nodata','no data')] %}
+                    {% if cnt %}{% if not shown.first %}<span class="sep">·</span>{% endif %}<span class="{{ cls }}">{{ cnt }} {{ lbl }}</span>{% set shown.first = false %}{% endif %}
+                {% endfor %}
+            </div>
+            <div class="mon-console-sub">
+                last {{ selected_days }}d{% if ns.freshest is not none %} · freshest sync <span class="time-since" data-mins="{{ ns.freshest }}"></span>{% endif %}
+            </div>
+        </div>
+
+        {% for r in rows %}
+        {% set s = function_stats.get(r.key, {}) %}
+        {% set hot = r.eff in ('down', 'warning', 'errored') %}
+        <div class="mon-row {{ 'hot-amber' if r.eff == 'warning' else ('hot-red' if hot else '') }}">
+            <button class="mon-row-head" type="button" onclick="toggleRow(this)" aria-expanded="false">
+                <span class="mon-rname"><span class="mon-dot {{ r.eff }}"></span><span>{{ r.name }}</span></span>
+                <span class="mon-badge {{ r.eff }}">
+                    {%- if r.eff == 'up' %}OK{% elif r.eff == 'warning' %}Delayed{% elif r.eff == 'down' %}Down{% elif r.eff == 'errored' %}Errored{% else %}No Data{% endif %}
+                </span>
+                <span class="mon-rlast">{% if s.last_run %}<span class="time-ago" data-time="{{ s.last_run }}">{{ s.last_run }}</span>{% else %}—{% endif %}</span>
+                <span class="mon-rcad">{% if s.median_gap %}~{{ s.median_gap | round(0) | int }}min{% else %}—{% endif %}</span>
+                <span class="mon-spark" data-fn="{{ r.key }}"></span>
+                <span class="mon-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+            </button>
+
+            {% if hot %}
+            <div class="mon-hot">
+                <span class="mon-hot-since">
+                    {%- if r.eff == 'errored' %}Last run errored{% elif s.last_run %}Last ran <span class="time-ago" data-time="{{ s.last_run }}">{{ s.last_run }}</span>{% else %}No runs in period{% endif %}
                     {% if s.median_gap %}<span class="dim"> · expected ~every {{ s.median_gap | round(0) | int }}min</span>{% endif %}
-                </div>
-                {% if s.last_status == 'error' and s.last_error %}<div class="mon-att-err">{{ s.last_error }}</div>{% endif %}
-                <button class="mon-run" type="button" data-task="{{ fn_key }}" onclick="triggerTask(this)">
+                </span>
+                {% if s.last_status == 'error' and s.last_error %}<span class="mon-hot-err" title="{{ s.last_error }}">{{ s.last_error }}</span>{% endif %}
+                <button class="mon-run" type="button" data-task="{{ r.key }}" onclick="triggerTask(this)">
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5z"/></svg>
                     <span class="mon-run-label">Re-run now</span>
                 </button>
             </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="mon-clear"><span class="mon-dot up"></span><span><strong>All clear</strong> — every task is running on schedule.</span></div>
-        {% endif %}
-    </section>
+            {% endif %}
 
-    {# ── All tasks ledger ── #}
-    <section class="mon-band">
-        <div class="mon-band-label">All Tasks</div>
-        <div class="mon-ledger">
-            {% for fn_key, name in known_functions %}
-            {% set s = function_stats.get(fn_key, {}) %}
-            {% set st = s.get('status', 'unknown') %}
-            <div class="mon-row">
-                <button class="mon-row-head" type="button" onclick="toggleRow(this)" aria-expanded="false">
-                    <span class="mon-rname"><span class="mon-dot {{ st }}"></span><span>{{ name }}</span></span>
-                    <span class="mon-badge {{ st }}">
-                        {%- if st == 'up' %}OK{% elif st == 'warning' %}Delayed{% elif st == 'down' %}Down{% else %}No Data{% endif %}
-                    </span>
-                    <span class="mon-rlast">{% if s.last_run %}<span class="time-ago" data-time="{{ s.last_run }}">{{ s.last_run }}</span>{% else %}—{% endif %}</span>
-                    <span class="mon-rcad">{% if s.median_gap %}~{{ s.median_gap | round(0) | int }}min{% else %}—{% endif %}</span>
-                    <span class="mon-spark" data-fn="{{ fn_key }}"></span>
-                    <span class="mon-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
-                </button>
-                <div class="mon-detail" data-fn="{{ fn_key }}">
-                    <div class="mon-detail-grid">
-                        <div>
-                            <div class="mon-detail-label">Duration trend</div>
-                            {% if by_function.get(fn_key) %}<div class="mon-trend-wrap"><canvas id="durTrend_{{ loop.index }}" data-fn="{{ fn_key }}"></canvas></div>
-                            {% else %}<div style="color:var(--muted);font-size:12px;">No runs in period.</div>{% endif %}
-                        </div>
-                        <div>
-                            <div class="mon-detail-label">Recent runs</div>
-                            <div class="mon-runs">
-                                {% for r in (by_function.get(fn_key, [])[-6:] | reverse) %}
-                                {% set rc = 'err' if r.status == 'error' else ('skip' if r.status == 'skipped' else ('ok' if r.duration < 30 else ('slow' if r.duration < 120 else 'err'))) %}
-                                <div class="mon-runrow">
-                                    <span class="rt time-ago" data-time="{{ r.time }}">{{ r.time }}</span>
-                                    <span class="rd {{ rc }}">{{ r.duration }}s</span>
-                                    <span class="rs">{{ r.error_message or r.summary or r.status }}</span>
-                                </div>
-                                {% else %}
-                                <div style="color:var(--muted);font-size:12px;">No runs in period.</div>
-                                {% endfor %}
-                            </div>
-                        </div>
+            <div class="mon-detail" data-fn="{{ r.key }}">
+                <div class="mon-detail-grid">
+                    <div>
+                        <div class="mon-detail-label">Duration trend</div>
+                        {% if by_function.get(r.key) %}<div class="mon-trend-wrap"><canvas id="durTrend_{{ r.key }}" data-fn="{{ r.key }}"></canvas></div>
+                        {% else %}<div style="color:var(--muted);font-size:12px;">No runs in period.</div>{% endif %}
                     </div>
-                    {% if s.gap_events %}
-                    <div class="mon-gaps">
-                        <div class="mon-detail-label" style="color:var(--red);">Detected gaps</div>
-                        {% for gap in s.gap_events %}
-                        <div class="mon-gap-item"><strong>{{ gap.duration_min }} min downtime</strong> — {{ gap.start.replace('T', ' ').replace('Z', '') }} → {{ gap.end.replace('T', ' ').replace('Z', '') }}</div>
+                    <div>
+                        <div class="mon-detail-label">Recent runs</div>
+                        {% for run in (by_function.get(r.key, [])[-6:] | reverse) %}
+                        {% set rc = 'err' if run.status == 'error' else ('skip' if run.status == 'skipped' else ('ok' if run.duration < 30 else ('slow' if run.duration < 120 else 'err'))) %}
+                        <div class="mon-runrow">
+                            <span class="rt time-ago" data-time="{{ run.time }}">{{ run.time }}</span>
+                            <span class="rd {{ rc }}">{{ run.duration }}s</span>
+                            <span class="rs">{{ run.error_message or run.summary or run.status }}</span>
+                        </div>
+                        {% else %}
+                        <div style="color:var(--muted);font-size:12px;">No runs in period.</div>
                         {% endfor %}
                     </div>
-                    {% endif %}
-                    <div class="mon-detail-foot">
-                        <span class="mon-detail-stats">
-                            {{ s.count or 0 }} run{{ 's' if (s.count or 0) != 1 else '' }}
-                            {% if s.error_count %}· <span class="err">{{ s.error_count }} err</span>{% endif %}
-                            {% if s.skipped_count %}· {{ s.skipped_count }} skip{% endif %}
-                            {% if s.avg_duration %}· avg {{ s.avg_duration }}s · max {{ s.max_duration }}s{% endif %}
-                        </span>
-                        <button class="mon-run" type="button" data-task="{{ fn_key }}" onclick="triggerTask(this)">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5z"/></svg>
-                            <span class="mon-run-label">Run now</span>
-                        </button>
-                    </div>
+                </div>
+                {% if s.gap_events %}
+                <div class="mon-gaps">
+                    <div class="mon-detail-label" style="color:var(--red);">Detected gaps</div>
+                    {% for gap in s.gap_events %}
+                    <div class="mon-gap-item"><strong>{{ gap.duration_min }} min downtime</strong> — {{ gap.start.replace('T', ' ').replace('Z', '') }} → {{ gap.end.replace('T', ' ').replace('Z', '') }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <div class="mon-detail-stats">
+                    {{ s.count or 0 }} run{{ 's' if (s.count or 0) != 1 else '' }}
+                    {% if s.error_count %}· <span class="err">{{ s.error_count }} err</span>{% endif %}
+                    {% if s.skipped_count %}· {{ s.skipped_count }} skip{% endif %}
+                    {% if s.avg_duration %}· avg {{ s.avg_duration }}s · max {{ s.max_duration }}s{% endif %}
                 </div>
             </div>
-            {% endfor %}
         </div>
+        {% endfor %}
     </section>
 
     <div class="mon-debug">
@@ -320,7 +271,7 @@
 
 </div>
 
-<div class="page-footer">{{ ns.up }}/{{ known_functions|length }} tasks operational · last {{ selected_days }}d</div>
+<div class="page-footer">{{ ns.ok }}/{{ known_functions|length }} tasks operational · last {{ selected_days }}d</div>
 
 <script>
 const byFunction    = {{ by_function    | tojson | safe }};
@@ -341,7 +292,6 @@ function tok(name) {
 function alpha(rgb, a) { return rgb.replace('rgb(', 'rgba(').replace(')', ',' + a + ')'); }
 const C = { muted: tok('--muted'), line: tok('--bord2'), surf: tok('--surf2'), border: tok('--border'),
             green: tok('--green'), amber: tok('--yellow'), red: tok('--red'), accent: tok('--accent') };
-
 function durColor(d, status) {
     if (status === 'error')   return C.red;
     if (status === 'skipped') return C.muted;
@@ -350,11 +300,7 @@ function durColor(d, status) {
     return C.red;
 }
 
-// ── Relative time ──
-function timeAgo(isoStr) {
-    if (!isoStr) return '—';
-    return minsAgo(Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000));
-}
+function timeAgo(isoStr) { return isoStr ? minsAgo(Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000)) : '—'; }
 function minsAgo(mins) {
     if (mins < 1)  return 'just now';
     if (mins < 60) return mins + 'm ago';
@@ -365,7 +311,7 @@ function minsAgo(mins) {
 document.querySelectorAll('.time-ago').forEach(el => { if (el.dataset.time) el.textContent = timeAgo(el.dataset.time); });
 document.querySelectorAll('.time-since').forEach(el => { el.textContent = minsAgo(parseInt(el.dataset.mins) || 0); });
 
-// ── Row sparklines (lightweight inline SVG, colour = CSS var so no canvas needed) ──
+// Row sparklines — lightweight inline SVG (colour = CSS var, no canvas needed).
 document.querySelectorAll('.mon-spark').forEach(host => {
     const runs = byFunction[host.dataset.fn];
     if (!runs || !runs.length) { host.innerHTML = '<span style="color:var(--muted);font-size:11px;">—</span>'; return; }
@@ -379,7 +325,7 @@ document.querySelectorAll('.mon-spark').forEach(host => {
     host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path d="${path}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity=".75"/>${dots}</svg>`;
 });
 
-// ── Expand / lazy-build detail chart ──
+// Expand / lazy-build detail chart.
 function toggleRow(head) {
     const row = head.parentElement;
     const detail = row.querySelector('.mon-detail');
@@ -388,7 +334,6 @@ function toggleRow(head) {
     head.setAttribute('aria-expanded', open ? 'true' : 'false');
     if (open && !detail.dataset.init) { detail.dataset.init = '1'; buildTrend(detail); }
 }
-
 function buildTrend(detail) {
     const canvas = detail.querySelector('canvas[data-fn]');
     if (!canvas) return;
@@ -424,7 +369,7 @@ function buildTrend(detail) {
     });
 }
 
-// ── Task trigger ──
+// Task trigger.
 function triggerTask(btn) {
     if (btn.disabled) return;
     const task = btn.dataset.task, label = btn.querySelector('.mon-run-label'), orig = label.textContent;
