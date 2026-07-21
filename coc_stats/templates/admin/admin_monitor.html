@@ -5,131 +5,173 @@
 {% set chartjs_adapter = true %}
 {% include '_head.html' %}
 
-        /* ═══ TASK MONITOR — one status-ordered console ═══
-           The verdict lives in the panel header; a single task list sorts
-           worst-first, broken rows run "hot" with their since-when / error /
-           re-run inline, healthy rows stay quiet, any row expands for detail.
-           Two-tier by STATE, not by section — no banner, no duplicated band. */
-        .container { padding-bottom: 72px; }
+        html { scroll-behavior: smooth; }
 
-        .mon-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-        .mon-dot.up      { background: var(--green);  box-shadow: 0 0 6px color-mix(in oklch, var(--green) 55%, transparent); }
-        .mon-dot.warning { background: var(--yellow); box-shadow: 0 0 6px color-mix(in oklch, var(--yellow) 55%, transparent); }
-        .mon-dot.down,
-        .mon-dot.errored { background: var(--red);    box-shadow: 0 0 6px color-mix(in oklch, var(--red) 55%, transparent); }
-        .mon-dot.unknown { background: var(--muted); }
+        /* ── NAV: see _nav.html ── */
 
-        /* ── Console header = the verdict, one line ── */
-        .mon-console { margin-top: 26px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); }
-        .mon-console-head {
-            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-            padding: 15px 20px; border-bottom: 1px solid var(--border);
-            background: color-mix(in oklch, var(--surf2) 40%, var(--surface));
+        /* ── CONTAINER ── */
+        .container { padding-bottom: 80px; }
+
+        /* ── COLLAPSIBLE SECTION ── */
+        .collapse-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; margin-bottom: 20px; overflow: hidden;
         }
-        .mon-verdict { display: flex; align-items: center; gap: 11px; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; }
-        .mon-verdict .vdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
-        .mon-verdict .down { color: var(--red); } .mon-verdict .delayed { color: var(--yellow); }
-        .mon-verdict .errored { color: var(--red); } .mon-verdict .ok { color: var(--green); } .mon-verdict .nodata { color: var(--muted); }
-        .mon-verdict .sep { color: var(--bord2); margin: 0 1px; }
-        .mon-console-sub { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--muted); }
-
-        /* ── Task rows ── */
-        .mon-row { border-bottom: 1px solid var(--bord2); }
-        .mon-row:last-child { border-bottom: none; }
-        .mon-row.hot-red  { background: color-mix(in oklch, var(--red) 6%, transparent); }
-        .mon-row.hot-amber { background: color-mix(in oklch, var(--yellow) 5%, transparent); }
-        .mon-row-head {
-            display: flex; align-items: center; gap: 16px; padding: 13px 20px; width: 100%;
-            background: none; border: none; color: var(--text); text-align: left; cursor: pointer;
-            transition: background .12s;
+        .collapse-header {
+            width: 100%; display: flex; align-items: center; gap: 14px;
+            padding: 18px 22px; background: none; border: none; color: var(--text);
+            cursor: pointer; text-align: left; transition: background 0.15s;
         }
-        .mon-row-head:hover { background: color-mix(in oklch, var(--text) 3%, transparent); }
-        .mon-rname { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; flex: 1 1 130px; min-width: 0; }
-        .mon-rname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .mon-badge {
-            padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; flex-shrink: 0;
-            font-family: 'JetBrains Mono', monospace; letter-spacing: .4px; text-transform: uppercase;
+        .collapse-header:hover { background: var(--surf2); }
+        .collapse-header-icon { font-size: 20px; line-height: 1; }
+        .collapse-header-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; flex: 1;
         }
-        .mon-badge.up      { background: color-mix(in oklch, var(--green) 14%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 30%, transparent); }
-        .mon-badge.warning { background: color-mix(in oklch, var(--yellow) 15%, transparent); color: var(--yellow); border: 1px solid color-mix(in oklch, var(--yellow) 30%, transparent); }
-        .mon-badge.down,
-        .mon-badge.errored { background: color-mix(in oklch, var(--red) 14%, transparent);    color: var(--red);    border: 1px solid color-mix(in oklch, var(--red) 30%, transparent); }
-        .mon-badge.unknown { background: color-mix(in oklch, var(--muted) 10%, transparent);  color: var(--muted);  border: 1px solid color-mix(in oklch, var(--muted) 20%, transparent); }
-        .mon-rlast { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text); flex-shrink: 0; min-width: 74px; text-align: right; }
-        .mon-rcad { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); flex-shrink: 0; min-width: 82px; }
-        .mon-spark { flex-shrink: 0; width: 92px; height: 26px; display: flex; align-items: center; }
-        .mon-spark svg { display: block; }
-        .mon-chev { flex-shrink: 0; color: var(--muted); display: flex; transition: transform .2s; }
-        .mon-chev.open { transform: rotate(180deg); }
-        .mon-chev svg { width: 15px; height: 15px; }
-
-        /* ── Hot strip: the actionable line for broken rows, inline (no expand needed) ── */
-        .mon-hot {
-            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-            padding: 0 20px 13px 46px; margin-top: -4px;
+        .collapse-header-meta { font-size: 12px; color: var(--muted); }
+        .collapse-chevron {
+            font-size: 11px; color: var(--muted);
+            transition: transform 0.2s; display: inline-block;
         }
-        .mon-hot-since { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text); }
-        .mon-hot-since .dim { color: var(--muted); }
-        .mon-hot-err {
-            font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--red);
-            max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            padding: 2px 8px; border-radius: 6px; background: color-mix(in oklch, var(--red) 8%, transparent);
+        .collapse-chevron.open { transform: rotate(180deg); }
+        .collapse-body { padding: 0 22px 22px; border-top: 1px solid var(--border); }
+        .collapse-body.hidden { display: none; }
+
+        /* ── STATUS GRID ── */
+        .status-grid {
+            display: grid; grid-template-columns: repeat(5, 1fr);
+            gap: 14px; margin: 20px 0 24px;
         }
-        .mon-hot .mon-run { margin-left: auto; }
-
-        /* ── Run button ── */
-        .mon-run {
-            display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-            padding: 6px 13px; background: transparent; color: var(--muted);
-            border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
-            font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .3px;
-            transition: color .15s, border-color .15s, background .15s, transform .1s; white-space: nowrap;
+        .status-card {
+            background: var(--surf2); border: 1px solid var(--border);
+            border-left: 3px solid var(--border); border-radius: 10px; padding: 18px 16px;
+            transition: box-shadow 0.2s;
         }
-        .mon-run:hover:not(:disabled) { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 45%, transparent); background: color-mix(in oklch, var(--accent) 8%, transparent); }
-        .mon-run:active:not(:disabled) { transform: scale(.97); }
-        .mon-run:disabled { cursor: default; }
-        .mon-run svg { width: 11px; height: 11px; }
-        .mon-run[data-state="run"]  { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 45%, transparent); }
-        .mon-run[data-state="done"] { color: var(--green);  border-color: color-mix(in oklch, var(--green) 45%, transparent); }
-        .mon-run[data-state="busy"] { color: var(--yellow); border-color: color-mix(in oklch, var(--yellow) 45%, transparent); }
-        .mon-run[data-state="err"]  { color: var(--red);    border-color: color-mix(in oklch, var(--red) 45%, transparent); }
+        .status-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .status-card.up      { border-left-color: var(--green); }
+        .status-card.warning { border-left-color: var(--yellow); }
+        .status-card.down    { border-left-color: var(--red); }
+        .status-card.unknown { border-left-color: var(--muted); }
 
-        /* ── Expanded detail ── */
-        .mon-detail { display: none; padding: 0 20px 18px 46px; }
-        .mon-detail.open { display: block; }
-        .mon-detail-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; padding-top: 4px; }
-        .mon-detail-label { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-        .mon-trend-wrap { position: relative; height: 120px; }
-        .mon-runrow { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--bord2); font-size: 11.5px; }
-        .mon-runrow:last-child { border-bottom: none; }
-        .mon-runrow .rt { font-family: 'JetBrains Mono', monospace; color: var(--muted); flex-shrink: 0; }
-        .mon-runrow .rd { font-family: 'JetBrains Mono', monospace; font-weight: 700; flex-shrink: 0; min-width: 48px; }
-        .mon-runrow .rs { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .mon-runrow .rd.ok { color: var(--green); } .mon-runrow .rd.slow { color: var(--yellow); } .mon-runrow .rd.err { color: var(--red); } .mon-runrow .rd.skip { color: var(--muted); }
-        .mon-gaps { margin-top: 14px; }
-        .mon-gap-item { font-size: 11px; color: var(--muted); padding: 6px 10px; line-height: 1.5; background: color-mix(in oklch, var(--red) 6%, transparent); border: 1px solid color-mix(in oklch, var(--red) 18%, transparent); border-radius: 6px; margin-bottom: 4px; }
-        .mon-gap-item strong { color: var(--red); }
-        .mon-detail-stats { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--muted); }
-        .mon-detail-stats .err { color: var(--red); }
+        .status-card-top {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            margin-bottom: 12px;
+        }
+        .status-fn-icon { font-size: 22px; line-height: 1; }
+        .status-badge {
+            padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.4px; text-transform: uppercase;
+        }
+        .badge-up      { background: rgba(63,185,80,0.15);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
+        .badge-warning { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
+        .badge-down    { background: rgba(248,81,73,0.15);  color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
+        .badge-unknown { background: rgba(139,148,158,0.1); color: var(--muted);  border: 1px solid rgba(139,148,158,0.2); }
+        .badge-error   { background: rgba(248,81,73,0.15);  color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
+        .badge-skipped { background: rgba(139,148,158,0.1); color: var(--muted);  border: 1px solid rgba(139,148,158,0.2); }
+        .badge-success { background: rgba(63,185,80,0.15);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
 
-        .mon-debug { margin-top: 26px; }
+        .status-fn-name {
+            font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .status-last-run {
+            font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700;
+            margin-bottom: 4px; line-height: 1;
+        }
+        .status-meta { font-size: 11px; color: var(--muted); line-height: 1.7; }
+        .status-meta .gap-warn { color: var(--red); }
+        .status-summary {
+            font-size: 10px; color: var(--muted); margin-top: 6px;
+            font-family: monospace; word-break: break-all; line-height: 1.5;
+        }
+        .status-error {
+            font-size: 10px; color: var(--red); margin-top: 4px;
+            font-family: monospace; word-break: break-all; line-height: 1.5;
+        }
+
+        /* ── CHART CARD ── */
+        .chart-card {
+            background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 10px; padding: 20px; margin-bottom: 20px;
+        }
+        .chart-card-header {
+            display: flex; align-items: center; flex-wrap: wrap;
+            gap: 16px; margin-bottom: 16px;
+        }
+        .chart-card-header h3 {
+            font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700;
+        }
+        .chart-legend {
+            display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto;
+        }
+        .legend-item {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 12px; color: var(--muted);
+        }
+        .legend-dot {
+            width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+        }
+
+        /* ── FUNCTION GRID ── */
+        .fn-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+        .fn-card {
+            background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 10px; padding: 18px;
+        }
+        .fn-card-header {
+            display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px;
+        }
+        .fn-card-icon { font-size: 20px; line-height: 1; padding-top: 2px; }
+        .fn-card-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
+            margin-bottom: 3px;
+        }
+        .fn-card-meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
+        .fn-card-last {
+            font-size: 11px; color: var(--muted); margin-top: 4px;
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+        }
+        .fn-card-summary { font-family: monospace; font-size: 10px; color: var(--muted); }
+        .fn-card-error { font-family: monospace; font-size: 10px; color: var(--red); margin-top: 3px; }
+        .fn-chart-wrap { position: relative; height: 100px; margin-bottom: 12px; }
+
+        /* ── GAPS ── */
+        .gap-section { margin-top: 10px; }
+        .gap-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
+            letter-spacing: 1px; text-transform: uppercase; color: var(--red);
+            margin-bottom: 6px;
+        }
+        .gap-item {
+            font-size: 11px; color: var(--muted); padding: 6px 10px;
+            background: rgba(248,81,73,0.06); border: 1px solid rgba(248,81,73,0.15);
+            border-radius: 6px; margin-bottom: 4px; line-height: 1.5;
+        }
+        .gap-item strong { color: var(--red); }
+
+        /* ── NO DATA ── */
+        .no-data {
+            text-align: center; padding: 60px 20px;
+            font-size: 15px; color: var(--muted);
+        }
+        .no-data .icon { font-size: 48px; margin-bottom: 16px; }
+
+        /* ── FOOTER ── */
         .page-footer {
             text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
-            margin-top: 30px; border-top: 1px solid var(--bord2);
-            font-family: 'Manrope', sans-serif; font-weight: 600; letter-spacing: .3px;
+            margin-top: 4px; border-top: 1px solid var(--bord2);
+            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
         }
 
-        @media (max-width: 760px) {
-            .mon-detail-grid { grid-template-columns: 1fr; gap: 16px; }
-            .mon-rcad, .mon-spark { display: none; }
-            .mon-console-sub { margin-left: 0; width: 100%; }
-            .mon-row-head { gap: 10px; padding: 13px 16px; }
-            .mon-rname { flex-basis: 90px; }
-            .mon-rlast { min-width: 0; }
-            .mon-hot { padding-left: 16px; padding-right: 16px; }
-            .mon-detail { padding-left: 16px; padding-right: 16px; }
+        /* ── RESPONSIVE ── */
+        @media (max-width: 1200px) { .status-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 900px)  { .status-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 720px)  {
+            .fn-grid, .status-grid { grid-template-columns: 1fr; }
+            .nav-inner { padding: 0 16px; }
         }
-        @media (prefers-reduced-motion: reduce) { .mon-run, .mon-chev, .mon-row-head { transition: none; } }
     </style>
 </head>
 <body>
@@ -137,7 +179,7 @@
 {% include '_nav.html' %}
 
 {% set page_header_title = 'Task <span>Monitor</span>' %}
-{% set page_header_desc = 'Is the data pipeline healthy — what broke, since when, and can you kick it.' %}
+{% set page_header_desc = 'Background task health, timing, and gap detection.' %}
 {% set page_controls %}
 <label>Period</label>
 <select class="selector" onchange="window.location='?days='+this.value">
@@ -153,215 +195,330 @@
 <div class="container">
 
     {% set known_functions = [
-        ['task_update_battle_logs',  'Battle Logs'],
-        ['task_update_ranked_weeks', 'Ranked Weeks'],
-        ['task_update_clan_members', 'Clan Members'],
-        ['task_update_raid_weekend', 'Raid Weekend'],
-        ['task_update_clan_war',     'Clan War'],
-        ['task_update_cwl',          'CWL'],
+        ['task_update_battle_logs',  '⚔️',  'Battle Logs'],
+        ['task_update_ranked_weeks', '📊',  'Ranked Weeks'],
+        ['task_update_clan_members', '👥',  'Clan Members'],
+        ['task_update_raid_weekend', '🏰',  'Raid Weekend'],
+        ['task_update_clan_war',     '⚔️',  'Clan War'],
+        ['task_update_cwl',          '🏅',  'CWL'],
     ] %}
 
-    {# classify each task; severity drives worst-first order + hot styling #}
-    {% set rows = [] %}
-    {% set ns = namespace(down=0, delayed=0, errored=0, ok=0, nodata=0, freshest=None) %}
-    {% for fn_key, name in known_functions %}
-        {% set s = function_stats.get(fn_key, {}) %}
-        {% set st = s.get('status', 'unknown') %}
-        {% if st == 'down' %}{% set eff = 'down' %}{% set sev = 0 %}{% set ns.down = ns.down + 1 %}
-        {% elif st == 'warning' %}{% set eff = 'warning' %}{% set sev = 1 %}{% set ns.delayed = ns.delayed + 1 %}
-        {% elif st == 'up' and s.get('last_status') == 'error' %}{% set eff = 'errored' %}{% set sev = 2 %}{% set ns.errored = ns.errored + 1 %}
-        {% elif st == 'up' %}{% set eff = 'up' %}{% set sev = 3 %}{% set ns.ok = ns.ok + 1 %}
-        {% else %}{% set eff = 'unknown' %}{% set sev = 4 %}{% set ns.nodata = ns.nodata + 1 %}{% endif %}
-        {% set ms = s.get('minutes_since') %}
-        {% if ms is not none and (ns.freshest is none or ms < ns.freshest) %}{% set ns.freshest = ms %}{% endif %}
-        {{ rows.append({'key': fn_key, 'name': name, 'eff': eff, 'sev': sev}) or '' }}
+    {% set op_count = namespace(n=0) %}
+    {% for fn_key, icon, name in known_functions %}
+        {% set s = function_stats.get(fn_key, {}).get('status', 'unknown') %}
+        {% if s == 'up' %}{% set op_count.n = op_count.n + 1 %}{% endif %}
     {% endfor %}
-    {% set rows = rows | sort(attribute='sev') %}
-    {% set overall = 'bad' if (ns.down or ns.errored) else ('warn' if ns.delayed else ('good' if ns.ok == known_functions|length else 'unknown')) %}
 
-    <section class="mon-console">
-        <div class="mon-console-head">
-            <div class="mon-verdict">
-                <span class="vdot mon-dot {{ 'down' if overall == 'bad' else ('warning' if overall == 'warn' else ('up' if overall == 'good' else 'unknown')) }}"></span>
-                {% set shown = namespace(first=true) %}
-                {% for cnt, cls, lbl in [(ns.down,'down','down'),(ns.delayed,'delayed','delayed'),(ns.errored,'errored','errored'),(ns.ok,'ok','operational'),(ns.nodata,'nodata','no data')] %}
-                    {% if cnt %}{% if not shown.first %}<span class="sep">·</span>{% endif %}<span class="{{ cls }}">{{ cnt }} {{ lbl }}</span>{% set shown.first = false %}{% endif %}
-                {% endfor %}
-            </div>
-            <div class="mon-console-sub">
-                last {{ selected_days }}d{% if ns.freshest is not none %} · freshest sync <span class="time-since" data-mins="{{ ns.freshest }}"></span>{% endif %}
-            </div>
+    <!-- ── UPTIME TRACKER SECTION ── -->
+    <div class="collapse-card" id="card-uptime">
+        <div class="collapse-header">
+            <span class="collapse-header-icon">📡</span>
+            <span class="collapse-header-title">Task Uptime Monitor</span>
+            <span class="collapse-header-meta">
+                {{ op_count.n }}/{{ known_functions|length }} operational
+                &middot; last {{ selected_days }}d
+            </span>
         </div>
 
-        {% for r in rows %}
-        {% set s = function_stats.get(r.key, {}) %}
-        {% set hot = r.eff in ('down', 'warning', 'errored') %}
-        <div class="mon-row {{ 'hot-amber' if r.eff == 'warning' else ('hot-red' if hot else '') }}">
-            <button class="mon-row-head" type="button" onclick="toggleRow(this)" aria-expanded="false">
-                <span class="mon-rname"><span class="mon-dot {{ r.eff }}"></span><span>{{ r.name }}</span></span>
-                <span class="mon-badge {{ r.eff }}">
-                    {%- if r.eff == 'up' %}OK{% elif r.eff == 'warning' %}Delayed{% elif r.eff == 'down' %}Down{% elif r.eff == 'errored' %}Errored{% else %}No Data{% endif %}
-                </span>
-                <span class="mon-rlast">{% if s.last_run %}<span class="time-ago" data-time="{{ s.last_run }}">{{ s.last_run }}</span>{% else %}—{% endif %}</span>
-                <span class="mon-rcad">{% if s.median_gap %}~{{ s.median_gap | round(0) | int }}min{% else %}—{% endif %}</span>
-                <span class="mon-spark" data-fn="{{ r.key }}"></span>
-                <span class="mon-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
-            </button>
+        <div class="collapse-body" id="body-uptime">
 
-            {% if hot %}
-            <div class="mon-hot">
-                <span class="mon-hot-since">
-                    {%- if r.eff == 'errored' %}Last run errored{% elif s.last_run %}Last ran <span class="time-ago" data-time="{{ s.last_run }}">{{ s.last_run }}</span>{% else %}No runs in period{% endif %}
-                    {% if s.median_gap %}<span class="dim"> · expected ~every {{ s.median_gap | round(0) | int }}min</span>{% endif %}
-                </span>
-                {% if s.last_status == 'error' and s.last_error %}<span class="mon-hot-err" title="{{ s.last_error }}">{{ s.last_error }}</span>{% endif %}
-                <button class="mon-run" type="button" data-task="{{ r.key }}" onclick="triggerTask(this)">
-                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5z"/></svg>
-                    <span class="mon-run-label">Re-run now</span>
-                </button>
+            <!-- Status Cards -->
+            <div class="status-grid">
+                {% for fn_key, icon, name in known_functions %}
+                {% set stats = function_stats.get(fn_key, {}) %}
+                {% set status = stats.get('status', 'unknown') %}
+                <div class="status-card {{ status }}">
+                    <div class="status-card-top">
+                        <span class="status-fn-icon">{{ icon }}</span>
+                        <span class="status-badge badge-{{ status }}">
+                            {%- if status == 'up' %}Operational
+                            {%- elif status == 'warning' %}Delayed
+                            {%- elif status == 'down' %}Down
+                            {%- else %}No Data{%- endif %}
+                        </span>
+                    </div>
+                    <div class="status-fn-name">{{ name }}</div>
+                    <div class="status-last-run">
+                        {% if stats.last_run %}
+                        <span class="time-ago" data-time="{{ stats.last_run }}">{{ stats.last_run }}</span>
+                        {% else %}—{% endif %}
+                    </div>
+                    <div class="status-meta">
+                        {% if stats.count %}
+                        {{ stats.count }} run{{ 's' if stats.count != 1 else '' }}
+                        {% if stats.error_count %}&middot; <span style="color:var(--red)">{{ stats.error_count }} err</span>{% endif %}
+                        {% if stats.skipped_count %}&middot; {{ stats.skipped_count }} skip{% endif %}
+                        &middot; avg {{ stats.avg_duration }}s
+                        {% if stats.median_gap %}&middot; ~every {{ stats.median_gap | round(0) | int }}min{% endif %}
+                        {% if stats.gap_events %}
+                        <br><span class="gap-warn">⚠ {{ stats.gap_events | length }} gap{{ 's' if stats.gap_events | length != 1 else '' }}</span>
+                        {% endif %}
+                        {% else %}
+                        No runs in period
+                        {% endif %}
+                    </div>
+                    {% if stats.last_summary %}
+                    <div class="status-summary">{{ stats.last_summary }}</div>
+                    {% endif %}
+                    {% if stats.last_status == 'error' and stats.last_error %}
+                    <div class="status-error">{{ stats.last_error }}</div>
+                    {% endif %}
+                    <button class="task-run-btn" data-task="{{ fn_key }}" onclick="triggerTask(this)" style="margin-top:10px;width:100%;padding:5px 0;border-radius:6px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);transition:all .15s;">
+                        ▶ Run Now
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if function_stats %}
+
+            <!-- Timeline Chart -->
+            <div class="chart-card">
+                <div class="chart-card-header">
+                    <h3>Activity Timeline – last {{ selected_days }} day{{ 's' if selected_days != 1 else '' }}</h3>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-dot" style="background:#3fb950"></span>Fast (&lt;30s)</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#f0a500"></span>Medium (30–120s)</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#f85149"></span>Slow / Error</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#8b949e55"></span>Skipped</span>
+                    </div>
+                </div>
+                <div style="position:relative; height:200px;">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Per-Function Detail Cards -->
+            {% set fn_lookup = {
+                'task_update_battle_logs':  ['⚔️',  'Battle Logs'],
+                'task_update_ranked_weeks': ['📊',  'Ranked Weeks'],
+                'task_update_clan_members': ['👥',  'Clan Members'],
+                'task_update_raid_weekend': ['🏰',  'Raid Weekend'],
+                'task_update_clan_war':     ['⚔️',  'Clan War'],
+                'task_update_cwl':          ['🏅',  'CWL'],
+            } %}
+            <div class="fn-grid">
+                {% for fn, runs in by_function.items() %}
+                {% set fn_info = fn_lookup.get(fn, ['⚙️', fn]) %}
+                {% set stats = function_stats.get(fn, {}) %}
+                <div class="fn-card">
+                    <div class="fn-card-header">
+                        <span class="fn-card-icon">{{ fn_info[0] }}</span>
+                        <div style="flex:1">
+                            <div class="fn-card-title">{{ fn_info[1] }}</div>
+                            <div class="fn-card-meta">
+                                {{ stats.count }} runs
+                                {% if stats.error_count %}&middot; <span style="color:var(--red)">{{ stats.error_count }} errors</span>{% endif %}
+                                {% if stats.skipped_count %}&middot; {{ stats.skipped_count }} skipped{% endif %}
+                                &middot; avg {{ stats.avg_duration }}s &middot; max {{ stats.max_duration }}s
+                                {% if stats.median_gap %}&middot; ~every {{ stats.median_gap | round(0) | int }}min{% endif %}
+                            </div>
+                            <div class="fn-card-last">
+                                {% if stats.last_status %}
+                                <span class="status-badge badge-{{ stats.last_status }}" style="font-size:10px;padding:2px 7px;">{{ stats.last_status }}</span>
+                                {% endif %}
+                                {% if stats.last_summary %}
+                                <span class="fn-card-summary">{{ stats.last_summary }}</span>
+                                {% endif %}
+                            </div>
+                            {% if stats.last_status == 'error' and stats.last_error %}
+                            <div class="fn-card-error">{{ stats.last_error }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="fn-chart-wrap">
+                        <canvas id="durChart_{{ loop.index }}" data-fn="{{ fn }}"></canvas>
+                    </div>
+                    {% if stats.gap_events %}
+                    <div class="gap-section">
+                        <div class="gap-title">⚠ Detected Gaps</div>
+                        {% for gap in stats.gap_events %}
+                        <div class="gap-item">
+                            <strong>{{ gap.duration_min }} min downtime</strong> —
+                            {{ gap.start.replace('T', ' ').replace('Z', '') }} → {{ gap.end.replace('T', ' ').replace('Z', '') }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {% else %}
+            <div class="no-data">
+                <div class="icon">📭</div>
+                <div>No uptime data for the last {{ selected_days }} day{{ 's' if selected_days != 1 else '' }}.</div>
+                <div style="margin-top:8px; font-size:13px;">Background tasks haven't logged any runs in this period.</div>
             </div>
             {% endif %}
 
-            <div class="mon-detail" data-fn="{{ r.key }}">
-                <div class="mon-detail-grid">
-                    <div>
-                        <div class="mon-detail-label">Duration trend</div>
-                        {% if by_function.get(r.key) %}<div class="mon-trend-wrap"><canvas id="durTrend_{{ r.key }}" data-fn="{{ r.key }}"></canvas></div>
-                        {% else %}<div style="color:var(--muted);font-size:12px;">No runs in period.</div>{% endif %}
-                    </div>
-                    <div>
-                        <div class="mon-detail-label">Recent runs</div>
-                        {% for run in (by_function.get(r.key, [])[-6:] | reverse) %}
-                        {% set rc = 'err' if run.status == 'error' else ('skip' if run.status == 'skipped' else ('ok' if run.duration < 30 else ('slow' if run.duration < 120 else 'err'))) %}
-                        <div class="mon-runrow">
-                            <span class="rt time-ago" data-time="{{ run.time }}">{{ run.time }}</span>
-                            <span class="rd {{ rc }}">{{ run.duration }}s</span>
-                            <span class="rs">{{ run.error_message or run.summary or run.status }}</span>
-                        </div>
-                        {% else %}
-                        <div style="color:var(--muted);font-size:12px;">No runs in period.</div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% if s.gap_events %}
-                <div class="mon-gaps">
-                    <div class="mon-detail-label" style="color:var(--red);">Detected gaps</div>
-                    {% for gap in s.gap_events %}
-                    <div class="mon-gap-item"><strong>{{ gap.duration_min }} min downtime</strong> — {{ gap.start.replace('T', ' ').replace('Z', '') }} → {{ gap.end.replace('T', ' ').replace('Z', '') }}</div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                <div class="mon-detail-stats">
-                    {{ s.count or 0 }} run{{ 's' if (s.count or 0) != 1 else '' }}
-                    {% if s.error_count %}· <span class="err">{{ s.error_count }} err</span>{% endif %}
-                    {% if s.skipped_count %}· {{ s.skipped_count }} skip{% endif %}
-                    {% if s.avg_duration %}· avg {{ s.avg_duration }}s · max {{ s.max_duration }}s{% endif %}
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </section>
+        </div><!-- /collapse-body -->
+    </div><!-- /collapse-card uptime -->
 
-    <div class="mon-debug">
-        <a href="/debug" class="action-btn" style="display:inline-flex; align-items:center; gap:7px;">
-            Debug inspector
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg>
-        </a>
-    </div>
+    <div style="margin-top:24px;"><a href="/debug" class="action-btn" style="display:inline-block;">Debug inspector →</a></div>
 
 </div>
 
-<div class="page-footer">{{ ns.ok }}/{{ known_functions|length }} tasks operational · last {{ selected_days }}d</div>
+<div class="page-footer">{{ op_count.n }}/{{ known_functions|length }} tasks operational · last {{ selected_days }}d</div>
 
 <script>
 const byFunction    = {{ by_function    | tojson | safe }};
 const functionStats = {{ function_stats | tojson | safe }};
 
-// Resolve OKLCH design tokens to sRGB rgb() by painting to a 1px canvas and reading
-// the pixel back — getComputedStyle and the canvas fillStyle getter both keep oklch()
-// here, which the chart's alpha helper can't parse.
-const _tokCanvas = document.createElement('canvas'); _tokCanvas.width = _tokCanvas.height = 1;
-const _tokCtx = _tokCanvas.getContext('2d');
-function tok(name) {
-    const el = document.createElement('span'); el.style.color = 'var(' + name + ')';
-    document.body.appendChild(el); const css = getComputedStyle(el).color; el.remove();
-    _tokCtx.clearRect(0, 0, 1, 1); _tokCtx.fillStyle = css; _tokCtx.fillRect(0, 0, 1, 1);
-    const d = _tokCtx.getImageData(0, 0, 1, 1).data;
-    return 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
-}
-function alpha(rgb, a) { return rgb.replace('rgb(', 'rgba(').replace(')', ',' + a + ')'); }
-const C = { muted: tok('--muted'), line: tok('--bord2'), surf: tok('--surf2'), border: tok('--border'),
-            green: tok('--green'), amber: tok('--yellow'), red: tok('--red'), accent: tok('--accent') };
-function durColor(d, status) {
-    if (status === 'error')   return C.red;
-    if (status === 'skipped') return C.muted;
-    if (d < 30)  return C.green;
-    if (d < 120) return C.amber;
-    return C.red;
+// ── Task Trigger ─────────────────────────────────────────────────────────────
+function triggerTask(btn) {
+    const task = btn.dataset.task;
+    btn.disabled = true;
+    btn.textContent = '⏳ Running…';
+    btn.style.color = 'var(--accent)';
+    btn.style.borderColor = 'rgba(240,165,0,.4)';
+
+    fetch('/admin/trigger-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task }),
+    })
+    .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
+    .then(({ ok, status, data }) => {
+        if (status === 409 || data.busy) {
+            btn.textContent = '⚠ Already Running';
+            btn.style.color = 'var(--yellow)';
+            btn.style.borderColor = 'rgba(240,165,0,.4)';
+            alert('This task is currently already running (either scheduled or triggered manually). Please wait for it to finish before running it again.');
+        } else if (ok) {
+            btn.textContent = '✓ Done';
+            btn.style.color = 'var(--green)';
+            btn.style.borderColor = 'rgba(63,185,80,.4)';
+        } else {
+            btn.textContent = '✗ Error';
+            btn.style.color = 'var(--red)';
+            btn.style.borderColor = 'rgba(248,81,73,.4)';
+            alert('Task failed:\n' + (data.error || 'Unknown error'));
+        }
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = '▶ Run Now';
+            btn.style.color = 'var(--muted)';
+            btn.style.borderColor = 'var(--border)';
+        }, 3000);
+    })
+    .catch(() => {
+        btn.textContent = '✗ Error';
+        btn.style.color = 'var(--red)';
+        btn.style.borderColor = 'rgba(248,81,73,.4)';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = '▶ Run Now';
+            btn.style.color = 'var(--muted)';
+            btn.style.borderColor = 'var(--border)';
+        }, 3000);
+    });
 }
 
-function timeAgo(isoStr) { return isoStr ? minsAgo(Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000)) : '—'; }
-function minsAgo(mins) {
+const FN_NAMES = {
+    'task_update_battle_logs':  'Battle Logs',
+    'task_update_ranked_weeks': 'Ranked Weeks',
+    'task_update_clan_members': 'Clan Members',
+    'task_update_raid_weekend': 'Raid Weekend',
+    'task_update_clan_war':     'Clan War',
+    'task_update_cwl':          'CWL',
+};
+const FN_COLORS = {
+    'task_update_battle_logs':  '#58a6ff',
+    'task_update_ranked_weeks': '#3fb950',
+    'task_update_clan_members': '#f0a500',
+    'task_update_raid_weekend': '#f85149',
+    'task_update_clan_war':     '#bc8cff',
+    'task_update_cwl':          '#39d353',
+};
+
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+
+function runColor(r) {
+    if (r.status === 'error')   return '#f85149cc';
+    if (r.status === 'skipped') return '#8b949e44';
+    if (r.duration < 30)  return '#3fb950cc';
+    if (r.duration < 120) return '#f0a500cc';
+    return '#f85149cc';
+}
+
+function timeAgo(isoStr) {
+    if (!isoStr) return '—';
+    const d = new Date(isoStr);
+    const mins = Math.floor((Date.now() - d.getTime()) / 60000);
     if (mins < 1)  return 'just now';
     if (mins < 60) return mins + 'm ago';
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24)  return hrs + 'h ago';
+    if (hrs < 24)  return hrs + 'h ' + (mins % 60) + 'm ago';
     return Math.floor(hrs / 24) + 'd ago';
 }
-document.querySelectorAll('.time-ago').forEach(el => { if (el.dataset.time) el.textContent = timeAgo(el.dataset.time); });
-document.querySelectorAll('.time-since').forEach(el => { el.textContent = minsAgo(parseInt(el.dataset.mins) || 0); });
 
-// Row sparklines — lightweight inline SVG (colour = CSS var, no canvas needed).
-document.querySelectorAll('.mon-spark').forEach(host => {
-    const runs = byFunction[host.dataset.fn];
-    if (!runs || !runs.length) { host.innerHTML = '<span style="color:var(--muted);font-size:11px;">—</span>'; return; }
-    const last = runs.slice(-24), ds = last.map(r => r.duration || 0);
-    const max = Math.max(...ds, 1), W = 92, H = 26, n = ds.length;
-    const x = i => (n === 1 ? W / 2 : (i / (n - 1)) * (W - 2) + 1);
-    const y = d => H - 3 - (d / max) * (H - 8);
-    const path = ds.map((d, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(d).toFixed(1)).join(' ');
-    const dots = last.map((r, i) => r.status === 'error'
-        ? `<circle cx="${x(i).toFixed(1)}" cy="${y(r.duration || 0).toFixed(1)}" r="2" fill="var(--red)"/>` : '').join('');
-    host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path d="${path}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity=".75"/>${dots}</svg>`;
+document.querySelectorAll('.time-ago').forEach(el => {
+    const t = el.dataset.time;
+    if (t) el.textContent = timeAgo(t);
 });
 
-// Expand / lazy-build detail chart.
-function toggleRow(head) {
-    const row = head.parentElement;
-    const detail = row.querySelector('.mon-detail');
-    const open = detail.classList.toggle('open');
-    head.querySelector('.mon-chev').classList.toggle('open', open);
-    head.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open && !detail.dataset.init) { detail.dataset.init = '1'; buildTrend(detail); }
-}
-function buildTrend(detail) {
-    const canvas = detail.querySelector('canvas[data-fn]');
-    if (!canvas) return;
-    const runs = byFunction[canvas.dataset.fn];
-    if (!runs || !runs.length) return;
-    const last = runs.slice(-60);
-    new Chart(canvas, {
-        type: 'line',
-        data: {
-            labels: last.map(r => new Date(r.time).getTime()),
-            datasets: [{
-                data: last.map(r => r.duration),
-                borderColor: C.accent, backgroundColor: alpha(C.accent, .09), fill: true, tension: 0.3,
-                pointRadius: last.map(r => r.status === 'error' ? 4 : 2),
-                pointBackgroundColor: last.map(r => durColor(r.duration, r.status)),
-                pointHoverRadius: 6, borderWidth: 2,
-            }]
-        },
+// ── TIMELINE CHART ─────────────────────────────────────────
+const fnList   = Object.keys(byFunction);
+const tlCanvas = document.getElementById('timelineChart');
+if (fnList.length && tlCanvas) {
+    const datasets = fnList.map((fn, idx) => ({
+        label: FN_NAMES[fn] || fn,
+        data: byFunction[fn].map(r => ({
+            x: new Date(r.time).getTime(),
+            y: idx,
+            duration: r.duration,
+            status: r.status,
+            summary: r.summary,
+        })),
+        backgroundColor: byFunction[fn].map(r => runColor(r)),
+        pointRadius: 6,
+        pointHoverRadius: 9,
+        showLine: false,
+    }));
+
+    new Chart(tlCanvas, {
+        type: 'scatter',
+        data: { datasets },
         options: {
-            responsive: true, maintainAspectRatio: false,
-            scales: { x: { type: 'time', display: false }, y: { min: 0, grid: { color: C.line }, ticks: { color: C.muted, callback: v => v + 's', maxTicksLimit: 4 } } },
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: { displayFormats: { hour: 'dd.MM HH:mm', day: 'dd.MM' } },
+                    grid: { color: '#21262d' },
+                    ticks: { color: '#8b949e', maxTicksLimit: 10 },
+                },
+                y: {
+                    min: -0.5,
+                    max: fnList.length - 0.5,
+                    ticks: {
+                        stepSize: 1,
+                        callback: val => FN_NAMES[fnList[val]] || fnList[val] || '',
+                        color: '#8b949e',
+                    },
+                    grid: { color: '#21262d' },
+                }
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: C.surf, borderColor: C.border, borderWidth: 1,
+                    backgroundColor: '#1c2330',
+                    borderColor: '#30363d',
+                    borderWidth: 1,
                     callbacks: {
-                        title: items => new Date(items[0].parsed.x).toLocaleString(),
-                        label: item => { const r = last[item.dataIndex]; const parts = [r.status + ' · ' + item.raw + 's']; if (r.summary) parts.push(r.summary); if (r.error_message) parts.push('Error: ' + r.error_message); return parts; }
+                        title: items => new Date(items[0].raw.x).toLocaleString(),
+                        label: item => {
+                            const r   = item.raw;
+                            const fn  = fnList[Math.round(r.y)];
+                            const name = FN_NAMES[fn] || fn;
+                            const parts = [name + ' · ' + r.status + ' · ' + r.duration + 's'];
+                            if (r.summary) parts.push(r.summary);
+                            return parts;
+                        }
                     }
                 }
             }
@@ -369,21 +526,68 @@ function buildTrend(detail) {
     });
 }
 
-// Task trigger.
-function triggerTask(btn) {
-    if (btn.disabled) return;
-    const task = btn.dataset.task, label = btn.querySelector('.mon-run-label'), orig = label.textContent;
-    btn.disabled = true; btn.dataset.state = 'run'; label.textContent = 'Running…';
-    fetch('/admin/trigger-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) })
-    .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
-    .then(({ ok, status, data }) => {
-        if (status === 409 || data.busy) { btn.dataset.state = 'busy'; label.textContent = 'Already running'; }
-        else if (ok) { btn.dataset.state = 'done'; label.textContent = 'Done'; }
-        else { btn.dataset.state = 'err'; label.textContent = 'Failed'; }
-        setTimeout(() => { btn.disabled = false; btn.dataset.state = ''; label.textContent = orig; }, 2800);
-    })
-    .catch(() => { btn.dataset.state = 'err'; label.textContent = 'Failed'; setTimeout(() => { btn.disabled = false; btn.dataset.state = ''; label.textContent = orig; }, 2800); });
-}
+// ── PER-FUNCTION DURATION CHARTS ──────────────────────────
+document.querySelectorAll('[id^="durChart_"]').forEach(canvas => {
+    const fn   = canvas.dataset.fn;
+    const runs = byFunction[fn];
+    if (!runs || !runs.length) return;
+
+    const last60 = runs.slice(-60);
+    const color  = FN_COLORS[fn] || '#58a6ff';
+
+    new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: last60.map(r => new Date(r.time).getTime()),
+            datasets: [{
+                label: 'Duration (s)',
+                data: last60.map(r => r.duration),
+                borderColor: color,
+                backgroundColor: color + '18',
+                fill: true,
+                tension: 0.3,
+                pointRadius: last60.map(r => r.status === 'error' ? 5 : 2),
+                pointBackgroundColor: last60.map(r => runColor(r)),
+                pointHoverRadius: 6,
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { type: 'time', display: false },
+                y: {
+                    min: 0,
+                    grid: { color: '#21262d' },
+                    ticks: {
+                        color: '#8b949e',
+                        callback: v => v + 's',
+                        maxTicksLimit: 4,
+                    },
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1c2330',
+                    borderColor: '#30363d',
+                    borderWidth: 1,
+                    callbacks: {
+                        title: items => new Date(items[0].parsed.x).toLocaleString(),
+                        label: item => {
+                            const r = last60[item.dataIndex];
+                            const parts = [r.status + ' · ' + item.raw + 's'];
+                            if (r.summary) parts.push(r.summary);
+                            if (r.error_message) parts.push('Error: ' + r.error_message);
+                            return parts;
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
 </script>
 </body>
 </html>
