@@ -58,5 +58,6 @@
         <a href="/admin/users"   class="atab {% if _ap.startswith('/admin/users') %}active{% endif %}"{% if _ap.startswith('/admin/users') %} aria-current="page"{% endif %}>
             Users{% if pending_approvals and pending_approvals > 0 %}<span class="atab-badge urgent" title="{{ pending_approvals }} awaiting approval">{{ pending_approvals }}</span>{% endif %}
         </a>
+        <a href="/admin/insights" class="atab {% if _ap.startswith('/admin/insights') %}active{% endif %}"{% if _ap.startswith('/admin/insights') %} aria-current="page"{% endif %}>Insights</a>
     </div>
 </nav>

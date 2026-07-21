@@ -140,12 +140,21 @@ def admin_monitor():
 @admin_bp.route('/admin/roster')
 @require_super_admin
 def admin_roster():
-    # Shell page — the war-roster / CWL-bonus / skill-correlation tools each fetch
-    # their own data via existing AJAX endpoints.
+    # Shell page — the war-roster / CWL-bonus decision tools each fetch their own
+    # data via existing AJAX endpoints (/admin/war-roster, /admin/cwl-bonus[/*]).
     return render_template(
         'admin/admin_roster.html',
         current_month=dt.date.today().strftime('%Y-%m'),
     )
+
+
+@admin_bp.route('/admin/insights')
+@require_super_admin
+def admin_insights():
+    # Clan-analytics home. Shell page — the skill-correlation tool fetches its own
+    # data via the existing /admin/skill-correlation AJAX endpoint. Framed as a
+    # growable home so future clan-wide analytics land here rather than in a tool page.
+    return render_template('admin/admin_insights.html')
 
 
 @admin_bp.route('/admin/users')

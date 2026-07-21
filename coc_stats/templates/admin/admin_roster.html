@@ -1,59 +1,263 @@
 <!DOCTYPE html>
 <html lang="en">
-{% set page_title = 'Roster Tools – CoC Analytics' %}
+{% set page_title = 'Roster Decisions – CoC Analytics' %}
 {% include '_head.html' %}
 
-        /* ── CONTAINER ── */
-        .container { padding-bottom: 80px; }
+        /* ═══ ADMIN ROSTER — two mode-tinted decision consoles ═══
+           War Roster wears War Amber, CWL Bonus wears CWL Violet (the Ticket
+           identity: full mode-tinted border + faint wash). Same skeleton, hue =
+           which game mode. Threat Magenta stays interactive-only (primary buttons,
+           focus rings). Each console leads with the decision as a row of mono
+           figures, then the primary result; bulk detail hides behind a real
+           disclosure button. */
+        :root { --ease: cubic-bezier(.25,1,.5,1); }
+        .container { padding-bottom: 72px; }
 
-        /* ── COLLAPSIBLE SECTION ── */
-        .collapse-card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 12px; margin-bottom: 20px; overflow: hidden;
+        /* ── DECISION CONSOLE ── */
+        .rc {
+            --rc-mode: var(--muted);
+            background: color-mix(in oklch, var(--rc-mode) 4%, var(--surface));
+            border: 1px solid color-mix(in oklch, var(--rc-mode) 30%, var(--border));
+            border-radius: 10px; margin-top: 22px; overflow: hidden;
         }
-        .collapse-header {
-            width: 100%; display: flex; align-items: center; gap: 14px;
-            padding: 18px 22px; background: none; border: none; color: var(--text);
-            cursor: pointer; text-align: left; transition: background 0.15s;
-        }
-        .collapse-header:hover { background: var(--surf2); }
-        .collapse-header-icon { font-size: 20px; line-height: 1; }
-        .collapse-header-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; flex: 1;
-        }
-        .collapse-header-meta { font-size: 12px; color: var(--muted); }
-        .collapse-chevron {
-            font-size: 11px; color: var(--muted);
-            transition: transform 0.2s; display: inline-block;
-        }
-        .collapse-chevron.open { transform: rotate(180deg); }
-        .collapse-body { padding: 0 22px 22px; border-top: 1px solid var(--border); }
-        .collapse-body.hidden { display: none; }
+        .rc:first-child { margin-top: 20px; }
+        .rc-war { --rc-mode: var(--orange); }
+        .rc-cwl { --rc-mode: var(--purple); }
 
-        /* ── MEMBER TABLE ── */
-        .member-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .member-table th {
-            padding: 9px 14px; text-align: left; font-size: 10px; font-weight: 700;
-            color: var(--muted); text-transform: uppercase; letter-spacing: .8px;
-            border-bottom: 1px solid var(--border); background: var(--surf2);
+        .rc-head {
+            padding: 18px 22px;
+            border-bottom: 1px solid color-mix(in oklch, var(--rc-mode) 16%, var(--bord2));
         }
-        .member-table td { padding: 9px 14px; border-bottom: 1px solid var(--bord2); vertical-align: middle; }
-        .member-table tbody tr:last-child td { border-bottom: none; }
-        .member-table tbody tr:hover { background: rgba(255,255,255,.02); }
-        .m-name { font-weight: 600; font-size: 13px; }
-        .m-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; }
-        .m-search {
-            padding: 7px 12px; background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 7px; color: var(--text); font-family: 'DM Sans', sans-serif;
-            font-size: 13px; width: 220px; transition: border-color .15s; margin-bottom: 14px;
-        }
-        .m-search:focus { outline: none; border-color: var(--accent); }
+        .rc-head-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px 20px; flex-wrap: wrap; }
+        .rc-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .rc-ico { color: var(--rc-mode); display: flex; flex-shrink: 0; }
+        .rc-ico svg { width: 25px; height: 25px; }
+        .rc-titles { min-width: 0; }
+        .rc-title { font-family: 'Big Shoulders Display', sans-serif; font-size: 23px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; line-height: 1; }
+        .rc-sub { font-size: 12px; color: var(--muted); margin-top: 5px; }
+        .rc-sub .ctx { color: var(--rc-mode); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
 
-        /* ── FOOTER ── */
+        /* control cluster inside a head */
+        .rc-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+        .rc-field { display: flex; flex-direction: column; gap: 6px; }
+        .rc-field label { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+        .rc-input {
+            width: 78px; padding: 8px 10px; background: var(--surf2);
+            border: 1px solid var(--border); border-radius: 7px; color: var(--text);
+            font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700;
+        }
+        .rc-input:focus { outline: none; border-color: var(--rc-mode); box-shadow: 0 0 0 3px color-mix(in oklch, var(--rc-mode) 14%, transparent); }
+        .rc-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: var(--surf2); }
+        .rc-seg button {
+            padding: 8px 15px; background: transparent; color: var(--muted); border: none;
+            font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .5px;
+            cursor: pointer; transition: background .15s, color .15s;
+        }
+        .rc-seg button.on { background: color-mix(in oklch, var(--rc-mode) 16%, transparent); color: var(--rc-mode); }
+        .rc-seg button:not(.on):hover { color: var(--text); }
+
+        /* primary action — magenta interactive, sitewide */
+        .rc-run {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px;
+            background: transparent; color: var(--accent);
+            border: 1px solid color-mix(in oklch, var(--accent) 38%, transparent); border-radius: 7px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .5px;
+            text-transform: uppercase; cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s, transform .1s;
+        }
+        .rc-run:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 10%, transparent); border-color: var(--accent); box-shadow: 0 0 12px color-mix(in oklch, var(--accent) 18%, transparent); }
+        .rc-run:active:not(:disabled) { transform: scale(.97); }
+        .rc-run:disabled { opacity: .55; cursor: default; }
+        .rc-run svg { width: 13px; height: 13px; }
+        .rc-loading { font-size: 12px; color: var(--muted); align-self: center; }
+
+        /* verdict figures — the decision, in mono, before the data */
+        .rc-verdict {
+            display: flex; flex-wrap: wrap; align-items: stretch;
+            margin-top: 16px; padding-top: 14px;
+            border-top: 1px solid color-mix(in oklch, var(--rc-mode) 14%, var(--bord2));
+        }
+        .rc-fig { display: flex; flex-direction: column; gap: 6px; padding: 2px 20px; }
+        .rc-fig:first-child { padding-left: 0; }
+        .rc-fig + .rc-fig { border-left: 1px solid var(--bord2); }
+        .rc-fig .v { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 22px; color: var(--text); line-height: 1; }
+        .rc-fig .v.hot { color: var(--rc-mode); }
+        .rc-fig .v.dim { color: var(--muted); }
+        .rc-fig .l { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 10px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted); line-height: 1; }
+
+        .rc-body { padding: 18px 22px 20px; }
+
+        /* idle / empty */
+        .rc-idle {
+            padding: 26px 22px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6;
+            border: 1px dashed color-mix(in oklch, var(--rc-mode) 26%, var(--border)); border-radius: 8px;
+            background: color-mix(in oklch, var(--rc-mode) 3%, transparent);
+        }
+        .rc-idle strong { color: var(--text); font-weight: 700; }
+
+        .rc-block-label {
+            font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+            text-transform: uppercase; color: var(--muted); margin: 2px 0 11px; display: flex; align-items: center; gap: 9px;
+        }
+        .rc-block-label::after { content: ''; flex: 1; height: 1px; background: var(--bord2); }
+        .rc-block-label .n { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+
+        /* ── LINEUP / BENCH DATA TABLE (desktop) ── */
+        .lt-wrap { overflow: visible; }
+        .lt { width: 100%; border-collapse: collapse; }
+        .lt thead th {
+            padding: 8px 12px; text-align: left; font-family: 'Manrope', sans-serif;
+            font-size: 9.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+            color: var(--muted); border-bottom: 1px solid var(--border);
+        }
+        .lt th.c, .lt td.c { text-align: center; }
+        .lt tbody td { padding: 9px 12px; border-bottom: 1px solid var(--bord2); font-size: 13px; vertical-align: middle; }
+        .lt tbody tr:last-child td { border-bottom: none; }
+        .lt tbody tr:hover { background: color-mix(in oklch, var(--text) 2%, transparent); }
+        .lt .pos { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--muted); }
+        .lt .pname { font-weight: 700; }
+        .lt .mono { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+        .lt .lg { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--blue); }
+        .lt .thv { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
+        .lt-bench tbody tr td { opacity: .82; }
+
+        /* Why chips — semantic reason, reusing the judgment-pill vocabulary */
+        .why { display: inline-block; padding: 3px 9px; border-radius: 20px; font-family: 'Rajdhani', sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; }
+        .why-pref   { background: color-mix(in oklch, var(--green) 14%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 30%, transparent); }
+        /* Sparse = "not enough war data to judge" — a quiet, dim chip, never a mode hue
+           (Recon Blue means Ranked mode elsewhere). Keeps the no-data tail from shouting. */
+        .why-sparse { background: color-mix(in oklch, var(--muted) 11%, transparent);  color: var(--muted);  border: 1px solid color-mix(in oklch, var(--muted) 24%, transparent); }
+        .why-score  { background: color-mix(in oklch, var(--orange) 14%, transparent); color: var(--orange); border: 1px solid color-mix(in oklch, var(--orange) 30%, transparent); }
+        .why-fill   { background: color-mix(in oklch, var(--muted) 8%, transparent);   color: var(--muted);  border: 1px dashed color-mix(in oklch, var(--muted) 26%, transparent); }
+        /* No-signal rows (0 activity + 0 skill = nothing to go on) recede so the graded
+           picks carry the eye. Not a cut, just a dim. */
+        .lt tbody tr.nosig { opacity: .5; }
+        .lt tbody tr.nosig:hover { opacity: .78; }
+        .mr.nosig { opacity: .5; }
+        .rc-hint { font-size: 11px; color: var(--muted); margin: -5px 0 13px; }
+
+        /* ── MOBILE divided rows (established .mr pattern) ── */
+        .lt-rows { display: none; }
+        .mr { padding: 10px 2px; border-bottom: 1px solid var(--bord2); }
+        .mr:last-child { border-bottom: none; }
+        .mr-top { display: flex; align-items: center; gap: 9px; }
+        .mr-pos { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; color: var(--muted); min-width: 2ch; text-align: right; }
+        .mr-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mr-stats { display: flex; flex-wrap: wrap; gap: 4px 13px; margin-top: 6px; padding-left: calc(2ch + 9px); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; }
+        .mr-stats .u { color: var(--muted); font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 10px; margin-right: 3px; text-transform: uppercase; letter-spacing: .4px; }
+
+        /* ── DISCLOSURE (real button, keyboard + touch) ── */
+        .rc-disc { margin-top: 16px; }
+        .rc-disc-btn {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            padding: 11px 15px; background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); cursor: pointer; text-align: left;
+            transition: background .15s, border-color .15s;
+        }
+        .rc-disc-btn:hover { background: color-mix(in oklch, var(--text) 5%, var(--surf2)); border-color: color-mix(in oklch, var(--muted) 40%, var(--border)); }
+        .rc-disc-btn .lbl { flex: 1; text-transform: uppercase; letter-spacing: .9px; font-size: 10.5px; font-weight: 700; color: var(--muted); font-family: 'Manrope', sans-serif; }
+        .rc-disc-btn .lbl .n { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+        .rc-disc-chev { display: flex; color: var(--muted); transition: transform .18s var(--ease), color .18s; }
+        .rc-disc-chev svg { width: 13px; height: 13px; }
+        .rc-disc-btn[aria-expanded="true"] .rc-disc-chev { transform: rotate(90deg); color: var(--rc-mode); }
+        .rc-disc-panel { display: none; padding-top: 15px; }
+        .rc-disc-panel.open { display: block; }
+
+        /* ── CWL this-month lead ── */
+        .cwl-sug { display: flex; flex-direction: column; gap: 8px; }
+        .sug-row { display: flex; align-items: center; gap: 13px; padding: 11px 14px; border-radius: 8px; background: var(--surf2); border: 1px solid var(--bord2); }
+        .sug-rank { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px; color: var(--purple); min-width: 2ch; }
+        .sug-main { flex: 1; min-width: 0; }
+        .sug-name { font-weight: 700; font-size: 13.5px; }
+        .sug-why { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+        .sug-perf { display: flex; align-items: center; gap: 12px; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12.5px; flex-shrink: 0; }
+        .sug-stars { color: var(--yellow); white-space: nowrap; }
+        .cwl-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+        .cwl-apply {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; cursor: pointer;
+            background: color-mix(in oklch, var(--green) 12%, transparent); color: var(--green);
+            border: 1px solid color-mix(in oklch, var(--green) 34%, transparent); border-radius: 7px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+            transition: background .15s, transform .1s;
+        }
+        .cwl-apply:hover:not(:disabled) { background: color-mix(in oklch, var(--green) 20%, transparent); }
+        .cwl-apply:active:not(:disabled) { transform: scale(.97); }
+        .cwl-copy {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; cursor: pointer;
+            background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 7px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+            transition: color .15s, border-color .15s;
+        }
+        .cwl-copy:hover { color: var(--text); border-color: color-mix(in oklch, var(--muted) 40%, var(--border)); }
+        .cwl-copy svg, .cwl-apply svg { width: 13px; height: 13px; }
+        .cwl-allgiven { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-radius: 8px; background: color-mix(in oklch, var(--green) 6%, var(--surface)); border: 1px solid color-mix(in oklch, var(--green) 24%, transparent); font-size: 13px; color: var(--muted); }
+        .cwl-allgiven strong { color: var(--text); }
+        .cwl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px color-mix(in oklch, var(--green) 55%, transparent); flex-shrink: 0; }
+
+        /* ── LEDGER matrix (inside disclosure) ── */
+        .ledger-search {
+            padding: 8px 12px; background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 7px; color: var(--text); font-family: 'Manrope', sans-serif;
+            font-size: 13px; width: 240px; max-width: 100%; margin-bottom: 13px; transition: border-color .15s;
+        }
+        .ledger-search:focus { outline: none; border-color: var(--purple); }
+        .ledger-scroll { overflow-x: auto; }
+        .ledger { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+        .ledger th { padding: 8px 10px; font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surf2); }
+        .ledger td { padding: 8px 10px; border-bottom: 1px solid var(--bord2); vertical-align: middle; }
+        .ledger tbody tr:last-child td { border-bottom: none; }
+        .ledger tbody tr:hover { background: color-mix(in oklch, var(--text) 2%, transparent); }
+        .ledger .lg-sep { border-left: 2px solid var(--border); }
+        .ledger .lg-cur th, .ledger .lg-cur { background: color-mix(in oklch, var(--purple) 8%, transparent); }
+        .ledger .lg-curcell { background: color-mix(in oklch, var(--purple) 3%, transparent); }
+        .bt { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; padding: 3px 9px; min-width: 30px; border-radius: 6px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+        .bt-yes { color: var(--green); border: 1px solid color-mix(in oklch, var(--green) 32%, transparent); background: color-mix(in oklch, var(--green) 10%, transparent); }
+        .bt-yes:hover { background: color-mix(in oklch, var(--green) 18%, transparent); }
+        .bt-no  { color: var(--muted); border: 1px solid color-mix(in oklch, var(--muted) 22%, transparent); background: transparent; }
+        .bt-no:hover { color: var(--text); border-color: color-mix(in oklch, var(--muted) 40%, transparent); }
+
         .page-footer {
             text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
-            margin-top: 4px; border-top: 1px solid var(--bord2);
-            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
+            margin-top: 30px; border-top: 1px solid var(--bord2);
+            font-family: 'Manrope', sans-serif; font-weight: 600; letter-spacing: .3px;
+        }
+
+        /* ── MOTION — state feedback only (product register): reveal after an action,
+           expand on disclosure, a capped stagger on the small suggested list ── */
+        @keyframes rsIn   { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @keyframes discIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+        .reveal { animation: rsIn .34s var(--ease) both; }
+        .rc-disc-panel.open { animation: discIn .3s var(--ease); }
+        .cwl-sug .sug-row { animation: rsIn .3s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
+        .bt.flip { animation: btPulse .28s var(--ease); }
+        @keyframes btPulse { 0% { transform: scale(1); } 45% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
+        /* Apply arms an in-surface confirm (Threat Magenta = the interactive/commit signal),
+           not a native browser confirm() dialog. */
+        .cwl-apply.confirming { background: color-mix(in oklch, var(--accent) 14%, transparent); color: var(--accent); border-color: color-mix(in oklch, var(--accent) 42%, transparent); }
+
+        /* In-surface toast — feedback in the page's own language, replacing alert() */
+        .toast-wrap { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 600; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+        .toast { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border-radius: 9px; background: var(--surf2); border: 1px solid var(--border); color: var(--text); font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.5); animation: toastIn .28s var(--ease); }
+        .toast .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+        .toast.ok  { border-color: color-mix(in oklch, var(--green) 40%, transparent); } .toast.ok .dot  { background: var(--green); }
+        .toast.err { border-color: color-mix(in oklch, var(--red) 42%, transparent); }  .toast.err .dot { background: var(--red); }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .rc-run, .rc-seg button, .rc-disc-btn, .rc-disc-chev, .cwl-apply, .cwl-copy, .bt { transition: none; }
+            .rc-run:active, .cwl-apply:active { transform: none; }
+            .reveal, .rc-disc-panel.open, .cwl-sug .sug-row, .bt.flip, .toast { animation: none; }
+        }
+        @media (max-width: 720px) {
+            .lt-wrap { display: none; }
+            .lt-rows { display: block; }
+            .rc-head, .rc-body { padding-left: 16px; padding-right: 16px; }
+            .rc-fig { padding: 2px 14px; }
+        }
+        @media (max-width: 480px) {
+            .rc-verdict { gap: 10px 0; }
+            .rc-fig .v { font-size: 19px; }
+            .sug-perf { flex-direction: column; align-items: flex-end; gap: 2px; }
         }
     </style>
 </head>
@@ -61,312 +265,304 @@
 
 {% include '_nav.html' %}
 
-{% set page_header_title = 'Roster <span>Tools</span>' %}
-{% set page_header_desc = 'War roster recommendation, CWL bonus assignment, and skill correlation.' %}
+{% set page_header_title = 'Roster <span>Decisions</span>' %}
+{% set page_header_desc = 'Two calls made from the active roster — who starts the war, and who takes the CWL bonus.' %}
 {% include '_page_header.html' %}
 
 {% include 'admin/_admin_tabs.html' %}
 
 <div class="container">
 
-    <!-- ── War Roster Recommendation ── -->
-    <div class="collapse-card" id="card-war-roster" style="margin-top:16px">
-        <div class="collapse-header">
-            <span class="collapse-header-icon">⚔️</span>
-            <span class="collapse-header-title">War Roster Recommendation</span>
-            <span class="collapse-header-meta">Generate a recommended clan war roster</span>
-        </div>
-        <div class="collapse-body" id="body-war-roster">
-
-            <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin:18px 0 22px;">
-                <div>
-                    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">Mode</label>
-                    <button id="war-auto-btn" onclick="toggleWarAutoMode()"
-                            style="padding:7px 16px;background:rgba(240,165,0,.12);color:var(--accent);border:1px solid rgba(240,165,0,.35);border-radius:7px;font-weight:700;font-size:13px;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;cursor:pointer;">
-                        Auto
+    <!-- ══ WAR ROSTER CONSOLE ══ -->
+    <section class="rc rc-war" id="warConsole">
+        <div class="rc-head">
+            <div class="rc-head-top">
+                <div class="rc-id">
+                    <span class="rc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5 21 3l-.5 6.5-9 9M9.5 20.5 3 21l.5-6.5 9-9"/><path d="m14 10 1 1M4 20l4.5-4.5M20 4l-4.5 4.5"/></svg></span>
+                    <div class="rc-titles">
+                        <div class="rc-title">War Roster</div>
+                        <div class="rc-sub">Recommended clan-war lineup from war activity &amp; skill</div>
+                    </div>
+                </div>
+                <div class="rc-controls">
+                    <div class="rc-field">
+                        <label>Mode</label>
+                        <div class="rc-seg" role="group" aria-label="Roster mode">
+                            <button type="button" id="warModeAuto" class="on" onclick="setWarMode(true)" aria-pressed="true">Auto</button>
+                            <button type="button" id="warModeManual" onclick="setWarMode(false)" aria-pressed="false">Manual</button>
+                        </div>
+                    </div>
+                    <div id="warManual" style="display:none;align-items:flex-end;gap:12px;">
+                        <div class="rc-field">
+                            <label for="warSize">War size</label>
+                            <input class="rc-input" id="warSize" type="number" min="5" max="50" step="5" value="15">
+                        </div>
+                        <div class="rc-field">
+                            <label for="warFill">Fill-ups</label>
+                            <input class="rc-input" id="warFill" type="number" min="0" max="50" value="5">
+                        </div>
+                    </div>
+                    <button class="rc-run" id="warGen" onclick="generateWarRoster()">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5z"/></svg> Generate
                     </button>
+                    <span class="rc-loading" id="warLoading" style="display:none;">Computing…</span>
                 </div>
-                <div id="war-manual-inputs" style="display:none;flex-direction:row;align-items:flex-end;gap:16px;">
-                    <div>
-                        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">War Size</label>
-                        <input id="war-size" type="number" min="5" max="50" step="5" value="15"
-                               style="width:80px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;">
-                    </div>
-                    <div>
-                        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;">Fill-ups</label>
-                        <input id="war-fill-ups" type="number" min="0" max="50" value="5"
-                               style="width:80px;padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;">
+            </div>
+            <div class="rc-verdict" id="warVerdict" style="display:none;"></div>
+        </div>
+        <div class="rc-body">
+            <div class="rc-idle" id="warIdle">
+                <strong>No lineup yet.</strong><br>Generate a recommendation from the active roster — Auto sizes the war to the eligible pool, or set it by hand.
+            </div>
+            <div id="warResult" style="display:none;">
+                <div class="rc-block-label">Lineup <span class="n" id="warLineupN"></span></div>
+                <div class="rc-hint">Ordered by town hall — the war-map position, not a merit ranking. Dimmed rows have no recent war data.</div>
+                <div class="lt-wrap">
+                    <table class="lt">
+                        <thead><tr>
+                            <th class="c" style="width:38px;">#</th>
+                            <th>Player</th>
+                            <th class="c">League</th>
+                            <th class="c">TH</th>
+                            <th class="c">War act.</th>
+                            <th class="c">Skill</th>
+                            <th>Why</th>
+                        </tr></thead>
+                        <tbody id="warLineupBody"></tbody>
+                    </table>
+                </div>
+                <div class="lt-rows" id="warLineupRows"></div>
+
+                <div class="rc-disc" id="warBenchDisc" style="display:none;">
+                    <button type="button" class="rc-disc-btn" aria-expanded="false" aria-controls="warBenchPanel" onclick="toggleDisc(this)">
+                        <span class="lbl">Not selected <span class="n" id="warBenchN"></span></span>
+                        <span class="rc-disc-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+                    </button>
+                    <div class="rc-disc-panel" id="warBenchPanel">
+                        <div class="lt-wrap">
+                            <table class="lt lt-bench">
+                                <thead><tr>
+                                    <th>Player</th>
+                                    <th class="c">League</th>
+                                    <th class="c">TH</th>
+                                    <th class="c">War act.</th>
+                                    <th class="c">Skill</th>
+                                </tr></thead>
+                                <tbody id="warBenchBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="lt-rows" id="warBenchRows"></div>
                     </div>
                 </div>
-                <div id="war-auto-info" style="font-size:12px;color:var(--muted);font-style:italic;align-self:center;"></div>
-                <button onclick="generateWarRoster()" id="war-gen-btn"
-                        style="padding:8px 20px;background:transparent;color:var(--accent);border:1px solid rgba(240,165,0,.35);border-radius:7px;font-weight:700;font-size:13px;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;transition:all .15s;">
-                    Generate
+            </div>
+        </div>
+    </section>
+
+    <!-- ══ CWL BONUS CONSOLE ══ -->
+    <section class="rc rc-cwl" id="cwlConsole">
+        <div class="rc-head">
+            <div class="rc-head-top">
+                <div class="rc-id">
+                    <span class="rc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="5.5"/><path d="M9 13.2 7.5 21l4.5-2.6L16.5 21 15 13.2"/></svg></span>
+                    <div class="rc-titles">
+                        <div class="rc-title">CWL Bonus</div>
+                        <div class="rc-sub" id="cwlContext">This month's medal recipients, by longest wait</div>
+                    </div>
+                </div>
+                <span class="rc-loading" id="cwlLoading">Loading…</span>
+            </div>
+            <div class="rc-verdict" id="cwlVerdict" style="display:none;"></div>
+        </div>
+        <div class="rc-body">
+            <div id="cwlLead"></div>
+
+            <div class="rc-disc" id="cwlLedgerDisc" style="display:none;">
+                <button type="button" class="rc-disc-btn" aria-expanded="false" aria-controls="cwlLedgerPanel" onclick="toggleDisc(this)">
+                    <span class="lbl">Full ledger <span class="n" id="cwlLedgerN"></span></span>
+                    <span class="rc-disc-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
                 </button>
-                <span id="war-loading" style="display:none;font-size:13px;color:var(--muted);">Computing…</span>
-            </div>
-
-            <div id="war-roster-result" style="display:none;">
-
-                <!-- Stats summary -->
-                <div id="war-stats-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:12px 16px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:'Rajdhani',sans-serif;">
+                <div class="rc-disc-panel" id="cwlLedgerPanel">
+                    <input type="search" class="ledger-search" placeholder="Search player…" oninput="filterLedger(this)" aria-label="Search ledger">
+                    <div class="ledger-scroll table-scroll" id="cwlLedgerWrap"></div>
                 </div>
-
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-
-                    <!-- Roster -->
-                    <div>
-                        <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--bord2);">
-                            War Roster <span id="war-roster-count" style="color:var(--text);"></span>
-                        </div>
-                        <table style="width:100%;border-collapse:collapse;font-size:13px;" id="war-roster-table">
-                            <thead>
-                                <tr style="background:var(--surf2);">
-                                    <th class="sortable" data-col="pos" data-type="num" onclick="sortWarRoster(this)" style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;cursor:pointer;"># <span class="sort-icon">⇅</span></th>
-                                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
-                                    <th class="sortable" data-col="league" data-type="league" onclick="sortWarRoster(this)" style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;cursor:pointer;">League <span class="sort-icon">⇅</span></th>
-                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">TH</th>
-                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">War Act.</th>
-                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Verdict</th>
-                                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Reason</th>
-                                </tr>
-                            </thead>
-                            <tbody id="war-roster-tbody"></tbody>
-                        </table>
-                    </div>
-
-                    <!-- Bench -->
-                    <div>
-                        <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--bord2);">
-                            Not Selected <span id="cwl-bench-count" style="color:var(--text);"></span>
-                        </div>
-                        <table style="width:100%;border-collapse:collapse;font-size:13px;" id="cwl-bench-table">
-                            <thead>
-                                <tr style="background:var(--surf2);">
-                                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
-                                    <th class="sortable" data-col="league" data-type="league" onclick="sortWarRoster(this)" style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;cursor:pointer;">League <span class="sort-icon">⇅</span></th>
-                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">TH</th>
-                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">War Act.</th>
-                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Verdict</th>
-                                </tr>
-                            </thead>
-                            <tbody id="cwl-bench-tbody"></tbody>
-                        </table>
-                    </div>
-
-                </div>
-            </div><!-- /war-roster-result -->
-
-        </div><!-- /collapse-body -->
-    </div><!-- /collapse-card war-roster -->
-
-    <!-- ── CWL Bonus ── -->
-    <div class="collapse-card" id="card-cwl-bonus" style="margin-top:16px">
-        <div class="collapse-header">
-            <span class="collapse-header-icon">🏅</span>
-            <span class="collapse-header-title">CWL Bonus</span>
-            <span class="collapse-header-meta" id="cwl-bonus-meta">track monthly bonus recipients</span>
-        </div>
-        <div class="collapse-body" id="body-cwl-bonus">
-
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;margin-bottom:20px;">
-                <button onclick="suggestCWLBonus()" id="cwl-suggest-btn"
-                        style="padding:7px 18px;background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.3);border-radius:7px;color:var(--blue);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;text-transform:uppercase;transition:all .15s;">
-                    ✦ Suggest Bonus
-                </button>
-                <span id="cwl-bonus-loading" style="display:none;color:var(--muted);font-size:12px;">Loading…</span>
-            </div>
-
-            <!-- Suggestion panel -->
-            <div id="cwl-suggestion-panel" style="display:none;margin-bottom:16px;padding:14px 18px;background:var(--surf2);border:1px solid rgba(88,166,255,.25);border-left:3px solid var(--blue);border-radius:10px;">
-                <div id="cwl-suggestion-content"></div>
-            </div>
-
-            <div id="cwl-bonus-result"></div>
-
-        </div>
-    </div>
-
-    <!-- ── Ranked × Raid Skill Correlation ── -->
-    <div class="collapse-card" id="card-skill-corr" style="margin-top:16px">
-        <div class="collapse-header">
-            <span class="collapse-header-icon">📈</span>
-            <span class="collapse-header-title">Ranked × Raid Skill Correlation</span>
-            <span class="collapse-header-meta" id="skill-corr-meta">does ranked skill predict raid weekend performance?</span>
-        </div>
-        <div class="collapse-body" id="body-skill-corr">
-            <div style="margin:18px 0 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-                <button onclick="loadSkillCorr()" id="skill-corr-btn"
-                    style="padding:8px 20px;background:var(--accent);color:#000;border:none;border-radius:8px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.4px;">
-                    ▶ Run Analysis
-                </button>
-                <span id="skill-corr-loading" style="display:none;font-size:12px;color:var(--muted);">Analysing…</span>
-            </div>
-
-            <div id="skill-corr-result" style="display:none;">
-                <!-- Summary row -->
-                <div id="skill-corr-summary" style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px;"></div>
-
-                <!-- Scatter + Table side by side -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
-                    <div>
-                        <div style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">
-                            Scatter Plot — Ranked Win Rate vs Raid Avg Dmg%
-                        </div>
-                        <div id="skill-corr-scatter" style="position:relative;background:var(--surf2);border:1px solid var(--border);border-radius:10px;overflow:hidden;"></div>
-                    </div>
-                    <div>
-                        <div style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">
-                            Per-Player Breakdown
-                        </div>
-                        <div id="skill-corr-table-wrap" style="overflow-y:auto;max-height:360px;border:1px solid var(--border);border-radius:10px;"></div>
-                    </div>
-                </div>
-
-                <!-- Quadrant legend -->
-                <div id="skill-corr-quadrants" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-top:16px;"></div>
             </div>
         </div>
-    </div><!-- /collapse-card skill-corr -->
+    </section>
 
 </div>
 
-<div class="page-footer">Roster Tools · Admin</div>
+<div class="page-footer">Roster Decisions · Admin</div>
 
-<!-- ── CWL Bonus Report Preview Modal ── -->
-<div id="cwlReportBackdrop" onclick="closeCWLBonusReportModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;backdrop-filter:blur(4px);"></div>
-<div id="cwlReportModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;
-    background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;width:min(640px,90vw);box-shadow:0 24px 64px rgba(0,0,0,0.6);">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <span style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:0.5px;">📋 CWL Bonus Report</span>
-        <button onclick="closeCWLBonusReportModal()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">✕</button>
+<!-- ── CWL Bonus Report Modal ── -->
+<div id="cwlReportBackdrop" onclick="closeReport()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;backdrop-filter:blur(4px);"></div>
+<div id="cwlReportModal" role="dialog" aria-modal="true" aria-labelledby="cwlReportTitle" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px 26px;width:min(640px,92vw);box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <span id="cwlReportTitle" style="font-family:'Big Shoulders Display',sans-serif;font-size:20px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;">CWL Bonus Report</span>
+        <button onclick="closeReport()" aria-label="Close" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">✕</button>
     </div>
-    <textarea id="cwlReportText" readonly style="width:100%;height:340px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;
-        color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.6;padding:12px;resize:none;outline:none;"></textarea>
-    <div style="display:flex;gap:8px;margin-top:12px;">
-        <button onclick="copyCWLBonusReportModal()" class="action-btn" style="border-color:rgba(63,185,80,0.4);color:var(--green);padding:8px 18px;font-size:12px;">📋 Copy to clipboard</button>
-        <span id="cwlReportCopied" style="display:none;align-items:center;color:var(--green);font-size:13px;font-weight:600;">✓ Copied!</span>
+    <textarea id="cwlReportText" readonly style="width:100%;height:340px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.6;padding:12px;resize:none;outline:none;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+        <button onclick="copyReport()" class="cwl-copy" style="color:var(--green);border-color:color-mix(in oklch,var(--green) 34%,transparent);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</button>
+        <span id="cwlReportCopied" style="display:none;color:var(--green);font-size:13px;font-weight:700;">✓ Copied</span>
     </div>
 </div>
+
+<div class="toast-wrap" id="toastWrap" role="status" aria-live="polite"></div>
 
 <script>
-// ── War Roster ────────────────────────────────────────────────────────────────
-var _warAutoMode = true;
+function toast(msg, kind) {
+    const w = document.getElementById('toastWrap');
+    const t = document.createElement('div');
+    t.className = 'toast ' + (kind || '');
+    t.innerHTML = '<span class="dot"></span><span></span>';
+    t.lastChild.textContent = msg;
+    w.appendChild(t);
+    setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 320); }, 3400);
+}
+// ══ shared disclosure ══
+function toggleDisc(btn) {
+    const open = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    document.getElementById(btn.getAttribute('aria-controls')).classList.toggle('open', !open);
+}
 
-function toggleWarAutoMode() {
-    _warAutoMode = !_warAutoMode;
-    const btn     = document.getElementById('war-auto-btn');
-    const manual  = document.getElementById('war-manual-inputs');
-    const info    = document.getElementById('war-auto-info');
-    if (_warAutoMode) {
-        btn.style.background    = 'rgba(240,165,0,.12)';
-        btn.style.color         = 'var(--accent)';
-        btn.textContent         = 'Auto';
-        manual.style.display    = 'none';
-        info.textContent        = '';
-    } else {
-        btn.style.background    = 'var(--surf2)';
-        btn.style.color         = 'var(--muted)';
-        btn.textContent         = 'Manual';
-        manual.style.display    = 'flex';
-        manual.style.flexDirection = 'row';
-    }
+// restart the reveal animation on an element whose content just changed
+function replay(el) { el.classList.remove('reveal'); void el.offsetWidth; el.classList.add('reveal'); }
+
+function _scoreColor(v) {
+    if (v >= 80) return 'var(--green)';
+    if (v >= 50) return 'var(--blue)';
+    if (v >= 20) return 'var(--orange)';
+    if (v >   0) return 'var(--red)';
+    return 'var(--muted)';
+}
+
+// ══ WAR ROSTER ══
+var _warAuto = true;
+
+function setWarMode(auto) {
+    _warAuto = auto;
+    document.getElementById('warModeAuto').classList.toggle('on', auto);
+    document.getElementById('warModeAuto').setAttribute('aria-pressed', auto);
+    document.getElementById('warModeManual').classList.toggle('on', !auto);
+    document.getElementById('warModeManual').setAttribute('aria-pressed', !auto);
+    document.getElementById('warManual').style.display = auto ? 'none' : 'flex';
 }
 
 function generateWarRoster() {
-    const btn     = document.getElementById('war-gen-btn');
-    const loading = document.getElementById('war-loading');
+    const btn = document.getElementById('warGen'), loading = document.getElementById('warLoading');
     btn.disabled = true; loading.style.display = 'inline';
 
     const fd = new FormData();
-    if (_warAutoMode) {
-        fd.append('war_size', 'auto');
-        fd.append('fill_ups', 'auto');
-    } else {
-        fd.append('war_size', parseInt(document.getElementById('war-size').value) || 15);
-        fd.append('fill_ups', parseInt(document.getElementById('war-fill-ups').value) || 5);
+    if (_warAuto) { fd.append('war_size', 'auto'); fd.append('fill_ups', 'auto'); }
+    else {
+        fd.append('war_size', parseInt(document.getElementById('warSize').value) || 15);
+        fd.append('fill_ups', parseInt(document.getElementById('warFill').value) || 5);
     }
 
     fetch('/admin/war-roster', { method: 'POST', body: fd })
         .then(r => r.json())
         .then(data => {
-            if (data.auto) {
-                document.getElementById('war-auto-info').textContent =
-                    `Computed: War size ${data.war_size} · ${data.fill_ups} fill-up${data.fill_ups !== 1 ? 's' : ''}`;
-            }
-
-            const stats = [
-                { label: 'War Size',     value: data.war_size,       color: 'var(--text)' },
-                { label: 'Main Picks',   value: data.main_picks,     color: 'var(--green)' },
-                { label: 'Fill-ups',     value: data.fill_ups,       color: 'var(--muted)' },
-                { label: 'Eligible Pool',value: data.eligible_count, color: 'var(--accent)' },
-                { label: 'Not Selected', value: data.bench.length,   color: 'var(--muted)' },
-            ];
-            document.getElementById('war-stats-bar').innerHTML = stats.map((s, i) =>
-                `${i > 0 ? '<span style="color:var(--border);margin:0 2px;">|</span>' : ''}
-                 <span style="color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase;">${s.label}</span>
-                 <span style="color:${s.color};font-weight:700;font-size:14px;margin-left:4px;">${s.value}</span>`
-            ).join('');
-
-            data.roster.sort((a, b) => b.th - a.th);
-            renderWarRoster(data.roster, data.bench);
-            document.getElementById('war-roster-result').style.display = '';
+            renderWarVerdict(data);
+            renderWarLineup(data.roster);
+            renderWarBench(data.bench);
+            document.getElementById('warIdle').style.display = 'none';
+            const wr = document.getElementById('warResult');
+            wr.style.display = '';
+            replay(wr);
         })
-        .catch(() => alert('Error generating roster'))
+        .catch(() => toast('Could not generate the roster — try again', 'err'))
         .finally(() => { btn.disabled = false; loading.style.display = 'none'; });
 }
 
-function _scoreColor(v) {
-    if (v >= 80) return 'var(--green)';
-    if (v >= 50) return 'var(--blue)';
-    if (v >= 20) return 'var(--accent)';
-    if (v >   0) return 'var(--red)';
-    return 'var(--muted)';
+function renderWarVerdict(d) {
+    const figs = [
+        { v: d.war_size, l: 'War size' },
+        { v: d.main_picks, l: 'Main picks' },
+        { v: d.fill_ups, l: 'Fill-ups', cls: 'dim' },
+        { v: d.eligible_count, l: 'Eligible' },
+        { v: d.bench.length, l: 'Benched', cls: 'dim' },
+    ];
+    const el = document.getElementById('warVerdict');
+    el.innerHTML = figs.map(f =>
+        `<div class="rc-fig"><span class="v ${f.cls || ''}">${f.v}</span><span class="l">${f.l}</span></div>`).join('');
+    el.style.display = 'flex';
+    replay(el);
 }
 
-function _roleStyle(role) {
-    if (role === 'Fill-up')               return 'background:rgba(139,148,158,.1);color:var(--muted);border:1px solid rgba(139,148,158,.2);';
-    if (role === 'War pref: In')          return 'background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.25);';
-    if (role && role.startsWith('Sparse')) return 'background:rgba(88,166,255,.1);color:var(--blue);border:1px solid rgba(88,166,255,.25);';
-    return 'background:rgba(240,165,0,.1);color:var(--accent);border:1px solid rgba(240,165,0,.25);';
+function _whyChip(role) {
+    const r = role || '';
+    if (r === 'Fill-up')           return `<span class="why why-fill">Fill-up</span>`;
+    if (r === 'War pref: In')      return `<span class="why why-pref">Pref: In</span>`;
+    if (r.startsWith('Sparse'))    return `<span class="why why-sparse">Sparse</span>`;
+    return `<span class="why why-score">${r}</span>`;
 }
 
-function renderWarRoster(roster, bench) {
-    const rTbody = document.getElementById('war-roster-tbody');
-    const bTbody = document.getElementById('cwl-bench-tbody');
-    document.getElementById('war-roster-count').textContent = `(${roster.length})`;
-    document.getElementById('cwl-bench-count').textContent  = `(${bench.length})`;
+function _lg(p) { return p.ranked_league || p.league || '—'; }
+function _ns(p) { return (p.war_score === 0 && p.verdict === 0) ? 'nosig' : ''; }
 
-    const rosterByPos = [...roster].sort((a, b) =>
-        b.th - a.th || leagueSortKey(b.ranked_league || b.league) - leagueSortKey(a.ranked_league || a.league));
-    rTbody.innerHTML = rosterByPos.map((p, i) => `
-        <tr data-league="${(p.ranked_league||p.league||'').toLowerCase()}" data-th="${p.th}" data-waract="${p.war_score}" data-verdict="${p.verdict}" data-pos="${i+1}" style="border-bottom:1px solid var(--bord2);">
-            <td style="padding:9px 12px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);">${i+1}</td>
-            <td style="padding:9px 12px;font-weight:600;">${p.name}</td>
-            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${p.ranked_league||p.league||'—'}</td>
-            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);">TH${p.th}</td>
-            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:${_scoreColor(p.war_score)};">${p.war_score}</td>
-            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:${_scoreColor(p.verdict)};">${p.verdict}</td>
-            <td style="padding:9px 12px;"><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;${_roleStyle(p.role || p.reason)}">${p.role || p.reason}</span></td>
+function renderWarLineup(roster) {
+    const byPos = [...roster].sort((a, b) => b.th - a.th || leagueKey(_lg(b)) - leagueKey(_lg(a)));
+    document.getElementById('warLineupN').textContent = `(${roster.length})`;
+
+    document.getElementById('warLineupBody').innerHTML = byPos.map((p, i) => `
+        <tr class="${_ns(p)}">
+            <td class="c pos">${i + 1}</td>
+            <td class="pname">${p.name}</td>
+            <td class="c lg">${_lg(p)}</td>
+            <td class="c thv">TH${p.th}</td>
+            <td class="c mono" style="color:${_scoreColor(p.war_score)};">${p.war_score}</td>
+            <td class="c mono" style="color:${_scoreColor(p.verdict)};">${p.verdict}</td>
+            <td>${_whyChip(p.role || p.reason)}</td>
         </tr>`).join('');
 
-    bTbody.innerHTML = bench.map(p => `
-        <tr data-league="${(p.ranked_league||p.league||'').toLowerCase()}" data-th="${p.th}" data-waract="${p.war_score}" data-verdict="${p.verdict}" style="border-bottom:1px solid var(--bord2);opacity:.6;">
-            <td style="padding:9px 12px;font-weight:500;">${p.name}</td>
-            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${p.ranked_league||p.league||'—'}</td>
-            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);">TH${p.th}</td>
-            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:${_scoreColor(p.war_score)};">${p.war_score}</td>
-            <td style="padding:9px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:${_scoreColor(p.verdict)};">${p.verdict}</td>
-        </tr>`).join('');
+    document.getElementById('warLineupRows').innerHTML = byPos.map((p, i) => `
+        <div class="mr ${_ns(p)}">
+            <div class="mr-top">
+                <span class="mr-pos">${i + 1}</span>
+                <span class="mr-name">${p.name}</span>
+                ${_whyChip(p.role || p.reason)}
+            </div>
+            <div class="mr-stats">
+                <span class="lg">${_lg(p)}</span>
+                <span><span class="u">TH</span>${p.th}</span>
+                <span style="color:${_scoreColor(p.war_score)};"><span class="u">Act</span>${p.war_score}</span>
+                <span style="color:${_scoreColor(p.verdict)};"><span class="u">Skill</span>${p.verdict}</span>
+            </div>
+        </div>`).join('');
 }
 
-// ── War roster table sorting (by data-col) ─────────────────────────────────
-const _warTableSort = { 'war-roster-table': { col: null, asc: true }, 'cwl-bench-table': { col: null, asc: true }, 'cwl-bonus-table': { col: null, asc: true } };
+function renderWarBench(bench) {
+    const disc = document.getElementById('warBenchDisc');
+    if (!bench.length) { disc.style.display = 'none'; return; }
+    disc.style.display = '';
+    document.getElementById('warBenchN').textContent = `(${bench.length})`;
 
-function leagueSortKey(tier) {
+    document.getElementById('warBenchBody').innerHTML = bench.map(p => `
+        <tr class="${_ns(p)}">
+            <td class="pname">${p.name}</td>
+            <td class="c lg">${_lg(p)}</td>
+            <td class="c thv">TH${p.th}</td>
+            <td class="c mono" style="color:${_scoreColor(p.war_score)};">${p.war_score}</td>
+            <td class="c mono" style="color:${_scoreColor(p.verdict)};">${p.verdict}</td>
+        </tr>`).join('');
+
+    document.getElementById('warBenchRows').innerHTML = bench.map(p => `
+        <div class="mr ${_ns(p)}">
+            <div class="mr-top"><span class="mr-name">${p.name}</span></div>
+            <div class="mr-stats" style="padding-left:0;">
+                <span class="lg">${_lg(p)}</span>
+                <span><span class="u">TH</span>${p.th}</span>
+                <span style="color:${_scoreColor(p.war_score)};"><span class="u">Act</span>${p.war_score}</span>
+                <span style="color:${_scoreColor(p.verdict)};"><span class="u">Skill</span>${p.verdict}</span>
+            </div>
+        </div>`).join('');
+}
+
+function leagueKey(tier) {
     if (!tier) return 0;
     const t = ('' + tier).trim().toLowerCase();
-    if (t === 'unranked' || t === 'unknown league') return 0;
+    if (t === 'unranked' || t === 'unknown league' || t === '—') return 0;
     if (/ iii$/.test(t)) return 34;
     if (/ ii$/.test(t)) return 35;
     if (/ i$/.test(t)) return 36;
@@ -374,117 +570,173 @@ function leagueSortKey(tier) {
     return m ? parseInt(m[1], 10) : 0;
 }
 
-function sortWarRoster(th) {
-    const col = th.dataset.col;
-    const type = th.dataset.type || 'str';
-    sortTableByCol('war-roster-table', col, type);
-    sortTableByCol('cwl-bench-table', col, type);
-    // update header indicators
-    document.querySelectorAll('#war-roster-table th.sortable, #cwl-bench-table th.sortable, #cwl-bonus-table th.sortable').forEach(el => {
-        el.querySelector('.sort-icon') && (el.querySelector('.sort-icon').textContent = (el.dataset.col === col) ? (_warTableSort['war-roster-table'].asc ? '▲' : '▼') : '⇅');
-    });
-}
-
-function sortCwlBonus(th) {
-    const col = th.dataset.col;
-    const type = th.dataset.type || 'str';
-    sortTableByCol('cwl-bonus-table', col, type);
-    document.querySelectorAll('#cwl-bonus-table th.sortable').forEach(el => {
-        el.querySelector('.sort-icon') && (el.querySelector('.sort-icon').textContent = (el.dataset.col === col) ? (_warTableSort['cwl-bonus-table'].asc ? '▲' : '▼') : '⇅');
-    });
-}
-
-function sortTableByCol(tableId, col, type) {
-    const state = _warTableSort[tableId] || { col: null, asc: true };
-    state.asc = (state.col === col) ? !state.asc : true;
-    state.col = col;
-    _warTableSort[tableId] = state;
-
-    const tbody = document.getElementById(tableId)?.querySelector('tbody');
-    if (!tbody) return;
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-    rows.sort((a, b) => {
-        let av = (a.dataset[col] !== undefined) ? a.dataset[col] : (a.cells && a.cells.length ? a.cells[Array.from(a.parentNode.parentNode.querySelectorAll('th')).findIndex(h=>h.dataset.col===col)].textContent : '');
-        let bv = (b.dataset[col] !== undefined) ? b.dataset[col] : (b.cells && b.cells.length ? b.cells[Array.from(b.parentNode.parentNode.querySelectorAll('th')).findIndex(h=>h.dataset.col===col)].textContent : '');
-        if (type === 'num') { av = parseFloat(av)||0; bv = parseFloat(bv)||0; }
-        else if (type === 'league') { av = leagueSortKey(av); bv = leagueSortKey(bv); }
-        else { av = (av||'').toString().toLowerCase(); bv = (bv||'').toString().toLowerCase(); }
-        if (av < bv) return state.asc ? -1 : 1;
-        if (av > bv) return state.asc ? 1 : -1;
-        return 0;
-    });
-    // re-append rows
-    tbody.innerHTML = '';
-    rows.forEach(r => tbody.appendChild(r));
-}
-
-// ── CWL Bonus ─────────────────────────────────────────────────────────────────
-const _MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// ══ CWL BONUS ══
+const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function _fmtMonth(m) {
     const parts = m.split('-');
-    const [y, mo] = parts;
-    // a month with 2 CWLs has an extra key like '2026-06-16' — show the day instead of the
-    // year so the two columns for the same month are visually distinct
-    if (parts.length > 2) return _MONTH_NAMES[parseInt(mo) - 1] + ' ' + parts[2];
-    return _MONTH_NAMES[parseInt(mo) - 1] + ' ' + y;
+    if (parts.length > 2) return _MONTHS[parseInt(parts[1]) - 1] + ' ' + parts[2];
+    return _MONTHS[parseInt(parts[1]) - 1] + ' ' + parts[0];
+}
+function _fmtMonthLong(m) {
+    if (!m) return m;
+    const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const [y, mo] = m.split('-');
+    return `${names[parseInt(mo) - 1]} ${y}`;
 }
 
-function loadCWLBonus() {
-    const loading = document.getElementById('cwl-bonus-loading');
-    const result  = document.getElementById('cwl-bonus-result');
-    loading.style.display = 'inline';
-    result.innerHTML = '';
+window._cwl = {};   // { month, ledger, suggest }
 
+function loadCWL() {
     fetch('/admin/cwl-bonus')
         .then(r => r.json())
         .then(data => {
-            loading.style.display = 'none';
-            window._cwlCurrentMonth = data.current_month;
-            const cur = data.current_month;
-            const curBonuses = data.members.filter(p => p.by_month[cur]?.has_bonus).length;
-            document.getElementById('cwl-bonus-meta').textContent =
-                `${curBonuses} bonus${curBonuses !== 1 ? 'es' : ''} this month`;
-            renderCWLBonus(data);
+            window._cwl.month = data.current_month;
+            window._cwl.ledger = data;
+            renderLedger(data);
+            document.getElementById('cwlLedgerDisc').style.display = '';
+            // Then fetch this-month's decision so the lead shows with no extra click.
+            return fetch('/admin/cwl-bonus/suggest', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month: data.current_month }),
+            }).then(r => r.json().then(j => ({ ok: r.ok, j })));
+        })
+        .then(res => {
+            document.getElementById('cwlLoading').style.display = 'none';
+            if (res && res.j && res.j.ok) { window._cwl.suggest = res.j; renderCWLLead(res.j); }
+            else renderCWLNoSeason(res && res.j ? res.j.error : null);
         })
         .catch(() => {
-            loading.style.display = 'none';
-            result.innerHTML = '<div style="color:var(--red);font-size:13px;padding:8px 0;">Error loading data.</div>';
+            document.getElementById('cwlLoading').style.display = 'none';
+            document.getElementById('cwlLead').innerHTML =
+                '<div class="rc-idle" style="border-style:solid;">Could not load CWL data.</div>';
         });
 }
 
-function toggleCWLBonus(btn, tag, month) {
-    btn.disabled = true;
-    fetch('/admin/cwl-bonus/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_tag: tag, month }),
-    })
-    .then(r => r.json())
-    .then(data => {
-        btn.disabled = false;
-        if (!data.ok) return;
-        btn.dataset.state = data.added ? 'true' : 'false';
-        btn.className = 'gc-toggle ' + (data.added ? 'gc-yes' : 'gc-no');
-        btn.textContent = data.added ? '✓' : '✗';
-    });
+function renderCWLNoSeason(msg) {
+    // No active CWL to assign — state it calmly; the ledger (last real data) stays available below.
+    document.getElementById('cwlContext').textContent = 'No active CWL season';
+    document.getElementById('cwlLead').innerHTML = `
+        <div class="rc-idle">
+            <strong>No active CWL season.</strong><br>Nothing to assign right now${msg ? ' — ' + msg : ''}. Past seasons remain in the ledger below.</div>`;
+    // Open the ledger so there's real data on screen.
+    const btn = document.querySelector('#cwlLedgerDisc .rc-disc-btn');
+    if (btn && btn.getAttribute('aria-expanded') === 'false') toggleDisc(btn);
+}
+
+function renderCWLVerdict(d) {
+    const figs = [
+        { v: d.total_bonuses, l: 'Slots' },
+        { v: d.already_given, l: 'Given' },
+        { v: d.available, l: 'Remaining', cls: d.available > 0 ? 'hot' : 'dim' },
+    ];
+    const cv = document.getElementById('cwlVerdict');
+    cv.innerHTML = figs.map(f =>
+        `<div class="rc-fig"><span class="v ${f.cls || ''}">${f.v}</span><span class="l">${f.l}</span></div>`).join('');
+    cv.style.display = 'flex';
+    replay(cv);
+    document.getElementById('cwlContext').innerHTML =
+        `<span class="ctx">${_fmtMonth(window._cwl.month)}</span> · ${d.league} ${d.war_size}v${d.war_size} · won ${d.wins} + ${d.guaranteed} guaranteed`;
 }
 
 function _cwlAtkColor(done, max) {
     if (!max) return 'var(--muted)';
     if (done === max) return 'var(--green)';
-    if (done === 0)   return 'var(--red)';
+    if (done === 0) return 'var(--red)';
     return 'var(--yellow)';
 }
 
-function renderCWLBonus(data) {
-    const { months, current_month, members } = data;
-    const wrap = document.getElementById('cwl-bonus-result');
-    if (!members.length) {
-        wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0;">No active members found.</div>';
+function renderCWLLead(d) {
+    renderCWLVerdict(d);
+    const lead = document.getElementById('cwlLead');
+    const details = d.suggested_details || [];
+
+    if (!details.length) {
+        // Slots all filled, or nobody eligible.
+        const msg = d.available <= 0
+            ? `All <strong>${d.total_bonuses}</strong> bonus slot${d.total_bonuses !== 1 ? 's' : ''} for ${_fmtMonth(window._cwl.month)} are assigned.`
+            : `No eligible players to suggest right now (all remaining participants missed an attack or already hold a bonus).`;
+        lead.innerHTML = `
+            <div class="rc-block-label reveal">This month</div>
+            <div class="cwl-allgiven reveal"><span class="cwl-dot"></span><span>${msg}</span></div>
+            <div class="cwl-actions reveal"><button class="cwl-copy" onclick="openReport()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy report</button></div>`;
         return;
     }
 
-    // Sort: current month CWL participants first → by stars desc → name
+    const rows = details.map((p, i) => {
+        const flawless = p.attacks > 0 && p.attacks === p.total_wars && p.stars === p.attacks * 3;
+        return `<div class="sug-row" style="--i:${i}">
+            <span class="sug-rank">${i + 1}</span>
+            <div class="sug-main">
+                <div class="sug-name">${p.name}</div>
+                <div class="sug-why">${p.reason}</div>
+            </div>
+            <div class="sug-perf">
+                <span class="sug-stars">${p.stars}★${flawless ? ' ✨' : ''}</span>
+                <span style="color:${_cwlAtkColor(p.attacks, p.max_attacks)};">${p.attacks}/${p.max_attacks}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    lead.innerHTML = `
+        <div class="rc-block-label reveal">Suggested <span class="n">(${details.length})</span></div>
+        <div class="cwl-sug">${rows}</div>
+        <div class="cwl-actions reveal">
+            <button class="cwl-apply" id="cwlApplyBtn" onclick="applyCWL()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg> Apply ${details.length}</button>
+            <button class="cwl-copy" onclick="openReport()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy report</button>
+        </div>`;
+}
+
+const _CHECK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>`;
+
+function applyCWL(force) {
+    const d = window._cwl.suggest;
+    if (!d || !d.suggested_tags || !d.suggested_tags.length) return;
+    const btn = document.getElementById('cwlApplyBtn');
+    const n = d.suggested_tags.length;
+
+    // First press arms an in-surface confirm (no native confirm() dialog); it disarms itself.
+    if (!force) {
+        btn.classList.add('confirming');
+        btn.innerHTML = `${_CHECK_SVG} Confirm — assign ${n}?`;
+        btn.setAttribute('onclick', 'applyCWL(true)');
+        clearTimeout(window._applyArm);
+        window._applyArm = setTimeout(() => {
+            btn.classList.remove('confirming');
+            btn.innerHTML = `${_CHECK_SVG} Apply ${n}`;
+            btn.setAttribute('onclick', 'applyCWL()');
+        }, 4500);
+        return;
+    }
+
+    clearTimeout(window._applyArm);
+    btn.disabled = true;
+    fetch('/admin/cwl-bonus/apply', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: window._cwl.month, tags: d.suggested_tags }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (!res.ok) { toast('Could not apply bonuses: ' + (res.error || 'unknown error'), 'err'); btn.disabled = false; return; }
+        // Reflect in ledger toggles, then reload the decision so slots/remaining update.
+        const cur = window._cwl.month;
+        d.suggested_tags.forEach(tag => {
+            const b = document.getElementById(`bt-${tag.replace('#', '')}-${cur}`);
+            if (b) { b.className = 'bt bt-yes'; b.dataset.state = 'true'; b.setAttribute('aria-pressed', 'true'); b.textContent = '✓'; void b.offsetWidth; b.classList.add('flip'); }
+        });
+        toast(`Assigned ${n} CWL bonus${n !== 1 ? 'es' : ''}`, 'ok');
+        document.getElementById('cwlLoading').style.display = 'inline';
+        loadCWL();
+    })
+    .catch(() => { toast('Could not apply bonuses — network error', 'err'); btn.disabled = false; });
+}
+
+// ── ledger matrix ──
+function renderLedger(data) {
+    const { months, current_month, members } = data;
+    const wrap = document.getElementById('cwlLedgerWrap');
+    document.getElementById('cwlLedgerN').textContent = `(${months.length} season${months.length !== 1 ? 's' : ''})`;
+    if (!members.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:16px 0;">No active members.</div>'; return; }
+
     const sorted = [...members].sort((a, b) => {
         const am = a.by_month[current_month], bm = b.by_month[current_month];
         if ((bm.in_cwl ? 1 : 0) !== (am.in_cwl ? 1 : 0)) return (bm.in_cwl ? 1 : 0) - (am.in_cwl ? 1 : 0);
@@ -492,230 +744,85 @@ function renderCWLBonus(data) {
         return a.name.localeCompare(b.name);
     });
 
-    const SEP = 'border-left:2px solid var(--border);';
-
     const h1 = months.map((m, i) => {
         const cur = m === current_month;
-        const sep = i > 0 ? SEP : '';
-        return `<th colspan="3" style="text-align:center;padding:8px 6px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;${sep}${cur ? 'color:var(--accent);background:rgba(240,165,0,.07);' : ''}">${_fmtMonth(m)}${cur ? ' ●' : ''}</th>`;
+        return `<th colspan="3" class="${i > 0 ? 'lg-sep' : ''} ${cur ? 'lg-cur' : ''}" style="text-align:center;">${_fmtMonth(m)}${cur ? ' ●' : ''}</th>`;
     }).join('');
-
     const h2 = months.map((m, i) => {
-        const bg  = m === current_month ? 'background:rgba(240,165,0,.04);' : '';
-        const sep = i > 0 ? SEP : '';
-        return `<th style="text-align:center;padding:5px 4px;${bg}${sep}font-size:10px;color:var(--muted);">⭐</th>
-                <th style="text-align:center;padding:5px 4px;${bg}font-size:10px;color:var(--muted);">Atk</th>
-                <th style="text-align:center;padding:5px 4px;${bg}font-size:10px;color:var(--muted);">Bonus</th>`;
+        const cur = m === current_month ? 'lg-curcell' : '';
+        return `<th class="${i > 0 ? 'lg-sep' : ''} ${cur}" style="text-align:center;">★</th>
+                <th class="${cur}" style="text-align:center;">Atk</th>
+                <th class="${cur}" style="text-align:center;">Bonus</th>`;
     }).join('');
 
     const rows = sorted.map(p => {
         const tagId = p.tag.replace('#', '');
         const cells = months.map((m, i) => {
-            const md  = p.by_month[m];
-            const bg  = m === current_month ? 'background:rgba(240,165,0,.025);' : '';
-            const sep = i > 0 ? SEP : '';
+            const md = p.by_month[m], cur = m === current_month ? 'lg-curcell' : '';
             const flawless = md.in_cwl && md.attacks > 0 && md.attacks === md.total_wars && md.stars === md.attacks * 3;
             const starCell = md.in_cwl
-                ? `<td style="text-align:center;padding:8px 4px;${bg}${sep}font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--yellow);">${md.stars}${flawless ? ` <span title="3 stars on every attack" style="font-size:10px;">✨</span>` : ''}</td>`
-                : `<td style="text-align:center;padding:8px 4px;${bg}${sep}color:var(--bord2);font-size:12px;">—</td>`;
+                ? `<td class="${i > 0 ? 'lg-sep' : ''} ${cur}" style="text-align:center;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--yellow);">${md.stars}${flawless ? ' ✨' : ''}</td>`
+                : `<td class="${i > 0 ? 'lg-sep' : ''} ${cur}" style="text-align:center;color:var(--bord2);">—</td>`;
             const atkCell = md.in_cwl
-                ? `<td style="text-align:center;padding:8px 4px;${bg}font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${_cwlAtkColor(md.attacks, md.max_attacks)};">${md.attacks}/${md.max_attacks}</td>`
-                : `<td style="text-align:center;padding:8px 4px;${bg}color:var(--bord2);font-size:12px;">—</td>`;
-            const bonusCell = `<td style="text-align:center;padding:8px 4px;${bg}">
-                <button id="cwlb-${tagId}-${m}"
-                        class="gc-toggle ${md.has_bonus ? 'gc-yes' : 'gc-no'}"
-                        data-state="${md.has_bonus}"
-                        ondblclick="toggleCWLBonus(this,'${p.tag}','${m}')"
-                        title="Double-click to toggle"
-                        style="font-size:10px;padding:2px 8px;min-width:28px;">
-                    ${md.has_bonus ? '✓' : '✗'}
-                </button></td>`;
+                ? `<td class="${cur}" style="text-align:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;color:${_cwlAtkColor(md.attacks, md.max_attacks)};">${md.attacks}/${md.max_attacks}</td>`
+                : `<td class="${cur}" style="text-align:center;color:var(--bord2);">—</td>`;
+            const bonusCell = `<td class="${cur}" style="text-align:center;">
+                <button id="bt-${tagId}-${m}" class="bt ${md.has_bonus ? 'bt-yes' : 'bt-no'}" data-state="${md.has_bonus}"
+                    aria-pressed="${md.has_bonus}" aria-label="CWL bonus — ${(p.name || '').replace(/"/g, '&quot;')}, ${_fmtMonth(m)}"
+                    title="Toggle CWL bonus" onclick="toggleBonus(this,'${p.tag}','${m}')">${md.has_bonus ? '✓' : '✗'}</button></td>`;
             return starCell + atkCell + bonusCell;
         }).join('');
-
-        const posVal = p.cwl_pos != null ? p.cwl_pos : 999;
-        return `<tr data-name="${(p.name||'').toLowerCase()}" data-tag="${p.tag.toLowerCase()}" data-league="${(p.ranked_league||p.league||'').toLowerCase()}" data-cwlpos="${posVal}" style="border-bottom:1px solid var(--bord2);">
-                <td style="padding:8px 10px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);font-size:13px;">${p.cwl_pos != null ? '#' + p.cwl_pos : '—'}</td>
-                <td style="padding:8px 14px;white-space:nowrap;">
-                <div style="font-weight:600;font-size:13px;">${p.name}</div>
-                <div style="font-size:10px;color:var(--muted);margin-top:1px;">${p.tag}</div>
-            </td>
-                <td style="padding:8px 10px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--blue);">${p.ranked_league||p.league||'—'}</td>
+        return `<tr data-name="${(p.name || '').toLowerCase()}" data-tag="${p.tag.toLowerCase()}">
+            <td style="text-align:center;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--muted);">${p.cwl_pos != null ? '#' + p.cwl_pos : '—'}</td>
+            <td style="white-space:nowrap;"><div style="font-weight:700;font-size:13px;">${p.name}</div><div style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;">${p.tag}</div></td>
+            <td style="text-align:center;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--blue);">${p.ranked_league || p.league || '—'}</td>
             ${cells}
         </tr>`;
     }).join('');
 
-    wrap.innerHTML = `
-        <input type="search" class="m-search" placeholder="🔍 Search player…"
-               oninput="filterCWLBonus(this)" style="margin-bottom:14px;">
-        <div style="overflow-x:auto;">
-        <table class="member-table" id="cwl-bonus-table" style="min-width:700px;">
-            <thead>
-                <tr>
-                    <th rowspan="2" class="sortable" data-col="cwlpos" data-type="num" onclick="sortCwlBonus(this)" style="vertical-align:middle;padding:8px 10px;text-align:center;cursor:pointer;white-space:nowrap;"># <span class="sort-icon">⇅</span></th>
-                    <th rowspan="2" style="vertical-align:middle;padding:8px 14px;">Player</th>
-                    <th rowspan="2" class="sortable" data-col="league" data-type="league" onclick="sortCwlBonus(this)" style="vertical-align:middle;padding:8px 10px;text-align:center;cursor:pointer;">League <span class="sort-icon">⇅</span></th>
-                    ${h1}
-                </tr>
-                <tr>${h2}</tr>
-            </thead>
-            <tbody>${rows}</tbody>
-        </table>
-        </div>`;
+    wrap.innerHTML = `<table class="ledger">
+        <thead>
+            <tr><th rowspan="2" style="text-align:center;">#</th><th rowspan="2">Player</th><th rowspan="2" style="text-align:center;">League</th>${h1}</tr>
+            <tr>${h2}</tr>
+        </thead>
+        <tbody>${rows}</tbody></table>`;
 }
 
-function filterCWLBonus(input) {
+function filterLedger(input) {
     const q = input.value.toLowerCase();
-    document.querySelectorAll('#cwl-bonus-table tbody tr').forEach(row => {
+    document.querySelectorAll('#cwlLedgerWrap tbody tr').forEach(row => {
         row.style.display = (!q || row.dataset.name.includes(q) || row.dataset.tag.includes(q)) ? '' : 'none';
     });
 }
 
-function suggestCWLBonus() {
-    const month = window._cwlCurrentMonth;
-    if (!month) { alert('Load the bonus table first.'); return; }
-    const btn = document.getElementById('cwl-suggest-btn');
-    btn.disabled = true; btn.textContent = '⏳ Calculating…';
-
-    fetch('/admin/cwl-bonus/suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month }),
+function toggleBonus(btn, tag, month) {
+    btn.disabled = true;
+    fetch('/admin/cwl-bonus/toggle', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_tag: tag, month }),
     })
     .then(r => r.json())
-    .then(data => {
-        btn.disabled = false; btn.textContent = '✦ Suggest Bonus';
-        if (!data.ok) { alert('Error: ' + (data.error || 'Unknown')); return; }
-        _applyCWLSuggestion(data);
-    })
-    .catch(err => {
-        btn.disabled = false; btn.textContent = '✦ Suggest Bonus';
-        alert('Error calculating suggestions: ' + err.message);
+    .then(res => {
+        btn.disabled = false;
+        if (!res.ok) return;
+        btn.dataset.state = res.added ? 'true' : 'false';
+        btn.className = 'bt ' + (res.added ? 'bt-yes' : 'bt-no');
+        btn.setAttribute('aria-pressed', res.added);
+        btn.textContent = res.added ? '✓' : '✗';
+        void btn.offsetWidth; btn.classList.add('flip');
+        // Re-pull the decision so the verdict figures stay honest after a manual edit.
+        if (month === window._cwl.month) { document.getElementById('cwlLoading').style.display = 'inline'; loadCWL(); }
     });
 }
 
-function _applyCWLSuggestion(data) {
-    const suggestedSet = new Set(data.suggested_tags.map(t => t.toLowerCase()));
-    const panel   = document.getElementById('cwl-suggestion-panel');
-    const content = document.getElementById('cwl-suggestion-content');
-
-    // Store for apply and report
-    window._cwlSuggestedTags  = data.suggested_tags;
-    window._cwlTotalBonuses   = data.total_bonuses;
-    window._cwlSuggestData    = data;
-
-    // Update meta: X/Y slots filled
-    const given = data.already_given;
-    const total = data.total_bonuses;
-    document.getElementById('cwl-bonus-meta').textContent =
-        `${given}/${total} slot${total !== 1 ? 's' : ''} filled · ${data.league} ${data.war_size}v${data.war_size}`;
-
-    panel.style.display = '';
-
-    const detailRows = (data.suggested_details || []).map(p => {
-        const ac = _cwlAtkColor(p.attacks, p.max_attacks);
-        const flawless = p.attacks > 0 && p.attacks === p.total_wars && p.stars === p.attacks * 3;
-        const flawlessBadge = flawless
-            ? ` <span title="3 stars on every attack" style="font-size:10px;">✨</span>` : '';
-        return `<tr style="border-bottom:1px solid var(--bord2);">
-            <td style="padding:5px 10px;font-weight:600;font-size:12px;">${p.name}</td>
-            <td style="padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--yellow);white-space:nowrap;">${p.stars}⭐${flawlessBadge}</td>
-            <td style="padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:${ac};white-space:nowrap;">${p.attacks}/${p.max_attacks} atk</td>
-            <td style="padding:5px 10px;font-size:11px;color:var(--muted);">${p.reason}</td>
-        </tr>`;
-    }).join('');
-
-    content.innerHTML = `
-        <div style="margin-bottom:12px;">
-            <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text);">
-                ${data.league} · ${data.war_size}v${data.war_size}
-            </span>
-            <span style="font-size:12px;color:var(--muted);margin-left:14px;">
-                <span style="color:var(--green);">✓ ${data.wins} win${data.wins!==1?'s':''}</span>
-                + <span style="color:var(--blue);">${data.guaranteed} guaranteed</span>
-                = <strong style="color:var(--text);">${total} total slot${total!==1?'s':''}</strong>
-                &nbsp;·&nbsp; ${given} already given
-                &nbsp;·&nbsp; <strong style="color:var(--accent);">${data.available} remaining</strong>
-            </span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
-            <thead><tr style="background:var(--surf2);">
-                <th style="padding:5px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Player</th>
-                <th style="padding:5px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Stars</th>
-                <th style="padding:5px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Attacks</th>
-                <th style="padding:5px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:'Rajdhani',sans-serif;">Why</th>
-            </tr></thead>
-            <tbody>${detailRows || '<tr><td colspan="4" style="padding:8px 10px;color:var(--muted);font-size:12px;">No players to suggest.</td></tr>'}</tbody>
-        </table>
-        <button onclick="applyCWLSuggestions()"
-                style="padding:7px 18px;background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:7px;color:var(--green);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap;">
-            ✓ Apply Suggestions
-        </button>
-        <button onclick="openCWLBonusReportModal()"
-                style="padding:7px 18px;background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.3);border-radius:7px;color:var(--blue);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap;margin-left:8px;">
-            📋 Copy Report
-        </button>`;
-
-    // Highlight suggested rows
-    document.querySelectorAll('#cwl-bonus-table tbody tr').forEach(row => {
-        const isSuggested = suggestedSet.has(row.dataset.tag);
-        row.style.background = isSuggested ? 'rgba(88,166,255,0.07)' : '';
-        row.style.borderLeft = isSuggested ? '3px solid var(--blue)' : '';
-    });
-}
-
-function applyCWLSuggestions() {
-    if (!window._cwlSuggestedTags || !window._cwlCurrentMonth) return;
-    if (!confirm(`Apply bonus to ${window._cwlSuggestedTags.length} suggested player(s)?`)) return;
-
-    fetch('/admin/cwl-bonus/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: window._cwlCurrentMonth, tags: window._cwlSuggestedTags }),
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (!data.ok) { alert('Error: ' + (data.error || 'Unknown')); return; }
-
-        // Update buttons in-place — no reload needed, highlights stay
-        const cur = window._cwlCurrentMonth;
-        window._cwlSuggestedTags.forEach(tag => {
-            const btn = document.getElementById(`cwlb-${tag.replace('#', '')}-${cur}`);
-            if (btn && btn.dataset.state !== 'true') {
-                btn.className    = 'gc-toggle gc-yes';
-                btn.dataset.state = 'true';
-                btn.textContent  = '✓';
-            }
-        });
-
-        // Update meta count
-        const newGiven = (window._cwlTotalBonuses || 0) - (data.added !== undefined
-            ? (window._cwlTotalBonuses - window._cwlSuggestedTags.length) : 0);
-        const total = window._cwlTotalBonuses || '?';
-        const given = window._cwlSuggestedTags.length + (parseInt(document.getElementById('cwl-bonus-meta').textContent) || 0);
-        // Simpler: just re-count from the buttons
-        const curGiven = document.querySelectorAll(`[id^="cwlb-"][id$="-${cur}"].gc-yes`).length;
-        document.getElementById('cwl-bonus-meta').textContent =
-            `${curGiven}/${total} slot${total !== 1 ? 's' : ''} filled`;
-
-        document.getElementById('cwl-suggestion-panel').style.display = 'none';
-        window._cwlSuggestedTags = null;
-    });
-}
-
-function buildCWLBonusReportText() {
-    const data = window._cwlSuggestData;
+// ── report (unchanged logic; rebuilds the backend priority queue for a Discord paste) ──
+function buildReportText() {
+    const data = window._cwl.suggest;
     if (!data) return '';
-    const month = window._cwlCurrentMonth || '';
+    const month = window._cwl.month || '';
     const participants = data.participants || [];
     const available = data.available || 0;
 
-    function fmtMonth(m) {
-        if (!m) return m;
-        const [y, mo] = m.split('-');
-        const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        return `${names[parseInt(mo) - 1]} ${y}`;
-    }
     function waitDesc(p) {
         if (!p.last_bonus) return 'never had a bonus';
         if (p.months_ago === 1) return 'bonus last CWL';
@@ -726,7 +833,6 @@ function buildCWLBonusReportText() {
         return `${String(p.stars).padStart(2)}⭐ ${(p.destruction || 0).toFixed(1)}%`;
     }
 
-    // Rebuild priority queue exactly as backend
     const queue = participants
         .filter(p => !p.has_bonus && p.attacks >= p.max_attacks)
         .sort((a, b) => {
@@ -736,24 +842,16 @@ function buildCWLBonusReportText() {
             return (b.destruction || 0) - (a.destruction || 0);
         });
 
-    const selected     = queue.slice(0, available);
-    const notSelected  = queue.slice(available);
+    const selected = queue.slice(0, available);
+    const notSelected = queue.slice(available);
     const selectedTags = new Set(selected.map(p => p.tag));
 
-    // Stats only matter when a wait-time tier was actually contested — i.e. it has both a
-    // winner and a loser sharing the same wait. An uncontested tier (everyone in it either all
-    // got the bonus or all missed it) needs no further explanation beyond the wait time itself.
     const byWait = {};
-    queue.forEach(p => {
-        const key = p.last_bonus || '';
-        (byWait[key] = byWait[key] || []).push(p);
-    });
-    const contestedWaits = new Set(Object.keys(byWait).filter(key => {
-        const grp = byWait[key];
-        return grp.some(p => selectedTags.has(p.tag)) && grp.some(p => !selectedTags.has(p.tag));
+    queue.forEach(p => { const k = p.last_bonus || ''; (byWait[k] = byWait[k] || []).push(p); });
+    const contested = new Set(Object.keys(byWait).filter(k => {
+        const g = byWait[k]; return g.some(p => selectedTags.has(p.tag)) && g.some(p => !selectedTags.has(p.tag));
     }));
-    const needsStats = p => contestedWaits.has(p.last_bonus || '');
-    const statSuffix = p => needsStats(p) ? ` => ${statLine(p)}` : '';
+    const statSuffix = p => contested.has(p.last_bonus || '') ? ` => ${statLine(p)}` : '';
 
     function bonusReason(p) {
         if (p.has_bonus && !selectedTags.has(p.tag)) return 'already had bonus this month';
@@ -761,297 +859,57 @@ function buildCWLBonusReportText() {
         return waitDesc(p);
     }
 
-    // Bonus group sorted by priority (never bonused first, then longest wait, then most stars, then most destruction)
-    const bonusGroup = [
-        ...selected,
-        ...participants.filter(p => p.has_bonus && !selectedTags.has(p.tag)),
-    ].sort((a, b) => {
-        const la = a.last_bonus || '', lb = b.last_bonus || '';
-        if (la !== lb) return la < lb ? -1 : 1;
-        if (b.stars !== a.stars) return b.stars - a.stars;
-        return (b.destruction || 0) - (a.destruction || 0);
-    });
-
+    const bonusGroup = [...selected, ...participants.filter(p => p.has_bonus && !selectedTags.has(p.tag))]
+        .sort((a, b) => {
+            const la = a.last_bonus || '', lb = b.last_bonus || '';
+            if (la !== lb) return la < lb ? -1 : 1;
+            if (b.stars !== a.stars) return b.stars - a.stars;
+            return (b.destruction || 0) - (a.destruction || 0);
+        });
     const missedAtk = participants.filter(p => !p.has_bonus && p.attacks < p.max_attacks);
 
-    // Pad the name column to a consistent width across every section, so bullet lines line up
-    // when pasted somewhere monospace (Discord/Slack code block) — plain spaces survive copy-paste
-    // everywhere, unlike tab characters.
     const maxNameLen = Math.max(0, ...[...bonusGroup, ...notSelected, ...missedAtk].map(p => p.name.length));
     const name = p => p.name.padEnd(maxNameLen);
     const SEP = '-------------------';
-    // Insert a separator line between each player line (not after the last one) within a section.
     const withSep = arr => arr.flatMap((line, i) => i === 0 ? [line] : [SEP, line]);
 
     const lines = [
-        `CWL Bonus · ${fmtMonth(month)} · ${data.league} ${data.war_size}v${data.war_size}`,
+        `CWL Bonus · ${_fmtMonthLong(month)} · ${data.league} ${data.war_size}v${data.war_size}`,
         `${data.wins} win${data.wins !== 1 ? 's' : ''} + ${data.guaranteed} guaranteed = ${data.total_bonuses} slots`,
         '',
         `✅ Got bonus (${bonusGroup.length}):`,
         ...withSep(bonusGroup.map(p => `${name(p)} : ${bonusReason(p)}${statSuffix(p)}`)),
     ];
-
     if (notSelected.length) {
         lines.push('', `❌ Not enough slots (${notSelected.length}):`);
         lines.push(...withSep(notSelected.map(p => `${name(p)} : ${waitDesc(p)}${statSuffix(p)}`)));
     }
-
     if (missedAtk.length) {
         lines.push('', `❌ Missed an attack (${missedAtk.length}):`);
         lines.push(...withSep(missedAtk.map(p => `${name(p)} : ${p.attacks}/${p.max_attacks} atk`)));
     }
-
     return '```\n' + lines.join('\n') + '\n```';
 }
 
-function openCWLBonusReportModal() {
-    document.getElementById('cwlReportText').value = buildCWLBonusReportText();
+function openReport() {
+    document.getElementById('cwlReportText').value = buildReportText();
     document.getElementById('cwlReportCopied').style.display = 'none';
     document.getElementById('cwlReportBackdrop').style.display = 'block';
     document.getElementById('cwlReportModal').style.display = 'block';
 }
-
-function closeCWLBonusReportModal() {
+function closeReport() {
     document.getElementById('cwlReportBackdrop').style.display = 'none';
     document.getElementById('cwlReportModal').style.display = 'none';
 }
-
-function copyCWLBonusReportModal() {
+function copyReport() {
     navigator.clipboard.writeText(document.getElementById('cwlReportText').value).then(() => {
         const el = document.getElementById('cwlReportCopied');
-        el.style.display = 'flex';
-        setTimeout(() => { el.style.display = 'none'; }, 2000);
+        el.style.display = 'inline'; setTimeout(() => { el.style.display = 'none'; }, 2000);
     });
 }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeReport(); });
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCWLBonusReportModal(); });
-
-// ── Ranked × Raid Skill Correlation ──────────────────────────────────────────
-
-const TH_COLORS = {
-    8:'#a0a0a0',9:'#8ba7c4',10:'#7ac47a',11:'#e8c84a',12:'#e87a4a',
-    13:'#d44ad4',14:'#4ad4d4',15:'#4a7ad4',16:'#e84a4a',17:'#e8a44a',18:'#63b950',
-};
-
-function loadSkillCorr() {
-    document.getElementById('skill-corr-btn').disabled = true;
-    document.getElementById('skill-corr-loading').style.display = 'inline';
-    fetch('/admin/skill-correlation')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('skill-corr-loading').style.display = 'none';
-            document.getElementById('skill-corr-result').style.display  = 'block';
-            renderSkillCorr(data);
-        })
-        .catch(() => {
-            document.getElementById('skill-corr-loading').textContent = 'Error loading data.';
-        });
-}
-
-function renderSkillCorr(data) {
-    const { players, pearson_r, n_correlated } = data;
-
-    // ── Summary pills ──
-    const r = pearson_r;
-    const rLabel = r === null ? 'N/A' : (r > 0 ? '+' : '') + r.toFixed(2);
-    const rColor = r === null ? 'var(--muted)'
-        : Math.abs(r) >= 0.5 ? 'var(--green)'
-        : Math.abs(r) >= 0.25 ? 'var(--yellow)'
-        : 'var(--muted)';
-    const rDesc  = r === null ? 'Not enough data'
-        : Math.abs(r) >= 0.6 ? (r > 0 ? 'Strong positive link' : 'Strong negative link')
-        : Math.abs(r) >= 0.35 ? (r > 0 ? 'Moderate positive link' : 'Moderate negative link')
-        : Math.abs(r) >= 0.15 ? 'Weak link'
-        : 'No meaningful link';
-
-    const withBoth  = players.filter(p => p.ranked_score !== null && p.raid_score !== null).length;
-    const withRanked = players.filter(p => p.ranked_score !== null).length;
-    const withRaid   = players.filter(p => p.raid_score !== null).length;
-
-    document.getElementById('skill-corr-summary').innerHTML = [
-        { label: 'Pearson r', val: rLabel, color: rColor, sub: rDesc },
-        { label: 'Data Points', val: n_correlated, color: 'var(--text)', sub: '≥3 ranked weeks + ≥3 raid weekends' },
-        { label: 'Has Ranked Data', val: withRanked, color: 'var(--accent)', sub: `of ${players.length} members` },
-        { label: 'Has Raid Data',   val: withRaid,   color: 'var(--accent)', sub: `of ${players.length} members` },
-    ].map(s => `
-        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:130px;">
-            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${s.label}</div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;color:${s.color};line-height:1;">${s.val}</div>
-            <div style="font-size:10px;color:var(--muted);margin-top:3px;">${s.sub}</div>
-        </div>`).join('');
-
-    // ── Scatter plot ──
-    const plotPlayers = players.filter(p => p.ranked_score !== null && p.raid_score !== null);
-    buildScatterPlot(plotPlayers, pearson_r);
-
-    // ── Table ──
-    buildCorrTable(players);
-
-    // ── Quadrant breakdown ──
-    buildQuadrants(plotPlayers);
-
-    document.getElementById('skill-corr-meta').textContent =
-        `r = ${rLabel} · ${n_correlated} data points`;
-}
-
-function buildScatterPlot(pts, r) {
-    const W = 480, H = 320;
-    const ml = 52, mr = 14, mt = 14, mb = 46;
-    const iw = W - ml - mr, ih = H - mt - mb;
-
-    const xs = pts.map(p => p.ranked_score), ys = pts.map(p => p.raid_score);
-    const xmin = xs.length ? Math.max(0,  Math.min(...xs) - 5) : 0;
-    const xmax = xs.length ? Math.min(100, Math.max(...xs) + 5) : 100;
-    const ymin = ys.length ? Math.max(0,  Math.min(...ys) - 5) : 0;
-    const ymax = ys.length ? Math.min(100, Math.max(...ys) + 5) : 100;
-
-    const px = x => ml + (x - xmin) / (xmax - xmin) * iw;
-    const py = y => mt + ih - (y - ymin) / (ymax - ymin) * ih;
-
-    // Regression line
-    let regLine = '';
-    if (pts.length >= 3 && r !== null) {
-        const n = pts.length, mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
-        const num = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0);
-        const den = xs.reduce((s,x)=>s+(x-mx)**2,0);
-        if (den) {
-            const slope = num/den, intercept = my - slope*mx;
-            const x0 = xmin, x1 = xmax;
-            const y0 = slope*x0+intercept, y1 = slope*x1+intercept;
-            const rColor = Math.abs(r)>=0.4 ? 'rgba(63,185,80,.5)' : 'rgba(139,148,158,.3)';
-            regLine = `<line x1="${px(x0)}" y1="${py(y0)}" x2="${px(x1)}" y2="${py(y1)}" stroke="${rColor}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
-        }
-    }
-
-    // Grid lines
-    const gridTicks = n => Array.from({length: n+1}, (_,i) => i*(100/n));
-    const vGrids = gridTicks(4).filter(v => v >= xmin && v <= xmax)
-        .map(v => `<line x1="${px(v)}" y1="${mt}" x2="${px(v)}" y2="${mt+ih}" stroke="var(--bord2)" stroke-width="1"/>
-                   <text x="${px(v)}" y="${mt+ih+14}" text-anchor="middle" font-size="10" fill="var(--muted)">${v}</text>`).join('');
-    const hGrids = gridTicks(4).filter(v => v >= ymin && v <= ymax)
-        .map(v => `<line x1="${ml}" y1="${py(v)}" x2="${ml+iw}" y2="${py(v)}" stroke="var(--bord2)" stroke-width="1"/>
-                   <text x="${ml-8}" y="${py(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`).join('');
-
-    // Dots
-    const dots = pts.map((p, i) => {
-        const cx = px(p.ranked_score), cy = py(p.raid_score);
-        const col = TH_COLORS[p.th] || '#8b949e';
-        return `<circle cx="${cx}" cy="${cy}" r="7" fill="${col}" fill-opacity=".85" stroke="${col}" stroke-width="1.5"
-            data-idx="${i}" class="sc-dot" style="cursor:pointer;"/>`;
-    }).join('');
-
-    // Labels for dots (abbreviated, non-overlapping — just always show)
-    const labels = pts.map(p => {
-        const cx = px(p.ranked_score), cy = py(p.raid_score);
-        const short = p.name.split(' ')[0].substring(0,8);
-        return `<text x="${cx}" y="${cy - 10}" text-anchor="middle" font-size="9" fill="var(--muted)" style="pointer-events:none;">${short}</text>`;
-    }).join('');
-
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block;width:100%;height:auto;">
-        ${vGrids}${hGrids}
-        <line x1="${ml}" y1="${mt}" x2="${ml}" y2="${mt+ih}" stroke="var(--border)" stroke-width="1"/>
-        <line x1="${ml}" y1="${mt+ih}" x2="${ml+iw}" y2="${mt+ih}" stroke="var(--border)" stroke-width="1"/>
-        ${regLine}
-        ${dots}
-        ${labels}
-        <text x="${ml + iw/2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="DM Sans,sans-serif">Ranked Score →</text>
-        <text x="12" y="${mt + ih/2}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="DM Sans,sans-serif" transform="rotate(-90,12,${mt+ih/2})">Raid Score →</text>
-        ${r !== null ? `<text x="${ml+iw-4}" y="${mt+12}" text-anchor="end" font-size="10" fill="var(--muted)">r = ${(r>0?'+':'')+r.toFixed(2)}</text>` : ''}
-    </svg>`;
-
-    const wrap = document.getElementById('skill-corr-scatter');
-    wrap.innerHTML = svg;
-
-    // Tooltip on hover
-    wrap.querySelectorAll('.sc-dot').forEach(el => {
-        const i = +el.dataset.idx;
-        const p = pts[i];
-        const html = `<div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;margin-bottom:4px;">${p.name} · TH${p.th}</div>
-                <div style="color:var(--muted);line-height:1.8;">
-                    🏆 Ranked score: <strong style="color:var(--text);">${p.ranked_score}/100</strong> <span style="color:var(--muted);font-size:10px;">(${p.ranked_weeks} weeks · ${p.ranked_games} battles)</span><br>
-                    💥 Raid score: <strong style="color:var(--text);">${p.raid_score}/100</strong> <span style="color:var(--muted);font-size:10px;">(${p.raid_weekends} weekends · ${p.raid_attacks} attacks)</span>
-                </div>`;
-        el.addEventListener('mouseenter', e => showFloatTip(html, e));
-        el.addEventListener('mousemove', e => moveFloatTip(e));
-        el.addEventListener('mouseleave', hideFloatTip);
-    });
-}
-
-function buildCorrTable(players) {
-    const sorted = [...players].sort((a, b) => {
-        const sa = (a.ranked_score ?? -1) + (a.raid_score ?? -1);
-        const sb = (b.ranked_score ?? -1) + (b.raid_score ?? -1);
-        return sb - sa;
-    });
-
-    const rows = sorted.map(p => {
-        const wr  = p.ranked_score !== null ? `${p.ranked_score}` : '<span style="color:var(--muted);font-size:10px;">no data</span>';
-        const rd  = p.raid_score   !== null ? `${p.raid_score}`   : '<span style="color:var(--muted);font-size:10px;">no data</span>';
-        const col = TH_COLORS[p.th] || '#8b949e';
-        const hasB = p.ranked_score !== null && p.raid_score !== null;
-        const diff = hasB ? (p.ranked_score - p.raid_score).toFixed(1) : null;
-        const diffCell = diff !== null
-            ? `<span style="font-family:'Rajdhani',sans-serif;font-size:12px;color:${diff > 5 ? 'var(--green)' : diff < -5 ? 'var(--red)' : 'var(--muted)'};">${diff > 0 ? '+' : ''}${diff}</span>`
-            : '—';
-        return `<tr>
-            <td style="padding:7px 12px;"><span style="font-family:'Rajdhani',sans-serif;font-weight:700;color:${col};">TH${p.th}</span></td>
-            <td style="padding:7px 12px;font-weight:600;">${p.name}</td>
-            <td style="padding:7px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">${wr}</td>
-            <td style="padding:7px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;">${rd}</td>
-            <td style="padding:7px 12px;text-align:center;">${diffCell}</td>
-            <td style="padding:7px 12px;text-align:center;color:var(--muted);font-size:11px;">${p.ranked_weeks || '—'}</td>
-            <td style="padding:7px 12px;text-align:center;color:var(--muted);font-size:11px;">${p.raid_weekends || '—'}</td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('skill-corr-table-wrap').innerHTML = `
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
-            <thead style="background:var(--surf2);position:sticky;top:0;z-index:1;">
-                <tr>
-                    <th style="padding:7px 12px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">TH</th>
-                    <th style="padding:7px 12px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Player</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Ranked Score</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Raid Score</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;" title="Ranked score minus Raid score">Δ</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Rnk Weeks</th>
-                    <th style="padding:7px 12px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;">Raid Wknds</th>
-                </tr>
-            </thead>
-            <tbody style="font-size:12px;">${rows}</tbody>
-        </table>`;
-}
-
-function buildQuadrants(pts) {
-    if (!pts.length) return;
-    const mx = pts.reduce((s,p)=>s+p.ranked_score,0)/pts.length;
-    const my = pts.reduce((s,p)=>s+p.raid_score,0)/pts.length;
-
-    const q = { tr: [], tl: [], br: [], bl: [] };
-    pts.forEach(p => {
-        const key = (p.ranked_score >= mx ? 'r' : 'l') + (p.raid_score >= my ? 't' : 'b');
-        if (q[key[1]+key[0]]) q[key[1]+key[0]].push(p.name);
-    });
-
-    const qdefs = [
-        { key:'tr', icon:'⭐', label:'Elite', desc:'High ranked + high raid', color:'var(--green)' },
-        { key:'tl', icon:'🏰', label:'Raid Specialist', desc:'Lower ranked, strong raid', color:'var(--accent)' },
-        { key:'br', icon:'⚔️', label:'Ranked Specialist', desc:'Strong ranked, lower raid', color:'#4a7ad4' },
-        { key:'bl', icon:'📉', label:'Needs Growth', desc:'Lower on both metrics', color:'var(--muted)' },
-    ];
-
-    document.getElementById('skill-corr-quadrants').innerHTML = qdefs.map(qd => {
-        const names = q[qd.key] || [];
-        return `<div style="background:var(--surf2);border:1px solid var(--border);border-left:3px solid ${qd.color};border-radius:10px;padding:12px 14px;">
-            <div style="font-size:16px;margin-bottom:4px;">${qd.icon}</div>
-            <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:${qd.color};margin-bottom:2px;">${qd.label}</div>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">${qd.desc}</div>
-            <div style="font-size:11px;color:var(--text);line-height:1.8;">${names.length ? names.join(', ') : '<span style="color:var(--muted);">—</span>'}</div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:${qd.color};margin-top:6px;">${names.length}</div>
-        </div>`;
-    }).join('');
-}
-
-document.addEventListener('DOMContentLoaded', loadCWLBonus);
+document.addEventListener('DOMContentLoaded', loadCWL);
 </script>
 
 </body>
