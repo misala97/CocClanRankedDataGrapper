@@ -2091,3 +2091,305 @@ throughout.
 **Known gap accepted:** the spec's "pending marker for the live season" is
 satisfied by exclusion from the math plus the `impeccable` pass adding the visual
 marker; Task 8's DB smoke check asserts the exclusion.
+
+---
+
+## Post-review tasks
+
+The final whole-branch review returned "Ready to merge: With fixes" — 10 spec-fidelity
+gaps, all on the template side — plus a decision to add durable coverage. Tasks 9-11 close
+them. Task 11 comes last so it pins the final shape of `stats.py`.
+
+Note on this plan's Global Constraints: the "no pytest" rule was an error. The repo has no
+tests, but nothing forbids them and pytest 9.0.3 is already installed. Task 11 supersedes
+that constraint.
+
+---
+
+### Task 9: Backend gaps — data the template needed but never received
+
+**Files:**
+- Modify: `coc_stats/features/ranked/stats.py`
+- Modify: `coc_stats/features/ranked/routes.py` (U+2028 literals only)
+- Test: scratchpad `verify_stats_9.py`
+
+**Interfaces produced:**
+- `VERDICT_BANDS: tuple[tuple[str, str], ...]` — canonical (label, badge) order
+- `player_aggregate` gains label-keyed `verdict_record`, plus `townhall_now`
+- `player_defense` gains `star_mix`
+- `clan_form` gains `basis`
+- `build_record_page` gains `live_season`
+
+- [ ] **Step 1: Write the failing verification script**
+
+Create scratchpad `verify_stats_9.py`:
+
+```python
+# -*- coding: utf-8 -*-
+import datetime as dt
+from types import SimpleNamespace as NS
+from features.ranked.stats import (
+    VERDICT_BANDS, player_aggregate, player_defense, clan_form,
+    build_record_page, build_defense_expectations,
+)
+
+
+def rec(score, badge='badge-wow', label='Very Good', th=15, rank=25, sid='s'):
+    return {'season_id': sid, 'start_day': dt.date(2026, 5, 4), 'score': score,
+            'badge': badge, 'label': label, 'attacks_used': 12, 'max_attacks': 12,
+            'townhall': th, 'league_tier': 'Titan League 25', 'league_rank': rank,
+            'trophies': 500, 'rank': 10}
+
+
+# --- VERDICT_BANDS: 8 labels, best to worst, No Attacks last ---
+labels = [b[0] for b in VERDICT_BANDS]
+assert labels == ['Godlike', 'Dominant', 'Very Good', 'Good', 'Bad',
+                  'Disaster', 'Useless', 'No Attacks'], labels
+assert len(set(labels)) == 8, 'labels must be unique'
+# badge-useless legitimately serves two different labels — that is the whole point
+assert [b[1] for b in VERDICT_BANDS].count('badge-useless') == 2
+
+# --- verdict_record keys on LABEL, so No Attacks never merges into Useless ---
+a = player_aggregate([
+    rec(0, 'badge-useless', 'No Attacks'),
+    rec(10, 'badge-useless', 'Useless'),
+    rec(90, 'badge-godlike', 'Godlike'),
+])
+assert a['verdict_record'] == {'No Attacks': 1, 'Useless': 1, 'Godlike': 1}, a['verdict_record']
+assert sum(a['verdict_record'].values()) == 3
+assert a['verdict_record'].get('No Attacks') == 1, 'non-participation must not read as bad play'
+
+# --- townhall_now is the most recent week's town hall ---
+assert player_aggregate([rec(70, th=14), rec(70, th=15)])['townhall_now'] == 15
+assert player_aggregate([])['townhall_now'] == 0
+
+# --- defense star_mix ---
+d = lambda t, s: NS(trophies=t, stars=s)
+recs = {'#A': [rec(70, sid='s1')]}
+logs = {('#A', 's1'): [d(40, 0), d(27, 1), d(14, 2), d(0, 3), d(0, 3)]}
+exp = build_defense_expectations(recs, logs)
+pd = player_defense('#A', recs['#A'], logs, exp)
+assert pd['star_mix'] == {0: 1, 1: 1, 2: 1, 3: 2}, pd['star_mix']
+assert sum(pd['star_mix'].values()) == pd['n']
+assert player_defense('#Z', recs['#A'], {}, exp)['star_mix'] == {}
+
+# --- clan_form reports which delta formula it used ---
+sids6 = ['s%d' % i for i in range(1, 7)]
+lab6 = {s: s for s in sids6}
+long_form = {'#A': [rec(v, sid=s) for s, v in zip(sids6, [50, 50, 50, 70, 70, 70])]}
+f6 = clan_form(long_form, sids6, lab6, depth_source=[])
+assert f6['basis'] == 'last three seasons', f6['basis']
+assert f6['delta'] == 20.0
+
+sids3 = ['s1', 's2', 's3']
+short_form = {'#A': [rec(v, sid=s) for s, v in zip(sids3, [50, 60, 70])]}
+f3 = clan_form(short_form, sids3, {s: s for s in sids3}, depth_source=[])
+assert f3['basis'] == 'first to last season', f3['basis']
+assert f3['delta'] == 20.0
+
+assert clan_form({}, [], {}, depth_source=[])['basis'] == 'first to last season'
+
+# --- build_record_page surfaces the live season instead of hiding it ---
+def week(tag, sid, day, done, logs=None):
+    return NS(league_season_id=sid, start_day=dt.date(2026, 5, day), is_done=done,
+              player_tag=tag, townhall=15, max_attacks=12, attack_wins=12,
+              attack_losses=0, league_tier='Titan League 25', trophies=500,
+              rank=10, battle_logs=logs or [])
+
+players = [NS(tag='#A', name='Ace')]
+weeks = [week('#A', 's%d' % i, i + 3, True) for i in range(1, 5)]
+weeks.append(week('#A', 'live', 30, False))
+page = build_record_page(players, weeks, 'all')
+assert 'live' not in page['seasons'], 'live season must stay out of the math'
+assert page['live_season'] is not None
+assert page['live_season']['label'] == '30.05.26', page['live_season']
+assert page['live_season']['participants'] == 1
+
+no_live = build_record_page(players, weeks[:4], 'all')
+assert no_live['live_season'] is None
+
+print('TASK 9 OK')
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Expected: `ImportError: cannot import name 'VERDICT_BANDS'`
+
+- [ ] **Step 3: Implement**
+
+In `stats.py`, add beside the other threshold constants:
+
+```python
+# Canonical verdict order, best to worst, with No Attacks last because it is a
+# participation state rather than a performance band. _ranked_verdict returns only
+# SEVEN badge classes for these EIGHT labels — badge-useless serves both 'Useless'
+# and 'No Attacks' — so verdict_record must key on the label. Keying on the badge
+# silently counts a week someone never attacked as a week they attacked badly,
+# collapsing the exact distinction the Absent band exists to preserve.
+VERDICT_BANDS = (
+    ('Godlike',    'badge-godlike'),
+    ('Dominant',   'badge-dominant'),
+    ('Very Good',  'badge-wow'),
+    ('Good',       'badge-good'),
+    ('Bad',        'badge-warning'),
+    ('Disaster',   'badge-suck'),
+    ('Useless',    'badge-useless'),
+    ('No Attacks', 'badge-useless'),
+)
+```
+
+In `player_aggregate`, key the record by label:
+
+```python
+    verdict_record = {}
+    for r in records:
+        verdict_record[r['label']] = verdict_record.get(r['label'], 0) + 1
+```
+
+and add to the returned dict, next to `league_now`:
+
+```python
+        'townhall_now':    records[-1]['townhall'] if records else 0,
+```
+
+In `player_defense`, add `star_mix = {}` beside `values`, and inside the log loop:
+
+```python
+            star_mix[log.stars or 0] = star_mix.get(log.stars or 0, 0) + 1
+```
+
+Return `'star_mix': {}` on the no-defenses path and `'star_mix': star_mix` otherwise.
+
+In `clan_form`, capture which branch produced the delta:
+
+```python
+    if len(means) >= 6:
+        delta = round(sum(means[-3:]) / 3 - sum(means[-6:-3]) / 3, 1)
+        basis = 'last three seasons'
+    elif len(means) >= 2:
+        delta = round(means[-1] - means[0], 1)
+        basis = 'first to last season'
+    else:
+        delta = 0.0
+        basis = 'first to last season'
+```
+
+Add `'basis': basis,` to the returned dict.
+
+In `build_record_page`, after `season_ids` is computed:
+
+```python
+    # The live season is excluded from every aggregate, but the page still shows it
+    # as pending — silently omitting it makes an in-progress week look like it does
+    # not exist at all.
+    live = None
+    for w in weeks:
+        if w.is_done or w.player_tag not in in_clan:
+            continue
+        if live is None or (w.start_day and live['_day'] and w.start_day < live['_day']):
+            live = {'season_id': w.league_season_id, '_day': w.start_day,
+                    'label': w.start_day.strftime('%d.%m.%y') if w.start_day
+                             else w.league_season_id,
+                    'participants': 0}
+    if live:
+        live['participants'] = sum(
+            1 for w in weeks
+            if not w.is_done and w.player_tag in in_clan
+            and w.league_season_id == live['season_id'])
+        live.pop('_day')
+```
+
+Add `'live_season': live,` to the returned dict.
+
+In `routes.py`, replace the two **literal** U+2028/U+2029 characters inside
+`_script_safe_json` with escape sequences. They are unreachable (`json.dumps` defaults to
+`ensure_ascii=True`), but as literal control characters they make the function appear to
+have malformed lines in editors, `str.splitlines()`, and diff tools. The first argument of
+each of those two `.replace()` calls should become `' '` / `' '` written as
+escape sequences rather than the raw characters.
+
+- [ ] **Step 4: Run to verify it passes**
+
+Expect `TASK 9 OK`. Then re-run `verify_stats_1.py` through `verify_stats_6.py` and
+`verify_route_6/7/8.py`. `verify_stats_2.py` asserts the OLD badge-keyed `verdict_record`
+(`{'badge-wow': 4}`); update that single assertion to the label-keyed form
+(`{'Very Good': 4}`) and say so explicitly in your report.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add coc_stats/features/ranked/stats.py coc_stats/features/ranked/routes.py
+git commit -m "fix(ranked): key verdict record by label, add TH/star-mix/basis/live season"
+```
+
+---
+
+### Task 10: Template gaps — render what the spec asked for
+
+**Files:**
+- Modify: `coc_stats/templates/ranked/ranked_stats.html`
+- Modify: `coc_stats/features/ranked/routes.py` (pass `verdict_bands` and `live_season`)
+- Test: scratchpad `verify_route_10.py`
+
+Depends on Task 9's fields. Each item traces to a spec line:
+
+1. **Verdict strip** — render all 8 `VERDICT_BANDS` slots in fixed order with counts,
+   each carrying its badge class and an accessible label. Fixed slots are the point:
+   today the strip renders `.items()` in first-appearance order, so adjacent rows encode
+   the same bands in different positions and the strip cannot be compared between players.
+2. **Movers become clickable** — each `.mv-entry` becomes a `<button>` that opens that
+   player's drill-down. Absent and thin-tail players are not in the roster table, so give
+   both tail sections the same toggle + detail-row structure as roster rows, and have the
+   movers button target whichever exists. No player with a serialized payload may be
+   unreachable — today 5 of 37 are.
+3. **Zone 4 opening characterization** — a sentence derived from mean, sigma, trend and
+   attendance ("elite metronome", "boom-or-bust", "collapsing").
+4. **Zone 4 verdict record** — band counts plus best and worst week **with dates**, using
+   `best`, `worst`, and `records[].start_day`.
+5. **Defense star mix** — render `star_mix` as the conceded distribution.
+6. **Clan-form copy** — render `{{ form.basis }}` in place of the hardcoded
+   "across the last three seasons", which is false on the Last-4 window.
+7. **Live season pending marker** — show `live_season` beside the form chart, explicitly
+   labelled as in progress and not counted.
+8. **TH column** — add `townhall_now` to the roster table per the spec's row definition.
+9. **Participants in the chart tooltip** — a Chart.js `tooltip.callbacks.afterLabel`
+   reporting each point's participant count.
+10. **Renumber `#` after sort** — rewrite each row's first cell after `sortBy` runs, and
+    set `aria-sort` on the active header.
+11. **Replace `<abbr title>`** on the thin-defense asterisk with the project's native
+    Popover disclosure pattern — `title` is mouse-only and fails touch and keyboard.
+
+Verification must assert: 8 verdict slots render in fixed order; every movers entry is a
+`<button>`; no player present in the payload is unreachable; the rendered basis text
+matches the active window; the TH column exists; `aria-sort` appears after a sort. Re-run
+every prior route and stats script.
+
+```bash
+git commit -m "fix(ranked): close template spec gaps — verdict strip, clickable movers, Zone 4 bookends"
+```
+
+---
+
+### Task 11: pytest suite for the pure module
+
+**Files:**
+- Create: `tests/test_ranked_stats.py`
+- Modify: `requirements.txt` (add `pytest`)
+
+The repo's first tests. `stats.py` is pure — no Flask, no DB, no app context — so the suite
+must run via `python -m pytest tests/ -q` in under a second with no database available.
+
+Port the assertions built across Tasks 1-9 (nine scratchpad scripts), organised with shared
+fixtures instead of the duplicated per-script helpers. Cover at minimum: the TH-ceiling
+calibration (100 / 50 / 83 and why), trend windows at n=3,4,5,6,9, reliability band edges,
+`mean_badge` decoupling from per-week badges, defense band boundaries and band-vs-global
+normalization, the Absent-exclusion invariant, `FORM_BAND` exact boundaries, matchup fold
+arithmetic and the `enough` gate, near-miss inclusivity at exactly 90, `career_markers`
+first-week suppression, and Task 9's label-keyed verdict record.
+
+Do **not** test the route or template here — those need a database and belong in a separate
+smoke test if one is added later.
+
+```bash
+git commit -m "test(ranked): add pytest suite for the pure stats module"
+```
