@@ -148,6 +148,14 @@ def _newbie_check_count():
     except Exception:
         return 0
 
+def _pending_approval_count():
+    # Admin-only figure (the admin sub-nav badge + Overview alert tile). Guarded by
+    # the caller so the COUNT only runs for super admins, not every anonymous visitor.
+    try:
+        return AppUser.query.filter_by(is_approved=False).count()
+    except Exception:
+        return 0
+
 def _clan_badge_url():
     try:
         latest_war = ClanWar.query.order_by(ClanWar.start_time.desc()).first()
@@ -158,15 +166,17 @@ def _clan_badge_url():
 @app.context_processor
 def inject_auth():
     _nav_status = _nav_task_status()
+    _super = _is_super_admin()
     return {
         'current_user':  _current_user(),
-        'is_super_admin': _is_super_admin(),
+        'is_super_admin': _super,
         'is_env_admin':   _is_env_admin(),
         'can_create_reminder_ranked': _can_create_reminder_ranked(),
         'can_edit_clan_war': _can_edit_clan_war(),
         'nav_task_status': _nav_status,
         'nav_health': _nav_health(_nav_status),
         'newbie_check_count': _newbie_check_count(),
+        'pending_approvals': _pending_approval_count() if _super else 0,
         'clan_badge_url': _clan_badge_url(),
     }
 

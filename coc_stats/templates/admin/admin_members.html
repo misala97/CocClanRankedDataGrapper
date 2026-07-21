@@ -4,62 +4,92 @@
 {% include '_head.html' %}
         /* ── NAV: see _nav.html ── */
 
-        /* search */
-        .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-        .search-input {
-            padding: 8px 14px; background: var(--surface); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px;
-            width: 260px; transition: border-color .15s;
+        /* ── COLLAPSIBLE SECTION ── */
+        .collapse-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; margin-bottom: 20px; overflow: hidden;
         }
-        .search-input:focus { outline: none; border-color: var(--accent); }
-        .count-label { font-size: 12px; color: var(--muted); margin-left: auto; }
+        .collapse-header {
+            width: 100%; display: flex; align-items: center; gap: 14px;
+            padding: 18px 22px; background: none; border: none; color: var(--text);
+            cursor: pointer; text-align: left; transition: background 0.15s;
+        }
+        .collapse-header:hover { background: var(--surf2); }
+        .collapse-header-icon { font-size: 20px; line-height: 1; }
+        .collapse-header-title {
+            font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; flex: 1;
+        }
+        .collapse-header-meta { font-size: 12px; color: var(--muted); }
+        .collapse-chevron {
+            font-size: 11px; color: var(--muted);
+            transition: transform 0.2s; display: inline-block;
+        }
+        .collapse-chevron.open { transform: rotate(180deg); }
+        .collapse-body { padding: 0 22px 22px; border-top: 1px solid var(--border); }
+        .collapse-body.hidden { display: none; }
 
-        /* table */
+        /* ── MEMBER ADMIN ── */
         .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
-        thead th {
-            padding: 11px 16px; text-align: left; font-size: 10px; font-weight: 700;
-            color: var(--muted); text-transform: uppercase; letter-spacing: .8px; white-space: nowrap;
+        .member-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .member-table th {
+            padding: 9px 14px; text-align: left; font-size: 10px; font-weight: 700;
+            color: var(--muted); text-transform: uppercase; letter-spacing: .8px;
+            border-bottom: 1px solid var(--border); background: var(--surf2);
         }
-        tbody tr { border-bottom: 1px solid var(--bord2); transition: background .1s; }
-        tbody tr:last-child { border-bottom: none; }
-        tbody tr:hover { background: rgba(255,255,255,.02); }
-        td { padding: 10px 16px; vertical-align: middle; }
-
-        .player-name { font-weight: 600; font-size: 13px; }
-        .player-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; }
-
-        /* group chat toggle */
+        .member-table td { padding: 9px 14px; border-bottom: 1px solid var(--bord2); vertical-align: middle; }
+        .member-table tbody tr:last-child td { border-bottom: none; }
+        .member-table tbody tr:hover { background: rgba(255,255,255,.02); }
+        .m-name { font-weight: 600; font-size: 13px; }
+        .m-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; }
         .gc-toggle {
-            display: inline-flex; align-items: center; gap: 8px;
-            padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
             font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer;
-            border: 1px solid; transition: all .15s; white-space: nowrap;
+            border: 1px solid; transition: all .15s; white-space: nowrap; background: transparent;
         }
-        .gc-yes { background: rgba(63,185,80,.12); color: var(--green); border-color: rgba(63,185,80,.3); }
-        .gc-yes:hover { background: rgba(63,185,80,.2); }
-        .gc-no  { background: rgba(139,148,158,.08); color: var(--muted); border-color: rgba(139,148,158,.2); }
-        .gc-no:hover  { background: rgba(139,148,158,.15); border-color: rgba(139,148,158,.35); }
-
-        /* comment input */
+        .gc-yes { color: var(--green); border-color: rgba(63,185,80,.3); background: rgba(63,185,80,.08); }
+        .gc-yes:hover { background: rgba(63,185,80,.18); }
+        .gc-no  { color: var(--muted); border-color: rgba(139,148,158,.2); }
+        .gc-no:hover  { border-color: rgba(139,148,158,.4); color: var(--text); }
         .comment-wrap { display: flex; align-items: center; gap: 8px; }
         .comment-input {
-            flex: 1; min-width: 0; padding: 6px 10px;
+            flex: 1; min-width: 0; padding: 5px 10px;
             background: var(--surf2); border: 1px solid var(--bord2);
             border-radius: 6px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px;
             transition: border-color .15s;
         }
-        .comment-input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
-        .comment-input::placeholder { color: var(--muted); opacity: .6; }
-        .save-btn {
-            padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer;
+        .comment-input:focus { outline: none; border-color: var(--accent); }
+        .comment-input::placeholder { color: var(--muted); opacity: .5; }
+        .cm-save {
+            padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; cursor: pointer; white-space: nowrap;
             background: transparent; border: 1px solid var(--border); color: var(--muted);
-            transition: all .15s; white-space: nowrap;
+            transition: all .15s;
         }
-        .save-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .save-btn.saved { border-color: var(--green); color: var(--green); }
+        .cm-save:hover { border-color: var(--accent); color: var(--accent); }
+        .cm-save.saved { border-color: var(--green); color: var(--green); }
+        .m-search {
+            padding: 7px 12px; background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 7px; color: var(--text); font-family: 'DM Sans', sans-serif;
+            font-size: 13px; width: 220px; transition: border-color .15s; margin-bottom: 14px;
+        }
+        .m-search:focus { outline: none; border-color: var(--accent); }
+
+        /* ── WAR PREFERENCE ── */
+        .wp-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 700;
+            font-family: 'Rajdhani', sans-serif; letter-spacing: .4px;
+            border: none; transition: all .15s; white-space: nowrap;
+        }
+        .wp-btn.wp-readonly { cursor: default; opacity: .8; }
+        .wp-btn:not(.wp-readonly) { cursor: pointer; }
+        .wp-in   { background: var(--green); color: #0d1117; }
+        .wp-btn:not(.wp-readonly).wp-in:hover   { filter: brightness(1.15); }
+        .wp-out  { background: var(--red-solid);   color: #fff; }
+        .wp-btn:not(.wp-readonly).wp-out:hover  { filter: brightness(1.15); }
+        .wp-none { background: var(--surf2); color: var(--muted); border: 1px solid var(--border); }
+        .wp-btn:not(.wp-readonly).wp-none:hover { color: var(--text); border-color: var(--muted); }
 
         /* ── FOOTER ── */
         .page-footer {
@@ -67,15 +97,7 @@
             margin-top: 4px; border-top: 1px solid var(--bord2);
             font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
         }
-
-        .toast {
-            position: fixed; bottom: 24px; right: 24px; z-index: 999;
-            background: var(--surface); border: 1px solid var(--green); border-radius: 8px;
-            padding: 10px 18px; font-size: 13px; color: var(--green);
-            font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: .3px;
-            opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none;
-        }
-        .toast.show { opacity: 1; transform: translateY(0); }
+        .count-label { font-size: 12px; color: var(--muted); margin-left: auto; }
     </style>
 </head>
 <body>
@@ -86,19 +108,47 @@
 {% set page_header_desc = 'Comments and group chat status' %}
 {% set page_header_meta = [{'value': players | length, 'label': 'Active members'}] %}
 {% set page_controls %}
-<input type="search" class="selector" id="search" placeholder="Search player…" oninput="filterTable()" style="min-width:280px;">
+<input type="search" class="selector" id="memberSearch" placeholder="Search player…" oninput="filterMembers()" style="min-width:280px;">
 <span class="count-label" id="countLabel" style="color:var(--muted);font-size:13px;margin-left:4px;">{{ players | length }} members</span>
 {% endset %}
 {% include '_page_header.html' %}
 
+{% include 'admin/_admin_tabs.html' %}
+
 <div class="container">
 
+    <!-- ── New Member Evaluator ── -->
+    <div class="collapse-card" id="new-member-card">
+        <div class="collapse-header">
+            <span class="collapse-header-icon">🆕</span>
+            <span class="collapse-header-title">New Member Check</span>
+            <span class="collapse-header-meta" id="new-member-meta">evaluate recently joined players</span>
+        </div>
+        <div class="collapse-body" id="body-new-member">
+
+            <!-- Controls -->
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;margin-bottom:20px;">
+                <button onclick="loadNewMembers()" id="nm-btn"
+                        style="padding:7px 18px;background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.35);border-radius:7px;color:var(--accent);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;text-transform:uppercase;transition:all .15s;">
+                    Run Evaluation
+                </button>
+                <span id="nm-loading" style="display:none;color:var(--muted);font-size:12px;">Fetching live data…</span>
+            </div>
+
+            <!-- Results -->
+            <div id="nm-result"></div>
+
+        </div>
+    </div>
+
     <div class="table-wrap">
-        <table id="memberTable">
+        <div style="overflow-x:auto;">
+        <table class="member-table" id="memberTable">
             <thead>
                 <tr>
                     <th>Player</th>
                     <th>Group Chat</th>
+                    <th>War Pref</th>
                     <th>Comment</th>
                 </tr>
             </thead>
@@ -106,48 +156,62 @@
             {% for p in players %}
             <tr data-name="{{ (p.name or '') | lower }}" data-tag="{{ p.tag | lower }}">
                 <td>
-                    <div class="player-name">{{ p.name or p.tag }}</div>
-                    <div class="player-tag">{{ p.tag }}</div>
+                    <div class="m-name">{{ p.name or p.tag }}</div>
+                    <div class="m-tag">{{ p.tag }}</div>
                 </td>
                 <td>
                     <button class="gc-toggle {% if p.in_group_chat %}gc-yes{% else %}gc-no{% endif %}"
                             data-tag="{{ p.tag }}"
                             data-state="{{ 'true' if p.in_group_chat else 'false' }}"
-                            onclick="toggleGroupChat(this)">
-                        {% if p.in_group_chat %}✓ In Group Chat{% else %}✗ Not in Group Chat{% endif %}
+                            ondblclick="toggleGC(this)">
+                        {% if p.in_group_chat %}✓ In Group Chat{% else %}✗ Not in Chat{% endif %}
                     </button>
                 </td>
                 <td>
+                    <div style="display:flex; gap:10px; align-items:flex-end;">
+                        <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                            <span style="font-size:9px; color:var(--muted); font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.6px; text-transform:uppercase;">API</span>
+                            {% set wpi = p.war_preference_in_game or '' %}
+                            <button class="wp-btn wp-readonly wp-{{ wpi or 'none' }}" disabled title="In-game preference">
+                                {%- if wpi == 'in' %}In{%- elif wpi == 'out' %}Out{%- else %}—{%- endif %}
+                            </button>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                            <span style="font-size:9px; color:var(--muted); font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.6px; text-transform:uppercase;">Custom</span>
+                            {% set wpc = p.war_preference_custom or '' %}
+                            <button class="wp-btn wp-{{ wpc or 'none' }}"
+                                    data-tag="{{ p.tag }}"
+                                    data-state="{{ wpc }}"
+                                    ondblclick="cycleWarPref(this)"
+                                    title="Double-click to change">
+                                {%- if wpc == 'in' %}In{%- elif wpc == 'out' %}Out{%- else %}—{%- endif %}
+                            </button>
+                        </div>
+                    </div>
+                </td>
+                <td>
                     <div class="comment-wrap">
-                        <input class="comment-input"
-                               type="text"
+                        <input class="comment-input" type="text"
                                data-tag="{{ p.tag }}"
                                value="{{ p.admin_comment or '' }}"
                                placeholder="Add a note…"
                                maxlength="300">
-                        <button class="save-btn" onclick="saveComment(this)">Save</button>
+                        <button class="cm-save" onclick="saveComment(this)">Save</button>
                     </div>
                 </td>
             </tr>
             {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 
 <div class="page-footer">{{ players | length }} member{{ 's' if players | length != 1 else '' }} · Member Administration</div>
 
-<div class="toast" id="toast">Saved</div>
-
 <script>
-function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 1800);
-}
-
-async function patch(tag, data) {
+// ── MEMBER ADMIN ─────────────────────────────────────────────
+async function memberPatch(tag, data) {
     const res = await fetch(`/admin/members/${encodeURIComponent(tag)}/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -156,46 +220,267 @@ async function patch(tag, data) {
     return res.ok;
 }
 
-function toggleGroupChat(btn) {
-    const tag      = btn.dataset.tag;
+function toggleGC(btn) {
     const newState = btn.dataset.state !== 'true';
     btn.dataset.state = newState ? 'true' : 'false';
-    btn.className  = 'gc-toggle ' + (newState ? 'gc-yes' : 'gc-no');
-    btn.textContent = newState ? '✓ In Group Chat' : '✗ Not in Group Chat';
-    patch(tag, { in_group_chat: newState }).then(ok => {
-        if (ok) showToast('Saved');
-    });
+    btn.className = 'gc-toggle ' + (newState ? 'gc-yes' : 'gc-no');
+    btn.textContent = newState ? '✓ In Group Chat' : '✗ Not in Chat';
+    memberPatch(btn.dataset.tag, { in_group_chat: newState });
 }
 
 function saveComment(btn) {
     const input = btn.previousElementSibling;
-    const tag   = input.dataset.tag;
-    patch(tag, { admin_comment: input.value }).then(ok => {
-        if (ok) {
-            btn.textContent = '✓ Saved';
-            btn.classList.add('saved');
-            showToast('Comment saved');
-            setTimeout(() => { btn.textContent = 'Save'; btn.classList.remove('saved'); }, 2000);
+    memberPatch(input.dataset.tag, { admin_comment: input.value }).then(ok => {
+        if (!ok) return;
+        btn.textContent = '✓';
+        btn.classList.add('saved');
+        setTimeout(() => { btn.textContent = 'Save'; btn.classList.remove('saved'); }, 2000);
+    });
+}
+
+document.querySelectorAll('.comment-input').forEach(inp => {
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.nextElementSibling.click(); });
+});
+
+function cycleWarPref(btn) {
+    const states = ['', 'in', 'out'];
+    const labels = { '': '—', 'in': 'In', 'out': 'Out' };
+    const classes = { '': 'wp-none', 'in': 'wp-in', 'out': 'wp-out' };
+    const next = states[(states.indexOf(btn.dataset.state) + 1) % states.length];
+    btn.dataset.state = next;
+    btn.className = 'wp-btn ' + classes[next];
+    btn.textContent = labels[next];
+    memberPatch(btn.dataset.tag, { war_preference_custom: next });
+}
+
+function filterMembers() {
+    const q = document.getElementById('memberSearch').value.toLowerCase();
+    document.querySelectorAll('#memberTable tbody tr').forEach(row => {
+        row.style.display = (!q || row.dataset.name.includes(q) || row.dataset.tag.includes(q)) ? '' : 'none';
+    });
+}
+
+// ── New Member Evaluator ──────────────────────────────────────────────────────
+function loadNewMembers() {
+    const btn     = document.getElementById('nm-btn');
+    const loading = document.getElementById('nm-loading');
+    const result  = document.getElementById('nm-result');
+
+    btn.disabled = true;
+    loading.style.display = 'inline';
+    result.innerHTML = '';
+
+    fetch('/admin/evaluate-new-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        loading.style.display = 'none';
+        document.getElementById('new-member-meta').textContent =
+            `${data.count} unchecked player${data.count !== 1 ? 's' : ''}`;
+        renderNewMembers(data.results);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        loading.style.display = 'none';
+        result.innerHTML = `<div style="color:var(--red);font-size:13px;padding:8px 0;">Error: ${err.message}</div>`;
+    });
+}
+
+function nmMarkChecked(tag, rowId) {
+    fetch(`/admin/members/${encodeURIComponent(tag)}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newbie_check: true }),
+    }).then(r => {
+        if (!r.ok) return;
+        const card = document.getElementById(rowId);
+        if (card) card.remove();
+        const meta = document.getElementById('new-member-meta');
+        const m = meta.textContent.match(/(\d+)/);
+        if (m) {
+            const n = Math.max(0, parseInt(m[1]) - 1);
+            meta.textContent = `${n} unchecked player${n !== 1 ? 's' : ''}`;
         }
     });
 }
 
-// Save on Enter key
-document.querySelectorAll('.comment-input').forEach(inp => {
-    inp.addEventListener('keydown', e => {
-        if (e.key === 'Enter') inp.nextElementSibling.click();
-    });
-});
+const NM_V = {
+    accept:  { color: 'var(--green)',  bg: 'rgba(63,185,80,.12)',  border: 'rgba(63,185,80,.3)',  label: '✓ Accept',  stripe: '#3fb950' },
+    decline: { color: 'var(--red)',    bg: 'rgba(248,81,73,.12)',  border: 'rgba(248,81,73,.3)',  label: '✗ Decline', stripe: '#f85149' },
+    consider:{ color: 'var(--accent)', bg: 'rgba(240,165,0,.12)', border: 'rgba(240,165,0,.3)',  label: '? Consider', stripe: '#f0a500' },
+};
+const NM_C = {
+    pass: { color: 'var(--green)',  bg: 'rgba(63,185,80,.1)',  border: 'rgba(63,185,80,.25)',  icon: '✓' },
+    warn: { color: 'var(--yellow)', bg: 'rgba(240,165,0,.1)', border: 'rgba(240,165,0,.25)', icon: '⚠' },
+    fail: { color: 'var(--red)',    bg: 'rgba(248,81,73,.1)', border: 'rgba(248,81,73,.25)', icon: '✗' },
+};
 
-function filterTable() {
-    const q = document.getElementById('search').value.toLowerCase();
-    let visible = 0;
-    document.querySelectorAll('#memberTable tbody tr').forEach(row => {
-        const match = !q || row.dataset.name.includes(q) || row.dataset.tag.includes(q);
-        row.style.display = match ? '' : 'none';
-        if (match) visible++;
-    });
-    document.getElementById('countLabel').textContent = visible + ' member' + (visible !== 1 ? 's' : '');
+function nmHeroBarColor(pct) {
+    if (pct >= 75) return 'var(--green)';
+    if (pct >= 50) return 'var(--yellow)';
+    return 'var(--red)';
+}
+
+function renderNewMembers(results) {
+    const wrap = document.getElementById('nm-result');
+    if (!results.length) {
+        wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center;">All players have been checked — no unchecked members remain.</div>';
+        return;
+    }
+
+    const cards = results.map(p => {
+        const rowId    = 'nm-row-'    + p.tag.replace('#', '');
+        const detailId = 'nm-detail-' + p.tag.replace('#', '');
+        const vc       = NM_V[p.verdict] || NM_V.consider;
+
+        if (p.error) {
+            return `<div id="${rowId}" style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--red);border-radius:10px;">
+                <div style="flex:1;">
+                    <span style="font-weight:700;font-size:13px;">${p.name}</span>
+                    <span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:monospace;">${p.tag}</span>
+                    <span style="color:var(--red);font-size:12px;margin-left:12px;">API error: ${p.error}</span>
+                </div>
+                <button ondblclick="nmMarkChecked('${p.tag}','${rowId}')"
+                        style="padding:6px 14px;border-radius:7px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);transition:all .15s;white-space:nowrap;"
+                        onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+                        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">✓ Mark Checked</button>
+            </div>`;
+        }
+
+        // Hero bar
+        const hc = nmHeroBarColor(p.hero_pct);
+        const heroBar = `<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <div style="width:72px;height:5px;border-radius:3px;background:var(--bord2);overflow:hidden;">
+                <div style="height:100%;width:${Math.min(p.hero_pct,100)}%;background:${hc};border-radius:3px;"></div>
+            </div>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:${hc};min-width:36px;">${p.hero_pct}%</span>
+        </div>`;
+
+        // Check pills — labeled, color-coded
+        const pills = (p.checks || []).map(c => {
+            const cs = NM_C[c.status] || NM_C.warn;
+            return `<span title="${c.detail}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.3px;background:${cs.bg};color:${cs.color};border:1px solid ${cs.border};white-space:nowrap;cursor:default;">${cs.icon} ${c.label}</span>`;
+        }).join('');
+
+        // Verdict badge
+        const vBadge = `<div style="display:inline-flex;align-items:center;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;background:${vc.bg};color:${vc.color};border:1px solid ${vc.border};white-space:nowrap;">${vc.label}</div>`;
+
+        return `<div id="${rowId}"
+                     style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${vc.stripe};border-radius:10px;overflow:hidden;transition:box-shadow .2s;"
+                     onmouseover="this.style.boxShadow='0 4px 24px rgba(0,0,0,.3)'"
+                     onmouseout="this.style.boxShadow=''">
+            <!-- Main row -->
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;cursor:pointer;" onclick="nmToggleDetail('${detailId}')">
+                <!-- TH + name -->
+                <span style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--accent);padding:5px 11px;background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.2);border-radius:7px;flex-shrink:0;">TH${p.th}</span>
+                <div style="min-width:160px;flex-shrink:0;">
+                    <div style="font-weight:700;font-size:14px;line-height:1.25;"><a href="/player/${encodeURIComponent(p.tag.replace('#',''))}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:inherit;text-decoration:none;transition:color .15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color=''">${p.name} <span style="font-size:10px;opacity:.4;vertical-align:super;">↗</span></a></div>
+                    <div style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:2px;">${p.tag}</div>
+                    ${p.days_ago !== '?' && p.days_ago != null ? `<div style="font-size:10px;color:var(--muted);margin-top:1px;">joined ${p.days_ago}d ago</div>` : ''}
+                </div>
+                <!-- Hero bar -->
+                ${heroBar}
+                <!-- Check pills -->
+                <div style="display:flex;flex-wrap:wrap;gap:5px;flex:1;min-width:0;">${pills}</div>
+                <!-- Verdict + action -->
+                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+                    ${vBadge}
+                    <button ondblclick="event.stopPropagation();nmMarkChecked('${p.tag}','${rowId}')" onclick="event.stopPropagation()"
+                            style="padding:6px 14px;border-radius:7px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);transition:all .15s;white-space:nowrap;"
+                            onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+                            onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+                        ✓ Mark
+                    </button>
+                </div>
+            </div>
+            <!-- Expandable detail -->
+            <div id="${detailId}" style="display:none;border-top:1px solid var(--bord2);background:var(--surf2);">
+                ${nmDetailPanel(p)}
+            </div>
+        </div>`;
+    }).join('');
+
+    wrap.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${cards}</div>`;
+}
+
+function nmDetailPanel(p) {
+    const heroRows = [...p.heroes].sort((a, b) => b.max_level - a.max_level).map(h => {
+        const pct = h.max_level > 0 ? Math.round(h.level / h.max_level * 100) : 0;
+        const col = nmHeroBarColor(pct);
+        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;">
+            <span style="font-size:12px;color:var(--text);width:130px;flex-shrink:0;">${h.name}</span>
+            <div style="flex:1;height:5px;border-radius:3px;background:var(--bord2);overflow:hidden;max-width:110px;">
+                <div style="height:100%;width:${pct}%;background:${col};border-radius:3px;"></div>
+            </div>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:${col};min-width:52px;">${h.level}/${h.max_level}</span>
+        </div>`;
+    }).join('') || '<span style="color:var(--muted);font-size:12px;">No heroes unlocked</span>';
+
+    const checkRows = p.checks.map(c => {
+        const cs = NM_C[c.status] || NM_C.warn;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--bord2);">
+            <span style="width:16px;text-align:center;font-weight:700;font-size:14px;color:${cs.color};flex-shrink:0;">${cs.icon}</span>
+            <span style="font-size:12px;font-weight:600;width:110px;flex-shrink:0;">${c.label}</span>
+            <span style="font-size:12px;color:var(--muted);">${c.detail}</span>
+        </div>`;
+    }).join('');
+
+    const rankChip = p.ranked_league
+        ? `<div style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;">
+               ${p.league_icon ? `<img src="${p.league_icon}" width="16" height="16" style="border-radius:2px;flex-shrink:0;">` : ''}
+               <span style="font-size:11px;font-weight:600;">${p.ranked_league}</span>
+           </div>`
+        : `<div style="padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:11px;color:var(--muted);">Unranked</div>`;
+
+    const statsRow = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--bord2);">
+        ${rankChip}
+        ${p.join_date && p.join_date !== '?' ? `<div style="padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;display:inline-flex;align-items:center;gap:6px;">
+            <span style="font-size:10px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Joined</span>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;">${p.join_date}</span>
+            ${p.days_ago !== '?' && p.days_ago != null ? `<span style="font-size:10px;color:var(--muted);">${p.days_ago}d ago</span>` : ''}
+        </div>` : ''}
+    </div>`;
+
+    const tagClean = p.tag.replace('#', '');
+    const iframeUrl = `/admin/proxy/clashspot/${tagClean}`;
+
+    return `<div style="padding:18px 20px;">
+        ${statsRow}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+            <div>
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;">Hero Development</div>
+                ${heroRows}
+            </div>
+            <div>
+                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Checks</div>
+                ${checkRows}
+            </div>
+        </div>
+        <div style="margin-top:20px;border-top:1px solid var(--bord2);padding-top:16px;">
+            <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">External Profile</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <a href="https://clashspot.net/en/player/${tagClean}/capital-raid-seasons" target="_blank" rel="noopener"
+                   style="display:inline-flex;align-items:center;gap:8px;padding:9px 18px;background:rgba(88,166,255,.08);color:#58a6ff;border:1px solid rgba(88,166,255,.3);border-radius:8px;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.4px;text-decoration:none;transition:all .15s;"
+                   onmouseover="this.style.background='rgba(88,166,255,.18)'" onmouseout="this.style.background='rgba(88,166,255,.08)'">
+                    🏰 Capital Raid Seasons ↗
+                </a>
+                <a href="https://clashspot.net/en/player/${tagClean}/view" target="_blank" rel="noopener"
+                   style="display:inline-flex;align-items:center;gap:8px;padding:9px 18px;background:rgba(240,165,0,.08);color:var(--accent);border:1px solid rgba(240,165,0,.3);border-radius:8px;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.4px;text-decoration:none;transition:all .15s;"
+                   onmouseover="this.style.background='rgba(240,165,0,.18)'" onmouseout="this.style.background='rgba(240,165,0,.08)'">
+                    👤 Full Profile ↗
+                </a>
+            </div>
+        </div>
+    </div>`;
+}
+
+function nmToggleDetail(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 </script>
 

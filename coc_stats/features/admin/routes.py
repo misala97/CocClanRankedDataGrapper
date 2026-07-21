@@ -17,6 +17,20 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.route('/admin')
 @require_super_admin
 def admin_hub():
+    # Overview / command deck. Sync-health (nav_health / nav_task_status), newbie_check_count,
+    # and pending_approvals arrive via the sitewide context processor — the Overview assembles
+    # only the two figures the processor doesn't carry.
+    return render_template(
+        'admin/admin_overview.html',
+        active_members=Player.query.filter_by(in_clan=True).count(),
+        app_users=AppUser.query.count(),
+        cwl_bonus=_cwl_bonus_available(),
+    )
+
+
+@admin_bp.route('/admin/monitor')
+@require_super_admin
+def admin_monitor():
     days = request.args.get('days', 7, type=int)
     if days not in [1, 7, 14, 30]:
         days = 7
@@ -115,14 +129,21 @@ def admin_hub():
             'gap_events':     gap_events,
         }
 
-    members = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
-
     return render_template(
-        'admin/admin_hub.html',
+        'admin/admin_monitor.html',
         by_function=dict(by_function),
         function_stats=function_stats,
         selected_days=days,
-        members=members,
+    )
+
+
+@admin_bp.route('/admin/roster')
+@require_super_admin
+def admin_roster():
+    # Shell page — the war-roster / CWL-bonus / skill-correlation tools each fetch
+    # their own data via existing AJAX endpoints.
+    return render_template(
+        'admin/admin_roster.html',
         current_month=dt.date.today().strftime('%Y-%m'),
     )
 
@@ -391,6 +412,56 @@ def _normalize_war_size(team_size):
     return 30
 
 
+def _cwl_bonus_available():
+    """Overview alert tile: how many bonus slots remain unassigned in the active CWL season.
+    available = (guaranteed-by-league/size + wins) − already-assigned. Needs no per-player
+    data. Returns {'count', 'season_label'} or None when there is no active season / N/A league."""
+    try:
+        from models import CWLSeason, CWLWar
+        from app import CLAN_TAG
+
+        # Active season = most recent season that hasn't ended yet (matches admin_cwl_bonus_list).
+        recent = CWLSeason.query.order_by(CWLSeason.season.desc()).limit(8).all()
+        season = next((s for s in recent if s.state and s.state != 'ended'), None)
+        if not season:
+            return None
+
+        wars = [w for w in CWLWar.query.filter_by(season_id=season.id).all()
+                if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
+        if not wars:
+            return None
+
+        war_size = _normalize_war_size(wars[0].team_size)
+        league_name = season.league_name
+        if not league_name:
+            our_war = next((w for w in wars if w.clan_tag == CLAN_TAG), None) or wars[0]
+            league_name = (our_war.clan_cwl_league if our_war.clan_tag == CLAN_TAG
+                           else our_war.opp_cwl_league) or ''
+
+        guaranteed = _GUARANTEED_BONUSES.get(_cwl_league_group(league_name), {}).get(war_size)
+        if guaranteed is None:
+            return None
+
+        wins = 0
+        for w in wars:
+            if w.state != 'warEnded':
+                continue
+            if w.clan_tag == CLAN_TAG:
+                our_s, opp_s = w.clan_stars or 0, w.opp_stars or 0
+                our_p, opp_p = float(w.clan_destruction_pct or 0), float(w.opp_destruction_pct or 0)
+            else:
+                our_s, opp_s = w.opp_stars or 0, w.clan_stars or 0
+                our_p, opp_p = float(w.opp_destruction_pct or 0), float(w.clan_destruction_pct or 0)
+            if our_s > opp_s or (our_s == opp_s and our_p > opp_p):
+                wins += 1
+
+        already   = CWLBonus.query.filter_by(month=season.season).count()
+        available = max(0, (guaranteed + wins) - already)
+        return {'count': available, 'season_label': season.season}
+    except Exception:
+        return None
+
+
 @admin_bp.route('/admin/cwl-bonus/suggest', methods=['POST'])
 @require_super_admin
 def admin_cwl_bonus_suggest():
@@ -621,6 +692,7 @@ def admin_member_update(tag):
 
 
 @admin_bp.route('/debug')
+@require_super_admin
 def debug_dashboard():
     filter_tag = request.args.get('player_tag', default='').strip()
     sort_by = request.args.get('sort', default='tag')
