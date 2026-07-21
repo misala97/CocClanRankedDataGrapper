@@ -1,663 +1,276 @@
 <!DOCTYPE html>
 <html lang="en">
-{% set page_title = 'Ranked Statistics - CoC Analytics' %}
+{% set page_title = 'The Record – CoC Analytics' %}
 {% set chartjs = true %}
 {% include '_head.html' %}
 
-    /* ── SUMMARY CARDS ── */
-    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
-    .sc {
-        background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-        padding: 20px 22px; position: relative; overflow: hidden;
-    }
-    .sc::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 12px 12px 0 0; }
-    .sc-purple::before { background: linear-gradient(90deg, var(--purple), transparent); }
-    .sc-gold::before   { background: linear-gradient(90deg, var(--accent), transparent); }
-    .sc-green::before  { background: linear-gradient(90deg, var(--green),  transparent); }
-    .sc-blue::before   { background: linear-gradient(90deg, var(--blue),   transparent); }
-    .sc-icon  { font-size: 18px; margin-bottom: 8px; }
-    .sc-value { font-family: 'Rajdhani', sans-serif; font-size: 34px; font-weight: 700; line-height: 1; margin-bottom: 5px; }
-    .sc-purple .sc-value { color: var(--purple); }
-    .sc-gold   .sc-value { color: var(--accent); }
-    .sc-green  .sc-value { color: var(--green);  }
-    .sc-blue   .sc-value { color: var(--blue);   }
-    .sc-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; }
+    /* ═══ THE RECORD — long-term Ranked. Structural pass only; visual language
+       comes from a later impeccable pass. ═══ */
+    .container { padding-bottom: 72px; }
 
-    /* ── WALL OF FAME ── */
-    .wof-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-    .wof-card {
-        background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-        padding: 14px 16px; display: flex; align-items: center; gap: 14px;
-        transition: border-color .18s;
-    }
-    .wof-card:hover { border-color: rgba(240,165,0,.3); }
-    .wof-icon { font-size: 26px; flex-shrink: 0; width: 40px; text-align: center; }
-    .wof-body { min-width: 0; }
-    .wof-role  { font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 3px; }
-    .wof-name  { font-weight: 700; font-size: 14.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
-    .wof-stat  { font-family: 'Rajdhani', sans-serif; font-size: 13px; color: var(--muted); }
-    .wof-val   { color: var(--accent); font-weight: 700; }
+    .form-verdict { font-weight: 700; }
+    .form-chart-wrap { position: relative; height: 220px; margin: 16px 0 28px; }
 
-    /* ── PANELS ── */
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-    .panel-hdr {
-        display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
-        padding: 12px 18px; border-bottom: 1px solid var(--bord2); background: var(--surf2);
-    }
-    .panel-title { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .9px; }
-    .panel-sub   { font-size: 11px; color: var(--muted); opacity: .6; }
-    .panel-body  { padding: 18px; }
+    .mv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+    .mv-band { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .mv-band h3 { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; margin: 0 0 10px; }
+    .mv-entry { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; }
+    .mv-empty { color: var(--muted); font-size: 12px; }
 
-    /* ── CHARTS ROW ── */
-    .charts-row { display: grid; grid-template-columns: 1fr 380px; gap: 16px; margin-bottom: 24px; height: 300px; }
-    .charts-row .panel { display: flex; flex-direction: column; }
-    .charts-row .panel .panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
-    .chart-wrap { flex: 1; min-height: 0; position: relative; }
-    .career-select {
-        padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
-        font-size: 12px; font-family: 'DM Sans', sans-serif;
-        background: var(--surf2); color: var(--text); width: 100%; cursor: pointer;
-    }
-    .career-select:focus { outline: none; border-color: var(--accent); }
+    #record-table { width: 100%; border-collapse: collapse; }
+    #record-table th { text-align: left; font-size: 10.5px; letter-spacing: 1.2px;
+                       text-transform: uppercase; padding: 8px 10px; cursor: pointer; }
+    #record-table td { padding: 8px 10px; border-top: 1px solid var(--bord2); }
+    .rec-toggle { background: none; border: 0; color: inherit; font: inherit;
+                  cursor: pointer; text-align: left; width: 100%; }
+    .rec-detail { display: none; }
+    .rec-detail.open { display: table-row; }
+    .rec-tail { margin-top: 24px; }
+    .rec-tail h3 { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; }
 
-    /* ── TH ERA GRID ── */
-    .th-era-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
-    .th-era-scroll { overflow-x: auto; }
-    .th-era-scroll::-webkit-scrollbar { height: 5px; }
-    .th-era-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-    .th-era-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
-    .th-era-name-th {
-        min-width: 130px; width: 130px; background: var(--surf2);
-        border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
-        font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase;
-        letter-spacing: .5px; padding: 0 12px 8px; vertical-align: bottom;
+    @media (max-width: 760px) {
+        .mv-grid { grid-template-columns: 1fr; }
+        #record-table thead { display: none; }
+        #record-table tr.rec-row { display: block; border-top: 1px solid var(--bord2); }
+        #record-table tr.rec-row td { display: inline-block; border: 0; padding: 4px 8px; }
     }
-    .th-era-th {
-        min-width: 80px; width: 80px; height: 44px; background: var(--surf2);
-        border-bottom: 1px solid var(--border); border-right: 1px solid var(--bord2);
-        text-align: center; vertical-align: middle;
-        font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted);
-    }
-    .th-era-player-cell {
-        min-width: 130px; width: 130px; padding: 0 12px; height: 48px;
-        border-right: 1px solid var(--border); border-bottom: 1px solid var(--bord2);
-        background: var(--surf2); font-size: 12.5px; font-weight: 600; color: var(--text);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
-    }
-    .th-era-cell {
-        min-width: 80px; width: 80px; height: 48px; text-align: center; vertical-align: middle;
-        border-right: 1px solid rgba(255,255,255,.04); border-bottom: 1px solid rgba(255,255,255,.04);
-        cursor: default; transition: filter .12s; position: relative;
-    }
-    .th-era-cell:hover { filter: brightness(1.4); z-index: 2; }
-    .th-era-score { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; line-height: 1.1; }
-    .th-era-meta  { font-size: 9.5px; color: var(--muted); margin-top: 1px; font-family: 'Rajdhani', sans-serif; }
-    .th-era-empty { color: var(--muted); opacity: .18; font-size: 14px; }
-    .th-era-row:last-child .th-era-player-cell,
-    .th-era-row:last-child .th-era-cell { border-bottom: none; }
-    .th-note { padding: 9px 18px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--bord2); line-height: 1.6; }
-
-    /* ── LEADERBOARD ── */
-    .lb-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
-    .lb-hdr { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--bord2); background: var(--surf2); flex-wrap: wrap; }
-    .lb-search {
-        padding: 6px 12px; border: 1px solid var(--border); border-radius: 7px;
-        font-size: 12px; font-family: 'DM Sans', sans-serif;
-        background: var(--bg); color: var(--text); width: 190px;
-    }
-    .lb-search:focus { outline: none; border-color: var(--accent); }
-    .lb-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-    .lb-table thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
-    .lb-table thead th {
-        padding: 9px 10px; text-align: left; font-weight: 600; color: var(--muted);
-        font-size: 10.5px; text-transform: uppercase; letter-spacing: .7px; white-space: nowrap;
-        cursor: pointer; user-select: none;
-    }
-    .lb-table thead th:hover { color: var(--text); }
-    .lb-table thead th.sort-asc::after  { content: ' ↑'; font-size: .85em; color: var(--accent); }
-    .lb-table thead th.sort-desc::after { content: ' ↓'; font-size: .85em; color: var(--accent); }
-    .lb-table thead th.sort-asc,
-    .lb-table thead th.sort-desc { color: var(--accent); }
-    .lb-table thead th:first-child { cursor: default; width: 40px; text-align: center; }
-    .lb-table tbody tr { border-bottom: 1px solid var(--bord2); transition: background .1s; }
-    .lb-table tbody tr:last-child { border-bottom: none; }
-    .lb-table tbody tr:hover { background: rgba(255,255,255,.03); }
-    .lb-table tbody td { padding: 9px 10px; vertical-align: middle; }
-    .rank-cell { text-align: center; font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; }
-    .rank-1 { color: #ffd700; } .rank-2 { color: #b0bec5; } .rank-3 { color: #cd7f32; } .rank-n { color: var(--muted); font-size: 12px; }
-    .p-name { font-weight: 600; font-size: 13px; color: var(--text); }
-    .p-tag  { font-size: 10px; color: var(--muted); margin-top: 1px; }
-    .p-link { color: inherit; text-decoration: none; transition: color .12s; }
-    .p-link:hover { color: var(--accent); }
-    .p-arrow { font-size: 9px; color: var(--muted); opacity: .35; vertical-align: super; transition: opacity .12s; }
-    .p-link:hover .p-arrow { opacity: 1; color: var(--accent); }
-    .num { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; }
-    .c-gold   { color: var(--accent); } .c-green { color: var(--green); }
-    .c-blue   { color: var(--blue);   } .c-purple{ color: var(--purple); }
-    .c-muted  { color: var(--muted);  } .c-red   { color: var(--red); }
-    .c-yellow { color: var(--yellow); }
-    .attend-bar { display: inline-block; width: 36px; height: 4px; border-radius: 2px; background: var(--bord2); vertical-align: middle; margin-right: 5px; position: relative; overflow: hidden; }
-    .attend-fill { height: 100%; border-radius: 2px; position: absolute; left: 0; top: 0; }
-    .trend-up   { color: var(--green); font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; }
-    .trend-down { color: var(--red);   font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; }
-    .trend-flat { color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 13px; }
-    .consist-bar { display: inline-block; width: 38px; height: 5px; border-radius: 3px; background: var(--bord2); vertical-align: middle; margin-right: 4px; position: relative; overflow: hidden; }
-    .consist-fill { height: 100%; border-radius: 3px; position: absolute; left: 0; top: 0; }
-    .badge-score {
-        display: inline-block; padding: 2px 8px; border-radius: 5px;
-        font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
-    }
-    .verdict-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; min-width: 72px; }
-    .lb-footer { padding: 9px 18px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
-
-    /* ── HEATMAP ── */
-    .heatmap-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
-    .hm-scroll { overflow-x: auto; }
-    .hm-scroll::-webkit-scrollbar { height: 5px; }
-    .hm-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-    .hm-table { border-collapse: collapse; font-size: 11.5px; }
-    .hm-th-corner { width: 80px; min-width: 80px; background: var(--surf2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; padding: 0 10px 10px; vertical-align: bottom; }
-    .hm-th-player { width: 48px; min-width: 48px; max-width: 48px; height: 110px; padding: 0; background: var(--surf2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--bord2); text-align: center; vertical-align: bottom; }
-    .hm-th-player span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; max-height: 96px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; margin-bottom: 10px; }
-    .hm-week-cell { width: 80px; min-width: 80px; padding: 0 10px; height: 32px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--bord2); background: var(--surf2); font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; vertical-align: middle; }
-    .hm-cell { width: 48px; min-width: 48px; max-width: 48px; height: 32px; text-align: center; vertical-align: middle; border-right: 1px solid rgba(255,255,255,.04); border-bottom: 1px solid rgba(255,255,255,.04); cursor: default; transition: filter .12s; position: relative; }
-    .hm-cell:hover { filter: brightness(1.35); z-index: 2; }
-    .hm-cell-val   { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; }
-    .hm-cell-empty { color: var(--muted); opacity: .2; font-size: 12px; }
-    .hm-row:last-child .hm-week-cell, .hm-row:last-child .hm-cell { border-bottom: none; }
-
-    /* ── PAGE FOOTER ── */
-    .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: .3px; }
-
-    /* ── RESPONSIVE ── */
-    @media (max-width: 1100px) { .charts-row { grid-template-columns: 1fr; height: auto; } .chart-wrap { height: 220px; flex: none; } }
-    @media (max-width: 900px)  { .container { padding-left: 20px; padding-right: 20px; } .summary-grid { grid-template-columns: repeat(2, 1fr); } .wof-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 480px)  { .summary-grid { grid-template-columns: 1fr; } .wof-grid { grid-template-columns: 1fr; } .lb-search { width: 130px; } }
-</style>
 </head>
 <body>
-
 {% include '_nav.html' %}
 
-{% set page_header_title = 'Ranked <span>Statistics</span>' %}
-{% set page_header_desc = 'All-time performance across every ranked season - segmented by Town Hall era' %}
+{% set page_header_title = 'The <span>Record</span>' %}
+{% set page_header_desc = 'Long-term Ranked performance — who is improving, who is sliding, and who you can count on.' %}
+{% set page_header_meta = [
+    {'value': form.current,   'label': 'clan form'},
+    {'value': form.vs_peak,   'label': 'vs peak (' ~ form.peak_label ~ ')',
+     'tone': 'loss' if form.vs_peak < 0 else 'win'},
+    {'value': form.depth,     'label': 'players at good+'},
+    {'value': seasons | length, 'label': 'seasons'}
+] %}
+{% set page_primary_control %}
+    <form method="get" class="window-form">
+        <label for="window-select" class="sr-only">Window</label>
+        <select id="window-select" name="window" onchange="this.form.submit()">
+            {% for w in windows %}
+            <option value="{{ w }}" {% if w == window %}selected{% endif %}>
+                {{ 'All seasons' if w == 'all' else 'Last ' ~ w }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+{% endset %}
 {% include '_page_header.html' %}
 
 <div class="container">
 
-    <!-- Summary cards -->
-    <div class="summary-grid">
-        <div class="sc sc-purple">
-            <div class="sc-icon">📅</div>
-            <div class="sc-value">{{ total_weeks }}</div>
-            <div class="sc-label">Seasons Tracked</div>
-        </div>
-        <div class="sc sc-gold">
-            <div class="sc-icon"><img src="/static/img/battle.png" style="width:20px;height:20px;"></div>
-            <div class="sc-value">{{ '{:,}'.format(all_attacks_total) }}</div>
-            <div class="sc-label">All-Time Attacks</div>
-        </div>
-        <div class="sc sc-green">
-            <div class="sc-icon"><img src="/static/img/star.png" style="width:20px;height:20px;"></div>
-            <div class="sc-value">{{ clan_three_star_rate }}%</div>
-            <div class="sc-label">Clan 3★ Rate</div>
-        </div>
-        <div class="sc sc-blue">
-            <div class="sc-icon">📊</div>
-            <div class="sc-value">{{ avg_clan_score }}</div>
-            <div class="sc-label">Avg Clan Score</div>
-        </div>
-    </div>
+    {# ── ZONE 1 — CLAN FORM ─────────────────────────────────────────── #}
+    <section aria-labelledby="form-h">
+        <h2 id="form-h" class="sr-only">Clan form</h2>
+        <p class="form-verdict form-{{ form.direction }}">
+            Clan form is <strong>{{ form.direction }}</strong> —
+            {{ form.delta }} points across the last three seasons.
+            Peak was {{ form.peak_mean }} on {{ form.peak_label }}; now {{ form.current }}.
+        </p>
+        <div class="form-chart-wrap"><canvas id="form-chart"></canvas></div>
+    </section>
 
-    <!-- Wall of Fame -->
-    <div class="wof-grid" id="wofGrid"></div>
+    {# ── ZONE 2 — MOVERS ────────────────────────────────────────────── #}
+    <section class="mv-grid" aria-labelledby="mv-h">
+        <h2 id="mv-h" class="sr-only">Movers</h2>
+        {% for band, title, field, suffix in [
+            ('surging',    'Surging',    'trend',      ' pts'),
+            ('sliding',    'Sliding',    'trend',      ' pts'),
+            ('unreliable', 'Unreliable', 'sigma',      ' σ'),
+            ('absent',     'Absent',     'attendance', '')] %}
+        <div class="mv-band" data-band="{{ band }}">
+            <h3>{{ title }}</h3>
+            {% if movers[band] %}
+                {% for r in movers[band] %}
+                <div class="mv-entry">
+                    <span>{{ r.player_name }}</span>
+                    <span>
+                        {%- if band == 'absent' -%}
+                            {{ (r.attendance * 100) | round(1) }}% ({{ r.attacks_used }}/{{ r.attacks_max }})
+                        {%- else -%}
+                            {{ r[field] }}{{ suffix }}
+                        {%- endif -%}
+                    </span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="mv-empty">None this window.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </section>
 
-    <!-- Charts row -->
-    <div class="charts-row">
-        <div class="panel">
-            <div class="panel-hdr">
-                <span class="panel-title">📈 Clan Score Trend</span>
-                <span class="panel-sub">avg · min · max per season</span>
-            </div>
-            <div class="panel-body">
-                <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
-            </div>
-        </div>
-        <div class="panel">
-            <div class="panel-hdr">
-                <span class="panel-title">🏃 Player Career</span>
-                <span class="panel-sub">score over last 20 seasons</span>
-            </div>
-            <div class="panel-body">
-                <select id="careerSelect" class="career-select" onchange="buildCareerChart(this.value)"></select>
-                <div class="chart-wrap"><canvas id="careerChart"></canvas></div>
-            </div>
-        </div>
-    </div>
+    {# ── ZONE 3 — THE RECORD ────────────────────────────────────────── #}
+    <section aria-labelledby="rec-h">
+        <h2 id="rec-h" class="sr-only">The record</h2>
+        <table id="record-table">
+            <thead>
+                <tr>
+                    <th tabindex="0" data-sort="rank">#</th>
+                    <th tabindex="0" data-sort="name">Player</th>
+                    <th tabindex="0" data-sort="mean">Mean</th>
+                    <th>Form</th>
+                    <th tabindex="0" data-sort="reliability">Reliability</th>
+                    <th tabindex="0" data-sort="trend">Trend</th>
+                    <th tabindex="0" data-sort="attendance">Attendance</th>
+                    <th tabindex="0" data-sort="league">League</th>
+                    <th tabindex="0" data-sort="defense">Defense</th>
+                    <th>Verdicts</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for r in roster %}
+                <tr class="rec-row" data-tag="{{ r.player_tag }}">
+                    <td>{{ loop.index }}</td>
+                    <td>
+                        <button type="button" class="rec-toggle"
+                                aria-expanded="false"
+                                aria-controls="detail-{{ loop.index }}">
+                            {{ r.player_name }}
+                        </button>
+                    </td>
+                    <td class="rec-mean {{ r.mean_badge }}">{{ r.mean }}</td>
+                    <td><canvas class="rec-spark" width="80" height="20"
+                                data-scores="{{ r.scores | join(',') }}"></canvas></td>
+                    <td>{{ r.reliability }}</td>
+                    <td>{% if r.trend is not none %}{{ '%+.1f' % r.trend }}{% else %}—{% endif %}</td>
+                    <td>{% if r.attendance < 1.0 %}{{ (r.attendance * 100) | round(1) }}%{% else %}✓{% endif %}</td>
+                    <td>{{ r.league_now }}{% if r.league_move %} ({{ '%+d' % r.league_move }}){% endif %}</td>
+                    <td>
+                        {%- if r.defense.index is not none -%}
+                            {{ '%+.1f' % r.defense.index }}{% if r.defense.thin %} <abbr title="limited data">*</abbr>{% endif %}
+                        {%- else -%}—{%- endif -%}
+                    </td>
+                    <td class="rec-verdicts">
+                        {% for badge, count in r.verdict_record.items() %}
+                        <span class="{{ badge }}">{{ count }}</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                <tr class="rec-detail" id="detail-{{ loop.index }}" data-tag="{{ r.player_tag }}">
+                    <td colspan="10"><div class="rec-detail-body"></div></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
 
-    <!-- TH Era Performance Grid -->
-    <div class="th-era-panel">
-        <div class="panel-hdr">
-            <span class="panel-title">🏰 Performance by Town Hall Era</span>
-            <span class="panel-sub">avg score at each TH the player has actually attacked at</span>
+        {% if tail_thin %}
+        <div class="rec-tail">
+            <h3>Not enough data</h3>
+            {% for r in tail_thin %}
+            <div class="mv-entry"><span>{{ r.player_name }}</span><span>{{ r.weeks_played }} week(s)</span></div>
+            {% endfor %}
         </div>
-        <div class="th-era-scroll">
-            <div id="thEraWrap">
-                <div style="padding:24px;color:var(--muted);font-size:13px;text-align:center;">Loading…</div>
+        {% endif %}
+
+        {% if tail_absent %}
+        <div class="rec-tail">
+            <h3>Not participating</h3>
+            {% for r in tail_absent %}
+            <div class="mv-entry">
+                <span>{{ r.player_name }}</span>
+                <span>{{ r.attacks_used }}/{{ r.attacks_max }} attacks</span>
             </div>
+            {% endfor %}
         </div>
-        <div class="th-note">
-            ⚠️ Player TH is recorded once at the <em>start</em> of each ranked season (<code>ranked_week.townhall</code>) — mid-season upgrades won't shift a player to a new column until the following season.
-            Opponent TH is captured at sync time, so a late sync may reflect a post-battle upgrade.
-            Scores within each TH column are still fully TH-adjusted.
-        </div>
-    </div>
-
-    <!-- Leaderboard -->
-    <div class="lb-panel">
-        <div class="lb-hdr">
-            <span class="panel-title">🏆 All-Time Leaderboard</span>
-            <input id="lbSearch" class="lb-search" type="search" placeholder="🔍 Search player…" oninput="renderTable()">
-        </div>
-        <div style="overflow-x:auto;">
-            <table class="lb-table" id="lbTable">
-                <thead><tr>
-                    <th>#</th>
-                    <th onclick="sortBy('player_name')">Player</th>
-                    <th onclick="sortBy('weeks_active')">Seasons</th>
-                    <th onclick="sortBy('total_attacks')">Attacks</th>
-                    <th onclick="sortBy('attendance_rate')">Attend</th>
-                    <th onclick="sortBy('three_rate')">3★ %</th>
-                    <th onclick="sortBy('avg_score')">Avg Score</th>
-                    <th onclick="sortBy('best_score')">Best</th>
-                    <th onclick="sortBy('godlike_weeks')">Godlike</th>
-                    <th onclick="sortBy('consistency')" title="Lower = more consistent">Consist.</th>
-                    <th onclick="sortBy('trend')">Trend</th>
-                    <th onclick="sortBy('def_zero_rate')">Def 0★</th>
-                    <th>Verdict history</th>
-                </tr></thead>
-                <tbody id="lbBody"></tbody>
-            </table>
-        </div>
-        <div class="lb-footer" id="lbFooter"></div>
-    </div>
-
-    <!-- Performance Heatmap -->
-    <div class="heatmap-panel">
-        <div class="panel-hdr">
-            <span class="panel-title">🔥 Performance Heatmap</span>
-            <span class="panel-sub">score per player per season — last 20 seasons, most recent first</span>
-        </div>
-        <div class="hm-scroll">
-            <div id="heatmapWrap">
-                <div style="padding:24px;color:var(--muted);font-size:13px;text-align:center;">Loading…</div>
-            </div>
-        </div>
-    </div>
-
+        {% endif %}
+    </section>
 </div>
 
-<div class="page-footer">CoC Analytics · Ranked Statistics</div>
-
 <script>
-const playerStats  = {{ player_stats_json  | safe }};
-const clanTrend    = {{ clan_trend_json    | safe }};
-const heatmap      = {{ heatmap_json       | safe }};
-const careerLines  = {{ career_lines_json  | safe }};
-const careerLabels = {{ career_labels_json | safe }};
-const allThLevels  = {{ all_th_levels_json | safe }};
-const hofData      = {{ hof_json           | safe }};
+const PAGE = {{ page_json | safe }};
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-function scoreColor(s) {
-    if (s === null || s === undefined) return { bg: 'transparent', text: 'var(--muted)' };
-    if (s >= 87) return { bg: 'rgba(188,140,255,.22)', text: 'var(--purple)' };
-    if (s >= 80) return { bg: 'rgba(240,165,0,.22)',   text: 'var(--accent)' };
-    if (s >= 65) return { bg: 'rgba(63,185,80,.18)',   text: 'var(--green)'  };
-    if (s >= 58) return { bg: 'rgba(88,166,255,.18)',  text: 'var(--blue)'   };
-    if (s >= 43) return { bg: 'rgba(210,153,34,.18)',  text: 'var(--orange)' };
-    if (s >= 29) return { bg: 'rgba(248,81,73,.18)',   text: 'var(--red)'    };
-    if (s >  0)  return { bg: 'rgba(139,148,158,.1)',  text: 'var(--muted)'  };
-    return { bg: 'transparent', text: 'var(--muted)' };
-}
-
-function scoreBadge(s) {
-    if (s >= 87) return `<span class="badge-score badge-godlike">${s}</span>`;
-    if (s >= 80) return `<span class="badge-score badge-dominant">${s}</span>`;
-    if (s >= 65) return `<span class="badge-score badge-wow">${s}</span>`;
-    if (s >= 58) return `<span class="badge-score badge-good">${s}</span>`;
-    if (s >= 43) return `<span class="badge-score badge-warning">${s}</span>`;
-    if (s >= 29) return `<span class="badge-score badge-suck">${s}</span>`;
-    if (s >  0)  return `<span class="badge-score badge-useless">${s}</span>`;
-    return `<span class="badge-score badge-inactive">\u2014</span>`;
-}
-
-// ── Wall of Fame ──────────────────────────────────────────────────────────────
-function buildWoF() {
-    const records = [
-        { key: 'top_score',   icon: '👑', role: 'Most Dominant' },
-        { key: 'best_week',   icon: '⚡', role: 'Best Single Week' },
-        { key: 'most_3star',  icon: '🎯', role: 'Deadliest Attacker' },
-        { key: 'best_def',    icon: '🧱', role: 'Iron Wall' },
-        { key: 'godlike',     icon: '🌟', role: 'Godlike Machine' },
-        { key: 'most_active', icon: '🏅', role: 'Most Seasoned' },
-    ];
-    const grid = document.getElementById('wofGrid');
-    grid.innerHTML = records.map(r => {
-        const d = hofData[r.key];
-        if (!d) return '';
-        const prof = '/player/' + encodeURIComponent((d.tag||'').replace('#',''));
-        return `<div class="wof-card">
-            <div class="wof-icon">${r.icon}</div>
-            <div class="wof-body">
-                <div class="wof-role">${r.role}</div>
-                <div class="wof-name"><a href="${prof}" class="p-link" style="color:inherit;">${esc(d.name)}</a></div>
-                <div class="wof-stat">${esc(d.label)}: <span class="wof-val">${esc(d.val)}</span></div>
-            </div>
-        </div>`;
-    }).join('');
-}
-
-// ── Clan trend chart ──────────────────────────────────────────────────────────
-function buildTrendChart() {
-    const ctx = document.getElementById('trendChart');
-    if (!ctx || !clanTrend.length) return;
-    new Chart(ctx, {
+// Zone 1 — clan form line
+(function () {
+    const el = document.getElementById('form-chart');
+    if (!el || !window.Chart) return;
+    const css = getComputedStyle(document.documentElement);
+    // Chart.js draws to canvas and cannot resolve var() or color-mix(),
+    // so tokens must be resolved to concrete values first.
+    const accent = css.getPropertyValue('--accent').trim() || '#f0a500';
+    const muted  = css.getPropertyValue('--muted').trim()  || '#8a8a8a';
+    new Chart(el, {
         type: 'line',
         data: {
-            labels: clanTrend.map(r => r.label),
-            datasets: [
-                {
-                    label: 'Max',
-                    data: clanTrend.map(r => r.max_score),
-                    borderColor: 'rgba(240,165,0,.15)',
-                    borderWidth: 1, pointRadius: 0, tension: 0.35, fill: false,
-                },
-                {
-                    label: 'Avg Score',
-                    data: clanTrend.map(r => r.avg_score),
-                    borderColor: 'rgba(240,165,0,.9)',
-                    backgroundColor: 'rgba(240,165,0,.08)',
-                    borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: 'rgba(240,165,0,.9)',
-                    tension: 0.35, fill: '-1',
-                },
-                {
-                    label: 'Min',
-                    data: clanTrend.map(r => r.min_score),
-                    borderColor: 'rgba(240,165,0,.1)',
-                    backgroundColor: 'rgba(240,165,0,.05)',
-                    borderWidth: 1, pointRadius: 0, tension: 0.35, fill: '-1',
-                },
-            ]
+            labels: PAGE.form.points.map(p => p.label),
+            datasets: [{
+                data: PAGE.form.points.map(p => p.mean),
+                borderColor: accent, backgroundColor: accent,
+                tension: 0.3, pointRadius: 3
+            }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    filter: item => item.datasetIndex === 1,
-                    callbacks: {
-                        label: ctx => {
-                            const r = clanTrend[ctx.dataIndex];
-                            return [` Avg: ${r.avg_score}`, ` Range: ${r.min_score}\u2013${r.max_score}`, ` Players: ${r.participants}`];
-                        }
-                    }
-                }
-            },
+            plugins: { legend: { display: false } },
             scales: {
-                x: { ticks:{color:'#8b949e',font:{family:'Rajdhani',size:11},maxRotation:45}, grid:{color:'rgba(255,255,255,.04)'} },
-                y: { min:0, max:100, ticks:{color:'#8b949e',stepSize:20}, grid:{color:'rgba(255,255,255,.06)'} }
+                y: { min: 0, max: 100, ticks: { color: muted } },
+                x: { ticks: { color: muted } }
             }
         }
     });
-}
+})();
 
-// ── Career chart (per player) ─────────────────────────────────────────────────
-let careerChartInst = null;
-
-function buildCareerChart(selectedPlayer) {
-    const ctx = document.getElementById('careerChart');
-    if (!ctx) return;
-    if (careerChartInst) { careerChartInst.destroy(); careerChartInst = null; }
-
-    // clan average reference line
-    const clanAvg = careerLabels.map((_, i) => {
-        const vals = Object.values(careerLines).map(l => l[i]).filter(v => v != null);
-        return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+// Zone 3 — sparklines
+document.querySelectorAll('.rec-spark').forEach(function (canvas) {
+    const scores = canvas.dataset.scores.split(',').filter(Boolean).map(Number);
+    if (!scores.length) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.strokeStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue('--accent').trim() || '#f0a500';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    scores.forEach(function (s, i) {
+        const x = scores.length === 1 ? w / 2 : (i / (scores.length - 1)) * (w - 2) + 1;
+        const y = h - 1 - (s / 100) * (h - 2);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
-
-    const datasets = [
-        {
-            label: 'Clan Avg',
-            data: clanAvg,
-            borderColor: 'rgba(240,165,0,.4)',
-            borderWidth: 1.5, borderDash: [5,3],
-            pointRadius: 0, tension: 0.35, spanGaps: true, fill: false,
-        }
-    ];
-
-    if (selectedPlayer && careerLines[selectedPlayer]) {
-        datasets.push({
-            label: selectedPlayer,
-            data: careerLines[selectedPlayer],
-            borderColor: '#58a6ff',
-            backgroundColor: 'rgba(88,166,255,.1)',
-            borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#58a6ff',
-            tension: 0.35, spanGaps: true, fill: true,
-        });
-    }
-
-    careerChartInst = new Chart(ctx, {
-        type: 'line',
-        data: { labels: careerLabels, datasets },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color:'#8b949e', font:{family:'DM Sans',size:11}, boxWidth:12, padding:10 } },
-                tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y ?? '\u2014'}` } }
-            },
-            scales: {
-                x: { ticks:{color:'#8b949e',font:{family:'Rajdhani',size:11},maxRotation:45}, grid:{color:'rgba(255,255,255,.04)'} },
-                y: { min:0, max:100, ticks:{color:'#8b949e',stepSize:20}, grid:{color:'rgba(255,255,255,.06)'} }
-            }
-        }
-    });
-}
-
-function initCareerSelect() {
-    const sel = document.getElementById('careerSelect');
-    playerStats.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.player_name;
-        opt.textContent = p.player_name;
-        sel.appendChild(opt);
-    });
-    if (playerStats.length) {
-        sel.value = playerStats[0].player_name;
-        buildCareerChart(playerStats[0].player_name);
-    }
-}
-
-// ── TH Era Grid ───────────────────────────────────────────────────────────────
-function buildThEraGrid() {
-    const wrap = document.getElementById('thEraWrap');
-    const players = playerStats.filter(p => p.th_eras && p.th_eras.length > 0);
-    if (!allThLevels.length || !players.length) {
-        wrap.innerHTML = '<div style="padding:24px;color:var(--muted);font-size:13px;text-align:center;">No TH era data available.</div>';
-        return;
-    }
-
-    const thHeaders = allThLevels.map(th => `<th class="th-era-th">TH${th}</th>`).join('');
-
-    const rows = players.map(p => {
-        const eraMap = {};
-        p.th_eras.forEach(e => { eraMap[e.th] = e; });
-        const cells = allThLevels.map(th => {
-            const era = eraMap[th];
-            if (!era) return `<td class="th-era-cell th-era-empty">\u2014</td>`;
-            const c   = scoreColor(era.avg_score);
-            const tip = `TH${th}\n${p.player_name}\nAvg score: ${era.avg_score}\nAttacks: ${era.attacks}\nWeeks: ${era.weeks}\n3★ rate: ${era.three_rate}%`;
-            return `<td class="th-era-cell" style="background:${c.bg};" title="${esc(tip)}">
-                <div class="th-era-score" style="color:${c.text};">${era.avg_score}</div>
-                <div class="th-era-meta">${era.attacks} atk</div>
-            </td>`;
-        }).join('');
-        const prof = '/player/' + encodeURIComponent((p.player_tag||'').replace('#',''));
-        return `<tr class="th-era-row">
-            <td class="th-era-player-cell"><a href="${prof}" class="p-link">${esc(p.player_name)}</a></td>
-            ${cells}
-        </tr>`;
-    }).join('');
-
-    wrap.innerHTML = `<table class="th-era-table">
-        <thead><tr>
-            <th class="th-era-name-th">Player</th>
-            ${thHeaders}
-        </tr></thead>
-        <tbody>${rows}</tbody>
-    </table>`;
-}
-
-// ── sort state ────────────────────────────────────────────────────────────────
-let sortCol = 'avg_score', sortDir = 'desc';
-
-function sortBy(col) {
-    sortDir = sortCol === col ? (sortDir === 'desc' ? 'asc' : 'desc') : (col === 'player_name' ? 'asc' : 'desc');
-    sortCol = col;
-    renderTable(); updateSortHeaders();
-}
-
-function updateSortHeaders() {
-    document.querySelectorAll('#lbTable thead th').forEach(th => {
-        th.classList.remove('sort-asc','sort-desc');
-        const m = (th.getAttribute('onclick')||'').match(/'([^']+)'/);
-        if (m && m[1] === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
-    });
-}
-
-// ── Leaderboard ───────────────────────────────────────────────────────────────
-function renderTable() {
-    const q = (document.getElementById('lbSearch').value||'').toLowerCase();
-    let rows = playerStats.filter(p => !q ||
-        (p.player_name||'').toLowerCase().includes(q) ||
-        (p.player_tag||'').toLowerCase().includes(q)
-    );
-    rows.sort((a,b) => {
-        let av = a[sortCol] ?? (sortCol === 'best_rank' ? 9999 : -9999);
-        let bv = b[sortCol] ?? (sortCol === 'best_rank' ? 9999 : -9999);
-        if (sortCol === 'best_rank') { av = av ?? 9999; bv = bv ?? 9999; }
-        if (typeof av === 'string') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
-        return av < bv ? (sortDir === 'asc' ? -1 : 1) : av > bv ? (sortDir === 'asc' ? 1 : -1) : 0;
-    });
-
-    const tbody = document.getElementById('lbBody');
-    tbody.innerHTML = rows.map((p, i) => {
-        const rank = i + 1;
-        const rc   = rank===1?'rank-1':rank===2?'rank-2':rank===3?'rank-3':'rank-n';
-        const rm   = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':rank;
-        const prof = '/player/' + encodeURIComponent((p.player_tag||'').replace('#',''));
-
-        // Attendance bar
-        const aPct  = Math.min(100, p.attendance_rate || 0);
-        const aCol  = aPct >= 90 ? '#3fb950' : aPct >= 65 ? '#f0a500' : '#f85149';
-        const attendHtml = `<span class="attend-bar"><span class="attend-fill" style="width:${aPct}%;background:${aCol};"></span></span><span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:${aCol};">${aPct}%</span>`;
-
-        // Trend
-        const trendHtml = p.trend > 2 ? `<span class="trend-up">↑ +${p.trend}</span>`
-            : p.trend < -2 ? `<span class="trend-down">↓ ${p.trend}</span>`
-            : `<span class="trend-flat">→</span>`;
-
-        // Consistency
-        const maxC = 30, cPct = Math.min(100, (p.consistency / maxC) * 100);
-        const cH   = Math.round(120 * (1 - cPct / 100));
-        const consistHtml = p.consistency > 0
-            ? `<span class="consist-bar"><span class="consist-fill" style="width:${100-cPct}%;background:hsl(${cH},60%,48%);"></span></span><span style="font-family:'Rajdhani',sans-serif;font-size:12px;color:hsl(${cH},60%,58%);">${p.consistency}</span>`
-            : `<span class="c-muted" style="font-family:'Rajdhani',sans-serif;font-size:12px;">\u2014</span>`;
-
-        // Verdict history bar
-        const totalWks = p.weeks_active || 1;
-        const vSegments = [
-            { wks: p.godlike_weeks,  color: '#bc8cff' },
-            { wks: p.dominant_weeks, color: '#f0a500' },
-            { wks: p.wow_weeks,      color: '#3fb950' },
-            { wks: p.good_weeks,     color: '#58a6ff' },
-            { wks: p.bad_weeks,      color: '#d29922' },
-            { wks: p.disaster_weeks, color: '#f85149' },
-            { wks: p.useless_weeks,  color: '#8b949e' },
-        ];
-        const topTip = `Godlike ${p.godlike_weeks} · Dominant ${p.dominant_weeks} · Good+ ${(p.wow_weeks||0)+(p.good_weeks||0)}`;
-        const verdictBarHtml = `<div title="${topTip}" class="verdict-bar">${
-            vSegments.map(s => s.wks > 0
-                ? `<div style="flex:${s.wks};background:${s.color};"></div>`
-                : ''
-            ).join('')
-        }</div>`;
-
-        return `<tr>
-            <td class="rank-cell ${rc}">${rm}</td>
-            <td>
-                <div class="p-name"><a href="${prof}" class="p-link">${esc(p.player_name)} <span class="p-arrow">↗</span></a></div>
-                <div class="p-tag">${esc(p.player_tag)}</div>
-            </td>
-            <td><span class="num c-purple">${p.weeks_active}</span></td>
-            <td><span class="num c-blue">${p.total_attacks}</span></td>
-            <td>${attendHtml}</td>
-            <td><span class="num c-yellow">${p.three_rate}%</span></td>
-            <td>${scoreBadge(p.avg_score)}</td>
-            <td>${scoreBadge(p.best_score)}</td>
-            <td><span class="num c-purple">${p.godlike_weeks || '\u2014'}</span></td>
-            <td>${consistHtml}</td>
-            <td>${trendHtml}</td>
-            <td><span class="num c-green">${p.def_zero_rate > 0 ? p.def_zero_rate + '%' : '\u2014'}</span></td>
-            <td style="min-width:90px;">${verdictBarHtml}</td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('lbFooter').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown`;
-}
-
-// ── Heatmap ───────────────────────────────────────────────────────────────────
-function buildHeatmap() {
-    const { weeks, players, scores } = heatmap;
-    if (!weeks.length || !players.length) return;
-
-    const thCells = players.map(p => `<th class="hm-th-player"><span>${esc(p)}</span></th>`).join('');
-
-    const bodyRows = weeks.map((weekLabel, wi) => {
-        const cells = players.map(player => {
-            const s = (scores[player] || [])[wi];
-            if (s == null) return `<td class="hm-cell"><span class="hm-cell-empty">\u2014</span></td>`;
-            const c   = scoreColor(s);
-            const tip = `${player}\n${weekLabel}\nScore: ${s}`;
-            return `<td class="hm-cell" style="background:${c.bg};" title="${esc(tip)}">
-                <span class="hm-cell-val" style="color:${c.text};">${s}</span>
-            </td>`;
-        }).join('');
-        return `<tr class="hm-row"><td class="hm-week-cell">${esc(weekLabel)}</td>${cells}</tr>`;
-    }).join('');
-
-    document.getElementById('heatmapWrap').innerHTML = `
-        <table class="hm-table">
-            <thead><tr>
-                <th class="hm-th-corner">Season</th>${thCells}
-            </tr></thead>
-            <tbody>${bodyRows}</tbody>
-        </table>`;
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    buildWoF();
-    buildTrendChart();
-    initCareerSelect();
-    buildThEraGrid();
-    renderTable();
-    updateSortHeaders();
-    buildHeatmap();
+    ctx.stroke();
 });
-</script>
 
+// Zone 3 — sortable headers (click and keyboard)
+(function () {
+    const table = document.getElementById('record-table');
+    if (!table) return;
+    const tbody = table.tBodies[0];
+    const dir = {};
+    function sortBy(key) {
+        dir[key] = !dir[key];
+        const sign = dir[key] ? 1 : -1;
+        const pairs = [];
+        for (let i = 0; i < tbody.rows.length; i += 2) {
+            pairs.push([tbody.rows[i], tbody.rows[i + 1]]);
+        }
+        const tagOf = tr => tr.dataset.tag;
+        const rowFor = tag => PAGE.roster.find(r => r.player_tag === tag) || {};
+        pairs.sort(function (a, b) {
+            const ra = rowFor(tagOf(a[0])), rb = rowFor(tagOf(b[0]));
+            let va, vb;
+            switch (key) {
+                case 'name':    va = ra.player_name; vb = rb.player_name; break;
+                case 'league':  va = ra.league_rank_now; vb = rb.league_rank_now; break;
+                case 'defense': va = (ra.defense || {}).index; vb = (rb.defense || {}).index; break;
+                case 'reliability': va = ra.sigma; vb = rb.sigma; break;
+                default:        va = ra[key]; vb = rb[key];
+            }
+            if (va === null || va === undefined) va = -Infinity;
+            if (vb === null || vb === undefined) vb = -Infinity;
+            if (typeof va === 'string') return sign * va.localeCompare(vb);
+            return sign * (va - vb);
+        });
+        pairs.forEach(p => { tbody.appendChild(p[0]); tbody.appendChild(p[1]); });
+    }
+    table.querySelectorAll('th[data-sort]').forEach(function (th) {
+        th.addEventListener('click', () => sortBy(th.dataset.sort));
+        th.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sortBy(th.dataset.sort); }
+        });
+    });
+})();
+</script>
 </body>
 </html>
