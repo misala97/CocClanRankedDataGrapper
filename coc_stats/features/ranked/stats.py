@@ -159,3 +159,72 @@ def player_aggregate(records):
         'worst':           min(scores) if scores else 0,
         'verdict_record':  verdict_record,
     }
+
+
+def defense_band(league_rank):
+    """League-rank band used to normalize defense.
+
+    Holding a base gets much harder as you climb (clan data: mean trophies per
+    defense falls from 17.3 in band 16-20 to 6.7 in band 31-35), so raw
+    cross-league comparison is invalid.
+    """
+    if not league_rank:
+        return 'unranked'
+    if league_rank >= LEGEND_RANK_FLOOR:
+        return 'legend'
+    low = ((league_rank - 1) // 5) * 5 + 1
+    return '%d-%d' % (low, low + 4)
+
+
+def build_defense_expectations(week_records_by_tag, defense_logs_by_key):
+    """Expected trophies-per-defense per league band, across the whole clan.
+
+    Bands with fewer than DEFENSE_BAND_MIN_N defenses fall back to the global
+    mean and are flagged thin, rather than presenting a noisy band mean as if
+    it were precise.
+    """
+    buckets = {}
+    for tag, records in week_records_by_tag.items():
+        for r in records:
+            band = defense_band(r['league_rank'])
+            for log in defense_logs_by_key.get((tag, r['season_id']), ()):
+                buckets.setdefault(band, []).append(log.trophies or 0)
+
+    every = [v for values in buckets.values() for v in values]
+    global_mean = round(sum(every) / len(every), 2) if every else 0.0
+
+    expectations = {}
+    for band, values in buckets.items():
+        thin = len(values) < DEFENSE_BAND_MIN_N
+        expectations[band] = {
+            'n':    len(values),
+            'mean': global_mean if thin else round(sum(values) / len(values), 2),
+            'thin': thin,
+        }
+    expectations['_global'] = {'n': len(every), 'mean': global_mean, 'thin': False}
+    return expectations
+
+
+def player_defense(tag, records, defense_logs_by_key, expectations):
+    """One player's defense quality against what their leagues expected."""
+    fallback = expectations['_global']
+    values, expected, thin = [], [], False
+    for r in records:
+        band = expectations.get(defense_band(r['league_rank']), fallback)
+        logs = defense_logs_by_key.get((tag, r['season_id']), ())
+        if logs and band.get('thin'):
+            thin = True
+        for log in logs:
+            values.append(log.trophies or 0)
+            expected.append(band['mean'])
+
+    if not values:
+        return {'n': 0, 'tpd': None, 'index': None, 'thin': True}
+
+    tpd = round(sum(values) / len(values), 1)
+    return {
+        'n':     len(values),
+        'tpd':   tpd,
+        'index': round(tpd - sum(expected) / len(expected), 1),
+        'thin':  thin,
+    }
