@@ -590,12 +590,19 @@ def _league_mult(league_tier, player_th):
     return mult
 
 
+def _max_th_multiplier(player_th):
+    if player_th >= 18: return 1.00
+    if player_th == 17: return 1.05
+    return 1.15
+
+
 def _ranked_score_from_adj(adj_scores, max_attacks, league_tier, player_th):
     lm = _league_mult(league_tier, player_th)
     if not max_attacks:
         return 0, 0.0, lm
     th_adj = sum(adj_scores) / max_attacks
-    return min(round(th_adj * lm * 100 / 3.45), 100), th_adj, lm
+    ceiling = 3 * _max_th_multiplier(player_th)
+    return min(round(th_adj * lm * 100 / ceiling), 100), th_adj, lm
 
 
 def _calc_ranked_score(battle_logs, player_th, max_attacks, league_tier):
