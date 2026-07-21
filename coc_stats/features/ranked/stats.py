@@ -306,3 +306,71 @@ def movers(rows):
                              key=lambda r: -r['sigma']),
         'absent':     sorted(absent, key=lambda r: r['attendance']),
     }
+
+
+def matchup_buckets(attack_logs, th_by_season):
+    """Attack performance per town-hall matchup, bucketed -2..+2 with open ends.
+
+    A bucket below MATCHUP_MIN_N is still returned but flagged not-enough, so
+    the page can say "you have only faced even matchups" rather than render a
+    confident number over three attacks.
+    """
+    buckets = {}
+    for log in attack_logs:
+        own = th_by_season.get(log.league_season_id)
+        if not own:
+            continue
+        try:
+            opponent = int(log.opponent_th)
+        except (TypeError, ValueError):
+            opponent = own
+        diff = opponent - own
+        key = -2 if diff <= -2 else (2 if diff >= 2 else diff)
+        bucket = buckets.setdefault(key, {'attacks': 0, '_stars': 0, '_pct': 0})
+        bucket['attacks'] += 1
+        bucket['_stars'] += log.stars or 0
+        bucket['_pct'] += log.percentage or 0
+
+    for bucket in buckets.values():
+        n = bucket['attacks']
+        bucket['avg_stars'] = round(bucket.pop('_stars') / n, 2)
+        bucket['avg_pct'] = round(bucket.pop('_pct') / n, 1)
+        bucket['enough'] = n >= MATCHUP_MIN_N
+    return buckets
+
+
+def near_misses(attack_logs):
+    """Attacks that were one building short of a three-star."""
+    total = len(attack_logs)
+    near = sum(1 for l in attack_logs
+               if (l.stars or 0) == 2 and (l.percentage or 0) >= NEAR_MISS_PCT)
+    three = sum(1 for l in attack_logs if (l.stars or 0) == 3)
+    return {
+        'attacks':   total,
+        'near':      near,
+        'three':     three,
+        'near_pct':  round(near / total * 100, 1) if total else 0.0,
+        'three_pct': round(three / total * 100, 1) if total else 0.0,
+    }
+
+
+def career_markers(records):
+    """Town-hall upgrades and league promotions/demotions along a career line.
+
+    The first week is the baseline and never produces a marker.
+    """
+    markers = []
+    for previous, current in zip(records, records[1:]):
+        if current['townhall'] and previous['townhall'] and current['townhall'] != previous['townhall']:
+            markers.append({
+                'season_id': current['season_id'],
+                'kind':      'townhall',
+                'detail':    'TH%d -> TH%d' % (previous['townhall'], current['townhall']),
+            })
+        if current['league_rank'] and previous['league_rank'] and current['league_rank'] != previous['league_rank']:
+            markers.append({
+                'season_id': current['season_id'],
+                'kind':      'promotion' if current['league_rank'] > previous['league_rank'] else 'demotion',
+                'detail':    '%s -> %s' % (previous['league_tier'], current['league_tier']),
+            })
+    return markers
