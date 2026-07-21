@@ -34,6 +34,15 @@
         #record-table tr.rec-row { display: block; border-top: 1px solid var(--bord2); }
         #record-table tr.rec-row td { display: inline-block; border: 0; padding: 4px 8px; }
     }
+
+    .dd-block { margin: 14px 0; }
+    .dd-block h4 { font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase;
+                   color: var(--muted); margin: 0 0 6px; }
+    .dd-matchup { width: 100%; border-collapse: collapse; }
+    .dd-matchup th, .dd-matchup td { text-align: left; padding: 4px 8px; font-size: 12px; }
+    .dd-note { color: var(--muted); font-size: 11.5px; }
+    .dd-markers { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+    .dd-career { max-width: 100%; }
 </head>
 <body>
 {% include '_nav.html' %}
@@ -276,6 +285,161 @@ document.querySelectorAll('.rec-spark').forEach(function (canvas) {
         });
     });
 })();
+
+// Zone 4 — drill-down
+const MATCHUP_LABELS = {
+    '-2': 'TH-2 or lower', '-1': 'TH-1', '0': 'Even TH',
+    '1': 'TH+1', '2': 'TH+2 or higher'
+};
+
+// Clan mean stars per matchup bucket — the yardstick a player is measured against.
+const clanMatchupMean = (function () {
+    const totals = {};
+    Object.values(PAGE.players).forEach(function (p) {
+        Object.entries(p.matchups || {}).forEach(function ([k, b]) {
+            const t = totals[k] || (totals[k] = { stars: 0, attacks: 0 });
+            t.stars += b.avg_stars * b.attacks;
+            t.attacks += b.attacks;
+        });
+    });
+    const out = {};
+    Object.entries(totals).forEach(function ([k, t]) {
+        out[k] = t.attacks ? t.stars / t.attacks : null;
+    });
+    return out;
+})();
+
+function esc(s) {
+    return String(s).replace(/[&<>"]/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function renderDetail(tag) {
+    const p = PAGE.players[tag];
+    if (!p) return '<p>No data.</p>';
+    const parts = [];
+
+    // Career line
+    parts.push('<div class="dd-block"><h4>Career</h4>');
+    parts.push('<canvas class="dd-career" width="640" height="140" data-tag="' + esc(tag) + '"></canvas>');
+    if (p.markers.length) {
+        parts.push('<ul class="dd-markers">' + p.markers.map(m =>
+            '<li>' + esc(PAGE.labels[m.season_id] || m.season_id) + ' — ' +
+            esc(m.kind) + ': ' + esc(m.detail) + '</li>').join('') + '</ul>');
+    }
+    parts.push('</div>');
+
+    // Where the points go
+    parts.push('<div class="dd-block"><h4>Where the points go</h4>');
+    const keys = Object.keys(p.matchups).sort((a, b) => Number(a) - Number(b));
+    if (!keys.length) {
+        parts.push('<p>No attacks on record.</p>');
+    } else {
+        const rendered = keys.filter(k => p.matchups[k].enough);
+        if (!rendered.length) {
+            parts.push('<p>Too few attacks in any single matchup to judge — ' +
+                       keys.map(k => esc(MATCHUP_LABELS[k]) + ' (' + p.matchups[k].attacks + ')').join(', ') +
+                       '.</p>');
+        } else {
+            parts.push('<table class="dd-matchup"><thead><tr><th>Matchup</th><th>Attacks</th>' +
+                       '<th>Avg ★</th><th>Clan avg ★</th><th>Delta</th></tr></thead><tbody>');
+            rendered.forEach(function (k) {
+                const b = p.matchups[k];
+                const clan = clanMatchupMean[k];
+                const delta = clan === null || clan === undefined ? null : b.avg_stars - clan;
+                parts.push('<tr><td>' + esc(MATCHUP_LABELS[k] || k) + '</td><td>' + b.attacks +
+                    '</td><td>' + b.avg_stars.toFixed(2) + '</td><td>' +
+                    (clan === null || clan === undefined ? '—' : clan.toFixed(2)) + '</td><td>' +
+                    (delta === null ? '—' : (delta >= 0 ? '+' : '') + delta.toFixed(2)) + '</td></tr>');
+            });
+            parts.push('</tbody></table>');
+            const skipped = keys.filter(k => !p.matchups[k].enough);
+            if (skipped.length) {
+                parts.push('<p class="dd-note">Not shown (fewer than 10 attacks): ' +
+                    skipped.map(k => esc(MATCHUP_LABELS[k]) + ' (' + p.matchups[k].attacks + ')').join(', ') + '.</p>');
+            }
+        }
+    }
+    parts.push('</div>');
+
+    // Near-misses
+    parts.push('<div class="dd-block"><h4>Near-misses</h4><p>' +
+        p.near.near + ' of ' + p.near.attacks + ' attacks (' + p.near.near_pct +
+        '%) were 2★ at 90% or better — one building short of a 3★. ' +
+        'Three-star rate: ' + p.near.three_pct + '%.</p></div>');
+
+    // Attendance
+    parts.push('<div class="dd-block"><h4>Attendance</h4>');
+    if (!p.attendance_weeks.length) {
+        parts.push('<p>Every attack used, every week.</p>');
+    } else {
+        parts.push('<ul>' + p.attendance_weeks.map(w =>
+            '<li>' + esc(w.label) + ' — ' + w.used + '/' + w.max +
+            ' (' + w.missing + ' missed)</li>').join('') + '</ul>');
+    }
+    parts.push('</div>');
+
+    // Defense
+    parts.push('<div class="dd-block"><h4>Defense</h4>');
+    if (!p.defense.n) {
+        parts.push('<p>No defenses on record.</p>');
+    } else {
+        parts.push('<p>' + p.defense.tpd + ' trophies per defense across ' + p.defense.n +
+            ' defenses — ' + (p.defense.index >= 0 ? '+' : '') + p.defense.index +
+            ' against what this league expects.' +
+            (p.defense.thin ? ' <em>Limited data for this league band.</em>' : '') + '</p>');
+    }
+    parts.push('</div>');
+
+    return parts.join('');
+}
+
+function drawCareer(canvas) {
+    const p = PAGE.players[canvas.dataset.tag];
+    if (!p || !p.records.length) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const css = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue('--accent').trim() || '#f0a500';
+    const muted = css.getPropertyValue('--muted').trim() || '#8a8a8a';
+    const n = p.records.length;
+    const x = i => n === 1 ? w / 2 : (i / (n - 1)) * (w - 20) + 10;
+    const y = s => h - 10 - (s / 100) * (h - 20);
+
+    ctx.strokeStyle = muted; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(10, y(0)); ctx.lineTo(w - 10, y(0)); ctx.stroke();
+
+    const marked = new Set(p.markers.map(m => m.season_id));
+    ctx.strokeStyle = muted; ctx.setLineDash([3, 3]);
+    p.records.forEach(function (r, i) {
+        if (!marked.has(r.season_id)) return;
+        ctx.beginPath(); ctx.moveTo(x(i), 6); ctx.lineTo(x(i), h - 6); ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath();
+    p.records.forEach((r, i) => i ? ctx.lineTo(x(i), y(r.score)) : ctx.moveTo(x(i), y(r.score)));
+    ctx.stroke();
+
+    ctx.fillStyle = accent;
+    p.records.forEach(function (r, i) {
+        ctx.beginPath(); ctx.arc(x(i), y(r.score), 2.5, 0, Math.PI * 2); ctx.fill();
+    });
+}
+
+document.querySelectorAll('.rec-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        const row = btn.closest('tr');
+        const detail = document.getElementById(btn.getAttribute('aria-controls'));
+        const open = detail.classList.toggle('open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open && !detail.dataset.rendered) {
+            detail.querySelector('.rec-detail-body').innerHTML = renderDetail(row.dataset.tag);
+            detail.querySelectorAll('.dd-career').forEach(drawCareer);
+            detail.dataset.rendered = '1';
+        }
+    });
+});
 </script>
 </body>
 </html>
