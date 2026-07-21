@@ -374,3 +374,88 @@ def career_markers(records):
                 'detail':    '%s -> %s' % (previous['league_tier'], current['league_tier']),
             })
     return markers
+
+
+def _split_logs(weeks, in_clan_tags, wanted_seasons):
+    """Battle logs split by direction, keyed (player_tag, season_id)."""
+    attacks, defenses = {}, {}
+    for w in weeks:
+        if w.player_tag not in in_clan_tags or w.league_season_id not in wanted_seasons:
+            continue
+        key = (w.player_tag, w.league_season_id)
+        for log in w.battle_logs:
+            (attacks if _is_attack(log) else defenses).setdefault(key, []).append(log)
+    return attacks, defenses
+
+
+def build_record_page(clan_players, weeks, window):
+    """Everything /ranked/stats renders, from ORM rows to plain dicts."""
+    names = {p.tag: (p.name or p.tag) for p in clan_players}
+    in_clan = set(names)
+
+    season_ids = select_seasons([w for w in weeks if w.player_tag in in_clan], window)
+    wanted = set(season_ids)
+
+    labels = {}
+    for w in weeks:
+        sid = w.league_season_id
+        if sid in wanted and sid not in labels and w.start_day:
+            labels[sid] = w.start_day.strftime('%d.%m.%y')
+    for sid in season_ids:
+        labels.setdefault(sid, sid)
+
+    clan_weeks = [w for w in weeks if w.player_tag in in_clan]
+    records_by_tag = build_week_records(clan_weeks, season_ids)
+    attack_logs, defense_logs = _split_logs(clan_weeks, in_clan, wanted)
+    expectations = build_defense_expectations(records_by_tag, defense_logs)
+
+    rows, details = [], {}
+    for tag, records in records_by_tag.items():
+        row = player_aggregate(records)
+        row['player_tag'] = tag
+        row['player_name'] = names[tag]
+        row['defense'] = player_defense(tag, records, defense_logs, expectations)
+        row['scores'] = [r['score'] for r in records]
+        row['seasons'] = [r['season_id'] for r in records]
+        rows.append(row)
+
+        player_attacks = [l for key, logs in attack_logs.items() if key[0] == tag
+                          for l in logs]
+        details[tag] = {
+            'records':   records,
+            'markers':   career_markers(records),
+            'matchups':  matchup_buckets(player_attacks,
+                                         {r['season_id']: r['townhall'] for r in records}),
+            'near':      near_misses(player_attacks),
+            'defense':   row['defense'],
+            'attendance_weeks': [
+                {'season_id': r['season_id'], 'label': labels.get(r['season_id'], r['season_id']),
+                 'used': r['attacks_used'], 'max': r['max_attacks'],
+                 'missing': r['max_attacks'] - r['attacks_used']}
+                for r in records if r['max_attacks'] > r['attacks_used']
+            ],
+        }
+
+    bands = movers(rows)
+    absent_tags = {r['player_tag'] for r in bands['absent']}
+
+    roster = sorted(
+        [r for r in rows
+         if r['player_tag'] not in absent_tags and r['weeks_played'] >= MIN_WEEKS_FOR_RANKING],
+        key=lambda r: -r['mean'])
+    tail_thin = sorted(
+        [r for r in rows
+         if r['player_tag'] not in absent_tags and r['weeks_played'] < MIN_WEEKS_FOR_RANKING],
+        key=lambda r: -r['mean'])
+
+    return {
+        'window':      window,
+        'seasons':     season_ids,
+        'labels':      labels,
+        'form':        clan_form(records_by_tag, season_ids, labels, depth_source=roster),
+        'movers':      bands,
+        'roster':      roster,
+        'tail_thin':   tail_thin,
+        'tail_absent': bands['absent'],
+        'players':     details,
+    }

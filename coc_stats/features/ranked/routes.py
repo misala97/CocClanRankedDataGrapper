@@ -8,6 +8,9 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from features.auth.routes import _current_user
+from features.ranked.stats import (
+    DEFAULT_WINDOW, WINDOWS, build_record_page,
+)
 from models import Player, RankedWeek, RankedWeekAnalysis
 from services.helpers import (
     get_league_thresholds, _get_league_rank,
@@ -297,294 +300,52 @@ def ranked_weeks_page():
     )
 
 
-@ranked_bp.route('/ranked/stats')
-def ranked_stats_page():
-    clan_players    = Player.query.filter_by(in_clan=True).all()
-    in_clan_tags    = {p.tag for p in clan_players}
-    player_name_map = {p.tag: (p.name or p.tag) for p in clan_players}
+_RECORD_CACHE = {}          # (window, roster_hash) -> (expires_at, payload)
+_RECORD_TTL   = 300         # seconds
 
-    all_weeks = (
+
+def _record_page_cached(clan_players, window):
+    """Clan-wide aggregates are viewer-invariant, so cache per (window, roster)."""
+    tags = frozenset(p.tag for p in clan_players)
+    key = (window, hash(tags))
+    now = dt.datetime.now().timestamp()
+    hit = _RECORD_CACHE.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+
+    weeks = (
         RankedWeek.query
-        .filter(RankedWeek.player_tag.in_(in_clan_tags))
+        .filter(RankedWeek.player_tag.in_(tags))
         .options(selectinload(RankedWeek.battle_logs))
         .all()
-    )
+    ) if tags else []
 
-    distinct_weeks_q = (
-        db.session.query(RankedWeek.league_season_id, RankedWeek.start_day)
-        .filter(RankedWeek.player_tag.in_(in_clan_tags))
-        .distinct()
-        .order_by(RankedWeek.start_day.asc())
-        .all()
-    )
-    season_order  = [row.league_season_id for row in distinct_weeks_q]
-    season_labels = {
-        row.league_season_id: row.start_day.strftime('%d.%m.%y') if row.start_day else str(row.league_season_id)
-        for row in distinct_weeks_q
-    }
+    payload = build_record_page(clan_players, weeks, window)
+    _RECORD_CACHE[key] = (now + _RECORD_TTL, payload)
+    return payload
 
-    # ── Per-player accumulators ───────────────────────────────────────────────
-    acc              = {}
-    clan_season_agg  = {}   # season_id -> {scores: [], participants: int}
 
-    for week in all_weeks:
-        tag = week.player_tag
-        if tag not in in_clan_tags:
-            continue
-        if tag not in acc:
-            acc[tag] = {
-                'player_name':       player_name_map.get(tag, tag),
-                'player_tag':        tag,
-                'weeks_active':      0,
-                'total_attacks':     0,
-                'total_max_attacks': 0,
-                'stars_3': 0, 'stars_2': 0, 'stars_1': 0, 'stars_0': 0,
-                'total_stars':       0,
-                'total_defenses':    0,
-                'def_zero':          0,
-                'def_stars':         0,
-                'peak_trophies':     0,
-                'best_rank':         None,
-                'weekly_scores':     {},
-                'th_matchups':       [],
-                'th_eras':           {},   # th_level -> {attacks, stars_3, total_stars, scores, weeks}
-                'verdict_dist':      {},   # badge_class -> count
-            }
-        p = acc[tag]
-        p['weeks_active'] += 1
+@ranked_bp.route('/ranked/stats')
+def ranked_stats_page():
+    window = request.args.get('window', DEFAULT_WINDOW)
+    if window not in WINDOWS:
+        window = DEFAULT_WINDOW
 
-        player_th = week.townhall or 0
-        att_max   = week.max_attacks or 0
-        p['total_max_attacks'] += att_max
-
-        adj_week         = []
-        week_att_count   = 0
-        week_stars_3     = 0
-        week_total_stars = 0
-
-        if (week.trophies or 0) > p['peak_trophies']:
-            p['peak_trophies'] = week.trophies or 0
-        if week.rank and (p['best_rank'] is None or week.rank < p['best_rank']):
-            p['best_rank'] = week.rank
-
-        for log in week.battle_logs:
-            stars = log.stars or 0
-            if _is_attack(log):
-                p['total_attacks'] += 1
-                week_att_count     += 1
-                p['total_stars']   += stars
-                week_total_stars   += stars
-                if stars == 3:
-                    p['stars_3'] += 1
-                    week_stars_3 += 1
-                elif stars == 2: p['stars_2'] += 1
-                elif stars == 1: p['stars_1'] += 1
-                else:            p['stars_0'] += 1
-                try:    opp_th = int(log.opponent_th)
-                except: opp_th = player_th
-                diff = opp_th - player_th
-                p['th_matchups'].append({'diff': diff, 'stars': stars})
-                adj_week.append(stars * _calc_th_multiplier(diff, player_th))
-            else:
-                p['total_defenses'] += 1
-                p['def_stars']      += stars
-                if stars == 0:
-                    p['def_zero'] += 1
-
-        # TH era accumulation — uses ranked_week.townhall as the player's TH for this season
-        if player_th > 0:
-            era = p['th_eras'].setdefault(player_th, {
-                'attacks': 0, 'stars_3': 0, 'total_stars': 0, 'scores': [], 'weeks': 0
-            })
-            era['weeks']       += 1
-            era['attacks']     += week_att_count
-            era['stars_3']     += week_stars_3
-            era['total_stars'] += week_total_stars
-
-        if att_max > 0:
-            score, _, _ = _ranked_score_from_adj(adj_week, att_max, week.league_tier or '', player_th)
-            p['weekly_scores'][week.league_season_id] = score
-
-            if player_th > 0:
-                p['th_eras'][player_th]['scores'].append(score)
-
-            badge, _, _ = _ranked_verdict(score, week_att_count, att_max)
-            p['verdict_dist'][badge] = p['verdict_dist'].get(badge, 0) + 1
-
-            csa = clan_season_agg.setdefault(week.league_season_id, {'scores': [], 'participants': 0})
-            csa['scores'].append(score)
-            csa['participants'] += 1
-
-    # ── Build result list ─────────────────────────────────────────────────────
-    result = []
-    for tag, p in acc.items():
-        n      = p['total_attacks']
-        scores = [p['weekly_scores'][s] for s in season_order if s in p['weekly_scores']]
-        avg_score  = round(sum(scores) / len(scores), 1) if scores else 0
-        best_score = max(scores) if scores else 0
-        avg_stars  = round(p['total_stars'] / n, 2) if n else 0
-        three_rate = round(p['stars_3'] / n * 100, 1) if n else 0
-        two_rate   = round(p['stars_2'] / n * 100, 1) if n else 0
-        one_rate   = round(p['stars_1'] / n * 100, 1) if n else 0
-        zero_rate  = round(p['stars_0'] / n * 100, 1) if n else 0
-        def_zero_r = round(p['def_zero'] / p['total_defenses'] * 100, 1) if p['total_defenses'] else 0
-        attend_r   = round(p['total_attacks'] / p['total_max_attacks'] * 100, 1) if p['total_max_attacks'] else 0
-
-        consistency = 0.0
-        if len(scores) > 1:
-            consistency = round((sum((s - avg_score) ** 2 for s in scores) / len(scores)) ** 0.5, 1)
-
-        if len(scores) >= 6:
-            trend = round(sum(scores[-3:]) / 3 - sum(scores[-6:-3]) / 3, 1)
-        elif len(scores) >= 2:
-            trend = round(scores[-1] - scores[-2], 1)
-        else:
-            trend = 0.0
-
-        th_up   = [m for m in p['th_matchups'] if m['diff'] > 0]
-        th_even = [m for m in p['th_matchups'] if m['diff'] == 0]
-        th_down = [m for m in p['th_matchups'] if m['diff'] < 0]
-
-        th_eras_list = [
-            {
-                'th':         th,
-                'attacks':    era['attacks'],
-                'three_rate': round(era['stars_3'] / era['attacks'] * 100, 1) if era['attacks'] else 0,
-                'avg_score':  round(sum(era['scores']) / len(era['scores']), 1) if era['scores'] else 0,
-                'weeks':      era['weeks'],
-            }
-            for th, era in sorted(p['th_eras'].items())
-        ]
-
-        vd = p['verdict_dist']
-        result.append({
-            'player_name':       p['player_name'],
-            'player_tag':        p['player_tag'],
-            'weeks_active':      p['weeks_active'],
-            'total_attacks':     n,
-            'total_max_attacks': p['total_max_attacks'],
-            'attendance_rate':   attend_r,
-            'avg_stars':         avg_stars,
-            'three_rate':        three_rate,
-            'two_rate':          two_rate,
-            'one_rate':          one_rate,
-            'zero_rate':         zero_rate,
-            'avg_score':         avg_score,
-            'best_score':        best_score,
-            'best_rank':         p['best_rank'],
-            'peak_trophies':     p['peak_trophies'],
-            'consistency':       consistency,
-            'trend':             trend,
-            'def_zero_rate':     def_zero_r,
-            'total_defenses':    p['total_defenses'],
-            'th_up_avg':         round(sum(m['stars'] for m in th_up)   / len(th_up),   2) if th_up   else None,
-            'th_even_avg':       round(sum(m['stars'] for m in th_even) / len(th_even), 2) if th_even else None,
-            'th_down_avg':       round(sum(m['stars'] for m in th_down) / len(th_down), 2) if th_down else None,
-            'th_up_count':       len(th_up),
-            'th_even_count':     len(th_even),
-            'th_down_count':     len(th_down),
-            'weekly_scores':     p['weekly_scores'],
-            'th_eras':           th_eras_list,
-            'godlike_weeks':     vd.get('badge-godlike',  0),
-            'dominant_weeks':    vd.get('badge-dominant', 0),
-            'wow_weeks':         vd.get('badge-wow',      0),
-            'good_weeks':        vd.get('badge-good',     0),
-            'bad_weeks':         vd.get('badge-warning',  0),
-            'disaster_weeks':    vd.get('badge-suck',     0),
-            'useless_weeks':     vd.get('badge-useless',  0),
-        })
-    result.sort(key=lambda x: x['avg_score'], reverse=True)
-
-    # ── Clan weekly trend ─────────────────────────────────────────────────────
-    clan_trend = []
-    for sid in season_order:
-        csa = clan_season_agg.get(sid, {})
-        ws  = csa.get('scores', [])
-        if ws:
-            clan_trend.append({
-                'label':        season_labels[sid],
-                'avg_score':    round(sum(ws) / len(ws), 1),
-                'participants': csa['participants'],
-                'max_score':    max(ws),
-                'min_score':    min(ws),
-            })
-
-    # ── Performance heatmap (last 20 weeks) ───────────────────────────────────
-    heatmap_weeks   = season_order[-20:]
-    heatmap_players = [p['player_name'] for p in result]
-    heatmap = {
-        'weeks':   [season_labels[s] for s in reversed(heatmap_weeks)],
-        'players': heatmap_players,
-        'scores':  {
-            p['player_name']: [p['weekly_scores'].get(s) for s in reversed(heatmap_weeks)]
-            for p in result
-        },
-    }
-
-    # ── Career lines for player chart (last 20 seasons) ──────────────────────
-    career_seasons = season_order[-20:]
-    career_labels  = [season_labels[s] for s in career_seasons]
-    career_lines   = {
-        p['player_name']: [p['weekly_scores'].get(s) for s in career_seasons]
-        for p in result
-    }
-
-    # ── All TH levels seen across the data set ────────────────────────────────
-    all_th_levels = sorted({th for p_data in acc.values() for th in p_data['th_eras']})
-
-    # ── Summary ───────────────────────────────────────────────────────────────
-    total_weeks          = len(distinct_weeks_q)
-    all_attacks_total    = sum(p['total_attacks'] for p in result)
-    all_3stars           = sum(p['stars_3'] for p in acc.values())
-    clan_three_star_rate = round(all_3stars / all_attacks_total * 100, 1) if all_attacks_total else 0
-    active               = [p for p in result if p['avg_score'] > 0]
-    avg_clan_score       = round(sum(p['avg_score'] for p in active) / len(active), 1) if active else 0
-
-    # ── Hall of Fame ──────────────────────────────────────────────────────────
-    qualified = [p for p in result if p['avg_score'] > 0 and p['total_attacks'] >= 5]
-    hof = {}
-    if qualified:
-        def _hof(p, label, val):
-            return {'name': p['player_name'], 'tag': p['player_tag'], 'label': label, 'val': val}
-
-        p = max(qualified, key=lambda x: x['avg_score'])
-        hof['top_score'] = _hof(p, 'avg score', str(p['avg_score']))
-
-        p = max(qualified, key=lambda x: x['best_score'])
-        hof['best_week'] = _hof(p, 'best week score', str(p['best_score']))
-
-        p = max(qualified, key=lambda x: x['three_rate'])
-        hof['most_3star'] = _hof(p, '3★ rate', f"{p['three_rate']}%")
-
-        defenders = [q for q in qualified if q['def_zero_rate'] > 0]
-        if defenders:
-            p = max(defenders, key=lambda x: x['def_zero_rate'])
-            hof['best_def'] = _hof(p, 'def 0★ rate', f"{p['def_zero_rate']}%")
-
-        godlikers = [q for q in qualified if q['godlike_weeks'] > 0]
-        if godlikers:
-            p = max(godlikers, key=lambda x: x['godlike_weeks'])
-            hof['godlike'] = _hof(p, 'godlike weeks', str(p['godlike_weeks']))
-
-        p = max(qualified, key=lambda x: x['weeks_active'])
-        hof['most_active'] = _hof(p, 'seasons played', str(p['weeks_active']))
-
-    # Strip weekly_scores before serialising
-    result_json = [{k: v for k, v in p.items() if k != 'weekly_scores'} for p in result]
+    clan_players = Player.query.filter_by(in_clan=True).all()
+    page = _record_page_cached(clan_players, window)
 
     return render_template(
         'ranked/ranked_stats.html',
-        player_stats_json    = json.dumps(result_json,   default=str),
-        clan_trend_json      = json.dumps(clan_trend,    default=str),
-        heatmap_json         = json.dumps(heatmap,       default=str),
-        career_lines_json    = json.dumps(career_lines,  default=str),
-        career_labels_json   = json.dumps(career_labels, default=str),
-        all_th_levels_json   = json.dumps(all_th_levels, default=str),
-        hof_json             = json.dumps(hof,           default=str),
-        total_weeks          = total_weeks,
-        all_attacks_total    = all_attacks_total,
-        clan_three_star_rate = clan_three_star_rate,
-        avg_clan_score       = avg_clan_score,
+        window       = window,
+        windows      = list(WINDOWS),
+        form         = page['form'],
+        movers       = page['movers'],
+        roster       = page['roster'],
+        tail_thin    = page['tail_thin'],
+        tail_absent  = page['tail_absent'],
+        labels       = page['labels'],
+        seasons      = page['seasons'],
+        page_json    = json.dumps(page, default=str),
     )
 
 
