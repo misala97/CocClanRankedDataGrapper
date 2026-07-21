@@ -305,6 +305,23 @@ _RECORD_CACHE = {}          # (window, roster_hash) -> (expires_at, payload)
 _RECORD_TTL   = 300         # seconds
 
 
+def _script_safe_json(payload):
+    """JSON for embedding directly in a <script> block.
+
+    json.dumps leaves '</script>' intact, and the HTML tokenizer ends the
+    script element at that sequence even inside a JS string literal — so a
+    player name coming from the game API could break out into HTML. These
+    five escapes are what Flask's own tojson filter applies; the parsed
+    value is identical.
+    """
+    dumped = json.dumps(payload, default=str)
+    return (dumped.replace('<', '\\u003c')
+                  .replace('>', '\\u003e')
+                  .replace('&', '\\u0026')
+                  .replace(' ', '\\u2028')
+                  .replace(' ', '\\u2029'))
+
+
 def _record_page_cached(clan_players, window):
     """Clan-wide aggregates are viewer-invariant, so cache per (window, roster).
 
@@ -350,9 +367,8 @@ def ranked_stats_page():
         roster       = page['roster'],
         tail_thin    = page['tail_thin'],
         tail_absent  = page['tail_absent'],
-        labels       = page['labels'],
         seasons      = page['seasons'],
-        page_json    = json.dumps(page, default=str),
+        page_json    = _script_safe_json(page),
     )
 
 

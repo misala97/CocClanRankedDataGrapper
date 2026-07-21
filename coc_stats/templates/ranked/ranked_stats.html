@@ -238,6 +238,10 @@ document.querySelectorAll('.rec-spark').forEach(function (canvas) {
     if (!table) return;
     const tbody = table.tBodies[0];
     const dir = {};
+    const naturalOrder = new Map();
+    Array.from(tbody.rows).forEach(function (tr) {
+        if (tr.classList.contains('rec-row')) naturalOrder.set(tr.dataset.tag, naturalOrder.size);
+    });
     function sortBy(key) {
         dir[key] = !dir[key];
         const sign = dir[key] ? 1 : -1;
@@ -255,6 +259,7 @@ document.querySelectorAll('.rec-spark').forEach(function (canvas) {
                 case 'league':  va = ra.league_rank_now; vb = rb.league_rank_now; break;
                 case 'defense': va = (ra.defense || {}).index; vb = (rb.defense || {}).index; break;
                 case 'reliability': va = ra.sigma; vb = rb.sigma; break;
+                case 'rank':    va = naturalOrder.get(tagOf(a[0])); vb = naturalOrder.get(tagOf(b[0])); break;
                 default:        va = ra[key]; vb = rb[key];
             }
             if (va === null || va === undefined) va = -Infinity;
