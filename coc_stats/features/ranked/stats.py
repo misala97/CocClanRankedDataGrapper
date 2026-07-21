@@ -228,3 +228,81 @@ def player_defense(tag, records, defense_logs_by_key, expectations):
         'index': round(tpd - sum(expected) / len(expected), 1),
         'thin':  thin,
     }
+
+
+def clan_form(week_records_by_tag, season_ids, labels, depth_source):
+    """Clan mean score per season, plus a verdict on direction.
+
+    depth_source is the list of player aggregate rows; depth counts how many
+    clear the Good verdict band on their window mean.
+    """
+    by_season = {}
+    for records in week_records_by_tag.values():
+        for r in records:
+            by_season.setdefault(r['season_id'], []).append(r['score'])
+
+    points = []
+    for sid in season_ids:
+        scores = by_season.get(sid)
+        if not scores:
+            continue
+        points.append({
+            'season_id':    sid,
+            'label':        labels.get(sid, sid),
+            'mean':         round(sum(scores) / len(scores), 1),
+            'participants': len(scores),
+        })
+
+    means = [p['mean'] for p in points]
+    if len(means) >= 6:
+        delta = round(sum(means[-3:]) / 3 - sum(means[-6:-3]) / 3, 1)
+    elif len(means) >= 2:
+        delta = round(means[-1] - means[0], 1)
+    else:
+        delta = 0.0
+
+    if delta >= FORM_BAND:
+        direction = 'climbing'
+    elif delta <= -FORM_BAND:
+        direction = 'slipping'
+    else:
+        direction = 'holding'
+
+    peak = max(points, key=lambda p: p['mean']) if points else None
+    return {
+        'points':     points,
+        'delta':      delta,
+        'direction':  direction,
+        'current':    points[-1]['mean'] if points else 0.0,
+        'peak_mean':  peak['mean'] if peak else 0.0,
+        'peak_label': peak['label'] if peak else '',
+        'vs_peak':    round(points[-1]['mean'] - peak['mean'], 1) if points else 0.0,
+        'depth':      sum(1 for r in depth_source if r['mean'] >= GOOD_BAND_CUTOFF),
+    }
+
+
+def movers(rows):
+    """The four exception bands.
+
+    Absent is computed first and its members are excluded from the other three:
+    a player who did not attack is not "sliding", they are not playing, and
+    that is the fact leadership needs.
+    """
+    absent = [r for r in rows if r['attendance'] < ABSENT_ATTENDANCE]
+    absent_tags = {r['player_tag'] for r in absent}
+
+    eligible = [r for r in rows
+                if r['player_tag'] not in absent_tags
+                and r['weeks_played'] >= MIN_WEEKS_FOR_TREND]
+
+    return {
+        'surging':    sorted([r for r in eligible
+                              if r['trend'] is not None and r['trend'] >= TREND_BAND],
+                             key=lambda r: -r['trend']),
+        'sliding':    sorted([r for r in eligible
+                              if r['trend'] is not None and r['trend'] <= -TREND_BAND],
+                             key=lambda r: r['trend']),
+        'unreliable': sorted([r for r in eligible if r['sigma'] >= UNRELIABLE_SIGMA],
+                             key=lambda r: -r['sigma']),
+        'absent':     sorted(absent, key=lambda r: r['attendance']),
+    }
