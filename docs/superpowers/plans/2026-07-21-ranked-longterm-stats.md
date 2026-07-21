@@ -21,6 +21,13 @@
 - **Visual execution is out of scope for this plan.** Class names and markup here are structural. Palette, typography, signature element, and motion go through the `impeccable` skill after Task 8 lands.
 - **Working branch:** `dev_coc`. Only `main` deploys.
 - Run Python with `PYTHONPATH=C:/Users/michi/Desktop/CodingStuff/coc_stats` and cwd `coc_stats`.
+- **Never write to the database.** The dev DB holds the clan's real data. Every
+  verification in this plan is either a synthetic fixture or a read-only query. Do not
+  INSERT, UPDATE, DELETE, or exercise any write endpoint. A prior plan's implementers
+  created fake sessions in this database and they had to be hunted down and removed.
+- **Report only verification you actually ran.** Paste the real command and its real
+  output. "Verified by inspection" is a valid report; claiming a script passed without
+  running it is not.
 - Scratchpad for verification scripts: `C:/Users/michi/AppData/Local/Temp/claude/C--Users-michi-Desktop-CodingStuff/fe583947-d648-4d47-8783-9ed907f3f751/scratchpad/`
 
 ### Why synthetic fixtures, not database assertions
@@ -256,7 +263,7 @@ git commit -m "feat(ranked): add pure stats module — season windowing and week
 - Produces:
   - `reliability_word(sigma) -> str`
   - `score_trend(scores) -> float | None`
-  - `player_aggregate(records) -> dict` with keys `weeks_played, mean, sigma, reliability, trend, attendance, attacks_used, attacks_max, attacks_wasted, league_move, league_now, league_rank_now, best, worst, verdict_record`
+  - `player_aggregate(records) -> dict` with keys `weeks_played, mean, mean_badge, sigma, reliability, trend, attendance, attacks_used, attacks_max, attacks_wasted, league_move, league_now, league_rank_now, best, worst, verdict_record`
 
 - [ ] **Step 1: Write the failing verification script**
 
@@ -305,6 +312,16 @@ assert a['attacks_wasted'] == 0
 assert a['best'] == 80 and a['worst'] == 80
 assert a['verdict_record'] == {'badge-wow': 4}
 assert sum(a['verdict_record'].values()) == a['weeks_played'], 'verdict record must account for every week'
+
+# mean_badge is the band the MEAN falls into — not whichever badge happened to come first
+assert a['mean_badge'] == 'badge-dominant', a['mean_badge']          # mean 80
+assert player_aggregate([rec(95), rec(95)])['mean_badge'] == 'badge-godlike'
+assert player_aggregate([rec(60), rec(60)])['mean_badge'] == 'badge-good'
+assert player_aggregate([rec(10), rec(10)])['mean_badge'] == 'badge-useless'
+# a player whose weeks are all 'Very Good' badges but whose mean is lower must not
+# inherit the week badge
+mixed = player_aggregate([rec(90, badge='badge-godlike'), rec(30, badge='badge-suck')])
+assert mixed['mean'] == 60.0 and mixed['mean_badge'] == 'badge-good', mixed['mean_badge']
 
 # single week: sigma is 0, trend is None, nothing divides by zero
 one = player_aggregate([rec(70)])
@@ -385,9 +402,16 @@ def player_aggregate(records):
     for r in records:
         verdict_record[r['badge']] = verdict_record.get(r['badge'], 0) + 1
 
+    # The badge for the WINDOW MEAN, so the roster's mean cell is colored by the
+    # band that mean actually falls into. att_count=1, max_attacks=1 keeps
+    # _ranked_verdict from appending a missing-attacks suffix — attendance is
+    # reported separately and must not leak into this badge.
+    mean_badge, _, _ = _ranked_verdict(int(round(mean)), 1, 1) if n else ('badge-useless', '', 0)
+
     return {
         'weeks_played':    n,
         'mean':            mean,
+        'mean_badge':      mean_badge,
         'sigma':           sigma,
         'reliability':     reliability_word(sigma),
         'trend':           score_trend(scores),
@@ -1377,7 +1401,16 @@ assert 'class="rec-row"' in html or 'rec-row' in html, 'roster rows missing'
 assert 'rec-toggle' in html, 'drill-down toggles must be real buttons'
 assert '<button' in html
 assert 'tabindex="0"' in html, 'sortable headers need tabindex, not role'
-assert 'none this window' in html.lower(), 'empty movers bands must say so'
+assert 'rec-mean' in html and 'badge-' in html, 'mean cell must carry its verdict band class'
+
+# The empty-state branch is asserted against the TEMPLATE SOURCE, not the rendered
+# page: on the current dataset all four movers bands have members, so the empty
+# copy never renders and asserting on `html` would fail for the wrong reason.
+with open('templates/ranked/ranked_stats.html', encoding='utf-8') as fh:
+    src = fh.read()
+assert 'None this window.' in src, 'empty movers bands must have an explicit empty state'
+assert '{% else %}' in src
+
 print('ROUTE 7 OK')
 ```
 
@@ -1531,7 +1564,7 @@ tag: `_head.html` already opened one.
                             {{ r.player_name }}
                         </button>
                     </td>
-                    <td class="rec-mean {{ r.verdict_record.keys() | list | first }}">{{ r.mean }}</td>
+                    <td class="rec-mean {{ r.mean_badge }}">{{ r.mean }}</td>
                     <td><canvas class="rec-spark" width="80" height="20"
                                 data-scores="{{ r.scores | join(',') }}"></canvas></td>
                     <td>{{ r.reliability }}</td>
