@@ -3,13 +3,13 @@ from collections import defaultdict
 
 import requests as req_lib
 
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify, abort
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import AppUser, Player, BattleLog, RankedWeek, UptimeTracker, ClanWar, ClanWarMember, ClanWarAttack, CWLBonus
-from features.auth.routes import require_super_admin
+from features.auth.routes import require_super_admin, _current_user
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -162,7 +162,22 @@ def admin_insights():
 def admin_users():
     users   = AppUser.query.order_by(AppUser.is_approved, AppUser.created_at.desc()).all()
     players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
-    return render_template('admin/admin_users.html', users=users, players=players)
+
+    # Accounts may be linked to a player who has since left the clan. Those tags match
+    # no in-clan option, so without this the select renders "None" and the next save
+    # silently wipes a link nobody meant to touch. Passed separately (not merged into
+    # `players`) so the template can present them as their own category.
+    in_clan_tags = {p.tag for p in players}
+    orphan_tags  = {u.linked_player_tag for u in users if u.linked_player_tag} - in_clan_tags
+    departed_linked = (
+        Player.query.filter(Player.tag.in_(orphan_tags)).order_by(Player.name).all()
+        if orphan_tags else []
+    )
+
+    return render_template(
+        'admin/admin_users.html',
+        users=users, players=players, departed_linked=departed_linked,
+    )
 
 
 @admin_bp.route('/admin/users/<int:user_id>/approve', methods=['POST'])
@@ -174,9 +189,19 @@ def admin_user_approve(user_id):
     return redirect(url_for('admin.admin_users'))
 
 
+def _is_self(user_id):
+    """Locking yourself out is the one mistake this page can't undo for you.
+    The template disables these controls on your own row; this is the same rule
+    enforced server-side, so a stale page or a direct POST can't get around it."""
+    me = _current_user()
+    return bool(me and me.id == user_id)
+
+
 @admin_bp.route('/admin/users/<int:user_id>/reject', methods=['POST'])
 @require_super_admin
 def admin_user_reject(user_id):
+    if _is_self(user_id):
+        abort(400, 'You cannot revoke your own access.')
     u = db.get_or_404(AppUser, user_id)
     u.is_approved = False
     db.session.commit()
@@ -186,6 +211,8 @@ def admin_user_reject(user_id):
 @admin_bp.route('/admin/users/<int:user_id>/delete', methods=['POST'])
 @require_super_admin
 def admin_user_delete(user_id):
+    if _is_self(user_id):
+        abort(400, 'You cannot delete your own account.')
     u = db.get_or_404(AppUser, user_id)
     db.session.delete(u)
     db.session.commit()
@@ -196,6 +223,8 @@ def admin_user_delete(user_id):
 @require_super_admin
 def admin_user_toggle_super(user_id):
     u = db.get_or_404(AppUser, user_id)
+    if u.is_super_admin and _is_self(user_id):
+        abort(400, 'You cannot remove your own super admin.')
     u.is_super_admin = not u.is_super_admin
     db.session.commit()
     return redirect(url_for('admin.admin_users'))

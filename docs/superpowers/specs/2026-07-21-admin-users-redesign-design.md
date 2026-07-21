@@ -205,6 +205,23 @@ overridden grants); it removes no capability and no field.
   map to the existing semantic tiers rather than inventing a scale.
 - **Scope-console command-deck aesthetic** from the sibling admin pages — extend, don't restyle.
 
+## 8a. Deltas found during build (not in the original contract)
+
+Three things the implementation adds, each because building or critiquing it surfaced a
+state the spec hadn't accounted for:
+
+- **Pending accounts can already carry `is_super_admin`.** Real data has one. The flag does
+  nothing while `is_approved` is false and everything the moment it flips, so the tier-1
+  entry warns before the click. (`supers` is counted among **approved** accounts only — an
+  unapproved super admin holds no power and must not inflate the figure.)
+- **A fifth link state: tag stored, `Player` row gone entirely.** Neither "linked" nor
+  "departed" — `linked_player` is null while `linked_player_tag` is set, so the account would
+  have read as "Not linked" and escaped the unlinked tier too. Now its own fault entry.
+- **The self-lockout guard is enforced server-side, not only in the template.** §1.5 named
+  self-demotion; revoking or deleting your own account is the same hazard and strictly worse.
+  `admin_user_reject`, `admin_user_delete` and `admin_user_toggle_super` each `abort(400)` on
+  self, so a stale page or a direct POST can't route around the disabled control.
+
 ## 9. Open questions for impeccable
 
 - **Access tier badge:** how `Super admin` / `Standard + N grants` / `Standard` differentiate at a
