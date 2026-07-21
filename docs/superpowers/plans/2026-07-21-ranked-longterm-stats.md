@@ -74,12 +74,25 @@ from types import SimpleNamespace as NS
 from features.ranked.stats import WINDOWS, select_seasons, build_week_records
 
 
-def log(attack, stars, pct=0, opp_th=15):
+# Fixture calibration — these values are deliberate, do not "simplify" them:
+#
+# The 0-100 score divides by a per-town-hall ceiling of 3 * _max_th_multiplier(th).
+# For TH<=16 that ceiling is 3 * 1.15 = 3.45, which assumes attacking TH+2 bases.
+# An even-TH attack only earns _calc_th_multiplier(0, 15) = 0.95, so a TH15 player
+# who only ever hits even matchups tops out near 86, never 100. That is the
+# intended behaviour of the TH-ceiling normalization, not a defect.
+#
+# So: opponents are TH17 (diff +2 -> multiplier 1.15, hitting the ceiling exactly),
+# and the league is Witch League 17, whose rank 17 equals EXPECTED_LEAGUE_RANK[15],
+# making _league_mult exactly 1.0. Together those make the arithmetic exact:
+# a full week of triples scores exactly 100, and half a week exactly 50.
+
+def log(attack, stars, pct=0, opp_th=17):
     return NS(attack=attack, stars=stars, percentage=pct, opponent_th=opp_th,
               trophies=0, league_season_id='s', player_tag='#A')
 
 
-def week(sid, day, done=True, tag='#A', th=15, maxa=12, used=12, tier='Titan League 25',
+def week(sid, day, done=True, tag='#A', th=15, maxa=12, used=12, tier='Witch League 17',
          logs=None, trophies=500, rank=10):
     return NS(league_season_id=sid, start_day=dt.date(2026, 5, day), is_done=done,
               player_tag=tag, townhall=th, max_attacks=maxa, attack_wins=used,
@@ -97,19 +110,23 @@ weeks10 = [week('s%d' % i, i + 1) for i in range(1, 9)]
 assert select_seasons(weeks10, '4') == ['s5', 's6', 's7', 's8'], 'window keeps the most recent N'
 
 # --- build_week_records ---
-perfect = [log(True, 3, 100, 15) for _ in range(12)]
+perfect = [log(True, 3, 100) for _ in range(12)]
 recs = build_week_records([week('s1', 4, logs=perfect)], ['s1'])
 assert list(recs) == ['#A']
 r = recs['#A'][0]
-assert r['score'] == 100, 'twelve even-TH triples on 12 max attacks is a perfect score, got %r' % r['score']
+assert r['score'] == 100, 'twelve ceiling-rate triples on 12 max attacks is a perfect score, got %r' % r['score']
 assert r['badge'] == 'badge-godlike'
 assert r['label'] == 'Godlike', 'label must be stripped of the missing-attacks suffix'
 assert r['attacks_used'] == 12
-assert r['league_rank'] == 25
+assert r['league_rank'] == 17
 assert r['townhall'] == 15
 
+# an even-TH week cannot reach the ceiling — 0.95 multiplier against a 1.15 ceiling
+even = build_week_records([week('s1', 4, logs=[log(True, 3, 100, 15) for _ in range(12)])], ['s1'])
+assert even['#A'][0]['score'] == 83, 'even-TH tops out below 100 by design, got %r' % even['#A'][0]['score']
+
 # attacks_used comes from ranked_week, NOT from the log count
-half = [log(True, 3, 100, 15) for _ in range(6)]
+half = [log(True, 3, 100) for _ in range(6)]
 r2 = build_week_records([week('s1', 4, used=6, logs=half)], ['s1'])['#A'][0]
 assert r2['attacks_used'] == 6
 assert r2['score'] == 50, 'six of twelve triples halves the score, got %r' % r2['score']
