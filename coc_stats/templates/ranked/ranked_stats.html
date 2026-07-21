@@ -14,8 +14,17 @@
     .mv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
     .mv-band { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
     .mv-band h3 { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; margin: 0 0 10px; }
-    .mv-entry { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; }
     .mv-empty { color: var(--muted); font-size: 12px; }
+
+    /* Movers entries and tail rows are real buttons (a drill-down opener), not
+       inert rows — laid out to read the same as the old inert divs did. */
+    .mv-toggle, .tail-toggle {
+        display: flex; justify-content: space-between; align-items: center; gap: 10px;
+        width: 100%; padding: 4px 0; background: none; border: 0; color: inherit;
+        font: inherit; text-align: left; cursor: pointer;
+    }
+    .pd-panel { display: none; }
+    .pd-panel.open { display: block; }
 
     #record-table { width: 100%; border-collapse: collapse; }
     #record-table th { text-align: left; font-size: 10.5px; letter-spacing: 1.2px;
@@ -27,6 +36,19 @@
     .rec-detail.open { display: table-row; }
     .rec-tail { margin-top: 24px; }
     .rec-tail h3 { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; }
+
+    /* Thin-defense disclosure — replaces the old mouse-only title attribute. */
+    .thin-flag { background: none; border: 0; padding: 0 2px; color: inherit;
+                 font: inherit; cursor: pointer; text-decoration: underline dotted; }
+    .thin-pop, .info-pop {
+        position: fixed; margin: 0; inset: auto; background: var(--surf2);
+        border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+        max-width: 260px; font-size: 12px; line-height: 1.5; color: var(--text);
+        box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 9999;
+    }
+    .thin-pop::backdrop { background: transparent; }
+
+    .form-live-note { color: var(--muted); font-size: 12px; margin-top: 6px; }
 
     @media (max-width: 760px) {
         .mv-grid { grid-template-columns: 1fr; }
@@ -77,10 +99,16 @@
         <h2 id="form-h" class="sr-only">Clan form</h2>
         <p class="form-verdict form-{{ form.direction }}">
             Clan form is <strong>{{ form.direction }}</strong> —
-            {{ form.delta }} points across the last three seasons.
+            {{ form.delta }} points, {{ form.basis }}.
             Peak was {{ form.peak_mean }} on {{ form.peak_label }}; now {{ form.current }}.
         </p>
         <div class="form-chart-wrap"><canvas id="form-chart"></canvas></div>
+        {% if live_season %}
+        <p class="form-live-note">
+            {{ live_season.label }} is still in progress ({{ live_season.participants }} attacking so far)
+            — not counted in the line above or any average on this page.
+        </p>
+        {% endif %}
     </section>
 
     {# ── ZONE 2 — MOVERS ────────────────────────────────────────────── #}
@@ -95,7 +123,9 @@
             <h3>{{ title }}</h3>
             {% if movers[band] %}
                 {% for r in movers[band] %}
-                <div class="mv-entry">
+                <button type="button" class="mv-toggle player-toggle"
+                        data-tag="{{ r.player_tag }}" aria-expanded="false"
+                        aria-controls="mv-detail-{{ band }}-{{ loop.index0 }}">
                     <span>{{ r.player_name }}</span>
                     <span>
                         {%- if band == 'absent' -%}
@@ -104,6 +134,9 @@
                             {{ r[field] }}{{ suffix }}
                         {%- endif -%}
                     </span>
+                </button>
+                <div class="pd-panel" id="mv-detail-{{ band }}-{{ loop.index0 }}">
+                    <div class="pd-body"></div>
                 </div>
                 {% endfor %}
             {% else %}
@@ -121,6 +154,7 @@
                 <tr>
                     <th tabindex="0" data-sort="rank">#</th>
                     <th tabindex="0" data-sort="name">Player</th>
+                    <th tabindex="0" data-sort="townhall">TH</th>
                     <th tabindex="0" data-sort="mean">Mean</th>
                     <th>Form</th>
                     <th tabindex="0" data-sort="reliability">Reliability</th>
@@ -134,14 +168,16 @@
             <tbody>
             {% for r in roster %}
                 <tr class="rec-row" data-tag="{{ r.player_tag }}">
-                    <td>{{ loop.index }}</td>
+                    <td class="rec-rank">{{ loop.index }}</td>
                     <td>
-                        <button type="button" class="rec-toggle"
+                        <button type="button" class="rec-toggle player-toggle"
+                                data-tag="{{ r.player_tag }}"
                                 aria-expanded="false"
                                 aria-controls="detail-{{ loop.index }}">
                             {{ r.player_name }}
                         </button>
                     </td>
+                    <td>{{ r.townhall_now }}</td>
                     <td class="rec-mean {{ r.mean_badge }}">{{ r.mean }}</td>
                     <td><canvas class="rec-spark" width="80" height="20"
                                 data-scores="{{ r.scores | join(',') }}"></canvas></td>
@@ -151,17 +187,22 @@
                     <td>{{ r.league_now }}{% if r.league_move %} ({{ '%+d' % r.league_move }}){% endif %}</td>
                     <td>
                         {%- if r.defense.index is not none -%}
-                            {{ '%+.1f' % r.defense.index }}{% if r.defense.thin %} <abbr title="limited data">*</abbr>{% endif %}
+                            {{ '%+.1f' % r.defense.index }}{% if r.defense.thin %}
+                            <button type="button" class="thin-flag" aria-haspopup="dialog"
+                                    aria-expanded="false"
+                                    aria-label="Limited data for this league band">*</button>
+                            {% endif %}
                         {%- else -%}—{%- endif -%}
                     </td>
                     <td class="rec-verdicts">
-                        {% for badge, count in r.verdict_record.items() %}
-                        <span class="{{ badge }}">{{ count }}</span>
+                        {% for label, badge in verdict_bands %}
+                        <span class="{{ badge }}" data-verdict="{{ label }}"
+                              aria-label="{{ label }}: {{ r.verdict_record.get(label, 0) }}">{{ r.verdict_record.get(label, 0) }}</span>
                         {% endfor %}
                     </td>
                 </tr>
                 <tr class="rec-detail" id="detail-{{ loop.index }}" data-tag="{{ r.player_tag }}">
-                    <td colspan="10"><div class="rec-detail-body"></div></td>
+                    <td colspan="11"><div class="rec-detail-body pd-body"></div></td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -171,7 +212,14 @@
         <div class="rec-tail">
             <h3>Not enough data</h3>
             {% for r in tail_thin %}
-            <div class="mv-entry"><span>{{ r.player_name }}</span><span>{{ r.weeks_played }} week(s)</span></div>
+            <button type="button" class="tail-toggle player-toggle"
+                    data-tag="{{ r.player_tag }}" aria-expanded="false"
+                    aria-controls="tail-thin-detail-{{ loop.index0 }}">
+                <span>{{ r.player_name }}</span><span>{{ r.weeks_played }} week(s)</span>
+            </button>
+            <div class="pd-panel" id="tail-thin-detail-{{ loop.index0 }}">
+                <div class="pd-body"></div>
+            </div>
             {% endfor %}
         </div>
         {% endif %}
@@ -180,9 +228,14 @@
         <div class="rec-tail">
             <h3>Not participating</h3>
             {% for r in tail_absent %}
-            <div class="mv-entry">
+            <button type="button" class="tail-toggle player-toggle"
+                    data-tag="{{ r.player_tag }}" aria-expanded="false"
+                    aria-controls="tail-absent-detail-{{ loop.index0 }}">
                 <span>{{ r.player_name }}</span>
                 <span>{{ r.attacks_used }}/{{ r.attacks_max }} attacks</span>
+            </button>
+            <div class="pd-panel" id="tail-absent-detail-{{ loop.index0 }}">
+                <div class="pd-body"></div>
             </div>
             {% endfor %}
         </div>
@@ -192,6 +245,7 @@
 
 <script>
 const PAGE = {{ page_json | safe }};
+const VERDICT_BANDS = {{ verdict_bands | tojson }};
 
 // Zone 1 — clan form line
 (function () {
@@ -214,7 +268,19 @@ const PAGE = {{ page_json | safe }};
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        // Each point is a season mean of however many players actually
+                        // played it — the tooltip should say how many, not just the score.
+                        afterLabel: function (ctx) {
+                            const point = PAGE.form.points[ctx.dataIndex];
+                            return point ? 'Participants: ' + point.participants : '';
+                        }
+                    }
+                }
+            },
             scales: {
                 y: { min: 0, max: 100, ticks: { color: muted } },
                 x: { ticks: { color: muted } }
@@ -251,7 +317,15 @@ document.querySelectorAll('.rec-spark').forEach(function (canvas) {
     Array.from(tbody.rows).forEach(function (tr) {
         if (tr.classList.contains('rec-row')) naturalOrder.set(tr.dataset.tag, naturalOrder.size);
     });
-    function sortBy(key) {
+    function renumberRoster() {
+        // The '#' cell is a rendered rank, not a live index — a sort must rewrite it,
+        // or every column but the first would reorder while '#' silently lied.
+        Array.from(tbody.querySelectorAll('tr.rec-row')).forEach(function (tr, i) {
+            const cell = tr.querySelector('td.rec-rank');
+            if (cell) cell.textContent = i + 1;
+        });
+    }
+    function sortBy(key, th) {
         dir[key] = !dir[key];
         const sign = dir[key] ? 1 : -1;
         const pairs = [];
@@ -264,12 +338,13 @@ document.querySelectorAll('.rec-spark').forEach(function (canvas) {
             const ra = rowFor(tagOf(a[0])), rb = rowFor(tagOf(b[0]));
             let va, vb;
             switch (key) {
-                case 'name':    va = ra.player_name; vb = rb.player_name; break;
-                case 'league':  va = ra.league_rank_now; vb = rb.league_rank_now; break;
-                case 'defense': va = (ra.defense || {}).index; vb = (rb.defense || {}).index; break;
+                case 'name':     va = ra.player_name; vb = rb.player_name; break;
+                case 'townhall': va = ra.townhall_now; vb = rb.townhall_now; break;
+                case 'league':   va = ra.league_rank_now; vb = rb.league_rank_now; break;
+                case 'defense':  va = (ra.defense || {}).index; vb = (rb.defense || {}).index; break;
                 case 'reliability': va = ra.sigma; vb = rb.sigma; break;
-                case 'rank':    va = naturalOrder.get(tagOf(a[0])); vb = naturalOrder.get(tagOf(b[0])); break;
-                default:        va = ra[key]; vb = rb[key];
+                case 'rank':     va = naturalOrder.get(tagOf(a[0])); vb = naturalOrder.get(tagOf(b[0])); break;
+                default:         va = ra[key]; vb = rb[key];
             }
             if (va === null || va === undefined) va = -Infinity;
             if (vb === null || vb === undefined) vb = -Infinity;
@@ -277,11 +352,14 @@ document.querySelectorAll('.rec-spark').forEach(function (canvas) {
             return sign * (va - vb);
         });
         pairs.forEach(p => { tbody.appendChild(p[0]); tbody.appendChild(p[1]); });
+        renumberRoster();
+        table.querySelectorAll('th[data-sort]').forEach(function (h) { h.removeAttribute('aria-sort'); });
+        if (th) th.setAttribute('aria-sort', sign === 1 ? 'ascending' : 'descending');
     }
     table.querySelectorAll('th[data-sort]').forEach(function (th) {
-        th.addEventListener('click', () => sortBy(th.dataset.sort));
+        th.addEventListener('click', () => sortBy(th.dataset.sort, th));
         th.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sortBy(th.dataset.sort); }
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sortBy(th.dataset.sort, th); }
         });
     });
 })();
@@ -314,10 +392,39 @@ function esc(s) {
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+// Roster + both tail sections exactly partition every serialized player (see
+// features/ranked/stats.py:build_record_page), so this union is a complete
+// tag -> summary-row index — the mean/sigma/trend/attendance/verdict_record/
+// best/worst that PAGE.players (the drill-down detail) does not itself carry.
+const ROW_BY_TAG = (function () {
+    const map = {};
+    PAGE.roster.concat(PAGE.tail_thin || [], PAGE.tail_absent || [])
+        .forEach(function (r) { map[r.player_tag] = r; });
+    return map;
+})();
+
+// Opening characterization for Zone 4 — a short read on shape, not a paragraph.
+function characterize(row) {
+    if (!row) return '';
+    if (row.attendance < 0.5) return 'Barely present — under half of available attacks used.';
+    if (row.mean >= 80 && row.sigma < 10) return 'Elite and metronomic.';
+    if (row.sigma >= 15) return 'Boom-or-bust — wide week-to-week swings.';
+    if (row.trend !== null && row.trend !== undefined && row.trend <= -8) return 'Sliding — recent weeks are down from earlier form.';
+    if (row.trend !== null && row.trend !== undefined && row.trend >= 8) return 'Climbing — recent weeks are up from earlier form.';
+    if (row.mean >= 70) return 'Strong and consistent.';
+    if (row.mean < 40) return 'Struggling to find form.';
+    return 'Middle of the pack.';
+}
+
 function renderDetail(tag) {
     const p = PAGE.players[tag];
     if (!p) return '<p>No data.</p>';
+    const row = ROW_BY_TAG[tag];
     const parts = [];
+
+    // Opening characterization — mean/sigma/trend/attendance collapsed to one line.
+    const opening = characterize(row);
+    if (opening) parts.push('<p class="dd-open">' + esc(opening) + '</p>');
 
     // Career line
     parts.push('<div class="dd-block"><h4>Career</h4>');
@@ -388,6 +495,27 @@ function renderDetail(tag) {
             ' defenses — ' + (p.defense.index >= 0 ? '+' : '') + p.defense.index +
             ' against what this league expects.' +
             (p.defense.thin ? ' <em>Limited data for this league band.</em>' : '') + '</p>');
+        const mixKeys = Object.keys(p.defense.star_mix || {}).sort(function (a, b) { return Number(a) - Number(b); });
+        if (mixKeys.length) {
+            parts.push('<p class="dd-note">Stars conceded: ' +
+                mixKeys.map(function (k) { return k + '★ ×' + p.defense.star_mix[k]; }).join(', ') + '.</p>');
+        }
+    }
+    parts.push('</div>');
+
+    // Verdict record — same fixed 8-band order as the roster strip, plus best/worst weeks.
+    parts.push('<div class="dd-block"><h4>Verdict record</h4>');
+    if (row) {
+        parts.push('<div class="dd-verdicts">' + VERDICT_BANDS.map(function (band) {
+            const label = band[0], badge = band[1];
+            const count = (row.verdict_record || {})[label] || 0;
+            return '<span class="' + badge + '" data-verdict="' + esc(label) +
+                '" aria-label="' + esc(label) + ': ' + count + '">' + count + '</span>';
+        }).join('') + '</div>');
+        const bestRec = (p.records || []).find(function (r) { return r.score === row.best; });
+        const worstRec = (p.records || []).find(function (r) { return r.score === row.worst; });
+        parts.push('<p>Best week: ' + row.best + (bestRec ? ' (' + esc(bestRec.start_day) + ')' : '') +
+            '. Worst week: ' + row.worst + (worstRec ? ' (' + esc(worstRec.start_day) + ')' : '') + '.</p>');
     }
     parts.push('</div>');
 
@@ -427,17 +555,68 @@ function drawCareer(canvas) {
     });
 }
 
-document.querySelectorAll('.rec-toggle').forEach(function (btn) {
+// Every player-facing control on the page — roster toggle, movers button, or
+// tail-section button — shares this one open/render/close mechanism, so a
+// player is reachable the same way no matter which zone surfaced them.
+document.querySelectorAll('.player-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {
-        const row = btn.closest('tr');
         const detail = document.getElementById(btn.getAttribute('aria-controls'));
+        if (!detail) return;
         const open = detail.classList.toggle('open');
         btn.setAttribute('aria-expanded', open ? 'true' : 'false');
         if (open && !detail.dataset.rendered) {
-            detail.querySelector('.rec-detail-body').innerHTML = renderDetail(row.dataset.tag);
-            detail.querySelectorAll('.dd-career').forEach(drawCareer);
+            const body = detail.querySelector('.pd-body');
+            if (body) {
+                body.innerHTML = renderDetail(btn.dataset.tag);
+                body.querySelectorAll('.dd-career').forEach(drawCareer);
+            }
             detail.dataset.rendered = '1';
         }
+    });
+});
+
+// ── Thin-defense disclosure (keyboard + touch reachable; replaces the old title attribute) ──
+let thinOpenBtn = null;
+function positionPop(pop, btn) {
+    const r = btn.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    let left = r.left + r.width / 2 - pr.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - pr.width - 8));
+    let top = r.top - pr.height - 8;
+    if (top < 8) top = r.bottom + 8;
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+}
+function getThinPop() {
+    let pop = document.getElementById('thinPop');
+    if (!pop) {
+        pop = document.createElement('div');
+        pop.id = 'thinPop';
+        pop.className = 'thin-pop';
+        pop.setAttribute('popover', 'auto');
+        pop.setAttribute('role', 'dialog');
+        document.body.appendChild(pop);
+        pop.addEventListener('toggle', function (e) {
+            if (e.newState === 'closed' && thinOpenBtn) {
+                thinOpenBtn.setAttribute('aria-expanded', 'false');
+                thinOpenBtn = null;
+            }
+        });
+    }
+    return pop;
+}
+document.querySelectorAll('.thin-flag').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const pop = getThinPop();
+        if (thinOpenBtn === btn) { pop.hidePopover(); return; }
+        pop.textContent = 'Limited defense data for this league band — falls back to the clan-wide mean.';
+        if (pop.matches(':popover-open')) pop.hidePopover();
+        pop.showPopover();
+        positionPop(pop, btn);
+        if (thinOpenBtn) thinOpenBtn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-expanded', 'true');
+        thinOpenBtn = btn;
     });
 });
 </script>

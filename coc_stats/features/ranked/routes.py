@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from features.auth.routes import _current_user
 from features.ranked.stats import (
-    DEFAULT_WINDOW, WINDOWS, build_record_page,
+    DEFAULT_WINDOW, VERDICT_BANDS, WINDOWS, build_record_page,
 )
 from models import Player, RankedWeek, RankedWeekAnalysis
 from services.helpers import (
@@ -360,15 +360,17 @@ def ranked_stats_page():
 
     return render_template(
         'ranked/ranked_stats.html',
-        window       = window,
-        windows      = list(WINDOWS),
-        form         = page['form'],
-        movers       = page['movers'],
-        roster       = page['roster'],
-        tail_thin    = page['tail_thin'],
-        tail_absent  = page['tail_absent'],
-        seasons      = page['seasons'],
-        page_json    = _script_safe_json(page),
+        window        = window,
+        windows       = list(WINDOWS),
+        form          = page['form'],
+        movers        = page['movers'],
+        roster        = page['roster'],
+        tail_thin     = page['tail_thin'],
+        tail_absent   = page['tail_absent'],
+        seasons       = page['seasons'],
+        verdict_bands = list(VERDICT_BANDS),
+        live_season   = page['live_season'],
+        page_json     = _script_safe_json(page),
     )
 
 
