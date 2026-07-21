@@ -318,8 +318,8 @@ def _script_safe_json(payload):
     return (dumped.replace('<', '\\u003c')
                   .replace('>', '\\u003e')
                   .replace('&', '\\u0026')
-                  .replace(' ', '\\u2028')
-                  .replace(' ', '\\u2029'))
+                  .replace('\\u2028', '\\u2028')
+                  .replace('\\u2029', '\\u2029'))
 
 
 def _record_page_cached(clan_players, window):

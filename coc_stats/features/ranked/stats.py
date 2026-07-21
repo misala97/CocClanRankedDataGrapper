@@ -41,6 +41,23 @@ LEGEND_RANK_FLOOR     = 34      # _get_league_rank returns 34/35/36 for Legend I
 RELIABILITY_BANDS = ((5.0, 'metronome'), (10.0, 'steady'), (15.0, 'swingy'),
                      (None, 'erratic'))
 
+# Canonical verdict order, best to worst, with No Attacks last because it is a
+# participation state rather than a performance band. _ranked_verdict returns only
+# SEVEN badge classes for these EIGHT labels — badge-useless serves both 'Useless'
+# and 'No Attacks' — so verdict_record must key on the label. Keying on the badge
+# silently counts a week someone never attacked as a week they attacked badly,
+# collapsing the exact distinction the Absent band exists to preserve.
+VERDICT_BANDS = (
+    ('Godlike',    'badge-godlike'),
+    ('Dominant',   'badge-dominant'),
+    ('Very Good',  'badge-wow'),
+    ('Good',       'badge-good'),
+    ('Bad',        'badge-warning'),
+    ('Disaster',   'badge-suck'),
+    ('Useless',    'badge-useless'),
+    ('No Attacks', 'badge-useless'),
+)
+
 
 def select_seasons(weeks, window):
     """Completed season ids, oldest first, trimmed to the requested window."""
@@ -132,7 +149,7 @@ def player_aggregate(records):
 
     verdict_record = {}
     for r in records:
-        verdict_record[r['badge']] = verdict_record.get(r['badge'], 0) + 1
+        verdict_record[r['label']] = verdict_record.get(r['label'], 0) + 1
 
     # The badge for the WINDOW MEAN, so the roster's mean cell is colored by the
     # band that mean actually falls into. att_count=1, max_attacks=1 keeps
@@ -155,6 +172,7 @@ def player_aggregate(records):
                            if ranked_weeks else 0,
         'league_now':      ranked_weeks[-1]['league_tier'] if ranked_weeks else '',
         'league_rank_now': ranked_weeks[-1]['league_rank'] if ranked_weeks else 0,
+        'townhall_now':    records[-1]['townhall'] if records else 0,
         'best':            max(scores) if scores else 0,
         'worst':           min(scores) if scores else 0,
         'verdict_record':  verdict_record,
@@ -209,6 +227,7 @@ def player_defense(tag, records, defense_logs_by_key, expectations):
     """One player's defense quality against what their leagues expected."""
     fallback = expectations['_global']
     values, expected, thin = [], [], False
+    star_mix = {}
     for r in records:
         band = expectations.get(defense_band(r['league_rank']), fallback)
         logs = defense_logs_by_key.get((tag, r['season_id']), ())
@@ -217,16 +236,18 @@ def player_defense(tag, records, defense_logs_by_key, expectations):
         for log in logs:
             values.append(log.trophies or 0)
             expected.append(band['mean'])
+            star_mix[log.stars or 0] = star_mix.get(log.stars or 0, 0) + 1
 
     if not values:
-        return {'n': 0, 'tpd': None, 'index': None, 'thin': True}
+        return {'n': 0, 'tpd': None, 'index': None, 'thin': True, 'star_mix': {}}
 
     tpd = round(sum(values) / len(values), 1)
     return {
-        'n':     len(values),
-        'tpd':   tpd,
-        'index': round(tpd - sum(expected) / len(expected), 1),
-        'thin':  thin,
+        'n':        len(values),
+        'tpd':      tpd,
+        'index':    round(tpd - sum(expected) / len(expected), 1),
+        'thin':     thin,
+        'star_mix': star_mix,
     }
 
 
@@ -256,10 +277,13 @@ def clan_form(week_records_by_tag, season_ids, labels, depth_source):
     means = [p['mean'] for p in points]
     if len(means) >= 6:
         delta = round(sum(means[-3:]) / 3 - sum(means[-6:-3]) / 3, 1)
+        basis = 'last three seasons'
     elif len(means) >= 2:
         delta = round(means[-1] - means[0], 1)
+        basis = 'first to last season'
     else:
         delta = 0.0
+        basis = 'first to last season'
 
     if delta >= FORM_BAND:
         direction = 'climbing'
@@ -272,6 +296,7 @@ def clan_form(week_records_by_tag, season_ids, labels, depth_source):
     return {
         'points':     points,
         'delta':      delta,
+        'basis':      basis,
         'direction':  direction,
         'current':    points[-1]['mean'] if points else 0.0,
         'peak_mean':  peak['mean'] if peak else 0.0,
@@ -396,6 +421,25 @@ def build_record_page(clan_players, weeks, window):
     season_ids = select_seasons([w for w in weeks if w.player_tag in in_clan], window)
     wanted = set(season_ids)
 
+    # The live season is excluded from every aggregate, but the page still shows it
+    # as pending — silently omitting it makes an in-progress week look like it does
+    # not exist at all.
+    live = None
+    for w in weeks:
+        if w.is_done or w.player_tag not in in_clan:
+            continue
+        if live is None or (w.start_day and live['_day'] and w.start_day < live['_day']):
+            live = {'season_id': w.league_season_id, '_day': w.start_day,
+                    'label': w.start_day.strftime('%d.%m.%y') if w.start_day
+                             else w.league_season_id,
+                    'participants': 0}
+    if live:
+        live['participants'] = sum(
+            1 for w in weeks
+            if not w.is_done and w.player_tag in in_clan
+            and w.league_season_id == live['season_id'])
+        live.pop('_day')
+
     labels = {}
     for w in weeks:
         sid = w.league_season_id
@@ -452,6 +496,7 @@ def build_record_page(clan_players, weeks, window):
         'window':      window,
         'seasons':     season_ids,
         'labels':      labels,
+        'live_season': live,
         'form':        clan_form(records_by_tag, season_ids, labels, depth_source=roster),
         'movers':      bands,
         'roster':      roster,
