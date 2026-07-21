@@ -28,6 +28,8 @@ FORM_BAND             = 2.0     # clan-mean delta that separates holding from mo
 GOOD_BAND_CUTOFF      = 58      # _ranked_verdict's "Good" floor, for roster depth
 
 MIN_WEEKS_FOR_TREND   = 4       # trend and sigma are meaningless below this
+TREND_LONG_WINDOW     = 3       # weeks per side once there is enough history
+TREND_SHORT_WINDOW    = 2       # weeks per side when history is still short
 MIN_WEEKS_FOR_RANKING = 3       # fewer than this drops to the "not enough data" tail
 
 DEFENSE_BAND_MIN_N    = 250     # defenses needed before a league band is trusted
@@ -106,10 +108,13 @@ def score_trend(scores):
     Returns None below MIN_WEEKS_FOR_TREND — a two-week 'trend' is noise.
     """
     n = len(scores)
-    if n >= 6:
-        return round(sum(scores[-3:]) / 3 - sum(scores[-6:-3]) / 3, 1)
+    long_span = TREND_LONG_WINDOW * 2
+    if n >= long_span:
+        return round(sum(scores[-TREND_LONG_WINDOW:]) / TREND_LONG_WINDOW
+                     - sum(scores[long_span * -1:-TREND_LONG_WINDOW]) / TREND_LONG_WINDOW, 1)
     if n >= MIN_WEEKS_FOR_TREND:
-        return round(sum(scores[-2:]) / 2 - sum(scores[:2]) / 2, 1)
+        return round(sum(scores[-TREND_SHORT_WINDOW:]) / TREND_SHORT_WINDOW
+                     - sum(scores[:TREND_SHORT_WINDOW]) / TREND_SHORT_WINDOW, 1)
     return None
 
 
