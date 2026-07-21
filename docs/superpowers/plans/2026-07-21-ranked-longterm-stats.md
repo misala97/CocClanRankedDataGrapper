@@ -1408,7 +1408,16 @@ from app import app
 with app.test_client() as c:
     html = c.get('/ranked/stats').get_data(as_text=True)
 
-assert html.count('<style') == 1, 'exactly one style tag — _head.html opens it, the page must not open a second'
+with open('templates/ranked/ranked_stats.html', encoding='utf-8') as fh:
+    src = fh.read()
+
+# _head.html opens a <style> that the page closes with </head>, and _nav.html carries
+# its own self-contained block — so EVERY page in this app renders exactly two. The
+# rule that matters is that the page template must not open one of its own, which
+# would silently eat the next CSS rule. That intent lives at the source level.
+assert '<style' not in src, 'page template must not open its own <style> — _head.html already left one open'
+assert html.count('<style') == 2, 'expected _head.html + _nav.html blocks only, got %d' % html.count('<style')
+
 assert 'id="form-chart"' in html, 'zone 1 chart canvas missing'
 assert re.search(r'class="[^"]*form-verdict', html), 'zone 1 direction verdict missing'
 for band in ('surging', 'sliding', 'unreliable', 'absent'):
@@ -1423,8 +1432,6 @@ assert 'rec-mean' in html and 'badge-' in html, 'mean cell must carry its verdic
 # The empty-state branch is asserted against the TEMPLATE SOURCE, not the rendered
 # page: on the current dataset all four movers bands have members, so the empty
 # copy never renders and asserting on `html` would fail for the wrong reason.
-with open('templates/ranked/ranked_stats.html', encoding='utf-8') as fh:
-    src = fh.read()
 assert 'None this window.' in src, 'empty movers bands must have an explicit empty state'
 assert '{% else %}' in src
 
