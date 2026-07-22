@@ -1,6 +1,7 @@
+import calendar
 import datetime as dt
 
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from extensions import db
 from models import DeliveryShift
@@ -100,6 +101,11 @@ def _aggregate(rows):
 
 
 WEEKDAY_LABELS = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag']
+WEEKDAY_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+MONTH_LABELS = [
+    'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+]
 
 TIME_BUCKET_ORDER = ['morning', 'afternoon', 'evening', 'night']
 TIME_BUCKET_LABELS = {
@@ -110,17 +116,62 @@ TIME_BUCKET_LABELS = {
 }
 
 
-def _time_bucket(t):
-    if t is None:
+TIME_BUCKET_BOUNDARIES = [(0, 14, 'morning'), (14, 18, 'afternoon'), (18, 22, 'evening'), (22, 24, 'night')]
+
+
+def _time_bucket_shares(shift_start, hours_worked):
+    """Hours-in-bucket for a shift starting at shift_start and lasting hours_worked
+    hours, split across every Vormittag/Nachmittag/Abend/Nacht window it actually
+    crosses (wraps correctly past midnight). Returns None if start time is unknown."""
+    if shift_start is None or not hours_worked:
         return None
-    h = t.hour
-    if h < 14:
-        return 'morning'
-    if h < 18:
-        return 'afternoon'
-    if h < 22:
-        return 'evening'
-    return 'night'
+    remaining = hours_worked * 60
+    cursor = shift_start.hour * 60 + shift_start.minute
+    shares = {}
+    while remaining > 0:
+        cursor_in_day = cursor % 1440
+        cursor_hour = cursor_in_day / 60
+        for start_h, end_h, key in TIME_BUCKET_BOUNDARIES:
+            if start_h <= cursor_hour < end_h:
+                minutes_to_boundary = end_h * 60 - cursor_in_day
+                chunk = min(remaining, minutes_to_boundary)
+                shares[key] = shares.get(key, 0) + chunk / 60
+                cursor += chunk
+                remaining -= chunk
+                break
+    return shares
+
+
+def _time_breakdown(rows):
+    """Like _group_breakdown, but a shift crossing a time-of-day boundary contributes
+    to every bucket it spans, prorated by time-in-bucket (uniform-earning-rate
+    assumption) rather than being credited whole to its start bucket. `shift_count`
+    per bucket counts shifts that touched that bucket at all, so it can legitimately
+    sum to more than the total shift count when shifts cross boundaries."""
+    totals = {k: {'tips': 0.0, 'hours': 0.0, 'deliveries': 0.0, 'shift_ids': set()} for k in TIME_BUCKET_ORDER}
+    for r in rows:
+        shares = _time_bucket_shares(r['shift_start'], r['hours_worked'])
+        if not shares:
+            continue
+        for key, hrs in shares.items():
+            frac = hrs / r['hours_worked']
+            b = totals[key]
+            b['tips'] += r['total'] * frac
+            b['hours'] += hrs
+            b['deliveries'] += r['deliveries'] * frac
+            b['shift_ids'].add(r['id'])
+    entries = []
+    for key in TIME_BUCKET_ORDER:
+        b = totals[key]
+        if not b['shift_ids']:
+            continue
+        entries.append({
+            'label': TIME_BUCKET_LABELS[key],
+            'shift_count': len(b['shift_ids']),
+            'avg_per_hour': round(b['tips'] / b['hours'], 2) if b['hours'] else None,
+            'avg_per_delivery': round(b['tips'] / b['deliveries'], 2) if b['deliveries'] else None,
+        })
+    return entries
 
 
 def _group_breakdown(rows, key_func, label_func, order=None):
@@ -143,6 +194,45 @@ def _group_breakdown(rows, key_func, label_func, order=None):
     return [agg for _, agg in entries]
 
 
+def _build_month_calendar(year, month, rows, today, week_start):
+    rows_by_date = {}
+    for r in rows:
+        if r['shift_date']:
+            rows_by_date.setdefault(r['shift_date'], []).append(r)
+
+    week_end = week_start + dt.timedelta(days=6)
+    weeks = []
+    for week in calendar.Calendar(firstweekday=0).monthdayscalendar(year, month):
+        week_cells = []
+        for day in week:
+            if day == 0:
+                week_cells.append(None)
+                continue
+            d = dt.date(year, month, day)
+            day_rows = rows_by_date.get(d, [])
+            cell = {
+                'date': d,
+                'iso': d.isoformat(),
+                'day': day,
+                'weekday_label': WEEKDAY_LABELS[d.weekday()],
+                'rows': day_rows,
+                'is_today': d == today,
+                'is_future': d > today,
+                'is_current_week': week_start <= d <= week_end,
+                'is_month_best': False,
+                'per_hour': None,
+                'total': None,
+            }
+            if day_rows:
+                total = sum(r['total'] for r in day_rows)
+                hours = sum(r['hours_worked'] or 0 for r in day_rows)
+                cell['total'] = round(total, 2)
+                cell['per_hour'] = round(total / hours, 2) if hours else None
+            week_cells.append(cell)
+        weeks.append(week_cells)
+    return weeks
+
+
 @tips_bp.route('/tips')
 @login_required
 def tips_dashboard():
@@ -153,6 +243,39 @@ def tips_dashboard():
     week_start = today - dt.timedelta(days=today.weekday())
     month_start = today.replace(day=1)
     year_start = today.replace(month=1, day=1)
+
+    try:
+        cal_year = int(request.args.get('y', today.year))
+        cal_month = int(request.args.get('m', today.month))
+        dt.date(cal_year, cal_month, 1)
+    except (ValueError, TypeError):
+        cal_year, cal_month = today.year, today.month
+
+    calendar_weeks = _build_month_calendar(cal_year, cal_month, rows, today, week_start)
+    month_rates = [c['per_hour'] for week in calendar_weeks for c in week if c and c['per_hour'] is not None]
+    calendar_max_rate = max(month_rates) if month_rates else 1
+    if month_rates:
+        for week in calendar_weeks:
+            for c in week:
+                if c and c['per_hour'] == calendar_max_rate:
+                    c['is_month_best'] = True
+
+    prev_month, prev_year = (12, cal_year - 1) if cal_month == 1 else (cal_month - 1, cal_year)
+    next_month, next_year = (1, cal_year + 1) if cal_month == 12 else (cal_month + 1, cal_year)
+
+    is_current_month = (cal_year == today.year and cal_month == today.month)
+
+    viewed_month_stats = _aggregate([
+        r for r in rows if r['shift_date'] and r['shift_date'].year == cal_year and r['shift_date'].month == cal_month
+    ])
+
+    default_cell = None
+    focus_day = request.args.get('d', type=int)
+    if focus_day:
+        for week in calendar_weeks:
+            for c in week:
+                if c and c['day'] == focus_day:
+                    default_cell = c
 
     periods = {
         'week': _aggregate([r for r in rows if r['shift_date'] and r['shift_date'] >= week_start]),
@@ -177,12 +300,7 @@ def tips_dashboard():
         lambda k: WEEKDAY_LABELS[k],
         order=list(range(7)),
     )
-    breakdown_time = _group_breakdown(
-        rows,
-        lambda r: _time_bucket(r['shift_start']),
-        lambda k: TIME_BUCKET_LABELS[k],
-        order=TIME_BUCKET_ORDER,
-    )
+    breakdown_time = _time_breakdown(rows)
     breakdown_weather = _group_breakdown(
         rows,
         lambda r: r['weather'],
@@ -218,6 +336,18 @@ def tips_dashboard():
         chart_rates=chart_rates,
         bike_choices=BIKE_CHOICES,
         weather_choices=WEATHER_CHOICES,
+        calendar_weeks=calendar_weeks,
+        calendar_year=cal_year,
+        calendar_month=cal_month,
+        calendar_month_label=MONTH_LABELS[cal_month - 1],
+        calendar_max_rate=calendar_max_rate,
+        viewed_month_stats=viewed_month_stats,
+        weekday_short=WEEKDAY_SHORT,
+        prev_year=prev_year, prev_month=prev_month,
+        next_year=next_year, next_month=next_month,
+        is_current_month=is_current_month,
+        default_cell=default_cell,
+        today=today,
     )
 
 
@@ -228,6 +358,7 @@ def tips_add():
     try:
         shift_date = dt.datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
+        flash('Ungültiges Datum — Schicht wurde nicht gespeichert.', 'error')
         return redirect(url_for('tips.tips_dashboard'))
 
     shift = DeliveryShift(
@@ -245,7 +376,19 @@ def tips_add():
     )
     db.session.add(shift)
     db.session.commit()
-    return redirect(url_for('tips.tips_dashboard'))
+
+    all_rates = [
+        ((s.tips_cash or 0) + (s.tips_online or 0)) / s.hours_worked
+        for s in DeliveryShift.query.all() if s.hours_worked
+    ]
+    new_rate = ((shift.tips_cash or 0) + (shift.tips_online or 0)) / shift.hours_worked if shift.hours_worked else None
+    is_new_best = new_rate is not None and all_rates and new_rate >= max(all_rates)
+
+    if is_new_best:
+        flash('Neue Bestleistung — %.2f €/h!' % new_rate, 'best')
+    else:
+        flash('Schicht gespeichert.', 'success')
+    return redirect(url_for('tips.tips_dashboard', y=shift_date.year, m=shift_date.month, d=shift_date.day))
 
 
 @tips_bp.route('/tips/<int:shift_id>/update', methods=['POST'])
@@ -257,7 +400,7 @@ def tips_update(shift_id):
     try:
         shift.shift_date = dt.datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
-        pass
+        flash('Ungültiges Datum — restliche Änderungen wurden trotzdem gespeichert.', 'error')
 
     shift.shift_start = _to_time(request.form.get('shift_start', ''))
     shift.shift_end = _to_time(request.form.get('shift_end', ''))
@@ -273,13 +416,16 @@ def tips_update(shift_id):
     shift.notes = request.form.get('notes', '').strip() or None
 
     db.session.commit()
-    return redirect(url_for('tips.tips_dashboard'))
+    flash('Schicht aktualisiert.', 'success')
+    return redirect(url_for('tips.tips_dashboard', y=shift.shift_date.year, m=shift.shift_date.month, d=shift.shift_date.day))
 
 
 @tips_bp.route('/tips/<int:shift_id>/delete', methods=['POST'])
 @login_required
 def tips_delete(shift_id):
     shift = db.get_or_404(DeliveryShift, shift_id)
+    year, month, day = shift.shift_date.year, shift.shift_date.month, shift.shift_date.day
     db.session.delete(shift)
     db.session.commit()
-    return redirect(url_for('tips.tips_dashboard'))
+    flash('Schicht gelöscht.', 'success')
+    return redirect(url_for('tips.tips_dashboard', y=year, m=month, d=day))

@@ -1,618 +1,737 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trinkgeld Tracker</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <style>
-        :root {
-            --bg:      #0b0d14;
-            --surface: #131722;
-            --surf2:   #1a1f2e;
-            --border:  #272c3d;
-            --bord2:   #1e2333;
-            --text:    #eef0f7;
-            --muted:   #8b91a7;
-            --accent:  #6d6af6;
-            --acc2:    #22d3ee;
-            --green:   #34d399;
-            --red:     #fb7185;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trinkgeld Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root{
+  --bg:          oklch(0.11 0.012 170);
+  --surface:     oklch(0.16 0.013 170);
+  --surface-2:   oklch(0.135 0.012 170);
+  --border:      oklch(0.26 0.015 170);
+  --border-soft: oklch(0.21 0.013 170);
+  --ink:         oklch(0.95 0.004 170);
+  --muted:       oklch(0.63 0.010 170);
 
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        body::before {
-            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-            background:
-                radial-gradient(ellipse 60% 40% at 15% 0%, rgba(109,106,246,0.10) 0%, transparent 60%),
-                radial-gradient(ellipse 50% 40% at 100% 20%, rgba(34,211,238,0.07) 0%, transparent 60%);
-        }
-        a { text-decoration: none; color: inherit; }
+  --signal:      oklch(0.72 0.12 170);
+  --signal-fill: oklch(0.38 0.14 170);
+  --signal-ink:  oklch(0.97 0.01 170);
 
-        nav {
-            position: sticky; top: 0; z-index: 100;
-            background: rgba(11,13,20,0.92);
-            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-            border-bottom: 1px solid var(--border);
-        }
-        .nav-inner {
-            max-width: 1200px; margin: 0 auto; padding: 0 32px;
-            height: 62px; display: flex; align-items: center; justify-content: space-between;
-        }
-        .nav-logo { display: flex; align-items: center; gap: 10px; }
-        .logo-icon {
-            width: 36px; height: 36px;
-            background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border-radius: 10px; display: flex; align-items: center; justify-content: center;
-            font-size: 17px;
-        }
-        .nav-logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; }
-        .nav-links { display: flex; align-items: center; gap: 6px; }
-        .nav-links a {
-            font-size: 13px; font-weight: 500; color: var(--muted);
-            padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
-        }
-        .nav-links a:hover { color: var(--text); background: var(--surf2); }
+  --warn:        oklch(0.76 0.14 55);
+  --warn-fill:   oklch(0.48 0.15 55);
+  --warn-ink:    oklch(0.98 0.01 55);
 
-        .page-wrap { max-width: 1200px; margin: 0 auto; padding: 32px 32px 56px; position: relative; z-index: 1; }
-        h1 { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; margin-bottom: 4px; }
-        h2 { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; }
-        h3 { font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  --danger:      oklch(0.64 0.18 25);
 
-        .card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 16px; overflow: hidden; margin-bottom: 20px;
-        }
-        .card-header {
-            padding: 14px 18px; border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .card-body { padding: 18px; }
+  --font-ui:   'IBM Plex Sans', system-ui, sans-serif;
+  --font-data: 'IBM Plex Mono', ui-monospace, monospace;
 
-        /* ── PERIOD STAT GRID ── */
-        .period-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;
-            margin-bottom: 20px;
-        }
-        .period-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px;
-        }
-        .period-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-        .period-card .rates { display: flex; gap: 18px; margin: 8px 0 10px; }
-        .period-card .rate-block .rate-val { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; color: var(--acc2); }
-        .period-card .rate-block .rate-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
-        .period-card .sub { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
-        .period-card .sub strong { color: var(--text); }
+  --fs-xs:  0.75rem;
+  --fs-sm:  0.8125rem;
+  --fs-base:0.875rem;
+  --fs-md:  1rem;
+  --fs-lg:  1.125rem;
+  --fs-xl:  1.375rem;
+  --fs-2xl: 1.75rem;
 
-        /* ── FORMS ── */
-        .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; }
-        .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-        .form-group input, .form-group select, .form-group textarea {
-            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text); padding: 7px 10px; font-size: 13px; font-family: inherit;
-            transition: border-color 0.15s;
-        }
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
-        .form-group.grow { flex: 1; min-width: 130px; }
-        .form-group.grow input, .form-group.grow select { width: 100%; }
-        .num-input { width: 90px; }
-        .time-input { width: 110px; }
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px;
+  --sp-6:24px; --sp-8:32px; --sp-10:40px; --sp-14:56px;
 
-        .btn {
-            padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
-            font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
-            white-space: nowrap;
-        }
-        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--acc2)); color: #0b0d14; border-color: transparent; }
-        .btn-primary:hover { opacity: 0.9; }
-        .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
-        .btn-ghost:hover { color: var(--text); border-color: var(--text); }
-        .btn-danger { background: transparent; color: var(--red); border-color: var(--red); }
-        .btn-danger:hover { background: rgba(251,113,133,0.1); }
-        .btn-sm { padding: 4px 10px; font-size: 12px; }
+  --radius-sm: 3px;
+  --radius-md: 5px;
 
-        /* ── CHART ── */
-        .chart-wrap { padding: 18px; height: 280px; }
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
-        /* ── BREAKDOWN ── */
-        .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 20px; }
-        .breakdown-row {
-            display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            padding: 9px 18px; border-bottom: 1px solid var(--bord2); font-size: 13px;
-        }
-        .breakdown-row:last-child { border-bottom: none; }
-        .breakdown-label { font-weight: 600; }
-        .breakdown-meta { font-size: 11px; color: var(--muted); }
-        .breakdown-vals { text-align: right; }
-        .breakdown-vals .rate { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--acc2); }
-        .breakdown-vals .sub { font-size: 11px; color: var(--muted); }
+  --z-sticky: 10;
+}
 
-        /* ── BEST/WORST ── */
-        .bw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-        .bw-list { list-style: none; }
-        .bw-row {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 9px 18px; border-bottom: 1px solid var(--bord2); font-size: 13px;
-        }
-        .bw-row:last-child { border-bottom: none; }
-        .bw-date { color: var(--muted); }
-        .bw-val { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--acc2); }
+*,*::before,*::after{ box-sizing:border-box; margin:0; padding:0; }
+html{ color-scheme: dark; }
+body{
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+a{ color: inherit; text-decoration: none; }
+button{ font-family: inherit; }
+h1,h2,h3{ font-family: var(--font-ui); font-weight: 700; text-wrap: balance; }
 
-        /* ── SHIFT LIST ── */
-        .shift-item { border-bottom: 1px solid var(--bord2); }
-        .shift-item:last-child { border-bottom: none; }
-        .shift-summary {
-            display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            padding: 12px 18px; cursor: pointer; user-select: none; flex-wrap: wrap;
-        }
-        .shift-summary:hover { background: var(--surf2); }
-        .shift-summary .main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-        .shift-date-badge { font-weight: 600; font-size: 14px; min-width: 90px; }
-        .shift-meta { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
-        .shift-rates { display: flex; align-items: baseline; gap: 10px; }
-        .shift-rate-primary { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; color: var(--acc2); }
-        .shift-rate-secondary { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--accent); }
-        .shift-total-sub { font-size: 11px; color: var(--muted); }
-        .chevron { color: var(--muted); font-size: 12px; transition: transform 0.2s; }
-        .chevron.open { transform: rotate(90deg); }
+:focus-visible{ outline: 2px solid var(--signal); outline-offset: 2px; border-radius: var(--radius-sm); }
 
-        .shift-edit { display: none; padding: 0 18px 18px; }
-        .shift-edit.open { display: block; }
+.color-probe{ position:absolute; width:0; height:0; overflow:hidden; pointer-events:none; }
 
-        .empty { text-align: center; padding: 36px; color: var(--muted); font-size: 14px; }
+/* ── NAV ── */
+nav{
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  background: color-mix(in oklch, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner{
+  max-width: 1000px; margin: 0 auto; padding: 0 var(--sp-6);
+  height: 56px; display:flex; align-items:center; justify-content:space-between;
+}
+.wordmark{ font-family: var(--font-data); font-weight: 600; font-size: var(--fs-sm); letter-spacing: 0.08em; }
+.nav-links{ display:flex; align-items:center; gap: var(--sp-1); }
+.nav-links a{
+  font-size: var(--fs-sm); color: var(--muted); padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm); transition: color .15s var(--ease-out-expo), background .15s var(--ease-out-expo);
+}
+.nav-links a:hover{ color: var(--ink); background: var(--surface); }
 
-        @media (max-width: 700px) {
-            .page-wrap { padding: 24px 16px 40px; }
-            .shift-summary .main { gap: 8px; }
-        }
-    </style>
+/* ── PAGE ── */
+.page{ max-width: 1000px; margin: 0 auto; padding: var(--sp-8) var(--sp-6) var(--sp-14); }
+.page-head{ margin-bottom: var(--sp-8); }
+.page-head h1{ font-size: var(--fs-2xl); letter-spacing: -0.01em; }
+.page-head p{ color: var(--muted); font-size: var(--fs-base); margin-top: var(--sp-1); }
+
+.flash{
+  display:flex; align-items:center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-sm); font-size: var(--fs-sm); font-weight:600; margin-bottom: var(--sp-4);
+  border:1px solid transparent; animation: flashIn .4s var(--ease-out-expo);
+}
+@keyframes flashIn{ from{ transform: translateY(-6px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+@keyframes flashGlow{
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--warn) 55%, transparent); }
+  55%  { box-shadow: 0 0 26px 3px color-mix(in oklch, var(--warn) 40%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.flash-success{ background: color-mix(in oklch, var(--signal) 14%, var(--surface)); border-color: color-mix(in oklch, var(--signal) 40%, transparent); color: var(--signal); }
+.flash-error{ background: color-mix(in oklch, var(--danger) 14%, var(--surface)); border-color: color-mix(in oklch, var(--danger) 40%, transparent); color: var(--danger); }
+.flash-best{
+  background: color-mix(in oklch, var(--warn) 16%, var(--surface)); border-color: color-mix(in oklch, var(--warn) 50%, transparent); color: var(--warn);
+  font-size: var(--fs-base); animation: flashIn .4s var(--ease-out-expo), flashGlow 1.1s var(--ease-out-expo) .1s;
+}
+
+section.block{ margin-bottom: var(--sp-10); }
+.block-head{ display:flex; align-items:baseline; justify-content:space-between; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.block-head h2{ font-size: var(--fs-md); }
+.block-hint{ font-size: var(--fs-xs); color: var(--muted); }
+
+.panel{
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+
+/* ── SHARED FORM STYLES (used inside the calendar day-detail) ── */
+.log-groups{ display:grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap: var(--sp-5); }
+fieldset.fgroup{ border:none; display:flex; flex-direction:column; gap: var(--sp-3); }
+fieldset.fgroup legend{
+  font-size: var(--fs-xs); font-weight:600; text-transform:uppercase; letter-spacing:0.06em;
+  color: var(--muted); padding:0 0 var(--sp-2); width:100%; border-bottom:1px solid var(--border-soft);
+  margin-bottom: var(--sp-1);
+}
+.frow{ display:flex; gap: var(--sp-3); flex-wrap:wrap; }
+.field{ display:flex; flex-direction:column; gap: var(--sp-1); flex:1; min-width:90px; }
+.field label{ font-size: var(--fs-xs); color: var(--muted); }
+.field input, .field select, .field textarea{
+  background: var(--surface-2); border:1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--ink); padding: var(--sp-2) var(--sp-3); font-size: var(--fs-base); font-family: inherit;
+  transition: border-color .15s var(--ease-out-expo);
+}
+.field.money input, .field.count input{ font-family: var(--font-data); }
+.field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color: var(--signal); }
+.field.wide{ flex: 1 1 100%; }
+.form-actions{ display:flex; justify-content:flex-end; gap: var(--sp-3); margin-top: var(--sp-3); }
+
+.btn{
+  border:1px solid transparent; border-radius: var(--radius-sm); padding: 13px var(--sp-5);
+  font-weight:600; font-size: var(--fs-base); cursor:pointer; font-family: var(--font-ui);
+  transition: filter .15s var(--ease-out-expo), transform .1s var(--ease-out-expo);
+  min-height: 44px;
+}
+.btn:active{ transform: scale(0.98); }
+.btn-primary{ background: var(--signal-fill); color: var(--signal-ink); }
+.btn-primary:hover{ filter: brightness(1.15); }
+.btn-ghost{ background: transparent; color: var(--muted); border-color: var(--border); }
+.btn-ghost:hover{ color: var(--ink); border-color: var(--muted); }
+.btn-danger{ background: transparent; color: var(--danger); border-color: color-mix(in oklch, var(--danger) 45%, transparent); }
+.btn-danger:hover{ background: color-mix(in oklch, var(--danger) 12%, transparent); }
+.btn-sm{ padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); min-height: 40px; }
+
+/* ── TABS (standouts) ── */
+.tabgroup .tablist{ display:flex; gap: var(--sp-1); padding: var(--sp-2); border-bottom:1px solid var(--border); }
+.tabgroup [role="tab"]{
+  background:transparent; border:1px solid transparent; color: var(--muted);
+  font-size: var(--fs-xs); font-weight:600; text-transform:uppercase; letter-spacing:0.05em;
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-sm); cursor:pointer;
+  transition: background .15s var(--ease-out-expo), color .15s var(--ease-out-expo);
+  min-height: 44px;
+}
+.tabgroup [role="tab"]:hover{ color: var(--ink); }
+.tabgroup [role="tab"][aria-selected="true"]{ background: var(--signal-fill); color: var(--signal-ink); }
+.tabgroup [role="tabpanel"]{ padding: var(--sp-5); animation: panelIn .25s var(--ease-out-expo); }
+@keyframes panelIn{ from{ opacity:0; transform: translateY(4px); } to{ opacity:1; transform: translateY(0); } }
+.tabgroup [role="tabpanel"][hidden]{ display:none; }
+
+/* ── CALENDAR ── */
+.cal-panel{ padding: var(--sp-5); }
+.cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom: var(--sp-5); flex-wrap:wrap; gap: var(--sp-3); }
+.cal-nav-controls{ display:flex; align-items:center; gap: var(--sp-3); }
+.cal-nav-btn{
+  background: var(--surface-2); border:1px solid var(--border); color: var(--ink);
+  width:44px; height:44px; border-radius: var(--radius-sm); display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition: background .15s var(--ease-out-expo);
+}
+.cal-nav-btn:hover{ background: var(--border); }
+.cal-month-label{ font-family: var(--font-data); font-weight:600; font-size: var(--fs-md); min-width:150px; text-align:center; }
+.cal-readout{ font-size: var(--fs-xs); color: var(--muted); font-family: var(--font-data); display:flex; gap: var(--sp-4); flex-wrap:wrap; }
+.cal-readout b{ color: var(--ink); }
+.cal-today-link{ font-size: var(--fs-xs); color: var(--signal); border:1px solid color-mix(in oklch, var(--signal) 45%, transparent); border-radius: var(--radius-sm); padding: 4px var(--sp-2); }
+.cal-today-link:hover{ background: color-mix(in oklch, var(--signal) 12%, transparent); }
+
+.cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-weekday{ text-align:center; font-size: var(--fs-xs); color: var(--muted); text-transform:uppercase; letter-spacing:0.04em; padding-bottom: var(--sp-2); }
+.cal-cell{
+  aspect-ratio: 1; border-radius: var(--radius-sm); border:1px solid var(--border-soft);
+  background: var(--surface-2); cursor:pointer; position:relative;
+  display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between;
+  padding: 5px 6px;
+  transition: border-color .15s var(--ease-out-expo), transform .15s var(--ease-out-expo), box-shadow .15s var(--ease-out-expo);
+}
+.cal-cell:hover{ border-color: var(--muted); transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.35); }
+.cal-cell:active{ transform: scale(0.96) translateY(0); }
+.cal-cell.is-pad{ visibility:hidden; pointer-events:none; border:none; }
+.cal-cell.has-shift{
+  background: color-mix(in oklch, var(--signal) calc(var(--intensity, 0) * 1%), var(--surface-2));
+  border-color: color-mix(in oklch, var(--signal) calc(var(--intensity, 0) * 1%), var(--border-soft));
+}
+.cal-cell.is-future:not(.has-shift){ opacity:0.4; }
+.cal-cell.is-current-week{ border-top: 2px solid var(--ink); }
+.cal-cell.is-current-week.is-pad{ border-top: 2px solid transparent; }
+.cal-cell.is-today{ box-shadow: inset 0 0 0 2px var(--warn); }
+.cal-cell.active{ box-shadow: inset 0 0 0 2px var(--ink); }
+.cal-cell.is-today.active{ box-shadow: inset 0 0 0 2px var(--warn), inset 0 0 0 4px var(--ink); }
+.cal-cell-day{ font-family: var(--font-data); font-size: var(--fs-xs); color: var(--muted); }
+.cal-cell.has-shift .cal-cell-day{ color: var(--ink); font-weight:600; }
+.cal-cell-rate{ font-family: var(--font-data); font-size: 10px; color: var(--ink); font-weight:600; align-self:flex-end; }
+
+.cal-cell.is-month-best::after{
+  content:''; position:absolute; top:3px; right:3px; width:6px; height:6px; border-radius:50%;
+  background: var(--warn); box-shadow: 0 0 5px 1px color-mix(in oklch, var(--warn) 70%, transparent);
+}
+
+@keyframes cellPop {
+  0%   { transform: scale(0.55); box-shadow: 0 0 0 0 color-mix(in oklch, var(--signal) 70%, transparent); }
+  55%  { transform: scale(1.15); box-shadow: 0 0 0 9px color-mix(in oklch, var(--signal) 0%, transparent); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes cellPopBest {
+  0%   { transform: scale(0.5) rotate(-4deg); box-shadow: 0 0 0 0 color-mix(in oklch, var(--warn) 85%, transparent); }
+  50%  { transform: scale(1.22) rotate(3deg); box-shadow: 0 0 0 12px color-mix(in oklch, var(--warn) 0%, transparent); }
+  75%  { transform: scale(0.95) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0); box-shadow: 0 0 0 0 transparent; }
+}
+.cal-cell.just-saved{ animation: cellPop .6s var(--ease-out-expo); }
+.cal-cell.just-saved-best{ animation: cellPopBest .9s var(--ease-out-expo); }
+
+.day-detail[popover]{
+  position: fixed; inset: 0; margin: auto;
+  width: min(560px, 92vw); max-height: 85vh; overflow-y: auto;
+  padding: var(--sp-6);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.55);
+  opacity: 0; transform: scale(0.94) translateY(6px);
+  transition: opacity .25s var(--ease-out-expo), transform .3s var(--ease-out-expo),
+              display .3s allow-discrete, overlay .3s allow-discrete;
+}
+.day-detail[popover]:popover-open{ opacity: 1; transform: scale(1) translateY(0); }
+@starting-style{
+  .day-detail[popover]:popover-open{ opacity: 0; transform: scale(0.94) translateY(6px); }
+}
+.day-detail::backdrop{
+  background: transparent; backdrop-filter: blur(0px);
+  transition: background-color .25s var(--ease-out-expo), backdrop-filter .25s var(--ease-out-expo),
+              display .25s allow-discrete, overlay .25s allow-discrete;
+}
+.day-detail:popover-open::backdrop{ background: color-mix(in oklch, var(--bg) 65%, transparent); backdrop-filter: blur(3px); }
+@starting-style{
+  .day-detail:popover-open::backdrop{ background: transparent; backdrop-filter: blur(0px); }
+}
+.day-popover-close{
+  position: absolute; top: var(--sp-4); right: var(--sp-4);
+  background: var(--surface-2); border:1px solid var(--border); border-radius: var(--radius-sm);
+  width: 32px; height: 32px; display:flex; align-items:center; justify-content:center;
+  color: var(--muted); cursor:pointer;
+}
+.day-popover-close:hover{ color: var(--ink); border-color: var(--muted); }
+.day-block-head{ margin-bottom: var(--sp-4); padding-right: var(--sp-8); }
+.day-block-head h3{ font-size: var(--fs-base); font-family: var(--font-data); font-weight: 600; }
+.day-shift{ margin-bottom: var(--sp-6); }
+.day-shift:last-child{ margin-bottom:0; }
+.day-shift-rates{ display:flex; align-items:baseline; gap: var(--sp-4); flex-wrap:wrap; margin-bottom: var(--sp-4); font-family: var(--font-data); font-size: var(--fs-sm); color: var(--muted); }
+.day-shift-rates .rate-big{ font-weight:600; font-size: var(--fs-lg); color: var(--signal); }
+.best-badge{
+  font-family: var(--font-ui); font-size: var(--fs-xs); font-weight:700; text-transform:uppercase; letter-spacing:0.05em;
+  color: var(--warn-ink); background: var(--warn-fill); padding: 3px var(--sp-2); border-radius: var(--radius-sm);
+  animation: badgePop .5s var(--ease-out-expo) .15s backwards;
+}
+@keyframes badgePop{ from{ transform:scale(0.5); opacity:0; } to{ transform:scale(1); opacity:1; } }
+.day-shift-meta{ display:grid; grid-template-columns: repeat(auto-fit, minmax(110px,1fr)); gap: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-4); }
+.day-shift-meta > div{ display:flex; flex-direction:column; gap:2px; }
+.day-shift-meta dt{ font-size: var(--fs-xs); color: var(--muted); text-transform:uppercase; letter-spacing:0.04em; }
+.day-shift-meta dd{ font-family: var(--font-data); font-size: var(--fs-sm); font-weight:600; }
+.day-shift-meta .wide{ grid-column: 1 / -1; }
+.day-shift-edit{ margin-top: var(--sp-5); padding-top: var(--sp-5); border-top:1px dashed var(--border-soft); animation: panelIn .25s var(--ease-out-expo); }
+
+/* ── TREND ── */
+.chart-wrap{ padding: var(--sp-5); height: 260px; }
+
+/* ── PATTERNS ── */
+.patterns-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap: var(--sp-4); }
+.pattern-block{ padding: var(--sp-4); }
+.pattern-block h3{ font-size: var(--fs-sm); margin-bottom: var(--sp-3); }
+.prow{ padding: var(--sp-2) 0; border-top:1px solid var(--border-soft); }
+.prow:first-of-type{ border-top:none; }
+.prow-top{ display:flex; flex-direction:column; gap: 2px; font-size: var(--fs-sm); }
+.prow-label{ font-weight:600; }
+.prow-vals{ font-family: var(--font-data); color: var(--muted); font-size: var(--fs-xs); }
+.prow-vals b{ color: var(--ink); font-weight:600; }
+.bar-track{ height:4px; background: var(--surface-2); border-radius:2px; margin-top: var(--sp-1); overflow:hidden; }
+.bar-fill{ height:100%; background: var(--warn); border-radius:2px; }
+.pattern-empty{ font-size: var(--fs-sm); color: var(--muted); padding: var(--sp-3) 0; }
+
+/* ── STANDOUTS ── */
+.sw-split{ display:grid; grid-template-columns: 1fr 1fr; gap: var(--sp-6); }
+.sw-col h3{ font-size: var(--fs-xs); text-transform:uppercase; letter-spacing:0.05em; color: var(--muted); margin-bottom: var(--sp-2); }
+.sw-row{ display:flex; align-items:center; justify-content:space-between; padding: var(--sp-2) 0; border-top:1px solid var(--border-soft); font-size: var(--fs-sm); }
+.sw-row:first-of-type{ border-top:none; }
+.sw-date{ color: var(--muted); }
+.sw-val{ font-family: var(--font-data); font-weight:600; }
+.sw-col.best .sw-val{ color: var(--signal); }
+
+@media (prefers-reduced-motion: reduce){
+  *{ transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
+}
+
+@media (max-width: 700px){
+  .page{ padding: var(--sp-6) var(--sp-4) var(--sp-10); }
+  .sw-split{ grid-template-columns: 1fr; gap: var(--sp-4); }
+  .cal-grid{ gap: 3px; }
+  .cal-cell{ padding: 3px 4px; }
+  .cal-cell-rate{ font-size: 9px; }
+}
+</style>
 </head>
 <body>
 
 <nav>
-    <div class="nav-inner">
-        <div class="nav-logo">
-            <div class="logo-icon">🛵</div>
-            <span>Trinkgeld Tracker</span>
-        </div>
-        <div class="nav-links">
-            <a href="/">Übersicht</a>
-            <a href="/logout">Logout</a>
-        </div>
+  <div class="nav-inner">
+    <span class="wordmark">TRINKGELD</span>
+    <div class="nav-links">
+      <a href="/">Übersicht</a>
+      <a href="/logout">Logout</a>
     </div>
+  </div>
 </nav>
 
-<div class="page-wrap">
+<main class="page">
+  {% set flash_messages = get_flashed_messages(with_categories=true) %}
+  {% set flash_category = flash_messages[0][0] if flash_messages else None %}
+  {% for category, message in flash_messages %}
+  <div class="flash flash-{{ category }}" role="status">{{ message }}</div>
+  {% endfor %}
+
+  <div class="page-head">
     <h1>Trinkgeld Tracker</h1>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:24px">Schichten erfassen und Statistiken auswerten</p>
+    <p>Tag im Kalender antippen zum Loggen oder Nachschauen.</p>
+  </div>
 
-    <!-- Add shift -->
-    <div class="card">
-        <div class="card-header"><h2>Neue Schicht erfassen</h2></div>
-        <div class="card-body">
-            <form method="post" action="{{ url_for('tips.tips_add') }}">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Datum</label>
-                        <input type="date" name="shift_date" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Beginn</label>
-                        <input type="time" name="shift_start" class="time-input">
-                    </div>
-                    <div class="form-group">
-                        <label>Ende</label>
-                        <input type="time" name="shift_end" class="time-input">
-                    </div>
-                    <div class="form-group">
-                        <label>Stunden</label>
-                        <select name="hours_worked" class="num-input" required>
-                            {% for h in [4, 6, 8] %}
-                            <option value="{{ h }}">{{ h }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Trinkgeld Bar</label>
-                        <input type="number" name="tips_cash" step="0.01" min="0" class="num-input">
-                    </div>
-                    <div class="form-group">
-                        <label>Trinkgeld Online</label>
-                        <input type="number" name="tips_online" step="0.01" min="0" class="num-input">
-                    </div>
-                    <div class="form-group">
-                        <label>Lieferungen</label>
-                        <input type="number" name="deliveries" min="0" class="num-input">
-                    </div>
-                    <div class="form-group">
-                        <label>Fahrten</label>
-                        <input type="number" name="trips" min="0" class="num-input">
-                    </div>
-                    <div class="form-group">
-                        <label>Fahrrad</label>
-                        <select name="bike_size">
-                            <option value="">—</option>
-                            {% for val, label in bike_choices %}
-                            <option value="{{ val }}">{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Wetter</label>
-                        <select name="weather">
-                            {% for val, label in weather_choices %}
-                            <option value="{{ val }}" {% if val == 'clear' %}selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group grow">
-                        <label>Notiz</label>
-                        <input type="text" name="notes" placeholder="optional">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Hinzufügen</button>
-                </div>
-            </form>
+  <!-- CALENDAR -->
+  <section class="block">
+    <div class="block-head"><h2>Kalender</h2></div>
+    <div class="panel cal-panel">
+      <div class="cal-nav">
+        <div class="cal-nav-controls">
+          <a class="cal-nav-btn" href="{{ url_for('tips.tips_dashboard', y=prev_year, m=prev_month) }}" aria-label="Vorheriger Monat">
+            <svg width="8" height="12" viewBox="0 0 8 12" fill="none" aria-hidden="true"><path d="M7 1L2 6l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <span class="cal-month-label">{{ calendar_month_label }} {{ calendar_year }}</span>
+          <a class="cal-nav-btn" href="{{ url_for('tips.tips_dashboard', y=next_year, m=next_month) }}" aria-label="Nächster Monat">
+            <svg width="8" height="12" viewBox="0 0 8 12" fill="none" aria-hidden="true"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          {% if not is_current_month %}<a class="cal-today-link" href="{{ url_for('tips.tips_dashboard') }}">Heute</a>{% endif %}
         </div>
-    </div>
+        <div class="cal-readout">
+          <span>Woche <b>{{ ('%.2f'|format(periods.week.avg_per_hour) ~ ' €/h') if periods.week.avg_per_hour is not none else '—' }}</b></span>
+          <span>Monat <b>{{ ('%.2f'|format(viewed_month_stats.avg_per_hour) ~ ' €/h') if viewed_month_stats.avg_per_hour is not none else '—' }}</b></span>
+          <span>Jahr <b>{{ ('%.2f'|format(periods.year.avg_per_hour) ~ ' €/h') if periods.year.avg_per_hour is not none else '—' }}</b></span>
+          <span>Gesamt <b>{{ ('%.2f'|format(periods.all.avg_per_hour) ~ ' €/h') if periods.all.avg_per_hour is not none else '—' }}</b></span>
+        </div>
+      </div>
 
-    <!-- Period totals -->
-    <div class="period-grid">
-        {% for key, title in [('week','Diese Woche'), ('month','Dieser Monat'), ('year','Dieses Jahr'), ('all','Gesamt')] %}
-        {% set p = periods[key] %}
-        <div class="period-card">
-            <div class="label">{{ title }}</div>
-            <div class="rates">
-                <div class="rate-block">
-                    <div class="rate-val">{{ ('%.2f'|format(p.avg_per_hour) ~ ' €') if p.avg_per_hour is not none else '—' }}</div>
-                    <div class="rate-lbl">Ø pro Stunde</div>
-                </div>
-                <div class="rate-block">
-                    <div class="rate-val">{{ ('%.2f'|format(p.avg_per_delivery) ~ ' €') if p.avg_per_delivery is not none else '—' }}</div>
-                    <div class="rate-lbl">Ø pro Lieferung</div>
-                </div>
-                <div class="rate-block">
-                    <div class="rate-val">{{ ('%.2f'|format(p.avg_per_trip) ~ ' €') if p.avg_per_trip is not none else '—' }}</div>
-                    <div class="rate-lbl">Ø pro Fahrt</div>
-                </div>
+      <div class="cal-grid">
+        {% for wd in weekday_short %}<div class="cal-weekday">{{ wd }}</div>{% endfor %}
+        {% for week in calendar_weeks %}{% for cell in week %}
+          {% if cell is none %}
+          <div class="cal-cell is-pad"></div>
+          {% else %}
+          <button type="button"
+                  class="cal-cell{% if cell.rows %} has-shift{% endif %}{% if cell.is_today %} is-today{% endif %}{% if cell.is_future %} is-future{% endif %}{% if cell.is_current_week %} is-current-week{% endif %}{% if cell.is_month_best %} is-month-best{% endif %}{% if default_cell and cell.iso == default_cell.iso and flash_category == 'success' %} just-saved{% elif default_cell and cell.iso == default_cell.iso and flash_category == 'best' %} just-saved-best{% endif %}"
+                  data-iso="{{ cell.iso }}"
+                  aria-label="{{ cell.weekday_label }}, {{ cell.day }}. {{ calendar_month_label }}{% if cell.is_today %} (heute){% endif %}{% if cell.per_hour is not none %}, Schicht erfasst, {{ '%.2f'|format(cell.per_hour) }} Euro pro Stunde{% else %}, keine Schicht erfasst{% endif %}"
+                  {% if cell.per_hour is not none %}style="--intensity:{{ (cell.per_hour / calendar_max_rate * 100) | round(0) }}"{% endif %}
+                  onclick="selectDay('{{ cell.iso }}', {{ 'true' if cell.rows else 'false' }}, '{{ cell.weekday_label }}, {{ cell.day }}. {{ calendar_month_label }}')">
+            <span class="cal-cell-day" aria-hidden="true">{{ cell.day }}</span>
+            {% if cell.per_hour is not none %}<span class="cal-cell-rate" aria-hidden="true">{{ '%.0f'|format(cell.per_hour) }}€</span>{% endif %}
+          </button>
+          {% endif %}
+        {% endfor %}{% endfor %}
+      </div>
+
+      <div class="day-detail" id="day-detail" popover>
+        <button type="button" class="day-popover-close" popovertarget="day-detail" popovertargetaction="hide" aria-label="Schließen">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+
+        {% for week in calendar_weeks %}{% for cell in week %}{% if cell and cell.rows %}
+        <div class="day-block" id="day-{{ cell.iso }}" hidden>
+          <div class="day-block-head"><h3>{{ cell.weekday_label }}, {{ cell.day }}. {{ calendar_month_label }}</h3></div>
+          {% for r in cell.rows %}
+          <div class="day-shift">
+            <div class="day-shift-info">
+              <div class="day-shift-rates">
+                {% if default_cell and cell.iso == default_cell.iso and flash_category == 'best' %}<span class="best-badge">Bestleistung</span>{% endif %}
+                <span class="rate-big">{{ ('%.2f'|format(r.per_hour) ~ ' €/h') if r.per_hour is not none else '—' }}</span>
+                <span>{{ ('%.2f'|format(r.per_delivery) ~ ' €/L') if r.per_delivery is not none else '—' }}</span>
+                <span>{{ ('%.2f'|format(r.per_trip) ~ ' €/F') if r.per_trip is not none else '—' }}</span>
+              </div>
+              <dl class="day-shift-meta">
+                <div><dt>Gesamt</dt><dd>{{ '%.2f'|format(r.total) }} €</dd></div>
+                <div><dt>Bar / Online</dt><dd>{{ '%.2f'|format(r.tips_cash) }} € / {{ '%.2f'|format(r.tips_online) }} €</dd></div>
+                <div><dt>Stunden</dt><dd>{{ '%.1f'|format(r.hours_worked) if r.hours_worked is not none else '—' }}</dd></div>
+                <div><dt>Zeit</dt><dd>{{ r.shift_start.strftime('%H:%M') if r.shift_start else '—' }}–{{ r.shift_end.strftime('%H:%M') if r.shift_end else '—' }}</dd></div>
+                <div><dt>Lieferungen</dt><dd>{{ r.deliveries }}</dd></div>
+                <div><dt>Fahrten</dt><dd>{{ r.trips }}</dd></div>
+                <div><dt>Fahrrad</dt><dd>{{ r.bike_label }}</dd></div>
+                <div><dt>Wetter</dt><dd>{{ r.weather_label }}</dd></div>
+                {% if r.notes %}<div class="wide"><dt>Notiz</dt><dd>{{ r.notes }}</dd></div>{% endif %}
+              </dl>
+              <div class="form-actions" style="justify-content:flex-start">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="toggleEdit('edit-{{ r.id }}', this)">Bearbeiten</button>
+                <form method="post" action="{{ url_for('tips.tips_delete', shift_id=r.id) }}" onsubmit="return confirm('Schicht löschen?')">
+                  <button type="submit" class="btn btn-danger btn-sm">Löschen</button>
+                </form>
+              </div>
             </div>
-            <div class="sub">
-                <span>{{ p.shift_count }} Schichten · {{ '%.1f'|format(p.total_hours) }} Std · {{ p.total_deliveries }} Lieferungen · {{ p.total_trips }} Fahrten</span>
-                <span>Gesamt: <strong>{{ '%.2f'|format(p.total_tips) }} €</strong> (Bar {{ '%.2f'|format(p.total_cash) }} € · Online {{ '%.2f'|format(p.total_online) }} €)</span>
+            <div class="day-shift-edit" id="edit-{{ r.id }}" hidden>
+            <form method="post" action="{{ url_for('tips.tips_update', shift_id=r.id) }}">
+              <input type="hidden" name="shift_date" value="{{ r.shift_date.strftime('%Y-%m-%d') }}">
+              <div class="log-groups">
+                <fieldset class="fgroup">
+                  <legend>Zeit</legend>
+                  <div class="frow">
+                    <div class="field"><label for="e{{ r.id }}-start">Beginn</label><input id="e{{ r.id }}-start" type="time" name="shift_start" value="{{ r.shift_start.strftime('%H:%M') if r.shift_start else '' }}"></div>
+                    <div class="field"><label for="e{{ r.id }}-end">Ende</label><input id="e{{ r.id }}-end" type="time" name="shift_end" value="{{ r.shift_end.strftime('%H:%M') if r.shift_end else '' }}"></div>
+                    <div class="field"><label for="e{{ r.id }}-hours">Stunden</label>
+                      <select id="e{{ r.id }}-hours" name="hours_worked" required>
+                        {% for h in [4, 6, 8] %}<option value="{{ h }}" {% if r.hours_worked == h %}selected{% endif %}>{{ h }}</option>{% endfor %}
+                      </select>
+                    </div>
+                  </div>
+                </fieldset>
+                <fieldset class="fgroup">
+                  <legend>Verdienst</legend>
+                  <div class="frow">
+                    <div class="field money"><label for="e{{ r.id }}-cash">Trinkgeld Bar</label><input id="e{{ r.id }}-cash" type="number" name="tips_cash" step="0.01" min="0" value="{{ r.tips_cash }}"></div>
+                    <div class="field money"><label for="e{{ r.id }}-online">Trinkgeld Online</label><input id="e{{ r.id }}-online" type="number" name="tips_online" step="0.01" min="0" value="{{ r.tips_online }}"></div>
+                  </div>
+                </fieldset>
+                <fieldset class="fgroup">
+                  <legend>Umfang</legend>
+                  <div class="frow">
+                    <div class="field count"><label for="e{{ r.id }}-deliveries">Lieferungen</label><input id="e{{ r.id }}-deliveries" type="number" name="deliveries" min="0" value="{{ r.deliveries }}"></div>
+                    <div class="field count"><label for="e{{ r.id }}-trips">Fahrten</label><input id="e{{ r.id }}-trips" type="number" name="trips" min="0" value="{{ r.trips }}"></div>
+                  </div>
+                </fieldset>
+                <fieldset class="fgroup">
+                  <legend>Bedingungen</legend>
+                  <div class="frow">
+                    <div class="field"><label for="e{{ r.id }}-bike">Fahrrad</label>
+                      <select id="e{{ r.id }}-bike" name="bike_size">
+                        <option value="">—</option>
+                        {% for val, label in bike_choices %}<option value="{{ val }}" {% if r.bike_size == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                      </select>
+                    </div>
+                    <div class="field"><label for="e{{ r.id }}-weather">Wetter</label>
+                      <select id="e{{ r.id }}-weather" name="weather">
+                        {% for val, label in weather_choices %}<option value="{{ val }}" {% if (r.weather or 'clear') == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                      </select>
+                    </div>
+                  </div>
+                </fieldset>
+              </div>
+              <div class="field wide" style="margin-top:var(--sp-3)"><label for="e{{ r.id }}-notes">Notiz</label><input id="e{{ r.id }}-notes" type="text" name="notes" value="{{ r.notes or '' }}" placeholder="optional"></div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-sm">Speichern</button>
+              </div>
+            </form>
             </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}{% endfor %}{% endfor %}
+
+        <div class="day-block" id="day-add" hidden>
+          <div class="day-block-head"><h3 id="add-date-label">—</h3></div>
+          <form method="post" action="{{ url_for('tips.tips_add') }}">
+            <input type="hidden" name="shift_date" id="add-date-hidden" value="">
+            <div class="log-groups">
+              <fieldset class="fgroup">
+                <legend>Zeit</legend>
+                <div class="frow">
+                  <div class="field"><label for="add-start">Beginn</label><input id="add-start" type="time" name="shift_start"></div>
+                  <div class="field"><label for="add-end">Ende</label><input id="add-end" type="time" name="shift_end"></div>
+                  <div class="field"><label for="add-hours">Stunden</label>
+                    <select id="add-hours" name="hours_worked" required>
+                      {% for h in [4, 6, 8] %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+                    </select>
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset class="fgroup">
+                <legend>Verdienst</legend>
+                <div class="frow">
+                  <div class="field money"><label for="add-cash">Trinkgeld Bar</label><input id="add-cash" type="number" name="tips_cash" step="0.01" min="0" placeholder="0.00"></div>
+                  <div class="field money"><label for="add-online">Trinkgeld Online</label><input id="add-online" type="number" name="tips_online" step="0.01" min="0" placeholder="0.00"></div>
+                </div>
+              </fieldset>
+              <fieldset class="fgroup">
+                <legend>Umfang</legend>
+                <div class="frow">
+                  <div class="field count"><label for="add-deliveries">Lieferungen</label><input id="add-deliveries" type="number" name="deliveries" min="0" placeholder="0"></div>
+                  <div class="field count"><label for="add-trips">Fahrten</label><input id="add-trips" type="number" name="trips" min="0" placeholder="0"></div>
+                </div>
+              </fieldset>
+              <fieldset class="fgroup">
+                <legend>Bedingungen</legend>
+                <div class="frow">
+                  <div class="field"><label for="add-bike">Fahrrad</label>
+                    <select id="add-bike" name="bike_size">
+                      <option value="">—</option>
+                      {% for val, label in bike_choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                    </select>
+                  </div>
+                  <div class="field"><label for="add-weather">Wetter</label>
+                    <select id="add-weather" name="weather">
+                      {% for val, label in weather_choices %}<option value="{{ val }}" {% if val == 'clear' %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                  </div>
+                </div>
+              </fieldset>
+            </div>
+            <div class="field wide" style="margin-top:var(--sp-3)"><label for="add-notes">Notiz</label><input id="add-notes" type="text" name="notes" placeholder="optional"></div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Schicht speichern</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TREND -->
+  {% if chart_labels %}
+  <section class="block">
+    <div class="block-head"><h2>Verlauf</h2></div>
+    <div class="panel chart-wrap"><canvas id="trendChart" role="img" aria-label="Liniendiagramm: Euro pro Stunde und Trinkgeld gesamt je Schicht, chronologisch von {{ chart_labels[0] }} bis {{ chart_labels[-1] }}"></canvas></div>
+  </section>
+  {% endif %}
+
+  <!-- PATTERNS -->
+  {% if rows %}
+  <section class="block">
+    <div class="block-head"><h2>Muster</h2><span class="block-hint">Ø pro Stunde, Balkenlänge = relativer Vergleich innerhalb der Gruppe</span></div>
+    <div class="patterns-grid">
+
+      <div class="panel pattern-block">
+        <h3>Nach Wochentag</h3>
+        {% set max_v = (breakdown_weekday | map(attribute='avg_per_hour') | list | max) or 1 %}
+        {% for g in breakdown_weekday %}
+        <div class="prow">
+          <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
+            <span class="prow-vals"><b>{{ '%.2f'|format(g.avg_per_hour) }} €/h</b> · {{ '%.2f'|format(g.avg_per_delivery) }} €/L · n={{ g.shift_count }}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ (g.avg_per_hour / max_v * 100) | round(1) }}%"></div></div>
         </div>
         {% endfor %}
-    </div>
+      </div>
 
-    <!-- Trend chart -->
-    {% if chart_labels %}
-    <div class="card">
-        <div class="card-header"><h2>Verlauf</h2></div>
-        <div class="chart-wrap">
-            <canvas id="trendChart"></canvas>
+      <div class="panel pattern-block">
+        <h3>Nach Tageszeit</h3>
+        {% if breakdown_time %}
+        <p style="font-size:var(--fs-xs); color:var(--muted); margin:-4px 0 var(--sp-2)">Schichten über mehrere Zeiträume werden anteilig aufgeteilt — n kann in Summe über die Gesamtzahl Schichten hinausgehen.</p>
+        {% set max_v = (breakdown_time | map(attribute='avg_per_hour') | list | max) or 1 %}
+        {% for g in breakdown_time %}
+        <div class="prow">
+          <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
+            <span class="prow-vals"><b>{{ '%.2f'|format(g.avg_per_hour) }} €/h</b> · {{ '%.2f'|format(g.avg_per_delivery) }} €/L · n={{ g.shift_count }}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ (g.avg_per_hour / max_v * 100) | round(1) }}%"></div></div>
         </div>
-    </div>
-    {% endif %}
-
-    <!-- Breakdowns -->
-    {% if rows %}
-    <div class="breakdown-grid">
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Nach Wochentag</h2></div>
-            <div class="chart-wrap" style="height:{{ 60 + breakdown_weekday|length * 36 }}px">
-                <canvas id="chart-weekday"></canvas>
-            </div>
-        </div>
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Nach Tageszeit</h2></div>
-            {% if breakdown_time %}
-            <div class="chart-wrap" style="height:{{ 60 + breakdown_time|length * 36 }}px">
-                <canvas id="chart-time"></canvas>
-            </div>
-            {% else %}
-            <div class="empty">Keine Schichten mit Beginn-Zeit erfasst.</div>
-            {% endif %}
-        </div>
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Nach Wetter</h2></div>
-            <div class="chart-wrap" style="height:{{ 60 + breakdown_weather|length * 36 }}px">
-                <canvas id="chart-weather"></canvas>
-            </div>
-        </div>
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Nach Fahrrad</h2></div>
-            {% if breakdown_bike %}
-            <div class="chart-wrap" style="height:{{ 60 + breakdown_bike|length * 36 }}px">
-                <canvas id="chart-bike"></canvas>
-            </div>
-            {% else %}
-            <div class="empty">Keine Schichten mit Fahrrad-Angabe erfasst.</div>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- Best / worst -->
-    {% if rows %}
-    <div class="bw-grid" style="margin-bottom:20px">
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Beste Rate (€/Std)</h2></div>
-            <ul class="bw-list">
-                {% for r in best_rate %}
-                <li class="bw-row">
-                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
-                    <span class="bw-val">{{ '%.2f'|format(r.per_hour) }} €/h</span>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Schwächste Rate (€/Std)</h2></div>
-            <ul class="bw-list">
-                {% for r in worst_rate %}
-                <li class="bw-row">
-                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
-                    <span class="bw-val">{{ '%.2f'|format(r.per_hour) }} €/h</span>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Beste Rate (€/Lieferung)</h2></div>
-            <ul class="bw-list">
-                {% for r in best_delivery_rate %}
-                <li class="bw-row">
-                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
-                    <span class="bw-val">{{ '%.2f'|format(r.per_delivery) }} €</span>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Schwächste Rate (€/Lieferung)</h2></div>
-            <ul class="bw-list">
-                {% for r in worst_delivery_rate %}
-                <li class="bw-row">
-                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
-                    <span class="bw-val">{{ '%.2f'|format(r.per_delivery) }} €</span>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Beste Rate (€/Fahrt)</h2></div>
-            <ul class="bw-list">
-                {% for r in best_trip_rate %}
-                <li class="bw-row">
-                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
-                    <span class="bw-val">{{ '%.2f'|format(r.per_trip) }} €</span>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        <div class="card" style="margin-bottom:0">
-            <div class="card-header"><h2>Schwächste Rate (€/Fahrt)</h2></div>
-            <ul class="bw-list">
-                {% for r in worst_trip_rate %}
-                <li class="bw-row">
-                    <span class="bw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
-                    <span class="bw-val">{{ '%.2f'|format(r.per_trip) }} €</span>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- Shift list -->
-    <div class="card">
-        <div class="card-header"><h2>Alle Schichten</h2></div>
-        {% if rows %}
-        <div>
-            {% for r in rows %}
-            <div class="shift-item">
-                <div class="shift-summary" onclick="toggleShift({{ r.id }})">
-                    <div class="main">
-                        <span class="shift-date-badge">{{ r.shift_date.strftime('%d.%m.%Y') }}</span>
-                        <span class="shift-meta">
-                            <span>{{ '%.1f'|format(r.hours_worked) if r.hours_worked is not none else '—' }} Std</span>
-                            <span>{{ r.deliveries }} Lieferungen</span>
-                            <span>{{ r.trips }} Fahrten</span>
-                            <span>{{ r.bike_label }}</span>
-                            <span>{{ r.weather_label }}</span>
-                        </span>
-                    </div>
-                    <div class="main">
-                        <div class="shift-rates">
-                            <span class="shift-rate-primary">{{ ('%.2f'|format(r.per_hour) ~ ' €/h') if r.per_hour is not none else '—' }}</span>
-                            <span class="shift-rate-secondary">{{ ('%.2f'|format(r.per_delivery) ~ ' €/Lief.') if r.per_delivery is not none else '—' }}</span>
-                            <span class="shift-rate-secondary">{{ ('%.2f'|format(r.per_trip) ~ ' €/Fahrt') if r.per_trip is not none else '—' }}</span>
-                        </div>
-                        <span class="shift-total-sub">({{ '%.2f'|format(r.total) }} € gesamt)</span>
-                        <span class="chevron" id="chevron-{{ r.id }}">▶</span>
-                    </div>
-                </div>
-                <div class="shift-edit" id="edit-{{ r.id }}">
-                    <form method="post" action="{{ url_for('tips.tips_update', shift_id=r.id) }}">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Datum</label>
-                                <input type="date" name="shift_date" value="{{ r.shift_date.strftime('%Y-%m-%d') }}" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Beginn</label>
-                                <input type="time" name="shift_start" class="time-input" value="{{ r.shift_start.strftime('%H:%M') if r.shift_start else '' }}">
-                            </div>
-                            <div class="form-group">
-                                <label>Ende</label>
-                                <input type="time" name="shift_end" class="time-input" value="{{ r.shift_end.strftime('%H:%M') if r.shift_end else '' }}">
-                            </div>
-                            <div class="form-group">
-                                <label>Stunden</label>
-                                <select name="hours_worked" class="num-input" required>
-                                    {% for h in [4, 6, 8] %}
-                                    <option value="{{ h }}" {% if r.hours_worked == h %}selected{% endif %}>{{ h }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Trinkgeld Bar</label>
-                                <input type="number" name="tips_cash" step="0.01" min="0" class="num-input" value="{{ r.tips_cash }}">
-                            </div>
-                            <div class="form-group">
-                                <label>Trinkgeld Online</label>
-                                <input type="number" name="tips_online" step="0.01" min="0" class="num-input" value="{{ r.tips_online }}">
-                            </div>
-                            <div class="form-group">
-                                <label>Lieferungen</label>
-                                <input type="number" name="deliveries" min="0" class="num-input" value="{{ r.deliveries }}">
-                            </div>
-                            <div class="form-group">
-                                <label>Fahrten</label>
-                                <input type="number" name="trips" min="0" class="num-input" value="{{ r.trips }}">
-                            </div>
-                            <div class="form-group">
-                                <label>Fahrrad</label>
-                                <select name="bike_size">
-                                    <option value="">—</option>
-                                    {% for val, label in bike_choices %}
-                                    <option value="{{ val }}" {% if r.bike_size == val %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Wetter</label>
-                                <select name="weather">
-                                    {% for val, label in weather_choices %}
-                                    <option value="{{ val }}" {% if (r.weather or 'clear') == val %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="form-group grow">
-                                <label>Notiz</label>
-                                <input type="text" name="notes" value="{{ r.notes or '' }}" placeholder="optional">
-                            </div>
-                            <button type="submit" class="btn btn-primary">Speichern</button>
-                        </div>
-                    </form>
-                    <form method="post" action="{{ url_for('tips.tips_delete', shift_id=r.id) }}"
-                          onsubmit="return confirm('Schicht löschen?')" style="margin-top:10px">
-                        <button type="submit" class="btn btn-danger btn-sm">Schicht löschen</button>
-                    </form>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
+        {% endfor %}
         {% else %}
-        <div class="empty">Noch keine Schichten erfasst.</div>
+        <div class="pattern-empty">Keine Schichten mit Beginn-Zeit erfasst.</div>
         {% endif %}
+      </div>
+
+      <div class="panel pattern-block">
+        <h3>Nach Wetter</h3>
+        {% set max_v = (breakdown_weather | map(attribute='avg_per_hour') | list | max) or 1 %}
+        {% for g in breakdown_weather %}
+        <div class="prow">
+          <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
+            <span class="prow-vals"><b>{{ '%.2f'|format(g.avg_per_hour) }} €/h</b> · {{ '%.2f'|format(g.avg_per_delivery) }} €/L · n={{ g.shift_count }}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ (g.avg_per_hour / max_v * 100) | round(1) }}%"></div></div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="panel pattern-block">
+        <h3>Nach Fahrrad</h3>
+        {% if breakdown_bike %}
+        {% set max_v = (breakdown_bike | map(attribute='avg_per_hour') | list | max) or 1 %}
+        {% for g in breakdown_bike %}
+        <div class="prow">
+          <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
+            <span class="prow-vals"><b>{{ '%.2f'|format(g.avg_per_hour) }} €/h</b> · {{ '%.2f'|format(g.avg_per_delivery) }} €/L · n={{ g.shift_count }}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ (g.avg_per_hour / max_v * 100) | round(1) }}%"></div></div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="pattern-empty">Keine Schichten mit Fahrrad-Angabe erfasst.</div>
+        {% endif %}
+      </div>
+
     </div>
-</div>
+  </section>
+  {% endif %}
+
+  <!-- STANDOUT SHIFTS -->
+  {% if rows %}
+  <section class="block">
+    <div class="block-head"><h2>Auffällige Schichten</h2></div>
+    <div class="panel tabgroup" id="standout-tabs">
+      <div class="tablist" role="tablist" aria-label="Kennzahl">
+        {% for key, title in [('hour','€ / Stunde'), ('delivery','€ / Lieferung'), ('trip','€ / Fahrt')] %}
+        <button type="button" role="tab" id="sw-tab-{{ key }}" aria-controls="sw-panel-{{ key }}"
+                aria-selected="{{ 'true' if loop.first else 'false' }}" tabindex="{{ '0' if loop.first else '-1' }}">{{ title }}</button>
+        {% endfor %}
+      </div>
+
+      {% set metrics = [('hour', best_rate, worst_rate, 'per_hour', '€/h'),
+                         ('delivery', best_delivery_rate, worst_delivery_rate, 'per_delivery', '€/L'),
+                         ('trip', best_trip_rate, worst_trip_rate, 'per_trip', '€/F')] %}
+      {% for key, best, worst, field, unit in metrics %}
+      <div role="tabpanel" id="sw-panel-{{ key }}" aria-labelledby="sw-tab-{{ key }}" {% if not loop.first %}hidden{% endif %}>
+        <div class="sw-split">
+          <div class="sw-col best">
+            <h3>Beste</h3>
+            {% for r in best %}
+            <div class="sw-row"><span class="sw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span><span class="sw-val">{{ '%.2f'|format(r[field]) }} {{ unit }}</span></div>
+            {% endfor %}
+          </div>
+          <div class="sw-col worst">
+            <h3>Schwächste</h3>
+            {% for r in worst %}
+            <div class="sw-row"><span class="sw-date">{{ r.shift_date.strftime('%d.%m.%Y') }}</span><span class="sw-val">{{ '%.2f'|format(r[field]) }} {{ unit }}</span></div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</main>
+
+<!-- color probes for Chart.js (canvas can't resolve oklch/custom props directly) -->
+<span class="color-probe" id="probe-signal" style="color:var(--signal)"></span>
+<span class="color-probe" id="probe-warn" style="color:var(--warn)"></span>
+<span class="color-probe" id="probe-muted" style="color:var(--muted)"></span>
+<span class="color-probe" id="probe-border" style="color:var(--border-soft)"></span>
+<span class="color-probe" id="probe-ink" style="color:var(--ink)"></span>
 
 <script>
-function toggleShift(id) {
-    const edit = document.getElementById('edit-' + id);
-    const chevron = document.getElementById('chevron-' + id);
-    const isOpen = edit.classList.contains('open');
-    edit.classList.toggle('open', !isOpen);
-    chevron.classList.toggle('open', !isOpen);
+function initTabs(root) {
+  const tabs = Array.from(root.querySelectorAll('[role="tab"]'));
+  const panels = Array.from(root.querySelectorAll('[role="tabpanel"]'));
+  function activate(i, focus) {
+    tabs.forEach((t, j) => {
+      const on = j === i;
+      t.setAttribute('aria-selected', on);
+      t.tabIndex = on ? 0 : -1;
+      if (on && focus) t.focus();
+    });
+    panels.forEach((p, j) => { p.hidden = j !== i; });
+  }
+  tabs.forEach((tab, i) => {
+    tab.addEventListener('click', () => activate(i, false));
+    tab.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); activate((i + 1) % tabs.length, true); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); activate((i - 1 + tabs.length) % tabs.length, true); }
+    });
+  });
+}
+document.querySelectorAll('.tabgroup').forEach(initTabs);
+
+function toggleEdit(id, btn) {
+  const el = document.getElementById(id);
+  const isOpen = !el.hidden;
+  el.hidden = isOpen;
+  btn.textContent = isOpen ? 'Bearbeiten' : 'Fertig';
 }
 
-{% if chart_labels %}
-const ctx = document.getElementById('trendChart');
-new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: {{ chart_labels | tojson }},
-        datasets: [
-            {
-                label: '€/Std',
-                data: {{ chart_rates | tojson }},
-                borderColor: '#6d6af6',
-                backgroundColor: 'rgba(109,106,246,0.12)',
-                tension: 0.3,
-                fill: true,
-                yAxisID: 'y',
-            },
-            {
-                label: 'Trinkgeld gesamt (€)',
-                data: {{ chart_totals | tojson }},
-                borderColor: '#22d3ee',
-                backgroundColor: 'rgba(34,211,238,0.08)',
-                tension: 0.3,
-                fill: false,
-                yAxisID: 'y1',
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-            x: { ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' } },
-            y: { position: 'left', ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' } },
-            y1: { position: 'right', ticks: { color: '#8b91a7' }, grid: { display: false } },
-        },
-        plugins: {
-            legend: { labels: { color: '#eef0f7' } }
-        }
-    }
-});
+function selectDay(iso, hasShift, label) {
+  document.querySelectorAll('.cal-cell').forEach(c => c.classList.toggle('active', c.dataset.iso === iso));
+  document.querySelectorAll('.day-block').forEach(b => { b.hidden = true; });
+  if (hasShift) {
+    const block = document.getElementById('day-' + iso);
+    if (block) block.hidden = false;
+  } else {
+    document.getElementById('day-add').hidden = false;
+    document.getElementById('add-date-hidden').value = iso;
+    document.getElementById('add-date-label').textContent = 'Neue Schicht — ' + label;
+  }
+  document.getElementById('day-detail').togglePopover(true);
+}
+{% if default_cell %}
+selectDay('{{ default_cell.iso }}', {{ 'true' if default_cell.rows else 'false' }}, '{{ default_cell.weekday_label }}, {{ default_cell.day }}. {{ calendar_month_label }}');
 {% endif %}
 
-function renderBreakdownChart(canvasId, groups) {
-    const el = document.getElementById(canvasId);
-    if (!el || !groups.length) return;
-    new Chart(el, {
-        type: 'bar',
-        data: {
-            labels: groups.map(g => `${g.label} (n=${g.shift_count})`),
-            datasets: [
-                {
-                    label: '€/Std',
-                    data: groups.map(g => g.avg_per_hour),
-                    backgroundColor: 'rgba(109,106,246,0.75)',
-                    borderRadius: 6,
-                },
-                {
-                    label: '€/Lieferung',
-                    data: groups.map(g => g.avg_per_delivery),
-                    backgroundColor: 'rgba(34,211,238,0.65)',
-                    borderRadius: 6,
-                }
-            ]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { ticks: { color: '#8b91a7' }, grid: { color: '#1e2333' }, beginAtZero: true },
-                y: { ticks: { color: '#eef0f7' }, grid: { display: false } },
-            },
-            plugins: {
-                legend: { labels: { color: '#eef0f7' } },
-                tooltip: {
-                    callbacks: {
-                        afterBody: (items) => {
-                            const g = groups[items[0].dataIndex];
-                            return `${g.shift_count} Schichten · Gesamt ${g.total_tips.toFixed(2)} €`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
+{% if chart_labels %}
+(function () {
+  const c = (id) => getComputedStyle(document.getElementById(id)).color;
+  const signal = c('probe-signal'), warn = c('probe-warn'), muted = c('probe-muted'),
+        border = c('probe-border'), ink = c('probe-ink');
 
-renderBreakdownChart('chart-weekday', {{ breakdown_weekday | tojson }});
-renderBreakdownChart('chart-time', {{ breakdown_time | tojson }});
-renderBreakdownChart('chart-weather', {{ breakdown_weather | tojson }});
-renderBreakdownChart('chart-bike', {{ breakdown_bike | tojson }});
+  new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels: {{ chart_labels | tojson }},
+      datasets: [
+        { label: '€/Std', data: {{ chart_rates | tojson }}, borderColor: signal, backgroundColor: 'transparent', tension: 0.3, fill: false, yAxisID: 'y', pointRadius: 0, pointHoverRadius: 4, borderWidth: 2 },
+        { label: 'Trinkgeld gesamt (€)', data: {{ chart_totals | tojson }}, borderColor: warn, backgroundColor: 'transparent', tension: 0.3, fill: false, yAxisID: 'y1', pointRadius: 0, pointHoverRadius: 4, borderWidth: 2 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { color: muted, font: { family: "'IBM Plex Mono'", size: 10 } }, grid: { color: border } },
+        y: { position: 'left', ticks: { color: muted, font: { family: "'IBM Plex Mono'", size: 10 } }, grid: { color: border } },
+        y1:{ position: 'right', ticks: { color: muted, font: { family: "'IBM Plex Mono'", size: 10 } }, grid: { display: false } },
+      },
+      plugins: { legend: { labels: { color: ink, font: { size: 11 } } } }
+    }
+  });
+})();
+{% endif %}
 </script>
 
 </body>
