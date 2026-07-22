@@ -1,7 +1,8 @@
 import calendar
 import datetime as dt
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from sqlalchemy import func
 
 from extensions import db
 from models import DeliveryShift
@@ -29,14 +30,14 @@ BIKE_LABELS = dict(BIKE_CHOICES)
 
 def _to_float(value, fallback=0.0):
     try:
-        return float(value)
+        return max(0.0, float(value))
     except (TypeError, ValueError):
         return fallback
 
 
 def _to_int(value, fallback=0):
     try:
-        return int(value)
+        return max(0, int(value))
     except (TypeError, ValueError):
         return fallback
 
@@ -220,6 +221,7 @@ def _build_month_calendar(year, month, rows, today, week_start):
                 'is_future': d > today,
                 'is_current_week': week_start <= d <= week_end,
                 'is_month_best': False,
+                'is_high_intensity': False,
                 'per_hour': None,
                 'total': None,
             }
@@ -257,8 +259,11 @@ def tips_dashboard():
     if month_rates:
         for week in calendar_weeks:
             for c in week:
-                if c and c['per_hour'] == calendar_max_rate:
-                    c['is_month_best'] = True
+                if c and c['per_hour'] is not None:
+                    if c['per_hour'] == calendar_max_rate:
+                        c['is_month_best'] = True
+                    if c['per_hour'] / calendar_max_rate > 0.55:
+                        c['is_high_intensity'] = True
 
     prev_month, prev_year = (12, cal_year - 1) if cal_month == 1 else (cal_month - 1, cal_year)
     next_month, next_year = (1, cal_year + 1) if cal_month == 12 else (cal_month + 1, cal_year)
@@ -276,6 +281,21 @@ def tips_dashboard():
             for c in week:
                 if c and c['day'] == focus_day:
                     default_cell = c
+
+    tabbable_iso = default_cell['iso'] if default_cell else None
+    if not tabbable_iso and is_current_month:
+        for week in calendar_weeks:
+            for c in week:
+                if c and c['is_today']:
+                    tabbable_iso = c['iso']
+    if not tabbable_iso:
+        for week in calendar_weeks:
+            for c in week:
+                if c:
+                    tabbable_iso = c['iso']
+                    break
+            if tabbable_iso:
+                break
 
     periods = {
         'week': _aggregate([r for r in rows if r['shift_date'] and r['shift_date'] >= week_start]),
@@ -347,6 +367,7 @@ def tips_dashboard():
         next_year=next_year, next_month=next_month,
         is_current_month=is_current_month,
         default_cell=default_cell,
+        tabbable_iso=tabbable_iso,
         today=today,
     )
 
@@ -377,12 +398,14 @@ def tips_add():
     db.session.add(shift)
     db.session.commit()
 
-    all_rates = [
-        ((s.tips_cash or 0) + (s.tips_online or 0)) / s.hours_worked
-        for s in DeliveryShift.query.all() if s.hours_worked
-    ]
+    max_rate = db.session.query(
+        func.max(
+            (func.coalesce(DeliveryShift.tips_cash, 0) + func.coalesce(DeliveryShift.tips_online, 0))
+            / DeliveryShift.hours_worked
+        )
+    ).filter(DeliveryShift.hours_worked > 0).scalar()
     new_rate = ((shift.tips_cash or 0) + (shift.tips_online or 0)) / shift.hours_worked if shift.hours_worked else None
-    is_new_best = new_rate is not None and all_rates and new_rate >= max(all_rates)
+    is_new_best = new_rate is not None and max_rate is not None and new_rate >= max_rate
 
     if is_new_best:
         flash('Neue Bestleistung — %.2f €/h!' % new_rate, 'best')
@@ -425,7 +448,56 @@ def tips_update(shift_id):
 def tips_delete(shift_id):
     shift = db.get_or_404(DeliveryShift, shift_id)
     year, month, day = shift.shift_date.year, shift.shift_date.month, shift.shift_date.day
+    session['last_deleted'] = {
+        'shift_date': shift.shift_date.isoformat(),
+        'shift_start': shift.shift_start.isoformat() if shift.shift_start else None,
+        'shift_end': shift.shift_end.isoformat() if shift.shift_end else None,
+        'hours_worked': shift.hours_worked,
+        'tips_cash': shift.tips_cash,
+        'tips_online': shift.tips_online,
+        'deliveries': shift.deliveries,
+        'trips': shift.trips,
+        'bike_size': shift.bike_size,
+        'weather': shift.weather,
+        'notes': shift.notes,
+    }
     db.session.delete(shift)
     db.session.commit()
-    flash('Schicht gelöscht.', 'success')
+    undo_url = url_for('tips.tips_undo_delete')
+    flash(
+        'Schicht gelöscht. '
+        f'<form method="post" action="{undo_url}" class="flash-undo-form">'
+        '<button type="submit" class="flash-undo-btn">Rückgängig</button>'
+        '</form>',
+        'success',
+    )
     return redirect(url_for('tips.tips_dashboard', y=year, m=month, d=day))
+
+
+@tips_bp.route('/tips/undo-delete', methods=['POST'])
+@login_required
+def tips_undo_delete():
+    data = session.pop('last_deleted', None)
+    if not data:
+        flash('Nichts zum Wiederherstellen.', 'error')
+        return redirect(url_for('tips.tips_dashboard'))
+
+    shift = DeliveryShift(
+        shift_date=dt.date.fromisoformat(data['shift_date']),
+        shift_start=dt.time.fromisoformat(data['shift_start']) if data['shift_start'] else None,
+        shift_end=dt.time.fromisoformat(data['shift_end']) if data['shift_end'] else None,
+        hours_worked=data['hours_worked'],
+        tips_cash=data['tips_cash'],
+        tips_online=data['tips_online'],
+        deliveries=data['deliveries'],
+        trips=data['trips'],
+        bike_size=data['bike_size'],
+        weather=data['weather'],
+        notes=data['notes'],
+    )
+    db.session.add(shift)
+    db.session.commit()
+    flash('Schicht wiederhergestellt.', 'success')
+    return redirect(url_for(
+        'tips.tips_dashboard', y=shift.shift_date.year, m=shift.shift_date.month, d=shift.shift_date.day,
+    ))

@@ -110,6 +110,12 @@ nav{
   background: color-mix(in oklch, var(--warn) 16%, var(--surface)); border-color: color-mix(in oklch, var(--warn) 50%, transparent); color: var(--warn);
   font-size: var(--fs-base); animation: flashIn .4s var(--ease-out-expo), flashGlow 1.1s var(--ease-out-expo) .1s;
 }
+.flash-undo-form{ margin-left:auto; }
+.flash-undo-btn{
+  background:transparent; border:1px solid currentColor; color:inherit; font:inherit; font-weight:700;
+  padding: 4px var(--sp-3); border-radius: var(--radius-sm); cursor:pointer; min-height:32px;
+}
+.flash-undo-btn:hover{ background: color-mix(in oklch, currentColor 15%, transparent); }
 
 section.block{ margin-bottom: var(--sp-10); }
 .block-head{ display:flex; align-items:baseline; justify-content:space-between; gap: var(--sp-3); margin-bottom: var(--sp-4); }
@@ -204,6 +210,8 @@ fieldset.fgroup legend{
   border-color: color-mix(in oklch, var(--signal) calc(var(--intensity, 0) * 1%), var(--border-soft));
 }
 .cal-cell.is-future:not(.has-shift){ opacity:0.4; }
+.cal-cell:disabled{ cursor: not-allowed; }
+.cal-cell:disabled:hover{ transform:none; box-shadow:none; border-color: var(--border-soft); }
 .cal-cell.is-current-week{ border-top: 2px solid var(--ink); }
 .cal-cell.is-current-week.is-pad{ border-top: 2px solid transparent; }
 .cal-cell.is-today{ box-shadow: inset 0 0 0 2px var(--warn); }
@@ -212,6 +220,8 @@ fieldset.fgroup legend{
 .cal-cell-day{ font-family: var(--font-data); font-size: var(--fs-xs); color: var(--muted); }
 .cal-cell.has-shift .cal-cell-day{ color: var(--ink); font-weight:600; }
 .cal-cell-rate{ font-family: var(--font-data); font-size: 10px; color: var(--ink); font-weight:600; align-self:flex-end; }
+.cal-cell.is-high-intensity .cal-cell-day,
+.cal-cell.is-high-intensity .cal-cell-rate{ color: var(--bg); }
 
 .cal-cell.is-month-best::after{
   content:''; position:absolute; top:3px; right:3px; width:6px; height:6px; border-radius:50%;
@@ -236,7 +246,7 @@ fieldset.fgroup legend{
   position: fixed; inset: 0; margin: auto;
   width: min(560px, 92vw); max-height: 85vh; overflow-y: auto;
   padding: var(--sp-6);
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); border: none; border-radius: var(--radius-md);
   box-shadow: 0 24px 64px rgba(0,0,0,0.55);
   opacity: 0; transform: scale(0.94) translateY(6px);
   transition: opacity .25s var(--ease-out-expo), transform .3s var(--ease-out-expo),
@@ -314,7 +324,8 @@ fieldset.fgroup legend{
 @media (max-width: 700px){
   .page{ padding: var(--sp-6) var(--sp-4) var(--sp-10); }
   .sw-split{ grid-template-columns: 1fr; gap: var(--sp-4); }
-  .cal-grid{ gap: 3px; }
+  .cal-panel{ padding: var(--sp-3); }
+  .cal-grid{ gap: 2px; }
   .cal-cell{ padding: 3px 4px; }
   .cal-cell-rate{ font-size: 9px; }
 }
@@ -336,7 +347,7 @@ fieldset.fgroup legend{
   {% set flash_messages = get_flashed_messages(with_categories=true) %}
   {% set flash_category = flash_messages[0][0] if flash_messages else None %}
   {% for category, message in flash_messages %}
-  <div class="flash flash-{{ category }}" role="status">{{ message }}</div>
+  <div class="flash flash-{{ category }}" role="status">{{ message | safe }}</div>
   {% endfor %}
 
   <div class="page-head">
@@ -373,10 +384,13 @@ fieldset.fgroup legend{
           {% if cell is none %}
           <div class="cal-cell is-pad"></div>
           {% else %}
+          {% set locked = cell.is_future and not cell.rows %}
           <button type="button"
-                  class="cal-cell{% if cell.rows %} has-shift{% endif %}{% if cell.is_today %} is-today{% endif %}{% if cell.is_future %} is-future{% endif %}{% if cell.is_current_week %} is-current-week{% endif %}{% if cell.is_month_best %} is-month-best{% endif %}{% if default_cell and cell.iso == default_cell.iso and flash_category == 'success' %} just-saved{% elif default_cell and cell.iso == default_cell.iso and flash_category == 'best' %} just-saved-best{% endif %}"
+                  class="cal-cell{% if cell.rows %} has-shift{% endif %}{% if cell.is_today %} is-today{% endif %}{% if cell.is_future %} is-future{% endif %}{% if cell.is_current_week %} is-current-week{% endif %}{% if cell.is_month_best %} is-month-best{% endif %}{% if cell.is_high_intensity %} is-high-intensity{% endif %}{% if default_cell and cell.iso == default_cell.iso and flash_category == 'success' %} just-saved{% elif default_cell and cell.iso == default_cell.iso and flash_category == 'best' %} just-saved-best{% endif %}"
                   data-iso="{{ cell.iso }}"
-                  aria-label="{{ cell.weekday_label }}, {{ cell.day }}. {{ calendar_month_label }}{% if cell.is_today %} (heute){% endif %}{% if cell.per_hour is not none %}, Schicht erfasst, {{ '%.2f'|format(cell.per_hour) }} Euro pro Stunde{% else %}, keine Schicht erfasst{% endif %}"
+                  tabindex="{{ '0' if cell.iso == tabbable_iso else '-1' }}"
+                  {% if locked %}disabled{% endif %}
+                  aria-label="{{ cell.weekday_label }}, {{ cell.day }}. {{ calendar_month_label }}{% if cell.is_today %} (heute){% endif %}{% if cell.per_hour is not none %}, Schicht erfasst, {{ '%.2f'|format(cell.per_hour) }} Euro pro Stunde{% elif locked %}, in der Zukunft, noch nicht loggbar{% else %}, keine Schicht erfasst{% endif %}"
                   {% if cell.per_hour is not none %}style="--intensity:{{ (cell.per_hour / calendar_max_rate * 100) | round(0) }}"{% endif %}
                   onclick="selectDay('{{ cell.iso }}', {{ 'true' if cell.rows else 'false' }}, '{{ cell.weekday_label }}, {{ cell.day }}. {{ calendar_month_label }}')">
             <span class="cal-cell-day" aria-hidden="true">{{ cell.day }}</span>
@@ -386,7 +400,7 @@ fieldset.fgroup legend{
         {% endfor %}{% endfor %}
       </div>
 
-      <div class="day-detail" id="day-detail" popover>
+      <div class="day-detail" id="day-detail" popover tabindex="-1">
         <button type="button" class="day-popover-close" popovertarget="day-detail" popovertargetaction="hide" aria-label="Schließen">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         </button>
@@ -491,6 +505,7 @@ fieldset.fgroup legend{
                   <div class="field"><label for="add-end">Ende</label><input id="add-end" type="time" name="shift_end"></div>
                   <div class="field"><label for="add-hours">Stunden</label>
                     <select id="add-hours" name="hours_worked" required>
+                      <option value="" selected disabled>—</option>
                       {% for h in [4, 6, 8] %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
                     </select>
                   </div>
@@ -557,8 +572,8 @@ fieldset.fgroup legend{
         {% for g in breakdown_weekday %}
         <div class="prow">
           <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
-            <span class="prow-vals"><b>{{ '%.2f'|format(g.avg_per_hour) }} €/h</b> · {{ '%.2f'|format(g.avg_per_delivery) }} €/L · n={{ g.shift_count }}</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width:{{ (g.avg_per_hour / max_v * 100) | round(1) }}%"></div></div>
+            <span class="prow-vals"><b>{{ ('%.2f'|format(g.avg_per_hour) ~ ' €/h') if g.avg_per_hour is not none else '—' }}</b> · {{ ('%.2f'|format(g.avg_per_delivery) ~ ' €/L') if g.avg_per_delivery is not none else '—' }} · n={{ g.shift_count }}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ ((g.avg_per_hour / max_v * 100) | round(1)) if g.avg_per_hour is not none else 0 }}%"></div></div>
         </div>
         {% endfor %}
       </div>
@@ -566,13 +581,13 @@ fieldset.fgroup legend{
       <div class="panel pattern-block">
         <h3>Nach Tageszeit</h3>
         {% if breakdown_time %}
-        <p style="font-size:var(--fs-xs); color:var(--muted); margin:-4px 0 var(--sp-2)">Schichten über mehrere Zeiträume werden anteilig aufgeteilt — n kann in Summe über die Gesamtzahl Schichten hinausgehen.</p>
+        <p style="font-size:var(--fs-xs); color:var(--muted); margin:0 0 var(--sp-2)">Schichten über mehrere Zeiträume werden anteilig aufgeteilt — n kann in Summe über die Gesamtzahl Schichten hinausgehen.</p>
         {% set max_v = (breakdown_time | map(attribute='avg_per_hour') | list | max) or 1 %}
         {% for g in breakdown_time %}
         <div class="prow">
           <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
-            <span class="prow-vals"><b>{{ '%.2f'|format(g.avg_per_hour) }} €/h</b> · {{ '%.2f'|format(g.avg_per_delivery) }} €/L · n={{ g.shift_count }}</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width:{{ (g.avg_per_hour / max_v * 100) | round(1) }}%"></div></div>
+            <span class="prow-vals"><b>{{ ('%.2f'|format(g.avg_per_hour) ~ ' €/h') if g.avg_per_hour is not none else '—' }}</b> · {{ ('%.2f'|format(g.avg_per_delivery) ~ ' €/L') if g.avg_per_delivery is not none else '—' }} · n={{ g.shift_count }}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ ((g.avg_per_hour / max_v * 100) | round(1)) if g.avg_per_hour is not none else 0 }}%"></div></div>
         </div>
         {% endfor %}
         {% else %}
@@ -586,8 +601,8 @@ fieldset.fgroup legend{
         {% for g in breakdown_weather %}
         <div class="prow">
           <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
-            <span class="prow-vals"><b>{{ '%.2f'|format(g.avg_per_hour) }} €/h</b> · {{ '%.2f'|format(g.avg_per_delivery) }} €/L · n={{ g.shift_count }}</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width:{{ (g.avg_per_hour / max_v * 100) | round(1) }}%"></div></div>
+            <span class="prow-vals"><b>{{ ('%.2f'|format(g.avg_per_hour) ~ ' €/h') if g.avg_per_hour is not none else '—' }}</b> · {{ ('%.2f'|format(g.avg_per_delivery) ~ ' €/L') if g.avg_per_delivery is not none else '—' }} · n={{ g.shift_count }}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ ((g.avg_per_hour / max_v * 100) | round(1)) if g.avg_per_hour is not none else 0 }}%"></div></div>
         </div>
         {% endfor %}
       </div>
@@ -599,8 +614,8 @@ fieldset.fgroup legend{
         {% for g in breakdown_bike %}
         <div class="prow">
           <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
-            <span class="prow-vals"><b>{{ '%.2f'|format(g.avg_per_hour) }} €/h</b> · {{ '%.2f'|format(g.avg_per_delivery) }} €/L · n={{ g.shift_count }}</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width:{{ (g.avg_per_hour / max_v * 100) | round(1) }}%"></div></div>
+            <span class="prow-vals"><b>{{ ('%.2f'|format(g.avg_per_hour) ~ ' €/h') if g.avg_per_hour is not none else '—' }}</b> · {{ ('%.2f'|format(g.avg_per_delivery) ~ ' €/L') if g.avg_per_delivery is not none else '—' }} · n={{ g.shift_count }}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ ((g.avg_per_hour / max_v * 100) | round(1)) if g.avg_per_hour is not none else 0 }}%"></div></div>
         </div>
         {% endfor %}
         {% else %}
@@ -680,6 +695,40 @@ function initTabs(root) {
 }
 document.querySelectorAll('.tabgroup').forEach(initTabs);
 
+function initCalendarGrid() {
+  const grid = document.querySelector('.cal-grid');
+  if (!grid) return;
+  const gridChildren = Array.from(grid.children);
+  const cells = gridChildren.filter(el =>
+    el.classList.contains('cal-cell') && !el.classList.contains('is-pad') && !el.disabled);
+  if (!cells.length) return;
+  if (!cells.some(c => c.tabIndex === 0)) cells[0].tabIndex = 0;
+
+  function setRoving(cell) {
+    cells.forEach(c => { c.tabIndex = (c === cell) ? 0 : -1; });
+  }
+
+  cells.forEach(cell => {
+    cell.addEventListener('click', () => setRoving(cell));
+    cell.addEventListener('keydown', (e) => {
+      const idx = gridChildren.indexOf(cell);
+      let targetIdx = null;
+      if (e.key === 'ArrowRight') targetIdx = idx + 1;
+      else if (e.key === 'ArrowLeft') targetIdx = idx - 1;
+      else if (e.key === 'ArrowDown') targetIdx = idx + 7;
+      else if (e.key === 'ArrowUp') targetIdx = idx - 7;
+      else return;
+      const target = gridChildren[targetIdx];
+      if (target && target.classList.contains('cal-cell') && !target.classList.contains('is-pad') && !target.disabled) {
+        e.preventDefault();
+        setRoving(target);
+        target.focus();
+      }
+    });
+  });
+}
+initCalendarGrid();
+
 function toggleEdit(id, btn) {
   const el = document.getElementById(id);
   const isOpen = !el.hidden;
@@ -698,7 +747,9 @@ function selectDay(iso, hasShift, label) {
     document.getElementById('add-date-hidden').value = iso;
     document.getElementById('add-date-label').textContent = 'Neue Schicht — ' + label;
   }
-  document.getElementById('day-detail').togglePopover(true);
+  const popover = document.getElementById('day-detail');
+  popover.togglePopover(true);
+  popover.focus();
 }
 {% if default_cell %}
 selectDay('{{ default_cell.iso }}', {{ 'true' if default_cell.rows else 'false' }}, '{{ default_cell.weekday_label }}, {{ default_cell.day }}. {{ calendar_month_label }}');
