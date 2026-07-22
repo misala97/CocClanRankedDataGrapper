@@ -171,3 +171,329 @@ def stall_report(rows_by_exercise, threshold=STAGNATION_THRESHOLD):
         })
     report.sort(key=lambda entry: (-entry['sessions_since_pr'], entry['name']))
     return report
+
+
+def _sets_display(row):
+    return ', '.join('{:g} kg x {}'.format(weight, reps) for weight, reps in row.sets)
+
+
+def _pr_weight(rows):
+    """The heaviest single set ever logged."""
+    best = None
+    for row in rows:
+        for weight, reps in row.sets:
+            if best is None or weight > best['weight']:
+                best = {'weight': weight, 'reps': reps,
+                        'started_at': row.started_at, 'position': row.position}
+    return best
+
+
+def _pr_e1rm(rows):
+    """The single set with the highest estimated 1RM -- not always the
+    heaviest one, since more reps at less weight can estimate higher."""
+    best = None
+    for row in rows:
+        for weight, reps in row.sets:
+            value = epley_1rm(weight, reps)
+            if best is None or value > best['e1rm']:
+                best = {'e1rm': round(value, 1), 'weight': weight, 'reps': reps,
+                        'started_at': row.started_at, 'position': row.position}
+    return best
+
+
+def exercise_progress(rows, position=None):
+    """History table and chart series for one exercise.
+
+    Position is a *series*, not a filter: every session is plotted, grouped by
+    the slot it was performed in, so a slot sitting consistently higher than
+    another is visible instead of having to be hunted for by hiding data.
+    `position` still isolates one slot when the user explicitly asks.
+
+    `available_positions` always describes the unfiltered data, so the page can
+    keep offering the other slots even while one is isolated.
+    """
+    chronological = _chronological(rows)
+    available_positions = sorted({row.position for row in chronological})
+    shown = ([row for row in chronological if row.position == position]
+             if position is not None else chronological)
+
+    table = [
+        {
+            'session_id': row.session_id,
+            'started_at': row.started_at,
+            'position': row.position,
+            'sets_display': _sets_display(row),
+            'best_weight': best_weight(row),
+            'volume': round(row_volume(row), 1),
+            'e1rm': round(best_e1rm(row), 1),
+        }
+        for row in reversed(shown)
+    ]
+
+    series = []
+    for slot in (available_positions if position is None else [position]):
+        points = [row for row in shown if row.position == slot]
+        if not points:
+            continue
+        series.append({
+            'position': slot,
+            'points': [
+                {
+                    'started_at': row.started_at,
+                    'e1rm': round(best_e1rm(row), 1),
+                    'best_weight': best_weight(row),
+                    'volume': round(row_volume(row), 1),
+                }
+                for row in points
+            ],
+        })
+
+    return {
+        'table': table,
+        'series': series,
+        'available_positions': available_positions,
+        'selected_position': position,
+        'pr_weight': _pr_weight(chronological),
+        'pr_e1rm': _pr_e1rm(chronological),
+        'state': exercise_state(rows, position=position),
+        'sessions_since_pr': sessions_since_pr(rows, position=position),
+    }
+
+
+def _next_weight(weight, is_unilateral):
+    """The smallest honest jump up. 2.5 kg is the smallest pair of plates on
+    most bars; a unilateral lift moves one side at a time, so half that."""
+    return weight + (1.25 if is_unilateral else 2.5)
+
+
+def _verdict(entry, since):
+    if not entry['has_history']:
+        return 'neu'
+    if entry['is_weight_pr'] or entry['is_volume_pr'] or entry['is_e1rm_pr']:
+        return 'rekord'
+    if since is not None and since >= STAGNATION_THRESHOLD:
+        return 'stagniert'
+    if entry['volume_delta_pct'] is not None and entry['volume_delta_pct'] > 0:
+        return 'steigend'
+    return None
+
+
+def session_report(current, history, comparable_session_volumes=()):
+    """The finished-workout page.
+
+    `current` is this session's performed exercises -- the caller must already
+    have dropped any exercise that was replaced mid-workout, since its slot is
+    represented by the substitute that took over and counting both would
+    inflate the total. `history` is every other performed row for those same
+    exercises. `comparable_session_volumes` holds the total volume of past
+    sessions built from the same template, and is empty for freeform workouts:
+    averaging a leg day into a push day produces a number that is arithmetically
+    correct and completely meaningless.
+    """
+    by_exercise = {}
+    for row in history:
+        by_exercise.setdefault(row.exercise_id, []).append(row)
+
+    exercises = []
+    records = []
+    advice = []
+    total_volume = 0.0
+    total_sets = 0
+
+    for row in current:
+        volume = row_volume(row)
+        weight = best_weight(row)
+        e1rm = best_e1rm(row)
+        total_volume += volume
+        total_sets += len(row.sets)
+
+        past = by_exercise.get(row.exercise_id, [])
+        past_volumes = [row_volume(p) for p in past]
+        has_history = bool(past_volumes)
+        avg_volume = (sum(past_volumes) / len(past_volumes)) if has_history else None
+
+        entry = {
+            'exercise_id': row.exercise_id,
+            'name': row.name,
+            'position': row.position,
+            'sets': row.sets,
+            'sets_display': _sets_display(row),
+            'volume': round(volume, 1),
+            'best_weight': weight,
+            'e1rm': round(e1rm, 1),
+            'has_history': has_history,
+            'avg_volume': round(avg_volume, 1) if has_history else None,
+            'volume_delta_pct': (round((volume - avg_volume) / avg_volume * 100)
+                                 if avg_volume else None),
+            'is_weight_pr': has_history and weight > max(best_weight(p) for p in past),
+            'is_volume_pr': has_history and volume > max(past_volumes),
+            'is_e1rm_pr': has_history and e1rm > max(best_e1rm(p) for p in past),
+        }
+
+        since = sessions_since_pr(past + [row], position=row.position)
+        entry['sessions_since_pr'] = since
+        entry['verdict'] = _verdict(entry, since)
+        exercises.append(entry)
+
+        # One record per exercise, strongest kind first -- three badges on one
+        # lift is noise, and a weight PR already implies the others matter less.
+        if entry['is_weight_pr']:
+            previous_row = max(past, key=best_weight)
+            records.append({'kind': 'weight', 'name': row.name, 'position': row.position,
+                            'value': weight, 'previous': best_weight(previous_row),
+                            'previous_at': previous_row.started_at})
+        elif entry['is_e1rm_pr']:
+            previous_row = max(past, key=best_e1rm)
+            records.append({'kind': 'e1rm', 'name': row.name, 'position': row.position,
+                            'value': round(e1rm, 1), 'previous': round(best_e1rm(previous_row), 1),
+                            'previous_at': previous_row.started_at})
+        elif entry['is_volume_pr']:
+            previous_row = max(past, key=row_volume)
+            records.append({'kind': 'volume', 'name': row.name, 'position': row.position,
+                            'value': round(volume, 1), 'previous': round(row_volume(previous_row), 1),
+                            'previous_at': previous_row.started_at})
+
+        if entry['verdict'] == 'stagniert':
+            advice.append({
+                'exercise_id': row.exercise_id,
+                'name': row.name,
+                'stuck_at': weight,
+                'sessions': since,
+                'suggested_weight': _next_weight(weight, row.is_unilateral),
+            })
+
+    records.sort(key=lambda record: -record['value'])
+    advice.sort(key=lambda item: -item['sessions'])
+
+    avg_total = ((sum(comparable_session_volumes) / len(comparable_session_volumes))
+                 if comparable_session_volumes else None)
+
+    return {
+        'exercises': exercises,
+        'total_volume': round(total_volume, 1),
+        'total_sets': total_sets,
+        'avg_total_volume': round(avg_total, 1) if avg_total else None,
+        'total_volume_delta_pct': (round((total_volume - avg_total) / avg_total * 100)
+                                   if avg_total else None),
+        'records': records,
+        'record_count': len(records),
+        'advice': advice,
+    }
+
+
+def muscle_group_volume(rows, catalogue_groups, now, days=ROLLING_WINDOW_DAYS):
+    """Working sets and volume per muscle group over a rolling window.
+
+    `catalogue_groups` is every group with at least one exercise in the
+    catalogue, so a group you have quietly stopped training still appears --
+    at zero, flagged -- instead of vanishing from the page precisely when it
+    most needs pointing out.
+    """
+    cutoff = now - dt.timedelta(days=days)
+    totals = {group: {'group': group, 'sets': 0, 'volume': 0.0} for group in catalogue_groups}
+    for row in rows:
+        if row.started_at < cutoff:
+            continue
+        group = row.muscle_group or NO_GROUP_LABEL
+        bucket = totals.setdefault(group, {'group': group, 'sets': 0, 'volume': 0.0})
+        bucket['sets'] += len(row.sets)
+        bucket['volume'] += row_volume(row)
+
+    buckets = sorted(totals.values(), key=lambda bucket: (-bucket['sets'], bucket['group']))
+    peak = buckets[0]['sets'] if buckets else 0
+    for bucket in buckets:
+        bucket['volume'] = round(bucket['volume'], 1)
+        bucket['share'] = (bucket['sets'] / peak) if peak else 0.0
+        bucket['under_trained'] = bucket['sets'] == 0 or bucket['sets'] < peak * UNDER_TRAINED_RATIO
+    return buckets
+
+
+def _week_start(moment):
+    """Monday 00:00 of the ISO week `moment` falls in."""
+    monday = moment.date() - dt.timedelta(days=moment.weekday())
+    return dt.datetime(monday.year, monday.month, monday.day)
+
+
+def weekly_tonnage(rows, now, weeks=TONNAGE_WEEKS):
+    """Total volume per ISO week, oldest first, ending with the current one.
+
+    The last bucket is a partial week by definition. It is flagged
+    `is_current` so the page can label it as still running -- unflagged, a
+    Tuesday would always look like a collapse in training.
+    """
+    current_start = _week_start(now)
+    starts = [current_start - dt.timedelta(weeks=offset) for offset in range(weeks - 1, -1, -1)]
+    buckets = {start: 0.0 for start in starts}
+    for row in rows:
+        start = _week_start(row.started_at)
+        if start in buckets:
+            buckets[start] += row_volume(row)
+    return [
+        {'week_start': start, 'volume': round(buckets[start], 1),
+         'is_current': start == current_start}
+        for start in starts
+    ]
+
+
+def consistency(finished_started_at, now, days=ROLLING_WINDOW_DAYS):
+    """Training rate over the window, plus how long it has been since the last
+    session. `finished_started_at` is a list of datetimes."""
+    cutoff = now - dt.timedelta(days=days)
+    recent = [moment for moment in finished_started_at if moment >= cutoff]
+    latest = max(finished_started_at) if finished_started_at else None
+    return {
+        'sessions': len(recent),
+        'per_week': len(recent) / (days / 7.0),
+        'days_since_last': (now - latest).days if latest else None,
+        'window_days': days,
+    }
+
+
+def routine_memory(templates, sessions, now):
+    """Each routine with how long since it was last performed.
+
+    Longest-ago first, because that is usually the one you are about to do.
+    Routines never performed sort last: they are unproven rather than overdue,
+    and putting them on top would bury the answer under noise.
+    """
+    latest = {}
+    for session in sessions:
+        if session.template_id is None:
+            continue
+        seen = latest.get(session.template_id)
+        if seen is None or session.started_at > seen:
+            latest[session.template_id] = session.started_at
+
+    memory = []
+    for template in templates:
+        last = latest.get(template.id)
+        memory.append({
+            'template': template,
+            'last_done': last,
+            'days_ago': (now - last).days if last else None,
+        })
+    memory.sort(key=lambda entry: (entry['days_ago'] is None,
+                                   -(entry['days_ago'] or 0),
+                                   entry['template'].name))
+    return memory
+
+
+def group_exercises_by_muscle(exercises, muscle_groups):
+    """Bucket exercises by muscle group in the vocabulary's own order.
+
+    Anything that does not match a current group -- no group set, or a legacy
+    free-text value from before the vocabulary existed -- lands in a trailing
+    catch-all bucket rather than being silently dropped. `exercises` is
+    expected pre-sorted by name so each bucket stays alphabetical.
+    """
+    grouped = {group: [] for group in muscle_groups}
+    other = []
+    for exercise in exercises:
+        if exercise.muscle_group in grouped:
+            grouped[exercise.muscle_group].append(exercise)
+        else:
+            other.append(exercise)
+    result = [(group, grouped[group]) for group in muscle_groups if grouped[group]]
+    if other:
+        result.append((NO_GROUP_LABEL, other))
+    return result

@@ -183,3 +183,224 @@ def test_stall_report_lists_only_stagnating_exercises_worst_first():
     assert report[0]['sessions_since_pr'] == 6
     assert report[0]['stuck_at'] == 80.0
     assert report[0]['since'] == day(0)
+
+
+class FakeTemplate:
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+
+
+class FakeSession:
+    def __init__(self, template_id, started_at):
+        self.template_id = template_id
+        self.started_at = started_at
+
+
+class FakeExercise:
+    def __init__(self, name, muscle_group):
+        self.name = name
+        self.muscle_group = muscle_group
+
+
+NOW = dt.datetime(2026, 7, 23, 12, 0)
+
+
+def test_exercise_progress_returns_newest_first_table_and_per_position_series():
+    rows = [
+        perf([(80.0, 8)], position=1, started_at=day(0), session_id=1),
+        perf([(70.0, 8)], position=3, started_at=day(7), session_id=2),
+        perf([(82.5, 6)], position=1, started_at=day(14), session_id=3),
+    ]
+    result = stats.exercise_progress(rows)
+
+    assert [entry['session_id'] for entry in result['table']] == [3, 2, 1]
+    assert result['available_positions'] == [1, 3]
+    assert [series['position'] for series in result['series']] == [1, 3]
+    assert len(result['series'][0]['points']) == 2
+    assert result['pr_weight']['weight'] == 82.5
+    assert result['selected_position'] is None
+
+
+def test_exercise_progress_isolates_a_single_position_when_asked():
+    rows = [
+        perf([(80.0, 8)], position=1, started_at=day(0), session_id=1),
+        perf([(70.0, 8)], position=3, started_at=day(7), session_id=2),
+    ]
+    result = stats.exercise_progress(rows, position=3)
+
+    assert [entry['session_id'] for entry in result['table']] == [2]
+    assert [series['position'] for series in result['series']] == [3]
+    # available_positions always describes the unfiltered data, so the page
+    # can still offer the other slots as options.
+    assert result['available_positions'] == [1, 3]
+
+
+def test_exercise_progress_on_an_exercise_with_no_history_is_empty_not_broken():
+    result = stats.exercise_progress([])
+    assert result['table'] == []
+    assert result['series'] == []
+    assert result['pr_weight'] is None
+    assert result['pr_e1rm'] is None
+    assert result['state'] == 'neu'
+
+
+def test_session_report_totals_and_flags_a_weight_record():
+    current = [perf([(85.0, 8)], started_at=day(21), session_id=9)]
+    history = [
+        perf([(80.0, 8)], started_at=day(0), session_id=1),
+        perf([(80.0, 8)], started_at=day(7), session_id=2),
+    ]
+    report = stats.session_report(current, history)
+
+    assert report['total_sets'] == 1
+    assert report['total_volume'] == 680.0
+    assert report['record_count'] == 1
+    assert report['records'][0]['kind'] == 'weight'
+    assert report['records'][0]['previous'] == 80.0
+    assert report['exercises'][0]['verdict'] == 'rekord'
+
+
+def test_session_report_marks_a_first_ever_exercise_as_neu_not_as_a_record():
+    current = [perf([(60.0, 10)], started_at=day(0), session_id=1)]
+    report = stats.session_report(current, [])
+
+    assert report['record_count'] == 0
+    assert report['exercises'][0]['verdict'] == 'neu'
+    assert report['exercises'][0]['has_history'] is False
+    assert report['exercises'][0]['avg_volume'] is None
+    assert report['exercises'][0]['volume_delta_pct'] is None
+
+
+def test_session_report_advises_on_a_stagnating_exercise():
+    history = [perf([(85.0, 8)], started_at=day(0), session_id=1)]
+    history += [
+        perf([(80.0, 8)], started_at=day(7 * n), session_id=n + 1)
+        for n in range(1, 4)
+    ]
+    current = [perf([(80.0, 8)], started_at=day(28), session_id=9)]
+    report = stats.session_report(current, history)
+
+    assert report['exercises'][0]['verdict'] == 'stagniert'
+    assert len(report['advice']) == 1
+    assert report['advice'][0]['stuck_at'] == 80.0
+    assert report['advice'][0]['suggested_weight'] == 82.5
+
+
+def test_session_report_suggests_a_smaller_jump_for_unilateral_work():
+    history = [perf([(22.5, 8)], is_unilateral=True, started_at=day(0), session_id=1)]
+    history += [
+        perf([(20.0, 8)], is_unilateral=True, started_at=day(7 * n), session_id=n + 1)
+        for n in range(1, 4)
+    ]
+    current = [perf([(20.0, 8)], is_unilateral=True, started_at=day(28), session_id=9)]
+    report = stats.session_report(current, history)
+
+    assert report['advice'][0]['suggested_weight'] == 21.25
+
+
+def test_session_report_compares_against_the_template_cohort_when_given_one():
+    current = [perf([(80.0, 10)], started_at=day(21), session_id=9)]
+    report = stats.session_report(current, [], comparable_session_volumes=[400.0, 400.0])
+
+    assert report['avg_total_volume'] == 400.0
+    assert report['total_volume_delta_pct'] == 100
+
+
+def test_session_report_omits_the_whole_workout_comparison_for_freeform_sessions():
+    current = [perf([(80.0, 10)], started_at=day(21), session_id=9)]
+    report = stats.session_report(current, [])
+
+    assert report['avg_total_volume'] is None
+    assert report['total_volume_delta_pct'] is None
+
+
+def test_muscle_group_volume_lists_untrained_catalogue_groups_at_zero():
+    rows = [
+        perf([(80.0, 8)] * 5, muscle_group='Brust', started_at=NOW - dt.timedelta(days=3)),
+        perf([(60.0, 8)], muscle_group='Waden', started_at=NOW - dt.timedelta(days=3)),
+    ]
+    result = stats.muscle_group_volume(rows, ['Brust', 'Waden', 'Bizeps'], NOW)
+    by_group = {bucket['group']: bucket for bucket in result}
+
+    assert by_group['Brust']['sets'] == 5
+    assert by_group['Brust']['under_trained'] is False
+    assert by_group['Waden']['sets'] == 1
+    assert by_group['Waden']['under_trained'] is True   # 1 < 25% of 5
+    assert by_group['Bizeps']['sets'] == 0
+    assert by_group['Bizeps']['under_trained'] is True
+
+
+def test_muscle_group_volume_ignores_work_outside_the_window():
+    rows = [perf([(80.0, 8)], muscle_group='Brust', started_at=NOW - dt.timedelta(days=40))]
+    result = stats.muscle_group_volume(rows, ['Brust'], NOW)
+
+    assert result[0]['sets'] == 0
+
+
+def test_weekly_tonnage_returns_one_bucket_per_week_oldest_first():
+    rows = [perf([(100.0, 10)], started_at=NOW - dt.timedelta(days=1))]
+    result = stats.weekly_tonnage(rows, NOW, weeks=4)
+
+    assert len(result) == 4
+    assert result[0]['week_start'] < result[-1]['week_start']
+    assert result[-1]['is_current'] is True
+    assert result[-1]['volume'] == 1000.0
+    assert sum(bucket['is_current'] for bucket in result) == 1
+
+
+def test_weekly_tonnage_buckets_by_iso_week_not_by_rolling_seven_days():
+    monday = dt.datetime(2026, 7, 20, 9, 0)     # a Monday
+    sunday_before = dt.datetime(2026, 7, 19, 9, 0)
+    rows = [
+        perf([(100.0, 10)], started_at=monday, session_id=1),
+        perf([(100.0, 10)], started_at=sunday_before, session_id=2),
+    ]
+    result = stats.weekly_tonnage(rows, dt.datetime(2026, 7, 23, 12, 0), weeks=2)
+
+    assert result[0]['volume'] == 1000.0
+    assert result[1]['volume'] == 1000.0
+
+
+def test_consistency_reports_rate_and_gap():
+    finished = [NOW - dt.timedelta(days=n) for n in (2, 5, 9, 30)]
+    result = stats.consistency(finished, NOW)
+
+    assert result['sessions'] == 3          # the 30-day-old one is outside
+    assert result['per_week'] == 0.75
+    assert result['days_since_last'] == 2
+
+
+def test_consistency_with_no_history_does_not_divide_by_zero():
+    result = stats.consistency([], NOW)
+
+    assert result['sessions'] == 0
+    assert result['per_week'] == 0.0
+    assert result['days_since_last'] is None
+
+
+def test_routine_memory_sorts_longest_ago_first_and_unused_last():
+    templates = [FakeTemplate(1, 'Push'), FakeTemplate(2, 'Pull'), FakeTemplate(3, 'Beine')]
+    sessions = [
+        FakeSession(1, NOW - dt.timedelta(days=5)),
+        FakeSession(1, NOW - dt.timedelta(days=12)),
+        FakeSession(2, NOW - dt.timedelta(days=2)),
+    ]
+    result = stats.routine_memory(templates, sessions, NOW)
+
+    assert [entry['template'].name for entry in result] == ['Push', 'Pull', 'Beine']
+    assert result[0]['days_ago'] == 5        # most recent Push, not the older one
+    assert result[2]['days_ago'] is None
+
+
+def test_group_exercises_by_muscle_keeps_vocabulary_order_and_collects_strays():
+    exercises = [
+        FakeExercise('Bizepscurls', 'Bizeps'),
+        FakeExercise('Bankdruecken', 'Brust'),
+        FakeExercise('Etwas Altes', 'Legacy-Kategorie'),
+        FakeExercise('Ohne Gruppe', None),
+    ]
+    result = stats.group_exercises_by_muscle(exercises, ('Bizeps', 'Brust'))
+
+    assert [group for group, _ in result] == ['Bizeps', 'Brust', 'Ohne Muskelgruppe']
+    assert [ex.name for ex in result[2][1]] == ['Etwas Altes', 'Ohne Gruppe']
