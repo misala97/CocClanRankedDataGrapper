@@ -169,6 +169,7 @@ def _time_breakdown(rows):
         entries.append({
             'label': TIME_BUCKET_LABELS[key],
             'shift_count': len(b['shift_ids']),
+            'total_hours': round(b['hours'], 2),
             'avg_per_hour': round(b['tips'] / b['hours'], 2) if b['hours'] else None,
             'avg_per_delivery': round(b['tips'] / b['deliveries'], 2) if b['deliveries'] else None,
         })
