@@ -253,8 +253,9 @@ static/gym/
 | GET | `/gym/export` | unchanged; its UI moves to Verlauf |
 | GET | `/gym/exercises/<id>/progress.json` | unchanged |
 
-**Frozen contract.** Every POST route keeps its exact URL, form field names, and
-redirect target:
+**Frozen contract.** Every POST route keeps its exact URL and its exact form field
+names. Redirect targets are frozen *except* where the destination page has moved — those
+five are listed after the table and are the only permitted changes:
 
 ```
 /gym/start
@@ -280,8 +281,20 @@ redirect target:
 /gym/push/unsubscribe
 ```
 
-`gym_finish_session` currently redirects to `gym_session_summary`. It now redirects to
-`session_detail` directly, keeping the `just_finished=1` query parameter.
+**Permitted redirect changes** — each because its old destination no longer exists or
+no longer hosts the relevant UI:
+
+| Route | Was | Becomes |
+|---|---|---|
+| `/gym/session/<id>/finish` | `gym_session_summary` | `session_detail`, keeping `just_finished=1` |
+| `/gym/session/<id>/delete` | `gym_dashboard` | `gym_verlauf` |
+| `/gym/templates/<id>/delete` | `gym_dashboard` | `gym_heute` |
+| `/gym/exercises/add` | `gym_dashboard` | `gym_uebungen` (where the form now lives) |
+| `/gym/exercises/<id>/delete` | `gym_dashboard` | `gym_uebungen` |
+
+The view function for `/gym` is renamed `gym_dashboard` → `gym_heute`; the four
+`url_for('gym.gym_dashboard')` call sites above are updated with it. No other endpoint
+name changes.
 
 ### 5.3 `stats.py`
 
