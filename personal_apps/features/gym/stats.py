@@ -80,3 +80,94 @@ def best_e1rm(row):
 
 def row_volume(row):
     return sum(set_volume(weight, reps, row.is_unilateral) for weight, reps in row.sets)
+
+
+def _chronological(rows):
+    return sorted(rows, key=lambda row: (row.started_at, row.session_id))
+
+
+def dominant_position(rows):
+    """The slot this exercise is most often performed in -- the fair default
+    lens when nobody has asked for a specific one. Ties go to the lower slot
+    so the answer is stable across calls."""
+    counts = {}
+    for row in rows:
+        counts[row.position] = counts.get(row.position, 0) + 1
+    return max(sorted(counts), key=lambda position: counts[position])
+
+
+def _scoped(rows, position):
+    """Position-scoped history, with an all-positions fallback.
+
+    Exercise order changes how fatigued you are, so the same slot is the fair
+    comparison -- but a slot with fewer than two sessions cannot support a
+    judgement, and answering "no idea" would be worse than answering from
+    every position. So it falls back rather than going empty.
+    """
+    if position is None:
+        return _chronological(rows)
+    scoped = [row for row in rows if row.position == position]
+    return _chronological(scoped if len(scoped) >= 2 else rows)
+
+
+def sessions_since_pr(rows, position=None):
+    """How many completed sessions in a row have passed without a new best
+    estimated 1RM. None when there is too little history to say anything."""
+    scoped = _scoped(rows, position)
+    if len(scoped) < 2:
+        return None
+    best_ever = None
+    since = 0
+    for row in scoped:
+        current = best_e1rm(row)
+        if best_ever is None or current > best_ever:
+            best_ever = current
+            since = 0
+        else:
+            since += 1
+    return since
+
+
+def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):
+    """One of 'neu', 'rekord', 'stagniert', 'steigend', or None for stable.
+    Mutually exclusive; first match wins."""
+    if not rows:
+        return 'neu'
+    scoped = _scoped(rows, position)
+    if len(scoped) >= 2 and best_e1rm(scoped[-1]) > max(best_e1rm(row) for row in scoped[:-1]):
+        return 'rekord'
+    since = sessions_since_pr(rows, position=position)
+    if since is not None and since >= threshold:
+        return 'stagniert'
+    if len(scoped) >= 2 and best_e1rm(scoped[-1]) > best_e1rm(scoped[-2]):
+        return 'steigend'
+    return None
+
+
+def stall_report(rows_by_exercise, threshold=STAGNATION_THRESHOLD):
+    """Every exercise currently stagnating, worst first.
+
+    `rows_by_exercise` maps exercise_id -> list of PerformedExercise. Each
+    entry reports the slot it was judged in, the weight it is stuck at, and
+    when the plateau started, so the page can say something specific rather
+    than just flagging a name.
+    """
+    report = []
+    for exercise_id, rows in rows_by_exercise.items():
+        if not rows:
+            continue
+        position = dominant_position(rows)
+        if exercise_state(rows, position=position, threshold=threshold) != 'stagniert':
+            continue
+        scoped = _scoped(rows, position)
+        peak = max(scoped, key=best_e1rm)
+        report.append({
+            'exercise_id': exercise_id,
+            'name': rows[0].name,
+            'position': position,
+            'stuck_at': best_weight(scoped[-1]),
+            'since': peak.started_at,
+            'sessions_since_pr': sessions_since_pr(rows, position=position),
+        })
+    report.sort(key=lambda entry: (-entry['sessions_since_pr'], entry['name']))
+    return report
