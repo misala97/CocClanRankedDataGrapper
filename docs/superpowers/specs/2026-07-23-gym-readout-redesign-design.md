@@ -2,7 +2,9 @@
 
 **Date:** 2026-07-23
 **Scope:** `personal_apps` gym feature — navigation shell, dashboard, exercise detail, session detail, session summary
-**Visual reference:** `2026-07-23-gym-readout-reference.html` (same directory — illustrative mockup, not source)
+**Visual reference:** `2026-07-23-gym-readout-reference.html` (same directory) — a
+one-pass sketch the owner chose the direction from. Evidence of the approved *feel*;
+not a specification of its execution. See §4.0.
 
 ---
 
@@ -48,10 +50,29 @@ These were decided explicitly. Do not relitigate them during implementation.
 
 ## 4. Design brief — "Readout"
 
-**This section is the authority for the visual layer.** It is self-contained: the
-visual system can be built from this text alone. The reference HTML alongside this
-spec is illustrative fidelity, not a source of truth, and its type is a Windows
-stand-in.
+**This section is the brief impeccable designs against — not a design to transcribe.**
+
+### 4.0 What is locked, and what impeccable decides
+
+The reference HTML beside this spec is a **sketch**, produced in one pass to let the
+owner choose a direction. It used Windows system fonts as stand-ins and hex values that
+were invented, not derived, and never contrast-tested. It is committed as **evidence of
+the approved feel**, nothing more. Do not treat its values, spacing, radii, or component
+layouts as specification.
+
+| Locked — an owner decision, do not overturn | Open — impeccable's job |
+|---|---|
+| Dark only | The actual palette: every value re-derived and validated |
+| The thesis: an equipment readout (§4.1) | How that thesis is expressed in colour, weight, and rhythm |
+| The five-state model and its meanings (§4.2) | How each state is rendered |
+| Token **names and semantics** (§4.3) — templates reference them | Token **values** |
+| Numerals condensed, tabular, largest in their container (§4.4) | Which family; the full type scale; every size and weight |
+| Machined not soft; motion mechanical not elastic (§4.5) | Radii, depth, shadow, easing, duration |
+| The anti-references (§4.6) | Everything not named above |
+
+If a locked item turns out to be wrong under real execution — e.g. the state model
+cannot be made accessible, or the direction fights the content — say so and raise it.
+Don't silently deviate, and don't silently comply either.
 
 ### 4.1 Thesis
 
@@ -84,35 +105,57 @@ blindness.
 
 ### 4.3 Token contract
 
-Semantics are fixed. Hex values are the starting point and may be tuned for contrast,
-but **a token may not be repurposed** — amber never means anything but "now", cyan
-never means anything but "record".
+**The names and their meanings are the contract** — templates reference these tokens
+directly, so the set must exist and a token may never be repurposed. **The values are
+impeccable's to derive.**
 
 ```
---ground     #08090b   page background; unlit bezel
---chassis    #121418   panel surface
---raised     #1a1d22   inset/nested surface
---edge       #24272e   panel border
---edge-hi    #343943   lit top edge of a panel
---ink        #eef1f5   primary text; the "done / fact" state
---dim        #98a0ac   labels, secondary text
---unlit      #5c646f   inert text, unreached content
---live       #ff6a1a   NOW: current set, running rest, primary action
---live-deep  #a03c07   pressed/bottom edge of a live control
---record     #35e0ff   RECORD: a best beaten
---stall      #ff3b5c   ATTENTION: stagnation, destructive actions
+--ground     page background; the unlit bezel
+--chassis    panel surface
+--raised     inset / nested surface
+--edge       panel border
+--edge-hi    the lit top edge of a panel
+--ink        primary text; the DONE state — reads as fact
+--dim        labels, secondary text
+--unlit      inert text, content not yet reached
+--live       NOW: current set, running rest, primary action
+--live-deep  the pressed / bottom edge of a live control
+--record     RECORD: a previous best beaten
+--stall      ATTENTION: stagnation, destructive actions
 ```
 
-No other hue is introduced. Nothing decorative gets a colour.
+Constraints on the palette, in priority order:
+
+1. `--live`, `--record`, and `--stall` must be **unmistakable from each other** at a
+   glance, in daylight, on a phone, and under deuteranopia and protanopia. This is the
+   binding constraint — if a hue choice fails it, the hue is wrong, however good it
+   looks.
+2. Every text/background pairing that actually occurs must meet **WCAG AA**. Check the
+   real pairings, not the convenient ones: `--live` and `--record` appear on `--chassis`
+   far more often than on `--ground`, and `--dim` on `--chassis` is the easiest one to
+   get wrong.
+3. Neutrals are chosen, not defaulted — give them a deliberate hue bias rather than
+   using pure greys.
+4. Exactly three semantic hues. No fourth. Nothing decorative gets a colour.
+
+The sketch used an amber / cyan / red triad on a near-black cool-neutral ground. That
+combination satisfies constraint 1 and is a reasonable starting hypothesis — but it is a
+hypothesis. Derive and validate; don't inherit.
 
 ### 4.4 Type
 
-Three roles, one engineered family. **Recommended: IBM Plex** — `IBM Plex Sans
-Condensed` (display + numerals), `IBM Plex Sans` (body), `IBM Plex Mono` (dense
-tabular data and small uppercase labels). Self-hosted Flask app, so a webfont link is
-fine; there is no CSP constraint.
+Three roles are required: a **condensed face for display and numerals**, a **body
+face**, and something for **dense tabular data and small uppercase labels**. Whether
+those are three cuts of one family or a deliberate pairing is impeccable's call — as is
+the family itself. IBM Plex (Sans Condensed / Sans / Mono) satisfies the roles and is
+one candidate, not a requirement; the note in §4.6 about avoiding the faces that read as
+templated applies here too.
 
-Rules:
+Self-hosted Flask app, so a webfont link is fine — there is no CSP constraint. Whatever
+is chosen must ship real weights and **true tabular figures**; a face without them fails
+the first rule below and is disqualified regardless of how it looks.
+
+Rules that are not negotiable:
 - **Numerals are condensed, tabular (`font-variant-numeric: tabular-nums`), and the
   largest thing in their container.** Weight, volume, e1RM, duration, countdown.
 - Labels are small, uppercase, letterspaced, and quiet.
@@ -121,19 +164,26 @@ Rules:
 
 ### 4.5 Surface and motion
 
-- Panels: `--chassis` fill, 1px `--edge` border with `--edge-hi` on the **top** edge
-  only (a lit bezel), radius 2–4px. Machined, never soft.
-- Primary buttons: solid `--live`, an inset white top highlight, and a hard 3px
-  `--live-deep` bottom edge that compresses to 1px on `:active`. Real press depth.
-- Motion is mechanical: bars fill linearly, counters tick, the record flare is a single
-  sharp pulse that settles. **No bounce, no elastic easing.** Honour
-  `prefers-reduced-motion`.
+The required qualities, with the sketch's implementation given only as one way to reach
+them:
+
+- **Panels read as machined, never soft.** They should look lit from above and edged,
+  not floated on a diffuse shadow. *(Sketch: `--chassis` fill, 1px `--edge` border with
+  `--edge-hi` on the top edge only, small radius.)*
+- **Primary controls have real press depth** — pressing one should feel like it
+  travelled. *(Sketch: solid `--live`, inset top highlight, hard `--live-deep` bottom
+  edge that compresses on `:active`.)*
+- **Motion is mechanical.** Bars fill linearly, counters tick, the record flare is a
+  single sharp pulse that settles. **No bounce, no elastic easing.** Honour
+  `prefers-reduced-motion`: it disables the flare, the fills, and every transition.
 
 ### 4.6 Anti-references
 
 Explicitly not: lime or acid-green on near-black (what this replaces); violet-to-teal
 fitness gradients; large soft-rounded cards with wide diffuse shadows; colour used
-decoratively; emoji as section markers.
+decoratively; emoji as section markers; the faces that currently read as an AI default
+pick (Inter and Space Grotesk as the "safe" choice, Outfit — the two this app is
+replacing).
 
 ### 4.7 How impeccable is invoked
 
