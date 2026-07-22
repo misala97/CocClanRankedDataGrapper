@@ -9,3 +9,6 @@ PyMySQL
 gunicorn
 anthropic
 pywebpush
+
+# test
+pytest
