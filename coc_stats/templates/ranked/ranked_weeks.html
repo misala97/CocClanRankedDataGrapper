@@ -498,6 +498,11 @@
         } else {
             formula = `Score <strong>${item.score_100}</strong>/100 &nbsp;·&nbsp; raw <strong>${server}</strong> = Σ adj. stars / ${attMax} attacks`;
         }
+        const ceilNote = playerTH>=18
+            ? `<div class="rw-formula" style="opacity:.7;">Your TH's ceiling is <strong>1.00×</strong> per attack — you can never face a higher townhall, so a flawless week (3★ every attack) still reaches exactly 100.</div>`
+            : playerTH===17
+            ? `<div class="rw-formula" style="opacity:.7;">Your TH's ceiling is <strong>1.05×</strong> per attack — only TH18 counts as 'up' for you, so a flawless week still reaches exactly 100.</div>`
+            : '';
         return `<div class="rw-sec">
             <h4>Verdict · TH-adjusted score</h4>
             <div class="rw-levers">
@@ -507,6 +512,7 @@
                 <div class="rw-lever"><div class="l">Verdict</div><div class="v" style="color:${scoreColorFor(item)};">${item.score_100} · ${escapeHTML(verdictWord(item))}</div></div>
             </div>
             <div class="rw-formula">${formula}</div>
+            ${ceilNote}
             <details class="rw-disc"${ctx==='d'?' open':''}><summary><span class="arw">▶</span> Per-attack breakdown</summary>
                 <div class="rw-ledger table-scroll"><table class="rw-lt"><thead><tr><th>Opponent</th><th>Their TH</th><th>Multiplier</th><th>Stars</th><th>%</th><th>Adj. Stars</th></tr></thead><tbody>${rows || `<tr><td colspan="6" style="color:var(--ops-ink-dim);">No attacks logged.</td></tr>`}</tbody></table></div>
             </details>

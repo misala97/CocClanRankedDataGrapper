@@ -1,104 +1,257 @@
 <!DOCTYPE html>
 <html lang="en">
-{% set page_title = 'User Management – CoC Analytics' %}
+{% set page_title = 'Account Access – CoC Analytics' %}
 {% include '_head.html' %}
-        /* ── NAV: see _nav.html ── */
 
-        .section { margin-bottom: 40px; }
-        .section-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700;
-            letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted);
-            margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; gap: 8px;
+        /* ═══ ADMIN USERS — account access control ═══
+           Two neutral scope-console sections (admin, not a game mode → no mode hue).
+           Colour answers ONE question here: how much power an account holds. Standard
+           accounts are pure gunmetal; scoped grants read Recon Blue; super admin reads
+           Caution Amber — elevated privilege is something you audit, not celebrate.
+           The verdict green/amber/red vocabulary of the sibling pages is deliberately
+           NOT used: a super admin isn't "good" and a standard account isn't "bad".
+           Threat Magenta stays interactive-only (the approve action, focus rings). */
+        :root {
+            --ease: cubic-bezier(.25,1,.5,1);
+            --ease-exit: cubic-bezier(.16,1,.3,1);
+            /* Text-weight variants of two signal hues. --accent / --red are tuned for
+               fills and borders; as 11.5px bold text on --surf2 they measure 4.2:1 and
+               4.4:1, under the 4.5:1 floor. These clear it. */
+            --accent-txt: oklch(0.74 0.170 330);
+            --red-txt:    oklch(0.72 0.175 25);
         }
-        .badge-count {
-            background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 10px; padding: 1px 8px;
-            font-size: 12px; color: var(--muted); font-family: 'Rajdhani', sans-serif; font-weight: 700;
-        }
-        .badge-count.pending { background: rgba(240,165,0,0.1); border-color: rgba(240,165,0,0.3); color: var(--accent); }
+        .container { padding-bottom: 72px; }
 
-        .user-table { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        thead { background: var(--surf2); }
-        thead th {
-            padding: 11px 16px; text-align: left; font-size: 11px; font-weight: 700;
-            color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px;
-        }
-        tbody tr { border-top: 1px solid var(--bord2); transition: background 0.1s; }
-        tbody tr:hover { background: rgba(255,255,255,0.02); }
-        tbody td { padding: 14px 16px; vertical-align: middle; }
-
-        .username { font-weight: 600; }
-        .date { color: var(--muted); font-size: 13px; }
-        .super-badge {
-            display: inline-flex; align-items: center; gap: 4px;
-            padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;
-            background: rgba(188,140,255,0.12); color: var(--purple);
-            border: 1px solid rgba(188,140,255,0.25); font-family: 'Rajdhani', sans-serif; letter-spacing: 0.3px;
+        .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
         }
 
-        .actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        .btn {
-            padding: 5px 12px; border-radius: 6px; border: 1px solid;
-            font-size: 12px; font-weight: 700; font-family: 'Rajdhani', sans-serif;
-            letter-spacing: 0.3px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
-        }
-        .btn-approve { background: rgba(63,185,80,0.1); color: var(--green); border-color: rgba(63,185,80,0.3); }
-        .btn-approve:hover { background: rgba(63,185,80,0.2); }
-        .btn-reject  { background: rgba(240,165,0,0.08); color: var(--accent); border-color: rgba(240,165,0,0.3); }
-        .btn-reject:hover { background: rgba(240,165,0,0.15); }
-        .btn-delete  { background: rgba(248,81,73,0.08); color: var(--red); border-color: rgba(248,81,73,0.25); }
-        .btn-delete:hover { background: rgba(248,81,73,0.18); }
-        .btn-save    { background: rgba(88,166,255,0.1); color: var(--blue); border-color: rgba(88,166,255,0.3); }
-        .btn-save:hover { background: rgba(88,166,255,0.2); }
+        .usec { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-top: 22px; overflow: hidden; }
+        .usec:first-child { margin-top: 20px; }
+        .usec-head { padding: 17px 22px; border-bottom: 1px solid var(--bord2); display: flex; align-items: center; justify-content: space-between; gap: 14px 18px; flex-wrap: wrap; }
+        .usec-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .usec-ico { color: var(--muted); display: flex; flex-shrink: 0; }
+        .usec-ico svg { width: 23px; height: 23px; }
+        .usec-title { font-family: 'Big Shoulders Display', sans-serif; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; line-height: 1; margin: 0; }
+        .usec-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+        .usec-sub .n { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
+        .usec-body { padding: 18px 22px 20px; }
 
-        .perm-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        .perm-label {
-            display: flex; align-items: center; gap: 6px;
-            font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;
-        }
-        .perm-label input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
-        .perm-all-granted { font-size: 11px; color: var(--muted); font-style: italic; opacity: .6; }
+        /* ── all-clear hairline (Overview / Members pattern) ── */
+        .ac-clear { display: flex; align-items: center; gap: 12px; padding: 15px 18px; background: color-mix(in oklch, var(--green) 5%, var(--surface)); border: 1px solid color-mix(in oklch, var(--green) 22%, transparent); border-radius: 10px; font-size: 13px; color: var(--muted); }
+        .ac-clear strong { color: var(--text); font-weight: 700; }
+        .ac-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px color-mix(in oklch, var(--green) 55%, transparent); flex-shrink: 0; }
 
-        .super-toggle {
-            padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer;
-            transition: all .15s; border: 1px solid; white-space: nowrap; display: inline-block;
-        }
-        .super-toggle.is-super {
-            background: rgba(188,140,255,.12); color: var(--purple); border-color: rgba(188,140,255,.3);
-        }
-        .super-toggle.is-super:hover { background: rgba(188,140,255,.22); }
-        .super-toggle.not-super {
-            background: transparent; color: var(--muted); border-color: var(--border);
-        }
-        .super-toggle.not-super:hover { border-color: var(--purple); color: var(--purple); }
+        /* ── ATTENTION BAND ──
+           Two coloured tiers and one silent one. Decisions take Threat Magenta (the
+           page's one primary action); faults take Raid Red; standing notes get no
+           colour at all so they can't compete with the tiers that need answering. */
+        .at-group + .at-group { margin-top: 18px; }
+        .at-label { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 0 0 9px; display: flex; align-items: center; gap: 8px; }
+        .at-label .c { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 1px 7px; border-radius: 20px; background: color-mix(in oklch, var(--muted) 16%, transparent); color: var(--text); letter-spacing: 0; }
+        .at-label.tier-do .c   { background: color-mix(in oklch, var(--accent) 18%, transparent); color: var(--accent-txt); }
+        .at-label.tier-fault .c { background: color-mix(in oklch, var(--red) 16%, transparent); color: var(--red-txt); }
+        .at-list { display: flex; flex-direction: column; gap: 8px; list-style: none; margin: 0; padding: 0; }
+        .at-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 15px; background: var(--surf2); border: 1px solid var(--border); border-radius: 9px; }
+        .at-row.tier-do   { border-color: color-mix(in oklch, var(--accent) 30%, var(--border)); background: color-mix(in oklch, var(--accent) 5%, var(--surf2)); }
+        .at-row.tier-fault { border-color: color-mix(in oklch, var(--red) 28%, var(--border)); background: color-mix(in oklch, var(--red) 4%, var(--surf2)); }
+        .at-body { flex: 1; min-width: 190px; }
+        .at-who { font-weight: 700; font-size: 14px; line-height: 1.3; }
+        .at-why { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        .at-why .em { color: var(--text); font-weight: 600; }
+        .at-why .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+        .at-act { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+        .at-warn { display: inline-flex; align-items: center; gap: 7px; margin-top: 7px; padding: 5px 11px; border-radius: 7px; font-size: 11.5px; font-weight: 600; color: var(--yellow); border: 1px solid color-mix(in oklch, var(--yellow) 34%, transparent); background: color-mix(in oklch, var(--yellow) 8%, transparent); }
+        .at-warn::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); flex-shrink: 0; }
 
-        .empty { padding: 24px 16px; color: var(--muted); font-size: 14px; }
-
-        /* ── LINK PLAYER ── */
-        .link-form { display: flex; align-items: center; gap: 6px; }
-        .link-select {
-            background: var(--surf2); border: 1px solid var(--border); border-radius: 6px;
-            color: var(--text); font-size: 12px; padding: 4px 8px; min-width: 140px;
-            font-family: 'DM Sans', sans-serif; cursor: pointer;
+        /* ── buttons ── */
+        form.uact { display: contents; }
+        .ubtn {
+            display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; cursor: pointer;
+            background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 7px;
+            font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .3px;
+            white-space: nowrap; transition: color .15s, border-color .15s, background .15s, transform .1s;
         }
-        .link-select:focus { outline: none; border-color: rgba(88,166,255,0.5); }
-        .linked-pill {
-            display: inline-flex; align-items: center; gap: 5px;
-            padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700;
-            background: rgba(88,166,255,0.1); color: var(--blue); border: 1px solid rgba(88,166,255,0.25);
-            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.3px;
-            white-space: nowrap;
-        }
-        .linked-none { font-size: 12px; color: var(--muted); font-style: italic; }
+        .ubtn:hover:not(:disabled) { color: var(--text); border-color: color-mix(in oklch, var(--muted) 44%, transparent); }
+        .ubtn:active:not(:disabled) { transform: scale(.97); }
+        .ubtn:disabled { opacity: .55; cursor: default; }
+        .ubtn svg { width: 13px; height: 13px; flex-shrink: 0; }
+        .ubtn-primary { color: var(--accent-txt); border-color: color-mix(in oklch, var(--accent) 40%, transparent); }
+        .ubtn-primary:hover:not(:disabled) { color: var(--accent-txt); background: color-mix(in oklch, var(--accent) 14%, transparent); border-color: var(--accent); box-shadow: 0 0 12px color-mix(in oklch, var(--accent) 18%, transparent); }
+        .ubtn-danger { color: var(--red-txt); border-color: color-mix(in oklch, var(--red) 32%, transparent); }
+        .ubtn-danger:hover:not(:disabled) { color: var(--red-txt); background: color-mix(in oklch, var(--red) 12%, transparent); border-color: color-mix(in oklch, var(--red) 55%, transparent); }
+        .ubtn-elev { color: var(--yellow); border-color: color-mix(in oklch, var(--yellow) 32%, transparent); }
+        .ubtn-elev:hover:not(:disabled) { color: var(--yellow); background: color-mix(in oklch, var(--yellow) 12%, transparent); border-color: color-mix(in oklch, var(--yellow) 55%, transparent); }
+        /* Armed state must be unmistakable, and must not resize the button out from
+           under a finger — the label always shortens to "Confirm", never grows. */
+        .ubtn[data-armed], .ubtn[data-armed]:hover:not(:disabled) { background: var(--red-solid); border-color: var(--red-solid); color: oklch(0.98 0 0); }
+        .ubtn-elev[data-armed], .ubtn-elev[data-armed]:hover:not(:disabled) { background: var(--yellow); border-color: var(--yellow); color: oklch(0.16 0.010 330); }
+        .ubtn.arm { animation: btPulse .28s var(--ease); }
+        .confirm-q { font-size: 11.5px; color: var(--text); font-weight: 600; }
 
-        /* ── FOOTER ── */
-        .page-footer {
-            text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
-            margin-top: 4px; border-top: 1px solid var(--bord2);
-            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
+        /* ── REGISTRY — one markup set. Desktop: aligned grid columns under a header
+           row. Below 760px the same rows restructure into divided roster-rows (never
+           per-account cards — DESIGN.md standing rule). ── */
+        .areg { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .areg-head, .arow-main {
+            display: grid; align-items: center; gap: 12px;
+            /* Minimums must sum under the narrowest container that still shows the
+               table (768px tablet), or the trailing disclosure clips. */
+            grid-template-columns: minmax(104px, 1.25fr) minmax(232px, 1.05fr) minmax(118px, .95fr) 70px 34px;
+        }
+        .areg-head { padding: 9px 16px; background: var(--surf2); border-bottom: 1px solid var(--border); font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+        .arow { border-bottom: 1px solid var(--bord2); }
+        .arow:last-child { border-bottom: none; }
+        .arow-main { padding: 11px 16px; }
+        /* Highlight follows the actual control, not the whole row — nothing here
+           implies the row itself is clickable. */
+        .arow:focus-within, .arow:has(.disc:hover) { background: color-mix(in oklch, var(--text) 2%, transparent); }
+        .arow.is-super { background: color-mix(in oklch, var(--yellow) 4%, transparent); }
+        .arow.is-super:focus-within, .arow.is-super:has(.disc:hover) { background: color-mix(in oklch, var(--yellow) 7%, transparent); }
+
+        .au-idcell { min-width: 0; }
+        .au-name { font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .au-you { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 700; letter-spacing: .4px; color: var(--accent-txt); margin-left: 6px; }
+        .au-date { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+
+        /* ── the clearance key: three fixed slots, same order, every row. Scanning the
+           column shows the power distribution before you read a username. Each slot
+           carries its state as text for assistive tech, not only as colour. ── */
+        .clr { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .slot {
+            display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px;
+            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .4px;
+            text-transform: uppercase; white-space: nowrap; border: 1px solid;
+        }
+        .slot::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+        .slot-off { color: var(--muted); border-color: var(--bord2); background: transparent; }
+        .slot-off::before { background: var(--bord2); }
+        .slot-on { color: var(--blue); border-color: color-mix(in oklch, var(--blue) 32%, transparent); background: color-mix(in oklch, var(--blue) 10%, transparent); }
+        .slot-on::before { background: var(--blue); }
+        .slot-admin { color: var(--yellow); border-color: color-mix(in oklch, var(--yellow) 40%, transparent); background: color-mix(in oklch, var(--yellow) 12%, transparent); }
+        .slot-admin::before { background: var(--yellow); box-shadow: 0 0 5px color-mix(in oklch, var(--yellow) 55%, transparent); }
+        /* inherited: held because super admin grants it, not because it was set */
+        .slot-inherit { color: var(--yellow); border: 1px dashed color-mix(in oklch, var(--yellow) 42%, transparent); background: transparent; }
+        .slot-inherit::before { background: color-mix(in oklch, var(--yellow) 62%, transparent); }
+
+        .lnk { font-size: 12.5px; min-width: 0; }
+        .lnk-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lnk-th { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
+        .lnk-none { color: var(--muted); font-style: italic; font-size: 12px; }
+        .lnk-gone { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 20px; font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--red-txt); border: 1px solid color-mix(in oklch, var(--red) 34%, transparent); background: color-mix(in oklch, var(--red) 9%, transparent); margin-bottom: 3px; }
+
+        .disc { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; background: transparent; border: 1px solid transparent; border-radius: 7px; color: var(--muted); cursor: pointer; transition: color .15s, border-color .15s; }
+        .disc::after { content: ''; position: absolute; inset: -7px; }   /* comfortable touch target */
+        .disc:hover { color: var(--text); border-color: var(--border); }
+        .disc svg { width: 14px; height: 14px; transition: transform .18s var(--ease); }
+        .disc[aria-expanded="true"] { color: var(--text); }
+        .disc[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+        /* ── EDITOR (disclosure) — three risk tiers: routine, elevated, destructive ──
+           Expands via grid-template-rows rather than height, so the panel grows at its
+           real size with no layout-property animation and no measured max-height.
+           `visibility` is what keeps a collapsed editor out of the tab order — a 0fr
+           row with overflow:hidden would still be focusable. */
+        .aed { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s var(--ease); }
+        .aed.open { grid-template-rows: 1fr; }
+        .aed-inner { overflow: hidden; min-height: 0; visibility: hidden; transition: visibility 0s .22s; }
+        .aed.open .aed-inner { visibility: visible; transition: visibility 0s; }
+        .aed-pad { padding: 4px 16px 18px; }
+        .aed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 26px; }
+        .aed-block { min-width: 0; }
+        .aed-label { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+        .perm { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13px; cursor: pointer; user-select: none; }
+        .perm input { accent-color: var(--blue); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+        .perm.is-inert { color: var(--muted); }
+        .perm-note { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 6px; padding: 9px 12px; border: 1px dashed color-mix(in oklch, var(--yellow) 34%, transparent); border-radius: 7px; }
+        .perm-note b { color: var(--yellow); font-weight: 700; }
+        .lsel { width: 100%; max-width: 320px; padding: 7px 11px; background: var(--surf2); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-family: 'Manrope', sans-serif; font-size: 12.5px; cursor: pointer; }
+        .lsel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+        .js-off-only { margin-top: 9px; }
+        /* `.ubtn`'s display would otherwise beat the UA's [hidden] rule and leave
+           these focusable while invisible. */
+        .js-off-only[hidden] { display: none; }
+
+        .aed-elev { margin-top: 20px; padding: 13px 15px; border: 1px solid color-mix(in oklch, var(--yellow) 30%, transparent); border-radius: 9px; background: color-mix(in oklch, var(--yellow) 4%, transparent); display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
+        .aed-elev-txt { font-size: 12.5px; color: var(--muted); max-width: 62ch; }
+        .aed-elev-txt b { color: var(--text); font-weight: 700; }
+        .aed-danger { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--bord2); display: flex; align-items: center; gap: 12px 14px; flex-wrap: wrap; }
+        .aed-guard { flex: 1; min-width: 180px; font-size: 11.5px; color: var(--muted); }
+
+        .envnote { margin-top: 12px; padding: 0 4px; font-size: 11.5px; color: var(--muted); line-height: 1.7; }
+        .envnote code { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text); }
+        .envnote p { margin: 0 0 5px; }
+
+        /* ── toast (reused from Roster / Members) ── */
+        .toast-wrap { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 600; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+        .toast { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border-radius: 9px; background: var(--surf2); border: 1px solid var(--border); color: var(--text); font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.5); animation: toastIn .28s var(--ease); max-width: min(92vw, 460px); }
+        .toast .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+        .toast.ok  { border-color: color-mix(in oklch, var(--green) 40%, transparent); } .toast.ok .dot  { background: var(--green); }
+        .toast.err { border-color: color-mix(in oklch, var(--red) 42%, transparent); }  .toast.err .dot { background: var(--red); }
+
+        .regempty { display: none; padding: 20px 4px; text-align: center; color: var(--muted); font-size: 13px; }
+        .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 30px; border-top: 1px solid var(--bord2); font-family: 'Manrope', sans-serif; font-weight: 600; letter-spacing: .3px; }
+
+        /* ═══ MOTION ═══
+           Every save re-renders both sections from the server, so the page's real
+           motion problem isn't entrances — it's that a wholesale swap gives no signal
+           about WHAT changed. The stagger therefore runs on first paint only, and
+           everything after that is driven by a diff: entries that resolved play out,
+           clearance slots that flipped flash, figures that moved settle. */
+        @keyframes rsIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        /* A destructive control arming should read as a switch thrown, not a bounce:
+           a fast compress into the solid fill, no overshoot. */
+        @keyframes armSet { 0% { transform: scale(1); } 40% { transform: scale(.955); } 100% { transform: scale(1); } }
+        /* A slot whose power actually changed. Glow settles outward, colour is already
+           correct in the new markup — this only says "this one moved". */
+        @keyframes slotShift {
+            0%   { transform: scale(1);    box-shadow: 0 0 0 0 currentColor; }
+            35%  { transform: scale(1.07); box-shadow: 0 0 9px 0 color-mix(in oklch, currentColor 55%, transparent); }
+            100% { transform: scale(1);    box-shadow: 0 0 0 0 transparent; }
+        }
+        @keyframes figShift { from { opacity: .35; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+        /* First paint only — the attribute is dropped once the entrance has run, so a
+           refresh-driven swap never replays it. */
+        .usec[data-entrance] .at-row { animation: rsIn .3s var(--ease); animation-delay: calc(var(--i, 0) * 45ms); }
+        /* Exit is faster than entrance and uses the more decisive curve. */
+        .at-row.leaving { opacity: 0; transform: translateX(10px); transition: opacity .2s var(--ease-exit), transform .2s var(--ease-exit); }
+        .slot.changed { animation: slotShift .34s var(--ease); }
+        .readout .fig .v.changed { animation: figShift .26s var(--ease); }
+        .ubtn.arm { animation: armSet .14s var(--ease); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .ubtn, .disc, .disc svg, .lsel, .perm, .aed { transition: none; }
+            .ubtn:active { transform: none; }
+            .usec[data-entrance] .at-row, .toast, .ubtn.arm,
+            .slot.changed, .readout .fig .v.changed { animation: none; }
+            .at-row.leaving { transition: none; }
+            /* The diff still needs to be visible without movement: hold a flat tint on
+               what changed instead of animating it. */
+            .slot.changed { outline: 2px solid currentColor; outline-offset: 2px; }
+        }
+
+        @media (max-width: 900px) {
+            .aed-grid { grid-template-columns: 1fr; gap: 18px; }
+        }
+        @media (max-width: 760px) {
+            .usec-head, .usec-body { padding-left: 16px; padding-right: 16px; }
+            .areg-head { display: none; }
+            /* Divided roster-rows: identity + date + disclosure share line 1, the
+               clearance key and link wrap below. Never a card per account. */
+            .arow-main {
+                display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px;
+                align-items: center; padding: 11px 14px;
+            }
+            .arow-main > .au-idcell { grid-column: 1; grid-row: 1; }
+            .arow-main > .au-datecell { grid-column: 2; grid-row: 1; text-align: right; }
+            .arow-main > .disccell { grid-column: 3; grid-row: 1; }
+            .arow-main > .clr { grid-column: 1 / -1; grid-row: 2; margin-top: 6px; }
+            .arow-main > .lnk { grid-column: 1 / -1; grid-row: 3; margin-top: 4px; }
+            .disccell .disc { border-color: var(--border); }
+            .aed { padding-left: 14px; padding-right: 14px; }
         }
     </style>
 </head>
@@ -106,142 +259,586 @@
 
 {% include '_nav.html' %}
 
-{% set page_header_title = 'User <span>Management</span>' %}
-{% set page_header_desc = 'Approve registrations and manage user roles.' %}
+{#- Derived state. The route hands over raw AppUser rows; every judgment on this
+    page is computed here, the way features/auth/routes.py computes it. -#}
+{% set pending  = users | rejectattr('is_approved') | list %}
+{% set approved = users | selectattr('is_approved')  | list %}
+{% set supers   = approved | selectattr('is_super_admin') | list %}
+{% set departed_tags = departed_linked | map(attribute='tag') | list %}
+{% set link_counts = {} %}
+{% for u in approved if u.linked_player_tag %}
+    {% if link_counts.update({u.linked_player_tag: link_counts.get(u.linked_player_tag, 0) + 1}) %}{% endif %}
+{% endfor %}
+{% set _d = namespace(tags=[]) %}
+{% for tag, n in link_counts | dictsort %}{% if n > 1 %}{% set _d.tags = _d.tags + [tag] %}{% endif %}{% endfor %}
+{% set dupe_tags = _d.tags %}
+{% set broken   = approved | selectattr('linked_player_tag', 'in', departed_tags) | list %}
+{#- tag stored but the Player row is gone entirely: neither linked nor "departed" -#}
+{% set unknown  = approved | selectattr('linked_player_tag') | rejectattr('linked_player') | list %}
+{% set unlinked = approved | rejectattr('linked_player_tag') | list %}
+{% set fault_n  = broken | length + dupe_tags | length + unknown | length %}
+{% set attn_total = pending | length + fault_n + unlinked | length %}
+
+{% set page_header_title = 'Account <span>Access</span>' %}
+{% set page_header_desc = 'Decide who gets in, and what each account is allowed to do.' %}
+{% set page_header_meta = [
+    {'value': approved | length, 'label': 'With access'},
+    {'value': supers | length,   'label': 'Super admin' ~ ('s' if supers | length != 1 else '')},
+    {'value': pending | length,  'label': 'Awaiting decision'},
+] %}
+{% set page_controls %}
+<input type="search" class="selector" id="userSearch" placeholder="Search account or linked player…" oninput="filterReg()" style="min-width:260px;">
+{% endset %}
 {% include '_page_header.html' %}
+
+{% include 'admin/_admin_tabs.html' %}
 
 <div class="container">
 
-    {% set pending = users | selectattr('is_approved', 'equalto', false) | list %}
-    {% set approved = users | selectattr('is_approved', 'equalto', true) | list %}
-
-    <!-- Pending -->
-    <div class="section">
-        <div class="section-title">
-            Pending Approval
-            <span class="badge-count {% if pending %}pending{% endif %}">{{ pending | length }}</span>
+    <!-- ══ NEEDS ATTENTION ══ -->
+    <section class="usec" id="attnSection" aria-labelledby="attnTitle" data-entrance>
+        <div class="usec-head">
+            <div class="usec-id">
+                <span class="usec-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 21 19H3z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg></span>
+                <div>
+                    <h2 class="usec-title" id="attnTitle">Needs Attention</h2>
+                    <div class="usec-sub">
+                        {% if attn_total %}<span class="n">{{ attn_total }}</span> item{{ 's' if attn_total != 1 }} to decide or repair{% else %}Nothing waiting on you{% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="user-table">
+        <div class="usec-body">
+        {% if not attn_total %}
+            <div class="ac-clear"><span class="ac-dot"></span><span><strong>All clear</strong> — no accounts waiting, no link faults.</span></div>
+        {% else %}
+
             {% if pending %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Username</th>
-                        <th>Registered</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
+            <div class="at-group">
+                <h3 class="at-label tier-do">Awaiting decision <span class="c">{{ pending | length }}</span></h3>
+                <ul class="at-list">
                 {% for u in pending %}
-                <tr>
-                    <td class="username">{{ u.username }}</td>
-                    <td class="date">{{ u.created_at | local_dt }}</td>
-                    <td>
-                        <div class="actions">
-                            <form method="POST" action="/admin/users/{{ u.id }}/approve">
-                                <button type="submit" class="btn btn-approve">✓ Approve</button>
+                    <li class="at-row tier-do" data-key="p{{ u.id }}" data-name="{{ u.username | lower }}" style="--i:{{ loop.index0 }}">
+                        <div class="at-body">
+                            <div class="at-who">{{ u.username }}</div>
+                            <div class="at-why">Registered <span class="mono">{{ u.created_at | local_dt('%d.%m.%Y') }}</span> · no access until approved</div>
+                            {#- A pending account can already carry the super-admin flag; it does
+                                nothing until approval, then everything. Say so before the click. -#}
+                            {% if u.is_super_admin %}
+                            <div class="at-warn">Flagged super admin, so approving grants full admin access immediately</div>
+                            {% endif %}
+                        </div>
+                        <div class="at-act">
+                            <form class="uact" method="POST" action="/admin/users/{{ u.id }}/approve" data-ok="Account approved">
+                                <button type="submit" class="ubtn ubtn-primary">Approve</button>
                             </form>
-                            <form method="POST" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Delete {{ u.username }}?')">
-                                <button type="submit" class="btn btn-delete">✕ Delete</button>
+                            <form class="uact" method="POST" action="/admin/users/{{ u.id }}/delete"
+                                  data-confirm="Delete {{ u.username }} permanently" data-ok="Account deleted">
+                                <button type="submit" class="ubtn ubtn-danger">Delete</button>
                             </form>
                         </div>
-                    </td>
-                </tr>
+                    </li>
                 {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty">No pending registrations.</div>
+                </ul>
+            </div>
             {% endif %}
-        </div>
-    </div>
 
-    <!-- Active Users -->
-    <div class="section">
-        <div class="section-title">
-            Active Users
-            <span class="badge-count">{{ approved | length }}</span>
-        </div>
-        <div class="user-table">
-            {% if approved %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Username</th>
-                        <th>Registered</th>
-                        <th>Super Admin</th>
-                        <th>Permissions</th>
-                        <th>Linked Player</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for u in approved %}
-                <tr>
-                    <td class="username">{{ u.username }}</td>
-                    <td class="date">{{ u.created_at | local_dt('%d.%m.%Y') }}</td>
-                    <td>
-                        <form method="POST" action="/admin/users/{{ u.id }}/toggle-super"
-                              {% if u.is_super_admin %}onsubmit="return confirm('Remove Super Admin from {{ u.username }}?')"{% endif %}>
-                            <button type="submit" class="super-toggle {% if u.is_super_admin %}is-super{% else %}not-super{% endif %}">
-                                {% if u.is_super_admin %}⭐ Super Admin{% else %}☆ Make Super Admin{% endif %}
-                            </button>
-                        </form>
-                    </td>
-                    <td>
-                        {% if u.is_super_admin %}
-                            <span class="perm-all-granted">All permissions granted</span>
-                        {% else %}
-                        <form method="POST" action="/admin/users/{{ u.id }}/perms" class="perm-form">
-                            <label class="perm-label">
-                                <input type="checkbox" name="perm_create_reminder_ranked" {% if u.perm_create_reminder_ranked %}checked{% endif %}>
-                                Ranked Reminder
-                            </label>
-                            <label class="perm-label">
-                                <input type="checkbox" name="perm_clan_war_edits" {% if u.perm_clan_war_edits %}checked{% endif %}>
-                                Clan War Edits
-                            </label>
-                            <button type="submit" class="btn btn-save">Save</button>
-                        </form>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div class="link-form">
-                            <form method="POST" action="/admin/users/{{ u.id }}/link-player" style="display:flex;align-items:center;gap:6px;">
-                                <select name="linked_player_tag" class="link-select">
-                                    <option value="">— None —</option>
-                                    {% for p in players %}
-                                    <option value="{{ p.tag }}" {% if u.linked_player_tag == p.tag %}selected{% endif %}>
-                                        {{ p.name }} (TH{{ p.current_th }})
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <button type="submit" class="btn btn-save">Link</button>
-                            </form>
+            {% if fault_n %}
+            <div class="at-group">
+                <h3 class="at-label tier-fault">Link faults <span class="c">{{ fault_n }}</span></h3>
+                <ul class="at-list">
+                {% for u in broken %}
+                    <li class="at-row tier-fault" data-key="b{{ u.id }}" data-name="{{ u.username | lower }}" style="--i:{{ loop.index0 }}">
+                        <div class="at-body">
+                            <div class="at-who">{{ u.username }}</div>
+                            <div class="at-why">Linked to <span class="em">{{ u.linked_player.name or u.linked_player_tag }}</span>, who has left the clan</div>
                         </div>
-                    </td>
-                    <td>
-                        <div class="actions">
-                            <form method="POST" action="/admin/users/{{ u.id }}/reject">
-                                <button type="submit" class="btn btn-reject">Revoke</button>
-                            </form>
-                            <form method="POST" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Delete {{ u.username }}?')">
-                                <button type="submit" class="btn btn-delete">Delete</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
+                        <div class="at-act"><button class="ubtn" onclick="jumpTo({{ u.id }})">Repair link</button></div>
+                    </li>
                 {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty">No approved users yet.</div>
+                {% for u in unknown %}
+                    <li class="at-row tier-fault" data-key="x{{ u.id }}" data-name="{{ u.username | lower }}" style="--i:{{ broken | length + loop.index0 }}">
+                        <div class="at-body">
+                            <div class="at-who">{{ u.username }}</div>
+                            <div class="at-why">Linked to <span class="mono">{{ u.linked_player_tag }}</span>, which is no longer a known player</div>
+                        </div>
+                        <div class="at-act"><button class="ubtn" onclick="jumpTo({{ u.id }})">Repair link</button></div>
+                    </li>
+                {% endfor %}
+                {% for tag in dupe_tags %}
+                    {% set sharers = approved | selectattr('linked_player_tag', 'equalto', tag) | list %}
+                    {% set p = (players | selectattr('tag', 'equalto', tag) | list + departed_linked | selectattr('tag', 'equalto', tag) | list) | first %}
+                    <li class="at-row tier-fault" data-key="d{{ tag | replace('#','') }}" data-name="{{ sharers | map(attribute='username') | join(' ') | lower }}"
+                        style="--i:{{ broken | length + unknown | length + loop.index0 }}">
+                        <div class="at-body">
+                            <div class="at-who">{{ sharers | map(attribute='username') | join(' · ') }}</div>
+                            <div class="at-why">{{ sharers | length }} accounts linked to the same player, <span class="em">{{ p.name if p else tag }}</span></div>
+                        </div>
+                        <div class="at-act">
+                        {% for u in sharers %}
+                            <button class="ubtn" onclick="jumpTo({{ u.id }})">Edit {{ u.username }}</button>
+                        {% endfor %}
+                        </div>
+                    </li>
+                {% endfor %}
+                </ul>
+            </div>
             {% endif %}
+
+            {% if unlinked %}
+            <div class="at-group">
+                <h3 class="at-label">Not linked to a player <span class="c">{{ unlinked | length }}</span></h3>
+                <ul class="at-list">
+                {% for u in unlinked %}
+                    <li class="at-row" data-key="n{{ u.id }}" data-name="{{ u.username | lower }}" style="--i:{{ loop.index0 }}">
+                        <div class="at-body">
+                            <div class="at-who">{{ u.username }}</div>
+                            <div class="at-why">No player link, so this account gets no “you” highlighting and can’t use ranked reminders</div>
+                        </div>
+                        <div class="at-act"><button class="ubtn" onclick="jumpTo({{ u.id }})">Link player</button></div>
+                    </li>
+                {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+        {% endif %}
         </div>
-    </div>
+    </section>
+
+    <!-- ══ ACCOUNTS ══ -->
+    <section class="usec" id="regSection" aria-labelledby="regTitle">
+        <div class="usec-head">
+            <div class="usec-id">
+                <span class="usec-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="9" cy="10.5" r="2.2"/><path d="M5.8 16.2c.5-1.6 1.7-2.4 3.2-2.4s2.7.8 3.2 2.4"/><path d="M15 10h4M15 13.5h4"/></svg></span>
+                <div>
+                    <h2 class="usec-title" id="regTitle">Accounts</h2>
+                    <div class="usec-sub"><span class="n">{{ approved | length }}</span> with access · <span class="n">{{ supers | length }}</span> super admin{{ 's' if supers | length != 1 }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="usec-body">
+        {% if approved %}
+            <div class="areg" id="areg">
+                <div class="areg-head" aria-hidden="true">
+                    <span>Account</span><span>Clearance</span><span>Linked player</span><span>Registered</span><span></span>
+                </div>
+                {% for u in approved %}
+                {% set me = current_user and current_user.id == u.id %}
+                {% set gone = u.linked_player_tag in departed_tags %}
+                {% set last_super = u.is_super_admin and supers | length == 1 %}
+                <div class="arow {% if u.is_super_admin %}is-super{% endif %}" id="acct-{{ u.id }}"
+                     data-name="{{ u.username | lower }}"
+                     data-player="{{ (u.linked_player.name if u.linked_player else '') | lower }}">
+                    <div class="arow-main">
+                        <div class="au-idcell">
+                            <div class="au-name">{{ u.username }}{% if me %} <span class="au-you">YOU</span><span class="sr-only">(this is your account)</span>{% endif %}</div>
+                        </div>
+
+                        {#- Clearance key: three fixed slots, same order on every row. Each
+                            slot spells its state out for assistive tech; colour and border
+                            style are the visual shorthand, never the only channel. -#}
+                        <div class="clr">
+                            {% if u.is_super_admin %}
+                                <span class="slot slot-admin">Admin<span class="sr-only">: granted</span></span>
+                                <span class="slot slot-inherit">Reminders<span class="sr-only">: granted via super admin</span></span>
+                                <span class="slot slot-inherit">War edits<span class="sr-only">: granted via super admin</span></span>
+                            {% else %}
+                                <span class="slot slot-off">Admin<span class="sr-only">: not granted</span></span>
+                                <span class="slot {{ 'slot-on' if u.perm_create_reminder_ranked else 'slot-off' }}">Reminders<span class="sr-only">: {{ 'granted' if u.perm_create_reminder_ranked else 'not granted' }}</span></span>
+                                <span class="slot {{ 'slot-on' if u.perm_clan_war_edits else 'slot-off' }}">War edits<span class="sr-only">: {{ 'granted' if u.perm_clan_war_edits else 'not granted' }}</span></span>
+                            {% endif %}
+                        </div>
+
+                        <div class="lnk">
+                            {% if gone %}
+                                <span class="lnk-gone">Left clan</span>
+                                <div class="lnk-name">{{ u.linked_player.name or u.linked_player_tag }}</div>
+                                <div class="lnk-th">{{ u.linked_player_tag }}</div>
+                            {% elif u.linked_player %}
+                                <div class="lnk-name">{{ u.linked_player.name or u.linked_player_tag }}</div>
+                                <div class="lnk-th">{{ u.linked_player_tag }}{% if u.linked_player.current_th %} · TH{{ u.linked_player.current_th }}{% endif %}</div>
+                            {% elif u.linked_player_tag %}
+                                <span class="lnk-gone">Unknown</span>
+                                <div class="lnk-th">{{ u.linked_player_tag }}</div>
+                            {% else %}
+                                <span class="lnk-none">Not linked</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="au-datecell"><span class="au-date">{{ u.created_at | local_dt('%d.%m.%y') }}</span></div>
+
+                        <div class="disccell">
+                            <button class="disc" aria-expanded="false" aria-controls="ed-{{ u.id }}"
+                                    data-focus="disc-{{ u.id }}"
+                                    aria-label="Edit access for {{ u.username }}" onclick="toggleEd(this)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- editor -->
+                    <div class="aed" id="ed-{{ u.id }}">
+                      <div class="aed-inner"><div class="aed-pad">
+                        <div class="aed-grid">
+                            <div class="aed-block">
+                                <div class="aed-label">Grants</div>
+                                <form class="uperm" method="POST" action="/admin/users/{{ u.id }}/perms" data-uid="{{ u.id }}" data-ok="Grants saved">
+                                    <label class="perm {% if u.is_super_admin %}is-inert{% endif %}">
+                                        <input type="checkbox" name="perm_create_reminder_ranked" data-focus="perm-{{ u.id }}-ranked"
+                                               {% if u.perm_create_reminder_ranked %}checked{% endif %}>
+                                        Create ranked reminders
+                                    </label>
+                                    <label class="perm {% if u.is_super_admin %}is-inert{% endif %}">
+                                        <input type="checkbox" name="perm_clan_war_edits" data-focus="perm-{{ u.id }}-war"
+                                               {% if u.perm_clan_war_edits %}checked{% endif %}>
+                                        Edit clan war data
+                                    </label>
+                                    <button type="submit" class="ubtn js-off-only">Save grants</button>
+                                </form>
+                                {% if u.is_super_admin %}
+                                <div class="perm-note"><b>Overridden.</b> Super admin already grants both, so these have no effect right now. They are what this account falls back to if super admin is removed, and you can set them here first.</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="aed-block">
+                                <div class="aed-label">Linked player</div>
+                                <form class="ulink" method="POST" action="/admin/users/{{ u.id }}/link-player" data-uid="{{ u.id }}">
+                                    <select class="lsel" name="linked_player_tag" data-focus="lsel-{{ u.id }}" aria-label="Linked player for {{ u.username }}">
+                                        <option value="" {% if not u.linked_player_tag %}selected{% endif %}>— Not linked —</option>
+                                        {% if departed_linked %}
+                                        <optgroup label="No longer in clan">
+                                            {% for p in departed_linked %}
+                                            <option value="{{ p.tag }}" {% if u.linked_player_tag == p.tag %}selected{% endif %}>{{ p.name or p.tag }} (left clan)</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        <optgroup label="In clan">
+                                            {% for p in players %}
+                                            <option value="{{ p.tag }}" {% if u.linked_player_tag == p.tag %}selected{% endif %}>{{ p.name }} (TH{{ p.current_th }})</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                    </select>
+                                    <button type="submit" class="ubtn js-off-only">Save link</button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="aed-elev">
+                            <div class="aed-elev-txt">
+                                {% if u.is_super_admin %}
+                                    <b>Super admin.</b> Full access to every admin page and every permission, regardless of the grants above.
+                                    {% if last_super %}This is the only super admin account.{% endif %}
+                                {% else %}
+                                    <b>Standard account.</b>
+                                {% endif %}
+                            </div>
+                            {% if me and u.is_super_admin %}
+                                <span class="aed-guard">You can’t remove super admin from the account you’re signed in with.</span>
+                            {% else %}
+                                <form class="uact" method="POST" action="/admin/users/{{ u.id }}/toggle-super"
+                                      data-confirm="{{ 'Remove super admin' if u.is_super_admin else 'Make super admin' }}"
+                                      data-ok="Super admin updated"
+                                      {% if last_super %}data-extra="This is the last super admin account."{% endif %}>
+                                    <button type="submit" class="ubtn ubtn-elev">{{ 'Remove super admin' if u.is_super_admin else 'Make super admin' }}</button>
+                                </form>
+                            {% endif %}
+                        </div>
+
+                        <div class="aed-danger">
+                            {% if me %}
+                                <span class="aed-guard">You can’t revoke or delete the account you’re signed in with.</span>
+                            {% else %}
+                                <form class="uact" method="POST" action="/admin/users/{{ u.id }}/reject"
+                                      data-confirm="Revoke access" data-ok="Access revoked">
+                                    <button type="submit" class="ubtn ubtn-elev">Revoke access</button>
+                                </form>
+                                <form class="uact" method="POST" action="/admin/users/{{ u.id }}/delete"
+                                      data-confirm="Delete permanently" data-ok="Account deleted">
+                                    <button type="submit" class="ubtn ubtn-danger">Delete account</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                      </div></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="regempty" id="regEmpty" role="status"></div>
+            <div class="envnote">
+                <p>Revoking keeps the account and its settings but blocks sign-in, and moves it back to Needs Attention. Deleting is permanent.</p>
+                <p>The <code>ADMIN_USER</code> environment login is a full super admin. It is not an account, so it never appears in this list.</p>
+            </div>
+        {% else %}
+            <div class="ac-clear" style="background:var(--surf2);border-color:var(--border);">
+                <span class="ac-dot" style="background:var(--muted);box-shadow:none;"></span>
+                <span>No accounts have access yet. Approve a registration above to grant the first one.</span>
+            </div>
+        {% endif %}
+        </div>
+    </section>
+
 </div>
 
-<div class="page-footer">{{ approved | length }} active · {{ pending | length }} pending approval</div>
+<div class="page-footer">Account access · Admin</div>
+<div class="toast-wrap" id="toastWrap" role="status" aria-live="polite"></div>
+<div class="sr-only" id="liveRegion" aria-live="assertive"></div>
+
+<script>
+// Progressive enhancement: every action is a real form POST that works without JS.
+// With JS we intercept, post the same form-encoded body, and re-render in place.
+document.documentElement.classList.add('js');
+// `hidden`, not a visual class: an sr-only button stays in the tab order, so a
+// keyboard user would land on an invisible control.
+document.querySelectorAll('.js-off-only').forEach(b => { b.hidden = true; });
+
+function toast(msg, kind) {
+    const w = document.getElementById('toastWrap');
+    const t = document.createElement('div');
+    t.className = 'toast ' + (kind || '');
+    const dot = document.createElement('span'); dot.className = 'dot';
+    const m = document.createElement('span'); m.textContent = msg;
+    t.appendChild(dot); t.appendChild(m);
+    w.appendChild(t);
+    setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 320); }, 4000);
+}
+function announce(msg) { document.getElementById('liveRegion').textContent = msg; }
+
+// A redirect to /login means the session died; fetch follows it and would otherwise
+// report 200, i.e. "saved" for a change that never happened.
+function post(url, body) {
+    return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
+    }).then(r => {
+        if (r.redirected && /\/login/.test(r.url)) return { ok: false, why: 'Your session expired. Reload and sign in again.' };
+        if (r.status === 400) return { ok: false, why: 'That change is not allowed.' };
+        if (r.status === 401 || r.status === 403) return { ok: false, why: 'You are not allowed to do that.' };
+        if (!r.ok) return { ok: false, why: 'Server error (' + r.status + '). Try again.' };
+        return { ok: true };
+    }).catch(() => ({ ok: false, why: 'No connection to the server.' }));
+}
+
+/* Two-step confirm instead of a modal. Guards against the two ways this gets fired
+   by accident: a double-click (both clicks land on the same button) and a repeated
+   Enter press — a second activation inside 500ms is swallowed, not treated as the
+   confirmation. Escape or any click elsewhere disarms. */
+let _armed = null, _armedAt = 0, _armTimer = null;
+function disarm(quiet) {
+    if (!_armed) return;
+    const btn = _armed.querySelector('button');
+    btn.textContent = _armed.dataset.label;
+    btn.removeAttribute('data-armed');
+    if (!quiet) announce('Cancelled.');
+    _armed = null; clearTimeout(_armTimer);
+}
+function armed(form) {
+    const btn = form.querySelector('button');
+    if (_armed === form) {
+        if (Date.now() - _armedAt < 500) return false;   // double-click / double-Enter
+        disarm(true);
+        return true;
+    }
+    disarm(true);
+    _armed = form; _armedAt = Date.now();
+    form.dataset.label = btn.textContent.trim();
+    btn.textContent = 'Confirm';
+    btn.setAttribute('data-armed', '');
+    btn.classList.add('arm');
+    setTimeout(() => btn.classList.remove('arm'), 300);
+    announce(form.dataset.confirm + (form.dataset.extra ? '. ' + form.dataset.extra : '') + '. Activate again to confirm.');
+    _armTimer = setTimeout(() => disarm(), 6000);
+    return false;
+}
+document.addEventListener('click', e => {
+    if (_armed && !_armed.contains(e.target)) disarm(true);
+}, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') disarm(); });
+
+// The entrance is a first-paint event, not a save event. Once it has run the
+// attribute goes away, so the wholesale swap below never replays it.
+const _attn = document.getElementById('attnSection');
+if (_attn) {
+    const n = _attn.querySelectorAll('.at-row').length;
+    setTimeout(() => _attn.removeAttribute('data-entrance'), n * 45 + 400);
+}
+const _reduced = matchMedia('(prefers-reduced-motion: reduce)');
+
+/* What the page looked like before a save, so the swap can show what moved:
+   which attention entries existed, each account's clearance, each figure. */
+function snapshot() {
+    const acc = {};
+    document.querySelectorAll('#areg .arow').forEach(r => {
+        acc[r.id] = Array.from(r.querySelectorAll('.slot')).map(s => s.className);
+    });
+    return {
+        keys: new Set(Array.from(document.querySelectorAll('#attnSection .at-row')).map(r => r.dataset.key)),
+        acc:  acc,
+        figs: Array.from(document.querySelectorAll('.readout .fig .v')).map(v => v.textContent.trim()),
+    };
+}
+
+// Mark only what actually differs. Nothing else moves.
+function markDiff(before) {
+    document.querySelectorAll('#areg .arow').forEach(r => {
+        const was = before.acc[r.id];
+        if (!was) return;
+        r.querySelectorAll('.slot').forEach((s, i) => {
+            if (was[i] !== undefined && was[i] !== s.className) s.classList.add('changed');
+        });
+    });
+    document.querySelectorAll('.readout .fig .v').forEach((v, i) => {
+        if (before.figs[i] !== undefined && before.figs[i] !== v.textContent.trim()) v.classList.add('changed');
+    });
+}
+
+// ── in-place refresh: both sections re-rendered from the server, so counts, tiers
+// and rows can never drift from the database. Open disclosures, the search term and
+// keyboard focus are all restored; entries that resolved play out before the swap.
+function refresh() {
+    const open   = Array.from(document.querySelectorAll('.aed.open')).map(d => d.id);
+    const focus  = document.activeElement && document.activeElement.dataset
+                 ? document.activeElement.dataset.focus : null;
+    const before = snapshot();
+
+    return fetch(location.pathname, { headers: { 'X-Requested-With': 'fetch' } })
+        .then(r => r.text())
+        .then(html => {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const after = new Set(Array.from(doc.querySelectorAll('#attnSection .at-row')).map(r => r.dataset.key));
+            const resolved = Array.from(before.keys).filter(k => k && !after.has(k));
+
+            const swap = () => {
+                for (const id of ['attnSection', 'regSection']) {
+                    const fresh = doc.getElementById(id), cur = document.getElementById(id);
+                    if (fresh && cur) cur.innerHTML = fresh.innerHTML;
+                }
+                const readout = doc.querySelector('.page-header .readout');
+                const curReadout = document.querySelector('.page-header .readout');
+                if (readout && curReadout) curReadout.innerHTML = readout.innerHTML;
+                syncTabBadge(doc);
+                document.querySelectorAll('.js-off-only').forEach(b => { b.hidden = true; });
+                open.forEach(id => {
+                    const d = document.getElementById(id);
+                    if (!d) return;
+                    d.classList.add('open');
+                    const btn = document.querySelector('[aria-controls="' + id + '"]');
+                    if (btn) btn.setAttribute('aria-expanded', 'true');
+                });
+                if (focus) {
+                    const el = document.querySelector('[data-focus="' + focus + '"]');
+                    if (el) el.focus();
+                }
+                markDiff(before);
+                filterReg();
+            };
+
+            // Play resolved entries out of the OLD markup first, so approving and
+            // repairing a link look the same: a thing you dealt with, leaving.
+            if (resolved.length && !_reduced.matches) {
+                resolved.forEach(k => {
+                    const el = document.querySelector('#attnSection .at-row[data-key="' + k + '"]');
+                    if (el) el.classList.add('leaving');
+                });
+                return new Promise(res => setTimeout(() => { swap(); res(); }, 210));
+            }
+            swap();
+        })
+        .catch(() => toast('Could not refresh the page. Reload to see the current state.', 'err'));
+}
+
+// The rail holds a badge for Members too, and Members comes first — an unscoped
+// query rewrites the wrong tab.
+function syncTabBadge(doc) {
+    const tab = document.querySelector('.admin-tabs-rail .atab[href="/admin/users"]');
+    if (!tab) return;
+    const fresh = doc.querySelector('.admin-tabs-rail .atab[href="/admin/users"] .atab-badge');
+    const cur   = tab.querySelector('.atab-badge');
+    if (!fresh && cur) cur.remove();
+    else if (fresh && cur) cur.textContent = fresh.textContent;
+    else if (fresh && !cur) tab.appendChild(fresh.cloneNode(true));
+}
+
+function submitAct(form) {
+    const btn = form.querySelector('button');
+    if (btn) btn.disabled = true;
+    // No per-action exit here: refresh() diffs the result and plays out whatever
+    // actually resolved, so approving and repairing a link behave identically.
+    return post(form.action, new URLSearchParams(new FormData(form))).then(res => {
+        if (!res.ok) {
+            if (btn) btn.disabled = false;
+            toast(res.why, 'err');
+            return;
+        }
+        return refresh().then(() => toast(form.dataset.ok || 'Saved', 'ok'));
+    });
+}
+
+document.addEventListener('submit', e => {
+    const form = e.target;
+    if (form.matches('.uact')) {
+        e.preventDefault();
+        if (form.dataset.confirm && !armed(form)) return;
+        disarm(true);
+        submitAct(form);
+    } else if (form.matches('.uperm, .ulink')) {
+        e.preventDefault();
+        submitAct(form);
+    }
+}, true);
+
+// With JS, grants and the player link save the moment they change; the Save buttons
+// above exist for the no-JS path and are hidden.
+document.addEventListener('change', e => {
+    const form = e.target.closest('.uperm, .ulink');
+    if (!form) return;
+    if (form.matches('.ulink')) form.dataset.ok = e.target.value ? 'Player linked' : 'Link cleared';
+    submitAct(form);
+});
+
+function toggleEd(btn) {
+    const open = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    document.getElementById(btn.getAttribute('aria-controls')).classList.toggle('open', !open);
+}
+
+// Attention entries hand off to the account's editor rather than duplicating controls.
+function jumpTo(id) {
+    const row = document.getElementById('acct-' + id);
+    if (!row) return;
+    const btn = row.querySelector('.disc');
+    if (btn && btn.getAttribute('aria-expanded') !== 'true') toggleEd(btn);
+    row.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+    const sel = row.querySelector('.lsel');
+    if (sel) setTimeout(() => sel.focus(), 320);
+}
+
+// Search covers both bands — an account visible in Needs Attention must never be
+// reported as "no match".
+function filterReg() {
+    const box = document.getElementById('userSearch');
+    const q = (box ? box.value : '').toLowerCase().trim();
+    let inReg = 0, inAttn = 0;
+    document.querySelectorAll('#areg .arow').forEach(r => {
+        const m = !q || r.dataset.name.includes(q) || (r.dataset.player && r.dataset.player.includes(q));
+        r.style.display = m ? '' : 'none';
+        if (m) inReg++;
+    });
+    document.querySelectorAll('#attnSection .at-row').forEach(r => {
+        const m = !q || (r.dataset.name || '').includes(q);
+        r.style.display = m ? '' : 'none';
+        if (m) inAttn++;
+    });
+    const empty = document.getElementById('regEmpty');
+    if (!empty) return;
+    if (!q || inReg) { empty.style.display = 'none'; empty.textContent = ''; return; }
+    empty.style.display = 'block';
+    empty.textContent = inAttn
+        ? 'No account with access matches “' + q + '” — but ' + inAttn + ' entry above in Needs Attention does.'
+        : 'No account matches “' + q + '”.';
+}
+</script>
 
 </body>
 </html>

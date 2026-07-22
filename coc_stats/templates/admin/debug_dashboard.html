@@ -185,7 +185,7 @@
         </div>
         <div class="topbar-status">
             <div class="status-dot"></div>
-            Zuletzt aktualisiert: {{ latest_update | local_dt }}
+            Zuletzt aktualisiert: {{ (latest_update | local_dt) if latest_update else '—' }}
         </div>
     </header>
 

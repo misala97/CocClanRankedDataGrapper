@@ -3,13 +3,13 @@ from collections import defaultdict
 
 import requests as req_lib
 
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify, abort
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models import AppUser, Player, BattleLog, RankedWeek, UptimeTracker, ClanWar, ClanWarMember, ClanWarAttack, CWLBonus
-from features.auth.routes import require_super_admin
+from features.auth.routes import require_super_admin, _current_user
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -17,6 +17,20 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.route('/admin')
 @require_super_admin
 def admin_hub():
+    # Overview / command deck. Sync-health (nav_health / nav_task_status), newbie_check_count,
+    # and pending_approvals arrive via the sitewide context processor — the Overview assembles
+    # only the two figures the processor doesn't carry.
+    return render_template(
+        'admin/admin_overview.html',
+        active_members=Player.query.filter_by(in_clan=True).count(),
+        app_users=AppUser.query.count(),
+        cwl_bonus=_cwl_bonus_available(),
+    )
+
+
+@admin_bp.route('/admin/monitor')
+@require_super_admin
+def admin_monitor():
     days = request.args.get('days', 7, type=int)
     if days not in [1, 7, 14, 30]:
         days = 7
@@ -115,16 +129,32 @@ def admin_hub():
             'gap_events':     gap_events,
         }
 
-    members = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
-
     return render_template(
-        'admin/admin_hub.html',
+        'admin/admin_monitor.html',
         by_function=dict(by_function),
         function_stats=function_stats,
         selected_days=days,
-        members=members,
+    )
+
+
+@admin_bp.route('/admin/roster')
+@require_super_admin
+def admin_roster():
+    # Shell page — the war-roster / CWL-bonus decision tools each fetch their own
+    # data via existing AJAX endpoints (/admin/war-roster, /admin/cwl-bonus[/*]).
+    return render_template(
+        'admin/admin_roster.html',
         current_month=dt.date.today().strftime('%Y-%m'),
     )
+
+
+@admin_bp.route('/admin/insights')
+@require_super_admin
+def admin_insights():
+    # Clan-analytics home. Shell page — the skill-correlation tool fetches its own
+    # data via the existing /admin/skill-correlation AJAX endpoint. Framed as a
+    # growable home so future clan-wide analytics land here rather than in a tool page.
+    return render_template('admin/admin_insights.html')
 
 
 @admin_bp.route('/admin/users')
@@ -132,7 +162,22 @@ def admin_hub():
 def admin_users():
     users   = AppUser.query.order_by(AppUser.is_approved, AppUser.created_at.desc()).all()
     players = Player.query.filter_by(in_clan=True).order_by(Player.name).all()
-    return render_template('admin/admin_users.html', users=users, players=players)
+
+    # Accounts may be linked to a player who has since left the clan. Those tags match
+    # no in-clan option, so without this the select renders "None" and the next save
+    # silently wipes a link nobody meant to touch. Passed separately (not merged into
+    # `players`) so the template can present them as their own category.
+    in_clan_tags = {p.tag for p in players}
+    orphan_tags  = {u.linked_player_tag for u in users if u.linked_player_tag} - in_clan_tags
+    departed_linked = (
+        Player.query.filter(Player.tag.in_(orphan_tags)).order_by(Player.name).all()
+        if orphan_tags else []
+    )
+
+    return render_template(
+        'admin/admin_users.html',
+        users=users, players=players, departed_linked=departed_linked,
+    )
 
 
 @admin_bp.route('/admin/users/<int:user_id>/approve', methods=['POST'])
@@ -144,9 +189,19 @@ def admin_user_approve(user_id):
     return redirect(url_for('admin.admin_users'))
 
 
+def _is_self(user_id):
+    """Locking yourself out is the one mistake this page can't undo for you.
+    The template disables these controls on your own row; this is the same rule
+    enforced server-side, so a stale page or a direct POST can't get around it."""
+    me = _current_user()
+    return bool(me and me.id == user_id)
+
+
 @admin_bp.route('/admin/users/<int:user_id>/reject', methods=['POST'])
 @require_super_admin
 def admin_user_reject(user_id):
+    if _is_self(user_id):
+        abort(400, 'You cannot revoke your own access.')
     u = db.get_or_404(AppUser, user_id)
     u.is_approved = False
     db.session.commit()
@@ -156,6 +211,8 @@ def admin_user_reject(user_id):
 @admin_bp.route('/admin/users/<int:user_id>/delete', methods=['POST'])
 @require_super_admin
 def admin_user_delete(user_id):
+    if _is_self(user_id):
+        abort(400, 'You cannot delete your own account.')
     u = db.get_or_404(AppUser, user_id)
     db.session.delete(u)
     db.session.commit()
@@ -166,6 +223,8 @@ def admin_user_delete(user_id):
 @require_super_admin
 def admin_user_toggle_super(user_id):
     u = db.get_or_404(AppUser, user_id)
+    if u.is_super_admin and _is_self(user_id):
+        abort(400, 'You cannot remove your own super admin.')
     u.is_super_admin = not u.is_super_admin
     db.session.commit()
     return redirect(url_for('admin.admin_users'))
@@ -389,6 +448,56 @@ def _normalize_war_size(team_size):
     if not team_size or team_size <= 7:  return 5
     if team_size <= 20:                   return 15
     return 30
+
+
+def _cwl_bonus_available():
+    """Overview alert tile: how many bonus slots remain unassigned in the active CWL season.
+    available = (guaranteed-by-league/size + wins) − already-assigned. Needs no per-player
+    data. Returns {'count', 'season_label'} or None when there is no active season / N/A league."""
+    try:
+        from models import CWLSeason, CWLWar
+        from app import CLAN_TAG
+
+        # Active season = most recent season that hasn't ended yet (matches admin_cwl_bonus_list).
+        recent = CWLSeason.query.order_by(CWLSeason.season.desc()).limit(8).all()
+        season = next((s for s in recent if s.state and s.state != 'ended'), None)
+        if not season:
+            return None
+
+        wars = [w for w in CWLWar.query.filter_by(season_id=season.id).all()
+                if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
+        if not wars:
+            return None
+
+        war_size = _normalize_war_size(wars[0].team_size)
+        league_name = season.league_name
+        if not league_name:
+            our_war = next((w for w in wars if w.clan_tag == CLAN_TAG), None) or wars[0]
+            league_name = (our_war.clan_cwl_league if our_war.clan_tag == CLAN_TAG
+                           else our_war.opp_cwl_league) or ''
+
+        guaranteed = _GUARANTEED_BONUSES.get(_cwl_league_group(league_name), {}).get(war_size)
+        if guaranteed is None:
+            return None
+
+        wins = 0
+        for w in wars:
+            if w.state != 'warEnded':
+                continue
+            if w.clan_tag == CLAN_TAG:
+                our_s, opp_s = w.clan_stars or 0, w.opp_stars or 0
+                our_p, opp_p = float(w.clan_destruction_pct or 0), float(w.opp_destruction_pct or 0)
+            else:
+                our_s, opp_s = w.opp_stars or 0, w.clan_stars or 0
+                our_p, opp_p = float(w.opp_destruction_pct or 0), float(w.clan_destruction_pct or 0)
+            if our_s > opp_s or (our_s == opp_s and our_p > opp_p):
+                wins += 1
+
+        already   = CWLBonus.query.filter_by(month=season.season).count()
+        available = max(0, (guaranteed + wins) - already)
+        return {'count': available, 'season_label': season.season}
+    except Exception:
+        return None
 
 
 @admin_bp.route('/admin/cwl-bonus/suggest', methods=['POST'])
@@ -621,6 +730,7 @@ def admin_member_update(tag):
 
 
 @admin_bp.route('/debug')
+@require_super_admin
 def debug_dashboard():
     filter_tag = request.args.get('player_tag', default='').strip()
     sort_by = request.args.get('sort', default='tag')

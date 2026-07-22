@@ -1283,7 +1283,7 @@ function openSiegePop(btn) {
     siegeOpenBtn = btn;
 }
 
-const SCORE_INFO = "Verdict scores each player's raid: the sum of their level-adjusted destruction %, divided by 6 attacks, with a compounding bonus for solo-wiping whole districts — then mapped to a word (Godlike → Useless). Shift is separate: how much your own attacks pulled the clan's medals-per-attack average up (green) or down (red). Open any row for the full breakdown.";
+const SCORE_INFO = "Verdict scores each player's raid: the sum of their level-adjusted destruction %, divided by attacks used (cleanup taps that just finish an already-cleared district don't count), with a compounding bonus for solo-wiping whole districts — then mapped to a word (Godlike → Useless). Shift is separate: how much your own attacks pulled the clan's medals-per-attack average up (green) or down (red). Open any row for the full breakdown.";
 function getInfoPop() {
     let pop = document.getElementById('infoPop');
     if (!pop) {

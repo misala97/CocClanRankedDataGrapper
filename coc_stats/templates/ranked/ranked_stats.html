@@ -1,663 +1,907 @@
 <!DOCTYPE html>
 <html lang="en">
-{% set page_title = 'Ranked Statistics - CoC Analytics' %}
+{% set page_title = 'The Record – CoC Analytics' %}
 {% set chartjs = true %}
 {% include '_head.html' %}
 
-    /* ── SUMMARY CARDS ── */
-    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
-    .sc {
-        background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-        padding: 20px 22px; position: relative; overflow: hidden;
-    }
-    .sc::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 12px 12px 0 0; }
-    .sc-purple::before { background: linear-gradient(90deg, var(--purple), transparent); }
-    .sc-gold::before   { background: linear-gradient(90deg, var(--accent), transparent); }
-    .sc-green::before  { background: linear-gradient(90deg, var(--green),  transparent); }
-    .sc-blue::before   { background: linear-gradient(90deg, var(--blue),   transparent); }
-    .sc-icon  { font-size: 18px; margin-bottom: 8px; }
-    .sc-value { font-family: 'Rajdhani', sans-serif; font-size: 34px; font-weight: 700; line-height: 1; margin-bottom: 5px; }
-    .sc-purple .sc-value { color: var(--purple); }
-    .sc-gold   .sc-value { color: var(--accent); }
-    .sc-green  .sc-value { color: var(--green);  }
-    .sc-blue   .sc-value { color: var(--blue);   }
-    .sc-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; }
+    /* ═══ THE RECORD — long-term Ranked ═════════════════════════════════
+       Night-ops thermal scope, Ranked wears Recon Blue (--rk). Magenta stays
+       interactive/focus only (One Hue One Job). Flat: depth is bg → surface →
+       surf2, never shadow. Numbers are JetBrains Mono, full stop. */
+    .container { padding-bottom: 72px; --rk: var(--blue); --ease: cubic-bezier(0.25,1,0.5,1); }
 
-    /* ── WALL OF FAME ── */
-    .wof-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-    .wof-card {
-        background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-        padding: 14px 16px; display: flex; align-items: center; gap: 14px;
-        transition: border-color .18s;
-    }
-    .wof-card:hover { border-color: rgba(240,165,0,.3); }
-    .wof-icon { font-size: 26px; flex-shrink: 0; width: 40px; text-align: center; }
-    .wof-body { min-width: 0; }
-    .wof-role  { font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 3px; }
-    .wof-name  { font-weight: 700; font-size: 14.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
-    .wof-stat  { font-family: 'Rajdhani', sans-serif; font-size: 13px; color: var(--muted); }
-    .wof-val   { color: var(--accent); font-weight: 700; }
+    .rk-num { font-family: 'JetBrains Mono', monospace; font-weight: 700;
+              font-variant-numeric: tabular-nums; }
+    .rk-cap { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px;
+              text-transform: uppercase; color: var(--muted); }
+    .rk-section { margin-top: 26px; }
+    .rk-section > .rk-cap { display: block; margin-bottom: 12px; }
 
-    /* ── PANELS ── */
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-    .panel-hdr {
-        display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
-        padding: 12px 18px; border-bottom: 1px solid var(--bord2); background: var(--surf2);
+    /* ── ZONE 1 — CLAN FORM (featured tier) ── */
+    .form-panel {
+        border: 1px solid color-mix(in oklch, var(--rk) 30%, var(--border));
+        background: color-mix(in oklch, var(--rk) 5%, var(--surface));
+        border-radius: 12px; padding: 20px 22px; margin-top: 4px;
     }
-    .panel-title { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .9px; }
-    .panel-sub   { font-size: 11px; color: var(--muted); opacity: .6; }
-    .panel-body  { padding: 18px; }
+    .form-verdict {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+        font-size: clamp(19px, 2.5vw, 26px); line-height: 1.12; letter-spacing: 0.3px;
+        text-wrap: balance; margin: 0; color: var(--text);
+    }
+    .form-verdict .dir { text-transform: uppercase; }
+    .form-climbing .dir { color: var(--green); }
+    .form-slipping .dir { color: var(--red); }
+    .form-holding  .dir { color: var(--rk); }
+    .form-verdict .rk-num { font-size: 0.9em; color: var(--text); }
+    .form-verdict .peak { color: var(--muted); font-weight: 700;
+        font-family: 'Manrope', sans-serif; font-size: 13px; display: block;
+        margin-top: 8px; letter-spacing: 0; text-transform: none; }
+    .form-verdict .peak .rk-num { font-size: 13px; }
+    .form-chart-wrap { position: relative; height: 220px; margin: 18px 0 4px; }
+    .form-live-note {
+        display: flex; gap: 8px; align-items: baseline; color: var(--muted);
+        font-size: 12px; margin: 14px 0 0; padding-top: 12px;
+        border-top: 1px solid var(--bord2);
+    }
+    .form-live-note::before {
+        content: ''; width: 7px; height: 7px; border-radius: 50%; flex: none;
+        align-self: center; background: var(--rk);
+        box-shadow: 0 0 6px color-mix(in oklch, var(--rk) 55%, transparent);
+        animation: rkPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes rkPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-    /* ── CHARTS ROW ── */
-    .charts-row { display: grid; grid-template-columns: 1fr 380px; gap: 16px; margin-bottom: 24px; height: 300px; }
-    .charts-row .panel { display: flex; flex-direction: column; }
-    .charts-row .panel .panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
-    .chart-wrap { flex: 1; min-height: 0; position: relative; }
-    .career-select {
-        padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
-        font-size: 12px; font-family: 'DM Sans', sans-serif;
-        background: var(--surf2); color: var(--text); width: 100%; cursor: pointer;
+    /* ── ZONE 2 — MOVERS (four IFF-typed exception bands) ── */
+    .mv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .mv-band {
+        --band: var(--muted);
+        border: 1px solid color-mix(in oklch, var(--band) 26%, var(--border));
+        background: color-mix(in oklch, var(--band) 4%, var(--surface));
+        border-radius: 10px; padding: 14px 15px; min-width: 0;
     }
-    .career-select:focus { outline: none; border-color: var(--accent); }
+    .mv-band[data-band="surging"]    { --band: var(--green); }
+    .mv-band[data-band="sliding"]    { --band: var(--red); }
+    .mv-band[data-band="unreliable"] { --band: var(--yellow); }
+    .mv-band[data-band="absent"]     { --band: var(--muted); }
+    .mv-band h3 {
+        font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px;
+        text-transform: uppercase; margin: 0 0 4px; color: var(--band);
+    }
+    .mv-empty { color: var(--muted); font-size: 12px; margin: 6px 0 2px; opacity: 0.7; }
 
-    /* ── TH ERA GRID ── */
-    .th-era-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
-    .th-era-scroll { overflow-x: auto; }
-    .th-era-scroll::-webkit-scrollbar { height: 5px; }
-    .th-era-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-    .th-era-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
-    .th-era-name-th {
-        min-width: 130px; width: 130px; background: var(--surf2);
-        border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
-        font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase;
-        letter-spacing: .5px; padding: 0 12px 8px; vertical-align: bottom;
+    /* Movers + tail entries are drill-down openers (real buttons), styled as
+       quiet compact rows with the full hover/focus/active chain. */
+    .mv-toggle, .tail-toggle {
+        display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+        width: 100%; padding: 7px 8px; margin: 3px -8px 0; border: 0; border-radius: 7px;
+        background: none; color: var(--text); font-family: 'Manrope', sans-serif;
+        font-size: 13px; text-align: left; cursor: pointer;
+        transition: background .15s var(--ease);
     }
-    .th-era-th {
-        min-width: 80px; width: 80px; height: 44px; background: var(--surf2);
-        border-bottom: 1px solid var(--border); border-right: 1px solid var(--bord2);
-        text-align: center; vertical-align: middle;
-        font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--muted);
+    .mv-toggle > span:first-child, .tail-toggle > span:first-child {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .th-era-player-cell {
-        min-width: 130px; width: 130px; padding: 0 12px; height: 48px;
-        border-right: 1px solid var(--border); border-bottom: 1px solid var(--bord2);
-        background: var(--surf2); font-size: 12.5px; font-weight: 600; color: var(--text);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+    .mv-toggle > span:last-child {
+        font-family: 'JetBrains Mono', monospace; font-weight: 700; flex: none;
+        font-variant-numeric: tabular-nums; color: var(--band);
     }
-    .th-era-cell {
-        min-width: 80px; width: 80px; height: 48px; text-align: center; vertical-align: middle;
-        border-right: 1px solid rgba(255,255,255,.04); border-bottom: 1px solid rgba(255,255,255,.04);
-        cursor: default; transition: filter .12s; position: relative;
+    .tail-toggle > span:last-child {
+        font-family: 'JetBrains Mono', monospace; font-weight: 700; flex: none;
+        color: var(--muted); font-size: 12px;
     }
-    .th-era-cell:hover { filter: brightness(1.4); z-index: 2; }
-    .th-era-score { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700; line-height: 1.1; }
-    .th-era-meta  { font-size: 9.5px; color: var(--muted); margin-top: 1px; font-family: 'Rajdhani', sans-serif; }
-    .th-era-empty { color: var(--muted); opacity: .18; font-size: 14px; }
-    .th-era-row:last-child .th-era-player-cell,
-    .th-era-row:last-child .th-era-cell { border-bottom: none; }
-    .th-note { padding: 9px 18px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--bord2); line-height: 1.6; }
+    .mv-toggle:hover, .tail-toggle:hover { background: var(--surf2); }
+    .mv-toggle:active, .tail-toggle:active { background: var(--surf2); transform: scale(0.99); }
+    .mv-toggle:focus-visible, .tail-toggle:focus-visible {
+        outline: 2px solid var(--accent); outline-offset: 1px;
+    }
 
-    /* ── LEADERBOARD ── */
-    .lb-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
-    .lb-hdr { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--bord2); background: var(--surf2); flex-wrap: wrap; }
-    .lb-search {
-        padding: 6px 12px; border: 1px solid var(--border); border-radius: 7px;
-        font-size: 12px; font-family: 'DM Sans', sans-serif;
-        background: var(--bg); color: var(--text); width: 190px;
-    }
-    .lb-search:focus { outline: none; border-color: var(--accent); }
-    .lb-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-    .lb-table thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
-    .lb-table thead th {
-        padding: 9px 10px; text-align: left; font-weight: 600; color: var(--muted);
-        font-size: 10.5px; text-transform: uppercase; letter-spacing: .7px; white-space: nowrap;
-        cursor: pointer; user-select: none;
-    }
-    .lb-table thead th:hover { color: var(--text); }
-    .lb-table thead th.sort-asc::after  { content: ' ↑'; font-size: .85em; color: var(--accent); }
-    .lb-table thead th.sort-desc::after { content: ' ↓'; font-size: .85em; color: var(--accent); }
-    .lb-table thead th.sort-asc,
-    .lb-table thead th.sort-desc { color: var(--accent); }
-    .lb-table thead th:first-child { cursor: default; width: 40px; text-align: center; }
-    .lb-table tbody tr { border-bottom: 1px solid var(--bord2); transition: background .1s; }
-    .lb-table tbody tr:last-child { border-bottom: none; }
-    .lb-table tbody tr:hover { background: rgba(255,255,255,.03); }
-    .lb-table tbody td { padding: 9px 10px; vertical-align: middle; }
-    .rank-cell { text-align: center; font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; }
-    .rank-1 { color: #ffd700; } .rank-2 { color: #b0bec5; } .rank-3 { color: #cd7f32; } .rank-n { color: var(--muted); font-size: 12px; }
-    .p-name { font-weight: 600; font-size: 13px; color: var(--text); }
-    .p-tag  { font-size: 10px; color: var(--muted); margin-top: 1px; }
-    .p-link { color: inherit; text-decoration: none; transition: color .12s; }
-    .p-link:hover { color: var(--accent); }
-    .p-arrow { font-size: 9px; color: var(--muted); opacity: .35; vertical-align: super; transition: opacity .12s; }
-    .p-link:hover .p-arrow { opacity: 1; color: var(--accent); }
-    .num { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; }
-    .c-gold   { color: var(--accent); } .c-green { color: var(--green); }
-    .c-blue   { color: var(--blue);   } .c-purple{ color: var(--purple); }
-    .c-muted  { color: var(--muted);  } .c-red   { color: var(--red); }
-    .c-yellow { color: var(--yellow); }
-    .attend-bar { display: inline-block; width: 36px; height: 4px; border-radius: 2px; background: var(--bord2); vertical-align: middle; margin-right: 5px; position: relative; overflow: hidden; }
-    .attend-fill { height: 100%; border-radius: 2px; position: absolute; left: 0; top: 0; }
-    .trend-up   { color: var(--green); font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; }
-    .trend-down { color: var(--red);   font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; }
-    .trend-flat { color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 13px; }
-    .consist-bar { display: inline-block; width: 38px; height: 5px; border-radius: 3px; background: var(--bord2); vertical-align: middle; margin-right: 4px; position: relative; overflow: hidden; }
-    .consist-fill { height: 100%; border-radius: 3px; position: absolute; left: 0; top: 0; }
-    .badge-score {
-        display: inline-block; padding: 2px 8px; border-radius: 5px;
-        font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
-    }
-    .verdict-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; min-width: 72px; }
-    .lb-footer { padding: 9px 18px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+    .pd-panel { display: none; }
+    .pd-panel.open { display: block; }
+    .pd-panel.open .pd-body { animation: ddIn .18s var(--ease) both; }
 
-    /* ── HEATMAP ── */
-    .heatmap-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
-    .hm-scroll { overflow-x: auto; }
-    .hm-scroll::-webkit-scrollbar { height: 5px; }
-    .hm-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-    .hm-table { border-collapse: collapse; font-size: 11.5px; }
-    .hm-th-corner { width: 80px; min-width: 80px; background: var(--surf2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; padding: 0 10px 10px; vertical-align: bottom; }
-    .hm-th-player { width: 48px; min-width: 48px; max-width: 48px; height: 110px; padding: 0; background: var(--surf2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--bord2); text-align: center; vertical-align: bottom; }
-    .hm-th-player span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; max-height: 96px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; margin-bottom: 10px; }
-    .hm-week-cell { width: 80px; min-width: 80px; padding: 0 10px; height: 32px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--bord2); background: var(--surf2); font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; vertical-align: middle; }
-    .hm-cell { width: 48px; min-width: 48px; max-width: 48px; height: 32px; text-align: center; vertical-align: middle; border-right: 1px solid rgba(255,255,255,.04); border-bottom: 1px solid rgba(255,255,255,.04); cursor: default; transition: filter .12s; position: relative; }
-    .hm-cell:hover { filter: brightness(1.35); z-index: 2; }
-    .hm-cell-val   { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; }
-    .hm-cell-empty { color: var(--muted); opacity: .2; font-size: 12px; }
-    .hm-row:last-child .hm-week-cell, .hm-row:last-child .hm-cell { border-bottom: none; }
+    /* ── ZONE 3 — THE RECORD (dense flat table) ── */
+    .rec-scroll { overflow-x: auto; scrollbar-width: thin;
+        scrollbar-color: color-mix(in oklch, var(--muted) 38%, transparent) transparent; }
+    .rec-scroll::-webkit-scrollbar { height: 11px; }
+    .rec-scroll::-webkit-scrollbar-track { background: transparent; }
+    .rec-scroll::-webkit-scrollbar-thumb {
+        background: color-mix(in oklch, var(--muted) 38%, transparent);
+        border: 3px solid transparent; background-clip: padding-box; border-radius: 6px;
+    }
+    .rec-scroll::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in oklch, var(--muted) 62%, transparent); background-clip: padding-box;
+    }
+    #record-table { width: 100%; border-collapse: collapse; }
+    #record-table th {
+        text-align: left; font-family: 'Manrope', sans-serif; font-size: 10px;
+        font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase;
+        color: var(--muted); padding: 9px 10px; white-space: nowrap;
+        border-bottom: 1px solid var(--border); position: relative;
+    }
+    #record-table th[data-sort] { cursor: pointer; user-select: none; transition: color .15s var(--ease); }
+    #record-table th[data-sort]:hover { color: var(--text); }
+    #record-table th[data-sort]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    #record-table th[aria-sort] { color: var(--rk); }
+    #record-table th[aria-sort]::after {
+        content: '▲'; font-size: 7px; margin-left: 5px; vertical-align: middle;
+    }
+    #record-table th[aria-sort="descending"]::after { content: '▼'; }
+    #record-table td { padding: 9px 10px; border-top: 1px solid var(--bord2); font-size: 13px; white-space: nowrap; }
+    #record-table tr.rec-row { transition: background .13s var(--ease); }
+    #record-table tr.rec-row:hover { background: color-mix(in oklch, var(--rk) 5%, var(--surf2)); }
+    .rec-rank { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 12px; width: 1%; }
+    .rec-toggle {
+        background: none; border: 0; padding: 0; color: var(--text); font-family: 'Manrope', sans-serif;
+        font-size: 13px; font-weight: 600; cursor: pointer; text-align: left; width: 100%;
+        display: inline-flex; align-items: center; gap: 7px; transition: color .13s var(--ease);
+    }
+    .rec-toggle::before {
+        content: '▸'; color: var(--muted); font-size: 9px; transition: transform .15s var(--ease), color .15s var(--ease);
+    }
+    .rec-row:hover .rec-toggle, .rec-toggle:hover { color: var(--rk); }
+    .rec-row:hover .rec-toggle::before { color: var(--rk); }
+    tr.rec-detail.open + tr .rec-toggle::before,
+    .rec-row[aria-expanded] .rec-toggle::before { transform: none; }
+    .rec-toggle[aria-expanded="true"]::before { transform: rotate(90deg); color: var(--rk); }
+    .rec-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+    td.rec-th, td.rec-num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+    td.rec-th { color: var(--muted); font-size: 12px; }
+    /* Mean wears its verdict tier as a colored number, not the full badge pill —
+       neutralize the sitewide badge bg/border that the class would otherwise paint. */
+    #record-table td.rec-mean { background: none; border-top: 1px solid var(--bord2); }
+    .rec-mean { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .rec-mean.badge-godlike  { color: oklch(0.70 0.170 290); }
+    .rec-mean.badge-dominant { color: oklch(0.70 0.190 330); }
+    .rec-mean.badge-wow      { color: var(--green); }
+    .rec-mean.badge-good     { color: var(--blue); }
+    .rec-mean.badge-warning  { color: var(--orange); }
+    .rec-mean.badge-suck     { color: oklch(0.68 0.200 25); }
+    .rec-mean.badge-useless  { color: var(--muted); }
+    .rec-spark { display: block; vertical-align: middle; }
+    .rec-rel {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+        color: var(--muted);
+    }
+    .rec-rel[data-rel="metronome"] { color: var(--green); }
+    .rec-rel[data-rel="erratic"]   { color: var(--yellow); }
+    .rec-trend { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rec-trend.up   { color: var(--green); }
+    .rec-trend.down { color: var(--red); }
+    .rec-trend.flat { color: var(--muted); }
+    .rec-att { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-size: 12px; }
+    .rec-att.full { color: var(--green); }
+    .rec-att.short { color: var(--orange); }
+    .rec-league { font-size: 12px; color: var(--muted); }
+    .rec-league .mv-up   { color: var(--green); font-family: 'JetBrains Mono', monospace; }
+    .rec-league .mv-down { color: var(--red); font-family: 'JetBrains Mono', monospace; }
+    td.rec-def { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-size: 12px; }
+    td.rec-def.pos { color: var(--green); }
+    td.rec-def.neg { color: var(--muted); }
 
-    /* ── PAGE FOOTER ── */
-    .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; border-top: 1px solid var(--bord2); font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: .3px; }
+    /* Verdict strip — 8 fixed slots, a mini distribution. Populated slots glow
+       in their band hue; zero slots recede so the eye catches where a player lands. */
+    .rec-verdicts { display: inline-flex; gap: 2px; }
+    .rec-verdicts span {
+        font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700;
+        min-width: 17px; text-align: center; padding: 3px 0; border-radius: 3px;
+        font-variant-numeric: tabular-nums;
+    }
+    .rec-verdicts span[data-zero] { color: color-mix(in oklch, var(--muted) 45%, transparent); background: none; }
+    .thin-flag {
+        background: none; border: 0; padding: 0 1px; margin-left: 1px; color: var(--yellow);
+        font: inherit; font-weight: 700; cursor: pointer; line-height: 1;
+    }
+    .thin-flag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+    .thin-pop {
+        position: fixed; margin: 0; inset: auto; background: var(--surf2);
+        border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+        max-width: 260px; font-size: 12px; line-height: 1.5; color: var(--text);
+        box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    }
+    .thin-pop::backdrop { background: transparent; }
 
-    /* ── RESPONSIVE ── */
-    @media (max-width: 1100px) { .charts-row { grid-template-columns: 1fr; height: auto; } .chart-wrap { height: 220px; flex: none; } }
-    @media (max-width: 900px)  { .container { padding-left: 20px; padding-right: 20px; } .summary-grid { grid-template-columns: repeat(2, 1fr); } .wof-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 480px)  { .summary-grid { grid-template-columns: 1fr; } .wof-grid { grid-template-columns: 1fr; } .lb-search { width: 130px; } }
-</style>
+    /* Tail sections — quiet, demoted, but reachable. */
+    .rec-tail { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--bord2); }
+    .rec-tail h3 {
+        font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+        color: var(--muted); margin: 0 0 4px;
+    }
+
+    /* ── ZONE 4 — DRILL-DOWN (opens recessed from its row) ── */
+    .rec-detail { display: none; }
+    .rec-detail.open { display: table-row; }
+    .rec-detail > td { padding: 0 !important; border-top: 0 !important; }
+    .rec-detail-body, .pd-panel .pd-body { }
+    .rec-detail.open .rec-detail-body {
+        background: var(--bg); border-top: 2px solid var(--rk);
+        padding: 18px 22px 20px; animation: ddIn .18s var(--ease) both;
+    }
+    /* Top accent, not a side-stripe (side-stripe >1px is a banned accent). Matches
+       the table drill-down's border-top language so both openers read the same. */
+    .pd-panel .pd-body {
+        background: var(--bg); border: 1px solid var(--bord2); border-top: 2px solid var(--rk);
+        border-radius: 8px; padding: 14px 16px; margin: 4px 0 10px;
+    }
+    .dd-open {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+        font-size: 17px; letter-spacing: 0.3px; color: var(--rk); margin: 0 0 14px;
+    }
+    .dd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 26px; }
+    .dd-block { margin: 0 0 16px; break-inside: avoid; }
+    .dd-block h4 {
+        font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+        color: var(--muted); margin: 0 0 7px; padding-bottom: 5px;
+        border-bottom: 1px solid var(--bord2);
+    }
+    .dd-block p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text); }
+    .dd-block > ul { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; color: var(--text); line-height: 1.6; }
+    .dd-matchup { width: 100%; border-collapse: collapse; margin-top: 2px; }
+    .dd-matchup th {
+        text-align: right; padding: 3px 8px; font-size: 9.5px; font-weight: 700;
+        letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted);
+        border-bottom: 1px solid var(--bord2);
+    }
+    .dd-matchup th:first-child, .dd-matchup td:first-child { text-align: left; }
+    .dd-matchup td {
+        text-align: right; padding: 5px 8px; font-size: 12.5px;
+        font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+        border-top: 1px solid var(--bord2);
+    }
+    .dd-matchup td:first-child { font-family: 'Manrope', sans-serif; color: var(--muted); }
+    .dd-matchup .d-pos { color: var(--green); }
+    .dd-matchup .d-neg { color: var(--red); }
+    .dd-note { color: var(--muted); font-size: 11.5px; margin: 7px 0 0; }
+    .dd-markers { margin: 8px 0 0; padding-left: 16px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .dd-markers .mk-up   { color: var(--green); }
+    .dd-markers .mk-down { color: var(--red); }
+    .dd-markers .mk-th   { color: var(--rk); }
+    .dd-career { max-width: 100%; height: auto; display: block; margin-top: 2px; }
+    .dd-verdicts { display: flex; gap: 3px; margin-bottom: 8px; }
+    .dd-verdicts span {
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+        min-width: 22px; text-align: center; padding: 4px 0; border-radius: 4px;
+        font-variant-numeric: tabular-nums;
+    }
+    .dd-verdicts span[data-zero] { color: color-mix(in oklch, var(--muted) 45%, transparent); background: none; }
+    .dd-mono { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
+
+    @keyframes ddIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+    @media (max-width: 760px) {
+        .mv-grid { grid-template-columns: 1fr; }
+        #record-table thead { display: none; }
+        #record-table tbody { display: block; }
+        #record-table tr.rec-row {
+            display: grid; grid-template-columns: auto 1fr auto;
+            gap: 2px 10px; align-items: baseline; padding: 10px 4px;
+            border-top: 1px solid var(--bord2);
+        }
+        #record-table tr.rec-row td { display: inline-block; border: 0; padding: 0; white-space: normal; }
+        #record-table td.rec-rank { grid-row: 1; grid-column: 1; }
+        #record-table tr.rec-row td:nth-child(2) { grid-row: 1; grid-column: 2; }
+        #record-table td.rec-mean { grid-row: 1; grid-column: 3; text-align: right; }
+        #record-table tr.rec-row td:nth-child(5),
+        #record-table td.rec-th, .rec-rel, .rec-trend, .rec-att, .rec-league, td.rec-def {
+            grid-row: 2; grid-column: 1 / -1;
+        }
+        #record-table tr.rec-row td.rec-verdicts { grid-row: 3; grid-column: 1 / -1; }
+        #record-table tr.rec-row td:nth-child(5),
+        #record-table td.rec-th, td.rec-rel, td.rec-trend, td.rec-att, td.rec-league, td.rec-def {
+            display: inline-flex; margin-right: 12px;
+        }
+        .rec-detail.open .rec-detail-body { padding: 16px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .form-live-note::before { animation: none; }
+        .pd-panel.open .pd-body, .rec-detail.open .rec-detail-body { animation: none; }
+        .mv-toggle, .tail-toggle, .rec-row, .rec-toggle, .rec-toggle::before, #record-table th { transition: none; }
+        .mv-toggle:active, .tail-toggle:active { transform: none; }
+    }
 </head>
 <body>
-
 {% include '_nav.html' %}
 
-{% set page_header_title = 'Ranked <span>Statistics</span>' %}
-{% set page_header_desc = 'All-time performance across every ranked season - segmented by Town Hall era' %}
+{% set page_header_title = 'The <span>Record</span>' %}
+{% set page_header_desc = 'Long-term Ranked performance — who is improving, who is sliding, and who you can count on.' %}
+{% set page_header_meta = [
+    {'value': form.current,   'label': 'clan form'},
+    {'value': form.vs_peak,   'label': 'vs peak (' ~ form.peak_label ~ ')',
+     'tone': 'loss' if form.vs_peak < 0 else 'win'},
+    {'value': form.depth,     'label': 'players at good+'},
+    {'value': seasons | length, 'label': 'seasons'}
+] %}
+{% set page_primary_control %}
+    <form method="get" class="window-form">
+        <label for="window-select" class="sr-only">Window</label>
+        <select id="window-select" name="window" onchange="this.form.submit()">
+            {% for w in windows %}
+            <option value="{{ w }}" {% if w == window %}selected{% endif %}>
+                {{ 'All seasons' if w == 'all' else 'Last ' ~ w }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+{% endset %}
 {% include '_page_header.html' %}
 
 <div class="container">
 
-    <!-- Summary cards -->
-    <div class="summary-grid">
-        <div class="sc sc-purple">
-            <div class="sc-icon">📅</div>
-            <div class="sc-value">{{ total_weeks }}</div>
-            <div class="sc-label">Seasons Tracked</div>
+    {# ── ZONE 1 — CLAN FORM ─────────────────────────────────────────── #}
+    <section aria-labelledby="form-h" style="margin-top:4px">
+        <h2 id="form-h" class="sr-only">Clan form</h2>
+        <div class="form-panel">
+            <p class="form-verdict form-{{ form.direction }}">
+                Clan form is <span class="dir">{{ form.direction }}</span> —
+                <span class="rk-num">{{ '%+.1f' % form.delta }}</span> pts, {{ form.basis }}.
+                <span class="peak">Peak <span class="rk-num">{{ form.peak_mean }}</span> on {{ form.peak_label }}
+                    &nbsp;·&nbsp; now <span class="rk-num">{{ form.current }}</span></span>
+            </p>
+            <div class="form-chart-wrap"><canvas id="form-chart"></canvas></div>
+            {% if live_season %}
+            <p class="form-live-note">
+                <span>{{ live_season.label }} is still in progress
+                ({{ live_season.participants }} attacking so far) — not counted in the line above
+                or any average on this page.</span>
+            </p>
+            {% endif %}
         </div>
-        <div class="sc sc-gold">
-            <div class="sc-icon"><img src="/static/img/battle.png" style="width:20px;height:20px;"></div>
-            <div class="sc-value">{{ '{:,}'.format(all_attacks_total) }}</div>
-            <div class="sc-label">All-Time Attacks</div>
-        </div>
-        <div class="sc sc-green">
-            <div class="sc-icon"><img src="/static/img/star.png" style="width:20px;height:20px;"></div>
-            <div class="sc-value">{{ clan_three_star_rate }}%</div>
-            <div class="sc-label">Clan 3★ Rate</div>
-        </div>
-        <div class="sc sc-blue">
-            <div class="sc-icon">📊</div>
-            <div class="sc-value">{{ avg_clan_score }}</div>
-            <div class="sc-label">Avg Clan Score</div>
-        </div>
-    </div>
+    </section>
 
-    <!-- Wall of Fame -->
-    <div class="wof-grid" id="wofGrid"></div>
+    {# ── ZONE 2 — MOVERS ────────────────────────────────────────────── #}
+    <section class="rk-section" aria-labelledby="mv-h">
+        <h2 id="mv-h" class="rk-cap">Who's moving</h2>
+        <div class="mv-grid">
+        {% for band, title, field, suffix in [
+            ('surging',    'Surging',    'trend',      ' pts'),
+            ('sliding',    'Sliding',    'trend',      ' pts'),
+            ('unreliable', 'Unreliable', 'sigma',      ' σ'),
+            ('absent',     'Absent',     'attendance', '')] %}
+        <div class="mv-band" data-band="{{ band }}">
+            <h3>{{ title }}</h3>
+            {% if movers[band] %}
+                {% for r in movers[band] %}
+                <button type="button" class="mv-toggle player-toggle"
+                        data-tag="{{ r.player_tag }}" aria-expanded="false"
+                        aria-controls="mv-detail-{{ band }}-{{ loop.index0 }}">
+                    <span>{{ r.player_name }}</span>
+                    <span>
+                        {%- if band == 'absent' -%}
+                            {{ (r.attendance * 100) | round(1) }}% ({{ r.attacks_used }}/{{ r.attacks_max }})
+                        {%- else -%}
+                            {{ r[field] }}{{ suffix }}
+                        {%- endif -%}
+                    </span>
+                </button>
+                <div class="pd-panel" id="mv-detail-{{ band }}-{{ loop.index0 }}">
+                    <div class="pd-body"></div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="mv-empty">None this window.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+        </div>
+    </section>
 
-    <!-- Charts row -->
-    <div class="charts-row">
-        <div class="panel">
-            <div class="panel-hdr">
-                <span class="panel-title">📈 Clan Score Trend</span>
-                <span class="panel-sub">avg · min · max per season</span>
-            </div>
-            <div class="panel-body">
-                <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
-            </div>
+    {# ── ZONE 3 — THE RECORD ────────────────────────────────────────── #}
+    <section class="rk-section" aria-labelledby="rec-h">
+        <h2 id="rec-h" class="rk-cap">Season by season</h2>
+        <div class="rec-scroll">
+        <table id="record-table">
+            <thead>
+                <tr>
+                    <th tabindex="0" data-sort="rank">#</th>
+                    <th tabindex="0" data-sort="name">Player</th>
+                    <th tabindex="0" data-sort="townhall">TH</th>
+                    <th tabindex="0" data-sort="mean">Mean</th>
+                    <th>Form</th>
+                    <th tabindex="0" data-sort="reliability">Reliability</th>
+                    <th tabindex="0" data-sort="trend">Trend</th>
+                    <th tabindex="0" data-sort="attendance">Attendance</th>
+                    <th tabindex="0" data-sort="league">League</th>
+                    <th tabindex="0" data-sort="defense">Defense</th>
+                    <th>Verdicts</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for r in roster %}
+                <tr class="rec-row" data-tag="{{ r.player_tag }}">
+                    <td class="rec-rank">{{ loop.index }}</td>
+                    <td>
+                        <button type="button" class="rec-toggle player-toggle"
+                                data-tag="{{ r.player_tag }}"
+                                aria-expanded="false"
+                                aria-controls="detail-{{ loop.index }}">
+                            {{ r.player_name }}
+                        </button>
+                    </td>
+                    <td class="rec-th">{{ r.townhall_now }}</td>
+                    <td class="rec-mean {{ r.mean_badge }}">{{ r.mean }}</td>
+                    <td><canvas class="rec-spark" width="80" height="20"
+                                data-scores="{{ r.scores | join(',') }}"></canvas></td>
+                    <td><span class="rec-rel" data-rel="{{ r.reliability }}">{{ r.reliability }}</span></td>
+                    <td class="rec-trend {{ 'up' if (r.trend or 0) > 0 else 'down' if (r.trend or 0) < 0 else 'flat' }}">
+                        {%- if r.trend is not none %}{{ '%+.1f' % r.trend }}{% else %}—{% endif -%}
+                    </td>
+                    <td class="rec-att {{ 'full' if r.attendance >= 1.0 else 'short' }}">
+                        {%- if r.attendance < 1.0 %}{{ (r.attendance * 100) | round(1) }}%{% else %}✓{% endif -%}
+                    </td>
+                    <td class="rec-league">{{ r.league_now }}{% if r.league_move %}
+                        <span class="{{ 'mv-up' if r.league_move > 0 else 'mv-down' }}">({{ '%+d' % r.league_move }})</span>{% endif %}</td>
+                    <td class="rec-def {{ 'pos' if (r.defense.index or 0) >= 0 else 'neg' }}">
+                        {%- if r.defense.index is not none -%}
+                            {{ '%+.1f' % r.defense.index }}{% if r.defense.thin %}<button type="button" class="thin-flag" aria-haspopup="dialog"
+                                    aria-expanded="false"
+                                    aria-label="Limited data for this league band">*</button>{% endif %}
+                        {%- else -%}—{%- endif -%}
+                    </td>
+                    <td class="rec-verdicts">
+                        {% for label, badge in verdict_bands %}{% set c = r.verdict_record.get(label, 0) %}
+                        <span class="{% if c %}{{ badge }}{% endif %}"{% if not c %} data-zero{% endif %}
+                              data-verdict="{{ label }}" aria-label="{{ label }}: {{ c }}">{{ c }}</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                <tr class="rec-detail" id="detail-{{ loop.index }}" data-tag="{{ r.player_tag }}">
+                    <td colspan="11"><div class="rec-detail-body pd-body"></div></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
         </div>
-        <div class="panel">
-            <div class="panel-hdr">
-                <span class="panel-title">🏃 Player Career</span>
-                <span class="panel-sub">score over last 20 seasons</span>
-            </div>
-            <div class="panel-body">
-                <select id="careerSelect" class="career-select" onchange="buildCareerChart(this.value)"></select>
-                <div class="chart-wrap"><canvas id="careerChart"></canvas></div>
-            </div>
-        </div>
-    </div>
 
-    <!-- TH Era Performance Grid -->
-    <div class="th-era-panel">
-        <div class="panel-hdr">
-            <span class="panel-title">🏰 Performance by Town Hall Era</span>
-            <span class="panel-sub">avg score at each TH the player has actually attacked at</span>
-        </div>
-        <div class="th-era-scroll">
-            <div id="thEraWrap">
-                <div style="padding:24px;color:var(--muted);font-size:13px;text-align:center;">Loading…</div>
+        {% if tail_thin %}
+        <div class="rec-tail">
+            <h3>Not enough data</h3>
+            {% for r in tail_thin %}
+            <button type="button" class="tail-toggle player-toggle"
+                    data-tag="{{ r.player_tag }}" aria-expanded="false"
+                    aria-controls="tail-thin-detail-{{ loop.index0 }}">
+                <span>{{ r.player_name }}</span><span>{{ r.weeks_played }} week(s)</span>
+            </button>
+            <div class="pd-panel" id="tail-thin-detail-{{ loop.index0 }}">
+                <div class="pd-body"></div>
             </div>
+            {% endfor %}
         </div>
-        <div class="th-note">
-            ⚠️ Player TH is recorded once at the <em>start</em> of each ranked season (<code>ranked_week.townhall</code>) — mid-season upgrades won't shift a player to a new column until the following season.
-            Opponent TH is captured at sync time, so a late sync may reflect a post-battle upgrade.
-            Scores within each TH column are still fully TH-adjusted.
-        </div>
-    </div>
+        {% endif %}
 
-    <!-- Leaderboard -->
-    <div class="lb-panel">
-        <div class="lb-hdr">
-            <span class="panel-title">🏆 All-Time Leaderboard</span>
-            <input id="lbSearch" class="lb-search" type="search" placeholder="🔍 Search player…" oninput="renderTable()">
-        </div>
-        <div style="overflow-x:auto;">
-            <table class="lb-table" id="lbTable">
-                <thead><tr>
-                    <th>#</th>
-                    <th onclick="sortBy('player_name')">Player</th>
-                    <th onclick="sortBy('weeks_active')">Seasons</th>
-                    <th onclick="sortBy('total_attacks')">Attacks</th>
-                    <th onclick="sortBy('attendance_rate')">Attend</th>
-                    <th onclick="sortBy('three_rate')">3★ %</th>
-                    <th onclick="sortBy('avg_score')">Avg Score</th>
-                    <th onclick="sortBy('best_score')">Best</th>
-                    <th onclick="sortBy('godlike_weeks')">Godlike</th>
-                    <th onclick="sortBy('consistency')" title="Lower = more consistent">Consist.</th>
-                    <th onclick="sortBy('trend')">Trend</th>
-                    <th onclick="sortBy('def_zero_rate')">Def 0★</th>
-                    <th>Verdict history</th>
-                </tr></thead>
-                <tbody id="lbBody"></tbody>
-            </table>
-        </div>
-        <div class="lb-footer" id="lbFooter"></div>
-    </div>
-
-    <!-- Performance Heatmap -->
-    <div class="heatmap-panel">
-        <div class="panel-hdr">
-            <span class="panel-title">🔥 Performance Heatmap</span>
-            <span class="panel-sub">score per player per season — last 20 seasons, most recent first</span>
-        </div>
-        <div class="hm-scroll">
-            <div id="heatmapWrap">
-                <div style="padding:24px;color:var(--muted);font-size:13px;text-align:center;">Loading…</div>
+        {% if tail_absent %}
+        <div class="rec-tail">
+            <h3>Not participating</h3>
+            {% for r in tail_absent %}
+            <button type="button" class="tail-toggle player-toggle"
+                    data-tag="{{ r.player_tag }}" aria-expanded="false"
+                    aria-controls="tail-absent-detail-{{ loop.index0 }}">
+                <span>{{ r.player_name }}</span>
+                <span>{{ r.attacks_used }}/{{ r.attacks_max }} attacks</span>
+            </button>
+            <div class="pd-panel" id="tail-absent-detail-{{ loop.index0 }}">
+                <div class="pd-body"></div>
             </div>
+            {% endfor %}
         </div>
-    </div>
-
+        {% endif %}
+    </section>
 </div>
 
-<div class="page-footer">CoC Analytics · Ranked Statistics</div>
-
 <script>
-const playerStats  = {{ player_stats_json  | safe }};
-const clanTrend    = {{ clan_trend_json    | safe }};
-const heatmap      = {{ heatmap_json       | safe }};
-const careerLines  = {{ career_lines_json  | safe }};
-const careerLabels = {{ career_labels_json | safe }};
-const allThLevels  = {{ all_th_levels_json | safe }};
-const hofData      = {{ hof_json           | safe }};
+const PAGE = {{ page_json | safe }};
+const VERDICT_BANDS = {{ verdict_bands | tojson }};
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-function scoreColor(s) {
-    if (s === null || s === undefined) return { bg: 'transparent', text: 'var(--muted)' };
-    if (s >= 87) return { bg: 'rgba(188,140,255,.22)', text: 'var(--purple)' };
-    if (s >= 80) return { bg: 'rgba(240,165,0,.22)',   text: 'var(--accent)' };
-    if (s >= 65) return { bg: 'rgba(63,185,80,.18)',   text: 'var(--green)'  };
-    if (s >= 58) return { bg: 'rgba(88,166,255,.18)',  text: 'var(--blue)'   };
-    if (s >= 43) return { bg: 'rgba(210,153,34,.18)',  text: 'var(--orange)' };
-    if (s >= 29) return { bg: 'rgba(248,81,73,.18)',   text: 'var(--red)'    };
-    if (s >  0)  return { bg: 'rgba(139,148,158,.1)',  text: 'var(--muted)'  };
-    return { bg: 'transparent', text: 'var(--muted)' };
-}
-
-function scoreBadge(s) {
-    if (s >= 87) return `<span class="badge-score badge-godlike">${s}</span>`;
-    if (s >= 80) return `<span class="badge-score badge-dominant">${s}</span>`;
-    if (s >= 65) return `<span class="badge-score badge-wow">${s}</span>`;
-    if (s >= 58) return `<span class="badge-score badge-good">${s}</span>`;
-    if (s >= 43) return `<span class="badge-score badge-warning">${s}</span>`;
-    if (s >= 29) return `<span class="badge-score badge-suck">${s}</span>`;
-    if (s >  0)  return `<span class="badge-score badge-useless">${s}</span>`;
-    return `<span class="badge-score badge-inactive">\u2014</span>`;
-}
-
-// ── Wall of Fame ──────────────────────────────────────────────────────────────
-function buildWoF() {
-    const records = [
-        { key: 'top_score',   icon: '👑', role: 'Most Dominant' },
-        { key: 'best_week',   icon: '⚡', role: 'Best Single Week' },
-        { key: 'most_3star',  icon: '🎯', role: 'Deadliest Attacker' },
-        { key: 'best_def',    icon: '🧱', role: 'Iron Wall' },
-        { key: 'godlike',     icon: '🌟', role: 'Godlike Machine' },
-        { key: 'most_active', icon: '🏅', role: 'Most Seasoned' },
-    ];
-    const grid = document.getElementById('wofGrid');
-    grid.innerHTML = records.map(r => {
-        const d = hofData[r.key];
-        if (!d) return '';
-        const prof = '/player/' + encodeURIComponent((d.tag||'').replace('#',''));
-        return `<div class="wof-card">
-            <div class="wof-icon">${r.icon}</div>
-            <div class="wof-body">
-                <div class="wof-role">${r.role}</div>
-                <div class="wof-name"><a href="${prof}" class="p-link" style="color:inherit;">${esc(d.name)}</a></div>
-                <div class="wof-stat">${esc(d.label)}: <span class="wof-val">${esc(d.val)}</span></div>
-            </div>
-        </div>`;
-    }).join('');
-}
-
-// ── Clan trend chart ──────────────────────────────────────────────────────────
-function buildTrendChart() {
-    const ctx = document.getElementById('trendChart');
-    if (!ctx || !clanTrend.length) return;
-    new Chart(ctx, {
+// Zone 1 — clan form line
+(function () {
+    const el = document.getElementById('form-chart');
+    if (!el || !window.Chart) return;
+    const css = getComputedStyle(document.documentElement);
+    // Chart.js draws to canvas and cannot resolve var() or color-mix(),
+    // so tokens must be resolved to concrete values first. Ranked wears Recon
+    // Blue (--blue); magenta stays interactive/focus only.
+    const rk     = css.getPropertyValue('--blue').trim()  || '#5b8dd6';
+    const line   = css.getPropertyValue('--border').trim() || '#3a3a40';
+    const muted  = css.getPropertyValue('--muted').trim()  || '#8a8a8a';
+    // Canvas gradients can't parse color-mix(); derive alpha stops from the
+    // resolved oklch token instead (oklch itself is fine on canvas, color-mix isn't).
+    const rkA = a => rk.replace(/\)\s*$/, ' / ' + a + ')');
+    const grad = el.getContext('2d').createLinearGradient(0, 0, 0, 220);
+    grad.addColorStop(0, rkA(0.24));
+    grad.addColorStop(1, rkA(0));
+    new Chart(el, {
         type: 'line',
         data: {
-            labels: clanTrend.map(r => r.label),
-            datasets: [
-                {
-                    label: 'Max',
-                    data: clanTrend.map(r => r.max_score),
-                    borderColor: 'rgba(240,165,0,.15)',
-                    borderWidth: 1, pointRadius: 0, tension: 0.35, fill: false,
-                },
-                {
-                    label: 'Avg Score',
-                    data: clanTrend.map(r => r.avg_score),
-                    borderColor: 'rgba(240,165,0,.9)',
-                    backgroundColor: 'rgba(240,165,0,.08)',
-                    borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: 'rgba(240,165,0,.9)',
-                    tension: 0.35, fill: '-1',
-                },
-                {
-                    label: 'Min',
-                    data: clanTrend.map(r => r.min_score),
-                    borderColor: 'rgba(240,165,0,.1)',
-                    backgroundColor: 'rgba(240,165,0,.05)',
-                    borderWidth: 1, pointRadius: 0, tension: 0.35, fill: '-1',
-                },
-            ]
+            labels: PAGE.form.points.map(p => p.label),
+            datasets: [{
+                data: PAGE.form.points.map(p => p.mean),
+                borderColor: rk, backgroundColor: grad, fill: true,
+                borderWidth: 2, tension: 0.35,
+                pointRadius: 2.5, pointHoverRadius: 5,
+                pointBackgroundColor: rk, pointBorderColor: rk
+            }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    filter: item => item.datasetIndex === 1,
                     callbacks: {
-                        label: ctx => {
-                            const r = clanTrend[ctx.dataIndex];
-                            return [` Avg: ${r.avg_score}`, ` Range: ${r.min_score}\u2013${r.max_score}`, ` Players: ${r.participants}`];
+                        // Each point is a season mean of however many players actually
+                        // played it — the tooltip should say how many, not just the score.
+                        afterLabel: function (ctx) {
+                            const point = PAGE.form.points[ctx.dataIndex];
+                            return point ? 'Participants: ' + point.participants : '';
                         }
                     }
                 }
             },
             scales: {
-                x: { ticks:{color:'#8b949e',font:{family:'Rajdhani',size:11},maxRotation:45}, grid:{color:'rgba(255,255,255,.04)'} },
-                y: { min:0, max:100, ticks:{color:'#8b949e',stepSize:20}, grid:{color:'rgba(255,255,255,.06)'} }
+                y: { min: 0, max: 100, ticks: { color: muted } },
+                x: { ticks: { color: muted } }
             }
         }
     });
-}
+})();
 
-// ── Career chart (per player) ─────────────────────────────────────────────────
-let careerChartInst = null;
-
-function buildCareerChart(selectedPlayer) {
-    const ctx = document.getElementById('careerChart');
-    if (!ctx) return;
-    if (careerChartInst) { careerChartInst.destroy(); careerChartInst = null; }
-
-    // clan average reference line
-    const clanAvg = careerLabels.map((_, i) => {
-        const vals = Object.values(careerLines).map(l => l[i]).filter(v => v != null);
-        return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+// Zone 3 — sparklines
+document.querySelectorAll('.rec-spark').forEach(function (canvas) {
+    const scores = canvas.dataset.scores.split(',').filter(Boolean).map(Number);
+    if (!scores.length) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const rk = getComputedStyle(document.documentElement)
+        .getPropertyValue('--blue').trim() || '#5b8dd6';
+    ctx.strokeStyle = rk;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    scores.forEach(function (s, i) {
+        const x = scores.length === 1 ? w / 2 : (i / (scores.length - 1)) * (w - 2) + 1;
+        const y = h - 1.5 - (s / 100) * (h - 3);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
+    ctx.stroke();
+    // A single dot on the latest week anchors the eye at the current value.
+    const lx = scores.length === 1 ? w / 2 : w - 1;
+    const ly = h - 1.5 - (scores[scores.length - 1] / 100) * (h - 3);
+    ctx.fillStyle = rk;
+    ctx.beginPath(); ctx.arc(lx, ly, 1.8, 0, Math.PI * 2); ctx.fill();
+});
 
-    const datasets = [
-        {
-            label: 'Clan Avg',
-            data: clanAvg,
-            borderColor: 'rgba(240,165,0,.4)',
-            borderWidth: 1.5, borderDash: [5,3],
-            pointRadius: 0, tension: 0.35, spanGaps: true, fill: false,
-        }
-    ];
-
-    if (selectedPlayer && careerLines[selectedPlayer]) {
-        datasets.push({
-            label: selectedPlayer,
-            data: careerLines[selectedPlayer],
-            borderColor: '#58a6ff',
-            backgroundColor: 'rgba(88,166,255,.1)',
-            borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#58a6ff',
-            tension: 0.35, spanGaps: true, fill: true,
+// Zone 3 — sortable headers (click and keyboard)
+(function () {
+    const table = document.getElementById('record-table');
+    if (!table) return;
+    const tbody = table.tBodies[0];
+    const dir = {};
+    const naturalOrder = new Map();
+    Array.from(tbody.rows).forEach(function (tr) {
+        if (tr.classList.contains('rec-row')) naturalOrder.set(tr.dataset.tag, naturalOrder.size);
+    });
+    function renumberRoster() {
+        // The '#' cell is a rendered rank, not a live index — a sort must rewrite it,
+        // or every column but the first would reorder while '#' silently lied.
+        Array.from(tbody.querySelectorAll('tr.rec-row')).forEach(function (tr, i) {
+            const cell = tr.querySelector('td.rec-rank');
+            if (cell) cell.textContent = i + 1;
         });
     }
+    function sortBy(key, th) {
+        dir[key] = !dir[key];
+        const sign = dir[key] ? 1 : -1;
+        const pairs = [];
+        for (let i = 0; i < tbody.rows.length; i += 2) {
+            pairs.push([tbody.rows[i], tbody.rows[i + 1]]);
+        }
+        const tagOf = tr => tr.dataset.tag;
+        const rowFor = tag => PAGE.roster.find(r => r.player_tag === tag) || {};
+        pairs.sort(function (a, b) {
+            const ra = rowFor(tagOf(a[0])), rb = rowFor(tagOf(b[0]));
+            let va, vb;
+            switch (key) {
+                case 'name':     va = ra.player_name; vb = rb.player_name; break;
+                case 'townhall': va = ra.townhall_now; vb = rb.townhall_now; break;
+                case 'league':   va = ra.league_rank_now; vb = rb.league_rank_now; break;
+                case 'defense':  va = (ra.defense || {}).index; vb = (rb.defense || {}).index; break;
+                case 'reliability': va = ra.sigma; vb = rb.sigma; break;
+                case 'rank':     va = naturalOrder.get(tagOf(a[0])); vb = naturalOrder.get(tagOf(b[0])); break;
+                default:         va = ra[key]; vb = rb[key];
+            }
+            if (va === null || va === undefined) va = -Infinity;
+            if (vb === null || vb === undefined) vb = -Infinity;
+            if (typeof va === 'string') return sign * va.localeCompare(vb);
+            return sign * (va - vb);
+        });
+        pairs.forEach(p => { tbody.appendChild(p[0]); tbody.appendChild(p[1]); });
+        renumberRoster();
+        table.querySelectorAll('th[data-sort]').forEach(function (h) { h.removeAttribute('aria-sort'); });
+        if (th) th.setAttribute('aria-sort', sign === 1 ? 'ascending' : 'descending');
+    }
+    table.querySelectorAll('th[data-sort]').forEach(function (th) {
+        th.addEventListener('click', () => sortBy(th.dataset.sort, th));
+        th.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sortBy(th.dataset.sort, th); }
+        });
+    });
+})();
 
-    careerChartInst = new Chart(ctx, {
-        type: 'line',
-        data: { labels: careerLabels, datasets },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color:'#8b949e', font:{family:'DM Sans',size:11}, boxWidth:12, padding:10 } },
-                tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y ?? '\u2014'}` } }
-            },
-            scales: {
-                x: { ticks:{color:'#8b949e',font:{family:'Rajdhani',size:11},maxRotation:45}, grid:{color:'rgba(255,255,255,.04)'} },
-                y: { min:0, max:100, ticks:{color:'#8b949e',stepSize:20}, grid:{color:'rgba(255,255,255,.06)'} }
+// Zone 4 — drill-down
+const MATCHUP_LABELS = {
+    '-2': 'TH-2 or lower', '-1': 'TH-1', '0': 'Even TH',
+    '1': 'TH+1', '2': 'TH+2 or higher'
+};
+
+// Clan mean stars per matchup bucket — the yardstick a player is measured against.
+const clanMatchupMean = (function () {
+    const totals = {};
+    Object.values(PAGE.players).forEach(function (p) {
+        Object.entries(p.matchups || {}).forEach(function ([k, b]) {
+            const t = totals[k] || (totals[k] = { stars: 0, attacks: 0 });
+            t.stars += b.avg_stars * b.attacks;
+            t.attacks += b.attacks;
+        });
+    });
+    const out = {};
+    Object.entries(totals).forEach(function ([k, t]) {
+        out[k] = t.attacks ? t.stars / t.attacks : null;
+    });
+    return out;
+})();
+
+function esc(s) {
+    return String(s).replace(/[&<>"]/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// Roster + both tail sections exactly partition every serialized player (see
+// features/ranked/stats.py:build_record_page), so this union is a complete
+// tag -> summary-row index — the mean/sigma/trend/attendance/verdict_record/
+// best/worst that PAGE.players (the drill-down detail) does not itself carry.
+const ROW_BY_TAG = (function () {
+    const map = {};
+    PAGE.roster.concat(PAGE.tail_thin || [], PAGE.tail_absent || [])
+        .forEach(function (r) { map[r.player_tag] = r; });
+    return map;
+})();
+
+// Opening characterization for Zone 4 — a short read on shape, not a paragraph.
+function characterize(row) {
+    if (!row) return '';
+    if (row.attendance < 0.5) return 'Barely present — under half of available attacks used.';
+    if (row.mean >= 80 && row.sigma < 10) return 'Elite and metronomic.';
+    if (row.sigma >= 15) return 'Boom-or-bust — wide week-to-week swings.';
+    if (row.trend !== null && row.trend !== undefined && row.trend <= -8) return 'Sliding — recent weeks are down from earlier form.';
+    if (row.trend !== null && row.trend !== undefined && row.trend >= 8) return 'Climbing — recent weeks are up from earlier form.';
+    if (row.mean >= 70) return 'Strong and consistent.';
+    if (row.mean < 40) return 'Struggling to find form.';
+    return 'Middle of the pack.';
+}
+
+function renderDetail(tag) {
+    const p = PAGE.players[tag];
+    if (!p) return '<p>No data.</p>';
+    const row = ROW_BY_TAG[tag];
+    const parts = [];
+
+    // Opening characterization — mean/sigma/trend/attendance collapsed to one line.
+    const opening = characterize(row);
+    if (opening) parts.push('<p class="dd-open">' + esc(opening) + '</p>');
+
+    // Career line (full-width)
+    parts.push('<div class="dd-block"><h4>Career</h4>');
+    parts.push('<canvas class="dd-career" width="640" height="140" data-tag="' + esc(tag) + '"></canvas>');
+    if (p.markers.length) {
+        const mkClass = { promotion: 'mk-up', demotion: 'mk-down', townhall: 'mk-th' };
+        parts.push('<ul class="dd-markers">' + p.markers.map(m =>
+            '<li><span class="' + (mkClass[m.kind] || '') + '">' +
+            esc(PAGE.labels[m.season_id] || m.season_id) + ' — ' +
+            esc(m.kind) + '</span>: ' + esc(m.detail) + '</li>').join('') + '</ul>');
+    }
+    parts.push('</div>');
+
+    // The analytical blocks share a responsive two-column grid.
+    parts.push('<div class="dd-grid">');
+
+    // Where the points go
+    parts.push('<div class="dd-block"><h4>Where the points go</h4>');
+    const keys = Object.keys(p.matchups).sort((a, b) => Number(a) - Number(b));
+    if (!keys.length) {
+        parts.push('<p>No attacks on record.</p>');
+    } else {
+        const rendered = keys.filter(k => p.matchups[k].enough);
+        if (!rendered.length) {
+            parts.push('<p>Too few attacks in any single matchup to judge — ' +
+                       keys.map(k => esc(MATCHUP_LABELS[k]) + ' (' + p.matchups[k].attacks + ')').join(', ') +
+                       '.</p>');
+        } else {
+            parts.push('<table class="dd-matchup"><thead><tr><th>Matchup</th><th>Attacks</th>' +
+                       '<th>Avg ★</th><th>Clan avg ★</th><th>Delta</th></tr></thead><tbody>');
+            rendered.forEach(function (k) {
+                const b = p.matchups[k];
+                const clan = clanMatchupMean[k];
+                const delta = clan === null || clan === undefined ? null : b.avg_stars - clan;
+                const dCls = delta === null ? '' : (delta >= 0 ? ' class="d-pos"' : ' class="d-neg"');
+                parts.push('<tr><td>' + esc(MATCHUP_LABELS[k] || k) + '</td><td>' + b.attacks +
+                    '</td><td>' + b.avg_stars.toFixed(2) + '</td><td>' +
+                    (clan === null || clan === undefined ? '—' : clan.toFixed(2)) + '</td><td' + dCls + '>' +
+                    (delta === null ? '—' : (delta >= 0 ? '+' : '') + delta.toFixed(2)) + '</td></tr>');
+            });
+            parts.push('</tbody></table>');
+            const skipped = keys.filter(k => !p.matchups[k].enough);
+            if (skipped.length) {
+                parts.push('<p class="dd-note">Not shown (fewer than 10 attacks): ' +
+                    skipped.map(k => esc(MATCHUP_LABELS[k]) + ' (' + p.matchups[k].attacks + ')').join(', ') + '.</p>');
             }
         }
-    });
-}
-
-function initCareerSelect() {
-    const sel = document.getElementById('careerSelect');
-    playerStats.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.player_name;
-        opt.textContent = p.player_name;
-        sel.appendChild(opt);
-    });
-    if (playerStats.length) {
-        sel.value = playerStats[0].player_name;
-        buildCareerChart(playerStats[0].player_name);
     }
-}
+    parts.push('</div>');
 
-// ── TH Era Grid ───────────────────────────────────────────────────────────────
-function buildThEraGrid() {
-    const wrap = document.getElementById('thEraWrap');
-    const players = playerStats.filter(p => p.th_eras && p.th_eras.length > 0);
-    if (!allThLevels.length || !players.length) {
-        wrap.innerHTML = '<div style="padding:24px;color:var(--muted);font-size:13px;text-align:center;">No TH era data available.</div>';
-        return;
+    // Near-misses
+    parts.push('<div class="dd-block"><h4>Near-misses</h4><p>' +
+        p.near.near + ' of ' + p.near.attacks + ' attacks (' + p.near.near_pct +
+        '%) were 2★ at 90% or better — one building short of a 3★. ' +
+        'Three-star rate: ' + p.near.three_pct + '%.</p></div>');
+
+    // Attendance
+    parts.push('<div class="dd-block"><h4>Attendance</h4>');
+    if (!p.attendance_weeks.length) {
+        parts.push('<p>Every attack used, every week.</p>');
+    } else {
+        parts.push('<ul>' + p.attendance_weeks.map(w =>
+            '<li>' + esc(w.label) + ' — ' + w.used + '/' + w.max +
+            ' (' + w.missing + ' missed)</li>').join('') + '</ul>');
     }
+    parts.push('</div>');
 
-    const thHeaders = allThLevels.map(th => `<th class="th-era-th">TH${th}</th>`).join('');
+    // Defense
+    parts.push('<div class="dd-block"><h4>Defense</h4>');
+    if (!p.defense.n) {
+        parts.push('<p>No defenses on record.</p>');
+    } else {
+        parts.push('<p>' + p.defense.tpd + ' trophies per defense across ' + p.defense.n +
+            ' defenses — ' + (p.defense.index >= 0 ? '+' : '') + p.defense.index +
+            ' against what this league expects.' +
+            (p.defense.thin ? ' <em>Limited data for this league band.</em>' : '') + '</p>');
+        const mixKeys = Object.keys(p.defense.star_mix || {}).sort(function (a, b) { return Number(a) - Number(b); });
+        if (mixKeys.length) {
+            parts.push('<p class="dd-note">Stars conceded: ' +
+                mixKeys.map(function (k) { return k + '★ ×' + p.defense.star_mix[k]; }).join(', ') + '.</p>');
+        }
+    }
+    parts.push('</div>');
 
-    const rows = players.map(p => {
-        const eraMap = {};
-        p.th_eras.forEach(e => { eraMap[e.th] = e; });
-        const cells = allThLevels.map(th => {
-            const era = eraMap[th];
-            if (!era) return `<td class="th-era-cell th-era-empty">\u2014</td>`;
-            const c   = scoreColor(era.avg_score);
-            const tip = `TH${th}\n${p.player_name}\nAvg score: ${era.avg_score}\nAttacks: ${era.attacks}\nWeeks: ${era.weeks}\n3★ rate: ${era.three_rate}%`;
-            return `<td class="th-era-cell" style="background:${c.bg};" title="${esc(tip)}">
-                <div class="th-era-score" style="color:${c.text};">${era.avg_score}</div>
-                <div class="th-era-meta">${era.attacks} atk</div>
-            </td>`;
-        }).join('');
-        const prof = '/player/' + encodeURIComponent((p.player_tag||'').replace('#',''));
-        return `<tr class="th-era-row">
-            <td class="th-era-player-cell"><a href="${prof}" class="p-link">${esc(p.player_name)}</a></td>
-            ${cells}
-        </tr>`;
-    }).join('');
+    // Verdict record — same fixed 8-band order as the roster strip, plus best/worst weeks.
+    parts.push('<div class="dd-block"><h4>Verdict record</h4>');
+    if (row) {
+        parts.push('<div class="dd-verdicts">' + VERDICT_BANDS.map(function (band) {
+            const label = band[0], badge = band[1];
+            const count = (row.verdict_record || {})[label] || 0;
+            const cls = count ? esc(badge) : '';
+            const zero = count ? '' : ' data-zero';
+            return '<span class="' + cls + '"' + zero + ' data-verdict="' + esc(label) +
+                '" aria-label="' + esc(label) + ': ' + count + '">' + count + '</span>';
+        }).join('') + '</div>');
+        const bestRec = (p.records || []).find(function (r) { return r.score === row.best; });
+        const worstRec = (p.records || []).find(function (r) { return r.score === row.worst; });
+        parts.push('<p>Best week <span class="dd-mono">' + row.best + '</span>' +
+            (bestRec ? ' <span class="dd-note" style="font-size:12px">(' + esc(bestRec.start_day) + ')</span>' : '') +
+            ' &nbsp;·&nbsp; worst <span class="dd-mono">' + row.worst + '</span>' +
+            (worstRec ? ' <span class="dd-note" style="font-size:12px">(' + esc(worstRec.start_day) + ')</span>' : '') + '</p>');
+    }
+    parts.push('</div>');
 
-    wrap.innerHTML = `<table class="th-era-table">
-        <thead><tr>
-            <th class="th-era-name-th">Player</th>
-            ${thHeaders}
-        </tr></thead>
-        <tbody>${rows}</tbody>
-    </table>`;
+    parts.push('</div>');  // close .dd-grid
+
+    return parts.join('');
 }
 
-// ── sort state ────────────────────────────────────────────────────────────────
-let sortCol = 'avg_score', sortDir = 'desc';
+function drawCareer(canvas) {
+    const p = PAGE.players[canvas.dataset.tag];
+    if (!p || !p.records.length) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const css = getComputedStyle(document.documentElement);
+    const rk = css.getPropertyValue('--blue').trim() || '#5b8dd6';
+    const line = css.getPropertyValue('--bord2').trim() || '#2a2a30';
+    const muted = css.getPropertyValue('--muted').trim() || '#8a8a8a';
+    const rkA = a => rk.replace(/\)\s*$/, ' / ' + a + ')');
+    const n = p.records.length;
+    const x = i => n === 1 ? w / 2 : (i / (n - 1)) * (w - 20) + 10;
+    const y = s => h - 12 - (s / 100) * (h - 24);
 
-function sortBy(col) {
-    sortDir = sortCol === col ? (sortDir === 'desc' ? 'asc' : 'desc') : (col === 'player_name' ? 'asc' : 'desc');
-    sortCol = col;
-    renderTable(); updateSortHeaders();
-}
+    // baseline + faint mid gridline
+    ctx.strokeStyle = line; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(10, y(0)); ctx.lineTo(w - 10, y(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(10, y(50)); ctx.lineTo(w - 10, y(50)); ctx.stroke();
 
-function updateSortHeaders() {
-    document.querySelectorAll('#lbTable thead th').forEach(th => {
-        th.classList.remove('sort-asc','sort-desc');
-        const m = (th.getAttribute('onclick')||'').match(/'([^']+)'/);
-        if (m && m[1] === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    const marked = new Set(p.markers.map(m => m.season_id));
+    ctx.strokeStyle = muted; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    p.records.forEach(function (r, i) {
+        if (!marked.has(r.season_id)) return;
+        ctx.beginPath(); ctx.moveTo(x(i), 6); ctx.lineTo(x(i), h - 6); ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // soft area fill under the score line
+    ctx.beginPath();
+    p.records.forEach((r, i) => i ? ctx.lineTo(x(i), y(r.score)) : ctx.moveTo(x(i), y(r.score)));
+    ctx.lineTo(x(n - 1), y(0)); ctx.lineTo(x(0), y(0)); ctx.closePath();
+    ctx.fillStyle = rkA(0.12); ctx.fill();
+
+    ctx.strokeStyle = rk; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.beginPath();
+    p.records.forEach((r, i) => i ? ctx.lineTo(x(i), y(r.score)) : ctx.moveTo(x(i), y(r.score)));
+    ctx.stroke();
+
+    ctx.fillStyle = rk;
+    p.records.forEach(function (r, i) {
+        ctx.beginPath(); ctx.arc(x(i), y(r.score), 2.5, 0, Math.PI * 2); ctx.fill();
     });
 }
 
-// ── Leaderboard ───────────────────────────────────────────────────────────────
-function renderTable() {
-    const q = (document.getElementById('lbSearch').value||'').toLowerCase();
-    let rows = playerStats.filter(p => !q ||
-        (p.player_name||'').toLowerCase().includes(q) ||
-        (p.player_tag||'').toLowerCase().includes(q)
-    );
-    rows.sort((a,b) => {
-        let av = a[sortCol] ?? (sortCol === 'best_rank' ? 9999 : -9999);
-        let bv = b[sortCol] ?? (sortCol === 'best_rank' ? 9999 : -9999);
-        if (sortCol === 'best_rank') { av = av ?? 9999; bv = bv ?? 9999; }
-        if (typeof av === 'string') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
-        return av < bv ? (sortDir === 'asc' ? -1 : 1) : av > bv ? (sortDir === 'asc' ? 1 : -1) : 0;
+// Every player-facing control on the page — roster toggle, movers button, or
+// tail-section button — shares this one open/render/close mechanism, so a
+// player is reachable the same way no matter which zone surfaced them.
+document.querySelectorAll('.player-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        const detail = document.getElementById(btn.getAttribute('aria-controls'));
+        if (!detail) return;
+        const open = detail.classList.toggle('open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open && !detail.dataset.rendered) {
+            const body = detail.querySelector('.pd-body');
+            if (body) {
+                body.innerHTML = renderDetail(btn.dataset.tag);
+                body.querySelectorAll('.dd-career').forEach(drawCareer);
+            }
+            detail.dataset.rendered = '1';
+        }
     });
+});
 
-    const tbody = document.getElementById('lbBody');
-    tbody.innerHTML = rows.map((p, i) => {
-        const rank = i + 1;
-        const rc   = rank===1?'rank-1':rank===2?'rank-2':rank===3?'rank-3':'rank-n';
-        const rm   = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':rank;
-        const prof = '/player/' + encodeURIComponent((p.player_tag||'').replace('#',''));
-
-        // Attendance bar
-        const aPct  = Math.min(100, p.attendance_rate || 0);
-        const aCol  = aPct >= 90 ? '#3fb950' : aPct >= 65 ? '#f0a500' : '#f85149';
-        const attendHtml = `<span class="attend-bar"><span class="attend-fill" style="width:${aPct}%;background:${aCol};"></span></span><span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:${aCol};">${aPct}%</span>`;
-
-        // Trend
-        const trendHtml = p.trend > 2 ? `<span class="trend-up">↑ +${p.trend}</span>`
-            : p.trend < -2 ? `<span class="trend-down">↓ ${p.trend}</span>`
-            : `<span class="trend-flat">→</span>`;
-
-        // Consistency
-        const maxC = 30, cPct = Math.min(100, (p.consistency / maxC) * 100);
-        const cH   = Math.round(120 * (1 - cPct / 100));
-        const consistHtml = p.consistency > 0
-            ? `<span class="consist-bar"><span class="consist-fill" style="width:${100-cPct}%;background:hsl(${cH},60%,48%);"></span></span><span style="font-family:'Rajdhani',sans-serif;font-size:12px;color:hsl(${cH},60%,58%);">${p.consistency}</span>`
-            : `<span class="c-muted" style="font-family:'Rajdhani',sans-serif;font-size:12px;">\u2014</span>`;
-
-        // Verdict history bar
-        const totalWks = p.weeks_active || 1;
-        const vSegments = [
-            { wks: p.godlike_weeks,  color: '#bc8cff' },
-            { wks: p.dominant_weeks, color: '#f0a500' },
-            { wks: p.wow_weeks,      color: '#3fb950' },
-            { wks: p.good_weeks,     color: '#58a6ff' },
-            { wks: p.bad_weeks,      color: '#d29922' },
-            { wks: p.disaster_weeks, color: '#f85149' },
-            { wks: p.useless_weeks,  color: '#8b949e' },
-        ];
-        const topTip = `Godlike ${p.godlike_weeks} · Dominant ${p.dominant_weeks} · Good+ ${(p.wow_weeks||0)+(p.good_weeks||0)}`;
-        const verdictBarHtml = `<div title="${topTip}" class="verdict-bar">${
-            vSegments.map(s => s.wks > 0
-                ? `<div style="flex:${s.wks};background:${s.color};"></div>`
-                : ''
-            ).join('')
-        }</div>`;
-
-        return `<tr>
-            <td class="rank-cell ${rc}">${rm}</td>
-            <td>
-                <div class="p-name"><a href="${prof}" class="p-link">${esc(p.player_name)} <span class="p-arrow">↗</span></a></div>
-                <div class="p-tag">${esc(p.player_tag)}</div>
-            </td>
-            <td><span class="num c-purple">${p.weeks_active}</span></td>
-            <td><span class="num c-blue">${p.total_attacks}</span></td>
-            <td>${attendHtml}</td>
-            <td><span class="num c-yellow">${p.three_rate}%</span></td>
-            <td>${scoreBadge(p.avg_score)}</td>
-            <td>${scoreBadge(p.best_score)}</td>
-            <td><span class="num c-purple">${p.godlike_weeks || '\u2014'}</span></td>
-            <td>${consistHtml}</td>
-            <td>${trendHtml}</td>
-            <td><span class="num c-green">${p.def_zero_rate > 0 ? p.def_zero_rate + '%' : '\u2014'}</span></td>
-            <td style="min-width:90px;">${verdictBarHtml}</td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('lbFooter').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} shown`;
+// ── Thin-defense disclosure (keyboard + touch reachable; replaces the old title attribute) ──
+let thinOpenBtn = null;
+function positionPop(pop, btn) {
+    const r = btn.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    let left = r.left + r.width / 2 - pr.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - pr.width - 8));
+    let top = r.top - pr.height - 8;
+    if (top < 8) top = r.bottom + 8;
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
 }
-
-// ── Heatmap ───────────────────────────────────────────────────────────────────
-function buildHeatmap() {
-    const { weeks, players, scores } = heatmap;
-    if (!weeks.length || !players.length) return;
-
-    const thCells = players.map(p => `<th class="hm-th-player"><span>${esc(p)}</span></th>`).join('');
-
-    const bodyRows = weeks.map((weekLabel, wi) => {
-        const cells = players.map(player => {
-            const s = (scores[player] || [])[wi];
-            if (s == null) return `<td class="hm-cell"><span class="hm-cell-empty">\u2014</span></td>`;
-            const c   = scoreColor(s);
-            const tip = `${player}\n${weekLabel}\nScore: ${s}`;
-            return `<td class="hm-cell" style="background:${c.bg};" title="${esc(tip)}">
-                <span class="hm-cell-val" style="color:${c.text};">${s}</span>
-            </td>`;
-        }).join('');
-        return `<tr class="hm-row"><td class="hm-week-cell">${esc(weekLabel)}</td>${cells}</tr>`;
-    }).join('');
-
-    document.getElementById('heatmapWrap').innerHTML = `
-        <table class="hm-table">
-            <thead><tr>
-                <th class="hm-th-corner">Season</th>${thCells}
-            </tr></thead>
-            <tbody>${bodyRows}</tbody>
-        </table>`;
+function getThinPop() {
+    let pop = document.getElementById('thinPop');
+    if (!pop) {
+        pop = document.createElement('div');
+        pop.id = 'thinPop';
+        pop.className = 'thin-pop';
+        pop.setAttribute('popover', 'auto');
+        pop.setAttribute('role', 'dialog');
+        document.body.appendChild(pop);
+        pop.addEventListener('toggle', function (e) {
+            if (e.newState === 'closed' && thinOpenBtn) {
+                thinOpenBtn.setAttribute('aria-expanded', 'false');
+                thinOpenBtn = null;
+            }
+        });
+    }
+    return pop;
 }
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    buildWoF();
-    buildTrendChart();
-    initCareerSelect();
-    buildThEraGrid();
-    renderTable();
-    updateSortHeaders();
-    buildHeatmap();
+document.querySelectorAll('.thin-flag').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const pop = getThinPop();
+        if (thinOpenBtn === btn) { pop.hidePopover(); return; }
+        pop.textContent = 'Limited defense data for this league band — falls back to the clan-wide mean.';
+        if (pop.matches(':popover-open')) pop.hidePopover();
+        pop.showPopover();
+        positionPop(pop, btn);
+        if (thinOpenBtn) thinOpenBtn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-expanded', 'true');
+        thinOpenBtn = btn;
+    });
 });
 </script>
-
 </body>
 </html>

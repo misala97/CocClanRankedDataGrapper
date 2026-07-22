@@ -1,0 +1,63 @@
+{#-
+  Admin sub-nav. Rendered on every admin page, directly below _page_header.
+  Active tab is derived from request.path. Count badges surface pending work
+  (Members = players awaiting new-member check, Users = accounts awaiting
+  approval); both come free from the sitewide context processor and hide at 0.
+  Tint-only active state — never a side-stripe (DESIGN.md).
+-#}
+<style>
+    .admin-tabs {
+        max-width: 1400px; margin: 18px auto 0; padding: 0 32px;
+    }
+    .admin-tabs-rail {
+        display: flex; align-items: stretch; gap: 2px;
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto; scrollbar-width: none;
+    }
+    .admin-tabs-rail::-webkit-scrollbar { display: none; }
+    .atab {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 11px 16px 12px; position: relative;
+        font-family: 'Manrope', sans-serif; font-size: 13.5px; font-weight: 600;
+        color: var(--muted); white-space: nowrap; cursor: pointer;
+        border-bottom: 2px solid transparent; margin-bottom: -1px;
+        transition: color .15s, border-color .15s, background .15s;
+        border-top-left-radius: 7px; border-top-right-radius: 7px;
+    }
+    .atab:hover { color: var(--text); background: color-mix(in oklch, var(--text) 4%, transparent); }
+    .atab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+        background: color-mix(in oklch, var(--accent) 8%, transparent);
+    }
+    .atab-badge {
+        font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700;
+        line-height: 1; padding: 3px 6px; border-radius: 20px; min-width: 18px; text-align: center;
+        background: color-mix(in oklch, var(--accent) 16%, transparent);
+        color: var(--accent);
+        border: 1px solid color-mix(in oklch, var(--accent) 32%, transparent);
+    }
+    .atab-badge.urgent {
+        background: color-mix(in oklch, var(--red) 15%, transparent);
+        color: var(--red);
+        border-color: color-mix(in oklch, var(--red) 32%, transparent);
+    }
+    @media (max-width: 900px) { .admin-tabs { padding: 0 20px; } }
+    @media (max-width: 480px) { .admin-tabs { padding: 0 12px; } .atab { padding: 10px 12px 11px; font-size: 13px; } }
+    @media (prefers-reduced-motion: reduce) { .atab { transition: none; } }
+</style>
+{% set _ap = request.path %}
+<nav class="admin-tabs" aria-label="Admin sections">
+    <div class="admin-tabs-rail">
+        <a href="/admin"         class="atab {% if _ap == '/admin' %}active{% endif %}"{% if _ap == '/admin' %} aria-current="page"{% endif %}>Overview</a>
+        <a href="/admin/monitor" class="atab {% if _ap.startswith('/admin/monitor') %}active{% endif %}"{% if _ap.startswith('/admin/monitor') %} aria-current="page"{% endif %}>Monitor</a>
+        <a href="/admin/roster"  class="atab {% if _ap.startswith('/admin/roster') %}active{% endif %}"{% if _ap.startswith('/admin/roster') %} aria-current="page"{% endif %}>Roster</a>
+        <a href="/admin/members" class="atab {% if _ap.startswith('/admin/members') %}active{% endif %}"{% if _ap.startswith('/admin/members') %} aria-current="page"{% endif %}>
+            Members{% if newbie_check_count and newbie_check_count > 0 %}<span class="atab-badge urgent" title="{{ newbie_check_count }} awaiting new-member check">{{ newbie_check_count }}</span>{% endif %}
+        </a>
+        <a href="/admin/users"   class="atab {% if _ap.startswith('/admin/users') %}active{% endif %}"{% if _ap.startswith('/admin/users') %} aria-current="page"{% endif %}>
+            Users{% if pending_approvals and pending_approvals > 0 %}<span class="atab-badge urgent" title="{{ pending_approvals }} awaiting approval">{{ pending_approvals }}</span>{% endif %}
+        </a>
+        <a href="/admin/insights" class="atab {% if _ap.startswith('/admin/insights') %}active{% endif %}"{% if _ap.startswith('/admin/insights') %} aria-current="page"{% endif %}>Insights</a>
+    </div>
+</nav>

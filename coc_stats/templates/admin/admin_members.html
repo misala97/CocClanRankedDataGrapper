@@ -1,202 +1,688 @@
 <!DOCTYPE html>
 <html lang="en">
-{% set page_title = 'Member Admin – CoC Analytics' %}
+{% set page_title = 'Members – CoC Analytics' %}
 {% include '_head.html' %}
-        /* ── NAV: see _nav.html ── */
 
-        /* search */
-        .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-        .search-input {
-            padding: 8px 14px; background: var(--surface); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px;
-            width: 260px; transition: border-color .15s;
-        }
-        .search-input:focus { outline: none; border-color: var(--accent); }
-        .count-label { font-size: 12px; color: var(--muted); margin-left: auto; }
+        /* ═══ ADMIN MEMBERS — vet joiners + maintain the roster ═══
+           Two neutral scope-console sections (Members is admin, not a game mode →
+           no mode hue). Colour is signal: verdict green/amber/red, everything else
+           gunmetal. Threat Magenta stays interactive-only. Verdict-led / detail-on-
+           demand, matching the sibling admin pages. */
+        :root { --ease: cubic-bezier(.25,1,.5,1); }
+        .container { padding-bottom: 72px; }
 
-        /* table */
-        .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        thead { background: var(--surf2); border-bottom: 1px solid var(--border); }
-        thead th {
-            padding: 11px 16px; text-align: left; font-size: 10px; font-weight: 700;
-            color: var(--muted); text-transform: uppercase; letter-spacing: .8px; white-space: nowrap;
-        }
-        tbody tr { border-bottom: 1px solid var(--bord2); transition: background .1s; }
-        tbody tr:last-child { border-bottom: none; }
-        tbody tr:hover { background: rgba(255,255,255,.02); }
-        td { padding: 10px 16px; vertical-align: middle; }
+        .msec { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-top: 22px; overflow: hidden; }
+        .msec:first-child { margin-top: 20px; }
+        .msec-head { padding: 17px 22px; border-bottom: 1px solid var(--bord2); display: flex; align-items: center; justify-content: space-between; gap: 14px 18px; flex-wrap: wrap; }
+        .msec-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .msec-ico { color: var(--muted); display: flex; flex-shrink: 0; }
+        .msec-ico svg { width: 23px; height: 23px; }
+        .msec-title { font-family: 'Big Shoulders Display', sans-serif; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; line-height: 1; }
+        .msec-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+        .msec-sub .n { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
+        .msec-body { padding: 18px 22px 20px; }
 
-        .player-name { font-weight: 600; font-size: 13px; }
-        .player-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+        .nm-run {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px;
+            background: transparent; color: var(--accent);
+            border: 1px solid color-mix(in oklch, var(--accent) 38%, transparent); border-radius: 7px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .5px;
+            text-transform: uppercase; cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s, transform .1s; white-space: nowrap;
+        }
+        .nm-run:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 10%, transparent); border-color: var(--accent); box-shadow: 0 0 12px color-mix(in oklch, var(--accent) 18%, transparent); }
+        .nm-run:active:not(:disabled) { transform: scale(.97); }
+        .nm-run:disabled { opacity: .55; cursor: default; }
+        .nm-run svg { width: 13px; height: 13px; }
+        .nm-loading { font-size: 12px; color: var(--muted); }
 
-        /* group chat toggle */
-        .gc-toggle {
-            display: inline-flex; align-items: center; gap: 8px;
-            padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer;
-            border: 1px solid; transition: all .15s; white-space: nowrap;
-        }
-        .gc-yes { background: rgba(63,185,80,.12); color: var(--green); border-color: rgba(63,185,80,.3); }
-        .gc-yes:hover { background: rgba(63,185,80,.2); }
-        .gc-no  { background: rgba(139,148,158,.08); color: var(--muted); border-color: rgba(139,148,158,.2); }
-        .gc-no:hover  { background: rgba(139,148,158,.15); border-color: rgba(139,148,158,.35); }
+        /* ── all-clear hairline (Overview pattern) ── */
+        .nm-clear { display: flex; align-items: center; gap: 12px; padding: 15px 18px; background: color-mix(in oklch, var(--green) 5%, var(--surface)); border: 1px solid color-mix(in oklch, var(--green) 22%, transparent); border-radius: 10px; font-size: 13px; color: var(--muted); }
+        .nm-clear strong { color: var(--text); font-weight: 700; }
+        .nm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px color-mix(in oklch, var(--green) 55%, transparent); flex-shrink: 0; }
 
-        /* comment input */
-        .comment-wrap { display: flex; align-items: center; gap: 8px; }
-        .comment-input {
-            flex: 1; min-width: 0; padding: 6px 10px;
-            background: var(--surf2); border: 1px solid var(--bord2);
-            border-radius: 6px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px;
-            transition: border-color .15s;
+        /* ── vetting rows ── */
+        .nm-idle { padding: 22px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; border: 1px dashed var(--border); border-radius: 8px; }
+        .nm-list { display: flex; flex-direction: column; gap: 8px; }
+        .nm-row { background: var(--surf2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .nm-main { display: flex; align-items: center; gap: 14px; padding: 13px 16px; flex-wrap: wrap; }
+        .nm-verdict { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 5px 13px; border-radius: 20px; flex-shrink: 0; white-space: nowrap; }
+        .v-accept  { background: color-mix(in oklch, var(--green) 15%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 34%, transparent); }
+        .v-consider{ background: color-mix(in oklch, var(--yellow) 15%, transparent); color: var(--yellow); border: 1px solid color-mix(in oklch, var(--yellow) 34%, transparent); }
+        .v-decline { background: color-mix(in oklch, var(--red) 14%, transparent);    color: oklch(0.66 0.200 25); border: 1px solid color-mix(in oklch, var(--red) 34%, transparent); }
+        .nm-th { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; color: var(--text); padding: 3px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; flex-shrink: 0; }
+        .nm-idblk { min-width: 150px; flex-shrink: 0; }
+        .nm-name { font-weight: 700; font-size: 14px; line-height: 1.2; }
+        .nm-name a { color: inherit; transition: color .15s; }
+        .nm-name a:hover { color: var(--accent); }
+        .nm-sub { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+        .nm-join { font-size: 10.5px; color: var(--muted); margin-top: 1px; font-family: 'Manrope', sans-serif; }
+        .nm-hero { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .nm-hero-bar { width: 66px; height: 5px; border-radius: 3px; background: var(--bord2); overflow: hidden; }
+        .nm-hero-bar > i { display: block; height: 100%; border-radius: 3px; }
+        .nm-hero-pct { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; min-width: 34px; }
+        .nm-checks { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 120px; }
+        .chk { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-family: 'Rajdhani', sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
+        .chk .cg { font-weight: 800; font-size: 11px; line-height: 1; flex-shrink: 0; }  /* ✓ / ! / ✗ — shape carries status, not colour alone */
+        .chk-pass { background: color-mix(in oklch, var(--green) 11%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 26%, transparent); }
+        .chk-warn { background: color-mix(in oklch, var(--yellow) 11%, transparent); color: var(--yellow); border: 1px solid color-mix(in oklch, var(--yellow) 26%, transparent); }
+        .chk-fail { background: color-mix(in oklch, var(--red) 10%, transparent);    color: oklch(0.66 0.200 25); border: 1px solid color-mix(in oklch, var(--red) 26%, transparent); }
+        .nm-act { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .nm-mark {
+            display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; cursor: pointer;
+            background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 7px;
+            font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .3px; white-space: nowrap;
+            transition: color .15s, border-color .15s, background .15s;
         }
-        .comment-input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
-        .comment-input::placeholder { color: var(--muted); opacity: .6; }
-        .save-btn {
-            padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif; letter-spacing: .3px; cursor: pointer;
-            background: transparent; border: 1px solid var(--border); color: var(--muted);
-            transition: all .15s; white-space: nowrap;
-        }
-        .save-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .save-btn.saved { border-color: var(--green); color: var(--green); }
+        .nm-mark:hover { color: var(--green); border-color: color-mix(in oklch, var(--green) 40%, transparent); background: color-mix(in oklch, var(--green) 8%, transparent); }
+        .nm-mark svg { width: 13px; height: 13px; }
+        .nm-err { color: oklch(0.66 0.200 25); font-size: 12px; }
 
-        /* ── FOOTER ── */
-        .page-footer {
-            text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
-            margin-top: 4px; border-top: 1px solid var(--bord2);
-            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
-        }
+        /* ── disclosure (reused from Roster) ── */
+        .nm-disc-btn { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; background: transparent; border: none; color: var(--muted); cursor: pointer; font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
+        .nm-disc-btn:hover { color: var(--text); }
+        .nm-disc-chev { display: flex; transition: transform .18s var(--ease); }
+        .nm-disc-chev svg { width: 12px; height: 12px; }
+        .nm-disc-btn[aria-expanded="true"] .nm-disc-chev { transform: rotate(90deg); color: var(--text); }
+        .nm-detail { display: none; border-top: 1px solid var(--bord2); padding: 16px; }
+        .nm-detail.open { display: block; animation: rsIn .3s var(--ease); }
+        .nm-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        .nm-dlabel { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 11px; }
+        .hero-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .hero-row .hn { font-size: 12px; width: 130px; flex-shrink: 0; }
+        .hero-row .hb { flex: 1; max-width: 110px; height: 5px; border-radius: 3px; background: var(--bord2); overflow: hidden; }
+        .hero-row .hb > i { display: block; height: 100%; border-radius: 3px; }
+        .hero-row .hv { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; min-width: 52px; }
+        .chk-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--bord2); font-size: 12px; }
+        .chk-row:last-child { border-bottom: none; }
+        .chk-row .ci { width: 14px; text-align: center; font-weight: 800; font-size: 12px; flex-shrink: 0; }
+        .chk-row .cl { font-weight: 600; width: 106px; flex-shrink: 0; }
+        .chk-row .cd { color: var(--muted); }
+        .ext-links { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 4px; }
+        .ext-link { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .3px; transition: color .15s, border-color .15s; }
+        .ext-link:hover { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, transparent); }
+        .ext-link svg { width: 13px; height: 13px; flex-shrink: 0; }
+        .rank-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; font-size: 11px; font-weight: 600; }
+        .rank-chip img { width: 16px; height: 16px; border-radius: 2px; }
 
-        .toast {
-            position: fixed; bottom: 24px; right: 24px; z-index: 999;
-            background: var(--surface); border: 1px solid var(--green); border-radius: 8px;
-            padding: 10px 18px; font-size: 13px; color: var(--green);
-            font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: .3px;
-            opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none;
+        /* ── EDITOR — filter chips ── */
+        .mfilters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
+        .mchip {
+            display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; cursor: pointer;
+            background: var(--surf2); border: 1px solid var(--border); border-radius: 8px; color: var(--muted);
+            font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .2px;
+            transition: color .15s, border-color .15s, background .15s;
         }
-        .toast.show { opacity: 1; transform: translateY(0); }
+        .mchip:hover { color: var(--text); }
+        .mchip .c { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; background: color-mix(in oklch, var(--muted) 16%, transparent); color: var(--text); }
+        .mchip.on { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 45%, transparent); background: color-mix(in oklch, var(--accent) 8%, transparent); }
+        .mchip.on .c { background: color-mix(in oklch, var(--accent) 20%, transparent); color: var(--accent); }
+        .mchip .c.near-all { opacity: .45; }  /* a filter matching ~everyone isn't useful wayfinding */
+
+        /* ── EDITOR — table ── */
+        .mtable-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .mtable { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .mtable thead th { padding: 9px 14px; text-align: left; font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); background: var(--surf2); border-bottom: 1px solid var(--border); }
+        .mtable td { padding: 9px 14px; border-bottom: 1px solid var(--bord2); vertical-align: middle; }
+        .mtable tbody tr:last-child td { border-bottom: none; }
+        .mtable tbody tr:hover { background: color-mix(in oklch, var(--text) 2%, transparent); }
+        .m-id-name { font-weight: 700; font-size: 13px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .m-id-name a { color: inherit; transition: color .15s; }
+        .m-id-name a:hover { color: var(--accent); }
+        .m-id-sub { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 1px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .m-id-sub .th { color: var(--text); font-weight: 700; }
+        .m-id-sub .lg { color: var(--blue); font-weight: 700; }
+
+        .gc { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; cursor: pointer; border-radius: 20px; font-family: 'Rajdhani', sans-serif; font-size: 11.5px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; background: transparent; border: 1px solid; transition: background .15s, border-color .15s, color .15s; }
+        .gc::before { content: ''; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .gc-yes { color: var(--green); border-color: color-mix(in oklch, var(--green) 32%, transparent); background: color-mix(in oklch, var(--green) 8%, transparent); }
+        .gc-yes::before { background: var(--green); }
+        .gc-yes:hover { background: color-mix(in oklch, var(--green) 16%, transparent); }
+        .gc-no { color: var(--muted); border-color: color-mix(in oklch, var(--muted) 24%, transparent); }
+        .gc-no::before { background: var(--muted); }
+        .gc-no:hover { color: var(--text); border-color: color-mix(in oklch, var(--muted) 44%, transparent); }
+        .gc.flip { animation: btPulse .28s var(--ease); }
+
+        .wp { display: flex; align-items: flex-end; gap: 10px; }
+        .wp-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .wp-lbl { font-family: 'Manrope', sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); }
+        .wp-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; padding: 5px 12px; border-radius: 20px; font-family: 'Rajdhani', sans-serif; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; border: 1px solid; }
+        .wp-in   { color: var(--green); border-color: color-mix(in oklch, var(--green) 34%, transparent); background: color-mix(in oklch, var(--green) 10%, transparent); }
+        .wp-out  { color: oklch(0.66 0.200 25); border-color: color-mix(in oklch, var(--red) 34%, transparent); background: color-mix(in oklch, var(--red) 10%, transparent); }
+        .wp-none { color: var(--muted); border-color: color-mix(in oklch, var(--muted) 22%, transparent); background: transparent; }
+        /* read-only in-game value reads as flat text (no pill chrome) so the bordered
+           override pill beside it is clearly the editable control */
+        .wp-api { cursor: default; background: transparent; border-color: transparent; padding: 5px 4px; min-width: 0; }
+        .wp-cust { cursor: pointer; transition: filter .15s; }
+        .wp-cust:hover { filter: brightness(1.18); }
+        .wp-cust.flip { animation: btPulse .28s var(--ease); }
+
+        .cmt { display: flex; align-items: center; gap: 8px; }
+        .cmt-in { flex: 1; min-width: 0; padding: 6px 11px; background: var(--surf2); border: 1px solid var(--bord2); border-radius: 7px; color: var(--text); font-family: 'Manrope', sans-serif; font-size: 12.5px; transition: border-color .15s; }
+        .cmt-in:focus { outline: none; border-color: var(--accent); }
+        .cmt-in::placeholder { color: var(--muted); opacity: .55; }
+        .cmt-save { padding: 6px 12px; border-radius: 7px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .3px; cursor: pointer; background: transparent; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; transition: color .15s, border-color .15s; }
+        .cmt-save:hover { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, transparent); }
+        .cmt-save.saved { color: var(--green); border-color: color-mix(in oklch, var(--green) 40%, transparent); }
+        .cmt-save.dirty { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 45%, transparent); }  /* unsaved changes */
+
+        /* ── MOBILE divided rows ── */
+        .mrows { display: none; }
+        .mr { padding: 12px 4px; border-bottom: 1px solid var(--bord2); }
+        .mr:last-child { border-bottom: none; }
+        .mr-top { display: flex; align-items: baseline; gap: 8px; }
+        .mr-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mr-name a { color: inherit; }
+        .mr-meta { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
+        .mr-meta .lg { color: var(--blue); font-weight: 700; }
+        .mr-ctrls { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 9px; }
+        .mr-ctrls .cmt { flex: 1 1 100%; }
+
+        /* ── toast (reused) ── */
+        .toast-wrap { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 600; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+        .toast { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border-radius: 9px; background: var(--surf2); border: 1px solid var(--border); color: var(--text); font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.5); animation: toastIn .28s var(--ease); }
+        .toast .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+        .toast.ok  { border-color: color-mix(in oklch, var(--green) 40%, transparent); } .toast.ok .dot  { background: var(--green); }
+        .toast.err { border-color: color-mix(in oklch, var(--red) 42%, transparent); }  .toast.err .dot { background: var(--red); }
+        .toast-act { margin-left: 4px; padding: 4px 11px; background: transparent; border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent); border-radius: 6px; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .3px; cursor: pointer; transition: background .15s; }
+        .toast-act:hover { background: color-mix(in oklch, var(--accent) 12%, transparent); }
+
+        .page-footer { text-align: center; padding: 18px; color: var(--muted); font-size: 12px; margin-top: 30px; border-top: 1px solid var(--bord2); font-family: 'Manrope', sans-serif; font-weight: 600; letter-spacing: .3px; }
+
+        @keyframes rsIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @keyframes btPulse { 0% { transform: scale(1); } 45% { transform: scale(1.16); } 100% { transform: scale(1); } }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        .reveal { animation: rsIn .34s var(--ease) both; }
+        .nm-row { animation: rsIn .3s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
+        /* Hero meter grows in as the evidence lands (scaleX — no layout animation).
+           --i inherits from the row, so each bar fills just after its row fades in. */
+        @keyframes barGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+        .nm-hero-bar > i { transform-origin: left; animation: barGrow .55s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms + 120ms); }
+        .hero-row .hb > i { transform-origin: left; animation: barGrow .5s var(--ease) both; }
+        /* mark-checked exit — a gated class, not inline styles, so reduced-motion can suppress it */
+        .nm-row.leaving { opacity: 0; transform: translateX(8px); transition: opacity .25s var(--ease), transform .25s var(--ease); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .nm-run, .nm-mark, .mchip, .gc, .wp-cust, .cmt-in, .cmt-save, .nm-disc-chev, .ext-link { transition: none; }
+            .nm-run:active { transform: none; }
+            .reveal, .nm-row, .nm-detail.open, .gc.flip, .wp-cust.flip, .toast,
+            .nm-hero-bar > i, .hero-row .hb > i { animation: none; }
+            .nm-row.leaving { transition: none; }
+        }
+        @media (max-width: 760px) {
+            .mtable-wrap { display: none; }
+            .mrows { display: block; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+            .msec-head, .msec-body { padding-left: 16px; padding-right: 16px; }
+            .nm-detail-grid { grid-template-columns: 1fr; gap: 18px; }
+            .nm-checks { flex: 1 1 100%; }
+        }
     </style>
 </head>
 <body>
 
 {% include '_nav.html' %}
 
-{% set page_header_title = 'Member <span>Administration</span>' %}
-{% set page_header_desc = 'Comments and group chat status' %}
+{% set page_header_title = 'Clan <span>Members</span>' %}
+{% set page_header_desc = 'Vet recent joiners, and keep the roster’s group-chat, war-preference and notes current.' %}
 {% set page_header_meta = [{'value': players | length, 'label': 'Active members'}] %}
 {% set page_controls %}
-<input type="search" class="selector" id="search" placeholder="Search player…" oninput="filterTable()" style="min-width:280px;">
-<span class="count-label" id="countLabel" style="color:var(--muted);font-size:13px;margin-left:4px;">{{ players | length }} members</span>
+<input type="search" class="selector" id="memberSearch" placeholder="Search name or tag…" oninput="filterRoster()" style="min-width:260px;">
 {% endset %}
 {% include '_page_header.html' %}
 
+{% include 'admin/_admin_tabs.html' %}
+
 <div class="container">
 
-    <div class="table-wrap">
-        <table id="memberTable">
-            <thead>
-                <tr>
-                    <th>Player</th>
-                    <th>Group Chat</th>
-                    <th>Comment</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for p in players %}
-            <tr data-name="{{ (p.name or '') | lower }}" data-tag="{{ p.tag | lower }}">
-                <td>
-                    <div class="player-name">{{ p.name or p.tag }}</div>
-                    <div class="player-tag">{{ p.tag }}</div>
-                </td>
-                <td>
-                    <button class="gc-toggle {% if p.in_group_chat %}gc-yes{% else %}gc-no{% endif %}"
-                            data-tag="{{ p.tag }}"
-                            data-state="{{ 'true' if p.in_group_chat else 'false' }}"
-                            onclick="toggleGroupChat(this)">
-                        {% if p.in_group_chat %}✓ In Group Chat{% else %}✗ Not in Group Chat{% endif %}
-                    </button>
-                </td>
-                <td>
-                    <div class="comment-wrap">
-                        <input class="comment-input"
-                               type="text"
-                               data-tag="{{ p.tag }}"
-                               value="{{ p.admin_comment or '' }}"
-                               placeholder="Add a note…"
-                               maxlength="300">
-                        <button class="save-btn" onclick="saveComment(this)">Save</button>
+    <!-- ══ NEW MEMBER CHECK ══ -->
+    <section class="msec" id="vetSection">
+        <div class="msec-head">
+            <div class="msec-id">
+                <span class="msec-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M3 21c0-4.2 2.7-6.5 6-6.5"/><path d="M18 8v6M15 11h6"/></svg></span>
+                <div>
+                    <div class="msec-title">New Member Check</div>
+                    <div class="msec-sub" id="vetSub">Evaluate recent joiners against clan standards</div>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span class="nm-loading" id="vetLoading" style="display:none;">Fetching live data…</span>
+                <button class="nm-run" id="vetRun" onclick="loadNewMembers()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5z"/></svg> Run check</button>
+            </div>
+        </div>
+        <div class="msec-body">
+            <div class="nm-idle" id="vetIdle">Run the check to evaluate joiners who haven’t been reviewed yet — each is a live pull from the game API.</div>
+            <div id="vetResult" style="display:none;"></div>
+        </div>
+    </section>
+
+    <!-- ══ MEMBER ROSTER ══ -->
+    <section class="msec" id="rosterSection">
+        <div class="msec-head">
+            <div class="msec-id">
+                <span class="msec-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="10" cy="8" r="3.2"/><path d="M17 13c2.2.4 3.8 2 3.8 4.2"/><circle cx="17.5" cy="7.5" r="2.6"/></svg></span>
+                <div>
+                    <div class="msec-title">Member Roster</div>
+                    <div class="msec-sub"><span class="n">{{ players | length }}</span> active member{{ 's' if players | length != 1 }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="msec-body">
+
+            <div class="mfilters" id="mfilters">
+                <button class="mchip on" data-filter="all" onclick="setFilter(this)">All <span class="c" id="cnt-all">0</span></button>
+                <button class="mchip" data-filter="nochat" onclick="setFilter(this)">Not in chat <span class="c" id="cnt-nochat">0</span></button>
+                <button class="mchip" data-filter="override" onclick="setFilter(this)">War override <span class="c" id="cnt-override">0</span></button>
+                <button class="mchip" data-filter="note" onclick="setFilter(this)">Has note <span class="c" id="cnt-note">0</span></button>
+                <button class="mchip" data-filter="unvetted" onclick="setFilter(this)">Unvetted <span class="c" id="cnt-unvetted">0</span></button>
+                <select id="mSort" class="selector" onchange="sortRoster()" style="margin-left:auto;" aria-label="Sort roster">
+                    <option value="name-asc">Name A–Z</option>
+                    <option value="name-desc">Name Z–A</option>
+                    <option value="th-desc">Town hall ↓</option>
+                    <option value="th-asc">Town hall ↑</option>
+                </select>
+            </div>
+
+            <!-- desktop table -->
+            <div class="mtable-wrap">
+                <table class="mtable" id="mtable">
+                    <thead><tr>
+                        <th>Player</th><th>Group chat</th><th>War preference</th><th>Note</th>
+                    </tr></thead>
+                    <tbody>
+                    {% for p in players %}
+                    {% set wpi = p.war_preference_in_game or '' %}
+                    {% set wpc = p.war_preference_custom or '' %}
+                    <tr data-name="{{ (p.name or '') | lower }}" data-tag="{{ p.tag | lower }}" data-th="{{ p.current_th or 0 }}"
+                        data-chat="{{ 1 if p.in_group_chat else 0 }}" data-override="{{ 1 if wpc else 0 }}"
+                        data-note="{{ 1 if p.admin_comment else 0 }}" data-unvetted="{{ 0 if p.newbie_check else 1 }}">
+                        <td>
+                            <div class="m-id-name"><a href="/player/{{ p.tag | replace('#','') }}" target="_blank" rel="noopener">{{ p.name or p.tag }}</a></div>
+                            <div class="m-id-sub">
+                                <span>{{ p.tag }}</span>
+                                {% if p.current_th %}<span class="th">TH{{ p.current_th }}</span>{% endif %}
+                                {% if p.league_tier %}<span class="lg">{{ p.league_tier }}</span>{% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <button class="gc {{ 'gc-yes' if p.in_group_chat else 'gc-no' }}" data-tag="{{ p.tag }}"
+                                    data-state="{{ 'true' if p.in_group_chat else 'false' }}"
+                                    aria-pressed="{{ 'true' if p.in_group_chat else 'false' }}"
+                                    aria-label="Group chat for {{ p.name or p.tag }}" onclick="toggleGC(this)">
+                                {{ 'In chat' if p.in_group_chat else 'Not in chat' }}
+                            </button>
+                        </td>
+                        <td>
+                            <div class="wp">
+                                <div class="wp-col"><span class="wp-lbl">In-game</span>
+                                    <span class="wp-pill wp-api wp-{{ wpi or 'none' }}" title="In-game preference (read-only)">{{ 'In' if wpi == 'in' else ('Out' if wpi == 'out' else '—') }}</span>
+                                </div>
+                                <div class="wp-col"><span class="wp-lbl">Override</span>
+                                    <button class="wp-pill wp-cust wp-{{ wpc or 'none' }}" data-tag="{{ p.tag }}" data-state="{{ wpc }}"
+                                            aria-label="Custom war preference override for {{ p.name or p.tag }}" onclick="cycleWarPref(this)">{{ 'In' if wpc == 'in' else ('Out' if wpc == 'out' else '—') }}</button>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="min-width:220px;">
+                            <div class="cmt">
+                                <input class="cmt-in" type="text" data-tag="{{ p.tag }}" value="{{ p.admin_comment or '' }}" placeholder="Add a note…" maxlength="300" aria-label="Admin note for {{ p.name or p.tag }}">
+                                <button class="cmt-save" onclick="saveComment(this)">Save</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- mobile divided rows -->
+            <div class="mrows" id="mrows">
+                {% for p in players %}
+                {% set wpi = p.war_preference_in_game or '' %}
+                {% set wpc = p.war_preference_custom or '' %}
+                <div class="mr" data-name="{{ (p.name or '') | lower }}" data-tag="{{ p.tag | lower }}" data-th="{{ p.current_th or 0 }}"
+                     data-chat="{{ 1 if p.in_group_chat else 0 }}" data-override="{{ 1 if wpc else 0 }}"
+                     data-note="{{ 1 if p.admin_comment else 0 }}" data-unvetted="{{ 0 if p.newbie_check else 1 }}">
+                    <div class="mr-top">
+                        <span class="mr-name"><a href="/player/{{ p.tag | replace('#','') }}" target="_blank" rel="noopener">{{ p.name or p.tag }}</a></span>
+                        <span class="mr-meta">{% if p.current_th %}TH{{ p.current_th }} · {% endif %}<span class="lg">{{ p.league_tier or 'Unranked' }}</span></span>
                     </div>
-                </td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                    <div class="mr-ctrls">
+                        <button class="gc {{ 'gc-yes' if p.in_group_chat else 'gc-no' }}" data-tag="{{ p.tag }}"
+                                data-state="{{ 'true' if p.in_group_chat else 'false' }}" aria-pressed="{{ 'true' if p.in_group_chat else 'false' }}"
+                                aria-label="Group chat for {{ p.name or p.tag }}" onclick="toggleGC(this)">{{ 'In chat' if p.in_group_chat else 'Not in chat' }}</button>
+                        <div class="wp">
+                            <div class="wp-col"><span class="wp-lbl">In-game</span><span class="wp-pill wp-api wp-{{ wpi or 'none' }}">{{ 'In' if wpi == 'in' else ('Out' if wpi == 'out' else '—') }}</span></div>
+                            <div class="wp-col"><span class="wp-lbl">Override</span><button class="wp-pill wp-cust wp-{{ wpc or 'none' }}" data-tag="{{ p.tag }}" data-state="{{ wpc }}" aria-label="Custom war preference override for {{ p.name or p.tag }}" onclick="cycleWarPref(this)">{{ 'In' if wpc == 'in' else ('Out' if wpc == 'out' else '—') }}</button></div>
+                        </div>
+                        <div class="cmt">
+                            <input class="cmt-in" type="text" data-tag="{{ p.tag }}" value="{{ p.admin_comment or '' }}" placeholder="Add a note…" maxlength="300" aria-label="Admin note for {{ p.name or p.tag }}">
+                            <button class="cmt-save" onclick="saveComment(this)">Save</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div id="rosterEmpty" style="display:none;color:var(--muted);font-size:13px;padding:20px 4px;text-align:center;"></div>
+        </div>
+    </section>
+
 </div>
 
-<div class="page-footer">{{ players | length }} member{{ 's' if players | length != 1 else '' }} · Member Administration</div>
-
-<div class="toast" id="toast">Saved</div>
+<div class="page-footer">Members · Admin</div>
+<div class="toast-wrap" id="toastWrap" role="status" aria-live="polite"></div>
 
 <script>
-function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 1800);
+function toast(msg, kind, action) {
+    const w = document.getElementById('toastWrap');
+    const t = document.createElement('div');
+    t.className = 'toast ' + (kind || '');
+    t.style.pointerEvents = 'auto';
+    const dot = document.createElement('span'); dot.className = 'dot';
+    const m = document.createElement('span'); m.textContent = msg;
+    t.appendChild(dot); t.appendChild(m);
+    let ttl = 3200;
+    const dismiss = () => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 320); };
+    if (action) {
+        const b = document.createElement('button');
+        b.className = 'toast-act'; b.textContent = action.label;
+        b.onclick = () => { clearTimeout(to); action.fn(); dismiss(); };
+        t.appendChild(b); ttl = 6500;
+    }
+    w.appendChild(t);
+    const to = setTimeout(dismiss, ttl);
 }
 
-async function patch(tag, data) {
+async function memberPatch(tag, data) {
     const res = await fetch(`/admin/members/${encodeURIComponent(tag)}/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     });
     return res.ok;
 }
 
-function toggleGroupChat(btn) {
-    const tag      = btn.dataset.tag;
-    const newState = btn.dataset.state !== 'true';
-    btn.dataset.state = newState ? 'true' : 'false';
-    btn.className  = 'gc-toggle ' + (newState ? 'gc-yes' : 'gc-no');
-    btn.textContent = newState ? '✓ In Group Chat' : '✗ Not in Group Chat';
-    patch(tag, { in_group_chat: newState }).then(ok => {
-        if (ok) showToast('Saved');
+// ── group chat toggle (single-click, keyboard; optimistic + revert-on-failure) ──
+function _applyGC(btn, on) {
+    btn.dataset.state = on ? 'true' : 'false';
+    btn.setAttribute('aria-pressed', on);
+    btn.className = 'gc ' + (on ? 'gc-yes' : 'gc-no');
+    btn.textContent = on ? 'In chat' : 'Not in chat';
+    syncRowAttr(btn, 'chat', on ? 1 : 0);
+}
+function toggleGC(btn) {
+    const prev = btn.dataset.state === 'true';
+    const on = !prev;
+    _applyGC(btn, on);
+    void btn.offsetWidth; btn.classList.add('flip');
+    recount();
+    memberPatch(btn.dataset.tag, { in_group_chat: on }).then(ok => {
+        if (!ok) { _applyGC(btn, prev); recount(); toast('Couldn’t save — group chat reverted', 'err'); }
+    });
+}
+
+// ── war preference custom override (single-click cycle; optimistic + revert) ──
+function _applyWP(btn, v) {
+    const label = { '': '—', in: 'In', out: 'Out' };
+    btn.dataset.state = v;
+    btn.className = 'wp-pill wp-cust wp-' + (v || 'none');
+    btn.textContent = label[v];
+    syncRowAttr(btn, 'override', v ? 1 : 0);
+}
+function cycleWarPref(btn) {
+    const order = ['', 'in', 'out'];
+    const prev = btn.dataset.state || '';
+    const next = order[(order.indexOf(prev) + 1) % order.length];
+    _applyWP(btn, next);
+    void btn.offsetWidth; btn.classList.add('flip');
+    recount();
+    memberPatch(btn.dataset.tag, { war_preference_custom: next }).then(ok => {
+        if (!ok) { _applyWP(btn, prev); recount(); toast('Couldn’t save — war preference reverted', 'err'); }
     });
 }
 
 function saveComment(btn) {
     const input = btn.previousElementSibling;
-    const tag   = input.dataset.tag;
-    patch(tag, { admin_comment: input.value }).then(ok => {
-        if (ok) {
-            btn.textContent = '✓ Saved';
-            btn.classList.add('saved');
-            showToast('Comment saved');
-            setTimeout(() => { btn.textContent = 'Save'; btn.classList.remove('saved'); }, 2000);
-        }
+    memberPatch(input.dataset.tag, { admin_comment: input.value }).then(ok => {
+        if (!ok) { toast('Could not save note', 'err'); return; }
+        input.dataset.orig = input.value;
+        btn.classList.remove('dirty');
+        btn.innerHTML = _CHECK; btn.classList.add('saved');
+        syncRowAttr(btn, 'note', input.value.trim() ? 1 : 0);
+        recount();
+        setTimeout(() => { btn.textContent = 'Save'; btn.classList.remove('saved'); }, 1800);
     });
 }
-
-// Save on Enter key
-document.querySelectorAll('.comment-input').forEach(inp => {
-    inp.addEventListener('keydown', e => {
-        if (e.key === 'Enter') inp.nextElementSibling.click();
-    });
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('cmt-in')) e.target.nextElementSibling.click();
 });
 
-function filterTable() {
-    const q = document.getElementById('search').value.toLowerCase();
-    let visible = 0;
-    document.querySelectorAll('#memberTable tbody tr').forEach(row => {
-        const match = !q || row.dataset.name.includes(q) || row.dataset.tag.includes(q);
-        row.style.display = match ? '' : 'none';
-        if (match) visible++;
-    });
-    document.getElementById('countLabel').textContent = visible + ' member' + (visible !== 1 ? 's' : '');
+// keep BOTH the desktop row and the mobile row for a tag in sync (they filter independently)
+function syncRowAttr(el, attr, val) {
+    const tag = el.dataset.tag.toLowerCase();
+    document.querySelectorAll(`#mtable tbody tr[data-tag="${tag}"], #mrows .mr[data-tag="${tag}"]`)
+        .forEach(r => r.dataset[attr] = val);
 }
+
+// ── filter chips (multi-select, AND) + search + sort ──
+const _filters = new Set();
+function setFilter(chip) {
+    const f = chip.dataset.filter;
+    if (f === 'all') _filters.clear();
+    else _filters.has(f) ? _filters.delete(f) : _filters.add(f);
+    document.querySelectorAll('.mchip').forEach(c => {
+        const cf = c.dataset.filter;
+        c.classList.toggle('on', cf === 'all' ? _filters.size === 0 : _filters.has(cf));
+    });
+    filterRoster();
+}
+function _pass(row, f) {
+    if (f === 'nochat')   return row.dataset.chat === '0';
+    if (f === 'override') return row.dataset.override === '1';
+    if (f === 'note')     return row.dataset.note === '1';
+    if (f === 'unvetted') return row.dataset.unvetted === '1';
+    return true;
+}
+function _match(row, q) {
+    if (q && !(row.dataset.name.includes(q) || row.dataset.tag.includes(q))) return false;
+    for (const f of _filters) if (!_pass(row, f)) return false;   // every active filter must pass
+    return true;
+}
+function filterRoster() {
+    const q = (document.getElementById('memberSearch').value || '').toLowerCase();
+    let shown = 0;
+    document.querySelectorAll('#mtable tbody tr').forEach(r => { const m = _match(r, q); r.style.display = m ? '' : 'none'; if (m) shown++; });
+    document.querySelectorAll('#mrows .mr').forEach(r => { r.style.display = _match(r, q) ? '' : 'none'; });
+    const empty = document.getElementById('rosterEmpty');
+    empty.style.display = shown ? 'none' : '';
+    if (!shown) empty.textContent = q ? `No members match “${q}”.` : 'No members in this filter.';
+}
+function sortRoster() {
+    const [key, dir] = document.getElementById('mSort').value.split('-');
+    const d = dir === 'desc' ? -1 : 1;
+    const cmp = (a, b) => key === 'th'
+        ? (((+a.dataset.th || 0) - (+b.dataset.th || 0)) * d) || a.dataset.name.localeCompare(b.dataset.name)
+        : a.dataset.name.localeCompare(b.dataset.name) * d;
+    const tbody = document.querySelector('#mtable tbody');
+    Array.from(tbody.children).sort(cmp).forEach(r => tbody.appendChild(r));
+    const mrows = document.getElementById('mrows');
+    Array.from(mrows.children).sort(cmp).forEach(r => mrows.appendChild(r));
+}
+function recount() {
+    const rows = Array.from(document.querySelectorAll('#mtable tbody tr'));
+    const total = rows.length;
+    const set = (id, n) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = n;
+        // fade counts that barely subset the roster — a filter matching ~everyone isn't wayfinding
+        el.classList.toggle('near-all', id !== 'cnt-all' && total > 0 && n >= total * 0.9);
+    };
+    set('cnt-all', total);
+    set('cnt-nochat',   rows.filter(r => r.dataset.chat === '0').length);
+    set('cnt-override', rows.filter(r => r.dataset.override === '1').length);
+    set('cnt-note',     rows.filter(r => r.dataset.note === '1').length);
+    set('cnt-unvetted', rows.filter(r => r.dataset.unvetted === '1').length);
+}
+
+// ── NEW MEMBER CHECK ──
+const V = {
+    accept:   { cls: 'v-accept',   label: 'Accept' },
+    consider: { cls: 'v-consider', label: 'Consider' },
+    decline:  { cls: 'v-decline',  label: 'Decline' },
+};
+function heroColor(pct) { return pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)'; }
+const CHK = { pass: 'chk-pass', warn: 'chk-warn', fail: 'chk-fail' };
+const CHK_DOT = { pass: 'var(--green)', warn: 'var(--yellow)', fail: 'var(--red)' };
+const CHK_GLYPH = { pass: '✓', warn: '!', fail: '✗' };  // shape, not colour-only (a11y)
+
+function loadNewMembers() {
+    const btn = document.getElementById('vetRun'), loading = document.getElementById('vetLoading'), result = document.getElementById('vetResult');
+    btn.disabled = true; loading.style.display = 'inline'; result.style.display = 'none';
+    document.getElementById('vetIdle').style.display = 'none';
+
+    fetch('/admin/evaluate-new-members', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false; loading.style.display = 'none';
+            renderNewMembers(data.results || []);
+        })
+        .catch(() => {
+            btn.disabled = false; loading.style.display = 'none';
+            document.getElementById('vetIdle').style.display = '';
+            toast('Could not fetch new-member data', 'err');
+        });
+}
+
+let _vetResults = [];
+const _vetChecked = new Set();
+
+function renderNewMembers(results) {
+    _vetResults = results || [];
+    _vetChecked.clear();
+    renderVetList();
+}
+function renderVetList() {
+    const wrap = document.getElementById('vetResult');
+    wrap.style.display = '';
+    const shown = _vetResults.filter(p => !_vetChecked.has(p.tag.toLowerCase()));
+    const n = shown.length;
+    document.getElementById('vetSub').innerHTML = `<span class="n">${n}</span> joiner${n !== 1 ? 's' : ''} to review`;
+    if (!n) {
+        wrap.innerHTML = `<div class="nm-clear reveal"><span class="nm-dot"></span><span><strong>All clear</strong> — every joiner has been reviewed.</span></div>`;
+        return;
+    }
+    wrap.innerHTML = `<div class="nm-list">${shown.map((p, i) => nmRow(p, i)).join('')}</div>`;
+}
+
+function nmRow(p, i) {
+    const rowId = 'nm-' + p.tag.replace('#', '');
+    const tagClean = p.tag.replace('#', '');
+    const joined = (p.days_ago !== '?' && p.days_ago != null) ? ` · joined ${p.days_ago}d ago` : '';
+
+    if (p.error) {
+        return `<div class="nm-row" id="${rowId}" style="--i:${i}">
+            <div class="nm-main">
+                <span class="nm-verdict v-decline">Error</span>
+                <div class="nm-idblk" style="flex:1;"><div class="nm-name">${p.name}</div><div class="nm-sub">${p.tag}</div>
+                    <div class="nm-err">Live API error: ${p.error}</div></div>
+                <div class="nm-act"><button class="nm-mark" onclick="markChecked('${p.tag}','${rowId}')">${_CHECK} Mark checked</button></div>
+            </div></div>`;
+    }
+
+    const v = V[p.verdict] || V.consider;
+    const hc = heroColor(p.hero_pct);
+    const chips = (p.checks || []).map(c => `<span class="chk ${CHK[c.status] || 'chk-warn'}"><b class="cg">${CHK_GLYPH[c.status] || '!'}</b>${c.label}</span>`).join('');
+
+    return `<div class="nm-row" id="${rowId}" style="--i:${i}">
+        <div class="nm-main">
+            <span class="nm-verdict ${v.cls}">${v.label}</span>
+            <span class="nm-th">TH${p.th}</span>
+            <div class="nm-idblk">
+                <div class="nm-name"><a href="/player/${tagClean}" target="_blank" rel="noopener">${p.name}</a></div>
+                <div class="nm-sub">${p.tag}</div>
+                <div class="nm-join">${p.join_date && p.join_date !== '?' ? p.join_date : ''}${joined}</div>
+            </div>
+            <div class="nm-hero" title="Heroes at ${p.hero_pct}% of TH max">
+                <div class="nm-hero-bar"><i style="width:${Math.min(p.hero_pct, 100)}%;background:${hc};"></i></div>
+                <span class="nm-hero-pct" style="color:${hc};">${p.hero_pct}%</span>
+            </div>
+            <div class="nm-checks">${chips}</div>
+            <div class="nm-act">
+                <button class="nm-disc-btn" aria-expanded="false" aria-controls="${rowId}-d" onclick="toggleDetail(this)">Detail <span class="nm-disc-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button>
+                <button class="nm-mark" onclick="markChecked('${p.tag}','${rowId}')">${_CHECK} Mark checked</button>
+            </div>
+        </div>
+        <div class="nm-detail" id="${rowId}-d">${nmDetail(p, tagClean)}</div>
+    </div>`;
+}
+
+const _CHECK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>`;
+
+function nmDetail(p, tagClean) {
+    const heroes = [...(p.heroes || [])].sort((a, b) => b.max_level - a.max_level).map(h => {
+        const pct = h.max_level > 0 ? Math.round(h.level / h.max_level * 100) : 0;
+        const col = heroColor(pct);
+        return `<div class="hero-row"><span class="hn">${h.name}</span><div class="hb"><i style="width:${pct}%;background:${col};"></i></div><span class="hv" style="color:${col};">${h.level}/${h.max_level}</span></div>`;
+    }).join('') || '<span style="color:var(--muted);font-size:12px;">No heroes unlocked</span>';
+
+    const checks = (p.checks || []).map(c => `<div class="chk-row"><span class="ci" style="color:${CHK_DOT[c.status] || 'var(--yellow)'};">${CHK_GLYPH[c.status] || '!'}</span><span class="cl">${c.label}</span><span class="cd">${c.detail}</span></div>`).join('');
+
+    const rank = p.ranked_league
+        ? `<span class="rank-chip">${p.league_icon ? `<img src="${p.league_icon}" alt="">` : ''}${p.ranked_league}</span>`
+        : `<span class="rank-chip" style="color:var(--muted);">Unranked</span>`;
+
+    const arrow = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>`;
+
+    return `<div style="margin-bottom:15px;">${rank}</div>
+        <div class="nm-detail-grid">
+            <div><div class="nm-dlabel">Hero development</div>${heroes}</div>
+            <div><div class="nm-dlabel">Checks</div>${checks}</div>
+        </div>
+        <div style="margin-top:16px;border-top:1px solid var(--bord2);padding-top:14px;">
+            <div class="nm-dlabel">External profile</div>
+            <div class="ext-links">
+                <a class="ext-link" href="/player/${tagClean}" target="_blank" rel="noopener">Player page ${arrow}</a>
+                <a class="ext-link" href="https://clashspot.net/en/player/${tagClean}/view" target="_blank" rel="noopener">Clashspot ${arrow}</a>
+            </div>
+        </div>`;
+}
+
+function toggleDetail(btn) {
+    const open = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    document.getElementById(btn.getAttribute('aria-controls')).classList.toggle('open', !open);
+}
+
+function _setRosterVetted(tag, vetted) {
+    document.querySelectorAll(`#mtable tbody tr[data-tag="${tag.toLowerCase()}"], #mrows .mr[data-tag="${tag.toLowerCase()}"]`)
+        .forEach(r => r.dataset.unvetted = vetted ? 0 : 1);
+    recount();
+}
+function markChecked(tag, rowId) {
+    memberPatch(tag, { newbie_check: true }).then(ok => {
+        if (!ok) { toast('Could not mark checked', 'err'); return; }
+        const row = document.getElementById(rowId);
+        const finish = () => { _vetChecked.add(tag.toLowerCase()); renderVetList(); };
+        if (row) { row.classList.add('leaving'); setTimeout(finish, 260); } else finish();
+        _setRosterVetted(tag, true);
+        toast('Marked as checked', 'ok', { label: 'Undo', fn: () => undoChecked(tag) });
+    });
+}
+function undoChecked(tag) {
+    memberPatch(tag, { newbie_check: false }).then(ok => {
+        if (!ok) { toast('Could not undo', 'err'); return; }
+        _vetChecked.delete(tag.toLowerCase());
+        renderVetList();
+        _setRosterVetted(tag, false);
+    });
+}
+
+// unsaved-note indicator — mark Save when a note differs from its saved value
+document.querySelectorAll('.cmt-in').forEach(inp => {
+    inp.dataset.orig = inp.value;
+    inp.addEventListener('input', () => {
+        inp.nextElementSibling.classList.toggle('dirty', inp.value !== inp.dataset.orig);
+    });
+});
+recount();
 </script>
 
 </body>
