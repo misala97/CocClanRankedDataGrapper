@@ -40,7 +40,7 @@
     /* Thin-defense disclosure — replaces the old mouse-only title attribute. */
     .thin-flag { background: none; border: 0; padding: 0 2px; color: inherit;
                  font: inherit; cursor: pointer; text-decoration: underline dotted; }
-    .thin-pop, .info-pop {
+    .thin-pop {
         position: fixed; margin: 0; inset: auto; background: var(--surf2);
         border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
         max-width: 260px; font-size: 12px; line-height: 1.5; color: var(--text);
@@ -509,7 +509,7 @@ function renderDetail(tag) {
         parts.push('<div class="dd-verdicts">' + VERDICT_BANDS.map(function (band) {
             const label = band[0], badge = band[1];
             const count = (row.verdict_record || {})[label] || 0;
-            return '<span class="' + badge + '" data-verdict="' + esc(label) +
+            return '<span class="' + esc(badge) + '" data-verdict="' + esc(label) +
                 '" aria-label="' + esc(label) + ': ' + count + '">' + count + '</span>';
         }).join('') + '</div>');
         const bestRec = (p.records || []).find(function (r) { return r.score === row.best; });
