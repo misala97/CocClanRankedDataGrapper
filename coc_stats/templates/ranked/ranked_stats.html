@@ -4,67 +4,299 @@
 {% set chartjs = true %}
 {% include '_head.html' %}
 
-    /* ═══ THE RECORD — long-term Ranked. Structural pass only; visual language
-       comes from a later impeccable pass. ═══ */
-    .container { padding-bottom: 72px; }
+    /* ═══ THE RECORD — long-term Ranked ═════════════════════════════════
+       Night-ops thermal scope, Ranked wears Recon Blue (--rk). Magenta stays
+       interactive/focus only (One Hue One Job). Flat: depth is bg → surface →
+       surf2, never shadow. Numbers are JetBrains Mono, full stop. */
+    .container { padding-bottom: 72px; --rk: var(--blue); --ease: cubic-bezier(0.25,1,0.5,1); }
 
-    .form-verdict { font-weight: 700; }
-    .form-chart-wrap { position: relative; height: 220px; margin: 16px 0 28px; }
+    .rk-num { font-family: 'JetBrains Mono', monospace; font-weight: 700;
+              font-variant-numeric: tabular-nums; }
+    .rk-cap { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px;
+              text-transform: uppercase; color: var(--muted); }
+    .rk-section { margin-top: 26px; }
+    .rk-section > .rk-cap { display: block; margin-bottom: 12px; }
 
-    .mv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
-    .mv-band { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-    .mv-band h3 { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; margin: 0 0 10px; }
-    .mv-empty { color: var(--muted); font-size: 12px; }
-
-    /* Movers entries and tail rows are real buttons (a drill-down opener), not
-       inert rows — laid out to read the same as the old inert divs did. */
-    .mv-toggle, .tail-toggle {
-        display: flex; justify-content: space-between; align-items: center; gap: 10px;
-        width: 100%; padding: 4px 0; background: none; border: 0; color: inherit;
-        font: inherit; text-align: left; cursor: pointer;
+    /* ── ZONE 1 — CLAN FORM (featured tier) ── */
+    .form-panel {
+        border: 1px solid color-mix(in oklch, var(--rk) 30%, var(--border));
+        background: color-mix(in oklch, var(--rk) 5%, var(--surface));
+        border-radius: 12px; padding: 20px 22px; margin-top: 4px;
     }
+    .form-verdict {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+        font-size: clamp(19px, 2.5vw, 26px); line-height: 1.12; letter-spacing: 0.3px;
+        text-wrap: balance; margin: 0; color: var(--text);
+    }
+    .form-verdict .dir { text-transform: uppercase; }
+    .form-climbing .dir { color: var(--green); }
+    .form-slipping .dir { color: var(--red); }
+    .form-holding  .dir { color: var(--rk); }
+    .form-verdict .rk-num { font-size: 0.9em; color: var(--text); }
+    .form-verdict .peak { color: var(--muted); font-weight: 700;
+        font-family: 'Manrope', sans-serif; font-size: 13px; display: block;
+        margin-top: 8px; letter-spacing: 0; text-transform: none; }
+    .form-verdict .peak .rk-num { font-size: 13px; }
+    .form-chart-wrap { position: relative; height: 220px; margin: 18px 0 4px; }
+    .form-live-note {
+        display: flex; gap: 8px; align-items: baseline; color: var(--muted);
+        font-size: 12px; margin: 14px 0 0; padding-top: 12px;
+        border-top: 1px solid var(--bord2);
+    }
+    .form-live-note::before {
+        content: ''; width: 7px; height: 7px; border-radius: 50%; flex: none;
+        align-self: center; background: var(--rk);
+        box-shadow: 0 0 6px color-mix(in oklch, var(--rk) 55%, transparent);
+        animation: rkPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes rkPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+    /* ── ZONE 2 — MOVERS (four IFF-typed exception bands) ── */
+    .mv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .mv-band {
+        --band: var(--muted);
+        border: 1px solid color-mix(in oklch, var(--band) 26%, var(--border));
+        background: color-mix(in oklch, var(--band) 4%, var(--surface));
+        border-radius: 10px; padding: 14px 15px; min-width: 0;
+    }
+    .mv-band[data-band="surging"]    { --band: var(--green); }
+    .mv-band[data-band="sliding"]    { --band: var(--red); }
+    .mv-band[data-band="unreliable"] { --band: var(--yellow); }
+    .mv-band[data-band="absent"]     { --band: var(--muted); }
+    .mv-band h3 {
+        font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px;
+        text-transform: uppercase; margin: 0 0 4px; color: var(--band);
+    }
+    .mv-empty { color: var(--muted); font-size: 12px; margin: 6px 0 2px; opacity: 0.7; }
+
+    /* Movers + tail entries are drill-down openers (real buttons), styled as
+       quiet compact rows with the full hover/focus/active chain. */
+    .mv-toggle, .tail-toggle {
+        display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+        width: 100%; padding: 7px 8px; margin: 3px -8px 0; border: 0; border-radius: 7px;
+        background: none; color: var(--text); font-family: 'Manrope', sans-serif;
+        font-size: 13px; text-align: left; cursor: pointer;
+        transition: background .15s var(--ease);
+    }
+    .mv-toggle > span:first-child, .tail-toggle > span:first-child {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .mv-toggle > span:last-child {
+        font-family: 'JetBrains Mono', monospace; font-weight: 700; flex: none;
+        font-variant-numeric: tabular-nums; color: var(--band);
+    }
+    .tail-toggle > span:last-child {
+        font-family: 'JetBrains Mono', monospace; font-weight: 700; flex: none;
+        color: var(--muted); font-size: 12px;
+    }
+    .mv-toggle:hover, .tail-toggle:hover { background: var(--surf2); }
+    .mv-toggle:active, .tail-toggle:active { background: var(--surf2); transform: scale(0.99); }
+    .mv-toggle:focus-visible, .tail-toggle:focus-visible {
+        outline: 2px solid var(--accent); outline-offset: 1px;
+    }
+
     .pd-panel { display: none; }
     .pd-panel.open { display: block; }
+    .pd-panel.open .pd-body { animation: ddIn .18s var(--ease) both; }
 
+    /* ── ZONE 3 — THE RECORD (dense flat table) ── */
+    .rec-scroll { overflow-x: auto; scrollbar-width: thin;
+        scrollbar-color: color-mix(in oklch, var(--muted) 38%, transparent) transparent; }
+    .rec-scroll::-webkit-scrollbar { height: 11px; }
+    .rec-scroll::-webkit-scrollbar-track { background: transparent; }
+    .rec-scroll::-webkit-scrollbar-thumb {
+        background: color-mix(in oklch, var(--muted) 38%, transparent);
+        border: 3px solid transparent; background-clip: padding-box; border-radius: 6px;
+    }
+    .rec-scroll::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in oklch, var(--muted) 62%, transparent); background-clip: padding-box;
+    }
     #record-table { width: 100%; border-collapse: collapse; }
-    #record-table th { text-align: left; font-size: 10.5px; letter-spacing: 1.2px;
-                       text-transform: uppercase; padding: 8px 10px; cursor: pointer; }
-    #record-table td { padding: 8px 10px; border-top: 1px solid var(--bord2); }
-    .rec-toggle { background: none; border: 0; color: inherit; font: inherit;
-                  cursor: pointer; text-align: left; width: 100%; }
-    .rec-detail { display: none; }
-    .rec-detail.open { display: table-row; }
-    .rec-tail { margin-top: 24px; }
-    .rec-tail h3 { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; }
+    #record-table th {
+        text-align: left; font-family: 'Manrope', sans-serif; font-size: 10px;
+        font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase;
+        color: var(--muted); padding: 9px 10px; white-space: nowrap;
+        border-bottom: 1px solid var(--border); position: relative;
+    }
+    #record-table th[data-sort] { cursor: pointer; user-select: none; transition: color .15s var(--ease); }
+    #record-table th[data-sort]:hover { color: var(--text); }
+    #record-table th[data-sort]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    #record-table th[aria-sort] { color: var(--rk); }
+    #record-table th[aria-sort]::after {
+        content: '▲'; font-size: 7px; margin-left: 5px; vertical-align: middle;
+    }
+    #record-table th[aria-sort="descending"]::after { content: '▼'; }
+    #record-table td { padding: 9px 10px; border-top: 1px solid var(--bord2); font-size: 13px; white-space: nowrap; }
+    #record-table tr.rec-row { transition: background .13s var(--ease); }
+    #record-table tr.rec-row:hover { background: color-mix(in oklch, var(--rk) 5%, var(--surf2)); }
+    .rec-rank { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 12px; width: 1%; }
+    .rec-toggle {
+        background: none; border: 0; padding: 0; color: var(--text); font-family: 'Manrope', sans-serif;
+        font-size: 13px; font-weight: 600; cursor: pointer; text-align: left; width: 100%;
+        display: inline-flex; align-items: center; gap: 7px; transition: color .13s var(--ease);
+    }
+    .rec-toggle::before {
+        content: '▸'; color: var(--muted); font-size: 9px; transition: transform .15s var(--ease), color .15s var(--ease);
+    }
+    .rec-row:hover .rec-toggle, .rec-toggle:hover { color: var(--rk); }
+    .rec-row:hover .rec-toggle::before { color: var(--rk); }
+    tr.rec-detail.open + tr .rec-toggle::before,
+    .rec-row[aria-expanded] .rec-toggle::before { transform: none; }
+    .rec-toggle[aria-expanded="true"]::before { transform: rotate(90deg); color: var(--rk); }
+    .rec-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+    td.rec-th, td.rec-num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+    td.rec-th { color: var(--muted); font-size: 12px; }
+    /* Mean wears its verdict tier as a colored number, not the full badge pill —
+       neutralize the sitewide badge bg/border that the class would otherwise paint. */
+    #record-table td.rec-mean { background: none; border-top: 1px solid var(--bord2); }
+    .rec-mean { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .rec-mean.badge-godlike  { color: oklch(0.70 0.170 290); }
+    .rec-mean.badge-dominant { color: oklch(0.70 0.190 330); }
+    .rec-mean.badge-wow      { color: var(--green); }
+    .rec-mean.badge-good     { color: var(--blue); }
+    .rec-mean.badge-warning  { color: var(--orange); }
+    .rec-mean.badge-suck     { color: oklch(0.68 0.200 25); }
+    .rec-mean.badge-useless  { color: var(--muted); }
+    .rec-spark { display: block; vertical-align: middle; }
+    .rec-rel {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+        color: var(--muted);
+    }
+    .rec-rel[data-rel="metronome"] { color: var(--green); }
+    .rec-rel[data-rel="erratic"]   { color: var(--yellow); }
+    .rec-trend { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rec-trend.up   { color: var(--green); }
+    .rec-trend.down { color: var(--red); }
+    .rec-trend.flat { color: var(--muted); }
+    .rec-att { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-size: 12px; }
+    .rec-att.full { color: var(--green); }
+    .rec-att.short { color: var(--orange); }
+    .rec-league { font-size: 12px; color: var(--muted); }
+    .rec-league .mv-up   { color: var(--green); font-family: 'JetBrains Mono', monospace; }
+    .rec-league .mv-down { color: var(--red); font-family: 'JetBrains Mono', monospace; }
+    td.rec-def { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-size: 12px; }
+    td.rec-def.pos { color: var(--green); }
+    td.rec-def.neg { color: var(--muted); }
 
-    /* Thin-defense disclosure — replaces the old mouse-only title attribute. */
-    .thin-flag { background: none; border: 0; padding: 0 2px; color: inherit;
-                 font: inherit; cursor: pointer; text-decoration: underline dotted; }
+    /* Verdict strip — 8 fixed slots, a mini distribution. Populated slots glow
+       in their band hue; zero slots recede so the eye catches where a player lands. */
+    .rec-verdicts { display: inline-flex; gap: 2px; }
+    .rec-verdicts span {
+        font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700;
+        min-width: 17px; text-align: center; padding: 3px 0; border-radius: 3px;
+        font-variant-numeric: tabular-nums;
+    }
+    .rec-verdicts span[data-zero] { color: color-mix(in oklch, var(--muted) 45%, transparent); background: none; }
+    .thin-flag {
+        background: none; border: 0; padding: 0 1px; margin-left: 1px; color: var(--yellow);
+        font: inherit; font-weight: 700; cursor: pointer; line-height: 1;
+    }
+    .thin-flag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
     .thin-pop {
         position: fixed; margin: 0; inset: auto; background: var(--surf2);
         border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
         max-width: 260px; font-size: 12px; line-height: 1.5; color: var(--text);
-        box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 9999;
+        box-shadow: 0 8px 24px rgba(0,0,0,.5);
     }
     .thin-pop::backdrop { background: transparent; }
 
-    .form-live-note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    /* Tail sections — quiet, demoted, but reachable. */
+    .rec-tail { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--bord2); }
+    .rec-tail h3 {
+        font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+        color: var(--muted); margin: 0 0 4px;
+    }
+
+    /* ── ZONE 4 — DRILL-DOWN (opens recessed from its row) ── */
+    .rec-detail { display: none; }
+    .rec-detail.open { display: table-row; }
+    .rec-detail > td { padding: 0 !important; border-top: 0 !important; }
+    .rec-detail-body, .pd-panel .pd-body { }
+    .rec-detail.open .rec-detail-body {
+        background: var(--bg); border-top: 2px solid var(--rk);
+        padding: 18px 22px 20px; animation: ddIn .18s var(--ease) both;
+    }
+    /* Top accent, not a side-stripe (side-stripe >1px is a banned accent). Matches
+       the table drill-down's border-top language so both openers read the same. */
+    .pd-panel .pd-body {
+        background: var(--bg); border: 1px solid var(--bord2); border-top: 2px solid var(--rk);
+        border-radius: 8px; padding: 14px 16px; margin: 4px 0 10px;
+    }
+    .dd-open {
+        font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+        font-size: 17px; letter-spacing: 0.3px; color: var(--rk); margin: 0 0 14px;
+    }
+    .dd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 26px; }
+    .dd-block { margin: 0 0 16px; break-inside: avoid; }
+    .dd-block h4 {
+        font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+        color: var(--muted); margin: 0 0 7px; padding-bottom: 5px;
+        border-bottom: 1px solid var(--bord2);
+    }
+    .dd-block p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text); }
+    .dd-block > ul { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; color: var(--text); line-height: 1.6; }
+    .dd-matchup { width: 100%; border-collapse: collapse; margin-top: 2px; }
+    .dd-matchup th {
+        text-align: right; padding: 3px 8px; font-size: 9.5px; font-weight: 700;
+        letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted);
+        border-bottom: 1px solid var(--bord2);
+    }
+    .dd-matchup th:first-child, .dd-matchup td:first-child { text-align: left; }
+    .dd-matchup td {
+        text-align: right; padding: 5px 8px; font-size: 12.5px;
+        font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+        border-top: 1px solid var(--bord2);
+    }
+    .dd-matchup td:first-child { font-family: 'Manrope', sans-serif; color: var(--muted); }
+    .dd-matchup .d-pos { color: var(--green); }
+    .dd-matchup .d-neg { color: var(--red); }
+    .dd-note { color: var(--muted); font-size: 11.5px; margin: 7px 0 0; }
+    .dd-markers { margin: 8px 0 0; padding-left: 16px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .dd-markers .mk-up   { color: var(--green); }
+    .dd-markers .mk-down { color: var(--red); }
+    .dd-markers .mk-th   { color: var(--rk); }
+    .dd-career { max-width: 100%; height: auto; display: block; margin-top: 2px; }
+    .dd-verdicts { display: flex; gap: 3px; margin-bottom: 8px; }
+    .dd-verdicts span {
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+        min-width: 22px; text-align: center; padding: 4px 0; border-radius: 4px;
+        font-variant-numeric: tabular-nums;
+    }
+    .dd-verdicts span[data-zero] { color: color-mix(in oklch, var(--muted) 45%, transparent); background: none; }
+    .dd-mono { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
+
+    @keyframes ddIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
     @media (max-width: 760px) {
         .mv-grid { grid-template-columns: 1fr; }
         #record-table thead { display: none; }
-        #record-table tr.rec-row { display: block; border-top: 1px solid var(--bord2); }
-        #record-table tr.rec-row td { display: inline-block; border: 0; padding: 4px 8px; }
+        #record-table tbody { display: block; }
+        #record-table tr.rec-row {
+            display: grid; grid-template-columns: auto 1fr auto;
+            gap: 2px 10px; align-items: baseline; padding: 10px 4px;
+            border-top: 1px solid var(--bord2);
+        }
+        #record-table tr.rec-row td { display: inline-block; border: 0; padding: 0; white-space: normal; }
+        #record-table td.rec-rank { grid-row: 1; grid-column: 1; }
+        #record-table tr.rec-row td:nth-child(2) { grid-row: 1; grid-column: 2; }
+        #record-table td.rec-mean { grid-row: 1; grid-column: 3; text-align: right; }
+        #record-table tr.rec-row td:nth-child(5),
+        #record-table td.rec-th, .rec-rel, .rec-trend, .rec-att, .rec-league, td.rec-def {
+            grid-row: 2; grid-column: 1 / -1;
+        }
+        #record-table tr.rec-row td.rec-verdicts { grid-row: 3; grid-column: 1 / -1; }
+        #record-table tr.rec-row td:nth-child(5),
+        #record-table td.rec-th, td.rec-rel, td.rec-trend, td.rec-att, td.rec-league, td.rec-def {
+            display: inline-flex; margin-right: 12px;
+        }
+        .rec-detail.open .rec-detail-body { padding: 16px; }
     }
-
-    .dd-block { margin: 14px 0; }
-    .dd-block h4 { font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase;
-                   color: var(--muted); margin: 0 0 6px; }
-    .dd-matchup { width: 100%; border-collapse: collapse; }
-    .dd-matchup th, .dd-matchup td { text-align: left; padding: 4px 8px; font-size: 12px; }
-    .dd-note { color: var(--muted); font-size: 11.5px; }
-    .dd-markers { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
-    .dd-career { max-width: 100%; }
+    @media (prefers-reduced-motion: reduce) {
+        .form-live-note::before { animation: none; }
+        .pd-panel.open .pd-body, .rec-detail.open .rec-detail-body { animation: none; }
+        .mv-toggle, .tail-toggle, .rec-row, .rec-toggle, .rec-toggle::before, #record-table th { transition: none; }
+        .mv-toggle:active, .tail-toggle:active { transform: none; }
+    }
 </head>
 <body>
 {% include '_nav.html' %}
@@ -95,25 +327,30 @@
 <div class="container">
 
     {# ── ZONE 1 — CLAN FORM ─────────────────────────────────────────── #}
-    <section aria-labelledby="form-h">
+    <section aria-labelledby="form-h" style="margin-top:4px">
         <h2 id="form-h" class="sr-only">Clan form</h2>
-        <p class="form-verdict form-{{ form.direction }}">
-            Clan form is <strong>{{ form.direction }}</strong> —
-            {{ form.delta }} points, {{ form.basis }}.
-            Peak was {{ form.peak_mean }} on {{ form.peak_label }}; now {{ form.current }}.
-        </p>
-        <div class="form-chart-wrap"><canvas id="form-chart"></canvas></div>
-        {% if live_season %}
-        <p class="form-live-note">
-            {{ live_season.label }} is still in progress ({{ live_season.participants }} attacking so far)
-            — not counted in the line above or any average on this page.
-        </p>
-        {% endif %}
+        <div class="form-panel">
+            <p class="form-verdict form-{{ form.direction }}">
+                Clan form is <span class="dir">{{ form.direction }}</span> —
+                <span class="rk-num">{{ '%+.1f' % form.delta }}</span> pts, {{ form.basis }}.
+                <span class="peak">Peak <span class="rk-num">{{ form.peak_mean }}</span> on {{ form.peak_label }}
+                    &nbsp;·&nbsp; now <span class="rk-num">{{ form.current }}</span></span>
+            </p>
+            <div class="form-chart-wrap"><canvas id="form-chart"></canvas></div>
+            {% if live_season %}
+            <p class="form-live-note">
+                <span>{{ live_season.label }} is still in progress
+                ({{ live_season.participants }} attacking so far) — not counted in the line above
+                or any average on this page.</span>
+            </p>
+            {% endif %}
+        </div>
     </section>
 
     {# ── ZONE 2 — MOVERS ────────────────────────────────────────────── #}
-    <section class="mv-grid" aria-labelledby="mv-h">
-        <h2 id="mv-h" class="sr-only">Movers</h2>
+    <section class="rk-section" aria-labelledby="mv-h">
+        <h2 id="mv-h" class="rk-cap">Who's moving</h2>
+        <div class="mv-grid">
         {% for band, title, field, suffix in [
             ('surging',    'Surging',    'trend',      ' pts'),
             ('sliding',    'Sliding',    'trend',      ' pts'),
@@ -144,11 +381,13 @@
             {% endif %}
         </div>
         {% endfor %}
+        </div>
     </section>
 
     {# ── ZONE 3 — THE RECORD ────────────────────────────────────────── #}
-    <section aria-labelledby="rec-h">
-        <h2 id="rec-h" class="sr-only">The record</h2>
+    <section class="rk-section" aria-labelledby="rec-h">
+        <h2 id="rec-h" class="rk-cap">Season by season</h2>
+        <div class="rec-scroll">
         <table id="record-table">
             <thead>
                 <tr>
@@ -177,27 +416,30 @@
                             {{ r.player_name }}
                         </button>
                     </td>
-                    <td>{{ r.townhall_now }}</td>
+                    <td class="rec-th">{{ r.townhall_now }}</td>
                     <td class="rec-mean {{ r.mean_badge }}">{{ r.mean }}</td>
                     <td><canvas class="rec-spark" width="80" height="20"
                                 data-scores="{{ r.scores | join(',') }}"></canvas></td>
-                    <td>{{ r.reliability }}</td>
-                    <td>{% if r.trend is not none %}{{ '%+.1f' % r.trend }}{% else %}—{% endif %}</td>
-                    <td>{% if r.attendance < 1.0 %}{{ (r.attendance * 100) | round(1) }}%{% else %}✓{% endif %}</td>
-                    <td>{{ r.league_now }}{% if r.league_move %} ({{ '%+d' % r.league_move }}){% endif %}</td>
-                    <td>
+                    <td><span class="rec-rel" data-rel="{{ r.reliability }}">{{ r.reliability }}</span></td>
+                    <td class="rec-trend {{ 'up' if (r.trend or 0) > 0 else 'down' if (r.trend or 0) < 0 else 'flat' }}">
+                        {%- if r.trend is not none %}{{ '%+.1f' % r.trend }}{% else %}—{% endif -%}
+                    </td>
+                    <td class="rec-att {{ 'full' if r.attendance >= 1.0 else 'short' }}">
+                        {%- if r.attendance < 1.0 %}{{ (r.attendance * 100) | round(1) }}%{% else %}✓{% endif -%}
+                    </td>
+                    <td class="rec-league">{{ r.league_now }}{% if r.league_move %}
+                        <span class="{{ 'mv-up' if r.league_move > 0 else 'mv-down' }}">({{ '%+d' % r.league_move }})</span>{% endif %}</td>
+                    <td class="rec-def {{ 'pos' if (r.defense.index or 0) >= 0 else 'neg' }}">
                         {%- if r.defense.index is not none -%}
-                            {{ '%+.1f' % r.defense.index }}{% if r.defense.thin %}
-                            <button type="button" class="thin-flag" aria-haspopup="dialog"
+                            {{ '%+.1f' % r.defense.index }}{% if r.defense.thin %}<button type="button" class="thin-flag" aria-haspopup="dialog"
                                     aria-expanded="false"
-                                    aria-label="Limited data for this league band">*</button>
-                            {% endif %}
+                                    aria-label="Limited data for this league band">*</button>{% endif %}
                         {%- else -%}—{%- endif -%}
                     </td>
                     <td class="rec-verdicts">
-                        {% for label, badge in verdict_bands %}
-                        <span class="{{ badge }}" data-verdict="{{ label }}"
-                              aria-label="{{ label }}: {{ r.verdict_record.get(label, 0) }}">{{ r.verdict_record.get(label, 0) }}</span>
+                        {% for label, badge in verdict_bands %}{% set c = r.verdict_record.get(label, 0) %}
+                        <span class="{% if c %}{{ badge }}{% endif %}"{% if not c %} data-zero{% endif %}
+                              data-verdict="{{ label }}" aria-label="{{ label }}: {{ c }}">{{ c }}</span>
                         {% endfor %}
                     </td>
                 </tr>
@@ -207,6 +449,7 @@
             {% endfor %}
             </tbody>
         </table>
+        </div>
 
         {% if tail_thin %}
         <div class="rec-tail">
@@ -253,21 +496,32 @@ const VERDICT_BANDS = {{ verdict_bands | tojson }};
     if (!el || !window.Chart) return;
     const css = getComputedStyle(document.documentElement);
     // Chart.js draws to canvas and cannot resolve var() or color-mix(),
-    // so tokens must be resolved to concrete values first.
-    const accent = css.getPropertyValue('--accent').trim() || '#f0a500';
+    // so tokens must be resolved to concrete values first. Ranked wears Recon
+    // Blue (--blue); magenta stays interactive/focus only.
+    const rk     = css.getPropertyValue('--blue').trim()  || '#5b8dd6';
+    const line   = css.getPropertyValue('--border').trim() || '#3a3a40';
     const muted  = css.getPropertyValue('--muted').trim()  || '#8a8a8a';
+    // Canvas gradients can't parse color-mix(); derive alpha stops from the
+    // resolved oklch token instead (oklch itself is fine on canvas, color-mix isn't).
+    const rkA = a => rk.replace(/\)\s*$/, ' / ' + a + ')');
+    const grad = el.getContext('2d').createLinearGradient(0, 0, 0, 220);
+    grad.addColorStop(0, rkA(0.24));
+    grad.addColorStop(1, rkA(0));
     new Chart(el, {
         type: 'line',
         data: {
             labels: PAGE.form.points.map(p => p.label),
             datasets: [{
                 data: PAGE.form.points.map(p => p.mean),
-                borderColor: accent, backgroundColor: accent,
-                tension: 0.3, pointRadius: 3
+                borderColor: rk, backgroundColor: grad, fill: true,
+                borderWidth: 2, tension: 0.35,
+                pointRadius: 2.5, pointHoverRadius: 5,
+                pointBackgroundColor: rk, pointBorderColor: rk
             }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -295,16 +549,23 @@ document.querySelectorAll('.rec-spark').forEach(function (canvas) {
     if (!scores.length) return;
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
-    ctx.strokeStyle = getComputedStyle(document.documentElement)
-        .getPropertyValue('--accent').trim() || '#f0a500';
+    const rk = getComputedStyle(document.documentElement)
+        .getPropertyValue('--blue').trim() || '#5b8dd6';
+    ctx.strokeStyle = rk;
     ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     scores.forEach(function (s, i) {
         const x = scores.length === 1 ? w / 2 : (i / (scores.length - 1)) * (w - 2) + 1;
-        const y = h - 1 - (s / 100) * (h - 2);
+        const y = h - 1.5 - (s / 100) * (h - 3);
         i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
     ctx.stroke();
+    // A single dot on the latest week anchors the eye at the current value.
+    const lx = scores.length === 1 ? w / 2 : w - 1;
+    const ly = h - 1.5 - (scores[scores.length - 1] / 100) * (h - 3);
+    ctx.fillStyle = rk;
+    ctx.beginPath(); ctx.arc(lx, ly, 1.8, 0, Math.PI * 2); ctx.fill();
 });
 
 // Zone 3 — sortable headers (click and keyboard)
@@ -426,15 +687,20 @@ function renderDetail(tag) {
     const opening = characterize(row);
     if (opening) parts.push('<p class="dd-open">' + esc(opening) + '</p>');
 
-    // Career line
+    // Career line (full-width)
     parts.push('<div class="dd-block"><h4>Career</h4>');
     parts.push('<canvas class="dd-career" width="640" height="140" data-tag="' + esc(tag) + '"></canvas>');
     if (p.markers.length) {
+        const mkClass = { promotion: 'mk-up', demotion: 'mk-down', townhall: 'mk-th' };
         parts.push('<ul class="dd-markers">' + p.markers.map(m =>
-            '<li>' + esc(PAGE.labels[m.season_id] || m.season_id) + ' — ' +
-            esc(m.kind) + ': ' + esc(m.detail) + '</li>').join('') + '</ul>');
+            '<li><span class="' + (mkClass[m.kind] || '') + '">' +
+            esc(PAGE.labels[m.season_id] || m.season_id) + ' — ' +
+            esc(m.kind) + '</span>: ' + esc(m.detail) + '</li>').join('') + '</ul>');
     }
     parts.push('</div>');
+
+    // The analytical blocks share a responsive two-column grid.
+    parts.push('<div class="dd-grid">');
 
     // Where the points go
     parts.push('<div class="dd-block"><h4>Where the points go</h4>');
@@ -454,9 +720,10 @@ function renderDetail(tag) {
                 const b = p.matchups[k];
                 const clan = clanMatchupMean[k];
                 const delta = clan === null || clan === undefined ? null : b.avg_stars - clan;
+                const dCls = delta === null ? '' : (delta >= 0 ? ' class="d-pos"' : ' class="d-neg"');
                 parts.push('<tr><td>' + esc(MATCHUP_LABELS[k] || k) + '</td><td>' + b.attacks +
                     '</td><td>' + b.avg_stars.toFixed(2) + '</td><td>' +
-                    (clan === null || clan === undefined ? '—' : clan.toFixed(2)) + '</td><td>' +
+                    (clan === null || clan === undefined ? '—' : clan.toFixed(2)) + '</td><td' + dCls + '>' +
                     (delta === null ? '—' : (delta >= 0 ? '+' : '') + delta.toFixed(2)) + '</td></tr>');
             });
             parts.push('</tbody></table>');
@@ -509,15 +776,21 @@ function renderDetail(tag) {
         parts.push('<div class="dd-verdicts">' + VERDICT_BANDS.map(function (band) {
             const label = band[0], badge = band[1];
             const count = (row.verdict_record || {})[label] || 0;
-            return '<span class="' + esc(badge) + '" data-verdict="' + esc(label) +
+            const cls = count ? esc(badge) : '';
+            const zero = count ? '' : ' data-zero';
+            return '<span class="' + cls + '"' + zero + ' data-verdict="' + esc(label) +
                 '" aria-label="' + esc(label) + ': ' + count + '">' + count + '</span>';
         }).join('') + '</div>');
         const bestRec = (p.records || []).find(function (r) { return r.score === row.best; });
         const worstRec = (p.records || []).find(function (r) { return r.score === row.worst; });
-        parts.push('<p>Best week: ' + row.best + (bestRec ? ' (' + esc(bestRec.start_day) + ')' : '') +
-            '. Worst week: ' + row.worst + (worstRec ? ' (' + esc(worstRec.start_day) + ')' : '') + '.</p>');
+        parts.push('<p>Best week <span class="dd-mono">' + row.best + '</span>' +
+            (bestRec ? ' <span class="dd-note" style="font-size:12px">(' + esc(bestRec.start_day) + ')</span>' : '') +
+            ' &nbsp;·&nbsp; worst <span class="dd-mono">' + row.worst + '</span>' +
+            (worstRec ? ' <span class="dd-note" style="font-size:12px">(' + esc(worstRec.start_day) + ')</span>' : '') + '</p>');
     }
     parts.push('</div>');
+
+    parts.push('</div>');  // close .dd-grid
 
     return parts.join('');
 }
@@ -528,28 +801,38 @@ function drawCareer(canvas) {
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
     const css = getComputedStyle(document.documentElement);
-    const accent = css.getPropertyValue('--accent').trim() || '#f0a500';
+    const rk = css.getPropertyValue('--blue').trim() || '#5b8dd6';
+    const line = css.getPropertyValue('--bord2').trim() || '#2a2a30';
     const muted = css.getPropertyValue('--muted').trim() || '#8a8a8a';
+    const rkA = a => rk.replace(/\)\s*$/, ' / ' + a + ')');
     const n = p.records.length;
     const x = i => n === 1 ? w / 2 : (i / (n - 1)) * (w - 20) + 10;
-    const y = s => h - 10 - (s / 100) * (h - 20);
+    const y = s => h - 12 - (s / 100) * (h - 24);
 
-    ctx.strokeStyle = muted; ctx.lineWidth = 1;
+    // baseline + faint mid gridline
+    ctx.strokeStyle = line; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(10, y(0)); ctx.lineTo(w - 10, y(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(10, y(50)); ctx.lineTo(w - 10, y(50)); ctx.stroke();
 
     const marked = new Set(p.markers.map(m => m.season_id));
-    ctx.strokeStyle = muted; ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = muted; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
     p.records.forEach(function (r, i) {
         if (!marked.has(r.season_id)) return;
         ctx.beginPath(); ctx.moveTo(x(i), 6); ctx.lineTo(x(i), h - 6); ctx.stroke();
     });
     ctx.setLineDash([]);
 
-    ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath();
+    // soft area fill under the score line
+    ctx.beginPath();
+    p.records.forEach((r, i) => i ? ctx.lineTo(x(i), y(r.score)) : ctx.moveTo(x(i), y(r.score)));
+    ctx.lineTo(x(n - 1), y(0)); ctx.lineTo(x(0), y(0)); ctx.closePath();
+    ctx.fillStyle = rkA(0.12); ctx.fill();
+
+    ctx.strokeStyle = rk; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.beginPath();
     p.records.forEach((r, i) => i ? ctx.lineTo(x(i), y(r.score)) : ctx.moveTo(x(i), y(r.score)));
     ctx.stroke();
 
-    ctx.fillStyle = accent;
+    ctx.fillStyle = rk;
     p.records.forEach(function (r, i) {
         ctx.beginPath(); ctx.arc(x(i), y(r.score), 2.5, 0, Math.PI * 2); ctx.fill();
     });
