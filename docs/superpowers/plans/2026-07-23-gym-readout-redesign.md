@@ -1590,11 +1590,23 @@ git commit -m "feat(gym): merge the finished-workout pages into one"
 - Consumes: `stats.consistency`, `stats.routine_memory`, `stats.stall_report`, `stats.muscle_group_volume`, `stats.weekly_tonnage`, `load_performed`.
 - Produces: endpoint `gym.gym_heute` at `/gym`.
 
-- [ ] **Step 1: Rewrite the view**
+- [ ] **Step 1: Rewrite the view, then sweep every reference to its old name**
 
 Rename `gym_dashboard` to `gym_heute`. It must call `load_performed()` **once** and pass that one list into every stats function. Context: `active_session`, `consistency`, `routines`, `recent_sessions` (last 5 finished), `stalls`, `balance`, `tonnage`, `templates`, `vapid_public_key`.
 
 `catalogue_groups` for `muscle_group_volume` is the set of `muscle_group` values present on `Exercise` rows, mapped through `stats.NO_GROUP_LABEL` for `None`.
+
+**This rename breaks every existing reference to the old endpoint name**, and one of them — `_nav.html` — renders on every page, including this one. Immediately after renaming the view function, do a literal find-and-replace of `gym.gym_dashboard` → `gym.gym_heute` in `templates/gym/_nav.html` and in every remaining call site in `features/gym/routes.py` (the redirects inside `gym_delete_session`, `gym_delete_template`, `gym_add_exercise`, `gym_delete_exercise` — left pointing at the old name by Tasks 6 and 8). This is a pure rename, not a destination change: all three nav tabs still point at the same one page, and all four redirects still land on Heute. Tasks 10 and 11 change three of those seven links to their real final destination.
+
+`templates/gym/session_summary.html` also contains one reference. Leave it — that template is dead code after Task 8 (its route redirects instead of rendering it) and is deleted outright in Task 13.
+
+Confirm the sweep is complete:
+
+```bash
+cd personal_apps && grep -rn "gym\.gym_dashboard" features/gym templates/gym/_nav.html
+```
+
+Expected: no output.
 
 - [ ] **Step 2: Write the template**
 
@@ -1608,9 +1620,9 @@ The tonnage panel must label the `is_current` bucket as still running.
 
 Routine rename and delete sit behind a small edit affordance per routine; delete POSTs to `/gym/templates/<id>/delete`.
 
-- [ ] **Step 3: Update the four `url_for('gym.gym_dashboard')` call sites**
+- [ ] **Step 3: Confirm `gym_delete_template`'s destination is already final**
 
-In `gym_delete_session`, `gym_delete_template`, `gym_add_exercise`, `gym_delete_exercise`. Point `gym_delete_template` at `gym.gym_heute` now; the other three are finalised in Tasks 10 and 11.
+Step 1's sweep pointed all four redirects at `gym.gym_heute`. Of those four, `gym_delete_template` stays there permanently — deleting a routine belongs back on Heute, where routines are listed. No further change needed here; `gym_delete_session`, `gym_add_exercise` and `gym_delete_exercise` get their real final destination in Tasks 10 and 11.
 
 - [ ] **Step 4: Verify**
 
