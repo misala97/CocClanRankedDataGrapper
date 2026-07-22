@@ -371,10 +371,10 @@ fieldset.fgroup legend{
           {% if not is_current_month %}<a class="cal-today-link" href="{{ url_for('tips.tips_dashboard') }}">Heute</a>{% endif %}
         </div>
         <div class="cal-readout">
-          <span>Woche <b>{{ ('%.2f'|format(periods.week.avg_per_hour) ~ ' €/h') if periods.week.avg_per_hour is not none else '—' }}</b></span>
-          <span>Monat <b>{{ ('%.2f'|format(viewed_month_stats.avg_per_hour) ~ ' €/h') if viewed_month_stats.avg_per_hour is not none else '—' }}</b></span>
-          <span>Jahr <b>{{ ('%.2f'|format(periods.year.avg_per_hour) ~ ' €/h') if periods.year.avg_per_hour is not none else '—' }}</b></span>
-          <span>Gesamt <b>{{ ('%.2f'|format(periods.all.avg_per_hour) ~ ' €/h') if periods.all.avg_per_hour is not none else '—' }}</b></span>
+          <span>Woche <b>{{ '%.2f'|format(periods.week.total_tips) }} €</b></span>
+          <span>Monat <b>{{ '%.2f'|format(viewed_month_stats.total_tips) }} €</b></span>
+          <span>Jahr <b>{{ '%.2f'|format(periods.year.total_tips) }} €</b></span>
+          <span>Gesamt <b>{{ '%.2f'|format(periods.all.total_tips) }} €</b></span>
         </div>
       </div>
 
@@ -586,7 +586,7 @@ fieldset.fgroup legend{
         {% for g in breakdown_time %}
         <div class="prow">
           <div class="prow-top"><span class="prow-label">{{ g.label }}</span>
-            <span class="prow-vals"><b>{{ ('%.2f'|format(g.avg_per_hour) ~ ' €/h') if g.avg_per_hour is not none else '—' }}</b> · {{ ('%.2f'|format(g.avg_per_delivery) ~ ' €/L') if g.avg_per_delivery is not none else '—' }} · n={{ g.shift_count }}</span></div>
+            <span class="prow-vals"><b>{{ ('%.2f'|format(g.avg_per_hour) ~ ' €/h') if g.avg_per_hour is not none else '—' }}</b> · {{ ('%.2f'|format(g.avg_per_delivery) ~ ' €/L') if g.avg_per_delivery is not none else '—' }} · n={{ '%.1f'|format(g.total_hours) }} Std</span></div>
           <div class="bar-track"><div class="bar-fill" style="width:{{ ((g.avg_per_hour / max_v * 100) | round(1)) if g.avg_per_hour is not none else 0 }}%"></div></div>
         </div>
         {% endfor %}
