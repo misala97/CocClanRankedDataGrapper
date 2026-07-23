@@ -932,6 +932,47 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .modal-chart-wrap { position: relative; block-size: 240px; margin-bottom: var(--sp-3); }
 
 /* ============================================================================
+   SESSION FINISHED  ·  the read-only debrief (session_finished.html)
+   ----------------------------------------------------------------------------
+   Reached through the same `/gym/session/<id>` URL as the live view --
+   routes.py's session_detail() branches on session_.finished_at. The header
+   deliberately echoes session_detail.html's .session-head (name + status
+   chip) so the two feel like one page in two states, not two apps. Past the
+   header this is new composition over the Task 5 primitives (.flare, .stat,
+   .chip, .note-stall) -- none of their state colours are redefined here.
+   ============================================================================ */
+
+.session-finished__date { margin: calc(-1 * var(--sp-2)) 0 var(--sp-4); }
+
+/* record flare(s): one per PR, largest first (server-sorted) */
+.pr-flares { display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.flare__unit {
+  font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--record);
+  margin-inline-start: 0.3em;
+}
+.flare__meta { margin-top: var(--sp-2); }
+
+/* Volumen / Sätze / Dauer / Rekorde -- 2x2 on phone, 4-across once there's room */
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+@media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
+.stat__value.is-record { color: var(--record); text-shadow: var(--glow-record); }
+
+/* Nach Übung: a divided list inside one panel, not a card per row */
+.ex-report { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.ex-report + .ex-report { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+.ex-report__main { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
+.ex-report__sets { margin-top: 2px; }
+.ex-report .chip { flex: none; }
+
+.note-stall + .note-stall { margin-top: var(--sp-2); }
+
+.template-prompt { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
+
+.finished-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); }
+.finished-actions form { margin-inline-start: auto; }
+
+/* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
 

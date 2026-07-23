@@ -329,31 +329,52 @@ def gym_start():
 @login_required
 def session_detail(session_id):
     session_ = db.get_or_404(WorkoutSession, session_id)
+
+    if session_.finished_at:
+        # The finished workout is one page now (spec 6.5): build the report
+        # and hand off to session_finished.html instead of session_detail.html.
+        current = performed_from_session(session_)
+        history = [
+            row for row in load_performed(exercise_ids=[row.exercise_id for row in current])
+            if row.session_id != session_.id
+        ]
+        comparable = []
+        if session_.template_id:
+            cohort = (
+                WorkoutSession.query
+                .filter(
+                    WorkoutSession.id != session_.id,
+                    WorkoutSession.finished_at.isnot(None),
+                    WorkoutSession.template_id == session_.template_id,
+                )
+                .all()
+            )
+            cohort_ids = {other.id for other in cohort}
+            volumes = {}
+            for row in load_performed():
+                if row.session_id in cohort_ids:
+                    volumes[row.session_id] = volumes.get(row.session_id, 0.0) + stats.row_volume(row)
+            comparable = [volume for volume in volumes.values() if volume > 0]
+        data = stats.session_report(current, history, comparable_session_volumes=comparable)
+        return render_template('gym/session_finished.html', session=session_, **data)
+
     # A replaced original is hidden from the active view, so its suggestion
     # would never be used -- skip computing it there. Visibility is derived
     # from replaces_id (already loaded on every row) rather than by touching
     # se.replaced_by, which would lazy-load a separate query per row.
     replaced_original_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
-    visible_exercises = [
-        se for se in session_.exercises
-        if session_.finished_at or se.id not in replaced_original_ids
-    ]
+    visible_exercises = [se for se in session_.exercises if se.id not in replaced_original_ids]
     suggestions = {se.id: _last_performance(se.exercise_id, position=se.position) for se in visible_exercises}
+    history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
+    by_exercise = {}
+    for row in history:
+        if row.session_id != session_.id:
+            by_exercise.setdefault(row.exercise_id, []).append(row)
     stagnation_counts = {}
-    if not session_.finished_at:  # only ever shown for an active workout -- skip the query otherwise
-        history = load_performed(
-            exercise_ids=[se.exercise_id for se in visible_exercises]
-        )
-        by_exercise = {}
-        for row in history:
-            if row.session_id != session_.id:
-                by_exercise.setdefault(row.exercise_id, []).append(row)
-        for se in visible_exercises:
-            count = stats.sessions_since_pr(
-                by_exercise.get(se.exercise_id, []), position=se.position
-            )
-            if count is not None and count >= stats.STAGNATION_THRESHOLD:
-                stagnation_counts[se.id] = count
+    for se in visible_exercises:
+        count = stats.sessions_since_pr(by_exercise.get(se.exercise_id, []), position=se.position)
+        if count is not None and count >= stats.STAGNATION_THRESHOLD:
+            stagnation_counts[se.id] = count
     exercises = Exercise.query.order_by(Exercise.name).all()
     return render_template(
         'gym/session_detail.html',
@@ -640,51 +661,16 @@ def gym_finish_session(session_id):
     # later for a workout that's already over.
     _cancel_pending_push(session_)
     db.session.commit()
-    return redirect(url_for('gym.gym_session_summary', session_id=session_.id, just_finished=1))
+    return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/summary')
 @login_required
 def gym_session_summary(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
-    current = performed_from_session(session_)
-    history = [
-        row for row in load_performed(exercise_ids=[row.exercise_id for row in current])
-        if row.session_id != session_.id
-    ]
-    comparable = []
-    if session_.template_id:
-        cohort = (
-            WorkoutSession.query
-            .filter(
-                WorkoutSession.id != session_.id,
-                WorkoutSession.finished_at.isnot(None),
-                WorkoutSession.template_id == session_.template_id,
-            )
-            .all()
-        )
-        cohort_ids = {other.id for other in cohort}
-        volumes = {}
-        for row in load_performed():
-            if row.session_id in cohort_ids:
-                volumes[row.session_id] = volumes.get(row.session_id, 0.0) + stats.row_volume(row)
-        comparable = [volume for volume in volumes.values() if volume > 0]
-    data = stats.session_report(current, history, comparable_session_volumes=comparable)
-
-    # Temporary shim: the old templates predate stats.py's key names. Deleted
-    # when exercise_detail.html and session_finished.html are rebuilt.
-    exercises = [
-        {**entry, 'session_volume': entry['volume'], 'session_best_weight': entry['best_weight'],
-         'session_best_e1rm': entry['e1rm']}
-        for entry in data['exercises']
-    ]
-    return render_template(
-        'gym/session_summary.html', session=session_, exercises=exercises,
-        total_volume=data['total_volume'], total_sets=data['total_sets'],
-        avg_total_volume=data['avg_total_volume'],
-        total_volume_delta_pct=data['total_volume_delta_pct'],
-        pr_count=data['record_count'],
-    )
+    # Kept as a redirect: a finished workout is one page now, and this URL is
+    # in browser history and bookmarks.
+    return redirect(url_for('gym.session_detail', session_id=session_id,
+                            **request.args.to_dict()))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/delete', methods=['POST'])
@@ -699,6 +685,9 @@ def gym_delete_session(session_id):
         db.session.commit()
         db.session.delete(session_)
         db.session.commit()
+    # TODO(Task 11): gym.gym_verlauf doesn't exist yet -- deleting a finished
+    # workout should return to workout history, not the dashboard. Point this
+    # at gym.gym_verlauf once that route is built.
     return redirect(url_for('gym.gym_dashboard'))
 
 

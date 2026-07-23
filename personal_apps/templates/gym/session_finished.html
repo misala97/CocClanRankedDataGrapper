@@ -1,0 +1,122 @@
+{% extends 'gym/_base.html' %}
+
+{# The finished-workout debrief (spec 6.5). Reached through the same
+   /gym/session/<id> URL as session_detail.html -- routes.py's session_detail()
+   branches on session_.finished_at and renders this template once the workout
+   is over, whether that's seconds after tapping "Workout beenden" or weeks
+   later from Verlauf. Six elements, in a fixed order:
+     1. record flare (only with records)
+     2. readouts: Volumen / Sätze / Dauer / Rekorde
+     3. Nach Übung -- one row per exercise, with a verdict chip
+     4. Nächstes Mal -- concrete advice for stalled lifts (only if any)
+     5. template-update prompt (only just_finished + session.template)
+     6. actions: Verlauf, Workout löschen
+   Numbers are plain floats (no locale formatting), matching session_detail.html. #}
+
+{% block title %}{{ session.name or 'Workout' }} · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="gym-wrap">
+
+    <header class="session-head">
+        <div class="session-head__main">
+            <h1>{{ session.name or 'Workout' }}</h1>
+            <span class="chip chip--done">Beendet</span>
+        </div>
+    </header>
+    <p class="label session-finished__date">{{ session.started_at.strftime('%d.%m.%Y') }}</p>
+
+    {% if record_count > 0 %}
+    <section class="pr-flares">
+        {% for record in records %}
+        {% set kind_label = {'weight': 'Gewichts', 'e1rm': 'e1RM', 'volume': 'Volumen'}[record.kind] %}
+        <div class="flare">
+            <div class="flare__label">{{ record.name }} · Neuer {{ kind_label }}-Rekord</div>
+            <div class="flare__value">{{ record.value }}<span class="flare__unit">kg</span></div>
+            <div class="label flare__meta">vorher {{ record.previous }} kg · {{ record.previous_at.strftime('%d.%m.%Y') }} · Position {{ record.position }}</div>
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+
+    <div class="stat-grid">
+        <div class="stat">
+            <span class="stat__label">Volumen</span>
+            <span class="stat__value">{{ total_volume }} kg</span>
+            {% if total_volume_delta_pct is not none %}
+            <span class="stat__delta{{ ' is-up' if total_volume_delta_pct >= 0 else '' }}">{{ '%+d'|format(total_volume_delta_pct) }} % ggü. Ø</span>
+            {% endif %}
+        </div>
+        <div class="stat">
+            <span class="stat__label">Sätze</span>
+            <span class="stat__value">{{ total_sets }}</span>
+        </div>
+        <div class="stat">
+            <span class="stat__label">Dauer</span>
+            <span class="stat__value">{{ session.finished_at - session.started_at }}</span>
+        </div>
+        <div class="stat">
+            <span class="stat__label">Rekorde</span>
+            <span class="stat__value{{ ' is-record' if record_count else '' }}">{{ record_count }}</span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="section-head"><span class="label">Nach Übung</span></div>
+        {% if exercises %}
+        {% for entry in exercises %}
+        <div class="ex-report">
+            <div class="ex-report__main">
+                <div class="name">{{ entry.name }}</div>
+                <div class="label ex-report__sets">Pos. {{ entry.position }} · {{ entry.sets_display }}</div>
+            </div>
+            {% if entry.verdict == 'rekord' %}
+            <span class="chip chip--record">Rekord</span>
+            {% elif entry.verdict == 'stagniert' %}
+            <span class="chip chip--stall">{{ entry.sessions_since_pr }} ohne PR</span>
+            {% elif entry.verdict == 'steigend' %}
+            <span class="chip chip--up">+{{ entry.volume_delta_pct }} % Vol.</span>
+            {% elif entry.verdict == 'neu' %}
+            <span class="chip chip--neu">Erste Aufzeichnung</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty">Keine erledigten Sätze in diesem Workout.</div>
+        {% endif %}
+    </div>
+
+    {% if advice %}
+    <div class="panel">
+        <div class="section-head"><span class="label">Nächstes Mal</span></div>
+        {% for item in advice %}
+        <div class="note-stall">
+            <strong>{{ item.name }}</strong> steht seit {{ item.sessions }} Workouts auf {{ item.stuck_at }} kg — auf <strong>{{ item.suggested_weight }} kg</strong> gehen, notfalls 2 Wdh. weniger.
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if request.args.get('just_finished') and session.template %}
+    <div class="panel">
+        <div class="template-prompt">
+            <span>Vorlage <strong>{{ session.template.name }}</strong> mit dieser Übungsliste &amp; Reihenfolge aktualisieren?</span>
+            <form method="post" action="{{ url_for('gym.gym_update_template', session_id=session.id) }}">
+                <button type="submit" class="btn btn--ghost">Vorlage aktualisieren</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="finished-actions">
+        {# gym.gym_verlauf doesn't exist until Task 11 -- points at the
+           dashboard for now, same placeholder as gym_delete_session's own
+           redirect in routes.py. #}
+        <a href="{{ url_for('gym.gym_dashboard') }}" class="btn btn--ghost">Verlauf</a>
+        <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=session.id) }}" onsubmit="return confirm('Workout unwiderruflich löschen?')">
+            <button type="submit" class="btn btn--stall">Workout löschen</button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
