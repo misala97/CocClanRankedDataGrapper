@@ -1,0 +1,65 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+   SHARED reactive-panel effects — pointer-tracked reticle ("targeting
+   lock"), magnetic buttons, and a one-time entrance for the live-status
+   row. Pure front-end, no data dependency. Fully skipped under
+   prefers-reduced-motion: reduce (the static resting appearance is the
+   fallback, not a degraded one). Included by both /login and /register.
+   ═══════════════════════════════════════════════════════════════════════ -#}
+<script>
+(function () {
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return;
+
+    // ── Reticle: tracks the pointer within the content panel ──
+    var panel = document.querySelector('.auth-panel');
+    var reticle = document.querySelector('.auth-reticle');
+    if (panel && reticle) {
+        var rTx = 0, rTy = 0, rRaf = null;
+        var applyReticle = function () {
+            reticle.style.transform = 'translate(' + rTx.toFixed(1) + 'px, ' + rTy.toFixed(1) + 'px)';
+            rRaf = null;
+        };
+        panel.addEventListener('pointermove', function (e) {
+            var r = panel.getBoundingClientRect();
+            rTx = ((e.clientX - r.left) / r.width - 0.5) * 22;
+            rTy = ((e.clientY - r.top) / r.height - 0.5) * 22;
+            if (!rRaf) rRaf = requestAnimationFrame(applyReticle);
+        });
+        panel.addEventListener('pointerleave', function () {
+            rTx = 0; rTy = 0;
+            if (!rRaf) rRaf = requestAnimationFrame(applyReticle);
+        });
+    }
+
+    // ── Magnetic buttons: submit + toggle links nudge toward the pointer ──
+    var MAGNET_MAX = 12;
+    var clampMagnet = function (v) { return Math.max(-MAGNET_MAX, Math.min(MAGNET_MAX, v)); };
+    var magnets = document.querySelectorAll('.auth-submit, .auth-toggle-link');
+    magnets.forEach(function (el) {
+        var mx = 0, my = 0, mRaf = null;
+        var applyMagnet = function () {
+            el.style.transform = 'translate(' + mx.toFixed(1) + 'px, ' + my.toFixed(1) + 'px)';
+            mRaf = null;
+        };
+        el.addEventListener('pointermove', function (e) {
+            var r = el.getBoundingClientRect();
+            mx = clampMagnet((e.clientX - r.left - r.width / 2) * 0.16);
+            my = clampMagnet((e.clientY - r.top - r.height / 2) * 0.16);
+            if (!mRaf) mRaf = requestAnimationFrame(applyMagnet);
+        });
+        el.addEventListener('pointerleave', function () {
+            mx = 0; my = 0;
+            if (!mRaf) mRaf = requestAnimationFrame(applyMagnet);
+        });
+    });
+
+    // ── Live-status row: one brief entrance, not an orchestrated page load ──
+    var live = document.querySelector('.auth-live');
+    if (live && 'animate' in live) {
+        live.animate(
+            [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }],
+            { duration: 420, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' }
+        );
+    }
+})();
+</script>

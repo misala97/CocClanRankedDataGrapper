@@ -5,7 +5,7 @@
    ═══════════════════════════════════════════════════════════════════════ -#}
 <aside class="auth-panel">
     <a href="/" class="auth-brand">
-        <span class="auth-crest">
+        <span class="auth-crest{% if recon and recon.live_label %} is-live{% endif %}">
             <span class="auth-crest-inner">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
@@ -23,8 +23,24 @@
     </a>
 
     <div class="auth-pitch">
-        <h1 class="auth-headline">One command center for the clan</h1>
+        <h1 class="auth-headline">One command center for {{ (recon.clan_name if recon else None) or 'the clan' }}</h1>
         <p class="auth-pitch-body">War, CWL, Raid, Ranked, and Roster — one place, real verdicts, not spreadsheets and screenshots.</p>
+
+        {% if recon and recon.live_label %}
+        <div class="auth-live">
+            <span class="auth-live-dot" aria-hidden="true"></span>
+            <span class="auth-live-label">{{ recon.live_label }}</span>
+        </div>
+        {% endif %}
+
+        {% if recon %}
+        <div class="readout auth-readout">
+            <div class="fig">
+                <span class="v">{{ recon.member_count }}</span>
+                <span class="l">Already Inside</span>
+            </div>
+        </div>
+        {% endif %}
 
         <ul class="auth-points">
             <li>

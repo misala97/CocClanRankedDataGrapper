@@ -28,6 +28,16 @@
         .auth-crest-inner svg { width: 60%; height: 60%; }
         .auth-brand-text { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 17px; letter-spacing: .6px; text-transform: uppercase; }
 
+        /* Heartbeat glow — gated to `.is-live` (recon.live_label truthy) so
+           this is a state signal ("something real is happening right now"),
+           never an idle decorative loop. Static otherwise, matching the
+           Ticket component's live-dot rule in DESIGN.md. */
+        .auth-crest.is-live { animation: authCrestPulse 2.4s ease-in-out infinite; }
+        @keyframes authCrestPulse {
+            0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 45%, transparent); }
+            50%      { box-shadow: 0 0 16px 2px color-mix(in oklch, var(--accent) 45%, transparent); }
+        }
+
         .auth-pitch { margin: auto 0; max-width: 40ch; position: relative; z-index: 1; }
         .auth-headline {
             font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
@@ -36,6 +46,27 @@
         }
         .auth-pitch-body { font-family: 'Manrope', sans-serif; color: var(--muted); font-size: 14.5px; line-height: 1.6; margin-top: 16px; }
 
+        /* ── Live-status readout — real data, not decoration. Only rendered
+           when something is genuinely happening in the clan right now. ── */
+        .auth-live {
+            display: flex; align-items: center; gap: 9px; width: fit-content; margin-top: 22px;
+            padding: 8px 14px; border-radius: 8px;
+            background: color-mix(in oklch, var(--accent) 10%, transparent);
+            border: 1px solid color-mix(in oklch, var(--accent) 28%, transparent);
+        }
+        .auth-live-dot {
+            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--accent);
+            box-shadow: 0 0 6px color-mix(in oklch, var(--accent) 55%, transparent);
+            animation: authLivePulse 1.8s ease-in-out infinite;
+        }
+        @keyframes authLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+        .auth-live-label { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--accent); }
+
+        /* Reuses _head.html's sitewide `.readout`/`.fig` mono-figure vocabulary
+           (the "signature moment" pattern) instead of inventing a new stat style. */
+        .auth-readout { margin-top: 20px; border-top: none; padding-top: 0; }
+        .auth-readout .fig { padding: 0; }
+
         .auth-points { list-style: none; margin-top: 32px; display: flex; flex-direction: column; gap: 14px; }
         .auth-points li { display: flex; align-items: center; gap: 11px; font-family: 'Manrope', sans-serif; font-size: 13.5px; color: var(--text); }
         .auth-points svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--accent); }
@@ -43,7 +74,10 @@
         /* Decorative scope-reticle motif, echoing the sitewide "thermal-scope
            readout" north star. Static (no pulse) — this is atmosphere, not a
            live/state signal, so it stays quiet rather than animating. */
-        .auth-reticle { position: absolute; right: -70px; bottom: -70px; width: 280px; height: 280px; opacity: .4; pointer-events: none; }
+        .auth-reticle {
+            position: absolute; right: -70px; bottom: -70px; width: 280px; height: 280px; opacity: .4; pointer-events: none;
+            transition: transform .3s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform;
+        }
         .auth-reticle circle, .auth-reticle line { stroke: var(--border); stroke-width: 1; fill: none; }
 
         /* ── Toggle (Sign In / Register — two real links, not a JS tab panel) ── */
@@ -52,7 +86,7 @@
             flex: 1; text-align: center; padding: 9px 0; border-radius: 7px;
             font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12.5px;
             letter-spacing: .5px; text-transform: uppercase; color: var(--muted);
-            transition: background .15s, color .15s;
+            transition: background .15s, color .15s, transform .15s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .auth-toggle-link:hover { color: var(--text); }
         .auth-toggle-link.is-active { background: color-mix(in oklch, var(--accent) 16%, transparent); color: var(--accent); }
@@ -75,7 +109,8 @@
             width: 100%; padding: 12px; margin-top: 6px; border: none; border-radius: 8px; cursor: pointer;
             background: var(--accent); color: var(--bg);
             font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13.5px;
-            letter-spacing: .5px; text-transform: uppercase; transition: background .15s, box-shadow .15s;
+            letter-spacing: .5px; text-transform: uppercase;
+            transition: background .15s, box-shadow .15s, transform .15s cubic-bezier(0.16, 1, 0.3, 1);
             display: inline-flex; align-items: center; justify-content: center; text-align: center;
         }
         .auth-submit:hover { background: var(--acc2); box-shadow: 0 0 16px color-mix(in oklch, var(--accent) 26%, transparent); }
@@ -105,7 +140,8 @@
         .auth-submit-link { margin-top: 24px; text-decoration: none; }
 
         @media (prefers-reduced-motion: reduce) {
-            .auth-brand, .auth-toggle-link, .auth-field input, .auth-submit { transition: none; }
+            .auth-brand, .auth-toggle-link, .auth-field input, .auth-submit, .auth-reticle { transition: none; }
+            .auth-crest.is-live, .auth-live-dot { animation: none; }
         }
 
         /* ── Responsive: content panel compresses to brand + headline only ─
