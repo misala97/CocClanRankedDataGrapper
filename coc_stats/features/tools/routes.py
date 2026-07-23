@@ -16,8 +16,9 @@ _WAR_ORE = {
     16: (1110, 39, 6), 17: (1110, 39, 6), 18: (1110, 39, 6),
 }
 
-def _compute_war_stats(player_tag: str) -> dict:
-    cutoff = datetime.utcnow() - timedelta(days=30)
+def _compute_war_stats(player_tag: str, cutoff=None) -> dict:
+    if cutoff is None:
+        cutoff = datetime.utcnow() - timedelta(days=30)
     wars   = ClanWar.query.filter(ClanWar.end_time >= cutoff).all()
     total_shiny = total_glowy = total_starry = total_attacks = total_wars = 0
     for war in wars:
@@ -98,6 +99,54 @@ def _compute_cwl_stats(player_tag: str) -> dict:
             'attacks': total_attacks, 'wars': total_wars}
 
 
+def _ore_mult(clan_stars, opp_stars, clan_pct, opp_pct) -> float:
+    cs, os_, cd, od = clan_stars or 0, opp_stars or 0, clan_pct or 0, opp_pct or 0
+    if cs > os_: return 1.0
+    if cs < os_: return 0.5
+    if cd > od:  return 1.0
+    if cd < od:  return 0.5
+    return 4 / 7
+
+
+def _tally_ore_from_wars(wars, player_tag: str):
+    """(shiny, glowy, starry, attacks, wars_participated) this player earned across `wars`,
+    using the same per-attack ore model as the source stats (defender TH → _WAR_ORE × result mult)."""
+    shiny = glowy = starry = attacks = participated_wars = 0
+    for war in wars:
+        mult = _ore_mult(war.clan_stars, getattr(war, 'opponent_stars', None) or getattr(war, 'opp_stars', None),
+                         war.clan_destruction_pct,
+                         getattr(war, 'opponent_destruction_pct', None) or getattr(war, 'opp_destruction_pct', None))
+        defender_th = {m.player_tag: m.town_hall_level for m in war.members if m.is_opponent}
+        took = False
+        for attack in war.attacks:
+            if attack.attacker_tag != player_tag:
+                continue
+            th  = max(8, min(18, defender_th.get(attack.defender_tag, 14) or 14))
+            ore = _WAR_ORE.get(th, (0, 0, 0))
+            shiny  += round(ore[0] * mult)
+            glowy  += round(ore[1] * mult)
+            starry += round(ore[2] * mult)
+            attacks += 1
+            took = True
+        if took:
+            participated_wars += 1
+    return shiny, glowy, starry, attacks, participated_wars
+
+
+def _compute_ore_since(player_tag: str, since_dt) -> dict:
+    """Ore this player earned from regular-war + CWL attacks that ended at/after `since_dt`.
+    Powers the Armory since-last-visit pulse."""
+    reg_wars = ClanWar.query.filter(ClanWar.end_time >= since_dt).all()
+    cwl_wars = CWLWar.query.filter(CWLWar.end_time >= since_dt).all()
+    ws, wg, wst, wa, wc = _tally_ore_from_wars(reg_wars, player_tag)
+    cs, cg, cst, ca, cr = _tally_ore_from_wars(cwl_wars, player_tag)
+    return {
+        'shiny': ws + cs, 'glowy': wg + cg, 'starry': wst + cst,
+        'war_attacks': wa, 'war_count': wc,
+        'cwl_attacks': ca, 'cwl_rounds': cr,
+    }
+
+
 def _require_login():
     if not _any_access():
         return redirect(url_for('auth.login'))
@@ -176,6 +225,25 @@ def equipment_calculator():
     except Exception:
         cwl_stats = _zero.copy()
 
+    # ── Since-last-visit pulse ────────────────────────────────────────────────
+    # Ore earned from this player's own war + CWL attacks since they last opened the
+    # Armory. The stamp only advances on a "fresh" visit (≥8h elapsed or a new calendar
+    # day) so refreshing within a session keeps showing the same pulse instead of zero.
+    now       = datetime.utcnow()
+    prev_seen = user.equip_last_seen_at
+    pulse     = None
+    if prev_seen is not None:
+        try:
+            pulse = _compute_ore_since(player.tag, prev_seen)
+        except Exception:
+            pulse = None
+    if prev_seen is None or (now - prev_seen) >= timedelta(hours=8) or now.date() != prev_seen.date():
+        user.equip_last_seen_at = now
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
     return render_template(
         'tools/equipment.html',
         player=player,
@@ -186,6 +254,8 @@ def equipment_calculator():
         war_stats_json=json.dumps(war_stats),
         cwl_stats_json=json.dumps(cwl_stats),
         gain_settings_json=user.gain_settings or 'null',
+        equip_pulse_json=json.dumps(pulse) if pulse else 'null',
+        equip_pulse_since=json.dumps(prev_seen.isoformat()) if prev_seen else 'null',
     )
 
 

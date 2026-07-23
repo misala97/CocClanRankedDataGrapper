@@ -223,6 +223,7 @@ class AppUser(db.Model):
     ore_glowy         = db.Column(db.Integer, default=0, nullable=True)
     ore_starry        = db.Column(db.Integer, default=0, nullable=True)
     gain_settings     = db.Column(db.Text, nullable=True)  # JSON: serialised OreGain source state
+    equip_last_seen_at = db.Column(db.DateTime, nullable=True)  # last Armory visit; powers the since-last-visit ore pulse
 
     linked_player = db.relationship('Player', foreign_keys=[linked_player_tag], lazy='joined')
 

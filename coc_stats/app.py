@@ -13,8 +13,6 @@ load_dotenv(override=True)
 setup_root_logger()
 
 CLAN_TAG   = os.getenv("CLAN_TAG", "#2QRC8998U")
-ADMIN_USER = os.getenv("ADMIN_USER", "")
-ADMIN_PASS = os.getenv("ADMIN_PASS", "")
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 
@@ -25,10 +23,10 @@ DB_PASS = os.getenv("DB_PASS", "")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("DB_NAME", "coc_stats")
 
-_secret_key = os.getenv("SECRET_KEY")
+_secret_key = os.getenv("COC_SECRET_KEY")
 if not _secret_key:
     import logging
-    logging.getLogger().warning("SECRET_KEY not set in .env — using random key, sessions reset on restart.")
+    logging.getLogger().warning("COC_SECRET_KEY not set in .env — using random key, sessions reset on restart.")
     _secret_key = secrets.token_hex(32)
 
 app.config['SECRET_KEY'] = _secret_key

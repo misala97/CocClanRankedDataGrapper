@@ -19,7 +19,7 @@ window.OreGain = (function () {
         { id: 'star',   name: 'Star Bonus',      icon: '⭐', freq: 'daily',   shiny: 0,    glowy: 0,   starry: 0,  enabled: true,  th: 0, league: 'Unranked' },
         { id: 'war',    name: 'Clan War',        icon: '⚔️', freq: 'monthly', shiny: 0,    glowy: 0,   starry: 0,  enabled: true,  attacks: 0, wars: 0 },
         { id: 'cwl',    name: 'CWL',             icon: '🏆', freq: 'monthly', shiny: 0,    glowy: 0,   starry: 0,  enabled: true,  attacks: 0, wars: 0 },
-        { id: 'trader', name: 'Trader (Medals)', icon: '🪙', freq: 'weekly',  shiny: 1000, glowy: 100, starry: 10, enabled: true,  shinyBuys: 2, glowyBuys: 2, starryBuys: 2 },
+        { id: 'trader', name: 'Trader (Medals)', icon: '🪙', freq: 'weekly',  shiny: 0, glowy: 0, starry: 0, enabled: false,  shinyBuys: 0, glowyBuys: 0, starryBuys: 0 },
         { id: 'prosp',  name: 'Prospector',      icon: '⛏️', freq: 'monthly', shiny: 0,    glowy: 0,   starry: 0,  enabled: false, pairCounts: [0,0,0,0,0,0] },
         { id: 'custom', name: 'Custom',          icon: '✨', freq: 'monthly', shiny: 0,    glowy: 0,   starry: 0,  enabled: true },
     ];
@@ -132,9 +132,9 @@ window.OreGain = (function () {
         return `<button onclick="OreGain.setTraderBuys('${ore}',${n})" id="trader-${ore}-${n}"
             style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;padding:2px 6px;
                    border-radius:4px;cursor:pointer;
-                   background:${active?'var(--accent)':'var(--surf2)'};
+                   background:${active?'var(--gain-accent, var(--accent))':'var(--surf2)'};
                    color:${active?'var(--bg)':'var(--muted)'};
-                   border:1px solid ${active?'var(--accent)':'var(--border)'};">${n}×</button>`;
+                   border:1px solid ${active?'var(--gain-accent, var(--accent))':'var(--border)'};">${n}×</button>`;
     }
     function _traderFmtD(weekly) { const d = weekly/7; return d < 10 ? d.toFixed(1) : Math.round(d).toString(); }
 
@@ -224,7 +224,7 @@ window.OreGain = (function () {
     }
 
     function renderTraderCard(s) {
-        const bs = s.shinyBuys??2, bg = s.glowyBuys??2, bst = s.starryBuys??2;
+        const bs = s.shinyBuys??0, bg = s.glowyBuys??0, bst = s.starryBuys??0;
         const ws = TRADER_BUNDLES.shiny*bs, wg = TRADER_BUNDLES.glowy*bg, wst = TRADER_BUNDLES.starry*bst;
         const btns = (ore, buys) => `<div style="display:flex;gap:3px;">${[0,1,2].map(n => _traderBtn(ore,n,buys===n)).join('')}</div>`;
         return `
@@ -558,9 +558,9 @@ window.OreGain = (function () {
         if (ore === 'shiny')  src.shinyBuys  = val;
         if (ore === 'glowy')  src.glowyBuys  = val;
         if (ore === 'starry') src.starryBuys = val;
-        src.shiny  = TRADER_BUNDLES.shiny  * (src.shinyBuys  ?? 2);
-        src.glowy  = TRADER_BUNDLES.glowy  * (src.glowyBuys  ?? 2);
-        src.starry = TRADER_BUNDLES.starry * (src.starryBuys ?? 2);
+        src.shiny  = TRADER_BUNDLES.shiny  * (src.shinyBuys  ?? 0);
+        src.glowy  = TRADER_BUNDLES.glowy  * (src.glowyBuys  ?? 0);
+        src.starry = TRADER_BUNDLES.starry * (src.starryBuys ?? 0);
         src.freq   = 'weekly';
         src.enabled = src.shiny > 0 || src.glowy > 0 || src.starry > 0;
         const upd = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -575,9 +575,9 @@ window.OreGain = (function () {
             if (!btn) return;
             const buys = o==='shiny' ? src.shinyBuys : o==='glowy' ? src.glowyBuys : src.starryBuys;
             const active = buys === n;
-            btn.style.background  = active ? 'var(--accent)' : 'var(--surf2)';
+            btn.style.background  = active ? 'var(--gain-accent, var(--accent))' : 'var(--surf2)';
             btn.style.color       = active ? 'var(--bg)'     : 'var(--muted)';
-            btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+            btn.style.borderColor = active ? 'var(--gain-accent, var(--accent))' : 'var(--border)';
         }));
         saveGainSources(); updateGainSummary();
         window.scheduleAutoSave?.(); _flashModalSaved();
@@ -702,9 +702,9 @@ window.OreGain = (function () {
     function _recomputeTrader() {
         const trader = gainSources.find(s => s.id === 'trader');
         if (!trader) return;
-        trader.shiny   = TRADER_BUNDLES.shiny  * (trader.shinyBuys  ?? 2);
-        trader.glowy   = TRADER_BUNDLES.glowy  * (trader.glowyBuys  ?? 2);
-        trader.starry  = TRADER_BUNDLES.starry * (trader.starryBuys ?? 2);
+        trader.shiny   = TRADER_BUNDLES.shiny  * (trader.shinyBuys  ?? 0);
+        trader.glowy   = TRADER_BUNDLES.glowy  * (trader.glowyBuys  ?? 0);
+        trader.starry  = TRADER_BUNDLES.starry * (trader.starryBuys ?? 0);
         trader.freq    = 'weekly';
         trader.enabled = trader.shiny > 0 || trader.glowy > 0 || trader.starry > 0;
     }
