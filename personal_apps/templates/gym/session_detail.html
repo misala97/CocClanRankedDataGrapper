@@ -1,13 +1,16 @@
 {% extends 'gym/_base.html' %}
 
-{# The live workout view (spec 6.4). The state model does real work here:
-   exactly one exercise panel is `.panel--live` and expanded (the first not-yet-
-   finished, non-skipped one); completed exercises collapse to a `.panel--done`
-   summary row, not-yet-reached ones to `.panel--unlit`. Within the live panel
-   set rows run unlit -> live -> done, and the amber rest bar lives beside them.
-   A finished session still renders here as a read-only record until Task 8
-   splits it off into session_finished.html. Every endpoint, form field, and
-   gesture is preserved from the page this replaces. #}
+{# The live workout view (spec 6.4). Task 8 split the finished-workout view
+   off into session_finished.html -- routes.py's session_detail() now always
+   returns by rendering that template before it ever reaches this one, so
+   this template only ever renders for an unfinished (active) session. The
+   state model does real work here: exactly one exercise panel is
+   `.panel--live` and expanded (the first not-yet-finished, non-skipped
+   one); completed exercises collapse to a `.panel--done` summary row,
+   not-yet-reached ones to `.panel--unlit`. Within the live panel set rows
+   run unlit -> live -> done, and the amber rest bar lives beside them.
+   Every endpoint, form field, and gesture is preserved from the page this
+   replaces. #}
 
 {% block title %}{{ session.name or 'Workout' }} · Gym Tracker{% endblock %}
 
@@ -19,26 +22,11 @@
     <header class="session-head">
         <div class="session-head__main">
             <h1>{{ session.name or 'Workout' }}</h1>
-            {% if session.finished_at %}
-            <span class="chip chip--done">Beendet</span>
-            {% else %}
             <span class="chip chip--live">Aktiv</span>
-            {% endif %}
         </div>
-        {% if session.finished_at %}
-        <div class="num num--md session-head__clock is-done">{{ session.finished_at - session.started_at }}</div>
-        {% else %}
         <div class="num num--md session-head__clock" id="session-duration" data-started="{{ session.started_at.isoformat() }}">--:--:--</div>
-        {% endif %}
     </header>
 
-    {% if session.finished_at %}
-    <div class="session-head__sub">
-        <a href="{{ url_for('gym.gym_session_summary', session_id=session.id) }}" class="btn btn--ghost btn--sm">📊 Zusammenfassung</a>
-    </div>
-    {% endif %}
-
-    {% if not session.finished_at %}
     <div class="panel notify" id="notify-row">
         <span class="notify__text">Erhalte eine Push-Benachrichtigung, wenn deine Pause vorbei ist (installiere die App zuerst über „Zum Home-Bildschirm").</span>
         <button type="button" class="btn btn--ghost btn--sm" id="notify-enable-btn">Aktivieren</button>
@@ -47,32 +35,27 @@
     <div class="reorder-row">
         <button type="button" class="btn btn--ghost btn--sm" id="reorder-lock-btn">🔒 Reihenfolge gesperrt</button>
     </div>
-    {% endif %}
 
     {# the single live exercise = the first visible, non-skipped one that isn't
        fully logged yet (mirrors the resume strip's "current exercise" rule) #}
     {% set ns = namespace(live_id=none) %}
-    {% if not session.finished_at %}
-        {% for se in visible_exercises %}
-            {% set _done = se.sets|selectattr('completed')|list|length %}
-            {% set _total = se.sets|length %}
-            {% if ns.live_id is none and not se.skipped and not (_total > 0 and _done == _total) %}
-                {% set ns.live_id = se.id %}
-            {% endif %}
-        {% endfor %}
-    {% endif %}
+    {% for se in visible_exercises %}
+        {% set _done = se.sets|selectattr('completed')|list|length %}
+        {% set _total = se.sets|length %}
+        {% if ns.live_id is none and not se.skipped and not (_total > 0 and _done == _total) %}
+            {% set ns.live_id = se.id %}
+        {% endif %}
+    {% endfor %}
 
-    <div id="exercise-cards"{% if session.finished_at %} class="read-only"{% endif %}>
+    <div id="exercise-cards">
     {% for se in visible_exercises %}
         {% set done = se.sets|selectattr('completed')|list|length %}
         {% set total = se.sets|length %}
         {% set all_done = total > 0 and done == total %}
-        {% set is_live = (not session.finished_at) and (se.id == ns.live_id) %}
-        {% set is_resting_here = (not session.finished_at) and session.resting_set_id and session.rest_ends_at
+        {% set is_live = (se.id == ns.live_id) %}
+        {% set is_resting_here = session.resting_set_id and session.rest_ends_at
                                  and (se.sets|selectattr('id', 'equalto', session.resting_set_id)|list|length > 0) %}
-        {% if session.finished_at %}
-            {% set pcls = '' %}{% set collapsed = false %}
-        {% elif is_live %}
+        {% if is_live %}
             {% set pcls = 'panel--live' %}{% set collapsed = false %}
         {% elif se.skipped %}
             {% set pcls = 'panel--unlit is-skipped' %}{% set collapsed = not is_resting_here %}
@@ -98,52 +81,16 @@
                     {% endif %}
                 </div>
                 <div class="exercise-card__tools">
-                    {% if not session.finished_at %}
                     <form method="post" action="{{ url_for('gym.gym_update_session_exercise_rest', session_exercise_id=se.id) }}" class="rest-form" title="Pause in Sekunden — speichert automatisch">
                         <span class="rest-form__unit label">⏱</span>
                         <input type="number" name="rest_seconds" min="0" class="input input--num rest-form__input" value="{{ se.rest_seconds if se.rest_seconds is not none else '' }}" aria-label="Pause in Sekunden">
                         <span class="rest-form__unit label">s</span>
                     </form>
-                    {% endif %}
                     <button type="button" class="icon-btn progress-open-btn" data-exercise-id="{{ se.exercise_id }}" data-position="{{ se.position }}" aria-label="Fortschritt anzeigen" title="Fortschritt anzeigen">📊</button>
                 </div>
             </div>
 
-            {% if session.finished_at and (se.replaces or se.replaced_by) %}
-            <div class="replace-note label">
-                {% if se.replaces %}🔁 Ersetzt: {{ se.replaces.exercise.name }}{% endif %}
-                {% if se.replaces and se.replaced_by %}<br>{% endif %}
-                {% if se.replaced_by %}🔁 Ersetzt durch: {{ se.replaced_by.exercise.name }}{% endif %}
-            </div>
-            {% endif %}
-
             <div class="exercise-card__body">
-                {% if session.finished_at %}
-                {# ---- read-only record ---- #}
-                {% if se.sets %}
-                <div class="sets">
-                    {% for s in se.sets %}
-                    <div class="set set--{{ 'done' if s.completed else 'unlit' }}">
-                        <span class="set__idx">{{ loop.index }}</span>
-                        <span class="load" data-set-value>
-                            <span class="load__val">{{ s.weight }}</span><span class="load__unit">kg</span><span class="load__x">×</span><span class="load__val">{{ s.reps }}</span>
-                        </span>
-                        <button type="button" class="icon-btn edit-set-btn" data-set-id="{{ s.id }}" aria-label="Wert bearbeiten">✏️</button>
-                        <form method="post" action="{{ url_for('gym.gym_update_set', set_id=s.id) }}" class="set__log edit-set-form set__editrow hidden">
-                            <input type="number" name="weight" step="0.5" min="0" class="input input--num" value="{{ s.weight }}" aria-label="Gewicht in kg">
-                            <span class="load__unit">kg</span><span class="load__x">×</span>
-                            <input type="number" name="reps" min="0" class="input input--num" value="{{ s.reps }}" aria-label="Wiederholungen">
-                            <button type="submit" class="icon-btn" aria-label="Speichern">💾</button>
-                        </form>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% elif not se.skipped %}
-                <div class="empty">Noch keine Sätze protokolliert.</div>
-                {% endif %}
-
-                {% else %}
-                {# ---- live logging ---- #}
                 {% if se.sets %}
                 {% if total > done %}
                 <p class="pending-hint label">{{ total - done }} Satz{{ 'e' if (total - done) != 1 else '' }} aus letztem Mal — Werte anpassen und antippen zum Bestätigen</p>
@@ -231,13 +178,11 @@
                         <button type="submit" class="btn btn--stall btn--sm">Entfernen</button>
                     </form>
                 </div>
-                {% endif %}
             </div>
         </div>
     {% endfor %}
     </div>
 
-    {% if not session.finished_at %}
     <div class="panel">
         <div class="section-head"><span class="label">Übung hinzufügen</span></div>
         <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" id="add-exercise-form" class="add-exercise">
@@ -272,7 +217,6 @@
             <button type="submit" class="btn btn--live btn--block">Workout beenden</button>
         </form>
     </div>
-    {% endif %}
 
     <div class="panel">
         <div class="section-head"><span class="label">Als Vorlage speichern</span></div>
@@ -292,11 +236,7 @@
 <script>
 function pad(n) { return String(n).padStart(2, '0'); }
 
-const SESSION_FINISHED = {{ 'true' if session.finished_at else 'false' }};
-
-{% if not session.finished_at %}
 if (window.GymClock) { window.GymClock.start(document.getElementById('session-duration')); }
-{% endif %}
 
 // ---- reorder lock ----------------------------------------------------------
 let reorderUnlocked = false;
@@ -550,7 +490,7 @@ if (notifyBtn) {
         lastClientY = e.clientY;
 
         if (!dragStarted) {
-            if (SESSION_FINISHED || !reorderUnlocked) return;
+            if (!reorderUnlocked) return;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
             if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
@@ -637,20 +577,5 @@ document.addEventListener('change', (e) => {
     const form = input.closest('form');
     if (form && form.requestSubmit) form.requestSubmit();
 });
-
-// ---- finished view: pencil reveals the inline edit form --------------------
-(function setupEditSetForms() {
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest && e.target.closest('.edit-set-btn');
-        if (!btn) return;
-        const row = btn.closest('.set');
-        if (!row) return;
-        const valueEl = row.querySelector('[data-set-value]');
-        const formEl = row.querySelector('.edit-set-form');
-        if (valueEl) valueEl.classList.add('hidden');
-        btn.classList.add('hidden');
-        if (formEl) formEl.classList.remove('hidden');
-    });
-})();
 </script>
 {% endblock %}
