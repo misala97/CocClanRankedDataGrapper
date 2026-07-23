@@ -439,10 +439,20 @@ def session_detail(session_id):
         if row.session_id != session_.id:
             by_exercise.setdefault(row.exercise_id, []).append(row)
     stagnation_counts = {}
+    record_set_ids = set()
     for se in visible_exercises:
-        count = stats.sessions_since_pr(by_exercise.get(se.exercise_id, []), position=se.position)
+        prior = by_exercise.get(se.exercise_id, [])
+        count = stats.sessions_since_pr(prior, position=se.position)
         if count is not None and count >= stats.STAGNATION_THRESHOLD:
             stagnation_counts[se.id] = count
+        # Live equivalent of the finished-session PR flare (session_report's
+        # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
+        # same prior-sessions-only pool, so a set can light up cyan the
+        # instant it's confirmed rather than only on the recap screen an
+        # hour later.
+        for s in se.sets:
+            if s.completed and stats.is_new_best(s.weight, s.reps, prior):
+                record_set_ids.add(s.id)
     exercises = Exercise.query.order_by(Exercise.name).all()
     return render_template(
         'gym/session_detail.html',
@@ -450,9 +460,15 @@ def session_detail(session_id):
         visible_exercises=visible_exercises,
         suggestions=suggestions,
         stagnation_counts=stagnation_counts,
+        record_set_ids=record_set_ids,
         exercises=exercises,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
+        # PushSubscription has no user/device scoping (single-user app, one
+        # flat table keyed by endpoint) -- "any row at all" is the correct
+        # "already set up" signal here, not something narrower the schema
+        # doesn't actually track.
+        has_push_subscription=PushSubscription.query.first() is not None,
     )
 
 

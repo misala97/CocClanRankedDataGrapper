@@ -179,10 +179,20 @@ svg { display: block; }
 }
 
 .gym-wrap {
+  inline-size: 100%;                     /* see below */
   max-width: var(--wrap-max);
   margin-inline: auto;
   padding: var(--sp-5) var(--sp-4) var(--sp-10);
 }
+/* On mobile, <body> is a column flex container (below) -- and per the flex
+   spec, an item with an auto cross-axis margin (margin-inline: auto, here
+   for desktop centering) is exempt from the default stretch-to-fill sizing.
+   Without an explicit width, .gym-wrap silently fell back to fit-content
+   instead of the viewport: invisible until a descendant's min-content
+   width grew large enough to drag it wider than the screen (a nowrap
+   truncated name is exactly that), at which point the whole page gained
+   horizontal overflow. inline-size: 100% restores fill-then-cap-at-max-width,
+   the behaviour the max-width + auto-margin pattern was always meant to have. */
 @media (min-width: 900px) {
   .gym-wrap { padding: var(--sp-8) var(--sp-6) var(--sp-12); }
 }
@@ -367,6 +377,28 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .set--record .set__check::before { background: var(--record); border-color: var(--record); box-shadow: var(--glow-record); }
 .set--record .set__check::after { opacity: 1; }
 
+/* Tap feedback for the check button: the live session view re-renders this
+   whole row from the server after every toggle (session_detail.html's
+   AJAX-refresh architecture always swaps in a fresh #exercise-cards, so a
+   `transition` keyed to a class change never fires -- there is no "before"
+   state on a brand-new node). gym.js adds one of these two classes to the
+   OLD row the instant you tap, before the fetch even starts, so the tap
+   itself always gets an answer regardless of round-trip time; the swapped-in
+   node then just shows the settled true state. Confirming (becoming done) is
+   its own animation, distinct from resetting (undoing a done set) -- a
+   revert is a quieter, unlit motion, never the same amber pulse as progress. */
+@keyframes set-confirm-pulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.025); border-color: var(--live); box-shadow: var(--glow-live); }
+  100% { transform: scale(1); }
+}
+@keyframes set-reset-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.set.is-confirming { animation: set-confirm-pulse 260ms var(--ease-out); }
+.set.is-resetting   { animation: set-reset-pulse 220ms var(--ease); }
+
 /* STALL: attention. Red outline plus, in the row, the value stays red. The word
    is carried by an adjacent chip/note, never colour alone. */
 .set--stall {
@@ -446,6 +478,21 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   transition: inline-size 1s linear;   /* bars fill linearly, mechanically */
 }
 
+/* The countdown hitting zero is the actual cue to start the next set --
+   currently silent unless you're staring at the bar. gym.js adds this class
+   exactly once, the moment its own tick loop observes the transition from
+   still-counting to done (never on a stale rest window that was already
+   expired when the panel rendered -- see startRestFillTick's sawPositive
+   guard), so it can never replay on an unrelated refresh elsewhere on the
+   page. */
+@keyframes rest-ready-flash {
+  0%   { box-shadow: none; }
+  35%  { box-shadow: var(--glow-live); }
+  100% { box-shadow: none; }
+}
+.rest.rest-complete { animation: rest-ready-flash 640ms var(--ease-out); }
+.rest.rest-complete .rest__value { color: var(--ink); transition: color 640ms var(--ease-out); }
+
 /* ============================================================================
    BUTTONS  ·  live (real press depth) / ghost / stall (destructive)
    ============================================================================ */
@@ -464,7 +511,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
               background var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
   -webkit-tap-highlight-color: transparent;
 }
-.btn:disabled { opacity: 0.45; pointer-events: none; }
+/* :disabled only applies to real form controls -- an <a> styled as a .btn
+   (the export action, which is a plain download link, not a submit) needs
+   the same treatment via a class instead. */
+.btn:disabled, .btn.is-disabled { opacity: 0.45; pointer-events: none; }
 
 /* the primary action is LIVE: solid amber, inset top highlight, hard bottom edge
    that compresses on press so the control feels like it travelled */
@@ -619,6 +669,14 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .resume__pulse {
   inline-size: 8px; block-size: 8px; border-radius: 50%; flex: none;
   background: var(--live); box-shadow: var(--glow-live);
+  animation: pulse-breathe 1.8s ease-in-out infinite;
+}
+/* status LED, not decoration: this is the one element on the shell that's
+   only ever rendered while a workout is actually in progress, so a slow
+   breathe is the literal state -- live right now -- not motion for its own sake */
+@keyframes pulse-breathe {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
 }
 .resume__body { display: flex; flex-direction: column; gap: 1px; min-inline-size: 0; flex: 1; }
 .resume__name {
@@ -831,9 +889,45 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .card-title-area {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
   flex: 1; min-inline-size: 0;
-  cursor: pointer;                       /* tap toggles collapse; drag reorders (JS) */
-  touch-action: pan-y;                   /* let the page scroll; the drag script opts in past a threshold */
+  cursor: pointer;                       /* tap toggles collapse (JS) */
+  touch-action: pan-y;                   /* vertical touch here scrolls the page like anywhere else */
   -webkit-tap-highlight-color: transparent;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+/* Collapsed = the settled summary row -- one quiet line, not a second
+   headline. A long name (this app's real data goes well past 30 chars,
+   e.g. "Lat Pulldown (Single Arm, Hauptbahnhof)") would otherwise wrap to
+   3+ lines at the --t-name size and make the "slim overview" the collapsed
+   state exists for pointless. Truncates instead; tapping the row (existing
+   collapse toggle) expands it and .exercise-card__name's un-truncated,
+   full-size rule below takes over again. */
+.exercise-card.collapsed .card-title-area { flex-wrap: nowrap; }
+.exercise-card.collapsed .exercise-card__name {
+  font-size: var(--t-sm);
+  flex: 1; min-inline-size: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.exercise-card.collapsed .card-title-area .chip,
+.exercise-card.collapsed .card-title-area .tag { flex: none; }
+/* .exercise-card__head's flex-start (below) is for the expanded card, where
+   a wrapped multi-line name should top-align with the tools column rather
+   than center against a much shorter block. Collapsed rows are guaranteed
+   single-line now, so top-aligning against the 44px handle/rest-input just
+   strands the text near the top with dead space under it -- center instead. */
+.exercise-card.collapsed .exercise-card__head { align-items: center; }
+/* Drag origin on touch: pan-y above hands any vertical touch-drag on the row
+   to native scroll before JS ever sees enough movement to claim it -- there
+   is no "opt in past a threshold" for a browser-recognised pan gesture, so
+   dragging needs its own small always-scroll-exempt target. Mouse has no such
+   conflict (touch-action doesn't apply), so gym.js only requires this handle
+   for touch/pen input and still allows grabbing anywhere on the row with a
+   mouse. */
+.drag-handle {
+  display: inline-grid; place-items: center;
+  inline-size: 44px; block-size: 44px; flex: none;
+  color: var(--dim);
+  cursor: grab;
+  touch-action: none;
 }
 .exercise-card__name { font-size: var(--t-name); line-height: 1.15; overflow-wrap: anywhere; }
 .exercise-card__tools { flex: none; display: flex; align-items: center; gap: var(--sp-1); }
@@ -844,8 +938,63 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .rest-form__input { inline-size: 3.5rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
 
 /* collapse: the header is the settled summary row; the body is the workspace */
-.exercise-card__body { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-3); }
-.exercise-card.collapsed .exercise-card__body { display: none; }
+/* Animatable collapse via the grid-rows technique: display:none can't be
+   transitioned, so .exercise-card__body is a 1-row grid whose track animates
+   1fr <-> 0fr, and .exercise-card__body-inner (its one grid item -- added in
+   session_detail.html purely so every existing child stacks into that single
+   animatable row) clips the content as the track shrinks. Only ever visibly
+   animates on the direct tap-to-collapse gesture (a plain classList.toggle on
+   the existing node); an AJAX refresh always swaps in a brand-new node in its
+   already-settled state, same reasoning as the set-confirm-pulse above. */
+.exercise-card__body {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-top: var(--sp-3);
+  transition: grid-template-rows 320ms var(--ease-out), margin-top 320ms var(--ease-out);
+}
+.exercise-card__body-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  /* overflow:hidden only clips visually -- every input/button in here would
+     otherwise stay in the tab order and the accessibility tree even while
+     the row is animated to zero height (unlike the old display:none, which
+     handled both in one property). Delay visibility until the collapse
+     animation actually finishes so it doesn't cut the motion short; expand
+     restores it immediately since there's no animation to protect there. */
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+}
+.exercise-card.collapsed .exercise-card__body-inner {
+  visibility: hidden;
+  transition: visibility 0s linear 320ms;
+}
+.exercise-card.collapsed .exercise-card__body { grid-template-rows: 0fr; margin-top: 0; }
+
+/* The two moments in a workout actually worth marking on this card: it just
+   became the live one, or you just closed it out. gym.js adds these classes
+   by diffing the old #exercise-cards against the freshly-fetched one right
+   before the AJAX swap -- so unlike a plain per-refresh animation, this only
+   ever plays for the exercise whose state genuinely crossed that line on
+   THIS action, never for the four other cards that happened to re-render
+   alongside it, and never on a plain page load. just-lit borrows --live
+   (amber = current/now, its real meaning); just-finished deliberately does
+   NOT borrow --record (cyan means a PR specifically, not true here) -- it's
+   an ink-white flash, matching how .set--done already reads DONE as "full-
+   brightness ink, settled fact" rather than a coloured state. */
+@keyframes card-just-lit {
+  0%   { box-shadow: none; }
+  50%  { box-shadow: var(--glow-live); }
+  100% { box-shadow: var(--glow-live), var(--edge-lit); }   /* .panel--live's own resting shadow */
+}
+.exercise-card.just-lit { animation: card-just-lit 480ms var(--ease-out); }
+
+@keyframes card-just-finished {
+  0%   { box-shadow: none; }
+  45%  { box-shadow: 0 0 16px rgba(236, 239, 242, 0.4); }
+  100% { box-shadow: none; }
+}
+.exercise-card.just-finished { animation: card-just-finished 560ms var(--ease-out); }
 
 .pending-hint { color: var(--dim); }
 .sets { display: flex; flex-direction: column; gap: var(--sp-1); }
@@ -857,6 +1006,21 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .set__log .load__unit, .set__log .load__x { flex: none; }
 .set__log .set__check { margin-inline-start: auto; }
 .set__del { justify-self: end; }
+
+/* Undo window for set deletion (Interaction Design's own "undo beats confirm"
+   rule): the row's real children hide instead of the row disappearing, and
+   this bar takes over the whole grid row until the window elapses or the
+   user taps Rückgängig. gym.js owns the timer. */
+.set--pending-delete > *:not(.set__undo) { display: none; }
+@keyframes set-undo-in { from { opacity: 0; } to { opacity: 1; } }
+.set__undo {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3);
+  color: var(--dim);
+  font-size: var(--t-sm);
+  animation: set-undo-in 180ms var(--ease-out);
+}
 
 /* finished (read-only) set row: static load readout + a pencil that swaps in
    an edit form spanning the rest of the row */
@@ -883,7 +1047,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 
 /* drag reorder */
 .exercise-card.dragging { opacity: 0.4; }
-.drag-ghost { z-index: var(--z-bar); box-shadow: var(--glow-live), 0 12px 32px rgba(0, 0, 0, 0.6); opacity: 0.96; }
+.drag-ghost {
+  z-index: var(--z-bar); box-shadow: var(--glow-live), 0 12px 32px rgba(0, 0, 0, 0.6); opacity: 0.96;
+  user-select: none; -webkit-user-select: none;
+}
 
 /* ============================================================================
    PROGRESS MODAL  ·  _progress_modal.html (shared: session detail + exercise
@@ -896,8 +1063,29 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   position: fixed; inset: 0; z-index: var(--z-modal);
   display: flex; align-items: flex-end; justify-content: center;
   background: rgba(0, 0, 0, 0.6);
+  opacity: 1; visibility: visible;
+  transition: opacity 240ms var(--ease-out), visibility 0s linear 0s;
 }
 @media (min-width: 640px) { .modal { align-items: center; padding: var(--sp-4); } }
+
+/* Overrides the bare .hidden utility above (two classes beats one at equal
+   !important weight) so THIS element fades instead of snapping -- everywhere
+   else .hidden still means instant display:none. Stays display:flex and
+   pointer-events:none rather than actually leaving the layout, so the close
+   fade has something to animate; visibility is what removes it from the a11y
+   tree and tab order, delayed until the fade-out finishes (open has none). */
+.modal.hidden {
+  /* the bare .hidden utility above sets display:none with !important --
+     !important always beats a normal declaration regardless of specificity,
+     so without matching it here this display:flex never actually wins and
+     the whole open/close transition below silently never runs (confirmed via
+     getAnimations() returning zero running animations in either direction). */
+  display: flex !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 200ms var(--ease), visibility 0s linear 200ms;
+}
 
 .modal__box {
   inline-size: 100%; max-inline-size: 560px; max-block-size: 90vh; overflow-y: auto;
@@ -905,8 +1093,17 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   border: 1px solid var(--edge); border-top-color: var(--edge-hi);
   border-radius: var(--r-panel) var(--r-panel) 0 0;
   box-shadow: var(--edge-lit), 0 -8px 32px rgba(0, 0, 0, 0.5);
+  transform: none;
+  transition: transform 240ms var(--ease-out);
 }
-@media (min-width: 640px) { .modal__box { border-radius: var(--r-panel); } }
+/* mobile is a bottom sheet, so it retreats down; desktop is a centered
+   dialog, so it only settles by scale -- matches each surface's own radius
+   treatment right below (sheet: top corners only vs. dialog: full radius) */
+.modal.hidden .modal__box { transform: translateY(16px) scale(0.98); }
+@media (min-width: 640px) {
+  .modal__box { border-radius: var(--r-panel); }
+  .modal.hidden .modal__box { transform: translateY(0) scale(0.96); }
+}
 
 .modal__head {
   position: sticky; top: 0; z-index: 1;
@@ -991,6 +1188,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .set-correct__row .input--num { inline-size: 4rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
 
 .note-stall + .note-stall { margin-top: var(--sp-2); }
+.save-error__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
 
 .template-prompt { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
 
@@ -1123,6 +1321,66 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .tonnage__note { margin-top: var(--sp-2); color: var(--live); }
 
 /* ============================================================================
+   HEUTE BOOT SEQUENCE  ·  page-load only, scoped to this page
+   ----------------------------------------------------------------------------
+   Same "dead until power hits it" instrument the file header already sells:
+   on load the chassis flickers once as current surges in, each section
+   lights up in sequence, and the two gauges (muscle-group bars, weekly
+   tonnage) sweep up to the reading stats.py already computed -- like a
+   needle settling, not a number appearing. One-shot: nothing here loops,
+   re-fires, or waits on scroll -- it all runs once, on initial paint.
+   Fully killed by the REDUCED MOTION block at the end of this file
+   (animation-delay zeroed there too, so reduced-motion users see the
+   finished page immediately, with no staggered pop-in).
+   ============================================================================ */
+
+@keyframes boot-flicker {
+  0%, 100% { filter: brightness(1); }
+  8%  { filter: brightness(2.2); }
+  17% { filter: brightness(0.82); }
+  28% { filter: brightness(1.7); }
+  45% { filter: brightness(1); }
+}
+.heute { animation: boot-flicker 460ms var(--ease) both; }
+
+@keyframes boot-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.heute__head,
+.heute__start,
+.heute__recent,
+.heute__board > .panel {
+  animation: boot-in 380ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.heute__head                         { --i: 0; }
+.heute__start                        { --i: 1; }
+.heute__recent                       { --i: 2; }
+.heute__board > .panel:nth-child(1)  { --i: 3; }   /* Steht still */
+.heute__board > .panel:nth-child(2)  { --i: 4; }   /* Sätze pro Muskelgruppe */
+.heute__board > .panel:nth-child(3)  { --i: 5; }   /* Tonnage pro Woche */
+
+/* Routinen: real cards (one per template), so the list gets its own rhythm
+   instead of moving as one block. Capped at --i:6 in heute.html so a long
+   template list can't push the last card's delay past the rest of the boot. */
+.heute__routines > .empty,
+.heute__routines > .routine {
+  animation: boot-in 380ms var(--ease-out) both;
+  animation-delay: calc(90ms + (var(--i, 0) * 45ms));
+}
+
+/* gauges: sweep from zero to the value already computed server-side, timed
+   to start just after their own panel (--i: 4 / --i: 5 above) begins
+   lighting up. transform, not width/height -- the real share/volume value
+   stays in the inline style each bar already carries (see heute.html); this
+   only scales the already-correctly-sized bar up from its own baseline. */
+@keyframes gauge-sweep-v { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes gauge-sweep-h { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.vbar       { transform-origin: bottom; animation: gauge-sweep-v 420ms var(--ease-out) both; animation-delay: 295ms; }
+.hbar__fill { transform-origin: left;   animation: gauge-sweep-h 420ms var(--ease-out) both; animation-delay: 250ms; }
+
+/* ============================================================================
    ÜBUNGEN  ·  the exercise catalogue (uebungen.html)
    ----------------------------------------------------------------------------
    One responsive composition, no phone/desktop split (spec 6.2). Search and
@@ -1156,24 +1414,67 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 .uebungen-sort__opt input { accent-color: var(--live); }
 
-.uebungen-group-header { padding: var(--sp-2) 0; margin-top: var(--sp-1); }
-.uebungen-group-header:first-child { margin-top: 0; }
-
-/* one divided row per exercise -- same "not a card per row" pattern as
-   .recent-row / .ex-report-row */
-.uebungen-row {
-  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3);
-  min-block-size: 44px;
+/* A real table: one shared header names the columns once instead of every
+   row re-labelling itself ("Zuletzt", "e1RM") -- that repetition was the
+   actual noise. .uebungen-table is the ONE grid; .uebungen-table__head,
+   .uebungen-list and .uebungen-row are all `display: contents`, so their
+   children all bubble up to participate directly in that single grid
+   instead of each establishing their own independently-sized columns
+   (two grids with the same `auto auto` never actually agree on a width --
+   confirmed the header and body columns drifting apart before landing on
+   this). Nested `display: contents` is what makes cross-row AND
+   header-to-row column alignment possible with markup this shallow. The
+   group header and the JS search/sort (it moves whole .uebungen-row
+   nodes) don't care -- display: contents changes rendering only, never
+   the DOM the script walks or the [hidden] toggle it sets. */
+.uebungen-table {
+  display: grid;
+  grid-template-columns: 1fr auto auto 44px;
+  column-gap: var(--sp-3);
+  align-items: center;
 }
-.uebungen-row + .uebungen-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
-.uebungen-row[hidden], .uebungen-group-header[hidden] { display: none; }
+.uebungen-table__head, .uebungen-list { display: contents; }
+.uebungen-table__head span:not(.uebungen-table__rule) {
+  padding-bottom: var(--sp-2);
+  font-family: var(--font-mono); font-size: var(--t-micro); font-weight: var(--w-semi);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+}
+.uebungen-table__head span:nth-child(2), .uebungen-table__head span:nth-child(3) { text-align: right; }
+/* One hairline spanning every column, not four separate borders that stop
+   short at each column-gap (four disconnected fragments instead of a
+   single line -- the "alignment" that actually read as broken). Same
+   reasoning for .uebungen-row__rule below, per data row. */
+.uebungen-table__rule { grid-column: 1 / -1; block-size: 1px; padding: 0; background: var(--edge-hi); margin-bottom: var(--sp-1); }
 
-.uebungen-row__main { flex: 1 1 12rem; min-inline-size: 0; overflow-wrap: anywhere; }
+/* Closed by default (gym.js) -- a button, not a label, so tapping it is
+   the way you go from "which groups exist" to "what's in this one". */
+.uebungen-group-header {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: var(--sp-2);
+  inline-size: 100%; text-align: left;
+  min-block-size: 44px;
+  padding: var(--sp-2) 0; margin-top: var(--sp-1);
+}
+.uebungen-group-header:first-child { margin-top: 0; }
+.uebungen-group-header__chevron {
+  display: inline-block; flex: none;
+  color: var(--dim); font-size: var(--t-sm);
+  transition: transform var(--dur-2) var(--ease);
+}
+.uebungen-group-header.is-open .uebungen-group-header__chevron { transform: rotate(90deg); }
+
+.uebungen-row { display: contents; }
+.uebungen-row[hidden], .uebungen-group-header[hidden] { display: none; }
+.uebungen-row > * { padding-block: var(--sp-2); }
+.uebungen-row__rule { grid-column: 1 / -1; block-size: 1px; padding: 0; background: var(--edge); }
+
+.uebungen-row__name-cell { min-inline-size: 0; overflow-wrap: anywhere; }
+.uebungen-row__name-cell .chip { margin-inline-start: var(--sp-2); }
 .uebungen-row__meta { margin-top: 2px; }
-.uebungen-row__best { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
-.uebungen-row__e1rm { white-space: nowrap; }
-.uebungen-row .chip { flex: none; }
-.uebungen-row__delete { flex: none; }
+.uebungen-row__weight, .uebungen-row__e1rm { text-align: right; white-space: nowrap; }
+.uebungen-row__dash { color: var(--dim); }
+.uebungen-row__delete-cell { display: flex; justify-content: center; }
+.uebungen-row__delete-cell:empty { display: none; }
 
 .uebungen-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
 
@@ -1190,10 +1491,20 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .verlauf__head { margin-bottom: var(--sp-4); }
 
 .verlauf-export__presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
-.verlauf-export__range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
+.verlauf-export__action { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
 
 .verlauf-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
 .verlauf-row + .verlauf-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+/* checkbox has no adjacent label text (aria-label carries the name instead),
+   so unlike .uebungen-check / .exercise-detail-check -- which get their
+   44px-wide tap target for free from the text beside them -- this one needs
+   both dimensions set explicitly. */
+.verlauf-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-inline-size: 44px; min-block-size: 44px;
+  flex: none;
+  cursor: pointer;
+}
 .verlauf-row__main { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
 .verlauf-row__meta { margin-top: 2px; }
 .verlauf-row__exercises { margin-top: 2px; }
@@ -1253,11 +1564,16 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    exactly the bug this comment exists to prevent regressing: an unassigned
    .exercise-detail__head previously auto-placed itself after "meta",
    rendering the exercise's own name at the BOTTOM of the page. */
-.exercise-detail__head    { grid-area: head; }
-.exercise-detail__verdict { grid-area: verdict; }
-.exercise-detail__chart   { grid-area: chart; }
-.exercise-detail__history { grid-area: history; }
-.exercise-detail__meta    { grid-area: meta; }
+/* min-inline-size: 0 on every one -- same reasoning as .gym-wrap above:
+   a grid item's automatic minimum width defaults to its content's, and
+   without this, h1's large (--num-md) heading font forces the single
+   mobile column -- and everything else riding along in it -- wider than
+   the viewport the moment a long exercise name doesn't fit at that size. */
+.exercise-detail__head    { grid-area: head;    min-inline-size: 0; }
+.exercise-detail__verdict { grid-area: verdict; min-inline-size: 0; }
+.exercise-detail__chart   { grid-area: chart;   min-inline-size: 0; }
+.exercise-detail__history { grid-area: history; min-inline-size: 0; }
+.exercise-detail__meta    { grid-area: meta;    min-inline-size: 0; }
 
 .exercise-detail__name-warning { margin-top: var(--sp-3); }
 
@@ -1324,8 +1640,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
   }
   .rest__fill, .hbar__fill { transition: none !important; }
   .flare { animation: none !important; }

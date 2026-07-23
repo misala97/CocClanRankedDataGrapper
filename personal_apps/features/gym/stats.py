@@ -82,6 +82,24 @@ def row_volume(row):
     return sum(set_volume(weight, reps, row.is_unilateral) for weight, reps in row.sets)
 
 
+def is_new_best(weight, reps, prior_rows):
+    """True if one just-logged (weight, reps) pair beats every OTHER
+    session's best for this exercise -- the same "beats every OTHER
+    session, regardless of when it happened" semantics session_report's own
+    is_weight_pr/is_e1rm_pr already use (unscoped by position there too, so
+    a set flagged live here always agrees with the flare that same exercise
+    gets at session end), just applied to one set the moment it's checked
+    instead of a whole session's aggregate after the fact. False with no
+    prior history to beat -- a first attempt at an exercise isn't a record
+    of anything yet."""
+    if not prior_rows:
+        return False
+    return (
+        weight > max(best_weight(row) for row in prior_rows)
+        or epley_1rm(weight, reps) > max(best_e1rm(row) for row in prior_rows)
+    )
+
+
 def _chronological(rows):
     return sorted(rows, key=lambda row: (row.started_at, row.session_id))
 
