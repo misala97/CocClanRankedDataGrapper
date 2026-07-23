@@ -22,7 +22,7 @@
         var mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
         var curX = mouseX, curY = mouseY;
         var hasMoved = false;
-        var LERP = 0.0225; // half speed of the previous 0.045 -- ~99% converged after ~6s stationary
+        var LERP = 0.01125; // half speed again -- ~99% converged after ~12s stationary
         document.addEventListener('pointermove', function (e) {
             mouseX = e.clientX; mouseY = e.clientY;
             if (!hasMoved) { hasMoved = true; curX = mouseX; curY = mouseY; lock.classList.add('is-active'); }
