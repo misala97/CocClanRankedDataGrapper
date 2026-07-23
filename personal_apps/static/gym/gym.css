@@ -323,6 +323,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .set__check {
   position: relative;
   inline-size: 44px; block-size: 44px;
+  flex: none;
   justify-self: end;
 }
 .set__check::before {
