@@ -1,11 +1,12 @@
 {# Shared gym shell nav: mobile bottom tab bar, desktop top bar, and the
-   active-workout resume strip. Included once by `_base.html` on every real
-   gym page now that Task 12 migrated exercise_detail.html -- the last
-   template still including this directly. `session_summary.html` also still
-   includes it directly, but that template is dead (its route is a pure
-   redirect since Task 8) and pending deletion in Task 13. Kept
-   self-contained regardless (no condition below assumes `_base.html`-only
-   context), since that one straggler still exists on disk today.
+   active-workout resume strip. Included once by `_base.html` on every gym
+   page -- Task 12 migrated exercise_detail.html (the last template still
+   including this directly), and Task 13 deleted session_summary.html, the
+   other template that used to include it directly outside `_base.html`
+   (dashboard.html, deleted in the same task, already went through
+   `_base.html` like every other page). Kept self-contained regardless (no
+   condition below assumes `_base.html`-only context) in case a future page
+   ever needs it standalone again.
 
    `gym_active_session` is injected into every gym-blueprint template's
    context automatically by inject_gym_nav_context() in routes.py -- no view
