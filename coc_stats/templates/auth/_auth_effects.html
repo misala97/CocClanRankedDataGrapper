@@ -10,25 +10,22 @@
     var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion) return;
 
-    // ── Reticle: tracks the pointer within the content panel ──
-    var panel = document.querySelector('.auth-panel');
-    var reticle = document.querySelector('.auth-reticle');
-    if (panel && reticle) {
+    // ── Reticle: tracks the pointer across the WHOLE page, not just while
+    //    hovering the panel — most cursor time is spent over the form
+    //    column, so a panel-scoped listener rarely fired. Large amplitude
+    //    (±70px) so the "lock-on" reads clearly instead of vanishing. ──
+    var wrap = document.querySelector('.auth-reticle-wrap');
+    if (wrap) {
         var rTx = 0, rTy = 0, rRaf = null;
         var applyReticle = function () {
-            reticle.style.transform = 'translate(' + rTx.toFixed(1) + 'px, ' + rTy.toFixed(1) + 'px)';
+            wrap.style.transform = 'translate(' + rTx.toFixed(1) + 'px, ' + rTy.toFixed(1) + 'px)';
             rRaf = null;
         };
-        panel.addEventListener('pointermove', function (e) {
-            var r = panel.getBoundingClientRect();
-            rTx = ((e.clientX - r.left) / r.width - 0.5) * 22;
-            rTy = ((e.clientY - r.top) / r.height - 0.5) * 22;
+        document.addEventListener('pointermove', function (e) {
+            rTx = (e.clientX / window.innerWidth - 0.5) * 140;
+            rTy = (e.clientY / window.innerHeight - 0.5) * 140;
             if (!rRaf) rRaf = requestAnimationFrame(applyReticle);
-        });
-        panel.addEventListener('pointerleave', function () {
-            rTx = 0; rTy = 0;
-            if (!rRaf) rRaf = requestAnimationFrame(applyReticle);
-        });
+        }, { passive: true });
     }
 
     // ── Magnetic buttons: submit + toggle links nudge toward the pointer ──
@@ -57,9 +54,30 @@
     var live = document.querySelector('.auth-live');
     if (live && 'animate' in live) {
         live.animate(
-            [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }],
+            [{ opacity: 0, transform: 'translateY(4px) scale(.96)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
             { duration: 420, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' }
         );
+    }
+
+    // ── Member-count figure: counts up from 0 on load instead of just
+    //    appearing — a real number doing real work reads more convincingly
+    //    when it visibly ticks up, not as a fabricated affordance. ──
+    var figVal = document.querySelector('.auth-readout .v');
+    if (figVal) {
+        var target = parseInt(figVal.textContent, 10);
+        if (!isNaN(target)) {
+            var start = null;
+            var DUR = 800;
+            var tick = function (now) {
+                if (start === null) start = now;
+                var p = Math.min(1, (now - start) / DUR);
+                var eased = 1 - Math.pow(1 - p, 3);
+                figVal.textContent = Math.round(eased * target);
+                if (p < 1) requestAnimationFrame(tick);
+            };
+            figVal.textContent = '0';
+            requestAnimationFrame(tick);
+        }
     }
 })();
 </script>

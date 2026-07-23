@@ -49,14 +49,15 @@
         /* ── Live-status readout — real data, not decoration. Only rendered
            when something is genuinely happening in the clan right now. ── */
         .auth-live {
-            display: flex; align-items: center; gap: 9px; width: fit-content; margin-top: 22px;
-            padding: 8px 14px; border-radius: 8px;
-            background: color-mix(in oklch, var(--accent) 10%, transparent);
-            border: 1px solid color-mix(in oklch, var(--accent) 28%, transparent);
+            display: flex; align-items: center; gap: 10px; width: fit-content; margin-top: 22px;
+            padding: 9px 16px; border-radius: 8px;
+            background: color-mix(in oklch, var(--accent) 16%, transparent);
+            border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent);
+            box-shadow: 0 0 22px color-mix(in oklch, var(--accent) 20%, transparent);
         }
         .auth-live-dot {
-            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--accent);
-            box-shadow: 0 0 6px color-mix(in oklch, var(--accent) 55%, transparent);
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--accent);
+            box-shadow: 0 0 9px color-mix(in oklch, var(--accent) 70%, transparent);
             animation: authLivePulse 1.8s ease-in-out infinite;
         }
         @keyframes authLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
@@ -71,14 +72,36 @@
         .auth-points li { display: flex; align-items: center; gap: 11px; font-family: 'Manrope', sans-serif; font-size: 13.5px; color: var(--text); }
         .auth-points svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--accent); }
 
-        /* Decorative scope-reticle motif, echoing the sitewide "thermal-scope
-           readout" north star. Static (no pulse) — this is atmosphere, not a
-           live/state signal, so it stays quiet rather than animating. */
-        .auth-reticle {
-            position: absolute; right: -70px; bottom: -70px; width: 280px; height: 280px; opacity: .4; pointer-events: none;
-            transition: transform .3s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform;
+        /* Scope-reticle motif, echoing the sitewide "thermal-scope readout"
+           north star. Two independently-animated layers on purpose: the
+           OUTER wrap is what JS translates toward the pointer (tracked
+           document-wide, not just while hovering the panel — the earlier
+           panel-scoped version rarely fired since most cursor time is spent
+           over the form column) — a CSS `transform` transition can't share
+           a property with a JS-driven inline transform without fighting it,
+           so rotation lives on the INNER svg/sweep instead. Always
+           gently alive (idle rotation), not just reactive — a static scope
+           reads as decoration; a scanning one reads as "watching." */
+        .auth-reticle-wrap {
+            position: absolute; right: -30px; bottom: -30px; width: 380px; height: 380px;
+            opacity: .6; pointer-events: none;
+            transition: transform .5s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform;
         }
+        .auth-reticle { width: 100%; height: 100%; display: block; animation: authReticleSpin 60s linear infinite; }
         .auth-reticle circle, .auth-reticle line { stroke: var(--border); stroke-width: 1; fill: none; }
+        .auth-reticle circle.auth-reticle-accent { stroke: color-mix(in oklch, var(--accent) 55%, var(--border)); stroke-width: 1.4; }
+        /* Radar sweep: a rotating wedge of light, on-brand for the "night
+           ops scope" identity. Screen-blended and low-opacity so it reads
+           as a light sweep, not a filled gradient surface — DESIGN.md's
+           gradient ban is about surface/text fills, not this kind of
+           atmosphere on the one page that's explicitly this system's
+           single deliberate exception to "quiet at rest." */
+        .auth-reticle-sweep {
+            position: absolute; inset: 0; border-radius: 50%; mix-blend-mode: screen;
+            background: conic-gradient(from 0deg, color-mix(in oklch, var(--accent) 45%, transparent), transparent 22%);
+            animation: authReticleSpin 5s linear infinite;
+        }
+        @keyframes authReticleSpin { to { transform: rotate(360deg); } }
 
         /* ── Toggle (Sign In / Register — two real links, not a JS tab panel) ── */
         .auth-toggle { display: flex; gap: 4px; background: var(--surf2); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 28px; }
@@ -140,8 +163,9 @@
         .auth-submit-link { margin-top: 24px; text-decoration: none; }
 
         @media (prefers-reduced-motion: reduce) {
-            .auth-brand, .auth-toggle-link, .auth-field input, .auth-submit, .auth-reticle { transition: none; }
-            .auth-crest.is-live, .auth-live-dot { animation: none; }
+            .auth-brand, .auth-toggle-link, .auth-field input, .auth-submit, .auth-reticle-wrap { transition: none; }
+            .auth-crest.is-live, .auth-live-dot, .auth-reticle, .auth-reticle-sweep { animation: none; }
+            .auth-reticle-sweep { display: none; }
         }
 
         /* ── Responsive: content panel compresses to brand + headline only ─
@@ -154,7 +178,7 @@
             .auth-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
             .auth-panel { border-right: none; border-bottom: 1px solid var(--border); padding: 26px 24px; }
             .auth-pitch { margin: 20px 0 0; max-width: none; }
-            .auth-pitch-body, .auth-points, .auth-reticle { display: none; }
+            .auth-pitch-body, .auth-points, .auth-reticle-wrap { display: none; }
             .auth-headline { font-size: clamp(24px, 6vw, 30px); }
             .auth-form-col { padding: 28px 20px 40px; }
             /* 44px touch-target floor, matching the sitewide mobile-controls

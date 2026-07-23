@@ -58,13 +58,16 @@
         </ul>
     </div>
 
-    <svg class="auth-reticle" viewBox="0 0 280 280" aria-hidden="true" focusable="false">
-        <circle cx="140" cy="140" r="60"/>
-        <circle cx="140" cy="140" r="100"/>
-        <circle cx="140" cy="140" r="139"/>
-        <line x1="140" y1="6" x2="140" y2="46"/>
-        <line x1="140" y1="234" x2="140" y2="274"/>
-        <line x1="6" y1="140" x2="46" y2="140"/>
-        <line x1="234" y1="140" x2="274" y2="140"/>
-    </svg>
+    <div class="auth-reticle-wrap" aria-hidden="true">
+        <div class="auth-reticle-sweep"></div>
+        <svg class="auth-reticle" viewBox="0 0 280 280" focusable="false">
+            <circle cx="140" cy="140" r="60"/>
+            <circle cx="140" cy="140" r="100"/>
+            <circle cx="140" cy="140" r="139" class="auth-reticle-accent"/>
+            <line x1="140" y1="6" x2="140" y2="46"/>
+            <line x1="140" y1="234" x2="140" y2="274"/>
+            <line x1="6" y1="140" x2="46" y2="140"/>
+            <line x1="234" y1="140" x2="274" y2="140"/>
+        </svg>
+    </div>
 </aside>
