@@ -200,7 +200,7 @@ def _schedule_rest(session_set):
     db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
 
 
-def load_performed(exercise_ids=None, since=None, include_active=False):
+def load_performed(exercise_ids=None, since=None, include_active=False, exclude_session_exercise_ids=None):
     """Every exercise-as-performed with at least one completed set, as the
     single flat shape stats.py consumes.
 
@@ -217,6 +217,13 @@ def load_performed(exercise_ids=None, since=None, include_active=False):
     False: an in-progress workout's still-changing numbers must not leak into
     an average or a "sessions since PR" count before the workout is actually
     done.
+
+    `exclude_session_exercise_ids`, if given, drops those specific
+    SessionExercise rows outright before they ever become a PerformedExercise
+    -- gym_verlauf uses this to exclude a replaced-away original from its
+    own session's totals, the same exclusion performed_from_session() already
+    applies when building a single session's `current` for session_report().
+    Default (None) excludes nothing, so every other caller here is unaffected.
     """
     query = (
         SessionExercise.query
@@ -234,8 +241,11 @@ def load_performed(exercise_ids=None, since=None, include_active=False):
     if since is not None:
         query = query.filter(WorkoutSession.started_at >= since)
 
+    exclude_ids = exclude_session_exercise_ids or ()
     performed = []
     for session_exercise in query.order_by(WorkoutSession.started_at).all():
+        if session_exercise.id in exclude_ids:
+            continue
         completed = tuple(
             (s.weight, s.reps) for s in session_exercise.sets if s.completed
         )
@@ -820,61 +830,40 @@ def gym_verlauf():
         .all()
     )
 
+    # Replaced-away originals must not contribute to their own session's
+    # volume/record totals below -- the same exclusion performed_from_session()
+    # already applies for session_report()/the detail page: the substitute
+    # took over that slot, and counting both would inflate the session's
+    # totals with an exercise the historical comparison was never scoped to.
+    # `sessions` above already eager-loads every finished session's
+    # .exercises (for the exercise-list column) -- reused here for zero extra
+    # queries, reading replaces_id (a plain, already-loaded column) rather
+    # than the replaced_by backref, which would lazy-load once per row (see
+    # session_detail's identical replaced_original_ids, same reasoning).
+    replaced_away_ids = {
+        se.replaces_id
+        for s in sessions for se in s.exercises
+        if se.replaces_id is not None
+    }
+
     # The one bulk load this whole page runs on -- every completed set ever
     # logged, across every exercise, in a single query (see load_performed()'s
     # own docstring). Every session's volume and record count below is
     # derived from this one result set in Python; must not be recomputed per
     # session (spec 5.4, same discipline as gym_heute/gym_uebungen).
-    performed = load_performed()
-    sessions_by_exercise = {}
-    for row in performed:
-        per_exercise = sessions_by_exercise.setdefault(row.exercise_id, {})
-        per_exercise.setdefault(row.session_id, []).append(row)
+    performed = load_performed(exclude_session_exercise_ids=replaced_away_ids)
 
     volume_by_session = {}
-    records_by_session = {}
-    for exercise_id, rows_by_session in sessions_by_exercise.items():
-        # A session can (rarely) log the same exercise twice, in two
-        # different slots -- _template_exercises_from_session already has to
-        # guard against this -- so a session's rows for one exercise are
-        # combined into a single performance before comparing, rather than
-        # judged one row at a time (which could otherwise have the second row
-        # shadow the first purely because of query order, not real
-        # chronology). load_performed() already returns rows ordered by
-        # WorkoutSession.started_at, so the first row seen per session
-        # already carries the right order.
-        ordered_session_ids = sorted(
-            rows_by_session, key=lambda sid: rows_by_session[sid][0].started_at,
-        )
-        running_weight = running_e1rm = running_volume = None
-        for session_id in ordered_session_ids:
-            rows = rows_by_session[session_id]
-            session_weight = max(stats.best_weight(row) for row in rows)
-            session_e1rm = max(stats.best_e1rm(row) for row in rows)
-            session_volume = sum(stats.row_volume(row) for row in rows)
-            volume_by_session[session_id] = volume_by_session.get(session_id, 0.0) + session_volume
+    for row in performed:
+        volume_by_session[row.session_id] = volume_by_session.get(row.session_id, 0.0) + stats.row_volume(row)
 
-            # Same "beats a prior best by weight, e1RM, or volume" definition
-            # as stats.session_report's is_weight_pr / is_e1rm_pr /
-            # is_volume_pr -- one record per exercise per session -- but
-            # judged chronologically against only what came before it, rather
-            # than against every other session regardless of when it
-            # happened. That is the right comparison for "was this a record
-            # when it happened," and it stays stable no matter which
-            # session's row it's viewed from.
-            if (
-                (running_weight is not None and session_weight > running_weight)
-                or (running_e1rm is not None and session_e1rm > running_e1rm)
-                or (running_volume is not None and session_volume > running_volume)
-            ):
-                records_by_session[session_id] = records_by_session.get(session_id, 0) + 1
-
-            if running_weight is None or session_weight > running_weight:
-                running_weight = session_weight
-            if running_e1rm is None or session_e1rm > running_e1rm:
-                running_e1rm = session_e1rm
-            if running_volume is None or session_volume > running_volume:
-                running_volume = session_volume
+    # Same "beats every OTHER session, regardless of when it happened"
+    # semantics stats.session_report's own is_weight_pr/is_e1rm_pr/
+    # is_volume_pr use -- computed for every session in this one pass so a
+    # session's count here always agrees with what its own detail page
+    # (session_report) shows, instead of the strictly weaker "beats only the
+    # sessions before it" a chronological-only comparison would give.
+    records_by_session = stats.session_record_counts(performed)
 
     history = [
         {

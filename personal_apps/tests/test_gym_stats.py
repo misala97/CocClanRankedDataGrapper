@@ -404,3 +404,133 @@ def test_group_exercises_by_muscle_keeps_vocabulary_order_and_collects_strays():
 
     assert [group for group, _ in result] == ['Bizeps', 'Brust', 'Ohne Muskelgruppe']
     assert [ex.name for ex in result[2][1]] == ['Etwas Altes', 'Ohne Gruppe']
+
+
+# -- session_record_counts -- Verlauf's bulk companion to session_report()'s
+# own per-session record_count. Every case here is chosen to mirror a real
+# session_report() call: if these disagree with what session_report(current,
+# history) would compute for the same session, Verlauf and the session's own
+# detail page show two different "truths" for one fact (the bug this
+# function exists to fix).
+
+def test_session_record_counts_compares_the_top_session_against_the_second_best():
+    # The session holding the single highest value can't be compared against
+    # itself -- it must be judged against the next-best (here, the only
+    # other session), the top-2 fallback the review called out explicitly.
+    rows = [
+        perf([(80.0, 8)], started_at=day(0), session_id=1),
+        perf([(90.0, 8)], started_at=day(7), session_id=2),
+    ]
+    counts = stats.session_record_counts(rows)
+
+    assert counts.get(2, 0) == 1
+    assert counts.get(1, 0) == 0
+
+
+def test_session_record_counts_does_not_count_a_record_since_overtaken_by_a_later_session():
+    # This is the exact real-world bug: session 2 was a record only against
+    # what came before it (session 1), but session 3 has since beaten it --
+    # session 2 must NOT count, because it does not beat *every other*
+    # session, only the ones before it.
+    rows = [
+        perf([(80.0, 8)], started_at=day(0), session_id=1),
+        perf([(85.0, 8)], started_at=day(7), session_id=2),
+        perf([(90.0, 8)], started_at=day(14), session_id=3),
+    ]
+    counts = stats.session_record_counts(rows)
+
+    assert counts.get(1, 0) == 0
+    assert counts.get(2, 0) == 0
+    assert counts.get(3, 0) == 1
+
+
+def test_session_record_counts_accumulates_across_multiple_exercises_for_one_session():
+    rows = [
+        perf([(80.0, 8)], exercise_id=1, name='Bankdruecken', started_at=day(0), session_id=1),
+        perf([(90.0, 8)], exercise_id=1, name='Bankdruecken', started_at=day(7), session_id=2),
+        perf([(50.0, 10)], exercise_id=2, name='Beinpresse', started_at=day(0), session_id=1),
+        perf([(60.0, 10)], exercise_id=2, name='Beinpresse', started_at=day(7), session_id=2),
+    ]
+    counts = stats.session_record_counts(rows)
+
+    assert counts[2] == 2
+    assert counts.get(1, 0) == 0
+
+
+def test_session_record_counts_is_zero_for_an_exercise_only_one_session_has_ever_done():
+    # No other session exists to have "beaten" -- matches session_report's
+    # own has_history=False -> never a record, regardless of the value.
+    rows = [perf([(80.0, 8)], started_at=day(0), session_id=1)]
+    counts = stats.session_record_counts(rows)
+
+    assert counts.get(1, 0) == 0
+
+
+def test_session_record_counts_ties_do_not_count_as_a_record():
+    rows = [
+        perf([(80.0, 8)], started_at=day(0), session_id=1),
+        perf([(80.0, 8)], started_at=day(7), session_id=2),
+    ]
+    counts = stats.session_record_counts(rows)
+
+    assert counts.get(1, 0) == 0
+    assert counts.get(2, 0) == 0
+
+
+def test_session_record_counts_catches_an_e1rm_record_that_is_not_a_weight_record():
+    # session 2 is not the heaviest, but 12 reps at 90 estimates a higher
+    # 1RM than 5 reps at 100 -- it must still register as a record on the
+    # e1RM axis alone. (session 1 legitimately also counts here, via the
+    # separate weight axis: 100kg is still the heaviest of the two -- that
+    # is a real, independent record, not a fixture mistake.)
+    rows = [
+        perf([(100.0, 5)], started_at=day(0), session_id=1),   # heaviest weight
+        perf([(90.0, 12)], started_at=day(7), session_id=2),   # lighter but a higher e1RM
+    ]
+    assert stats.best_e1rm(rows[1]) > stats.best_e1rm(rows[0])
+    assert stats.best_weight(rows[1]) < stats.best_weight(rows[0])
+
+    counts = stats.session_record_counts(rows)
+
+    assert counts.get(2, 0) == 1   # via e1RM
+    assert counts.get(1, 0) == 1   # via weight (heaviest of the two)
+
+
+def test_session_record_counts_combines_a_sessions_own_duplicate_rows_for_one_exercise():
+    # A session can (rarely) log the same exercise twice, in two different
+    # slots -- its best row must still be judged as one performance, not let
+    # a weaker sibling row shadow it or double-count it.
+    rows = [
+        perf([(80.0, 8)], started_at=day(0), session_id=1, position=1),
+        perf([(70.0, 8)], started_at=day(7), session_id=2, position=1),
+        perf([(95.0, 8)], started_at=day(7), session_id=2, position=4),
+    ]
+    counts = stats.session_record_counts(rows)
+
+    assert counts.get(2, 0) == 1
+    assert counts.get(1, 0) == 0
+
+
+def test_session_record_counts_agrees_with_session_report_for_every_session():
+    # Belt-and-suspenders: independently recompute what session_report()
+    # would say for every session in a nontrivial multi-session,
+    # multi-exercise scenario, and require exact agreement -- this is the
+    # actual contract the function exists to satisfy.
+    all_rows = [
+        perf([(80.0, 8)], exercise_id=1, name='Bankdruecken', started_at=day(0), session_id=1),
+        perf([(85.0, 8)], exercise_id=1, name='Bankdruecken', started_at=day(7), session_id=2),
+        perf([(90.0, 8)], exercise_id=1, name='Bankdruecken', started_at=day(14), session_id=3),
+        perf([(50.0, 10)], exercise_id=2, name='Beinpresse', started_at=day(0), session_id=1),
+        perf([(55.0, 10)], exercise_id=2, name='Beinpresse', started_at=day(7), session_id=2),
+        perf([(52.0, 10)], exercise_id=2, name='Beinpresse', started_at=day(14), session_id=3),
+    ]
+    bulk_counts = stats.session_record_counts(all_rows)
+
+    by_session = {}
+    for row in all_rows:
+        by_session.setdefault(row.session_id, []).append(row)
+
+    for session_id, current in by_session.items():
+        history = [row for row in all_rows if row.session_id != session_id]
+        report = stats.session_report(current, history)
+        assert bulk_counts.get(session_id, 0) == report['record_count'], session_id

@@ -381,6 +381,78 @@ def session_report(current, history, comparable_session_volumes=()):
     }
 
 
+def session_record_counts(rows):
+    """The {session_id: record_count} companion to session_report()'s own
+    per-session record_count -- every finished session's count, computed in
+    one pass, for a page (Verlauf) that needs all of them at once rather
+    than paying an N+1 by calling session_report() once per session.
+
+    Uses the exact same "beats every OTHER session, regardless of when it
+    happened" semantics as session_report's is_weight_pr / is_e1rm_pr /
+    is_volume_pr -- not "beats only the sessions that came before it" -- so
+    a session's number here always agrees with what session_report() would
+    compute for that same session, which is what its own detail page shows.
+    `rows` is every already-loaded PerformedExercise across every session;
+    the caller must already have dropped any exercise that was replaced
+    mid-workout (see performed_from_session), the same requirement
+    session_report's own `current` carries -- a replaced-away original's
+    slot is represented by the substitute that took over, and counting both
+    would inflate a session's own totals.
+
+    One pass per exercise, per metric (best weight, best e1RM, summed
+    volume): the session holding the single highest value can only be
+    compared against the second-highest, since it cannot be said to beat
+    itself; every other session is compared against the single highest
+    value, since that is the highest bar anyone else has set. That is
+    mathematically the same question session_report asks per row (does this
+    beat the max of every OTHER session), just answered for every session
+    in one sweep instead of one query's worth of "current" at a time.
+
+    A session can (rarely) log the same exercise twice, in two different
+    slots -- its rows for that exercise are combined into one per-session
+    value first (max weight, max e1RM, summed volume) so that session is
+    judged as a single performance on that exercise, not as two rows that
+    could otherwise shadow or double-count each other. This mirrors
+    session_report itself: two rows in `current` for one exercise would each
+    be compared independently against the very same `history`, so a
+    stronger row could earn a record while a weaker sibling row from the
+    same session correctly does not -- combining first collapses that
+    per-exercise decision into the single best-of-both-rows number, which is
+    the same one-record-per-exercise-per-session outcome session_report
+    produces in the overwhelmingly common case of one row per exercise.
+    """
+    rows_by_exercise = {}
+    for row in rows:
+        by_session = rows_by_exercise.setdefault(row.exercise_id, {})
+        by_session.setdefault(row.session_id, []).append(row)
+
+    record_counts = {}
+    for sessions in rows_by_exercise.values():
+        session_values = {
+            session_id: {
+                'weight': max(best_weight(row) for row in session_rows),
+                'e1rm': max(best_e1rm(row) for row in session_rows),
+                'volume': sum(row_volume(row) for row in session_rows),
+            }
+            for session_id, session_rows in sessions.items()
+        }
+
+        record_here = set()
+        for metric in ('weight', 'e1rm', 'volume'):
+            ranked = sorted(session_values.items(), key=lambda item: -item[1][metric])
+            top_session_id, top_value = ranked[0][0], ranked[0][1][metric]
+            second_value = ranked[1][1][metric] if len(ranked) > 1 else None
+            for session_id, values in session_values.items():
+                threshold = second_value if session_id == top_session_id else top_value
+                if threshold is not None and values[metric] > threshold:
+                    record_here.add(session_id)
+
+        for session_id in record_here:
+            record_counts[session_id] = record_counts.get(session_id, 0) + 1
+
+    return record_counts
+
+
 def muscle_group_volume(rows, catalogue_groups, now, days=ROLLING_WINDOW_DAYS):
     """Working sets and volume per muscle group over a rolling window.
 
