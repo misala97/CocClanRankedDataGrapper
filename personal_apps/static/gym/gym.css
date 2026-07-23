@@ -819,8 +819,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 .session-head__main { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); min-inline-size: 0; }
 .session-head__clock { flex: none; color: var(--live); text-shadow: var(--glow-live); }
-.session-head__clock.is-done { color: var(--ink); text-shadow: none; }   /* a finished session's static duration is fact, not a running timer */
-.session-head__sub { margin: calc(-1 * var(--sp-2)) 0 var(--sp-4); }
 
 /* push-notification enable row + the reorder lock toggle */
 .notify { display: flex; align-items: center; gap: var(--sp-3); }
@@ -848,7 +846,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 /* collapse: the header is the settled summary row; the body is the workspace */
 .exercise-card__body { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-3); }
 .exercise-card.collapsed .exercise-card__body { display: none; }
-.replace-note { color: var(--dim); margin-top: var(--sp-2); line-height: 1.4; }
 
 .pending-hint { color: var(--dim); }
 .sets { display: flex; flex-direction: column; gap: var(--sp-1); }

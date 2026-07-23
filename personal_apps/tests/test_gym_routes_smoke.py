@@ -18,6 +18,14 @@ def test_dashboard_renders(client):
     assert client.get('/gym').status_code == 200
 
 
+def test_uebungen_renders(client):
+    assert client.get('/gym/uebungen').status_code == 200
+
+
+def test_verlauf_renders(client):
+    assert client.get('/gym/verlauf').status_code == 200
+
+
 def test_exercise_detail_renders_for_every_exercise(client):
     with flask_app.app_context():
         from models import Exercise
