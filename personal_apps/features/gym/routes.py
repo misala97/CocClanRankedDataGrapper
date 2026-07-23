@@ -190,7 +190,7 @@ def _schedule_rest(session_set):
     db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
 
 
-def load_performed(exercise_ids=None, since=None):
+def load_performed(exercise_ids=None, since=None, include_active=False):
     """Every exercise-as-performed with at least one completed set, as the
     single flat shape stats.py consumes.
 
@@ -198,6 +198,15 @@ def load_performed(exercise_ids=None, since=None):
     verdicts need them for the whole catalogue at once, and asking per exercise
     would mean one query per row -- roughly forty on the catalogue page today,
     and worse every time an exercise is added.
+
+    `include_active` also includes the current active (unfinished) session's
+    own completed sets. The exercise-detail page and its live progress modal
+    need this -- a set just logged mid-workout must show up immediately, not
+    only once the workout is finished. Callers building historical
+    comparisons (stagnation checks, past-session averages) must leave this
+    False: an in-progress workout's still-changing numbers must not leak into
+    an average or a "sessions since PR" count before the workout is actually
+    done.
     """
     query = (
         SessionExercise.query
@@ -207,8 +216,9 @@ def load_performed(exercise_ids=None, since=None):
             joinedload(SessionExercise.sets),
         )
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(WorkoutSession.finished_at.isnot(None))
     )
+    if not include_active:
+        query = query.filter(WorkoutSession.finished_at.isnot(None))
     if exercise_ids is not None:
         query = query.filter(SessionExercise.exercise_id.in_(exercise_ids))
     if since is not None:
@@ -854,7 +864,7 @@ def _exercise_progress_shim(rows, position):
 def exercise_detail(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     position = request.args.get('position', type=int)
-    rows = load_performed(exercise_ids=[exercise.id])
+    rows = load_performed(exercise_ids=[exercise.id], include_active=True)
     data = _exercise_progress_shim(rows, position)
     return render_template('gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS, **data)
 
@@ -870,7 +880,7 @@ def gym_exercise_progress_json(exercise_id):
     just because you haven't done this exercise in this position before."""
     exercise = db.get_or_404(Exercise, exercise_id)
     position = request.args.get('position', type=int)
-    rows = load_performed(exercise_ids=[exercise.id])
+    rows = load_performed(exercise_ids=[exercise.id], include_active=True)
     progress = stats.exercise_progress(rows, position=position)
     if position is not None and not progress['table']:
         position = None
