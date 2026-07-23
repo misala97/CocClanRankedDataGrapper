@@ -745,10 +745,7 @@ def gym_delete_session(session_id):
         db.session.commit()
         db.session.delete(session_)
         db.session.commit()
-    # TODO(Task 11): gym.gym_verlauf doesn't exist yet -- deleting a finished
-    # workout should return to workout history, not the dashboard. Point this
-    # at gym.gym_verlauf once that route is built.
-    return redirect(url_for('gym.gym_heute'))
+    return redirect(url_for('gym.gym_verlauf'))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/update_template', methods=['POST'])
@@ -802,6 +799,93 @@ def gym_delete_template(template_id):
     db.session.delete(template)
     db.session.commit()
     return redirect(url_for('gym.gym_heute'))
+
+
+@gym_bp.route('/gym/verlauf')
+@login_required
+def gym_verlauf():
+    """Every finished workout, newest first, with its own total volume and
+    record count -- spec 6.6, one of the three real nav destinations."""
+    # Eager-loaded for the exercise-list column: WorkoutSession.exercises and
+    # SessionExercise.exercise are lazy relationships (models.py). This page
+    # can list every finished session ever logged, and touching either per
+    # row without this would be exactly the N+1 the bulk-loading discipline
+    # below exists to avoid, just on a different relationship than
+    # load_performed().
+    sessions = (
+        WorkoutSession.query
+        .filter(WorkoutSession.finished_at.isnot(None))
+        .options(joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise))
+        .order_by(WorkoutSession.started_at.desc())
+        .all()
+    )
+
+    # The one bulk load this whole page runs on -- every completed set ever
+    # logged, across every exercise, in a single query (see load_performed()'s
+    # own docstring). Every session's volume and record count below is
+    # derived from this one result set in Python; must not be recomputed per
+    # session (spec 5.4, same discipline as gym_heute/gym_uebungen).
+    performed = load_performed()
+    sessions_by_exercise = {}
+    for row in performed:
+        per_exercise = sessions_by_exercise.setdefault(row.exercise_id, {})
+        per_exercise.setdefault(row.session_id, []).append(row)
+
+    volume_by_session = {}
+    records_by_session = {}
+    for exercise_id, rows_by_session in sessions_by_exercise.items():
+        # A session can (rarely) log the same exercise twice, in two
+        # different slots -- _template_exercises_from_session already has to
+        # guard against this -- so a session's rows for one exercise are
+        # combined into a single performance before comparing, rather than
+        # judged one row at a time (which could otherwise have the second row
+        # shadow the first purely because of query order, not real
+        # chronology). load_performed() already returns rows ordered by
+        # WorkoutSession.started_at, so the first row seen per session
+        # already carries the right order.
+        ordered_session_ids = sorted(
+            rows_by_session, key=lambda sid: rows_by_session[sid][0].started_at,
+        )
+        running_weight = running_e1rm = running_volume = None
+        for session_id in ordered_session_ids:
+            rows = rows_by_session[session_id]
+            session_weight = max(stats.best_weight(row) for row in rows)
+            session_e1rm = max(stats.best_e1rm(row) for row in rows)
+            session_volume = sum(stats.row_volume(row) for row in rows)
+            volume_by_session[session_id] = volume_by_session.get(session_id, 0.0) + session_volume
+
+            # Same "beats a prior best by weight, e1RM, or volume" definition
+            # as stats.session_report's is_weight_pr / is_e1rm_pr /
+            # is_volume_pr -- one record per exercise per session -- but
+            # judged chronologically against only what came before it, rather
+            # than against every other session regardless of when it
+            # happened. That is the right comparison for "was this a record
+            # when it happened," and it stays stable no matter which
+            # session's row it's viewed from.
+            if (
+                (running_weight is not None and session_weight > running_weight)
+                or (running_e1rm is not None and session_e1rm > running_e1rm)
+                or (running_volume is not None and session_volume > running_volume)
+            ):
+                records_by_session[session_id] = records_by_session.get(session_id, 0) + 1
+
+            if running_weight is None or session_weight > running_weight:
+                running_weight = session_weight
+            if running_e1rm is None or session_e1rm > running_e1rm:
+                running_e1rm = session_e1rm
+            if running_volume is None or session_volume > running_volume:
+                running_volume = session_volume
+
+    history = [
+        {
+            'session': s,
+            'volume': round(volume_by_session.get(s.id, 0.0), 1),
+            'record_count': records_by_session.get(s.id, 0),
+        }
+        for s in sessions
+    ]
+
+    return render_template('gym/verlauf.html', history=history)
 
 
 @gym_bp.route('/gym/export')

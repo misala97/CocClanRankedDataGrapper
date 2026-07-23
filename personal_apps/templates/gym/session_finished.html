@@ -132,10 +132,7 @@
     {% endif %}
 
     <div class="finished-actions">
-        {# gym.gym_verlauf doesn't exist until Task 11 -- points at Heute for
-           now, same placeholder as gym_delete_session's own redirect in
-           routes.py. #}
-        <a href="{{ url_for('gym.gym_heute') }}" class="btn btn--ghost">Verlauf</a>
+        <a href="{{ url_for('gym.gym_verlauf') }}" class="btn btn--ghost">Verlauf</a>
         <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=session.id) }}" onsubmit="return confirm('Workout unwiderruflich löschen?')">
             <button type="submit" class="btn btn--stall">Workout löschen</button>
         </form>

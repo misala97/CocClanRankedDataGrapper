@@ -1,0 +1,95 @@
+{% extends 'gym/_base.html' %}
+
+{# Verlauf (spec 6.6): the third real route -- a chronological list of every
+   finished workout, newest first, plus the JSON export panel (moved here
+   verbatim in behavior from the old dashboard; see gym_export() in
+   routes.py, unchanged). Every row's total volume and record count come
+   from gym_verlauf()'s own single load_performed() call, grouped by session
+   in Python -- same bulk-loading discipline as Heute/Übungen (spec 5.4):
+   this page must never issue one query per session no matter how long the
+   history gets. #}
+
+{% block title %}Verlauf · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="gym-wrap">
+<div class="verlauf">
+
+    <header class="verlauf__head">
+        <h1>Verlauf</h1>
+    </header>
+
+    <section class="panel verlauf__export">
+        <div class="section-head"><span class="label">Export</span></div>
+        <div class="verlauf-export__presets">
+            <button type="button" class="btn btn--ghost btn--sm export-preset" data-days="30">Letzte 30 Tage</button>
+            <button type="button" class="btn btn--ghost btn--sm export-preset" data-days="90">Letzte 90 Tage</button>
+            <button type="button" class="btn btn--ghost btn--sm export-preset" data-days="">Alle</button>
+        </div>
+        <form method="get" action="{{ url_for('gym.gym_export') }}" class="verlauf-export__range">
+            <div class="field">
+                <label class="label" for="export-from">Von</label>
+                <input type="date" name="from" id="export-from" class="input">
+            </div>
+            <div class="field">
+                <label class="label" for="export-to">Bis</label>
+                <input type="date" name="to" id="export-to" class="input">
+            </div>
+            <button type="submit" class="btn btn--live btn--sm">Exportieren (JSON)</button>
+        </form>
+    </section>
+
+    <section class="panel verlauf__list">
+        <div class="section-head"><span class="label">Workouts</span></div>
+        {% if history %}
+        {% for entry in history %}
+        <div class="verlauf-row">
+            <a href="{{ url_for('gym.session_detail', session_id=entry.session.id) }}" class="verlauf-row__main">
+                <div class="name">{{ entry.session.name or 'Workout' }}</div>
+                <p class="label verlauf-row__meta">{{ entry.session.started_at.strftime('%d.%m.%Y %H:%M') }} · {{ entry.session.finished_at - entry.session.started_at }}</p>
+                <p class="label verlauf-row__exercises">{{ entry.session.exercises|map(attribute='exercise.name')|join(' · ') }}</p>
+            </a>
+            <div class="verlauf-row__stats">
+                <span class="load"><span class="load__val">{{ entry.volume }}</span><span class="load__unit">kg</span></span>
+                {% if entry.record_count %}
+                <span class="chip chip--record">{{ entry.record_count }} {{ 'Rekord' if entry.record_count == 1 else 'Rekorde' }}</span>
+                {% endif %}
+            </div>
+            <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=entry.session.id) }}" class="verlauf-row__delete" onsubmit="return confirm('Workout unwiderruflich löschen?')">
+                <button type="submit" class="btn btn--stall btn--sm">Löschen</button>
+            </form>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty">Noch keine abgeschlossenen Workouts.</div>
+        {% endif %}
+    </section>
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Export presets: unchanged behavior from the old dashboard (see the header
+// comment above) -- sets `to` to today and `from` to today minus N days;
+// "Alle" clears `from` entirely so gym_export() falls back to its own
+// earliest-possible default.
+document.querySelectorAll('.export-preset').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        const days = btn.dataset.days;
+        const toInput = document.getElementById('export-to');
+        const fromInput = document.getElementById('export-from');
+        const today = new Date();
+        toInput.value = today.toISOString().slice(0, 10);
+        if (days) {
+            const from = new Date(today);
+            from.setDate(from.getDate() - parseInt(days, 10));
+            fromInput.value = from.toISOString().slice(0, 10);
+        } else {
+            fromInput.value = '';
+        }
+    });
+});
+</script>
+{% endblock %}

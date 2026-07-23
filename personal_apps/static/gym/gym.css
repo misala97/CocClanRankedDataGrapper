@@ -1181,6 +1181,29 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .uebungen-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
 
 /* ============================================================================
+   VERLAUF  ·  workout history + export (verlauf.html)
+   ----------------------------------------------------------------------------
+   Two panels: the export controls (spec 6.6 -- same behavior as the old
+   dashboard's export panel, restyled with this system's own primitives, not
+   the old .export-panel/.form-row classes), then one divided list of every
+   finished session, newest first -- the same "not a card per row" pattern as
+   .recent-row / .ex-report-row / .uebungen-row.
+   ============================================================================ */
+
+.verlauf__head { margin-bottom: var(--sp-4); }
+
+.verlauf-export__presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.verlauf-export__range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
+
+.verlauf-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.verlauf-row + .verlauf-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+.verlauf-row__main { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
+.verlauf-row__meta { margin-top: 2px; }
+.verlauf-row__exercises { margin-top: 2px; }
+.verlauf-row__stats { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); flex: none; }
+.verlauf-row__delete { flex: none; }
+
+/* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
 
