@@ -1,24 +1,7 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gym Tracker</title>
-    <link rel="manifest" href="/static/manifest.json">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
-    <meta name="theme-color" content="#0a0a0a">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
-</head>
-<body>
+{% extends 'gym/_base.html' %}
 
-{% include 'gym/_nav.html' %}
-
-<div class="gym-page-wrap">
+{% block content %}
+<div class="gym-wrap">
     <h1>Gym Tracker</h1>
     <p style="color:var(--gym-muted);font-size:14px;margin-bottom:24px">Workouts, Sätze und Fortschritt verfolgen</p>
 
@@ -184,22 +167,11 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-{% if active_session %}
-const startedAt = new Date(document.getElementById('active-elapsed').dataset.started + 'Z');
-function pad(n) { return String(n).padStart(2, '0'); }
-function tick() {
-    const diff = Math.max(0, Date.now() - startedAt.getTime());
-    const totalSec = Math.floor(diff / 1000);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    document.getElementById('active-elapsed').textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
-}
-tick();
-setInterval(tick, 1000);
-{% endif %}
+window.GymClock.start(document.getElementById('active-elapsed'));
 document.querySelectorAll('.export-preset').forEach((btn) => {
     btn.addEventListener('click', () => {
         const days = btn.dataset.days;
@@ -217,6 +189,4 @@ document.querySelectorAll('.export-preset').forEach((btn) => {
     });
 });
 </script>
-
-</body>
-</html>
+{% endblock %}

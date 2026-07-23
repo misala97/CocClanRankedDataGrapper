@@ -128,6 +128,7 @@
   /* ---- shell metrics ---- */
   --wrap-max: 1160px;
   --tabbar-h: 60px;
+  --resume-h: 52px;   /* deliberate, not content-derived -- see body.has-resume below */
 }
 
 /* ============================================================================
@@ -585,6 +586,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   }
   .topbar__nav { display: flex; align-items: center; gap: var(--sp-1); }
   .topbar__link {
+    display: inline-flex; align-items: center; min-block-size: 44px;
     padding: var(--sp-2) var(--sp-3); border-radius: var(--r-control);
     font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
     letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
@@ -600,6 +602,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .resume {
   position: fixed; inset-inline: 0; z-index: var(--z-resume);
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  min-block-size: var(--resume-h);   /* fixed, not content-derived: body.has-resume below reserves exactly this much */
   display: flex; align-items: center; gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-4);
   background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
@@ -616,7 +619,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   font-size: var(--t-meta); letter-spacing: var(--track-name); text-transform: uppercase;
   color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.resume__meta { font-family: var(--font-mono); font-size: var(--t-micro); color: var(--dim); }
+.resume__meta {
+  font-family: var(--font-mono); font-size: var(--t-micro); color: var(--dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;   /* keeps .resume at exactly --resume-h even for a long exercise name */
+}
 .resume__clock {
   font-family: var(--font-display); font-weight: var(--w-bold);
   font-variant-numeric: tabular-nums; font-size: var(--num-sm);
@@ -626,6 +632,27 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   /* desktop has room: the strip sits in normal flow directly below the top bar
      (rendered there by _base.html), not fixed, so it never overlaps the bar */
   .resume { position: static; border-top: 0; border-bottom: 1px solid var(--live); }
+}
+
+/* Mobile only: when the resume strip is actually rendered above the fixed tab
+   bar, the base `body` padding-bottom (which only clears the tab bar itself)
+   isn't enough -- the strip sits on top of the last ~52px of scrollable
+   content. _base.html adds this class to <body> exactly when _nav.html is
+   about to render .resume (same gym_active_session + endpoint condition), so
+   the reserved space always matches whether the strip is actually there. */
+@media (max-width: 899px) {
+  body.has-resume {
+    padding-bottom: calc(var(--tabbar-h) + var(--resume-h) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* quiet mobile-only logout: normal flow (not fixed, not a 4th tab -- the tab
+   bar is exactly three routes), de-emphasised via .label, but still a full
+   44px tap strip. Desktop already has its own logout link in .topbar. */
+.nav-footer { display: flex; justify-content: center; }
+.nav-footer a { display: inline-flex; align-items: center; justify-content: center; min-block-size: 44px; padding-inline: var(--sp-4); }
+@media (min-width: 900px) {
+  .nav-footer { display: none; }
 }
 
 /* ============================================================================

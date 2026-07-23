@@ -1,38 +1,72 @@
-{# Shared gym nav: top bar (desktop, >860px) + bottom tab bar (mobile).
+{# Shared gym shell nav: mobile bottom tab bar, desktop top bar, and the
+   active-workout resume strip. Included once by `_base.html` on every page
+   that extends it (dashboard.html so far), and directly by the gym templates
+   Tasks 7/8/12 haven't migrated to the shell yet (session_detail.html,
+   session_summary.html, exercise_detail.html) -- so nothing here may assume
+   `_base.html`-only context; every condition below is self-contained.
+
    `gym_active_session` is injected into every gym-blueprint template's
-   context automatically by inject_gym_nav_context() in routes.py -- no
-   view needs to pass it explicitly. "Verlauf"/"Übungen" are anchors on the
-   dashboard (there is no separate history/exercises route), see the Global
-   Constraints note in the plan this was built from. #}
-<nav class="gym-nav">
-    <div class="gym-nav-inner">
-        <div class="gym-nav-logo">
-            <div class="gym-logo-icon">🏋️</div>
-            <span>Gym Tracker</span>
-        </div>
-        <div class="gym-nav-links">
-            <a href="{{ url_for('gym.gym_dashboard') }}" class="{{ 'active' if request.endpoint == 'gym.gym_dashboard' else '' }}">Dashboard</a>
-            {% if gym_active_session %}
-            <a href="{{ url_for('gym.session_detail', session_id=gym_active_session.id) }}" class="{{ 'active' if request.endpoint == 'gym.session_detail' else '' }}">Aktiv<span class="gym-nav-dot"></span></a>
-            {% endif %}
-            <a href="{{ url_for('gym.gym_dashboard') }}#history" class="{{ 'active' if request.endpoint == 'gym.gym_session_summary' else '' }}">Verlauf</a>
-            <a href="{{ url_for('gym.gym_dashboard') }}#exercises" class="{{ 'active' if request.endpoint == 'gym.exercise_detail' else '' }}">Übungen</a>
-            <a href="/logout">Logout</a>
-        </div>
+   context automatically by inject_gym_nav_context() in routes.py -- no view
+   needs to pass it explicitly.
+
+   Endpoint names: gym.gym_heute / gym.gym_uebungen / gym.gym_verlauf don't
+   exist until Tasks 9-11 build them. Every <a href> below points at
+   gym.gym_dashboard (the only real page today) -- but each tab's *is-active*
+   check already compares against its real, future endpoint name, so the
+   Task 11 rewire only has to change the href/url_for() targets, not the
+   active-state logic. Today that means no tab is lit while on the
+   dashboard; that is expected and temporary, not a bug. #}
+{% set gym_nav_items = [
+    {'label': 'Heute', 'endpoint': 'gym.gym_heute'},
+    {'label': 'Übungen', 'endpoint': 'gym.gym_uebungen'},
+    {'label': 'Verlauf', 'endpoint': 'gym.gym_verlauf'},
+] %}
+
+<nav class="topbar" aria-label="Hauptnavigation">
+    <span class="topbar__brand">Gym Tracker</span>
+    <div class="topbar__nav">
+        {% for item in gym_nav_items %}
+        <a href="{{ url_for('gym.gym_dashboard') }}" class="topbar__link{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
+        {% endfor %}
+        <a href="/logout" class="topbar__link">Abmelden</a>
     </div>
 </nav>
 
-<div class="gym-tabbar">
-    <a href="{{ url_for('gym.gym_dashboard') }}" class="{{ 'active' if request.endpoint == 'gym.gym_dashboard' else '' }}">
-        <span class="gym-tab-icon">🏠</span>Dashboard
-    </a>
-    <a href="{{ url_for('gym.session_detail', session_id=gym_active_session.id) if gym_active_session else url_for('gym.gym_dashboard') }}" class="{{ 'active' if request.endpoint == 'gym.session_detail' else '' }}">
-        <span class="gym-tab-icon">🏋️{% if gym_active_session %}<span class="gym-nav-dot"></span>{% endif %}</span>Aktiv
-    </a>
-    <a href="{{ url_for('gym.gym_dashboard') }}#history" class="{{ 'active' if request.endpoint == 'gym.gym_session_summary' else '' }}">
-        <span class="gym-tab-icon">📜</span>Verlauf
-    </a>
-    <a href="{{ url_for('gym.gym_dashboard') }}#exercises" class="{{ 'active' if request.endpoint == 'gym.exercise_detail' else '' }}">
-        <span class="gym-tab-icon">📋</span>Übungen
-    </a>
+{% if gym_active_session and request.endpoint != 'gym.session_detail' %}
+{# "Current exercise": the first visible exercise (position order, skipping
+   skipped rows and originals a mid-workout replace superseded -- the same
+   visibility rule session_detail's route uses) that isn't fully logged yet,
+   or the last visible one if everything is already done. A resume-strip
+   heuristic ("what was I on") -- not the authoritative live-set concept the
+   session detail page itself owns from Task 7 onward. #}
+{% set replaced_ids = gym_active_session.exercises | selectattr('replaces_id') | map(attribute='replaces_id') | list %}
+{% set visible_exercises = gym_active_session.exercises | rejectattr('skipped') | rejectattr('id', 'in', replaced_ids) | list %}
+{% set ns = namespace(current=none) %}
+{% for se in visible_exercises %}
+    {% if ns.current is none and (se.sets | length == 0 or (se.sets | rejectattr('completed') | list | length > 0)) %}
+        {% set ns.current = se %}
+    {% endif %}
+{% endfor %}
+{% if ns.current is none and visible_exercises %}{% set ns.current = visible_exercises[-1] %}{% endif %}
+<a href="{{ url_for('gym.session_detail', session_id=gym_active_session.id) }}" class="resume" aria-label="Aktives Workout fortsetzen">
+    <span class="resume__pulse" aria-hidden="true"></span>
+    <span class="resume__body">
+        <span class="resume__name">{{ gym_active_session.name or 'Workout' }}</span>
+        <span class="resume__meta">{{ ns.current.exercise.name if ns.current else 'Wird fortgesetzt' }}</span>
+    </span>
+    <span class="resume__clock" id="resume-elapsed" data-started="{{ gym_active_session.started_at.isoformat() }}">--:--:--</span>
+</a>
+<script>
+    if (window.GymClock) { window.GymClock.start(document.getElementById('resume-elapsed')); }
+</script>
+{% endif %}
+
+<nav class="tabbar" aria-label="Hauptnavigation">
+    {% for item in gym_nav_items %}
+    <a href="{{ url_for('gym.gym_dashboard') }}" class="tabbar__tab{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
+    {% endfor %}
+</nav>
+
+<div class="nav-footer">
+    <a href="/logout" class="label">Abmelden</a>
 </div>
