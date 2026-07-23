@@ -1,31 +1,41 @@
 {#- ═══════════════════════════════════════════════════════════════════════
-   SHARED reactive-panel effects — pointer-tracked reticle ("targeting
-   lock"), magnetic buttons, and a one-time entrance for the live-status
-   row. Pure front-end, no data dependency. Fully skipped under
-   prefers-reduced-motion: reduce (the static resting appearance is the
-   fallback, not a degraded one). Included by both /login and /register.
+   SHARED reactive effects — the cursor-chasing targeting lock (.auth-lock,
+   markup in _auth_lock.html), magnetic buttons, a one-time entrance for the
+   live-status row, and the member-count count-up. Pure front-end, no data
+   dependency. Fully skipped under prefers-reduced-motion: reduce (the
+   static resting appearance is the fallback, not a degraded one). Included
+   by both /login and /register.
    ═══════════════════════════════════════════════════════════════════════ -#}
 <script>
 (function () {
     var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion) return;
 
-    // ── Reticle: tracks the pointer across the WHOLE page, not just while
-    //    hovering the panel — most cursor time is spent over the form
-    //    column, so a panel-scoped listener rarely fired. Large amplitude
-    //    (±70px) so the "lock-on" reads clearly instead of vanishing. ──
-    var wrap = document.querySelector('.auth-reticle-wrap');
-    if (wrap) {
-        var rTx = 0, rTy = 0, rRaf = null;
-        var applyReticle = function () {
-            wrap.style.transform = 'translate(' + rTx.toFixed(1) + 'px, ' + rTy.toFixed(1) + 'px)';
-            rRaf = null;
-        };
+    // ── Targeting lock: eases toward the REAL cursor position every frame
+    //    (a continuous rAF loop, not a one-shot handler), fixed to the
+    //    viewport so it's visible over the whole shell, not just the panel.
+    //    Left stationary, it keeps closing the gap frame over frame until it
+    //    visibly reaches the pointer — a lerp, not a capped nudge. ──
+    var canHover = !window.matchMedia || window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    var lock = document.querySelector('.auth-lock');
+    if (lock && canHover) {
+        var mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
+        var curX = mouseX, curY = mouseY;
+        var hasMoved = false;
+        var LERP = 0.045; // ~99% converged after ~3s of a stationary cursor at 60fps
         document.addEventListener('pointermove', function (e) {
-            rTx = (e.clientX / window.innerWidth - 0.5) * 140;
-            rTy = (e.clientY / window.innerHeight - 0.5) * 140;
-            if (!rRaf) rRaf = requestAnimationFrame(applyReticle);
+            mouseX = e.clientX; mouseY = e.clientY;
+            if (!hasMoved) { hasMoved = true; curX = mouseX; curY = mouseY; lock.classList.add('is-active'); }
         }, { passive: true });
+        (function loop() {
+            if (hasMoved) {
+                curX += (mouseX - curX) * LERP;
+                curY += (mouseY - curY) * LERP;
+                lock.style.left = curX.toFixed(1) + 'px';
+                lock.style.top = curY.toFixed(1) + 'px';
+            }
+            requestAnimationFrame(loop);
+        })();
     }
 
     // ── Magnetic buttons: submit + toggle links nudge toward the pointer ──

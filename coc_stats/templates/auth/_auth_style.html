@@ -72,36 +72,42 @@
         .auth-points li { display: flex; align-items: center; gap: 11px; font-family: 'Manrope', sans-serif; font-size: 13.5px; color: var(--text); }
         .auth-points svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--accent); }
 
-        /* Scope-reticle motif, echoing the sitewide "thermal-scope readout"
-           north star. Two independently-animated layers on purpose: the
-           OUTER wrap is what JS translates toward the pointer (tracked
-           document-wide, not just while hovering the panel — the earlier
-           panel-scoped version rarely fired since most cursor time is spent
-           over the form column) — a CSS `transform` transition can't share
-           a property with a JS-driven inline transform without fighting it,
-           so rotation lives on the INNER svg/sweep instead. Always
-           gently alive (idle rotation), not just reactive — a static scope
-           reads as decoration; a scanning one reads as "watching." */
-        .auth-reticle-wrap {
-            position: absolute; right: -30px; bottom: -30px; width: 380px; height: 380px;
-            opacity: .6; pointer-events: none;
-            transition: transform .5s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform;
+        /* Targeting-lock scope — `position: fixed` so it spans the WHOLE
+           auth-shell (both panel and form column), unclipped by any
+           ancestor's `overflow: hidden`. JS eases `left`/`top` toward the
+           real cursor every animation frame (a continuous lerp loop, not a
+           one-shot event handler), so it visibly chases and, given a couple
+           of stationary seconds, converges onto the pointer — a scope that
+           actually hunts you, not a corner ornament nudged by it. Rotation
+           lives on the inner rings/sweep (a separate transform from the
+           outer position layer) so the two don't fight over one property.
+           Desktop/mouse only — see the `hover:hover` + `pointer:fine` gate
+           below and the matching JS check; there's no persistent cursor to
+           chase on touch. */
+        .auth-lock {
+            position: fixed; top: 0; left: 0; width: 220px; height: 220px;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
+            opacity: 0; transition: opacity .5s ease;
         }
-        .auth-reticle { width: 100%; height: 100%; display: block; animation: authReticleSpin 60s linear infinite; }
-        .auth-reticle circle, .auth-reticle line { stroke: var(--border); stroke-width: 1; fill: none; }
-        .auth-reticle circle.auth-reticle-accent { stroke: color-mix(in oklch, var(--accent) 55%, var(--border)); stroke-width: 1.4; }
+        .auth-lock.is-active { opacity: .55; }
+        .auth-lock-rings { width: 100%; height: 100%; display: block; animation: authLockSpin 40s linear infinite; }
+        .auth-lock-rings circle, .auth-lock-rings line { stroke: var(--accent); stroke-width: 1.2; fill: none; }
+        .auth-lock-rings circle.auth-lock-dashed { stroke-dasharray: 3 7; stroke: color-mix(in oklch, var(--accent) 65%, transparent); }
         /* Radar sweep: a rotating wedge of light, on-brand for the "night
            ops scope" identity. Screen-blended and low-opacity so it reads
            as a light sweep, not a filled gradient surface — DESIGN.md's
            gradient ban is about surface/text fills, not this kind of
            atmosphere on the one page that's explicitly this system's
            single deliberate exception to "quiet at rest." */
-        .auth-reticle-sweep {
+        .auth-lock-sweep {
             position: absolute; inset: 0; border-radius: 50%; mix-blend-mode: screen;
-            background: conic-gradient(from 0deg, color-mix(in oklch, var(--accent) 45%, transparent), transparent 22%);
-            animation: authReticleSpin 5s linear infinite;
+            background: conic-gradient(from 0deg, color-mix(in oklch, var(--accent) 55%, transparent), transparent 20%);
+            animation: authLockSpin 3.5s linear infinite;
         }
-        @keyframes authReticleSpin { to { transform: rotate(360deg); } }
+        @keyframes authLockSpin { to { transform: rotate(360deg); } }
+        @media not all and (hover: hover) and (pointer: fine) {
+            .auth-lock { display: none; }
+        }
 
         /* ── Toggle (Sign In / Register — two real links, not a JS tab panel) ── */
         .auth-toggle { display: flex; gap: 4px; background: var(--surf2); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 28px; }
@@ -163,22 +169,24 @@
         .auth-submit-link { margin-top: 24px; text-decoration: none; }
 
         @media (prefers-reduced-motion: reduce) {
-            .auth-brand, .auth-toggle-link, .auth-field input, .auth-submit, .auth-reticle-wrap { transition: none; }
-            .auth-crest.is-live, .auth-live-dot, .auth-reticle, .auth-reticle-sweep { animation: none; }
-            .auth-reticle-sweep { display: none; }
+            .auth-brand, .auth-toggle-link, .auth-field input, .auth-submit, .auth-lock { transition: none; }
+            .auth-crest.is-live, .auth-live-dot, .auth-lock-rings, .auth-lock-sweep { animation: none; }
+            .auth-lock { display: none; }
         }
 
         /* ── Responsive: content panel compresses to brand + headline only ─
            Below 860px there isn't room for a genuine two-column split, and
            this page's whole job is getting to the form fast — so the panel
            drops to a thin identity band instead of stacking its full pitch
-           above the form. Body sentence, points, and the reticle are dropped
-           entirely, not just shrunk. ── */
+           above the form. Body sentence, points, and the lock scope are
+           dropped entirely, not just shrunk — a 220px scope roaming a
+           390px-wide screen has nowhere to go regardless of pointer type. ── */
         @media (max-width: 860px) {
             .auth-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
             .auth-panel { border-right: none; border-bottom: 1px solid var(--border); padding: 26px 24px; }
             .auth-pitch { margin: 20px 0 0; max-width: none; }
-            .auth-pitch-body, .auth-points, .auth-reticle-wrap { display: none; }
+            .auth-pitch-body, .auth-points { display: none; }
+            .auth-lock { display: none; }
             .auth-headline { font-size: clamp(24px, 6vw, 30px); }
             .auth-form-col { padding: 28px 20px 40px; }
             /* 44px touch-target floor, matching the sitewide mobile-controls
