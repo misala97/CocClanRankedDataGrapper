@@ -94,16 +94,22 @@
 
     {% if table %}
     <section class="exercise-detail__chart">
-        {% if available_positions|length > 1 %}
-        <div class="exercise-detail__positions">
-            <span class="label">Position:</span>
-            <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id) }}" class="position-pill{{ ' is-active' if selected_position is none else '' }}">Alle</a>
-            {% for p in available_positions %}
-            <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id, position=p) }}" class="position-pill{{ ' is-active' if selected_position == p else '' }}">Position {{ p }}</a>
-            {% endfor %}
-        </div>
-        {% endif %}
+        {# position picker lives inside the panel (like .exercise-detail__verdict's
+           own Status header) so this panel's top edge always lands at the same
+           place as the verdict panel beside it -- outside, it only aligned by
+           accident for exercises with zero/one position (no picker rendered);
+           any exercise with 2+ positions pushed this panel down against a
+           verdict panel whose header is always inside its own box. #}
         <div class="panel">
+            {% if available_positions|length > 1 %}
+            <div class="exercise-detail__positions">
+                <span class="label">Position:</span>
+                <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id) }}" class="position-pill{{ ' is-active' if selected_position is none else '' }}">Alle</a>
+                {% for p in available_positions %}
+                <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id, position=p) }}" class="position-pill{{ ' is-active' if selected_position == p else '' }}">Position {{ p }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
             <div class="exercise-detail__chart-wrap"><canvas id="progress-chart"></canvas></div>
         </div>
     </section>

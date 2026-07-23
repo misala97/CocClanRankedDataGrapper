@@ -119,8 +119,12 @@
     </section>
 
     <section class="heute__recent">
+        {# label sits outside the panel, same as .heute__routines' own
+           section-head -- both columns share this grid row, so the label
+           has to be in the same place in both or the panels below start at
+           two different heights and the row reads as misaligned. #}
+        <div class="section-head"><span class="label">Letzte Workouts</span></div>
         <div class="panel">
-            <div class="section-head"><span class="label">Letzte Workouts</span></div>
             {% if recent_sessions %}
             {% for s in recent_sessions %}
             <a href="{{ url_for('gym.session_detail', session_id=s.id) }}" class="recent-row">
