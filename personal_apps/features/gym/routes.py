@@ -880,39 +880,35 @@ def gym_verlauf():
 @gym_bp.route('/gym/export')
 @login_required
 def gym_export():
-    """Downloadable JSON of finished workout history in a date range, for
-    feeding into an external analysis tool later. Full detail (every set,
-    not just aggregates) so nothing useful is thrown away up front. Both
-    original and substitute SessionExercise rows are exported (mirroring
-    what a finished session's own detail view already shows -- see
-    session_detail's visible_exercises computation), each carrying
-    replaces/replaced_by exercise names so a swap is fully traceable."""
-    date_from = request.args.get('from', '')
-    date_to = request.args.get('to', '')
-    try:
-        from_date = dt.datetime.strptime(date_from, '%Y-%m-%d') if date_from else dt.datetime(1970, 1, 1)
-    except ValueError:
-        from_date = dt.datetime(1970, 1, 1)
-    try:
-        to_date = dt.datetime.strptime(date_to, '%Y-%m-%d') if date_to else dt.datetime.utcnow()
-    except ValueError:
-        to_date = dt.datetime.utcnow()
-    to_date_exclusive = to_date + dt.timedelta(days=1)  # 'to' is inclusive of that whole calendar day
+    """Downloadable JSON of specific finished workouts, picked by id from
+    Verlauf's own checklist (the 30/90-day presets there just bulk-check
+    matching rows client-side -- this route only ever sees the final id
+    list, never a date range). Full detail (every set, not just aggregates)
+    so nothing useful is thrown away up front. Both original and substitute
+    SessionExercise rows are exported (mirroring what a finished session's
+    own detail view already shows -- see session_detail's visible_exercises
+    computation), each carrying replaces/replaced_by exercise names so a
+    swap is fully traceable."""
+    ids_param = request.args.get('ids', '')
+    session_ids = []
+    for raw_id in ids_param.split(','):
+        raw_id = raw_id.strip()
+        if raw_id.isdigit():
+            session_ids.append(int(raw_id))
 
     sessions = (
         WorkoutSession.query
         .filter(
             WorkoutSession.finished_at.isnot(None),
-            WorkoutSession.started_at >= from_date,
-            WorkoutSession.started_at < to_date_exclusive,
+            WorkoutSession.id.in_(session_ids),
         )
         .order_by(WorkoutSession.started_at.asc())
         .all()
-    )
+    ) if session_ids else []
 
     payload = {
         'exported_at': dt.datetime.utcnow().isoformat() + 'Z',
-        'range': {'from': date_from or None, 'to': date_to or None},
+        'requested_session_ids': session_ids,
         'sessions': [
             {
                 'id': s.id,
@@ -942,7 +938,7 @@ def gym_export():
     }
 
     resp = jsonify(payload)
-    filename = f"gym-export-{date_from or 'all'}_{date_to or 'now'}.json"
+    filename = f"gym-export-{len(sessions)}-workouts.json"
     resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     return resp
 
