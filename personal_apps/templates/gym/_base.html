@@ -1,0 +1,43 @@
+{# Shared shell for every gym page: doctype/meta/PWA tags, the IBM Plex
+   webfont link (see gym.css's header comment -- three weight sets for the
+   three type roles: Sans Condensed / Sans / Mono), gym.css, gym.js, the nav
+   include, and the three blocks a page fills in. See personal_apps/
+   PRODUCT.md for the "Readout" design brief this all serves.
+
+   gym.js is loaded here (not deferred) so window.GymClock/GymUtils/GymChart
+   already exist by the time any inline <script> later in the body runs --
+   in particular _nav.html's own inline script for the resume strip's clock.
+
+   <body> gets a `has-resume` class exactly when _nav.html is about to render
+   the resume strip -- same gym_active_session + endpoint condition, kept in
+   sync with the `{% if %}` there. gym.css uses that class to reserve extra
+   bottom padding on mobile so the fixed strip never sits on top of page
+   content (see body.has-resume in gym.css). #}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Gym Tracker{% endblock %}</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
+    <meta name="theme-color" content="#0d1014">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+    <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
+    <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
+</head>
+<body{% if gym_active_session and request.endpoint != 'gym.session_detail' %} class="has-resume"{% endif %}>
+
+{% include 'gym/_nav.html' %}
+
+{% block content %}{% endblock %}
+
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

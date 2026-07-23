@@ -1,308 +1,1650 @@
-/* Gym Tracker design system. Self-contained: no dependency on _head.html,
-   coc_stats, or any other personal_apps page/palette. Shared by all 4 gym
-   templates via <link>. */
+/* ============================================================================
+   GYM TRACKER  ·  "READOUT" VISUAL SYSTEM
+   ----------------------------------------------------------------------------
+   The display on a serious piece of equipment: industrial condensed numerals,
+   a machined chassis, and emissive semantic colour. Numbers glow because they
+   are lit, not because a gradient was applied. Dark only, tuned properly.
+
+   Self-contained: no dependency on _head.html, coc_stats, or any other
+   personal_apps palette. Every gym template links this file directly.
+
+   FONTS (loaded by the template <head>, e.g. _base.html):
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?\
+       family=IBM+Plex+Mono:wght@400;500;600&\
+       family=IBM+Plex+Sans:wght@400;500&\
+       family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+   One engineered superfamily across three roles: Sans Condensed for display and
+   numerals, Sans for body, Mono for dense data and small uppercase labels. All
+   three cuts ship true tabular figures (font-variant-numeric: tabular-nums).
+
+   COLOUR  ·  derived in OKLCH, validated as hex (contrast + CVD tested).
+     token        oklch(L C H)        hex        role
+     --ground     0.170 0.010 255     #0d1014    page bg, the unlit bezel
+     --chassis    0.222 0.012 255     #171b21    panel surface
+     --raised     0.270 0.013 255     #22272d    inset / nested surface
+     --edge       0.320 0.013 255     #2e333a    panel border
+     --edge-hi    0.420 0.015 255     #484e55    the lit top edge
+     --ink        0.950 0.006 255     #eceff2    primary text; the DONE state
+     --dim        0.720 0.013 255     #9fa5ad    labels, secondary text
+     --unlit      0.664 0.013 255     #8e949c    inert text, not yet reached
+     --live       0.800 0.165 072     #fea91e    NOW: current set, rest, action
+     --live-deep  0.530 0.113 066     #975c0e    pressed / bottom edge of live
+     --record     0.820 0.130 200     #34dde5    RECORD: a previous best beaten
+     --stall      0.648 0.190 023     #ec5255    ATTENTION: stagnation, destroy
+   Neutrals carry a deliberate cool bias (hue 255, low chroma): blued graphite,
+   not dead grey. Exactly three semantic hues; nothing decorative gets colour.
+
+   Measured WCAG contrast (all required text pairings meet AA):
+     ink/chassis 14.97   dim/chassis 6.96   live/chassis 8.98
+     record/chassis 10.39   stall/chassis 4.86
+     unlit/chassis 5.65   unlit/ground 6.23   unlit/live-wash 4.72
+   (--unlit lifted 0.601->0.664 in Task 7: the set-row index / "kg" / "x"
+    labels are the first small inert text rendered on --chassis and inside a
+    live panel's amber wash; at the old value those two pairings were 4.39 and
+    3.67, both under the 4.5 AA floor for small text. The lift clears both and
+    only raises the unlit pairings -- the five above are unchanged.)
+   Colour is never the sole signal: every state also carries a shape or a word,
+   so it survives daylight and red-green colour blindness (deuteranopia and
+   protanopia simulation confirmed live / record / stall stay distinct).
+   ============================================================================ */
 
 :root {
-    --gym-bg: #0a0a0a;
-    --gym-surface: #151515;
-    --gym-surface-2: #1c1c1c;
-    --gym-border: #272727;
-    --gym-border-soft: #1c1c1c;
-    --gym-text: #e8e8ec;
-    --gym-muted: #8a8a92;
-    --gym-lime: #d4ff3f;
-    --gym-lime-dim: #a8d92a;
-    --gym-red: #fb7185;
+  /* ---- colour: the token contract ---- */
+  --ground:    #0d1014;
+  --chassis:   #171b21;
+  --raised:    #22272d;
+  --edge:      #2e333a;
+  --edge-hi:   #484e55;
+  --ink:       #eceff2;
+  --dim:       #9fa5ad;
+  --unlit:     #8e949c;
+  --live:      #fea91e;
+  --live-deep: #975c0e;
+  --live-hi:   #ffbe47;   /* lightness variant of --live for hover / brighter-lit */
+  --record:    #34dde5;
+  --stall:     #ec5255;
+
+  /* ---- emitted light (halos): the "lit, not painted" quality ---- */
+  --glow-live:   0 0 16px rgba(254, 169, 30, 0.42);
+  --glow-record: 0 0 18px rgba(52, 221, 229, 0.48);
+  /* faint state washes for lit surfaces; kept <=12% so text contrast measured
+     against --chassis still holds on the tinted row */
+  --wash-live:   rgba(254, 169, 30, 0.10);
+  --wash-record: rgba(52, 221, 229, 0.10);
+  --wash-stall:  rgba(236, 82, 85, 0.10);
+
+  /* ---- type: families ---- */
+  --font-display: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body:    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* ---- type: role sizes (fixed rem scale; labels cluster, numerals leap) ---- */
+  --t-micro: 0.625rem;   /* 10px  tab labels, tiniest meta */
+  --t-label: 0.6875rem;  /* 11px  uppercase panel labels */
+  --t-meta:  0.75rem;    /* 12px  secondary meta, chip text */
+  --t-sm:    0.875rem;   /* 14px  dense body, table cells */
+  --t-body:  1rem;       /* 16px  sentences (notes, advice) */
+  --t-name:  1.125rem;   /* 18px  exercise / panel names */
+  --num-sm:  1.375rem;   /* 22px  set-row load values */
+  --num-md:  1.75rem;    /* 28px  clock, section metrics */
+  --num-lg:  2.25rem;    /* 36px  finished-workout readouts */
+  --num-xl:  3rem;       /* 48px  the record flare value */
+
+  --w-body: 400;
+  --w-med:  500;
+  --w-semi: 600;
+  --w-bold: 700;
+
+  --track-label: 0.12em;   /* uppercase labels sit too tight by default */
+  --track-name:  0.03em;   /* condensed display names, gently opened */
+  --track-num:  -0.01em;   /* big tabular numerals, gently closed */
+
+  /* ---- space: 4pt base ---- */
+  --sp-1: 0.25rem; --sp-2: 0.5rem;  --sp-3: 0.75rem; --sp-4: 1rem;
+  --sp-5: 1.25rem; --sp-6: 1.5rem;  --sp-8: 2rem;    --sp-10: 2.5rem;
+  --sp-12: 3rem;   --sp-16: 4rem;
+
+  /* ---- machined geometry: small radii, hard edges, no soft float ---- */
+  --r-inset:   2px;
+  --r-chip:    3px;
+  --r-control: 4px;
+  --r-panel:   6px;
+
+  /* lit-from-above top highlight + a hard 1px bottom line; never a diffuse blur */
+  --edge-lit:   inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --edge-drop:  0 1px 0 rgba(0, 0, 0, 0.5);
+  --press-live: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 3px 0 var(--live-deep);
+  --press-ghost: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 0 rgba(0, 0, 0, 0.55);
+
+  /* ---- motion: mechanical, not elastic ---- */
+  --dur-1: 90ms;    /* instant feedback: press */
+  --dur-2: 150ms;   /* state change: hover, check */
+  --dur-3: 220ms;   /* reveal, collapse */
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);          /* decisive, no overshoot */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);     /* confident settle for the flare */
+
+  /* ---- z-scale: semantic, never 9999 ---- */
+  --z-resume: 80;
+  --z-bar:    90;
+  --z-modal-backdrop: 200;
+  --z-modal:  210;
+
+  /* ---- shell metrics ---- */
+  --wrap-max: 1160px;
+  --tabbar-h: 60px;
+  --resume-h: 52px;   /* deliberate, not content-derived -- see body.has-resume below */
 }
+
+/* ============================================================================
+   RESET + BASE
+   ============================================================================ */
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+html { -webkit-text-size-adjust: 100%; }
+
 body {
-    font-family: 'Inter', system-ui, sans-serif;
-    background: var(--gym-bg);
-    color: var(--gym-text);
-    min-height: 100vh;
-    padding-bottom: 72px; /* room for the fixed bottom tab bar on mobile */
+  font-family: var(--font-body);
+  font-weight: var(--w-body);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--ground);
+  min-height: 100vh;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  /* room for the fixed mobile tab bar; cleared on desktop below */
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
 }
-@media (min-width: 861px) {
-    body { padding-bottom: 0; }
-}
-
-a { text-decoration: none; color: inherit; }
-
-h1 { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 28px; letter-spacing: -0.5px; margin-bottom: 4px; }
-h2 { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 17px; letter-spacing: -0.2px; }
-
-.gym-page-wrap { max-width: 1000px; margin: 0 auto; padding: 28px 24px 56px; position: relative; z-index: 1; }
-@media (max-width: 700px) {
-    .gym-page-wrap { padding: 20px 16px 40px; }
+@media (min-width: 900px) {
+  body { padding-bottom: 0; }
 }
 
-/* ===== Top nav (desktop) + bottom tab bar (mobile) ===== */
-.gym-nav {
-    position: sticky; top: 0; z-index: 100;
-    background: rgba(10,10,10,0.92);
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    border-bottom: 1px solid var(--gym-border);
-}
-.gym-nav-inner {
-    max-width: 1000px; margin: 0 auto; padding: 0 24px;
-    height: 58px; display: flex; align-items: center; justify-content: space-between;
-}
-.gym-nav-logo { display: flex; align-items: center; gap: 10px; }
-.gym-logo-icon {
-    width: 34px; height: 34px; background: var(--gym-lime); color: #0a0a0a;
-    border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px;
-}
-.gym-nav-logo span { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 18px; }
-.gym-nav-links { display: flex; align-items: center; gap: 4px; }
-.gym-nav-links a {
-    font-size: 13px; font-weight: 600; color: var(--gym-muted);
-    padding: 7px 14px; border-radius: 999px; transition: color 0.15s, background 0.15s;
-}
-.gym-nav-links a:hover { color: var(--gym-text); background: var(--gym-surface); }
-.gym-nav-links a.active { color: var(--gym-bg); background: var(--gym-lime); }
-.gym-nav-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--gym-lime); margin-left: 5px; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+input, select, textarea { font: inherit; color: inherit; }
+svg { display: block; }
 
-.gym-tabbar {
-    display: none;
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
-    background: rgba(10,10,10,0.95);
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    border-top: 1px solid var(--gym-border);
-    padding: 6px max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-bottom));
-}
-@media (max-width: 860px) {
-    .gym-nav-links { display: none; }
-    .gym-tabbar { display: flex; }
-}
-.gym-tabbar a {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 6px 4px; font-size: 10px; font-weight: 600; color: var(--gym-muted);
-    border-radius: 12px;
-}
-.gym-tabbar a .gym-tab-icon { font-size: 18px; line-height: 1; position: relative; }
-.gym-tabbar a.active { color: var(--gym-lime); }
-.gym-tabbar a .gym-tab-icon .gym-nav-dot { position: absolute; top: -2px; right: -6px; margin: 0; }
+::selection { background: var(--live); color: var(--ground); }
 
-/* ===== Cards ===== */
-.card {
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
-    border-radius: 16px; overflow: hidden; margin-bottom: 18px;
+/* Neutral, unmistakable focus. Focus is orthogonal to the five-state model,
+   so it never borrows a semantic hue. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--r-inset);
 }
-.card-header {
-    padding: 14px 18px; border-bottom: 1px solid var(--gym-border);
-    display: flex; align-items: center; justify-content: space-between;
-    flex-wrap: wrap; row-gap: 8px; column-gap: 12px;
-}
-.card-body { padding: 18px; }
-.export-panel { padding: 14px 18px; border-bottom: 1px solid var(--gym-border); }
-.export-presets { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 
-/* ===== Buttons ===== */
+.gym-wrap {
+  inline-size: 100%;                     /* see below */
+  max-width: var(--wrap-max);
+  margin-inline: auto;
+  padding: var(--sp-5) var(--sp-4) var(--sp-10);
+}
+/* On mobile, <body> is a column flex container (below) -- and per the flex
+   spec, an item with an auto cross-axis margin (margin-inline: auto, here
+   for desktop centering) is exempt from the default stretch-to-fill sizing.
+   Without an explicit width, .gym-wrap silently fell back to fit-content
+   instead of the viewport: invisible until a descendant's min-content
+   width grew large enough to drag it wider than the screen (a nowrap
+   truncated name is exactly that), at which point the whole page gained
+   horizontal overflow. inline-size: 100% restores fill-then-cap-at-max-width,
+   the behaviour the max-width + auto-margin pattern was always meant to have. */
+@media (min-width: 900px) {
+  .gym-wrap { padding: var(--sp-8) var(--sp-6) var(--sp-12); }
+}
+
+/* ============================================================================
+   TYPOGRAPHIC PRIMITIVES
+   ============================================================================ */
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: var(--w-bold);
+  letter-spacing: var(--track-name);
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+h1 { font-size: var(--num-md); }
+h2 { font-size: var(--t-name); }
+h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
+
+/* Small, quiet, letterspaced. The instrument-panel label. */
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: var(--w-semi);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.label--micro { font-size: var(--t-micro); }
+
+/* Condensed uppercase name (exercise, routine, workout). */
+.name {
+  font-family: var(--font-display);
+  font-size: var(--t-name);
+  font-weight: var(--w-semi);
+  letter-spacing: var(--track-name);
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* Every numeral in the app: condensed, tabular, tight, the largest thing in
+   its container. Size comes from the container or a --num-* modifier. */
+.num {
+  font-family: var(--font-display);
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: var(--track-num);
+  line-height: 1;
+}
+.num--sm { font-size: var(--num-sm); }
+.num--md { font-size: var(--num-md); }
+.num--lg { font-size: var(--num-lg); }
+.num--xl { font-size: var(--num-xl); }
+.num.is-live   { color: var(--live);   text-shadow: var(--glow-live); }
+.num.is-record { color: var(--record); text-shadow: var(--glow-record); }
+.num.is-unlit  { color: var(--unlit); }
+.num.is-stall  { color: var(--stall); }
+
+/* The load readout: weight KG x reps, numerals dominant, units quiet. */
+.load { display: inline-flex; align-items: baseline; gap: 0.15em; }
+.load__val { font-family: var(--font-display); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
+  font-size: var(--num-sm); letter-spacing: var(--track-num); line-height: 1; }
+.load__unit { font-family: var(--font-mono); font-size: var(--t-meta);
+  font-weight: var(--w-med); letter-spacing: 0.04em; color: var(--dim);
+  text-transform: uppercase; }
+.load__x { font-size: var(--t-meta); color: var(--unlit); padding-inline: 0.15em; }
+
+/* section header: label on the left, optional action on the right */
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-3); margin-bottom: var(--sp-3);
+}
+
+/* ============================================================================
+   PANEL  ·  the machined chassis surface
+   ============================================================================ */
+
+.panel {
+  background: var(--chassis);
+  border: 1px solid var(--edge);
+  border-top-color: var(--edge-hi);          /* lit from above */
+  border-radius: var(--r-panel);
+  box-shadow: var(--edge-lit), var(--edge-drop);
+  padding: var(--sp-4);
+}
+.panel + .panel { margin-top: var(--sp-3); }
+
+.panel__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3); margin-bottom: var(--sp-3);
+}
+.panel__tags { display: flex; align-items: center; gap: var(--sp-1); flex: none; }
+
+/* Not yet reached: outline only, transparent fill, dimmed. */
+.panel--unlit {
+  background: transparent;
+  border-color: var(--edge);
+  box-shadow: none;
+  opacity: 0.72;
+}
+/* The one live panel: lit top edge + faint amber wash + halo. Full border, no
+   side stripe. */
+.panel--live {
+  border-color: var(--live);
+  background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
+  box-shadow: var(--glow-live), var(--edge-lit);
+}
+
+/* Settled summary row (a completed exercise collapsed). */
+.panel--done .panel__head { margin-bottom: 0; }
+
+/* ============================================================================
+   SET ROW  ·  unlit -> live -> done, with record / stall
+   ============================================================================ */
+
+.set {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-inset);
+  background: var(--ground);
+  transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+.set + .set { margin-top: var(--sp-1); }
+.set__idx {
+  font-family: var(--font-mono); font-size: var(--t-meta);
+  color: var(--unlit); text-align: center;
+}
+
+/* the check: an empty <button aria-label="..."> gives a 44x44 tap target; the
+   26px machined box (::before) and the tick (::after) are drawn in CSS, so no
+   glyph markup is needed and there is no glyph/box z-order fight */
+.set__check {
+  position: relative;
+  inline-size: 44px; block-size: 44px;
+  flex: none;
+  justify-self: end;
+}
+.set__check::before {
+  content: ""; position: absolute; inset: 9px;
+  border: 1.5px solid var(--edge-hi);
+  border-radius: var(--r-inset);
+  transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.set__check::after {                  /* the tick, revealed when the set is done */
+  content: ""; position: absolute; left: 50%; top: 47%;
+  inline-size: 6px; block-size: 11px;
+  border: solid var(--ground); border-width: 0 2px 2px 0;
+  transform: translate(-50%, -55%) rotate(45deg);
+  opacity: 0; transition: opacity var(--dur-2) var(--ease);
+}
+
+/* UNLIT: prefilled, inert */
+.set--unlit { border-color: var(--edge); background: transparent; }
+.set--unlit .load__val { color: var(--unlit); }
+.set--unlit .load__unit { color: var(--unlit); }
+
+/* LIVE: the current set. Amber, halo, full border (no stripe). One at a time. */
+.set--live {
+  border-color: var(--live);
+  background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
+}
+.set--live .load__val { color: var(--live); text-shadow: var(--glow-live); }
+.set--live .set__check::before { border-color: var(--live); box-shadow: var(--glow-live); }
+
+/* DONE: logged and settled. Full-brightness ink, solid tick. Reads as fact. */
+.set--done .load__val { color: var(--ink); }
+.set--done .set__check::before { background: var(--ink); border-color: var(--ink); }
+.set--done .set__check::after { opacity: 1; }
+
+/* RECORD: a set that beat a previous best. Cyan. */
+.set--record {
+  border-color: var(--record);
+  background: linear-gradient(var(--wash-record), var(--wash-record)), var(--chassis);
+}
+.set--record .load__val { color: var(--record); text-shadow: var(--glow-record); }
+.set--record .set__check::before { background: var(--record); border-color: var(--record); box-shadow: var(--glow-record); }
+.set--record .set__check::after { opacity: 1; }
+
+/* Tap feedback for the check button: the live session view re-renders this
+   whole row from the server after every toggle (session_detail.html's
+   AJAX-refresh architecture always swaps in a fresh #exercise-cards, so a
+   `transition` keyed to a class change never fires -- there is no "before"
+   state on a brand-new node). gym.js adds one of these two classes to the
+   OLD row the instant you tap, before the fetch even starts, so the tap
+   itself always gets an answer regardless of round-trip time; the swapped-in
+   node then just shows the settled true state. Confirming (becoming done) is
+   its own animation, distinct from resetting (undoing a done set) -- a
+   revert is a quieter, unlit motion, never the same amber pulse as progress. */
+@keyframes set-confirm-pulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.025); border-color: var(--live); box-shadow: var(--glow-live); }
+  100% { transform: scale(1); }
+}
+@keyframes set-reset-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.set.is-confirming { animation: set-confirm-pulse 260ms var(--ease-out); }
+.set.is-resetting   { animation: set-reset-pulse 220ms var(--ease); }
+
+/* STALL: attention. Red outline plus, in the row, the value stays red. The word
+   is carried by an adjacent chip/note, never colour alone. */
+.set--stall {
+  border-color: var(--stall);
+  background: linear-gradient(var(--wash-stall), var(--wash-stall)), var(--chassis);
+}
+.set--stall .load__val { color: var(--stall); }
+
+/* ============================================================================
+   CHIP + TAG  ·  the state model, compressed to a badge (colour + a word)
+   ============================================================================ */
+
+.chip {
+  display: inline-flex; align-items: center; gap: 0.35em;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: var(--w-semi);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.25em 0.55em;
+  border-radius: var(--r-chip);
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  color: var(--dim);
+  white-space: nowrap;
+}
+/* filled chips (record / done) carry dark ink text; outline chips (live / stall)
+   carry the hue as text, so each state reads by shape as well as colour */
+.chip--live   { border-color: var(--live);   color: var(--live);   background: transparent; box-shadow: var(--glow-live); }
+.chip--record { border-color: var(--record); color: var(--ground); background: var(--record); box-shadow: var(--glow-record); }
+.chip--done   { border-color: var(--edge-hi); color: var(--ink); }
+.chip--stall  { border-color: var(--stall);  color: var(--stall);  background: transparent; }
+.chip--up     { border-color: var(--edge-hi); color: var(--ink); }   /* steigend */
+.chip--neu    { border-color: var(--edge); color: var(--dim); }      /* neu */
+
+/* tag: quiet metadata (position, set count), never a state */
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: var(--w-med);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2em 0.45em;
+  border-radius: var(--r-inset);
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  color: var(--dim);
+}
+.tag--live { background: var(--live); border-color: var(--live); color: var(--ground); }
+
+/* ============================================================================
+   REST BAR  ·  amber, inside the live panel, linear fill
+   ============================================================================ */
+
+.rest {
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  margin-top: var(--sp-3);
+}
+.rest__top { display: flex; align-items: baseline; justify-content: space-between; }
+.rest__label {
+  font-family: var(--font-mono); font-size: var(--t-micro);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
+}
+.rest__value {
+  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums; font-size: var(--num-sm);
+  line-height: 1; color: var(--live); text-shadow: var(--glow-live);
+}
+.rest__track {
+  block-size: 6px; border-radius: var(--r-inset);
+  background: var(--ground); overflow: hidden;
+}
+.rest__fill {
+  block-size: 100%; inline-size: 0%;
+  background: var(--live);
+  box-shadow: var(--glow-live);
+  transition: inline-size 1s linear;   /* bars fill linearly, mechanically */
+}
+
+/* The countdown hitting zero is the actual cue to start the next set --
+   currently silent unless you're staring at the bar. gym.js adds this class
+   exactly once, the moment its own tick loop observes the transition from
+   still-counting to done (never on a stale rest window that was already
+   expired when the panel rendered -- see startRestFillTick's sawPositive
+   guard), so it can never replay on an unrelated refresh elsewhere on the
+   page. */
+@keyframes rest-ready-flash {
+  0%   { box-shadow: none; }
+  35%  { box-shadow: var(--glow-live); }
+  100% { box-shadow: none; }
+}
+.rest.rest-complete { animation: rest-ready-flash 640ms var(--ease-out); }
+.rest.rest-complete .rest__value { color: var(--ink); transition: color 640ms var(--ease-out); }
+
+/* ============================================================================
+   BUTTONS  ·  live (real press depth) / ghost / stall (destructive)
+   ============================================================================ */
+
 .btn {
-    padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 700;
-    font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
-    white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-block-size: 44px;
+  padding: 0 var(--sp-5);
+  font-family: var(--font-display);
+  font-size: var(--t-name);
+  font-weight: var(--w-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: var(--r-control);
+  transition: transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease),
+              background var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+  -webkit-tap-highlight-color: transparent;
 }
-.btn-primary { background: var(--gym-lime); color: #0a0a0a; border-color: transparent; }
-.btn-primary:hover { background: var(--gym-lime-dim); }
-.btn-ghost { background: transparent; color: var(--gym-muted); border-color: var(--gym-border); }
-.btn-ghost:hover { color: var(--gym-text); border-color: var(--gym-text); }
-.btn-danger { background: transparent; color: var(--gym-red); border-color: var(--gym-red); }
-.btn-danger:hover { background: rgba(251,113,133,0.1); }
-.btn-sm { padding: 5px 11px; font-size: 12px; }
+/* :disabled only applies to real form controls -- an <a> styled as a .btn
+   (the export action, which is a plain download link, not a submit) needs
+   the same treatment via a class instead. */
+.btn:disabled, .btn.is-disabled { opacity: 0.45; pointer-events: none; }
+
+/* the primary action is LIVE: solid amber, inset top highlight, hard bottom edge
+   that compresses on press so the control feels like it travelled */
+.btn--live {
+  background: var(--live);
+  color: var(--ground);
+  box-shadow: var(--press-live);
+}
+.btn--live:hover { background: var(--live-hi); }
+.btn--live:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1px 0 var(--live-deep);
+}
+
+/* ghost: machined outline, its own quieter press depth */
+.btn--ghost {
+  background: var(--chassis);
+  color: var(--ink);
+  border: 1px solid var(--edge-hi);
+  box-shadow: var(--press-ghost);
+}
+.btn--ghost:hover { border-color: var(--ink); }
+.btn--ghost:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 0 rgba(0,0,0,0.55); }
+
+/* destructive: stall outline, fills on press. Never a bare coloured word. */
+.btn--stall {
+  background: transparent;
+  color: var(--stall);
+  border: 1px solid var(--stall);
+}
+.btn--stall:hover { background: var(--wash-stall); }
+
+.btn--sm { min-block-size: 36px; padding: 0 var(--sp-3); font-size: var(--t-meta); letter-spacing: 0.08em; }
+.btn--block { display: flex; inline-size: 100%; }
+
+/* icon button: 44x44 tap target regardless of the glyph size */
 .icon-btn {
-    width: 32px; height: 32px; padding: 0; flex-shrink: 0;
-    display: inline-flex; align-items: center; justify-content: center; font-size: 14px;
+  position: relative; display: inline-grid; place-items: center;
+  inline-size: 44px; block-size: 44px;
+  color: var(--dim); border-radius: var(--r-control);
+  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+.icon-btn:hover { color: var(--ink); background: var(--raised); }
+
+/* ============================================================================
+   FORM CONTROLS  ·  recessed machined wells
+   ============================================================================ */
+
+.field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.field > .label { color: var(--dim); }
+
+.input, .select, .textarea {
+  min-block-size: 40px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--ground);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-control);
+  color: var(--ink);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);   /* reads as recessed */
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.input::placeholder, .textarea::placeholder { color: var(--unlit); }
+.input:focus, .select:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--live);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), var(--glow-live);
+}
+/* numeric wells use the tabular display face so digits line up as you type */
+.input--num {
+  font-family: var(--font-display); font-weight: var(--w-semi);
+  font-variant-numeric: tabular-nums; font-size: var(--t-name);
+  text-align: center; inline-size: 5rem;
+}
+.check {
+  inline-size: 20px; block-size: 20px; accent-color: var(--live);
 }
 
-/* ===== Forms ===== */
-.form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-.form-group { display: flex; flex-direction: column; gap: 5px; }
-.form-group label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gym-muted); }
-.form-group input, .form-group select, .form-group textarea {
-    background: var(--gym-surface-2); border: 1px solid var(--gym-border); border-radius: 8px;
-    color: var(--gym-text); padding: 7px 10px; font-size: 13px; font-family: inherit;
-    transition: border-color 0.15s;
+/* ============================================================================
+   SHELL  ·  tab bar (mobile) + top bar (desktop) + resume strip
+   ============================================================================ */
+
+/* mobile bottom tab bar: solid chassis, three real routes, active lit amber.
+   No frosted glass. */
+.tabbar {
+  position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-bar);
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--chassis);
+  border-top: 1px solid var(--edge);
+  box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.5);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--gym-lime); }
-.form-group.grow { flex: 1; min-width: 130px; }
-.form-group.grow input, .form-group.grow select { width: 100%; }
-.num-input { width: 90px; }
-.num-input-sm {
-    width: 64px; background: var(--gym-surface-2); border: 1px solid var(--gym-border); border-radius: 8px;
-    color: var(--gym-text); padding: 5px 8px; font-size: 13px; font-family: inherit;
+.tabbar__tab {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--sp-1);
+  min-block-size: var(--tabbar-h);
+  font-family: var(--font-mono); font-size: var(--t-micro); font-weight: var(--w-semi);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--unlit);
 }
-.num-input-sm:focus { outline: none; border-color: var(--gym-lime); }
-.unit { color: var(--gym-muted); font-size: 12px; }
-
-/* ===== Badges / pills ===== */
-.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-.badge-active { background: rgba(212,255,63,0.15); color: var(--gym-lime); }
-.badge-done { background: rgba(139,145,167,0.15); color: var(--gym-muted); }
-.gym-pill {
-    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;
-    color: var(--gym-muted); background: var(--gym-surface-2); border: 1px solid var(--gym-border);
-    border-radius: 999px; padding: 4px 11px; cursor: pointer; transition: all 0.15s;
+.tabbar__tab .icon-btn, .tabbar__tab svg { color: inherit; }
+/* the active tab is lit: an amber indicator rail across its top edge, amber label */
+.tabbar__tab::before {
+  content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  inline-size: 22px; block-size: 2px;
+  border-radius: 0 0 2px 2px; background: transparent;
 }
-.gym-pill.active, .gym-pill:hover { color: var(--gym-bg); background: var(--gym-lime); border-color: var(--gym-lime); }
+.tabbar__tab.is-active { color: var(--live); }
+.tabbar__tab.is-active::before { background: var(--live); box-shadow: var(--glow-live); }
 
-.empty { text-align: center; padding: 28px; color: var(--gym-muted); font-size: 13px; }
-
-/* ===== Dashboard: active-session hero ===== */
-.active-session { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; }
-.active-session .name { font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 700; }
-.active-session .elapsed { font-family: 'Outfit', sans-serif; font-size: 30px; font-weight: 800; color: var(--gym-lime); }
-
-/* ===== Dashboard: lists ===== */
-.list-row {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    padding: 10px 18px; border-bottom: 1px solid var(--gym-border-soft); font-size: 13px;
+/* desktop top bar: wordmark, the same three links, logout. Not a sidebar; the
+   cockpit needs the vertical space. */
+.topbar { display: none; }
+@media (min-width: 900px) {
+  .tabbar { display: none; }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--sp-6);
+    padding: var(--sp-3) var(--sp-6);
+    background: var(--chassis);
+    border-bottom: 1px solid var(--edge);
+    box-shadow: var(--edge-drop);
+  }
+  .topbar__brand {
+    font-family: var(--font-display); font-weight: var(--w-bold);
+    font-size: var(--t-name); letter-spacing: var(--track-name); text-transform: uppercase;
+  }
+  .topbar__nav { display: flex; align-items: center; gap: var(--sp-1); }
+  .topbar__link {
+    display: inline-flex; align-items: center; min-block-size: 44px;
+    padding: var(--sp-2) var(--sp-3); border-radius: var(--r-control);
+    font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+    transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+  }
+  .topbar__link:hover { color: var(--ink); background: var(--raised); }
+  .topbar__link.is-active { color: var(--live); }
 }
-.list-row:last-child { border-bottom: none; }
-.list-row .main { font-weight: 700; }
-.list-row .meta { font-size: 11px; color: var(--gym-muted); }
-.list-row .actions { display: flex; align-items: center; gap: 8px; }
 
-/* ===== Dashboard: exercise catalog grouped by muscle group ===== */
-.gym-muscle-section { border-bottom: 1px solid var(--gym-border-soft); }
-.gym-muscle-section:last-child { border-bottom: none; }
-.gym-muscle-header {
-    padding: 10px 18px; font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.6px; color: var(--gym-lime); background: rgba(212,255,63,0.06);
-    cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+/* resume strip: the active workout, always reachable. Amber chassis strip,
+   pinned above the tab bar on mobile / below the top bar on desktop. It is not
+   a tab. */
+.resume {
+  position: fixed; inset-inline: 0; z-index: var(--z-resume);
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  min-block-size: var(--resume-h);   /* fixed, not content-derived: body.has-resume below reserves exactly this much */
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
+  border-top: 1px solid var(--live);
+  box-shadow: var(--glow-live);
 }
-.gym-muscle-section.collapsed .gym-muscle-rows { display: none; }
-
-/* ===== Active workout: dense-table set logging ===== */
-.session-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
-.session-header .duration { font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 800; color: var(--gym-lime); }
-.notify-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; font-size: 13px; color: var(--gym-muted); }
-
-.reorder-lock-row { margin-bottom: 12px; }
-
-.sets-list { margin-bottom: 12px; }
-.set-row {
-    position: relative; overflow: hidden;
-    display: flex; align-items: center; gap: 10px; padding: 7px 8px; margin: 0 -8px;
-    border-top: 1px solid var(--gym-border-soft); font-size: 13px;
-    border-left: 3px solid transparent; transition: opacity 0.15s, border-color 0.15s;
+.resume__pulse {
+  inline-size: 8px; block-size: 8px; border-radius: 50%; flex: none;
+  background: var(--live); box-shadow: var(--glow-live);
+  animation: pulse-breathe 1.8s ease-in-out infinite;
 }
-.set-row:first-child { border-top: none; }
-.set-row.set-pending { opacity: 0.55; border-left-style: dashed; border-left-color: var(--gym-border-soft); }
-.set-row.set-done { border-left-color: var(--gym-lime); background: rgba(212,255,63,0.05); }
-.pending-hint { font-size: 11px; color: var(--gym-muted); margin-bottom: 8px; }
-.stagnation-note {
-    font-size: 12px; font-weight: 600; color: var(--gym-lime); background: rgba(212,255,63,0.08);
-    border: 1px solid rgba(212,255,63,0.35); border-radius: 999px; padding: 6px 12px; margin-bottom: 10px;
-    display: inline-block;
+/* status LED, not decoration: this is the one element on the shell that's
+   only ever rendered while a workout is actually in progress, so a slow
+   breathe is the literal state -- live right now -- not motion for its own sake */
+@keyframes pulse-breathe {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
 }
-.replace-note { font-size: 11px; color: var(--gym-muted); margin-top: 4px; }
-.replace-details { margin-top: 12px; }
-.replace-details summary { cursor: pointer; list-style: none; display: inline-block; }
-.replace-details summary::-webkit-details-marker { display: none; }
-.set-row > * { position: relative; z-index: 1; }
-.set-index { width: 20px; color: var(--gym-muted); font-weight: 600; }
-.set-edit-form { display: flex; align-items: center; gap: 6px; flex: 1; }
-.set-check {
-    width: 30px; height: 30px; flex-shrink: 0; border-radius: 999px;
-    border: 1px solid var(--gym-border); background: var(--gym-surface-2); color: transparent;
-    font-size: 14px; font-weight: 700; line-height: 1; cursor: pointer; transition: all 0.15s;
+.resume__body { display: flex; flex-direction: column; gap: 1px; min-inline-size: 0; flex: 1; }
+.resume__name {
+  font-family: var(--font-display); font-weight: var(--w-semi);
+  font-size: var(--t-meta); letter-spacing: var(--track-name); text-transform: uppercase;
+  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.set-check.checked { background: var(--gym-lime); border-color: var(--gym-lime); color: #0a0a0a; }
-.set-value { font-family: 'Outfit', sans-serif; font-weight: 700; }
-.edit-set-btn { flex-shrink: 0; }
-.set-value.hidden, .edit-set-btn.hidden, .edit-set-form.hidden { display: none; }
-
-/* ===== Active workout: rest timer (card-level bar, not a per-row overlay) ===== */
-.rest-bar { margin: 4px 0 12px; }
-.rest-bar-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--gym-muted); margin-bottom: 4px; }
-.rest-bar-label { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 13px; color: var(--gym-lime); }
-.rest-bar-track { height: 6px; border-radius: 999px; background: var(--gym-surface-2); overflow: hidden; }
-.rest-bar-fill { height: 100%; background: var(--gym-lime); transition: width 1s linear; }
-
-.exercise-card.dragging { position: relative; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,0.5); cursor: grabbing; touch-action: none; }
-.exercise-card.dragging.drag-ghost { z-index: 200; }
-#exercise-cards { user-select: none; -webkit-user-select: none; }
-.rest-form { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-
-.card-header-title-row { display: flex; align-items: center; gap: 6px; flex: 1 1 140px; min-width: 0; }
-.card-title-area { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; touch-action: none; }
-.card-title-area h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#exercise-cards:not(.read-only) .card-title-area { cursor: grab; }
-.exercise-card.dragging .card-title-area { cursor: grabbing; }
-.exercise-card.collapsed .card-body { display: none; }
-
-.progress-badge {
-    font-size: 11px; font-weight: 700; font-family: 'Outfit', sans-serif; flex-shrink: 0;
-    color: var(--gym-muted); background: var(--gym-surface-2); border: 1px solid var(--gym-border);
-    border-radius: 999px; padding: 2px 8px;
+.resume__meta {
+  font-family: var(--font-mono); font-size: var(--t-micro); color: var(--dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;   /* keeps .resume at exactly --resume-h even for a long exercise name */
 }
-.progress-badge.all-done { color: var(--gym-lime); border-color: var(--gym-lime); background: rgba(212,255,63,0.1); }
-.exercise-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin-top: 12px; }
-.progress-open-btn {
-    background: transparent; border: none; color: var(--gym-muted); font-size: 16px;
-    cursor: pointer; flex-shrink: 0; line-height: 1;
-    width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+.resume__clock {
+  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums; font-size: var(--num-sm);
+  color: var(--live); text-shadow: var(--glow-live); flex: none;
 }
-.progress-open-btn:hover { color: var(--gym-text); }
-
-/* ===== Modal (quick-glance progress) ===== */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
-.modal-overlay.hidden { display: none; }
-.modal-box { background: var(--gym-surface); border: 1px solid var(--gym-border); border-radius: 16px; max-width: 480px; width: 100%; max-height: 80vh; overflow-y: auto; }
-.modal-header {
-    display: flex; align-items: center; justify-content: space-between; padding: 14px 18px;
-    border-bottom: 1px solid var(--gym-border); position: sticky; top: 0; background: var(--gym-surface);
+@media (min-width: 900px) {
+  /* desktop has room: the strip sits in normal flow directly below the top bar
+     (rendered there by _base.html), not fixed, so it never overlaps the bar */
+  .resume { position: static; border-top: 0; border-bottom: 1px solid var(--live); }
 }
-.modal-body { padding: 18px; }
-.pr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.pr-card { background: var(--gym-surface-2); border: 1px solid var(--gym-border); border-radius: 12px; padding: 12px; }
-.pr-card .label { font-size: 10px; color: var(--gym-muted); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 700; }
-.pr-card .val { font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 800; color: var(--gym-lime); margin: 4px 0 2px; }
-.pr-card .sub { font-size: 11px; color: var(--gym-muted); }
-.modal-chart-wrap { height: 200px; margin-bottom: 8px; }
-.modal-position-note { font-size: 11px; color: var(--gym-muted); margin-bottom: 12px; }
 
-.actions-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
-
-/* ===== Exercise detail: period cards + table ===== */
-.chart-wrap { padding: 18px; height: 280px; }
-.period-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
-.period-card { background: var(--gym-surface); border: 1px solid var(--gym-border); border-radius: 16px; padding: 16px; }
-.period-card .label { font-size: 11px; color: var(--gym-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
-.period-card .rate-val { font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 800; color: var(--gym-lime); margin: 8px 0 4px; }
-.period-card .sub { font-size: 12px; color: var(--gym-muted); }
-.period-card .sub.positive { color: var(--gym-lime); }
-.period-card .sub.negative { color: var(--gym-red); }
-
-table.sets { width: 100%; border-collapse: collapse; font-size: 13px; }
-table.sets th { text-align: left; color: var(--gym-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; padding: 8px; }
-table.sets td { padding: 8px; border-top: 1px solid var(--gym-border-soft); }
-table.sets td.num { font-family: 'Outfit', sans-serif; font-weight: 700; }
-
-/* ===== Session summary: hero PR cards ===== */
-.gym-pr-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
-.gym-pr-hero-card {
-    background: linear-gradient(135deg, var(--gym-lime), var(--gym-lime-dim)); color: #0a0a0a;
-    border-radius: 16px; padding: 14px;
+/* Mobile only: when the resume strip is actually rendered above the fixed tab
+   bar, the base `body` padding-bottom (which only clears the tab bar itself)
+   isn't enough -- the strip sits on top of the last ~52px of scrollable
+   content. _base.html adds this class to <body> exactly when _nav.html is
+   about to render .resume (same gym_active_session + endpoint condition), so
+   the reserved space always matches whether the strip is actually there. */
+@media (max-width: 899px) {
+  body.has-resume {
+    padding-bottom: calc(var(--tabbar-h) + var(--resume-h) + env(safe-area-inset-bottom, 0px));
+  }
 }
-.gym-pr-hero-card .name { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; opacity: 0.75; }
-.gym-pr-hero-card .headline { font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 800; margin: 4px 0 2px; }
-.gym-pr-hero-card .sub { font-size: 11px; font-weight: 700; }
 
-.summary-exercise { padding: 14px 18px; border-top: 1px solid var(--gym-border-soft); }
-.summary-exercise:first-child { border-top: none; }
-.summary-exercise .name { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
-.summary-exercise .stats { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--gym-muted); margin-bottom: 6px; }
-.summary-exercise .stats strong { color: var(--gym-text); font-family: 'Outfit', sans-serif; }
-.pr-badges { display: flex; flex-wrap: wrap; gap: 6px; }
-.pr-badge {
-    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;
-    color: #0a0a0a; background: var(--gym-lime);
-    border-radius: 999px; padding: 3px 10px;
+/* quiet mobile-only logout: normal flow (not fixed, not a 4th tab -- the tab
+   bar is exactly three routes), de-emphasised via .label, but still a full
+   44px tap strip. Desktop already has its own logout link in .topbar. */
+.nav-footer { display: flex; justify-content: center; }
+.nav-footer a { display: inline-flex; align-items: center; justify-content: center; min-block-size: 44px; padding-inline: var(--sp-4); }
+
+/* _nav.html is included ahead of a page's own content -- by _base.html
+   before {% block content %}, and by the three templates Tasks 7/8/12
+   haven't migrated to the shell yet, ahead of their own body markup. On
+   mobile, everything else _nav.html renders is out of normal flow (.topbar
+   is display:none, .resume/.tabbar are position:fixed), so unpatched,
+   .nav-footer would land as the first in-flow child of <body> and render
+   above the page's real content instead of below it. Making <body> a column
+   flex container on mobile only, and giving .nav-footer the sole non-zero
+   `order`, pushes it after every other in-flow child -- whatever they are,
+   on whichever template -- without moving it in the DOM or touching the
+   include contract the old templates still depend on. */
+@media (max-width: 899px) {
+  body { display: flex; flex-direction: column; }
+  .nav-footer { order: 1; }
 }
-.summary-delta { font-size: 12px; color: var(--gym-muted); }
-.summary-delta.positive { color: var(--gym-lime); }
-.summary-delta.negative { color: var(--gym-red); }
+@media (min-width: 900px) {
+  .nav-footer { display: none; }
+}
+
+/* ============================================================================
+   READOUTS + BOARD  ·  stat tiles, bars, the record flare
+   (state-model expressions the dashboard and finished pages consume)
+   ============================================================================ */
+
+/* stat readout: quiet label, dominant tabular number, optional delta */
+.stat {
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--chassis);
+  border: 1px solid var(--edge);
+  border-top-color: var(--edge-hi);
+  border-radius: var(--r-panel);
+  box-shadow: var(--edge-lit), var(--edge-drop);
+}
+.stat__label {
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
+}
+.stat__value {
+  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums; font-size: var(--num-lg);
+  line-height: 1; letter-spacing: var(--track-num); color: var(--ink);
+}
+.stat__delta { font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim); }
+.stat__delta.is-up   { color: var(--ink); }
+.stat__delta.is-record { color: var(--record); }
+.stat__delta.is-stall { color: var(--stall); }
+
+/* horizontal bar (muscle-group balance): fixed label + track + tabular count */
+.hbar { display: grid; grid-template-columns: 5rem 1fr 2.5rem; gap: var(--sp-2); align-items: center; }
+.hbar + .hbar { margin-top: var(--sp-2); }
+.hbar__name { font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim); letter-spacing: 0.03em; }
+.hbar__track { block-size: 8px; background: var(--ground); border-radius: var(--r-inset); overflow: hidden; }
+.hbar__fill { display: block; block-size: 100%; background: var(--edge-hi); transition: inline-size var(--dur-3) linear; }
+.hbar__fill.is-stall { background: var(--stall); }   /* under-trained group */
+.hbar__val { font-family: var(--font-display); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; font-size: var(--t-name); text-align: right; color: var(--dim); }
+
+/* vertical bars (weekly tonnage): the current, partial week is lit amber */
+.vbars { display: flex; align-items: flex-end; gap: var(--sp-1); block-size: 108px; }
+.vbar { flex: 1; min-block-size: 2px; background: var(--edge-hi); border-radius: var(--r-inset) var(--r-inset) 0 0; }
+.vbar.is-live { background: var(--live); box-shadow: var(--glow-live); }
+.vbars__axis { display: flex; justify-content: space-between; margin-top: var(--sp-1);
+  font-family: var(--font-mono); font-size: var(--t-micro); color: var(--unlit); letter-spacing: 0.04em; }
+
+/* record flare: cyan, top of screen, one sharp pulse then settles */
+.flare {
+  padding: var(--sp-4);
+  background: linear-gradient(var(--wash-record), var(--wash-record)), var(--chassis);
+  border: 1px solid var(--record);
+  border-radius: var(--r-panel);
+  box-shadow: var(--glow-record);
+  animation: flare-pulse 620ms var(--ease-out) 1 both;
+}
+.flare__label {
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--record);
+}
+.flare__value {
+  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums; font-size: var(--num-xl); line-height: 1;
+  letter-spacing: var(--track-num); color: var(--record); text-shadow: var(--glow-record);
+}
+@keyframes flare-pulse {
+  0%   { transform: scale(0.985); filter: brightness(1.7); }
+  45%  { transform: scale(1);     filter: brightness(1.18); }
+  100% { transform: scale(1);     filter: brightness(1); }
+}
+
+/* ============================================================================
+   TABLE  ·  dense history, tabular figures, record rows lit cyan
+   ============================================================================ */
+
+.table { inline-size: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+.table th {
+  text-align: left; padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
+  border-bottom: 1px solid var(--edge);
+}
+.table td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--edge); color: var(--ink); }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table tr:last-child td { border-bottom: 0; }
+.table tr.is-record td { color: var(--record); background: var(--wash-record); }
+
+/* ============================================================================
+   NOTES + EMPTY STATES
+   ============================================================================ */
+
+/* the stagnation nudge / next-time advice: full stall outline + the word,
+   never a coloured side stripe */
+.note-stall {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--wash-stall);
+  border: 1px solid var(--stall);
+  border-radius: var(--r-control);
+  color: var(--ink);
+  font-size: var(--t-body); line-height: 1.5;   /* real prose: the debrief is the point */
+}
+.note-stall__label {
+  display: block; margin-bottom: var(--sp-1);
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--stall);
+}
+.note-stall strong { color: var(--ink); font-weight: var(--w-semi); }
+
+.divider { block-size: 1px; background: var(--edge); border: 0; margin-block: var(--sp-5); }
+
+.empty {
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+  color: var(--dim);
+  font-size: var(--t-sm);
+}
+.empty .label { display: block; margin-bottom: var(--sp-2); color: var(--unlit); }
+
+/* ============================================================================
+   SESSION DETAIL  ·  the live workout view (session_detail.html)
+   ----------------------------------------------------------------------------
+   Composition over the primitives above. The load-bearing rule (spec 6.4):
+   exactly one exercise panel is `.panel--live` (expanded); completed ones are
+   `.panel--done` and not-yet-reached ones `.panel--unlit`, both collapsed to
+   their header summary row. `.collapsed` hides the body; the header stays as
+   the settled row. `.exercise-card` / `.card-title-area` are behavioural hooks
+   the inline drag/refresh script drives -- kept as their own names so that
+   script barely changed from the version this replaced.
+   ============================================================================ */
+
+/* Everything on this view is tapped one-handed, standing at the gym, so every
+   control clears the 44px touch floor (spec 7) -- including the buttons/inputs
+   the shared tokens otherwise draw at 36/40px for calmer desktop surfaces. */
+.session-view .btn--sm { min-block-size: 44px; }
+.session-view .input, .session-view .select { min-block-size: 44px; }
+
+/* page header: workout name + status chip, elapsed clock on the right */
+.session-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--sp-3); margin-bottom: var(--sp-4);
+}
+.session-head__main { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); min-inline-size: 0; }
+.session-head__clock { flex: none; color: var(--live); text-shadow: var(--glow-live); }
+
+/* push-notification enable row + the reorder lock toggle */
+.notify { display: flex; align-items: center; gap: var(--sp-3); }
+.notify__text { flex: 1; min-inline-size: 0; color: var(--dim); font-size: var(--t-sm); }
+.reorder-row { margin: var(--sp-3) 0; }
+
+/* one exercise = one .panel. margin between them (both live/unlit variants are
+   still .panel, so the base `.panel + .panel` rule already spaces them) */
+.exercise-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
+.card-title-area {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
+  flex: 1; min-inline-size: 0;
+  cursor: pointer;                       /* tap toggles collapse (JS) */
+  touch-action: pan-y;                   /* vertical touch here scrolls the page like anywhere else */
+  -webkit-tap-highlight-color: transparent;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+/* Collapsed = the settled summary row -- one quiet line, not a second
+   headline. A long name (this app's real data goes well past 30 chars,
+   e.g. "Lat Pulldown (Single Arm, Hauptbahnhof)") would otherwise wrap to
+   3+ lines at the --t-name size and make the "slim overview" the collapsed
+   state exists for pointless. Truncates instead; tapping the row (existing
+   collapse toggle) expands it and .exercise-card__name's un-truncated,
+   full-size rule below takes over again. */
+.exercise-card.collapsed .card-title-area { flex-wrap: nowrap; }
+.exercise-card.collapsed .exercise-card__name {
+  font-size: var(--t-sm);
+  flex: 1; min-inline-size: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.exercise-card.collapsed .card-title-area .chip,
+.exercise-card.collapsed .card-title-area .tag { flex: none; }
+/* .exercise-card__head's flex-start (below) is for the expanded card, where
+   a wrapped multi-line name should top-align with the tools column rather
+   than center against a much shorter block. Collapsed rows are guaranteed
+   single-line now, so top-aligning against the 44px handle/rest-input just
+   strands the text near the top with dead space under it -- center instead. */
+.exercise-card.collapsed .exercise-card__head { align-items: center; }
+/* Drag origin on touch: pan-y above hands any vertical touch-drag on the row
+   to native scroll before JS ever sees enough movement to claim it -- there
+   is no "opt in past a threshold" for a browser-recognised pan gesture, so
+   dragging needs its own small always-scroll-exempt target. Mouse has no such
+   conflict (touch-action doesn't apply), so gym.js only requires this handle
+   for touch/pen input and still allows grabbing anywhere on the row with a
+   mouse. */
+.drag-handle {
+  display: inline-grid; place-items: center;
+  inline-size: 44px; block-size: 44px; flex: none;
+  color: var(--dim);
+  cursor: grab;
+  touch-action: none;
+}
+.exercise-card__name { font-size: var(--t-name); line-height: 1.15; overflow-wrap: anywhere; }
+.exercise-card__tools { flex: none; display: flex; align-items: center; gap: var(--sp-1); }
+
+/* per-exercise rest-seconds editor (auto-saves on change) */
+.rest-form { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.rest-form__unit { color: var(--dim); }
+.rest-form__input { inline-size: 3.5rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
+
+/* collapse: the header is the settled summary row; the body is the workspace */
+/* Animatable collapse via the grid-rows technique: display:none can't be
+   transitioned, so .exercise-card__body is a 1-row grid whose track animates
+   1fr <-> 0fr, and .exercise-card__body-inner (its one grid item -- added in
+   session_detail.html purely so every existing child stacks into that single
+   animatable row) clips the content as the track shrinks. Only ever visibly
+   animates on the direct tap-to-collapse gesture (a plain classList.toggle on
+   the existing node); an AJAX refresh always swaps in a brand-new node in its
+   already-settled state, same reasoning as the set-confirm-pulse above. */
+.exercise-card__body {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-top: var(--sp-3);
+  transition: grid-template-rows 320ms var(--ease-out), margin-top 320ms var(--ease-out);
+}
+.exercise-card__body-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  /* overflow:hidden only clips visually -- every input/button in here would
+     otherwise stay in the tab order and the accessibility tree even while
+     the row is animated to zero height (unlike the old display:none, which
+     handled both in one property). Delay visibility until the collapse
+     animation actually finishes so it doesn't cut the motion short; expand
+     restores it immediately since there's no animation to protect there. */
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+}
+.exercise-card.collapsed .exercise-card__body-inner {
+  visibility: hidden;
+  transition: visibility 0s linear 320ms;
+}
+.exercise-card.collapsed .exercise-card__body { grid-template-rows: 0fr; margin-top: 0; }
+
+/* The two moments in a workout actually worth marking on this card: it just
+   became the live one, or you just closed it out. gym.js adds these classes
+   by diffing the old #exercise-cards against the freshly-fetched one right
+   before the AJAX swap -- so unlike a plain per-refresh animation, this only
+   ever plays for the exercise whose state genuinely crossed that line on
+   THIS action, never for the four other cards that happened to re-render
+   alongside it, and never on a plain page load. just-lit borrows --live
+   (amber = current/now, its real meaning); just-finished deliberately does
+   NOT borrow --record (cyan means a PR specifically, not true here) -- it's
+   an ink-white flash, matching how .set--done already reads DONE as "full-
+   brightness ink, settled fact" rather than a coloured state. */
+@keyframes card-just-lit {
+  0%   { box-shadow: none; }
+  50%  { box-shadow: var(--glow-live); }
+  100% { box-shadow: var(--glow-live), var(--edge-lit); }   /* .panel--live's own resting shadow */
+}
+.exercise-card.just-lit { animation: card-just-lit 480ms var(--ease-out); }
+
+@keyframes card-just-finished {
+  0%   { box-shadow: none; }
+  45%  { box-shadow: 0 0 16px rgba(236, 239, 242, 0.4); }
+  100% { box-shadow: none; }
+}
+.exercise-card.just-finished { animation: card-just-finished 560ms var(--ease-out); }
+
+.pending-hint { color: var(--dim); }
+.sets { display: flex; flex-direction: column; gap: var(--sp-1); }
+
+/* editable live set row: weight/reps wells, the check pushed to the cell end,
+   delete in the trailing grid column */
+.set__log { display: flex; align-items: center; gap: var(--sp-1); min-inline-size: 0; }
+.set__log .input--num { inline-size: 4rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
+.set__log .load__unit, .set__log .load__x { flex: none; }
+.set__log .set__check { margin-inline-start: auto; }
+.set__del { justify-self: end; }
+
+/* Undo window for set deletion (Interaction Design's own "undo beats confirm"
+   rule): the row's real children hide instead of the row disappearing, and
+   this bar takes over the whole grid row until the window elapses or the
+   user taps Rückgängig. gym.js owns the timer. */
+.set--pending-delete > *:not(.set__undo) { display: none; }
+@keyframes set-undo-in { from { opacity: 0; } to { opacity: 1; } }
+.set__undo {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3);
+  color: var(--dim);
+  font-size: var(--t-sm);
+  animation: set-undo-in 180ms var(--ease-out);
+}
+
+/* finished (read-only) set row: static load readout + a pencil that swaps in
+   an edit form spanning the rest of the row */
+.set__readout { min-inline-size: 0; }
+.set__tools { display: flex; align-items: center; gap: var(--sp-1); justify-self: end; }
+.set__editrow { grid-column: 2 / -1; }
+
+/* form rows that wrap gracefully on a phone */
+.add-set, .add-exercise, .save-template, .replace__form {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3);
+}
+.grow { flex: 1 1 9rem; min-inline-size: 0; }
+.add-set .field { flex: 0 0 auto; }
+.add-set .btn, .add-exercise .btn, .save-template .btn, .replace__form .btn { flex: none; }
+
+/* per-exercise actions: skip / replace / remove */
+.ex-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.replace { flex: 1 1 100%; }
+.replace > summary { display: inline-flex; list-style: none; width: auto; }
+.replace > summary::-webkit-details-marker { display: none; }
+.replace__form { margin-top: var(--sp-2); }
+
+.session-finish { margin: var(--sp-5) 0; }
+
+/* drag reorder */
+.exercise-card.dragging { opacity: 0.4; }
+.drag-ghost {
+  z-index: var(--z-bar); box-shadow: var(--glow-live), 0 12px 32px rgba(0, 0, 0, 0.6); opacity: 0.96;
+  user-select: none; -webkit-user-select: none;
+}
+
+/* ============================================================================
+   PROGRESS MODAL  ·  _progress_modal.html (shared: session detail + exercise
+   detail). PR cards read as records (cyan); the chart canvas gets a fixed box.
+   ============================================================================ */
+
+.hidden { display: none !important; }
+
+.modal {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  opacity: 1; visibility: visible;
+  transition: opacity 240ms var(--ease-out), visibility 0s linear 0s;
+}
+@media (min-width: 640px) { .modal { align-items: center; padding: var(--sp-4); } }
+
+/* Overrides the bare .hidden utility above (two classes beats one at equal
+   !important weight) so THIS element fades instead of snapping -- everywhere
+   else .hidden still means instant display:none. Stays display:flex and
+   pointer-events:none rather than actually leaving the layout, so the close
+   fade has something to animate; visibility is what removes it from the a11y
+   tree and tab order, delayed until the fade-out finishes (open has none). */
+.modal.hidden {
+  /* the bare .hidden utility above sets display:none with !important --
+     !important always beats a normal declaration regardless of specificity,
+     so without matching it here this display:flex never actually wins and
+     the whole open/close transition below silently never runs (confirmed via
+     getAnimations() returning zero running animations in either direction). */
+  display: flex !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 200ms var(--ease), visibility 0s linear 200ms;
+}
+
+.modal__box {
+  inline-size: 100%; max-inline-size: 560px; max-block-size: 90vh; overflow-y: auto;
+  background: var(--chassis);
+  border: 1px solid var(--edge); border-top-color: var(--edge-hi);
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
+  box-shadow: var(--edge-lit), 0 -8px 32px rgba(0, 0, 0, 0.5);
+  transform: none;
+  transition: transform 240ms var(--ease-out);
+}
+/* mobile is a bottom sheet, so it retreats down; desktop is a centered
+   dialog, so it only settles by scale -- matches each surface's own radius
+   treatment right below (sheet: top corners only vs. dialog: full radius) */
+.modal.hidden .modal__box { transform: translateY(16px) scale(0.98); }
+@media (min-width: 640px) {
+  .modal__box { border-radius: var(--r-panel); }
+  .modal.hidden .modal__box { transform: translateY(0) scale(0.96); }
+}
+
+.modal__head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  padding: var(--sp-4); background: var(--chassis); border-bottom: 1px solid var(--edge);
+}
+.modal__title { font-size: var(--t-name); min-inline-size: 0; overflow-wrap: anywhere; }
+.modal__body { padding: var(--sp-4); }
+
+.pr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.pr-card { padding: var(--sp-3); background: var(--raised); border: 1px solid var(--edge); border-radius: var(--r-control); }
+.pr-card .label { display: block; margin-bottom: var(--sp-1); }
+.pr-card .val {
+  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums; font-size: var(--num-sm); line-height: 1;
+  color: var(--record); text-shadow: var(--glow-record);
+}
+.pr-card .sub { display: block; margin-top: var(--sp-1); font-size: var(--t-meta); color: var(--dim); }
+.modal-position-note { margin-bottom: var(--sp-3); font-size: var(--t-meta); color: var(--dim); }
+.modal-chart-wrap { position: relative; block-size: 240px; margin-bottom: var(--sp-3); }
+
+/* ============================================================================
+   SESSION FINISHED  ·  the read-only debrief (session_finished.html)
+   ----------------------------------------------------------------------------
+   Reached through the same `/gym/session/<id>` URL as the live view --
+   routes.py's session_detail() branches on session_.finished_at. The header
+   deliberately echoes session_detail.html's .session-head (name + status
+   chip) so the two feel like one page in two states, not two apps. Past the
+   header this is new composition over the Task 5 primitives (.flare, .stat,
+   .chip, .note-stall) -- none of their state colours are redefined here.
+   ============================================================================ */
+
+.session-finished__date { margin: calc(-1 * var(--sp-2)) 0 var(--sp-4); }
+
+/* record flare(s): one per PR, largest first (server-sorted) */
+.pr-flares { display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.flare__unit {
+  font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--record);
+  margin-inline-start: 0.3em;
+}
+.flare__meta { margin-top: var(--sp-2); }
+
+/* Volumen / Sätze / Dauer / Rekorde -- 2x2 on phone, 4-across once there's room */
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+@media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
+.stat__value.is-record { color: var(--record); text-shadow: var(--glow-record); }
+
+/* Nach Übung: a divided list inside one panel, not a card per row. Each row
+   is wrapped (.ex-report-row) so the optional correction disclosure below
+   the summary line still counts as "one row" for the divider -- otherwise a
+   <details> sitting between two .ex-report siblings would break the
+   adjacent-sibling border on every row that follows one with sets to edit. */
+.ex-report-row + .ex-report-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+.ex-report { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.ex-report__main { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
+.ex-report__sets { margin-top: 2px; }
+.ex-report .chip { flex: none; }
+
+/* correction affordance: closed-by-default native disclosure (no JS, free
+   keyboard support via <summary>'s implicit button semantics) revealing one
+   quiet weight/reps form per set. Deliberately styled at .label weight --
+   smaller and dimmer than the chip beside it -- so it never competes with
+   the verdict chip or the record flare above for attention. */
+.set-correct { margin-top: var(--sp-1); }
+.set-correct__toggle {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  min-block-size: 44px;
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+  color: var(--dim);
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.set-correct__toggle::-webkit-details-marker { display: none; }
+.set-correct__toggle:hover { color: var(--ink); }
+.set-correct[open] > .set-correct__toggle { color: var(--ink); }
+.set-correct__body { display: flex; flex-direction: column; gap: var(--sp-2); padding-bottom: var(--sp-1); }
+.set-correct__row { display: flex; align-items: center; gap: var(--sp-2); }
+.set-correct__idx { inline-size: 1.25rem; flex: none; text-align: center; }
+.set-correct__row .input--num { inline-size: 4rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
+
+.note-stall + .note-stall { margin-top: var(--sp-2); }
+.save-error__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
+
+.template-prompt { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
+
+.finished-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); }
+.finished-actions form { margin-inline-start: auto; }
+
+/* ============================================================================
+   HEUTE  ·  the landing page (heute.html)
+   ----------------------------------------------------------------------------
+   One template, two compositions: a single CSS Grid whose named areas are
+   fully redefined per breakpoint. Phone stacks single-column in launcher
+   order (head, routines, start, recent, board); desktop rearranges into a
+   planning cockpit (head+start as one bar, the three-panel board, then
+   routines/recent as two columns). No markup differs between the two --
+   only grid-template-areas/-columns change, plus one button re-skin below.
+   .hbar / .vbars / .vbar already exist (built in Task 5 for this page); only
+   layout glue and the two new list/disclosure patterns are added here.
+   ============================================================================ */
+
+.heute {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "head"
+    "routines"
+    "start"
+    "recent"
+    "board";
+}
+@media (min-width: 900px) {
+  .heute {
+    grid-template-columns: 3fr 2fr;
+    grid-template-areas:
+      "head     start"
+      "divider  divider"
+      "board    board"
+      "routines recent";
+    align-items: start;
+    gap: var(--sp-6);
+  }
+}
+
+.heute__head     { grid-area: head; }
+.heute__start    { grid-area: start; }
+.heute__routines { grid-area: routines; }
+.heute__recent   { grid-area: recent; }
+.heute__board    { grid-area: board; display: flex; flex-direction: column; gap: var(--sp-3); }
+.heute__board .panel + .panel { margin-top: 0; }   /* .heute__board's own gap already spaces them; avoid doubling up */
+
+/* the bar's dividing line, as its own full-width grid row -- not a border on
+   .heute__head/.heute__start individually, which (once the start-form wraps
+   to two lines in its narrower column) would end up at two different
+   heights instead of reading as one bar's bottom edge. Phone doesn't have
+   this row at all: a genuinely desktop-only element, hidden rather than
+   given a phone-side grid-area (see spec 6.1's "hidden in CSS" allowance). */
+.heute__divider { display: none; }
+
+@media (min-width: 900px) {
+  .heute__divider { display: block; grid-area: divider; border: 0; block-size: 1px; background: var(--edge); margin: 0; }
+  .heute__board { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
+  .heute__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
+  .heute__start { display: flex; align-items: flex-end; }
+  .heute__start form, .heute__start .heute__active-note { inline-size: 100%; }
+}
+
+.heute__title h1 { margin-bottom: var(--sp-1); }
+.heute__window-label { display: none; }
+.heute__consistency { color: var(--dim); font-size: var(--t-sm); }
+@media (min-width: 900px) {
+  .heute__window-label { display: block; margin-bottom: var(--sp-1); text-align: right; }
+  .heute__consistency-block { text-align: right; }
+}
+
+/* free-workout-start form: fields flow, wrap gracefully on a phone */
+.heute-start-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
+.heute-start-form .btn { flex: none; }
+/* phone: a secondary path (routines' own Starten buttons are primary, spec
+   6.1); desktop: the bar's one deliberate action, promoted to live/amber.
+   Same button, same markup -- only the skin changes with the breakpoint. */
+@media (min-width: 900px) {
+  .heute__start .btn--ghost {
+    background: var(--live); color: var(--ground); border-color: var(--live);
+    box-shadow: var(--press-live);
+  }
+  .heute__start .btn--ghost:hover { background: var(--live-hi); }
+}
+
+.heute__active-note { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+/* one chassis panel per routine -- not rows in a shared panel (spec 6.1) */
+.routine__title { min-inline-size: 0; }
+.routine__exercises { margin: var(--sp-2) 0 var(--sp-3); overflow-wrap: anywhere; }
+
+/* edit affordance: closed by default, anchored under its toggle as a small
+   popover rather than pushed inline -- so opening it never reflows the card
+   or squeezes the rename input into whatever width a flex item shrinks to. */
+.routine__edit { position: relative; flex: none; }
+.routine__edit-toggle {
+  display: inline-grid; place-items: center;
+  inline-size: 44px; block-size: 44px;
+  color: var(--dim); border-radius: var(--r-control);
+  cursor: pointer; list-style: none;
+  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+.routine__edit-toggle::-webkit-details-marker { display: none; }
+.routine__edit-toggle:hover { color: var(--ink); background: var(--raised); }
+.routine__edit[open] > .routine__edit-toggle { color: var(--ink); background: var(--raised); }
+.routine__edit-body {
+  position: absolute; z-index: 2; right: 0; top: calc(100% + var(--sp-1));
+  inline-size: max(220px, min(280px, calc(100vw - 3rem)));
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--raised);
+  border: 1px solid var(--edge-hi);
+  border-radius: var(--r-panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.routine__edit-form { display: flex; gap: var(--sp-2); }
+.routine__edit-form .input { flex: 1; min-inline-size: 0; }
+
+/* Letzte Workouts: a divided list inside one panel, not a card per row --
+   same "not a card per row" philosophy as session_finished.html's Nach
+   Übung rows, but independent classes so the two pages stay free to diverge. */
+.recent-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-block-size: 44px; }
+.recent-row + .recent-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+.recent-row__main { min-inline-size: 0; overflow-wrap: anywhere; }
+.recent-row__meta { margin-top: 2px; }
+
+.tonnage__note { margin-top: var(--sp-2); color: var(--live); }
+
+/* ============================================================================
+   HEUTE BOOT SEQUENCE  ·  page-load only, scoped to this page
+   ----------------------------------------------------------------------------
+   Same "dead until power hits it" instrument the file header already sells:
+   on load the chassis flickers once as current surges in, each section
+   lights up in sequence, and the two gauges (muscle-group bars, weekly
+   tonnage) sweep up to the reading stats.py already computed -- like a
+   needle settling, not a number appearing. One-shot: nothing here loops,
+   re-fires, or waits on scroll -- it all runs once, on initial paint.
+   Fully killed by the REDUCED MOTION block at the end of this file
+   (animation-delay zeroed there too, so reduced-motion users see the
+   finished page immediately, with no staggered pop-in).
+   ============================================================================ */
+
+@keyframes boot-flicker {
+  0%, 100% { filter: brightness(1); }
+  8%  { filter: brightness(2.2); }
+  17% { filter: brightness(0.82); }
+  28% { filter: brightness(1.7); }
+  45% { filter: brightness(1); }
+}
+.heute { animation: boot-flicker 460ms var(--ease) both; }
+
+@keyframes boot-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.heute__head,
+.heute__start,
+.heute__recent,
+.heute__board > .panel {
+  animation: boot-in 380ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.heute__head                         { --i: 0; }
+.heute__start                        { --i: 1; }
+.heute__recent                       { --i: 2; }
+.heute__board > .panel:nth-child(1)  { --i: 3; }   /* Steht still */
+.heute__board > .panel:nth-child(2)  { --i: 4; }   /* Sätze pro Muskelgruppe */
+.heute__board > .panel:nth-child(3)  { --i: 5; }   /* Tonnage pro Woche */
+
+/* Routinen: real cards (one per template), so the list gets its own rhythm
+   instead of moving as one block. Capped at --i:6 in heute.html so a long
+   template list can't push the last card's delay past the rest of the boot. */
+.heute__routines > .empty,
+.heute__routines > .routine {
+  animation: boot-in 380ms var(--ease-out) both;
+  animation-delay: calc(90ms + (var(--i, 0) * 45ms));
+}
+
+/* gauges: sweep from zero to the value already computed server-side, timed
+   to start just after their own panel (--i: 4 / --i: 5 above) begins
+   lighting up. transform, not width/height -- the real share/volume value
+   stays in the inline style each bar already carries (see heute.html); this
+   only scales the already-correctly-sized bar up from its own baseline. */
+@keyframes gauge-sweep-v { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes gauge-sweep-h { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.vbar       { transform-origin: bottom; animation: gauge-sweep-v 420ms var(--ease-out) both; animation-delay: 295ms; }
+.hbar__fill { transform-origin: left;   animation: gauge-sweep-h 420ms var(--ease-out) both; animation-delay: 250ms; }
+
+/* ============================================================================
+   ÜBUNGEN  ·  the exercise catalogue (uebungen.html)
+   ----------------------------------------------------------------------------
+   One responsive composition, no phone/desktop split (spec 6.2). Search and
+   sort are entirely client-side over the rows the server renders once (see
+   uebungen.html's own script) -- sorting moves the real .uebungen-row /
+   .uebungen-group-header nodes rather than re-rendering, so the divided-list
+   border below and every other row detail survive any reorder untouched.
+
+   [hidden] must win over a row/header's own `display: flex` -- a bare class
+   selector ties the UA stylesheet's default `[hidden]{display:none}` on
+   specificity, and author rules win ties, so without the boost below a
+   "hidden" row would still render.
+   ============================================================================ */
+
+.uebungen__head { margin-bottom: var(--sp-4); }
+
+.uebungen__controls {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.uebungen-sort {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3);
+  flex: 1 1 auto; border: 0;
+}
+.uebungen-sort legend { padding: 0; margin-bottom: var(--sp-1); inline-size: 100%; }
+.uebungen-sort__opt {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  min-block-size: 36px;
+  font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim);
+  cursor: pointer;
+}
+.uebungen-sort__opt input { accent-color: var(--live); }
+
+/* A real table: one shared header names the columns once instead of every
+   row re-labelling itself ("Zuletzt", "e1RM") -- that repetition was the
+   actual noise. .uebungen-table is the ONE grid; .uebungen-table__head,
+   .uebungen-list and .uebungen-row are all `display: contents`, so their
+   children all bubble up to participate directly in that single grid
+   instead of each establishing their own independently-sized columns
+   (two grids with the same `auto auto` never actually agree on a width --
+   confirmed the header and body columns drifting apart before landing on
+   this). Nested `display: contents` is what makes cross-row AND
+   header-to-row column alignment possible with markup this shallow. The
+   group header and the JS search/sort (it moves whole .uebungen-row
+   nodes) don't care -- display: contents changes rendering only, never
+   the DOM the script walks or the [hidden] toggle it sets. */
+.uebungen-table {
+  display: grid;
+  grid-template-columns: 1fr auto auto 44px;
+  column-gap: var(--sp-3);
+  align-items: center;
+}
+.uebungen-table__head, .uebungen-list { display: contents; }
+.uebungen-table__head span:not(.uebungen-table__rule) {
+  padding-bottom: var(--sp-2);
+  font-family: var(--font-mono); font-size: var(--t-micro); font-weight: var(--w-semi);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+}
+.uebungen-table__head span:nth-child(2), .uebungen-table__head span:nth-child(3) { text-align: right; }
+/* One hairline spanning every column, not four separate borders that stop
+   short at each column-gap (four disconnected fragments instead of a
+   single line -- the "alignment" that actually read as broken). Same
+   reasoning for .uebungen-row__rule below, per data row. */
+.uebungen-table__rule { grid-column: 1 / -1; block-size: 1px; padding: 0; background: var(--edge-hi); margin-bottom: var(--sp-1); }
+
+/* Closed by default (gym.js) -- a button, not a label, so tapping it is
+   the way you go from "which groups exist" to "what's in this one". */
+.uebungen-group-header {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: var(--sp-2);
+  inline-size: 100%; text-align: left;
+  min-block-size: 44px;
+  padding: var(--sp-2) 0; margin-top: var(--sp-1);
+}
+.uebungen-group-header:first-child { margin-top: 0; }
+.uebungen-group-header__chevron {
+  display: inline-block; flex: none;
+  color: var(--dim); font-size: var(--t-sm);
+  transition: transform var(--dur-2) var(--ease);
+}
+.uebungen-group-header.is-open .uebungen-group-header__chevron { transform: rotate(90deg); }
+
+.uebungen-row { display: contents; }
+.uebungen-row[hidden], .uebungen-group-header[hidden] { display: none; }
+.uebungen-row > * { padding-block: var(--sp-2); }
+.uebungen-row__rule { grid-column: 1 / -1; block-size: 1px; padding: 0; background: var(--edge); }
+
+.uebungen-row__name-cell { min-inline-size: 0; overflow-wrap: anywhere; }
+.uebungen-row__name-cell .chip { margin-inline-start: var(--sp-2); }
+.uebungen-row__meta { margin-top: 2px; }
+.uebungen-row__weight, .uebungen-row__e1rm { text-align: right; white-space: nowrap; }
+.uebungen-row__dash { color: var(--dim); }
+.uebungen-row__delete-cell { display: flex; justify-content: center; }
+.uebungen-row__delete-cell:empty { display: none; }
+
+.uebungen-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
+
+/* ============================================================================
+   VERLAUF  ·  workout history + export (verlauf.html)
+   ----------------------------------------------------------------------------
+   Two panels: the export controls (spec 6.6 -- same behavior as the old
+   dashboard's export panel, restyled with this system's own primitives, not
+   the old .export-panel/.form-row classes), then one divided list of every
+   finished session, newest first -- the same "not a card per row" pattern as
+   .recent-row / .ex-report-row / .uebungen-row.
+   ============================================================================ */
+
+.verlauf__head { margin-bottom: var(--sp-4); }
+
+.verlauf-export__presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.verlauf-export__action { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
+
+.verlauf-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.verlauf-row + .verlauf-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+/* checkbox has no adjacent label text (aria-label carries the name instead),
+   so unlike .uebungen-check / .exercise-detail-check -- which get their
+   44px-wide tap target for free from the text beside them -- this one needs
+   both dimensions set explicitly. */
+.verlauf-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-inline-size: 44px; min-block-size: 44px;
+  flex: none;
+  cursor: pointer;
+}
+.verlauf-row__main { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
+.verlauf-row__meta { margin-top: 2px; }
+.verlauf-row__exercises { margin-top: 2px; }
+.verlauf-row__stats { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); flex: none; }
+.verlauf-row__delete { flex: none; }
+
+/* ============================================================================
+   EXERCISE DETAIL  ·  the single-exercise instrument (exercise_detail.html)
+   ----------------------------------------------------------------------------
+   Four blocks (spec 6.3): verdict band, chart (position as series, via
+   GymChart.renderProgressChart in gym.js), history table, metadata behind a
+   disclosure. Mobile stacks verdict->chart->history->meta, matching the
+   template's own block order; desktop puts the chart and the verdict/PR rail
+   on one row (chart wide, rail a fixed 22rem) with history and metadata full
+   width below. `.pr-grid`/`.pr-card` are the PROGRESS MODAL section's
+   components above, reused verbatim -- same PR-card concept, same look, on
+   both surfaces (page and modal) since both render the exact same
+   pr_weight/pr_e1rm shape from stats.exercise_progress().
+   ============================================================================ */
+
+.exercise-detail {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "head"
+    "verdict"
+    "chart"
+    "history"
+    "meta";
+}
+@media (min-width: 900px) {
+  .exercise-detail {
+    grid-template-columns: 1fr 22rem;
+    grid-template-areas:
+      "head     head"
+      "chart    verdict"
+      "history  history"
+      "meta     meta";
+    align-items: start;
+    gap: var(--sp-6);
+  }
+  /* No chart/history to lay out (zero history, or a hand-typed position
+     filter with nothing in it) -- let the verdict panel span full width
+     instead of sitting pinned to the right rail with an empty gap beside it. */
+  .exercise-detail--empty {
+    grid-template-areas:
+      "head    head"
+      "verdict verdict"
+      "meta    meta";
+  }
+}
+
+/* Every direct child of .exercise-detail MUST get an explicit grid-area.
+   CSS Grid auto-places anything without one into a fresh implicit row after
+   every named area in the template -- silently, with no error -- which is
+   exactly the bug this comment exists to prevent regressing: an unassigned
+   .exercise-detail__head previously auto-placed itself after "meta",
+   rendering the exercise's own name at the BOTTOM of the page. */
+/* min-inline-size: 0 on every one -- same reasoning as .gym-wrap above:
+   a grid item's automatic minimum width defaults to its content's, and
+   without this, h1's large (--num-md) heading font forces the single
+   mobile column -- and everything else riding along in it -- wider than
+   the viewport the moment a long exercise name doesn't fit at that size. */
+.exercise-detail__head    { grid-area: head;    min-inline-size: 0; }
+.exercise-detail__verdict { grid-area: verdict; min-inline-size: 0; }
+.exercise-detail__chart   { grid-area: chart;   min-inline-size: 0; }
+.exercise-detail__history { grid-area: history; min-inline-size: 0; }
+.exercise-detail__meta    { grid-area: meta;    min-inline-size: 0; }
+
+.exercise-detail__name-warning { margin-top: var(--sp-3); }
+
+.exercise-detail__verdict .panel { display: flex; flex-direction: column; gap: var(--sp-3); }
+.verdict-last { margin-top: calc(-1 * var(--sp-1)); color: var(--ink); font-size: var(--t-sm); line-height: 1.5; }
+.verdict-last__sets { display: block; margin-top: 2px; }
+
+/* position filter: real navigation links (?position=N / back to unfiltered),
+   not a client-side toggle -- isolating one slot is a different view of the
+   data, worth its own URL. "active" borrows the same amber = currently-
+   selected convention .topbar__link.is-active / .tabbar__tab.is-active
+   already use, not a repurposed state hue -- selection isn't one of the
+   five states. */
+.exercise-detail__positions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.position-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-block-size: 36px; padding: 0 var(--sp-3);
+  font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--dim);
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-chip);
+  transition: color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+.position-pill:hover { color: var(--ink); border-color: var(--edge-hi); }
+.position-pill.is-active { color: var(--live); border-color: var(--live); background: transparent; box-shadow: var(--glow-live); }
+
+.exercise-detail__chart-wrap { position: relative; block-size: 280px; }
+@media (min-width: 900px) {
+  .exercise-detail__chart-wrap { block-size: 420px; }
+}
+
+.exercise-detail__note { margin-bottom: var(--sp-3); color: var(--dim); font-size: var(--t-meta); line-height: 1.5; }
+.exercise-detail__table-wrap { overflow-x: auto; }
+
+/* metadata: closed-by-default disclosure, deliberately quiet (spec 6.3 --
+   "maintenance, not the reason you opened the page"). Body flows inline
+   (unlike .routine__edit's floating popover) -- there's no tight card here
+   to avoid reflowing. Auto-opened by the template when a rename attempt just
+   bounced off a taken name, so the warning and the form to try again land
+   together instead of the user having to reopen what they just submitted. */
+.meta-edit { margin-top: var(--sp-1); }
+.meta-edit__toggle {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  min-block-size: 44px;
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+  color: var(--dim);
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.meta-edit__toggle::-webkit-details-marker { display: none; }
+.meta-edit__toggle:hover { color: var(--ink); }
+.meta-edit[open] > .meta-edit__toggle { color: var(--ink); }
+.meta-edit__body { margin-top: var(--sp-2); }
+.exercise-detail-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
+
+/* ============================================================================
+   REDUCED MOTION  ·  disables the flare, the fills, and every transition
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+  .rest__fill, .hbar__fill { transition: none !important; }
+  .flare { animation: none !important; }
+}

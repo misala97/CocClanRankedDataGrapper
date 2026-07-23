@@ -1,275 +1,273 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ session.name or 'Workout' }} · Gym Tracker</title>
-    <link rel="manifest" href="/static/manifest.json">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
-    <meta name="theme-color" content="#0a0a0a">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
-</head>
-<body>
+{% extends 'gym/_base.html' %}
 
-<div class="modal-overlay hidden" id="progress-modal">
-    <div class="modal-box">
-        <div class="modal-header">
-            <h2 id="progress-modal-title">Fortschritt</h2>
-            <button type="button" class="btn btn-ghost btn-sm" id="progress-modal-close">✕</button>
-        </div>
-        <div class="modal-body" id="progress-modal-body"></div>
-    </div>
-</div>
+{# The live workout view (spec 6.4). Task 8 split the finished-workout view
+   off into session_finished.html -- routes.py's session_detail() now always
+   returns by rendering that template before it ever reaches this one, so
+   this template only ever renders for an unfinished (active) session. The
+   state model does real work here: exactly one exercise panel is
+   `.panel--live` and expanded (the first not-yet-finished, non-skipped
+   one); completed exercises collapse to a `.panel--done` summary row,
+   not-yet-reached ones to `.panel--unlit`. Within the live panel set rows
+   run unlit -> live -> done, and the amber rest bar lives beside them.
+   Every endpoint, form field, and gesture is preserved from the page this
+   replaces. #}
 
-{% include 'gym/_nav.html' %}
+{% block title %}{{ session.name or 'Workout' }} · Gym Tracker{% endblock %}
 
-<div class="gym-page-wrap">
-    <div class="session-header">
-        <div>
+{% block content %}
+{% include 'gym/_progress_modal.html' %}
+
+<div class="gym-wrap session-view">
+
+    <header class="session-head">
+        <div class="session-head__main">
             <h1>{{ session.name or 'Workout' }}</h1>
-            <span class="badge {{ 'badge-active' if not session.finished_at else 'badge-done' }}">
-                {{ 'Aktiv' if not session.finished_at else 'Beendet' }}
-            </span>
-            {% if session.finished_at %}
-            <a href="{{ url_for('gym.gym_session_summary', session_id=session.id) }}" class="btn btn-ghost btn-sm" style="margin-left:8px">📊 Zusammenfassung</a>
-            {% endif %}
+            <span class="chip chip--live">Aktiv</span>
         </div>
-        {% if session.finished_at %}
-        <div class="duration">{{ session.finished_at - session.started_at }}</div>
-        {% else %}
-        <div class="duration" id="session-duration" data-started="{{ session.started_at.isoformat() }}">--:--:--</div>
-        {% endif %}
+        <div class="num num--md session-head__clock" id="session-duration" data-started="{{ session.started_at.isoformat() }}">--:--:--</div>
+    </header>
+
+    {# Every mutating fetch below can fail (dropped connection, gym wifi) --
+       this banner is the one shared, visible answer to "did that save?" when
+       it doesn't. Starts hidden; gym.js-free inline script further down
+       shows/hides it and owns the retry. #}
+    <div class="note-stall hidden" id="save-error-banner" role="alert">
+        <span class="note-stall__label">Nicht gespeichert</span>
+        <span id="save-error-message"></span>
+        <div class="save-error__actions">
+            <button type="button" class="btn btn--stall btn--sm" id="save-error-retry">Erneut versuchen</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="save-error-dismiss">Verwerfen</button>
+        </div>
     </div>
 
-    {% if not session.finished_at %}
-    <div class="card">
-        <div class="card-header"><h2>Benachrichtigungen</h2></div>
-        <div class="notify-row" id="notify-row">
-            <span>Erhalte eine Push-Benachrichtigung, wenn deine Pause vorbei ist (installiere die App zuerst über "Zum Home-Bildschirm").</span>
-            <button type="button" class="btn btn-ghost btn-sm" id="notify-enable-btn">Aktivieren</button>
-        </div>
+    {# Only shown until a subscription actually exists -- previously rendered
+       unconditionally on every visit forever, ahead of the workout itself,
+       even long after the user had already subscribed. #}
+    {% if not has_push_subscription %}
+    <div class="panel notify" id="notify-row">
+        <span class="notify__text">Erhalte eine Push-Benachrichtigung, wenn deine Pause vorbei ist (installiere die App zuerst über „Zum Home-Bildschirm").</span>
+        <button type="button" class="btn btn--ghost btn--sm" id="notify-enable-btn">Aktivieren</button>
     </div>
     {% endif %}
 
-    {% if not session.finished_at %}
-    <div class="reorder-lock-row">
-        <button type="button" class="btn btn-ghost btn-sm" id="reorder-lock-btn">🔒 Reihenfolge gesperrt</button>
+    <div class="reorder-row">
+        <button type="button" class="btn btn--ghost btn--sm" id="reorder-lock-btn">🔒 Reihenfolge gesperrt</button>
     </div>
-    {% endif %}
 
-    <div id="exercise-cards" class="{{ 'read-only' if session.finished_at else '' }}">
+    {# the single live exercise = the first visible, non-skipped one that isn't
+       fully logged yet (mirrors the resume strip's "current exercise" rule) #}
+    {% set ns = namespace(live_id=none) %}
     {% for se in visible_exercises %}
-    {% set completed_count = se.sets|selectattr('completed')|list|length %}
-    {% set total_count = se.sets|length %}
-    {% set all_done = total_count > 0 and completed_count == total_count %}
-    {% set resting_set = se.sets|selectattr('id', 'equalto', session.resting_set_id)|list|first if session.resting_set_id else none %}
-    <div class="card exercise-card {{ 'collapsed' if all_done else '' }}" data-se-id="{{ se.id }}">
-        <div class="card-header">
-            <div class="card-header-title-row">
+        {% set _done = se.sets|selectattr('completed')|list|length %}
+        {% set _total = se.sets|length %}
+        {% if ns.live_id is none and not se.skipped and not (_total > 0 and _done == _total) %}
+            {% set ns.live_id = se.id %}
+        {% endif %}
+    {% endfor %}
+
+    <div id="exercise-cards">
+    {% for se in visible_exercises %}
+        {% set done = se.sets|selectattr('completed')|list|length %}
+        {% set total = se.sets|length %}
+        {% set all_done = total > 0 and done == total %}
+        {% set is_live = (se.id == ns.live_id) %}
+        {% set is_resting_here = session.resting_set_id and session.rest_ends_at
+                                 and (se.sets|selectattr('id', 'equalto', session.resting_set_id)|list|length > 0) %}
+        {% if is_live %}
+            {% set pcls = 'panel--live' %}{% set collapsed = false %}
+        {% elif se.skipped %}
+            {% set pcls = 'panel--unlit is-skipped' %}{% set collapsed = not is_resting_here %}
+        {% elif all_done %}
+            {% set pcls = 'panel--done' %}{% set collapsed = not is_resting_here %}
+        {% else %}
+            {% set pcls = 'panel--unlit' %}{% set collapsed = not is_resting_here %}
+        {% endif %}
+
+        <div class="panel exercise-card {{ pcls }}{{ ' collapsed' if collapsed else '' }}" data-se-id="{{ se.id }}">
+            <div class="exercise-card__head">
+                <span class="drag-handle" aria-hidden="true">⠿</span>
                 <div class="card-title-area">
-                    <h2>{{ se.exercise.name }}</h2>
+                    <h2 class="exercise-card__name">{{ se.exercise.name }}</h2>
                     {% if se.skipped %}
-                    <span class="badge badge-done">Übersprungen</span>
-                    {% elif total_count %}
-                    <span class="progress-badge {{ 'all-done' if all_done else '' }}">{{ completed_count }}/{{ total_count }}</span>
+                    <span class="chip">Übersprungen</span>
+                    {% elif is_live %}
+                    <span class="chip chip--live">Jetzt</span>
+                    {% if total %}<span class="tag">{{ done }}/{{ total }}</span>{% endif %}
+                    {% elif all_done %}
+                    <span class="chip chip--done">✓ {{ done }}/{{ total }}</span>
+                    {% elif total %}
+                    <span class="tag">{{ done }}/{{ total }}</span>
                     {% endif %}
                 </div>
-                <button type="button" class="progress-open-btn" data-exercise-id="{{ se.exercise_id }}" data-position="{{ se.position }}" title="Fortschritt anzeigen">📊</button>
-            </div>
-            {% if session.finished_at and (se.replaces or se.replaced_by) %}
-            <div class="replace-note">
-                {% if se.replaces %}🔁 Ersetzt: {{ se.replaces.exercise.name }}{% endif %}
-                {% if se.replaces and se.replaced_by %}<br>{% endif %}
-                {% if se.replaced_by %}🔁 Ersetzt durch: {{ se.replaced_by.exercise.name }}{% endif %}
-            </div>
-            {% endif %}
-            {% if not session.finished_at %}
-            <form method="post" action="{{ url_for('gym.gym_update_session_exercise_rest', session_exercise_id=se.id) }}" class="rest-form" title="Pause in Sekunden -- speichert automatisch">
-                <span class="unit">⏱</span>
-                <input type="number" name="rest_seconds" min="0" class="num-input-sm" value="{{ se.rest_seconds if se.rest_seconds is not none else '' }}">
-                <span class="unit">s</span>
-            </form>
-            {% endif %}
-        </div>
-        <div class="card-body">
-            {% if se.sets %}
-            {% if not session.finished_at and total_count > completed_count %}
-            <div class="pending-hint">{{ total_count - completed_count }} Satz{{ 'e' if total_count - completed_count != 1 else '' }} aus letztem Mal -- Werte anpassen und antippen zum Bestätigen</div>
-            {% endif %}
-            <div class="sets-list">
-                {% for s in se.sets %}
-                <div class="set-row {{ 'set-done' if s.completed else 'set-pending' }}">
-                    <span class="set-index">{{ loop.index }}</span>
-                    {% if not session.finished_at %}
-                    <form method="post" action="{{ url_for('gym.gym_toggle_set_complete', set_id=s.id) }}" class="set-edit-form">
-                        <input type="number" name="weight" step="0.5" min="0" class="num-input-sm" value="{{ s.weight }}">
-                        <span class="unit">kg ×</span>
-                        <input type="number" name="reps" min="0" class="num-input-sm" value="{{ s.reps }}">
-                        <button type="submit" class="set-check {{ 'checked' if s.completed else '' }}" title="{{ 'Erledigt -- antippen zum Zurücksetzen' if s.completed else 'Werte speichern & als erledigt markieren (startet die Pause)' }}">{{ '✓' if s.completed else '' }}</button>
+                <div class="exercise-card__tools">
+                    <form method="post" action="{{ url_for('gym.gym_update_session_exercise_rest', session_exercise_id=se.id) }}" class="rest-form" title="Pause in Sekunden — speichert automatisch">
+                        <span class="rest-form__unit label">⏱</span>
+                        <input type="number" name="rest_seconds" min="0" class="input input--num rest-form__input" value="{{ se.rest_seconds if se.rest_seconds is not none else '' }}" aria-label="Pause in Sekunden">
+                        <span class="rest-form__unit label">s</span>
                     </form>
-                    <form method="post" action="{{ url_for('gym.gym_delete_set', set_id=s.id) }}">
-                        <button type="submit" class="btn btn-ghost icon-btn">✕</button>
-                    </form>
-                    {% else %}
-                    <span class="set-value" data-set-value>{{ s.weight }} kg × {{ s.reps }}</span>
-                    <button type="button" class="btn btn-ghost icon-btn edit-set-btn" data-set-id="{{ s.id }}" title="Wert bearbeiten">✏️</button>
-                    <form method="post" action="{{ url_for('gym.gym_update_set', set_id=s.id) }}" class="set-edit-form edit-set-form hidden">
-                        <input type="number" name="weight" step="0.5" min="0" class="num-input-sm" value="{{ s.weight }}">
-                        <span class="unit">kg ×</span>
-                        <input type="number" name="reps" min="0" class="num-input-sm" value="{{ s.reps }}">
-                        <button type="submit" class="btn btn-ghost icon-btn" title="Speichern">💾</button>
-                    </form>
-                    {% endif %}
+                    <button type="button" class="icon-btn progress-open-btn" data-exercise-id="{{ se.exercise_id }}" data-position="{{ se.position }}" aria-label="Fortschritt anzeigen" title="Fortschritt anzeigen">📊</button>
                 </div>
-                {% endfor %}
             </div>
-            {% elif not se.skipped %}
-            <div class="empty">Noch keine Sätze protokolliert.</div>
-            {% endif %}
 
-            {% if resting_set and not session.finished_at %}
-            <div class="rest-bar">
-                <div class="rest-bar-top"><span>Pause</span><span class="rest-bar-label" id="rest-bar-label">--:--</span></div>
-                <div class="rest-bar-track"><div class="rest-bar-fill" id="rest-fill" data-rest-ends="{{ session.rest_ends_at.isoformat() }}" data-rest-total="{{ se.rest_seconds or se.exercise.default_rest_seconds or 0 }}"></div></div>
-            </div>
-            {% endif %}
-
-            {% if not session.finished_at %}
-            {% if not se.skipped %}
-            {% set suggestion = suggestions.get(se.id) %}
-            {% if se.id in stagnation_counts %}
-            <div class="stagnation-note">💡 {{ stagnation_counts[se.id] }} Workouts ohne neuen e1RM-PR — mehr Gewicht oder Wdh. versuchen (progressive overload)</div>
-            {% endif %}
-            <form method="post" action="{{ url_for('gym.gym_add_set', session_exercise_id=se.id) }}">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Gewicht (kg)</label>
-                        <input type="number" name="weight" step="0.5" min="0" class="num-input" required
-                               value="{{ suggestion.weight if suggestion else '' }}">
+            <div class="exercise-card__body">
+              <div class="exercise-card__body-inner">
+                {% if se.sets %}
+                {% if total > done %}
+                <p class="pending-hint label">{{ total - done }} Satz{{ 'e' if (total - done) != 1 else '' }} aus letztem Mal — Werte anpassen und antippen zum Bestätigen</p>
+                {% endif %}
+                <div class="sets">
+                    {% set setns = namespace(live_used=false) %}
+                    {% for s in se.sets %}
+                    {% if s.completed and s.id in record_set_ids %}{% set sstate = 'record' %}
+                    {% elif s.completed %}{% set sstate = 'done' %}
+                    {% elif is_live and not setns.live_used %}{% set sstate = 'live' %}{% set setns.live_used = true %}
+                    {% else %}{% set sstate = 'unlit' %}{% endif %}
+                    <div class="set set--{{ sstate }}">
+                        <span class="set__idx">{{ loop.index }}</span>
+                        <form method="post" action="{{ url_for('gym.gym_toggle_set_complete', set_id=s.id) }}" class="set__log">
+                            <input type="number" name="weight" step="0.5" min="0" class="input input--num" value="{{ s.weight }}" aria-label="Gewicht in kg">
+                            <span class="load__unit">kg</span>
+                            <span class="load__x">×</span>
+                            <input type="number" name="reps" min="0" class="input input--num" value="{{ s.reps }}" aria-label="Wiederholungen">
+                            <button type="submit" class="set__check" aria-label="{{ 'Erledigt — antippen zum Zurücksetzen' if s.completed else 'Werte speichern und als erledigt markieren (startet die Pause)' }}"></button>
+                        </form>
+                        <form method="post" action="{{ url_for('gym.gym_delete_set', set_id=s.id) }}" class="set__del">
+                            <button type="submit" class="icon-btn" aria-label="Satz löschen">✕</button>
+                        </form>
                     </div>
-                    <div class="form-group">
-                        <label>Wdh.</label>
-                        <input type="number" name="reps" min="0" class="num-input" required
-                               value="{{ suggestion.reps if suggestion else '' }}">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Satz hinzufügen</button>
+                    {% endfor %}
                 </div>
-            </form>
-            {% if suggestion and not se.sets %}
-            <div class="empty" style="padding-top:8px">Letzte Leistung: {{ suggestion.weight }} kg × {{ suggestion.reps }}</div>
-            {% endif %}
-            {% endif %}
-            <div class="exercise-actions">
-                <form method="post" action="{{ url_for('gym.gym_toggle_skip_session_exercise', session_exercise_id=se.id) }}">
-                    <button type="submit" class="btn btn-ghost btn-sm">{{ '↩️ Rückgängig' if se.skipped else '⏭️ Überspringen' }}</button>
+                {% elif not se.skipped %}
+                <div class="empty">Noch keine Sätze protokolliert.</div>
+                {% endif %}
+
+                {% if is_resting_here %}
+                <div class="rest">
+                    <div class="rest__top"><span class="rest__label">Pause</span><span class="rest__value" id="rest-bar-label">--:--</span></div>
+                    <div class="rest__track"><div class="rest__fill" id="rest-fill" data-rest-ends="{{ session.rest_ends_at.isoformat() }}" data-rest-total="{{ se.rest_seconds or se.exercise.default_rest_seconds or 0 }}"></div></div>
+                </div>
+                {% endif %}
+
+                {% if not se.skipped %}
+                {% if se.id in stagnation_counts %}
+                <div class="note-stall">
+                    <span class="note-stall__label">Stagniert</span>
+                    {{ stagnation_counts[se.id] }} Workouts ohne neuen e1RM-PR — mehr Gewicht oder Wdh. versuchen (progressive overload).
+                </div>
+                {% endif %}
+                {% set suggestion = suggestions.get(se.id) %}
+                <form method="post" action="{{ url_for('gym.gym_add_set', session_exercise_id=se.id) }}" class="add-set">
+                    <div class="field">
+                        <label class="label" for="add-set-weight-{{ se.id }}">Gewicht (kg)</label>
+                        <input type="number" id="add-set-weight-{{ se.id }}" name="weight" step="0.5" min="0" class="input input--num" required value="{{ suggestion.weight if suggestion else '' }}">
+                    </div>
+                    <div class="field">
+                        <label class="label" for="add-set-reps-{{ se.id }}">Wdh.</label>
+                        <input type="number" id="add-set-reps-{{ se.id }}" name="reps" min="0" class="input input--num" required value="{{ suggestion.reps if suggestion else '' }}">
+                    </div>
+                    <button type="submit" class="btn btn--live">Satz hinzufügen</button>
                 </form>
-                <details class="replace-details">
-                    <summary class="btn btn-ghost btn-sm">🔁 Übung ersetzen</summary>
-                    <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}" style="margin-top:8px">
-                        <div class="form-row">
-                            <div class="form-group grow">
-                                <label>Ersatzübung</label>
-                                <select name="exercise_id">
+                {% if suggestion and not se.sets %}
+                <p class="empty" style="padding:0">Letzte Leistung: {{ suggestion.weight }} kg × {{ suggestion.reps }}</p>
+                {% endif %}
+                {% endif %}
+
+                <div class="ex-actions">
+                    <form method="post" action="{{ url_for('gym.gym_toggle_skip_session_exercise', session_exercise_id=se.id) }}">
+                        <button type="submit" class="btn btn--ghost btn--sm">{{ '↩️ Rückgängig' if se.skipped else '⏭️ Überspringen' }}</button>
+                    </form>
+                    <details class="replace">
+                        <summary class="btn btn--ghost btn--sm">🔁 Ersetzen</summary>
+                        <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}" class="replace__form">
+                            <div class="field grow">
+                                <label class="label" for="replace-select-{{ se.id }}">Ersatzübung</label>
+                                <select id="replace-select-{{ se.id }}" name="exercise_id" class="select">
                                     <option value="">— Neue Übung —</option>
                                     {% for e in exercises if e.muscle_group == se.exercise.muscle_group and e.id != se.exercise_id %}
                                     <option value="{{ e.id }}">{{ e.name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="form-group grow">
-                                <label>Name der neuen Übung</label>
-                                <input type="text" name="new_exercise_name" placeholder="z.B. Kabelzug">
+                            <div class="field grow">
+                                <label class="label" for="replace-name-{{ se.id }}">Name der neuen Übung</label>
+                                <input type="text" id="replace-name-{{ se.id }}" name="new_exercise_name" class="input" placeholder="z.B. Kabelzug">
                             </div>
-                            <button type="submit" class="btn btn-primary btn-sm">Ersetzen</button>
-                        </div>
+                            <button type="submit" class="btn btn--live btn--sm">Ersetzen</button>
+                        </form>
+                    </details>
+                    <form method="post" action="{{ url_for('gym.gym_delete_session_exercise', session_exercise_id=se.id) }}" data-confirm="Übung aus Workout entfernen?">
+                        <button type="submit" class="btn btn--stall btn--sm">Entfernen</button>
                     </form>
-                </details>
-                <form method="post" action="{{ url_for('gym.gym_delete_session_exercise', session_exercise_id=se.id) }}" data-confirm="Übung aus Workout entfernen?">
-                    <button type="submit" class="btn btn-ghost btn-sm">Übung entfernen</button>
-                </form>
+                </div>
+              </div>
             </div>
-            {% endif %}
         </div>
-    </div>
     {% endfor %}
     </div>
 
-    {% if not session.finished_at %}
-    <div class="card">
-        <div class="card-header"><h2>Übung hinzufügen</h2></div>
-        <div class="card-body">
-            <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" id="add-exercise-form">
-                <div class="form-row">
-                    <div class="form-group grow">
-                        <label>Übung</label>
-                        <select name="exercise_id" id="exercise-select">
-                            <option value="">— Neue Übung —</option>
-                            {% for e in exercises %}
-                            <option value="{{ e.id }}">{{ e.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group grow" id="new-exercise-fields">
-                        <label>Name der neuen Übung</label>
-                        <input type="text" name="new_exercise_name" placeholder="z.B. Kniebeuge">
-                    </div>
-                    <div class="form-group grow" id="new-exercise-muscle-group">
-                        <label>Muskelgruppe</label>
-                        <select name="muscle_group">
-                            <option value="">— optional —</option>
-                            {% for mg in muscle_groups %}
-                            <option value="{{ mg }}">{{ mg }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Hinzufügen</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="actions-row">
-        <form method="post" action="{{ url_for('gym.gym_finish_session', session_id=session.id) }}" onsubmit="return confirm('Workout beenden?')">
-            <button type="submit" class="btn btn-primary">Workout beenden</button>
+    <div class="panel">
+        <div class="section-head"><span class="label">Übung hinzufügen</span></div>
+        <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" id="add-exercise-form" class="add-exercise">
+            <div class="field grow">
+                <label class="label" for="exercise-select">Übung</label>
+                <select name="exercise_id" id="exercise-select" class="select">
+                    <option value="">— Neue Übung —</option>
+                    {% for e in exercises %}
+                    <option value="{{ e.id }}">{{ e.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field grow" id="new-exercise-fields">
+                <label class="label" for="new-exercise-name-input">Name der neuen Übung</label>
+                <input type="text" id="new-exercise-name-input" name="new_exercise_name" class="input" placeholder="z.B. Kniebeuge">
+            </div>
+            <div class="field grow" id="new-exercise-muscle-group">
+                <label class="label" for="new-exercise-muscle-select">Muskelgruppe</label>
+                <select id="new-exercise-muscle-select" name="muscle_group" class="select">
+                    <option value="">— optional —</option>
+                    {% for mg in muscle_groups %}
+                    <option value="{{ mg }}">{{ mg }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn--live">Hinzufügen</button>
         </form>
     </div>
-    {% endif %}
 
-    <div class="card">
-        <div class="card-header"><h2>Als Vorlage speichern</h2></div>
-        <div class="card-body">
-            <form method="post" action="{{ url_for('gym.gym_save_as_template', session_id=session.id) }}">
-                <div class="form-row">
-                    <div class="form-group grow">
-                        <label>Name der Vorlage</label>
-                        <input type="text" name="template_name" placeholder="z.B. Push Day" required>
-                    </div>
-                    <button type="submit" class="btn btn-ghost">Speichern</button>
-                </div>
-            </form>
-        </div>
+    <div class="session-finish">
+        <form method="post" action="{{ url_for('gym.gym_finish_session', session_id=session.id) }}" onsubmit="return confirm('Workout beenden?')">
+            <button type="submit" class="btn btn--live btn--block">Workout beenden</button>
+        </form>
+    </div>
+
+    <div class="panel">
+        <div class="section-head"><span class="label">Als Vorlage speichern</span></div>
+        <form method="post" action="{{ url_for('gym.gym_save_as_template', session_id=session.id) }}" class="save-template">
+            <div class="field grow">
+                <label class="label" for="template-name-input">Name der Vorlage</label>
+                <input type="text" id="template-name-input" name="template_name" class="input" placeholder="z.B. Push Day" required>
+            </div>
+            <button type="submit" class="btn btn--ghost">Speichern</button>
+        </form>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
 function pad(n) { return String(n).padStart(2, '0'); }
 
-const SESSION_FINISHED = {{ 'true' if session.finished_at else 'false' }};
+if (window.GymClock) { window.GymClock.start(document.getElementById('session-duration')); }
 
+// ---- reorder lock ----------------------------------------------------------
 let reorderUnlocked = false;
 const reorderLockBtn = document.getElementById('reorder-lock-btn');
 function updateReorderLockButton() {
     if (!reorderLockBtn) return;
     reorderLockBtn.textContent = reorderUnlocked ? '🔓 Entsperrt — ziehen zum Sortieren' : '🔒 Reihenfolge gesperrt';
-    reorderLockBtn.classList.toggle('btn-primary', reorderUnlocked);
-    reorderLockBtn.classList.toggle('btn-ghost', !reorderUnlocked);
+    reorderLockBtn.classList.toggle('btn--live', reorderUnlocked);
+    reorderLockBtn.classList.toggle('btn--ghost', !reorderUnlocked);
 }
 if (reorderLockBtn) {
     reorderLockBtn.addEventListener('click', () => {
@@ -279,23 +277,10 @@ if (reorderLockBtn) {
     updateReorderLockButton();
 }
 
-{% if not session.finished_at %}
-const startedAt = new Date(document.getElementById('session-duration').dataset.started + 'Z');
-function tickDuration() {
-    const diff = Math.max(0, Date.now() - startedAt.getTime());
-    const totalSec = Math.floor(diff / 1000);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    document.getElementById('session-duration').textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
-}
-tickDuration();
-setInterval(tickDuration, 1000);
-{% endif %}
-
+// ---- rest countdown fill ---------------------------------------------------
 // Re-run after every AJAX refresh of #exercise-cards (a fresh #rest-fill
-// element, or none at all, may now exist), tracking the timer so old and
-// new tick loops don't pile up.
+// element, or none at all, may now exist), tracking the timer so old and new
+// tick loops don't pile up.
 let restFillTimer = null;
 function startRestFillTick() {
     if (restFillTimer) clearTimeout(restFillTimer);
@@ -303,6 +288,13 @@ function startRestFillTick() {
     if (!restFill) return;
     const restEndsAt = new Date(restFill.dataset.restEnds + 'Z');
     const restTotalSeconds = parseFloat(restFill.dataset.restTotal) || 0;
+    // Only flourish (rest-ready-flash, gym.css) the moment THIS tick loop
+    // watches the countdown cross zero -- not when the panel arrives already
+    // expired. The server keeps resting_set_id set until the next set starts
+    // a new rest, so a stale rest window can reappear on a refresh triggered
+    // by something else entirely; that's a silent re-render, not a fresh
+    // completion, and must not replay the flourish.
+    let sawPositive = false;
     function tick() {
         const el = document.getElementById('rest-fill');
         const label = document.getElementById('rest-bar-label');
@@ -311,8 +303,13 @@ function startRestFillTick() {
         if (diff <= 0 || restTotalSeconds <= 0) {
             el.style.width = '0%';
             if (label) label.textContent = '0:00';
+            if (sawPositive) {
+                const restBlock = el.closest('.rest');
+                if (restBlock) restBlock.classList.add('rest-complete');
+            }
             return;
         }
+        sawPositive = true;
         const pct = Math.max(0, Math.min(100, (diff / 1000 / restTotalSeconds) * 100));
         el.style.width = pct + '%';
         if (label) {
@@ -327,6 +324,7 @@ function startRestFillTick() {
 }
 startRestFillTick();
 
+// ---- add-exercise: reveal the new-exercise fields only for "Neue Übung" -----
 const exerciseSelect = document.getElementById('exercise-select');
 const newExerciseFields = document.getElementById('new-exercise-fields');
 const newExerciseMuscleGroup = document.getElementById('new-exercise-muscle-group');
@@ -340,6 +338,7 @@ if (exerciseSelect) {
     syncNewExerciseFields();
 }
 
+// ---- push notification enable ----------------------------------------------
 function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -356,8 +355,8 @@ if (notifyBtn) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         const reason = window.isSecureContext
             ? 'Dein Browser unterstützt keine Push-Benachrichtigungen.'
-            : 'Push-Benachrichtigungen brauchen eine sichere Verbindung (HTTPS). Über die lokale Netzwerk-Adresse (http://...) geht das nicht -- erst nach dem Deployment mit echtem HTTPS.';
-        document.getElementById('notify-row').innerHTML = `<span>${reason}</span>`;
+            : 'Push-Benachrichtigungen brauchen eine sichere Verbindung (HTTPS). Über die lokale Netzwerk-Adresse (http://...) geht das nicht — erst nach dem Deployment mit echtem HTTPS.';
+        document.getElementById('notify-row').innerHTML = `<span class="notify__text">${reason}</span>`;
     } else {
         notifyBtn.addEventListener('click', async () => {
             try {
@@ -386,6 +385,7 @@ if (notifyBtn) {
     }
 }
 
+// ---- drag-to-reorder (behind the lock toggle) ------------------------------
 (function setupDragReorder() {
     const DRAG_THRESHOLD = 8;
     const SCROLL_EDGE_ZONE = 80;
@@ -403,6 +403,8 @@ if (notifyBtn) {
     let dragGhostBaseClientY = 0;
     let openIdsBeforeDrag = null;
     let autoScrollRAF = null;
+    let dragPointerType = 'mouse';
+    let dragHandleHit = false;
 
     function beginDrag() {
         dragStarted = true;
@@ -470,6 +472,8 @@ if (notifyBtn) {
         titleArea = null;
         activePointerId = null;
         dragStarted = false;
+        dragPointerType = 'mouse';
+        dragHandleHit = false;
     }
 
     function updateDragPosition(clientY) {
@@ -524,7 +528,11 @@ if (notifyBtn) {
         lastClientY = e.clientY;
 
         if (!dragStarted) {
-            if (SESSION_FINISHED || !reorderUnlocked) return;
+            if (!reorderUnlocked) return;
+            // Touch/pen must grab the handle -- see .drag-handle's CSS comment
+            // for why a bare threshold can't win against native scroll there.
+            // Mouse has no such conflict, so it can start from anywhere on the row.
+            if (dragPointerType !== 'mouse' && !dragHandleHit) return;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
             if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
@@ -545,14 +553,12 @@ if (notifyBtn) {
 
         if (wasDragging) {
             if (order && order.length) {
-                fetch('{{ url_for("gym.gym_reorder_session_exercises", session_id=session.id) }}', {
+                performMutation('{{ url_for("gym.gym_reorder_session_exercises", session_id=session.id) }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ order: order }),
                     credentials: 'same-origin',
-                })
-                    .then((r) => r.text())
-                    .then(refreshExerciseCards);
+                });
             }
         } else if (!isCancel) {
             card.classList.toggle('collapsed');
@@ -560,10 +566,17 @@ if (notifyBtn) {
     }
 
     document.addEventListener('pointerdown', (e) => {
-        const area = e.target.closest && e.target.closest('.card-title-area');
+        // .drag-handle sits beside .card-title-area, not inside it (a fixed
+        // left column so it can't get swept into the title's own internal
+        // flex-wrap alongside long exercise names) -- either is a valid
+        // gesture origin.
+        const handle = e.target.closest && e.target.closest('.drag-handle');
+        const area = handle || (e.target.closest && e.target.closest('.card-title-area'));
         if (!area) return;
         dragCard = area.closest('.exercise-card');
         titleArea = area;
+        dragPointerType = e.pointerType;
+        dragHandleHit = !!handle;
         activePointerId = e.pointerId;
         startX = e.clientX;
         startY = e.clientY;
@@ -576,25 +589,125 @@ if (notifyBtn) {
     document.addEventListener('pointercancel', () => finish(true));
 })();
 
+// ---- AJAX refresh of the exercise list -------------------------------------
+// The server recomputes the lit-state model (which panel is live, what's
+// collapsed) on every render, so after an action the freshly rendered
+// #exercise-cards is authoritative -- we let it replace the old one wholesale
+// rather than trying to preserve client-side collapse state, which is what
+// lets the live panel advance to the next exercise as sets get completed.
 function refreshExerciseCards(html) {
     const scrollY = window.scrollY;
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const newCards = doc.getElementById('exercise-cards');
     const oldCards = document.getElementById('exercise-cards');
     if (newCards && oldCards) {
-        const collapsedIds = new Set();
-        const openIds = new Set();
+        // Snapshot what each exercise was BEFORE this refresh so the two
+        // moments actually worth marking -- an exercise becoming live, or
+        // crossing into all-done -- get a one-shot flourish (gym.css:
+        // .just-lit / .just-finished) instead of replaying on every card
+        // every time any one set gets checked anywhere on the page.
+        const wasLive = new Set(), wasDone = new Set();
         oldCards.querySelectorAll('.exercise-card').forEach((c) => {
-            (c.classList.contains('collapsed') ? collapsedIds : openIds).add(c.dataset.seId);
+            if (c.classList.contains('panel--live')) wasLive.add(c.dataset.seId);
+            if (c.classList.contains('panel--done')) wasDone.add(c.dataset.seId);
+        });
+        newCards.querySelectorAll('.exercise-card').forEach((c) => {
+            const id = c.dataset.seId;
+            if (c.classList.contains('panel--live') && !wasLive.has(id)) c.classList.add('just-lit');
+            if (c.classList.contains('panel--done') && !wasDone.has(id)) c.classList.add('just-finished');
         });
         oldCards.replaceWith(newCards);
-        newCards.querySelectorAll('.exercise-card').forEach((c) => {
-            if (collapsedIds.has(c.dataset.seId)) c.classList.add('collapsed');
-            else if (openIds.has(c.dataset.seId)) c.classList.remove('collapsed');
-        });
         window.scrollTo(0, scrollY);
     }
     startRestFillTick();
+}
+
+// ---- shared save-error banner ----------------------------------------------
+// Every mutation on this page (set check, add/delete, skip, replace, remove,
+// reorder) goes through performMutation() below, so a dropped connection
+// gets exactly one visible answer instead of silently doing nothing. Only
+// the most recent failure's retry is kept -- if several things fail in a
+// row, retrying re-attempts the last one, which is enough for a personal,
+// single-user app and avoids building a real failure queue.
+const saveErrorBanner = document.getElementById('save-error-banner');
+const saveErrorMessage = document.getElementById('save-error-message');
+const saveErrorRetryBtn = document.getElementById('save-error-retry');
+const saveErrorDismissBtn = document.getElementById('save-error-dismiss');
+let retrySaveError = null;
+
+function showSaveError(message, retryFn) {
+    retrySaveError = retryFn;
+    if (saveErrorMessage) saveErrorMessage.textContent = message;
+    if (saveErrorBanner) saveErrorBanner.classList.remove('hidden');
+}
+function hideSaveError() {
+    retrySaveError = null;
+    if (saveErrorBanner) saveErrorBanner.classList.add('hidden');
+}
+if (saveErrorRetryBtn) saveErrorRetryBtn.addEventListener('click', () => { if (retrySaveError) retrySaveError(); });
+if (saveErrorDismissBtn) saveErrorDismissBtn.addEventListener('click', hideSaveError);
+
+// ---- shared mutation helper: fetch -> refresh #exercise-cards, with a
+// consistent, visible failure path instead of each call site inventing (or
+// forgetting) its own. `onError`, if given, runs once immediately on
+// failure (e.g. to strip an optimistic class) -- separate from the retry,
+// which re-runs the whole request from scratch.
+function performMutation(url, options, onError) {
+    return fetch(url, options)
+        .then((r) => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+        })
+        .then((html) => {
+            hideSaveError();
+            refreshExerciseCards(html);
+        })
+        .catch((err) => {
+            console.error('Speichern fehlgeschlagen:', err);
+            if (onError) onError();
+            showSaveError(
+                'Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.',
+                () => performMutation(url, options, onError)
+            );
+        });
+}
+
+// ---- set deletion: undo window instead of a blocking confirm ---------------
+// Interaction-design guidance is explicit that undo beats confirmation
+// dialogs for reversible, low-stakes actions -- users click through
+// confirms mindlessly, but a few seconds to change your mind actually gets
+// used. The row's real content hides (via .set--pending-delete) rather than
+// the row vanishing immediately, so there's something concrete to undo back
+// to instead of the set just disappearing and hoping you meant it.
+const PENDING_DELETE_MS = 4000;
+function beginPendingSetDelete(form) {
+    const row = form.closest('.set');
+    const doDelete = () => performMutation(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin' });
+    if (!row) { doDelete(); return; } // no row to hold an undo state in -- fall back to deleting immediately
+
+    const undoBar = document.createElement('div');
+    undoBar.className = 'set__undo';
+    const label = document.createElement('span');
+    label.textContent = 'Satz gelöscht';
+    const undoBtn = document.createElement('button');
+    undoBtn.type = 'button';
+    undoBtn.className = 'btn btn--ghost btn--sm';
+    undoBtn.textContent = 'Rückgängig';
+    undoBar.append(label, undoBtn);
+
+    row.classList.add('set--pending-delete');
+    row.appendChild(undoBar);
+
+    const timer = setTimeout(() => {
+        undoBar.remove();
+        doDelete();
+    }, PENDING_DELETE_MS);
+
+    undoBtn.addEventListener('click', () => {
+        clearTimeout(timer);
+        row.classList.remove('set--pending-delete');
+        undoBar.remove();
+    });
 }
 
 document.addEventListener('submit', (e) => {
@@ -602,10 +715,27 @@ document.addEventListener('submit', (e) => {
     const container = document.getElementById('exercise-cards');
     if (!container || form.tagName !== 'FORM' || !container.contains(form)) return;
     e.preventDefault();
+
+    if (form.classList.contains('set__del')) {
+        beginPendingSetDelete(form);
+        return;
+    }
+
     if (form.dataset.confirm && !confirm(form.dataset.confirm)) return;
-    fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin' })
-        .then((r) => r.text())
-        .then(refreshExerciseCards);
+    // Instant tap feedback on the set-check button: this row is about to be
+    // destroyed and replaced by the refresh below, so this class only ever
+    // gets ~one frame to matter -- see set-confirm-pulse / set-reset-pulse
+    // in gym.css for why that's still worth doing.
+    let row = null;
+    if (form.classList.contains('set__log')) {
+        row = form.closest('.set');
+        if (row) row.classList.add(row.classList.contains('set--done') ? 'is-resetting' : 'is-confirming');
+    }
+    performMutation(
+        form.action,
+        { method: 'POST', body: new FormData(form), credentials: 'same-origin' },
+        () => { if (row) row.classList.remove('is-confirming', 'is-resetting'); }
+    );
 });
 
 document.addEventListener('change', (e) => {
@@ -614,94 +744,5 @@ document.addEventListener('change', (e) => {
     const form = input.closest('form');
     if (form && form.requestSubmit) form.requestSubmit();
 });
-
-// Quick per-exercise progress modal -- PRs + recent history without leaving
-// the workout. Fetches JSON (not HTML) so nothing needs script-execution
-// tricks for content injected via innerHTML. Chart rendering delegates to
-// the shared GymChart helper (gym.js) so this modal's chart and the full
-// exercise-detail page's chart never drift into two different looks.
-(function setupProgressModal() {
-    const modal = document.getElementById('progress-modal');
-    const title = document.getElementById('progress-modal-title');
-    const body = document.getElementById('progress-modal-body');
-    if (!modal) return;
-
-    const esc = window.GymUtils.escapeHtml;
-    let modalChart = null;
-
-    function render(data) {
-        let html = '';
-        if (data.pr_max_weight) {
-            const volLabel = data.is_unilateral ? 'Bestes Satzvolumen (beidseitig)' : 'Bestes Satzvolumen';
-            const volReps = data.is_unilateral ? `${esc(data.pr_max_volume.reps)} je Seite` : esc(data.pr_max_volume.reps);
-            html += `<div class="pr-grid">
-                <div class="pr-card"><div class="label">Max. Gewicht</div><div class="val">${esc(data.pr_max_weight.weight)} kg</div><div class="sub">${esc(data.pr_max_weight.reps)} Wdh. &middot; ${esc(data.pr_max_weight.date)}</div></div>
-                <div class="pr-card"><div class="label">${volLabel}</div><div class="val">${esc(data.pr_max_volume.volume)} kg</div><div class="sub">${esc(data.pr_max_volume.weight)} kg &times; ${volReps} &middot; ${esc(data.pr_max_volume.date)}</div></div>
-            </div>`;
-        }
-        if (data.position) {
-            html += `<div class="modal-position-note">Basierend auf Position ${esc(data.position)} im Workout (gleiche Reihenfolge wie heute)</div>`;
-        }
-        if (data.chart_labels && data.chart_labels.length) {
-            html += '<div class="modal-chart-wrap"><canvas id="modal-chart"></canvas></div>';
-        } else {
-            html += '<div class="empty">Noch keine erledigten Sätze für diese Übung.</div>';
-        }
-        html += `<div style="margin-top:14px"><a href="/gym/exercises/${data.exercise_id}" class="btn btn-ghost btn-sm">Vollständige Ansicht &amp; Diagramm →</a></div>`;
-        body.innerHTML = html;
-
-        if (modalChart) {
-            modalChart.destroy();
-            modalChart = null;
-        }
-        if (data.chart_labels && data.chart_labels.length) {
-            modalChart = GymChart.renderProgressChart(document.getElementById('modal-chart'), {
-                labels: data.chart_labels,
-                weights: data.chart_weights,
-                minWeights: data.chart_min_weights,
-                volumes: data.chart_volumes,
-            });
-        }
-    }
-
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest && e.target.closest('.progress-open-btn');
-        if (btn) {
-            const exerciseId = btn.dataset.exerciseId;
-            const position = btn.dataset.position;
-            title.textContent = 'Fortschritt';
-            body.innerHTML = '<div class="empty">Lädt…</div>';
-            modal.classList.remove('hidden');
-            fetch(`/gym/exercises/${exerciseId}/progress.json?position=${encodeURIComponent(position)}`, { credentials: 'same-origin' })
-                .then((r) => r.json())
-                .then((data) => { title.textContent = data.name; render(data); })
-                .catch(() => { body.innerHTML = '<div class="empty">Fehler beim Laden.</div>'; });
-            return;
-        }
-        if (e.target.id === 'progress-modal-close' || e.target === modal) {
-            modal.classList.add('hidden');
-        }
-    });
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') modal.classList.add('hidden');
-    });
-})();
-
-(function setupEditSetForms() {
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest && e.target.closest('.edit-set-btn');
-        if (!btn) return;
-        const row = btn.closest('.set-row');
-        if (!row) return;
-        const valueEl = row.querySelector('[data-set-value]');
-        const formEl = row.querySelector('.edit-set-form');
-        if (valueEl) valueEl.classList.add('hidden');
-        btn.classList.add('hidden');
-        if (formEl) formEl.classList.remove('hidden');
-    });
-})();
 </script>
-
-</body>
-</html>
+{% endblock %}

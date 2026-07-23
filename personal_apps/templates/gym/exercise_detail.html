@@ -1,136 +1,195 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ exercise.name }} · Gym Tracker</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
-    <meta name="theme-color" content="#0a0a0a">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
-</head>
-<body>
+{% extends 'gym/_base.html' %}
 
-{% include 'gym/_nav.html' %}
+{# Exercise detail (spec 6.3): the single-exercise instrument. Four blocks,
+   in a fixed order:
+     1. Verdict band -- state chip, last performance, current best (weight
+        AND e1RM), sessions since last PR, a concrete next step when
+        stagnating.
+     2. Chart -- every session, position encoded as a SERIES (not a filter):
+        stats.exercise_progress()'s own `series` field already groups points
+        by the slot they were performed in, so a slot sitting consistently
+        higher than another is visible instead of hidden behind a filter.
+        The position filter still exists, as isolate-one-slot links.
+     3. History table -- date, position, sets as logged, volume, e1RM.
+        Record rows (the exercise's current pr_weight/pr_e1rm) lit cyan.
+     4. Metadata -- demoted behind a `Bearbeiten` disclosure; it's
+        maintenance, not the reason the page was opened.
 
-<div class="gym-page-wrap">
-    <h1>{{ exercise.name }}</h1>
-    {% if request.args.get('name_taken') %}
-    <div class="card" style="border-color:var(--gym-red)">
-        <div class="card-body">
-            <span>Name nicht geändert -- es gibt bereits eine Übung mit diesem Namen. Andere Änderungen wurden trotzdem gespeichert.</span>
-        </div>
-    </div>
-    {% endif %}
-    <form method="post" action="{{ url_for('gym.gym_update_exercise', exercise_id=exercise.id) }}" style="margin-bottom:24px">
-        <div class="form-row">
-            <div class="form-group grow">
-                <label>Name</label>
-                <input type="text" name="name" value="{{ exercise.name }}" required>
-            </div>
-            <div class="form-group grow">
-                <label>Muskelgruppe</label>
-                <select name="muscle_group">
-                    <option value="">— keine —</option>
-                    {% for mg in muscle_groups %}
-                    <option value="{{ mg }}" {{ 'selected' if exercise.muscle_group == mg else '' }}>{{ mg }}</option>
-                    {% endfor %}
-                    {% if exercise.muscle_group and exercise.muscle_group not in muscle_groups %}
-                    <option value="{{ exercise.muscle_group }}" selected>{{ exercise.muscle_group }} (alt)</option>
-                    {% endif %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Standard-Pause (Sek.)</label>
-                <input type="number" name="default_rest_seconds" min="0" class="num-input" value="{{ exercise.default_rest_seconds if exercise.default_rest_seconds is not none else '' }}" placeholder="90">
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" name="is_unilateral" style="width:auto;margin-right:4px" {{ 'checked' if exercise.is_unilateral else '' }}>
-                    Einseitig (pro Seite)
-                </label>
-            </div>
-            <button type="submit" class="btn btn-ghost btn-sm">Speichern</button>
-        </div>
-    </form>
+   `table`/`series`/`available_positions`/`selected_position`/`pr_weight`/
+   `pr_e1rm`/`state`/`sessions_since_pr` are stats.exercise_progress()'s own
+   output, passed straight through by routes.py -- no key-adapting shim.
+   `chip_class`/`chip_label` are the one small addition routes.py makes,
+   reusing the same EXERCISE_STATE_CHIP mapping uebungen.html's rows use, so
+   the state->(class,label) mapping lives in exactly one place.
 
-    {% if available_positions|length > 1 %}
-    <div class="card">
-        <div class="card-body" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-size:12px;color:var(--gym-muted)">Diese Übung wurde an unterschiedlichen Positionen im Workout gemacht (Reihenfolge beeinflusst die Werte) &middot; Nach Position filtern:</span>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id) }}" class="gym-pill {{ 'active' if selected_position is none else '' }}">Alle</a>
-                {% for p in available_positions %}
-                <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id, position=p) }}" class="gym-pill {{ 'active' if selected_position == p else '' }}">Position {{ p }}</a>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    {% endif %}
+   Verdict band (incl. PR cards) + chart + history are ALL gated on `table`
+   being non-empty, per spec: "no chart, no table, no broken PR cards" for
+   an exercise with nothing to show yet. The state chip itself is NOT gated
+   -- exercise_state() returns 'neu' unconditionally for zero history, and a
+   brand new exercise showing "Neu" up top is exactly the information an
+   empty state should lead with. #}
 
-    {% if rows %}
-    <div class="period-grid">
-        <div class="period-card">
-            <div class="label">Max. Gewicht</div>
-            <div class="rate-val">{{ pr_max_weight.weight }} kg</div>
-            <div class="sub">{{ pr_max_weight.reps }} Wdh. · {{ pr_max_weight.date.strftime('%d.%m.%Y') }}</div>
+{% block title %}{{ exercise.name }} · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="gym-wrap">
+<div class="exercise-detail{{ ' exercise-detail--empty' if not table else '' }}">
+
+    <div class="exercise-detail__head">
+        <header>
+            <h1>{{ exercise.name }}</h1>
+        </header>
+
+        {% if request.args.get('name_taken') %}
+        <div class="note-stall exercise-detail__name-warning">
+            <span class="note-stall__label">Name nicht geändert</span>
+            Es gibt bereits eine Übung mit diesem Namen. Andere Änderungen wurden trotzdem gespeichert.
         </div>
-        <div class="period-card">
-            <div class="label">Bestes Satzvolumen{{ ' (beidseitig)' if exercise.is_unilateral else '' }}</div>
-            <div class="rate-val">{{ pr_max_volume.volume }} kg</div>
-            <div class="sub">{{ pr_max_volume.weight }} kg × {{ pr_max_volume.reps }}{{ ' je Seite' if exercise.is_unilateral else '' }} · {{ pr_max_volume.date.strftime('%d.%m.%Y') }}</div>
-        </div>
+        {% endif %}
     </div>
 
-    <div class="card">
-        <div class="card-header"><h2>Verlauf</h2></div>
-        <div class="chart-wrap">
-            <canvas id="progressChart"></canvas>
-        </div>
-    </div>
+    <section class="exercise-detail__verdict">
+        <div class="panel">
+            <div class="panel__head">
+                <span class="label">Status</span>
+                {% if chip_label %}<span class="chip chip--{{ chip_class }}">{{ chip_label }}</span>{% endif %}
+            </div>
 
-    <div class="card">
-        <div class="card-header">
-            <h2>Sätze pro Workout</h2>
-            {% if exercise.is_unilateral %}
-            <span style="font-size:12px;color:var(--gym-muted)">Einseitig: Gewicht/Wdh. je Seite geloggt, Volumen zählt beide Seiten (×2)</span>
+            {% if table %}
+            <p class="verdict-last">
+                Zuletzt {{ table[0].started_at.strftime('%d.%m.%Y') }} · Position {{ table[0].position }}
+                <span class="label verdict-last__sets">{{ table[0].sets_display }}</span>
+            </p>
+
+            <div class="pr-grid">
+                <div class="pr-card">
+                    <div class="label">Bestes Gewicht</div>
+                    <div class="val">{{ pr_weight.weight }} kg</div>
+                    <div class="sub">{{ pr_weight.reps }} Wdh. · Pos. {{ pr_weight.position }} · {{ pr_weight.started_at.strftime('%d.%m.%Y') }}</div>
+                </div>
+                <div class="pr-card">
+                    <div class="label">Bestes e1RM</div>
+                    <div class="val">{{ pr_e1rm.e1rm }} kg</div>
+                    <div class="sub">{{ pr_e1rm.weight }} kg × {{ pr_e1rm.reps }} · Pos. {{ pr_e1rm.position }} · {{ pr_e1rm.started_at.strftime('%d.%m.%Y') }}</div>
+                </div>
+            </div>
+
+            {% if sessions_since_pr and sessions_since_pr > 0 %}
+            <p class="label">Seit {{ sessions_since_pr }} Workout{{ 's' if sessions_since_pr != 1 else '' }} kein neuer e1RM-PR</p>
+            {% endif %}
+
+            {% if state == 'stagniert' %}
+            <div class="note-stall">
+                <span class="note-stall__label">Stagniert</span>
+                Seit {{ sessions_since_pr }} Workouts auf {{ table[0].best_weight }} kg (Position {{ table[0].position }}) — auf
+                <strong>{{ (table[0].best_weight + 1.25) if exercise.is_unilateral else (table[0].best_weight + 2.5) }} kg</strong>
+                gehen, notfalls 2 Wdh. weniger.
+            </div>
+            {% endif %}
+            {% else %}
+            <p class="empty">Noch keine Sätze für diese Übung protokolliert.</p>
             {% endif %}
         </div>
-        <div class="card-body">
-            <table class="sets">
-                <thead><tr><th>Datum</th><th>Pos.</th><th>Sätze</th><th>Volumen</th></tr></thead>
-                <tbody>
-                    {% for r in rows %}
-                    <tr>
-                        <td>{{ r.session.started_at.strftime('%d.%m.%Y') }}</td>
-                        <td>{{ r.position }}</td>
-                        <td>{{ r.sets_display }}</td>
-                        <td class="num">{{ r.volume }} kg</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% else %}
-    <div class="card">
-        <div class="empty">Noch keine Sätze für diese Übung protokolliert.</div>
-    </div>
-    {% endif %}
-</div>
+    </section>
 
-{% if rows %}
+    {% if table %}
+    <section class="exercise-detail__chart">
+        {# position picker lives inside the panel (like .exercise-detail__verdict's
+           own Status header) so this panel's top edge always lands at the same
+           place as the verdict panel beside it -- outside, it only aligned by
+           accident for exercises with zero/one position (no picker rendered);
+           any exercise with 2+ positions pushed this panel down against a
+           verdict panel whose header is always inside its own box. #}
+        <div class="panel">
+            {% if available_positions|length > 1 %}
+            <div class="exercise-detail__positions">
+                <span class="label">Position:</span>
+                <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id) }}" class="position-pill{{ ' is-active' if selected_position is none else '' }}">Alle</a>
+                {% for p in available_positions %}
+                <a href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id, position=p) }}" class="position-pill{{ ' is-active' if selected_position == p else '' }}">Position {{ p }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="exercise-detail__chart-wrap"><canvas id="progress-chart"></canvas></div>
+        </div>
+    </section>
+
+    <section class="exercise-detail__history">
+        <div class="panel">
+            <div class="section-head"><span class="label">Verlauf</span></div>
+            {% if exercise.is_unilateral %}
+            <p class="exercise-detail__note">Einseitig: Gewicht &amp; Wdh. sind je Seite geloggt, Volumen zählt beide Seiten (×2).</p>
+            {% endif %}
+            <div class="exercise-detail__table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr><th>Datum</th><th>Pos.</th><th>Sätze</th><th class="num">Volumen</th><th class="num">e1RM</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for row in table %}
+                        {% set is_record = (pr_e1rm and row.started_at == pr_e1rm.started_at) or (pr_weight and row.started_at == pr_weight.started_at) %}
+                        <tr class="{{ 'is-record' if is_record else '' }}">
+                            <td>{{ row.started_at.strftime('%d.%m.%Y') }}</td>
+                            <td>{{ row.position }}</td>
+                            <td>{{ row.sets_display }}</td>
+                            <td class="num">{{ row.volume }} kg</td>
+                            <td class="num">{{ row.e1rm }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="exercise-detail__meta">
+        <details class="meta-edit"{{ ' open' if request.args.get('name_taken') else '' }}>
+            <summary class="meta-edit__toggle">✏️ Bearbeiten</summary>
+            <div class="panel meta-edit__body">
+                <form method="post" action="{{ url_for('gym.gym_update_exercise', exercise_id=exercise.id) }}" class="add-exercise">
+                    <div class="field grow">
+                        <label class="label" for="meta-name">Name</label>
+                        <input type="text" id="meta-name" name="name" class="input" value="{{ exercise.name }}" required>
+                    </div>
+                    <div class="field grow">
+                        <label class="label" for="meta-group">Muskelgruppe</label>
+                        <select id="meta-group" name="muscle_group" class="select">
+                            <option value="">— keine —</option>
+                            {% for mg in muscle_groups %}
+                            <option value="{{ mg }}" {{ 'selected' if exercise.muscle_group == mg else '' }}>{{ mg }}</option>
+                            {% endfor %}
+                            {% if exercise.muscle_group and exercise.muscle_group not in muscle_groups %}
+                            <option value="{{ exercise.muscle_group }}" selected>{{ exercise.muscle_group }} (alt)</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="label" for="meta-rest">Standard-Pause (Sek.)</label>
+                        <input type="number" id="meta-rest" name="default_rest_seconds" min="0" class="input input--num" value="{{ exercise.default_rest_seconds if exercise.default_rest_seconds is not none else '' }}" placeholder="90">
+                    </div>
+                    <label class="exercise-detail-check">
+                        <input type="checkbox" name="is_unilateral" class="check" {{ 'checked' if exercise.is_unilateral else '' }}>
+                        <span class="label">Einseitig (pro Seite)</span>
+                    </label>
+                    <button type="submit" class="btn btn--live">Speichern</button>
+                </form>
+            </div>
+        </details>
+    </section>
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% if table %}
 <script>
-GymChart.renderProgressChart(document.getElementById('progressChart'), {
-    labels: {{ chart_labels | tojson }},
-    weights: {{ chart_weights | tojson }},
-    minWeights: {{ chart_min_weights | tojson }},
-    volumes: {{ chart_volumes | tojson }},
+GymChart.renderProgressChart(document.getElementById('progress-chart'), {
+    series: {{ series | tojson }},
+    tokens: GymChart.resolveTokens(),
 });
 </script>
 {% endif %}
-
-</body>
-</html>
+{% endblock %}

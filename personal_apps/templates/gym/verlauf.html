@@ -1,0 +1,126 @@
+{% extends 'gym/_base.html' %}
+
+{# Verlauf (spec 6.6): the third real route -- a chronological list of every
+   finished workout, newest first, plus a JSON export panel. Export has no
+   date inputs of its own: the presets bulk-check matching rows in the list
+   below, and manual per-row checkboxes handle everything else -- gym_export()
+   in routes.py takes the resulting `ids` list directly, never a date range.
+   Every row's total volume and record count come from gym_verlauf()'s own
+   single load_performed() call, grouped by session in Python -- same
+   bulk-loading discipline as Heute/Übungen (spec 5.4): this page must never
+   issue one query per session no matter how long the history gets. #}
+
+{% block title %}Verlauf · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="gym-wrap">
+<div class="verlauf">
+
+    <header class="verlauf__head">
+        <h1>Verlauf</h1>
+    </header>
+
+    {% if history %}
+    <section class="panel verlauf__export">
+        <div class="section-head"><span class="label">Export</span></div>
+        {# Presets bulk-check matching rows in the list below rather than
+           filling a date range -- gym.js-free inline script further down
+           owns the checking/counting logic. "Alle" (data-days="") checks
+           every row regardless of date. #}
+        <div class="verlauf-export__presets">
+            <button type="button" class="btn btn--ghost btn--sm export-preset" data-days="30">Letzte 30 Tage</button>
+            <button type="button" class="btn btn--ghost btn--sm export-preset" data-days="90">Letzte 90 Tage</button>
+            <button type="button" class="btn btn--ghost btn--sm export-preset" data-days="">Alle</button>
+        </div>
+        <div class="verlauf-export__action">
+            <span class="label" id="export-count">0 ausgewählt</span>
+            <a href="#" class="btn btn--live btn--sm is-disabled" id="export-submit-btn" aria-disabled="true">Exportieren (JSON)</a>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="panel verlauf__list">
+        <div class="section-head"><span class="label">Workouts</span></div>
+        {% if history %}
+        {% for entry in history %}
+        <div class="verlauf-row">
+            <label class="verlauf-check" aria-label="{{ entry.session.name or 'Workout' }} für Export auswählen">
+                <input type="checkbox" class="check export-row-check" value="{{ entry.session.id }}" data-started="{{ entry.session.started_at.isoformat() }}">
+            </label>
+            <a href="{{ url_for('gym.session_detail', session_id=entry.session.id) }}" class="verlauf-row__main">
+                <div class="name">{{ entry.session.name or 'Workout' }}</div>
+                <p class="label verlauf-row__meta">{{ entry.session.started_at.strftime('%d.%m.%Y %H:%M') }} · {{ entry.session.finished_at - entry.session.started_at }}</p>
+                <p class="label verlauf-row__exercises">{{ entry.session.exercises|map(attribute='exercise.name')|join(' · ') }}</p>
+            </a>
+            <div class="verlauf-row__stats">
+                <span class="load"><span class="load__val">{{ entry.volume }}</span><span class="load__unit">kg</span></span>
+                {% if entry.record_count %}
+                <span class="chip chip--record">{{ entry.record_count }} {{ 'Rekord' if entry.record_count == 1 else 'Rekorde' }}</span>
+                {% endif %}
+            </div>
+            <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=entry.session.id) }}" class="verlauf-row__delete" onsubmit="return confirm('Workout unwiderruflich löschen?')">
+                <button type="submit" class="btn btn--stall btn--sm">Löschen</button>
+            </form>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty">Noch keine abgeschlossenen Workouts.</div>
+        {% endif %}
+    </section>
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Export: presets bulk-check matching rows (replacing whatever was checked
+// before, not adding to it -- a one-shot quick-pick, not a toggle); manual
+// checking is always available on top for picking exactly the workouts you
+// want. The export link's href is just gym_export() with a comma-joined
+// `ids` list, rebuilt on every checkbox change -- no form submission, it's
+// a plain download link like any other.
+(function setupExport() {
+    const countEl = document.getElementById('export-count');
+    const exportBtn = document.getElementById('export-submit-btn');
+    if (!countEl || !exportBtn) return; // no history -- the whole panel is absent
+
+    const rowChecks = () => Array.from(document.querySelectorAll('.export-row-check'));
+
+    function refresh() {
+        const selected = rowChecks().filter((c) => c.checked);
+        countEl.textContent = selected.length === 1 ? '1 ausgewählt' : `${selected.length} ausgewählt`;
+        if (selected.length === 0) {
+            exportBtn.classList.add('is-disabled');
+            exportBtn.setAttribute('aria-disabled', 'true');
+            exportBtn.removeAttribute('href');
+        } else {
+            exportBtn.classList.remove('is-disabled');
+            exportBtn.removeAttribute('aria-disabled');
+            const ids = selected.map((c) => c.value).join(',');
+            exportBtn.href = '{{ url_for("gym.gym_export") }}?ids=' + encodeURIComponent(ids);
+        }
+    }
+
+    rowChecks().forEach((c) => c.addEventListener('change', refresh));
+
+    document.querySelectorAll('.export-preset').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const days = btn.dataset.days;
+            const cutoff = days ? Date.now() - parseInt(days, 10) * 86400000 : null;
+            rowChecks().forEach((c) => {
+                const started = new Date(c.dataset.started + 'Z').getTime();
+                c.checked = cutoff === null || started >= cutoff;
+            });
+            refresh();
+        });
+    });
+
+    exportBtn.addEventListener('click', (e) => {
+        if (exportBtn.classList.contains('is-disabled')) e.preventDefault();
+    });
+
+    refresh();
+})();
+</script>
+{% endblock %}

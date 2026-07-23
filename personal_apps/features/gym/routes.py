@@ -11,6 +11,7 @@ from models import (
     PushSubscription, PendingPush, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
 )
 from auth import login_required
+from features.gym import stats
 
 gym_bp = Blueprint('gym', __name__)
 
@@ -31,8 +32,15 @@ def gym_service_worker():
 
 DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest time is given
 
-STAGNATION_THRESHOLD = 4  # sessions without a new estimated-1RM PR before nudging toward progressive overload
-
+# stats.exercise_state()'s return value -> (chip CSS modifier, display label),
+# spec 5.6's table. A state of None means "no chip" and has no entry here --
+# callers must check before indexing.
+EXERCISE_STATE_CHIP = {
+    'neu': ('neu', 'Neu'),
+    'rekord': ('record', 'Rekord'),
+    'stagniert': ('stall', 'Stagniert'),
+    'steigend': ('up', 'Steigend'),
+}
 
 
 def _to_float(value, fallback=None):
@@ -192,216 +200,147 @@ def _schedule_rest(session_set):
     db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
 
 
-def _epley_1rm(weight, reps):
-    """Estimated one-rep max (Epley formula) -- there's no real single-rep
-    test happening mid-workout, so this is the standard estimate used by
-    every mainstream lifting tracker for the same reason."""
-    return weight * (1 + reps / 30.0)
+def load_performed(exercise_ids=None, since=None, include_active=False, exclude_session_exercise_ids=None):
+    """Every exercise-as-performed with at least one completed set, as the
+    single flat shape stats.py consumes.
 
+    This exists to be called ONCE per request. The pages that need per-exercise
+    verdicts need them for the whole catalogue at once, and asking per exercise
+    would mean one query per row -- roughly forty on the catalogue page today,
+    and worse every time an exercise is added.
 
-def _sessions_since_last_pr(exercise_id, position=None, exclude_session_id=None):
-    """How many completed sessions in a row -- most recent first -- have
-    passed without a new estimated-1RM PR for this exercise. e1RM (not raw
-    weight) is the yardstick so a rep increase at the same weight still
-    counts as progress. Returns None if there isn't enough history yet
-    (fewer than 2 completed sessions) to say anything meaningful.
+    `include_active` also includes the current active (unfinished) session's
+    own completed sets. The exercise-detail page and its live progress modal
+    need this -- a set just logged mid-workout must show up immediately, not
+    only once the workout is finished. Callers building historical
+    comparisons (stagnation checks, past-session averages) must leave this
+    False: an in-progress workout's still-changing numbers must not leak into
+    an average or a "sessions since PR" count before the workout is actually
+    done.
 
-    Position-aware like _last_session_exercise: exercise order affects
-    fatigue, so a stagnation read during an active workout should reflect
-    history in that same slot, not muddy it with a fresher/more-fatigued
-    performance from a different position. Falls back to all positions if
-    there isn't enough position-matched history yet to judge from -- fetched
-    in one query so the fallback doesn't cost a second DB round trip.
+    `exclude_session_exercise_ids`, if given, drops those specific
+    SessionExercise rows outright before they ever become a PerformedExercise
+    -- gym_verlauf uses this to exclude a replaced-away original from its
+    own session's totals, the same exclusion performed_from_session() already
+    applies when building a single session's `current` for session_report().
+    Default (None) excludes nothing, so every other caller here is unaffected.
     """
     query = (
         SessionExercise.query
+        .options(
+            joinedload(SessionExercise.exercise),
+            joinedload(SessionExercise.session),
+            joinedload(SessionExercise.sets),
+        )
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(
-            SessionExercise.exercise_id == exercise_id,
-            SessionExercise.sets.any(SessionSet.completed == True),
-            WorkoutSession.finished_at.isnot(None),
-        )
     )
-    if exclude_session_id is not None:
-        query = query.filter(SessionExercise.session_id != exclude_session_id)
-    all_session_exercises = query.order_by(WorkoutSession.started_at).all()
+    if not include_active:
+        query = query.filter(WorkoutSession.finished_at.isnot(None))
+    if exercise_ids is not None:
+        query = query.filter(SessionExercise.exercise_id.in_(exercise_ids))
+    if since is not None:
+        query = query.filter(WorkoutSession.started_at >= since)
 
-    session_exercises = [se for se in all_session_exercises if se.position == position] if position is not None else []
-    if len(session_exercises) < 2:
-        session_exercises = all_session_exercises
-    if len(session_exercises) < 2:
-        return None
-
-    best_ever = None
-    sessions_since = 0
-    for se in session_exercises:
-        session_best = max(_epley_1rm(s.weight, s.reps) for s in se.sets if s.completed)
-        if best_ever is None or session_best > best_ever:
-            best_ever = session_best
-            sessions_since = 0
-        else:
-            sessions_since += 1
-    return sessions_since
-
-
-def _set_volume(exercise, s):
-    """Volume for one logged set. Unilateral exercises log the per-side
-    weight/reps, so both sides did this -- the real volume is double what's
-    on the row. Centralized here so every volume computation stays in sync
-    (weight and reps themselves are never doubled -- they're displayed as
-    logged, per side)."""
-    return s.weight * s.reps * (2 if exercise.is_unilateral else 1)
-
-
-def _session_summary_data(session_):
-    """Post-workout summary: per-exercise PRs (weight / estimated 1RM /
-    single-session volume) and how this session's volume compares to your
-    historical average -- per exercise, and for the workout as a whole."""
-    exercise_rows = []
-    total_volume = 0.0
-    total_sets = 0
-
-    for se in session_.exercises:
-        # A replaced-away original isn't part of "what this workout looked
-        # like" -- its slot is represented by the substitute that took over.
-        # Skipping it here (unlike _exercise_progress_data, which still counts
-        # its sets toward that exercise's own all-time history) keeps this
-        # session's total_volume from being inflated by a one-off substitute
-        # exercise the historical comparison below was never scoped to include.
-        if se.replaced_by:
+    exclude_ids = exclude_session_exercise_ids or ()
+    performed = []
+    for session_exercise in query.order_by(WorkoutSession.started_at).all():
+        if session_exercise.id in exclude_ids:
             continue
-        completed_sets = [s for s in se.sets if s.completed]
-        if not completed_sets:
+        completed = tuple(
+            (s.weight, s.reps) for s in session_exercise.sets if s.completed
+        )
+        if not completed:
             continue
+        performed.append(_to_performed(session_exercise, completed))
+    return performed
 
-        session_volume = sum(_set_volume(se.exercise, s) for s in completed_sets)
-        session_best_weight = max(s.weight for s in completed_sets)
-        session_best_e1rm = max(_epley_1rm(s.weight, s.reps) for s in completed_sets)
-        total_volume += session_volume
-        total_sets += len(completed_sets)
 
-        past_session_exercises = (
-            SessionExercise.query
-            .filter(
-                SessionExercise.exercise_id == se.exercise_id,
-                SessionExercise.session_id != session_.id,
-                SessionExercise.sets.any(SessionSet.completed == True),
-            )
-            .all()
+def _to_performed(session_exercise, completed_sets):
+    exercise = session_exercise.exercise
+    return stats.PerformedExercise(
+        exercise_id=session_exercise.exercise_id,
+        name=exercise.name,
+        muscle_group=exercise.muscle_group,
+        is_unilateral=exercise.is_unilateral,
+        position=session_exercise.position,
+        session_id=session_exercise.session_id,
+        started_at=session_exercise.session.started_at,
+        sets=completed_sets,
+    )
+
+
+def performed_from_session(session_):
+    """This session's exercises as performed.
+
+    A replaced-away original is skipped: its slot is represented by the
+    substitute that took over, and counting both would inflate the session's
+    totals with an exercise the historical comparison was never scoped to.
+    """
+    performed = []
+    for session_exercise in session_.exercises:
+        if session_exercise.replaced_by:
+            continue
+        completed = tuple(
+            (s.weight, s.reps) for s in session_exercise.sets if s.completed
         )
-
-        past_volumes = []
-        past_best_weight = None
-        past_best_e1rm = None
-        for past_se in past_session_exercises:
-            past_completed = [s for s in past_se.sets if s.completed]
-            if not past_completed:
-                continue
-            past_volumes.append(sum(_set_volume(se.exercise, s) for s in past_completed))
-            for s in past_completed:
-                if past_best_weight is None or s.weight > past_best_weight:
-                    past_best_weight = s.weight
-                e1rm = _epley_1rm(s.weight, s.reps)
-                if past_best_e1rm is None or e1rm > past_best_e1rm:
-                    past_best_e1rm = e1rm
-
-        has_history = bool(past_volumes)
-        avg_volume = (sum(past_volumes) / len(past_volumes)) if has_history else None
-        best_volume_ever = max(past_volumes) if has_history else None
-
-        exercise_rows.append({
-            'name': se.exercise.name,
-            'session_volume': round(session_volume, 1),
-            'session_best_weight': session_best_weight,
-            'session_best_e1rm': round(session_best_e1rm, 1),
-            'has_history': has_history,
-            'avg_volume': round(avg_volume, 1) if has_history else None,
-            'volume_delta_pct': round((session_volume - avg_volume) / avg_volume * 100) if has_history and avg_volume else None,
-            'is_weight_pr': has_history and session_best_weight > past_best_weight,
-            'is_volume_pr': has_history and session_volume > best_volume_ever,
-            'is_e1rm_pr': has_history and session_best_e1rm > past_best_e1rm,
-        })
-
-    # Whole-workout volume comparison only makes sense against past sessions
-    # doing roughly the same exercises -- comparing against every finished
-    # session ever (mixing e.g. a leg day into a push day's average) produces
-    # a number that's technically correct but meaningless. Only template-
-    # linked sessions have a reliable "same workout" cohort to compare
-    # against; freeform sessions just skip this (per-exercise comparisons
-    # below are still shown either way, since those ARE scoped correctly).
-    past_total_volumes = []
-    if session_.template_id:
-        comparable_sessions = (
-            WorkoutSession.query
-            .options(joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise))
-            .filter(
-                WorkoutSession.id != session_.id,
-                WorkoutSession.finished_at.isnot(None),
-                WorkoutSession.template_id == session_.template_id,
-            )
-            .all()
-        )
-        for other in comparable_sessions:
-            v = sum(
-                _set_volume(se.exercise, s)
-                for se in other.exercises for s in se.sets if s.completed
-            )
-            if v > 0:
-                past_total_volumes.append(v)
-
-    avg_total_volume = (sum(past_total_volumes) / len(past_total_volumes)) if past_total_volumes else None
-
-    return {
-        'exercises': exercise_rows,
-        'total_volume': round(total_volume, 1),
-        'total_sets': total_sets,
-        'avg_total_volume': round(avg_total_volume, 1) if avg_total_volume else None,
-        'total_volume_delta_pct': round((total_volume - avg_total_volume) / avg_total_volume * 100) if avg_total_volume else None,
-        'pr_count': sum(1 for r in exercise_rows if r['is_weight_pr'] or r['is_volume_pr'] or r['is_e1rm_pr']),
-    }
-
-
-def _group_exercises_by_muscle(exercises):
-    """Buckets exercises by MUSCLE_GROUPS (in that fixed vocabulary's
-    order), with anything that doesn't match a current group -- no
-    muscle_group set, or a legacy free-text value from before the enum
-    existed -- collected into a trailing "Ohne Muskelgruppe" bucket instead
-    of being silently dropped. `exercises` is expected pre-sorted by name
-    (as gym_dashboard already queries it), so each bucket stays
-    alphabetical."""
-    grouped = {mg: [] for mg in MUSCLE_GROUPS}
-    other = []
-    for e in exercises:
-        if e.muscle_group in grouped:
-            grouped[e.muscle_group].append(e)
-        else:
-            other.append(e)
-    result = [(mg, grouped[mg]) for mg in MUSCLE_GROUPS if grouped[mg]]
-    if other:
-        result.append(('Ohne Muskelgruppe', other))
-    return result
+        if not completed:
+            continue
+        performed.append(_to_performed(session_exercise, completed))
+    return performed
 
 
 @gym_bp.route('/gym', strict_slashes=False)
 @login_required
-def gym_dashboard():
+def gym_heute():
+    now = dt.datetime.utcnow()
     active_session = _get_active_session()
-    exercises = Exercise.query.order_by(Exercise.name).all()
-    templates = WorkoutTemplate.query.order_by(WorkoutTemplate.name).all()
-    past_sessions = (
+
+    # Eager-loaded: each routine panel shows its own exercise list, and
+    # walking .exercises / .exercise per template without this would be an
+    # N+1 (one query per template, one more per template-exercise) -- exactly
+    # the pattern this page exists to avoid (see load_performed() below).
+    templates = (
+        WorkoutTemplate.query
+        .options(joinedload(WorkoutTemplate.exercises).joinedload(TemplateExercise.exercise))
+        .order_by(WorkoutTemplate.name)
+        .all()
+    )
+    routine_sessions = (
+        WorkoutSession.query
+        .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.template_id.isnot(None))
+        .all()
+    )
+    recent_sessions = (
         WorkoutSession.query
         .filter(WorkoutSession.finished_at.isnot(None))
         .order_by(WorkoutSession.started_at.desc())
-        .limit(20)
+        .limit(5)
         .all()
     )
+    catalogue_groups = {e.muscle_group or stats.NO_GROUP_LABEL for e in Exercise.query.all()}
+
+    # The one bulk load this whole page runs on -- every completed set ever
+    # logged, across every exercise. Every stats.py call below is fed from
+    # this single result; must not be called again no matter how many of
+    # them need it (see load_performed()'s own docstring).
+    performed = load_performed()
+    rows_by_exercise = {}
+    session_started_at = {}
+    for row in performed:
+        rows_by_exercise.setdefault(row.exercise_id, []).append(row)
+        session_started_at[row.session_id] = row.started_at
+
     return render_template(
-        'gym/dashboard.html',
+        'gym/heute.html',
+        now=now,
         active_session=active_session,
-        exercises_by_group=_group_exercises_by_muscle(exercises),
+        consistency=stats.consistency(list(session_started_at.values()), now),
+        routines=stats.routine_memory(templates, routine_sessions, now),
+        recent_sessions=recent_sessions,
+        stalls=stats.stall_report(rows_by_exercise),
+        balance=stats.muscle_group_volume(performed, catalogue_groups, now),
+        tonnage=stats.weekly_tonnage(performed, now),
         templates=templates,
-        past_sessions=past_sessions,
-        muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
     )
 
@@ -442,22 +381,78 @@ def gym_start():
 @login_required
 def session_detail(session_id):
     session_ = db.get_or_404(WorkoutSession, session_id)
+
+    if session_.finished_at:
+        # The finished workout is one page now (spec 6.5): build the report
+        # and hand off to session_finished.html instead of session_detail.html.
+        current = performed_from_session(session_)
+        history = [
+            row for row in load_performed(exercise_ids=[row.exercise_id for row in current])
+            if row.session_id != session_.id
+        ]
+        comparable = []
+        if session_.template_id:
+            cohort = (
+                WorkoutSession.query
+                .filter(
+                    WorkoutSession.id != session_.id,
+                    WorkoutSession.finished_at.isnot(None),
+                    WorkoutSession.template_id == session_.template_id,
+                )
+                .all()
+            )
+            cohort_ids = {other.id for other in cohort}
+            volumes = {}
+            for row in load_performed():
+                if row.session_id in cohort_ids:
+                    volumes[row.session_id] = volumes.get(row.session_id, 0.0) + stats.row_volume(row)
+            comparable = [volume for volume in volumes.values() if volume > 0]
+        data = stats.session_report(current, history, comparable_session_volumes=comparable)
+        # session_report()'s entries carry only plain (weight, reps) tuples --
+        # PerformedExercise is deliberately ORM-free (stats.py has zero
+        # SQLAlchemy dependency, see its module docstring). The "correct a
+        # past set" affordance needs a real SessionSet.id to POST to
+        # gym_update_set, so attach the real rows here instead. `current`
+        # (and therefore data['exercises'], built from it 1:1 in order) came
+        # from performed_from_session()'s filtered/ordered walk of
+        # session_.exercises -- skip a replaced-away original, skip an
+        # exercise with no completed sets. Re-deriving that exact filter and
+        # zipping lines each entry back up with its real SessionExercise.
+        reported_session_exercises = [
+            se for se in session_.exercises
+            if not se.replaced_by and any(s.completed for s in se.sets)
+        ]
+        for entry, se in zip(data['exercises'], reported_session_exercises):
+            entry['set_rows'] = [s for s in se.sets if s.completed]
+        return render_template('gym/session_finished.html', session=session_, **data)
+
     # A replaced original is hidden from the active view, so its suggestion
     # would never be used -- skip computing it there. Visibility is derived
     # from replaces_id (already loaded on every row) rather than by touching
     # se.replaced_by, which would lazy-load a separate query per row.
     replaced_original_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
-    visible_exercises = [
-        se for se in session_.exercises
-        if session_.finished_at or se.id not in replaced_original_ids
-    ]
+    visible_exercises = [se for se in session_.exercises if se.id not in replaced_original_ids]
     suggestions = {se.id: _last_performance(se.exercise_id, position=se.position) for se in visible_exercises}
+    history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
+    by_exercise = {}
+    for row in history:
+        if row.session_id != session_.id:
+            by_exercise.setdefault(row.exercise_id, []).append(row)
     stagnation_counts = {}
-    if not session_.finished_at:  # only ever shown for an active workout -- skip the queries otherwise
-        for se in visible_exercises:
-            count = _sessions_since_last_pr(se.exercise_id, position=se.position, exclude_session_id=session_.id)
-            if count is not None and count >= STAGNATION_THRESHOLD:
-                stagnation_counts[se.id] = count
+    record_set_ids = set()
+    for se in visible_exercises:
+        prior = by_exercise.get(se.exercise_id, [])
+        count = stats.sessions_since_pr(prior, position=se.position)
+        if count is not None and count >= stats.STAGNATION_THRESHOLD:
+            stagnation_counts[se.id] = count
+        # Live equivalent of the finished-session PR flare (session_report's
+        # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
+        # same prior-sessions-only pool, so a set can light up cyan the
+        # instant it's confirmed rather than only on the recap screen an
+        # hour later.
+        for s in se.sets:
+            if s.completed and stats.is_new_best(s.weight, s.reps, prior):
+                record_set_ids.add(s.id)
     exercises = Exercise.query.order_by(Exercise.name).all()
     return render_template(
         'gym/session_detail.html',
@@ -465,9 +460,15 @@ def session_detail(session_id):
         visible_exercises=visible_exercises,
         suggestions=suggestions,
         stagnation_counts=stagnation_counts,
+        record_set_ids=record_set_ids,
         exercises=exercises,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
+        # PushSubscription has no user/device scoping (single-user app, one
+        # flat table keyed by endpoint) -- "any row at all" is the correct
+        # "already set up" signal here, not something narrower the schema
+        # doesn't actually track.
+        has_push_subscription=PushSubscription.query.first() is not None,
     )
 
 
@@ -683,7 +684,9 @@ def gym_update_set(set_id):
     session. Deliberately narrow -- unlike gym_toggle_set_complete, this
     never touches `completed`, and works regardless of session.finished_at
     (that route's edit form is only shown for active sessions; this one's
-    form is only shown for finished ones, in session_detail.html)."""
+    form is the quiet "Sätze korrigieren" disclosure in
+    session_finished.html, one per exercise, shown only for finished
+    sessions)."""
     set_ = db.get_or_404(SessionSet, set_id)
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
@@ -744,15 +747,16 @@ def gym_finish_session(session_id):
     # later for a workout that's already over.
     _cancel_pending_push(session_)
     db.session.commit()
-    return redirect(url_for('gym.gym_session_summary', session_id=session_.id, just_finished=1))
+    return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/summary')
 @login_required
 def gym_session_summary(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
-    data = _session_summary_data(session_)
-    return render_template('gym/session_summary.html', session=session_, **data)
+    # Kept as a redirect: a finished workout is one page now, and this URL is
+    # in browser history and bookmarks.
+    return redirect(url_for('gym.session_detail', session_id=session_id,
+                            **request.args.to_dict()))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/delete', methods=['POST'])
@@ -767,7 +771,7 @@ def gym_delete_session(session_id):
         db.session.commit()
         db.session.delete(session_)
         db.session.commit()
-    return redirect(url_for('gym.gym_dashboard'))
+    return redirect(url_for('gym.gym_verlauf'))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/update_template', methods=['POST'])
@@ -797,6 +801,20 @@ def gym_save_as_template(session_id):
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
+@gym_bp.route('/gym/templates/<int:template_id>/rename', methods=['POST'])
+@login_required
+def gym_rename_template(template_id):
+    """Heute's small per-routine edit affordance. WorkoutTemplate.name carries
+    no unique constraint (unlike Exercise.name), so unlike gym_update_exercise
+    there is no collision case to reject -- any non-empty name is accepted."""
+    template = db.get_or_404(WorkoutTemplate, template_id)
+    new_name = request.form.get('name', '').strip()
+    if new_name:
+        template.name = new_name
+        db.session.commit()
+    return redirect(url_for('gym.gym_heute'))
+
+
 @gym_bp.route('/gym/templates/<int:template_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_template(template_id):
@@ -806,45 +824,107 @@ def gym_delete_template(template_id):
     WorkoutSession.query.filter_by(template_id=template.id).update({'template_id': None})
     db.session.delete(template)
     db.session.commit()
-    return redirect(url_for('gym.gym_dashboard'))
+    return redirect(url_for('gym.gym_heute'))
+
+
+@gym_bp.route('/gym/verlauf')
+@login_required
+def gym_verlauf():
+    """Every finished workout, newest first, with its own total volume and
+    record count -- spec 6.6, one of the three real nav destinations."""
+    # Eager-loaded for the exercise-list column: WorkoutSession.exercises and
+    # SessionExercise.exercise are lazy relationships (models.py). This page
+    # can list every finished session ever logged, and touching either per
+    # row without this would be exactly the N+1 the bulk-loading discipline
+    # below exists to avoid, just on a different relationship than
+    # load_performed().
+    sessions = (
+        WorkoutSession.query
+        .filter(WorkoutSession.finished_at.isnot(None))
+        .options(joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise))
+        .order_by(WorkoutSession.started_at.desc())
+        .all()
+    )
+
+    # Replaced-away originals must not contribute to their own session's
+    # volume/record totals below -- the same exclusion performed_from_session()
+    # already applies for session_report()/the detail page: the substitute
+    # took over that slot, and counting both would inflate the session's
+    # totals with an exercise the historical comparison was never scoped to.
+    # `sessions` above already eager-loads every finished session's
+    # .exercises (for the exercise-list column) -- reused here for zero extra
+    # queries, reading replaces_id (a plain, already-loaded column) rather
+    # than the replaced_by backref, which would lazy-load once per row (see
+    # session_detail's identical replaced_original_ids, same reasoning).
+    replaced_away_ids = {
+        se.replaces_id
+        for s in sessions for se in s.exercises
+        if se.replaces_id is not None
+    }
+
+    # The one bulk load this whole page runs on -- every completed set ever
+    # logged, across every exercise, in a single query (see load_performed()'s
+    # own docstring). Every session's volume and record count below is
+    # derived from this one result set in Python; must not be recomputed per
+    # session (spec 5.4, same discipline as gym_heute/gym_uebungen).
+    performed = load_performed(exclude_session_exercise_ids=replaced_away_ids)
+
+    volume_by_session = {}
+    for row in performed:
+        volume_by_session[row.session_id] = volume_by_session.get(row.session_id, 0.0) + stats.row_volume(row)
+
+    # Same "beats every OTHER session, regardless of when it happened"
+    # semantics stats.session_report's own is_weight_pr/is_e1rm_pr/
+    # is_volume_pr use -- computed for every session in this one pass so a
+    # session's count here always agrees with what its own detail page
+    # (session_report) shows, instead of the strictly weaker "beats only the
+    # sessions before it" a chronological-only comparison would give.
+    records_by_session = stats.session_record_counts(performed)
+
+    history = [
+        {
+            'session': s,
+            'volume': round(volume_by_session.get(s.id, 0.0), 1),
+            'record_count': records_by_session.get(s.id, 0),
+        }
+        for s in sessions
+    ]
+
+    return render_template('gym/verlauf.html', history=history)
 
 
 @gym_bp.route('/gym/export')
 @login_required
 def gym_export():
-    """Downloadable JSON of finished workout history in a date range, for
-    feeding into an external analysis tool later. Full detail (every set,
-    not just aggregates) so nothing useful is thrown away up front. Both
-    original and substitute SessionExercise rows are exported (mirroring
-    what a finished session's own detail view already shows -- see
-    session_detail's visible_exercises computation), each carrying
-    replaces/replaced_by exercise names so a swap is fully traceable."""
-    date_from = request.args.get('from', '')
-    date_to = request.args.get('to', '')
-    try:
-        from_date = dt.datetime.strptime(date_from, '%Y-%m-%d') if date_from else dt.datetime(1970, 1, 1)
-    except ValueError:
-        from_date = dt.datetime(1970, 1, 1)
-    try:
-        to_date = dt.datetime.strptime(date_to, '%Y-%m-%d') if date_to else dt.datetime.utcnow()
-    except ValueError:
-        to_date = dt.datetime.utcnow()
-    to_date_exclusive = to_date + dt.timedelta(days=1)  # 'to' is inclusive of that whole calendar day
+    """Downloadable JSON of specific finished workouts, picked by id from
+    Verlauf's own checklist (the 30/90-day presets there just bulk-check
+    matching rows client-side -- this route only ever sees the final id
+    list, never a date range). Full detail (every set, not just aggregates)
+    so nothing useful is thrown away up front. Both original and substitute
+    SessionExercise rows are exported (mirroring what a finished session's
+    own detail view already shows -- see session_detail's visible_exercises
+    computation), each carrying replaces/replaced_by exercise names so a
+    swap is fully traceable."""
+    ids_param = request.args.get('ids', '')
+    session_ids = []
+    for raw_id in ids_param.split(','):
+        raw_id = raw_id.strip()
+        if raw_id.isdigit():
+            session_ids.append(int(raw_id))
 
     sessions = (
         WorkoutSession.query
         .filter(
             WorkoutSession.finished_at.isnot(None),
-            WorkoutSession.started_at >= from_date,
-            WorkoutSession.started_at < to_date_exclusive,
+            WorkoutSession.id.in_(session_ids),
         )
         .order_by(WorkoutSession.started_at.asc())
         .all()
-    )
+    ) if session_ids else []
 
     payload = {
         'exported_at': dt.datetime.utcnow().isoformat() + 'Z',
-        'range': {'from': date_from or None, 'to': date_to or None},
+        'requested_session_ids': session_ids,
         'sessions': [
             {
                 'id': s.id,
@@ -874,75 +954,80 @@ def gym_export():
     }
 
     resp = jsonify(payload)
-    filename = f"gym-export-{date_from or 'all'}_{date_to or 'now'}.json"
+    filename = f"gym-export-{len(sessions)}-workouts.json"
     resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     return resp
 
 
-def _exercise_progress_data(exercise, position=None):
-    """Shared by the full exercise-history page and the in-workout progress
-    modal. Only counts *completed* sets -- a pending/unconfirmed set (e.g.
-    freshly copied from a template) hasn't actually been performed yet and
-    shouldn't count toward PRs or history.
+@gym_bp.route('/gym/uebungen')
+@login_required
+def gym_uebungen():
+    exercises = Exercise.query.order_by(Exercise.name).all()
 
-    Exercise order affects performance (the same exercise done 1st is
-    fresher than done 3rd), so mixing every position together can show
-    swings in the chart/PRs that aren't really progress or regression --
-    just a different slot that day. If `position` is given, only sessions
-    where this exercise was done in that exact position are included, for
-    an apples-to-apples view. `available_positions` is always computed from
-    the *unfiltered* data so the caller can build a filter control.
-    """
-    all_session_exercises = (
-        SessionExercise.query
-        .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(SessionExercise.exercise_id == exercise.id, SessionExercise.sets.any(SessionSet.completed == True))
-        .order_by(WorkoutSession.started_at)
-        .all()
-    )
-    available_positions = sorted({se.position for se in all_session_exercises})
-
-    session_exercises = all_session_exercises
-    if position is not None:
-        session_exercises = [se for se in all_session_exercises if se.position == position]
-
-    rows = []
-    pr_max_weight = None   # {'weight', 'reps', 'date'}
-    pr_max_volume = None   # {'weight', 'reps', 'volume', 'date'}
-    for se in session_exercises:
-        completed_sets = [s for s in se.sets if s.completed]
-        if not completed_sets:
-            continue
-        best_weight = max(s.weight for s in completed_sets)
-        worst_weight = min(s.weight for s in completed_sets)
-        volume = sum(_set_volume(exercise, s) for s in completed_sets)
-        sets_display = ', '.join(f'{s.weight}kg×{s.reps}' for s in completed_sets)
-        rows.append({
-            'session': se.session, 'sets': completed_sets, 'best_weight': best_weight,
-            'worst_weight': worst_weight, 'volume': volume, 'sets_display': sets_display,
-            'position': se.position,
-        })
-
-        for s in completed_sets:
-            if pr_max_weight is None or s.weight > pr_max_weight['weight']:
-                pr_max_weight = {'weight': s.weight, 'reps': s.reps, 'date': se.session.started_at}
-            set_volume = _set_volume(exercise, s)
-            if pr_max_volume is None or set_volume > pr_max_volume['volume']:
-                pr_max_volume = {'weight': s.weight, 'reps': s.reps, 'volume': set_volume, 'date': se.session.started_at}
-
-    rows.reverse()  # most recent first for the table
-    chart_rows = list(reversed(rows))
-    return {
-        'rows': rows,
-        'pr_max_weight': pr_max_weight,
-        'pr_max_volume': pr_max_volume,
-        'chart_labels': [r['session'].started_at.strftime('%d.%m.%Y') for r in chart_rows],
-        'chart_weights': [r['best_weight'] for r in chart_rows],
-        'chart_min_weights': [r['worst_weight'] for r in chart_rows],
-        'chart_volumes': [r['volume'] for r in chart_rows],
-        'available_positions': available_positions,
-        'selected_position': position,
+    # Delete-eligibility depends on ANY session_exercises/template_exercises
+    # row existing, not just ones with a completed set -- so it can't reuse
+    # rows_by_exercise below. Exercise.session_exercises/.template_exercises
+    # are lazy relationships (models.py) that would issue one query per
+    # exercise if touched per-row here; two bulk id sets instead, each
+    # gathered once regardless of catalogue size.
+    exercise_ids_with_sessions = {
+        row.exercise_id for row in db.session.query(SessionExercise.exercise_id).distinct()
     }
+    exercise_ids_with_templates = {
+        row.exercise_id for row in db.session.query(TemplateExercise.exercise_id).distinct()
+    }
+
+    # The one bulk load this whole page runs on -- every completed set ever
+    # logged, across the whole catalogue. Every exercise's state/last-done/
+    # best-weight/best-e1RM below is computed from this single result,
+    # grouped by exercise_id in Python; must not be queried again per
+    # exercise (see load_performed()'s own docstring, spec 5.4).
+    performed = load_performed()
+    rows_by_exercise = {}
+    for row in performed:
+        rows_by_exercise.setdefault(row.exercise_id, []).append(row)
+
+    entries_by_id = {}
+    for exercise in exercises:
+        rows = rows_by_exercise.get(exercise.id, [])
+        # dominant_position() requires at least one row -- a brand new
+        # exercise (no rows) has no position to speak of, and exercise_state
+        # returns 'neu' from its own empty-rows check before position is
+        # ever consulted, so None is a safe stand-in here.
+        position = stats.dominant_position(rows) if rows else None
+        best_e1rm = max((stats.best_e1rm(row) for row in rows), default=None)
+        state = stats.exercise_state(rows, position=position)
+        chip_class, chip_label = EXERCISE_STATE_CHIP.get(state, (None, None))
+        entries_by_id[exercise.id] = {
+            'exercise': exercise,
+            'state': state,
+            'chip_class': chip_class,
+            'chip_label': chip_label,
+            'last_done': max((row.started_at for row in rows), default=None),
+            'best_weight': max((stats.best_weight(row) for row in rows), default=None),
+            'best_e1rm': round(best_e1rm, 1) if best_e1rm is not None else None,
+            'sessions_since_pr': stats.sessions_since_pr(rows, position=position) if rows else None,
+            'can_delete': (
+                exercise.id not in exercise_ids_with_sessions
+                and exercise.id not in exercise_ids_with_templates
+            ),
+        }
+
+    # Default/grouped view (spec 6.2's "nach Muskelgruppe"). The two flat
+    # sorts ("am längsten ohne PR", "zuletzt gemacht") are client-side
+    # re-orderings of these SAME rows in uebungen.html's own script, not a
+    # second server round trip -- every exercise's data attributes carry
+    # what that script needs (see the template).
+    grouped = [
+        (group_name, [entries_by_id[e.id] for e in group_exercises])
+        for group_name, group_exercises in stats.group_exercises_by_muscle(exercises, MUSCLE_GROUPS)
+    ]
+
+    return render_template(
+        'gym/uebungen.html',
+        grouped=grouped,
+        muscle_groups=MUSCLE_GROUPS,
+    )
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>')
@@ -950,8 +1035,13 @@ def _exercise_progress_data(exercise, position=None):
 def exercise_detail(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     position = request.args.get('position', type=int)
-    data = _exercise_progress_data(exercise, position=position)
-    return render_template('gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS, **data)
+    rows = load_performed(exercise_ids=[exercise.id], include_active=True)
+    data = stats.exercise_progress(rows, position=position)
+    chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
+    return render_template(
+        'gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS,
+        chip_class=chip_class, chip_label=chip_label, **data,
+    )
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/progress.json')
@@ -965,32 +1055,31 @@ def gym_exercise_progress_json(exercise_id):
     just because you haven't done this exercise in this position before."""
     exercise = db.get_or_404(Exercise, exercise_id)
     position = request.args.get('position', type=int)
-    data = _exercise_progress_data(exercise, position=position)
-    if position is not None and not data['rows']:
-        data = _exercise_progress_data(exercise)
-        position = None
+    rows = load_performed(exercise_ids=[exercise.id], include_active=True)
+    progress = stats.exercise_progress(rows, position=position)
+    if position is not None and not progress['table']:
+        progress = stats.exercise_progress(rows, position=None)
 
-    def fmt_pr(pr):
+    def fmt_weight_pr(pr):
         if not pr:
             return None
-        return {'weight': pr['weight'], 'reps': pr['reps'], 'date': pr['date'].strftime('%d.%m.%Y')}
+        return {'weight': pr['weight'], 'reps': pr['reps'], 'position': pr['position'],
+                'date': pr['started_at'].strftime('%d.%m.%Y')}
 
-    def fmt_pr_volume(pr):
+    def fmt_e1rm_pr(pr):
         if not pr:
             return None
-        return {'weight': pr['weight'], 'reps': pr['reps'], 'volume': pr['volume'], 'date': pr['date'].strftime('%d.%m.%Y')}
+        return {'e1rm': pr['e1rm'], 'weight': pr['weight'], 'reps': pr['reps'], 'position': pr['position'],
+                'date': pr['started_at'].strftime('%d.%m.%Y')}
 
     return jsonify({
         'exercise_id': exercise.id,
         'name': exercise.name,
         'is_unilateral': exercise.is_unilateral,
-        'position': position,
-        'pr_max_weight': fmt_pr(data['pr_max_weight']),
-        'pr_max_volume': fmt_pr_volume(data['pr_max_volume']),
-        'chart_labels': data['chart_labels'],
-        'chart_weights': data['chart_weights'],
-        'chart_min_weights': data['chart_min_weights'],
-        'chart_volumes': data['chart_volumes'],
+        'selected_position': progress['selected_position'],
+        'series': progress['series'],
+        'pr_weight': fmt_weight_pr(progress['pr_weight']),
+        'pr_e1rm': fmt_e1rm_pr(progress['pr_e1rm']),
     })
 
 
@@ -1006,7 +1095,7 @@ def gym_add_exercise():
             is_unilateral=request.form.get('is_unilateral') == 'on',
         ))
         db.session.commit()
-    return redirect(url_for('gym.gym_dashboard'))
+    return redirect(url_for('gym.gym_uebungen'))
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
@@ -1040,7 +1129,7 @@ def gym_delete_exercise(exercise_id):
     if not exercise.session_exercises and not exercise.template_exercises:
         db.session.delete(exercise)
         db.session.commit()
-    return redirect(url_for('gym.gym_dashboard'))
+    return redirect(url_for('gym.gym_uebungen'))
 
 
 @gym_bp.route('/gym/push/subscribe', methods=['POST'])

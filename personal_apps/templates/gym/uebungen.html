@@ -1,0 +1,232 @@
+{% extends 'gym/_base.html' %}
+
+{# Übungen (spec 6.2): the exercise catalogue. One responsive composition --
+   unlike Heute there is no phone/desktop split (nothing in the spec calls
+   for one). The server renders every exercise exactly once, grouped by
+   muscle group (group_exercises_by_muscle, the default sort); "am längsten
+   ohne PR" and "zuletzt gemacht" are client-side re-orderings of those SAME
+   row elements (see the script block below) -- no second request, and the
+   search box filters whichever ordering is currently showing. Every row's
+   state/last-done/best-weight/best-e1RM was computed in routes.py's
+   gym_uebungen() from a single load_performed() call grouped by
+   exercise_id in Python; nothing here re-queries per exercise. #}
+
+{% block title %}Übungen · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="gym-wrap">
+<div class="uebungen">
+
+    <header class="uebungen__head">
+        <h1>Übungen</h1>
+    </header>
+
+    {% if grouped %}
+    <div class="uebungen__controls">
+        <div class="field grow">
+            <label class="label" for="uebungen-search">Suche</label>
+            <input type="search" id="uebungen-search" class="input" placeholder="Übung suchen…" autocomplete="off">
+        </div>
+        <fieldset class="uebungen-sort">
+            <legend class="label">Sortierung</legend>
+            <label class="uebungen-sort__opt"><input type="radio" name="uebungen-sort" value="muscle" checked> Nach Muskelgruppe</label>
+            <label class="uebungen-sort__opt"><input type="radio" name="uebungen-sort" value="stall"> Am längsten ohne PR</label>
+            <label class="uebungen-sort__opt"><input type="radio" name="uebungen-sort" value="recent"> Zuletzt gemacht</label>
+        </fieldset>
+    </div>
+
+    <div class="panel">
+        <div class="uebungen-table">
+            <div class="uebungen-table__head" aria-hidden="true">
+                <span>Übung</span>
+                <span>Gewicht</span>
+                <span>e1RM</span>
+                <span></span>
+                <span class="uebungen-table__rule"></span>
+            </div>
+            <div id="uebungen-list" class="uebungen-list">
+                {% for group_name, group_entries in grouped %}
+                <button type="button" class="uebungen-group-header label" aria-expanded="false">
+                    <span class="uebungen-group-header__chevron" aria-hidden="true">▸</span>
+                    {{ group_name }} ({{ group_entries|length }})
+                </button>
+                {% for entry in group_entries %}
+                <div class="uebungen-row"
+                     data-name="{{ entry.exercise.name|lower }}"
+                     data-last-done="{{ entry.last_done.isoformat() if entry.last_done else '' }}"
+                     data-since-pr="{{ entry.sessions_since_pr if entry.sessions_since_pr is not none else '' }}">
+                    <div class="uebungen-row__name-cell">
+                        <a href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise.id) }}" class="name">{{ entry.exercise.name }}</a>
+                        {% if entry.chip_label %}<span class="chip chip--{{ entry.chip_class }}">{{ entry.chip_label }}</span>{% endif %}
+                        <p class="label uebungen-row__meta">{% if entry.last_done %}Zuletzt {{ entry.last_done.strftime('%d.%m.%Y') }}{% else %}Noch nie gemacht{% endif %}</p>
+                    </div>
+                    <span class="uebungen-row__weight">{% if entry.best_weight is not none %}<span class="load__val">{{ entry.best_weight }}</span><span class="load__unit">kg</span>{% else %}<span class="uebungen-row__dash">—</span>{% endif %}</span>
+                    <span class="uebungen-row__e1rm">{{ entry.best_e1rm if entry.best_e1rm is not none else '—' }}</span>
+                    <span class="uebungen-row__delete-cell">
+                        {% if entry.can_delete %}
+                        <form method="post" action="{{ url_for('gym.gym_delete_exercise', exercise_id=entry.exercise.id) }}" onsubmit="return confirm('Übung löschen?')">
+                            <button type="submit" class="icon-btn" aria-label="{{ entry.exercise.name }} löschen" title="Übung löschen">✕</button>
+                        </form>
+                        {% endif %}
+                    </span>
+                    <span class="uebungen-row__rule" aria-hidden="true"></span>
+                </div>
+                {% endfor %}
+                {% endfor %}
+            </div>
+        </div>
+        <p class="empty" id="uebungen-empty" hidden>Keine Übungen gefunden.</p>
+    </div>
+    {% else %}
+    <div class="panel">
+        <div class="empty">Noch keine Übungen im Katalog.</div>
+    </div>
+    {% endif %}
+
+    <section class="uebungen__add">
+        <div class="panel">
+            <div class="section-head"><span class="label">Neue Übung</span></div>
+            <form method="post" action="{{ url_for('gym.gym_add_exercise') }}" class="add-exercise">
+                <div class="field grow">
+                    <label class="label" for="uebungen-add-name">Name</label>
+                    <input type="text" id="uebungen-add-name" name="name" class="input" placeholder="z. B. Bankdrücken" required>
+                </div>
+                <div class="field grow">
+                    <label class="label" for="uebungen-add-group">Muskelgruppe</label>
+                    <select id="uebungen-add-group" name="muscle_group" class="select">
+                        <option value="">— optional —</option>
+                        {% for mg in muscle_groups %}
+                        <option value="{{ mg }}">{{ mg }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label class="label" for="uebungen-add-rest">Pause (Sek.)</label>
+                    <input type="number" id="uebungen-add-rest" name="default_rest_seconds" min="0" class="input input--num" placeholder="90">
+                </div>
+                <label class="uebungen-check">
+                    <input type="checkbox" name="is_unilateral" class="check">
+                    <span class="label">Einseitig (pro Seite)</span>
+                </label>
+                <button type="submit" class="btn btn--live">Hinzufügen</button>
+            </form>
+        </div>
+    </section>
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Search + sort, entirely client-side over the rows the server already
+// rendered (grouped by muscle group). Sorting never fabricates new DOM --
+// it moves the existing .uebungen-row / .uebungen-group-header nodes, so
+// the "divided row" borders (.uebungen-row + .uebungen-row in gym.css) and
+// every other per-row detail keep working unmodified regardless of order.
+//
+// Groups start collapsed: Übungen is meant to be scannable as a short list
+// of muscle groups first, not a permanently-open wall of every exercise's
+// stats -- expand/collapse is a manual click, tracked via aria-expanded on
+// the header button itself (also what screen readers announce). An active
+// search overrides manual state and force-opens whichever groups still
+// have a match, so results are never hidden behind a collapsed header.
+(function () {
+    var list = document.getElementById('uebungen-list');
+    if (!list) return;
+
+    var originalOrder = Array.prototype.slice.call(list.children);          // the default grouped order, captured once
+    var rows = Array.prototype.slice.call(list.querySelectorAll('.uebungen-row'));
+    var headers = Array.prototype.slice.call(list.querySelectorAll('.uebungen-group-header'));
+    var searchInput = document.getElementById('uebungen-search');
+    var emptyNote = document.getElementById('uebungen-empty');
+
+    function rowsInGroup(header) {
+        var out = [];
+        var sib = header.nextElementSibling;
+        while (sib && !sib.classList.contains('uebungen-group-header')) {
+            if (sib.classList.contains('uebungen-row')) out.push(sib);
+            sib = sib.nextElementSibling;
+        }
+        return out;
+    }
+
+    headers.forEach(function (header) {
+        header.addEventListener('click', function () {
+            header.setAttribute('aria-expanded', header.getAttribute('aria-expanded') === 'true' ? 'false' : 'true');
+            render();
+        });
+    });
+
+    function compareStall(a, b) {
+        var av = a.dataset.sincePr, bv = b.dataset.sincePr;
+        var aNone = av === '', bNone = bv === '';
+        if (aNone !== bNone) return aNone ? 1 : -1;   // no/too-little history sorts last, not first -- unproven, not overdue
+        if (!aNone && av !== bv) return Number(bv) - Number(av);   // most sessions since PR first
+        return a.dataset.name.localeCompare(b.dataset.name, 'de');
+    }
+
+    function compareRecent(a, b) {
+        var av = a.dataset.lastDone, bv = b.dataset.lastDone;
+        var aNone = av === '', bNone = bv === '';
+        if (aNone !== bNone) return aNone ? 1 : -1;   // never done sorts last
+        if (!aNone && av !== bv) return av < bv ? 1 : -1;   // ISO 8601 strings compare lexicographically = chronologically; most recent first
+        return a.dataset.name.localeCompare(b.dataset.name, 'de');
+    }
+
+    function currentSort() {
+        var checked = list.ownerDocument.querySelector('input[name="uebungen-sort"]:checked');
+        return checked ? checked.value : 'muscle';
+    }
+
+    function render() {
+        var mode = currentSort();
+        var query = (searchInput && searchInput.value.trim().toLowerCase()) || '';
+
+        if (mode === 'muscle') {
+            originalOrder.forEach(function (node) { list.appendChild(node); });
+        } else {
+            var comparator = mode === 'recent' ? compareRecent : compareStall;
+            rows.slice().sort(comparator).forEach(function (node) { list.appendChild(node); });
+        }
+
+        if (mode !== 'muscle') {
+            // Flat modes: no groups, just every matching row.
+            headers.forEach(function (header) { header.hidden = true; });
+            rows.forEach(function (row) {
+                row.hidden = !(!query || row.dataset.name.indexOf(query) !== -1);
+            });
+        } else {
+            headers.forEach(function (header) {
+                var groupRows = rowsInGroup(header);
+                var matching = groupRows.filter(function (row) {
+                    return !query || row.dataset.name.indexOf(query) !== -1;
+                });
+                // Searching overrides the manual collapse state so a match
+                // is never hidden; with no query, the header's own toggle rules.
+                var open = query ? matching.length > 0 : header.getAttribute('aria-expanded') === 'true';
+                header.hidden = query ? matching.length === 0 : false;
+                header.classList.toggle('is-open', open);
+                groupRows.forEach(function (row) {
+                    var matches = !query || row.dataset.name.indexOf(query) !== -1;
+                    row.hidden = !(open && matches);
+                });
+            });
+        }
+
+        // Collapsed groups mean zero rows are *visible* by design -- that's
+        // not the same as the search finding nothing, which is the only
+        // time this note should show.
+        var anyMatch = !query || rows.some(function (row) { return row.dataset.name.indexOf(query) !== -1; });
+        if (emptyNote) emptyNote.hidden = anyMatch;
+    }
+
+    list.ownerDocument.querySelectorAll('input[name="uebungen-sort"]').forEach(function (radio) {
+        radio.addEventListener('change', render);
+    });
+    if (searchInput) searchInput.addEventListener('input', render);
+
+    render();
+})();
+</script>
+{% endblock %}

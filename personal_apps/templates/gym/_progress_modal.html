@@ -1,0 +1,88 @@
+{# Quick per-exercise progress modal: PRs + recent history without leaving the
+   page. Extracted from session_detail.html so exercise_detail.html (Task 12)
+   can include the exact same component. Self-contained -- markup plus the
+   behaviour that drives it.
+
+   It fetches JSON (not HTML) from /gym/exercises/<id>/progress.json, so the
+   response is injected with textContent-escaped values and nothing needs
+   script-execution tricks. Chart rendering delegates to the shared GymChart
+   helper (gym.js) so this modal's chart and the full exercise-detail page's
+   chart never drift into two different looks. GymChart/GymUtils are defined by
+   gym.js in <head>; Chart.js itself is only touched when a chart actually
+   renders (a user click, well after load), so a page including this partial
+   just needs Chart.js present by then. #}
+<div class="modal hidden" id="progress-modal">
+    <div class="modal__box">
+        <div class="modal__head">
+            <h2 class="modal__title" id="progress-modal-title">Fortschritt</h2>
+            <button type="button" class="icon-btn" id="progress-modal-close" aria-label="Schließen">✕</button>
+        </div>
+        <div class="modal__body" id="progress-modal-body"></div>
+    </div>
+</div>
+
+<script>
+(function setupProgressModal() {
+    const modal = document.getElementById('progress-modal');
+    const title = document.getElementById('progress-modal-title');
+    const body = document.getElementById('progress-modal-body');
+    if (!modal) return;
+
+    const esc = window.GymUtils.escapeHtml;
+    let modalChart = null;
+
+    function render(data) {
+        let html = '';
+        if (data.pr_weight && data.pr_e1rm) {
+            html += `<div class="pr-grid">
+                <div class="pr-card"><div class="label">Max. Gewicht</div><div class="val">${esc(data.pr_weight.weight)} kg</div><div class="sub">${esc(data.pr_weight.reps)} Wdh. &middot; Pos. ${esc(data.pr_weight.position)} &middot; ${esc(data.pr_weight.date)}</div></div>
+                <div class="pr-card"><div class="label">Bestes e1RM</div><div class="val">${esc(data.pr_e1rm.e1rm)} kg</div><div class="sub">${esc(data.pr_e1rm.weight)} kg &times; ${esc(data.pr_e1rm.reps)} &middot; Pos. ${esc(data.pr_e1rm.position)} &middot; ${esc(data.pr_e1rm.date)}</div></div>
+            </div>`;
+        }
+        if (data.selected_position) {
+            html += `<div class="modal-position-note">Basierend auf Position ${esc(data.selected_position)} im Workout (gleiche Reihenfolge wie heute)</div>`;
+        }
+        if (data.series && data.series.length) {
+            html += '<div class="modal-chart-wrap"><canvas id="modal-chart"></canvas></div>';
+        } else {
+            html += '<div class="empty">Noch keine erledigten Sätze für diese Übung.</div>';
+        }
+        html += `<div style="margin-top:14px"><a href="/gym/exercises/${data.exercise_id}" class="btn btn--ghost btn--sm">Vollständige Ansicht &amp; Diagramm →</a></div>`;
+        body.innerHTML = html;
+
+        if (modalChart) {
+            modalChart.destroy();
+            modalChart = null;
+        }
+        if (data.series && data.series.length) {
+            modalChart = GymChart.renderProgressChart(document.getElementById('modal-chart'), {
+                series: data.series,
+                tokens: GymChart.resolveTokens(),
+            });
+        }
+    }
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.progress-open-btn');
+        if (btn) {
+            const exerciseId = btn.dataset.exerciseId;
+            const position = btn.dataset.position;
+            title.textContent = 'Fortschritt';
+            body.innerHTML = '<div class="empty">Lädt…</div>';
+            modal.classList.remove('hidden');
+            fetch(`/gym/exercises/${exerciseId}/progress.json?position=${encodeURIComponent(position)}`, { credentials: 'same-origin' })
+                .then((r) => r.json())
+                .then((data) => { title.textContent = data.name; render(data); })
+                .catch(() => { body.innerHTML = '<div class="empty">Fehler beim Laden.</div>'; });
+            return;
+        }
+        if (e.target.id === 'progress-modal-close' || e.target === modal) {
+            modal.classList.add('hidden');
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') modal.classList.add('hidden');
+    });
+})();
+</script>
