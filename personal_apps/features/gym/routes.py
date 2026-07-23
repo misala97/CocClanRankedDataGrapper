@@ -356,6 +356,22 @@ def session_detail(session_id):
                     volumes[row.session_id] = volumes.get(row.session_id, 0.0) + stats.row_volume(row)
             comparable = [volume for volume in volumes.values() if volume > 0]
         data = stats.session_report(current, history, comparable_session_volumes=comparable)
+        # session_report()'s entries carry only plain (weight, reps) tuples --
+        # PerformedExercise is deliberately ORM-free (stats.py has zero
+        # SQLAlchemy dependency, see its module docstring). The "correct a
+        # past set" affordance needs a real SessionSet.id to POST to
+        # gym_update_set, so attach the real rows here instead. `current`
+        # (and therefore data['exercises'], built from it 1:1 in order) came
+        # from performed_from_session()'s filtered/ordered walk of
+        # session_.exercises -- skip a replaced-away original, skip an
+        # exercise with no completed sets. Re-deriving that exact filter and
+        # zipping lines each entry back up with its real SessionExercise.
+        reported_session_exercises = [
+            se for se in session_.exercises
+            if not se.replaced_by and any(s.completed for s in se.sets)
+        ]
+        for entry, se in zip(data['exercises'], reported_session_exercises):
+            entry['set_rows'] = [s for s in se.sets if s.completed]
         return render_template('gym/session_finished.html', session=session_, **data)
 
     # A replaced original is hidden from the active view, so its suggestion
@@ -600,7 +616,9 @@ def gym_update_set(set_id):
     session. Deliberately narrow -- unlike gym_toggle_set_complete, this
     never touches `completed`, and works regardless of session.finished_at
     (that route's edit form is only shown for active sessions; this one's
-    form is only shown for finished ones, in session_detail.html)."""
+    form is the quiet "Sätze korrigieren" disclosure in
+    session_finished.html, one per exercise, shown only for finished
+    sessions)."""
     set_ = db.get_or_404(SessionSet, set_id)
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))

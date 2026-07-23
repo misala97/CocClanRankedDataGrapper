@@ -65,19 +65,42 @@
         <div class="section-head"><span class="label">Nach Übung</span></div>
         {% if exercises %}
         {% for entry in exercises %}
-        <div class="ex-report">
-            <div class="ex-report__main">
-                <div class="name">{{ entry.name }}</div>
-                <div class="label ex-report__sets">Pos. {{ entry.position }} · {{ entry.sets_display }}</div>
+        <div class="ex-report-row">
+            <div class="ex-report">
+                <div class="ex-report__main">
+                    <div class="name">{{ entry.name }}</div>
+                    <div class="label ex-report__sets">Pos. {{ entry.position }} · {{ entry.sets_display }}</div>
+                </div>
+                {% if entry.verdict == 'rekord' %}
+                <span class="chip chip--record">Rekord</span>
+                {% elif entry.verdict == 'stagniert' %}
+                <span class="chip chip--stall">{{ entry.sessions_since_pr }} ohne PR</span>
+                {% elif entry.verdict == 'steigend' %}
+                <span class="chip chip--up">+{{ entry.volume_delta_pct }} % Vol.</span>
+                {% elif entry.verdict == 'neu' %}
+                <span class="chip chip--neu">Erste Aufzeichnung</span>
+                {% endif %}
             </div>
-            {% if entry.verdict == 'rekord' %}
-            <span class="chip chip--record">Rekord</span>
-            {% elif entry.verdict == 'stagniert' %}
-            <span class="chip chip--stall">{{ entry.sessions_since_pr }} ohne PR</span>
-            {% elif entry.verdict == 'steigend' %}
-            <span class="chip chip--up">+{{ entry.volume_delta_pct }} % Vol.</span>
-            {% elif entry.verdict == 'neu' %}
-            <span class="chip chip--neu">Erste Aufzeichnung</span>
+            {% if entry.set_rows %}
+            {# Quiet correction affordance -- fixing a typo'd weight/reps after
+               the fact, not a primary action, so it stays a closed-by-default
+               native disclosure rather than competing with the chip/flare for
+               attention. Each set posts individually to the untouched
+               gym_update_set endpoint. #}
+            <details class="set-correct">
+                <summary class="set-correct__toggle">✏️ Sätze korrigieren</summary>
+                <div class="set-correct__body">
+                    {% for s in entry.set_rows %}
+                    <form method="post" action="{{ url_for('gym.gym_update_set', set_id=s.id) }}" class="set-correct__row">
+                        <span class="label set-correct__idx">{{ loop.index }}</span>
+                        <input type="number" name="weight" step="0.5" min="0" class="input input--num" value="{{ s.weight }}" aria-label="{{ entry.name }}, Satz {{ loop.index }}, Gewicht in kg">
+                        <span class="load__unit">kg</span><span class="load__x">×</span>
+                        <input type="number" name="reps" min="0" class="input input--num" value="{{ s.reps }}" aria-label="{{ entry.name }}, Satz {{ loop.index }}, Wiederholungen">
+                        <button type="submit" class="icon-btn" aria-label="Satz {{ loop.index }} speichern" title="Speichern">💾</button>
+                    </form>
+                    {% endfor %}
+                </div>
+            </details>
             {% endif %}
         </div>
         {% endfor %}

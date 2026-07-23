@@ -34,4 +34,8 @@ def test_session_pages_render_for_every_finished_session(client):
             WorkoutSession.finished_at.isnot(None)).all()]
     for session_id in ids:
         assert client.get('/gym/session/{}'.format(session_id)).status_code == 200
-        assert client.get('/gym/session/{}/summary'.format(session_id)).status_code == 200
+        # /summary is a redirect now (a finished workout is one page under
+        # /gym/session/<id>) -- kept working for old bookmarks/history.
+        # Follow it through to the real destination so this smoke test still
+        # catches a broken render, not just a broken redirect.
+        assert client.get('/gym/session/{}/summary'.format(session_id), follow_redirects=True).status_code == 200

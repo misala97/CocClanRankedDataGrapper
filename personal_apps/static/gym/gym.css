@@ -172,7 +172,7 @@ svg { display: block; }
 
 /* Neutral, unmistakable focus. Focus is orthogonal to the five-state model,
    so it never borrows a semantic hue. */
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
   border-radius: var(--r-inset);
@@ -958,12 +958,40 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 @media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
 .stat__value.is-record { color: var(--record); text-shadow: var(--glow-record); }
 
-/* Nach Übung: a divided list inside one panel, not a card per row */
+/* Nach Übung: a divided list inside one panel, not a card per row. Each row
+   is wrapped (.ex-report-row) so the optional correction disclosure below
+   the summary line still counts as "one row" for the divider -- otherwise a
+   <details> sitting between two .ex-report siblings would break the
+   adjacent-sibling border on every row that follows one with sets to edit. */
+.ex-report-row + .ex-report-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
 .ex-report { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
-.ex-report + .ex-report { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
 .ex-report__main { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
 .ex-report__sets { margin-top: 2px; }
 .ex-report .chip { flex: none; }
+
+/* correction affordance: closed-by-default native disclosure (no JS, free
+   keyboard support via <summary>'s implicit button semantics) revealing one
+   quiet weight/reps form per set. Deliberately styled at .label weight --
+   smaller and dimmer than the chip beside it -- so it never competes with
+   the verdict chip or the record flare above for attention. */
+.set-correct { margin-top: var(--sp-1); }
+.set-correct__toggle {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  min-block-size: 44px;
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+  color: var(--dim);
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.set-correct__toggle::-webkit-details-marker { display: none; }
+.set-correct__toggle:hover { color: var(--ink); }
+.set-correct[open] > .set-correct__toggle { color: var(--ink); }
+.set-correct__body { display: flex; flex-direction: column; gap: var(--sp-2); padding-bottom: var(--sp-1); }
+.set-correct__row { display: flex; align-items: center; gap: var(--sp-2); }
+.set-correct__idx { inline-size: 1.25rem; flex: none; text-align: center; }
+.set-correct__row .input--num { inline-size: 4rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
 
 .note-stall + .note-stall { margin-top: var(--sp-2); }
 
