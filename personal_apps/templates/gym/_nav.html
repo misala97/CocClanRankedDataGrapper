@@ -70,3 +70,19 @@
 <div class="nav-footer">
     <a href="/logout" class="label">Abmelden</a>
 </div>
+<script>
+    // gym.css's mobile `order` puts .nav-footer last visually, but CSS
+    // `order` does not change keyboard tab order in any current browser
+    // (confirmed empirically -- Tab still follows DOM order, landing here
+    // straight after the three tab-bar links). .nav-footer is included
+    // ahead of a page's real content in every template that pulls this
+    // partial in, so once the whole document has actually parsed -- not
+    // just this include -- move it to be the last node in <body> for real,
+    // so focus order matches the visual order above it. Harmless on desktop:
+    // .nav-footer is display:none there and out-of-flow elements never
+    // enter the tab sequence regardless of DOM position.
+    document.addEventListener('DOMContentLoaded', function () {
+        var footer = document.querySelector('.nav-footer');
+        if (footer) { document.body.appendChild(footer); }
+    });
+</script>

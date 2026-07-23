@@ -651,6 +651,22 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    44px tap strip. Desktop already has its own logout link in .topbar. */
 .nav-footer { display: flex; justify-content: center; }
 .nav-footer a { display: inline-flex; align-items: center; justify-content: center; min-block-size: 44px; padding-inline: var(--sp-4); }
+
+/* _nav.html is included ahead of a page's own content -- by _base.html
+   before {% block content %}, and by the three templates Tasks 7/8/12
+   haven't migrated to the shell yet, ahead of their own body markup. On
+   mobile, everything else _nav.html renders is out of normal flow (.topbar
+   is display:none, .resume/.tabbar are position:fixed), so unpatched,
+   .nav-footer would land as the first in-flow child of <body> and render
+   above the page's real content instead of below it. Making <body> a column
+   flex container on mobile only, and giving .nav-footer the sole non-zero
+   `order`, pushes it after every other in-flow child -- whatever they are,
+   on whichever template -- without moving it in the DOM or touching the
+   include contract the old templates still depend on. */
+@media (max-width: 899px) {
+  body { display: flex; flex-direction: column; }
+  .nav-footer { order: 1; }
+}
 @media (min-width: 900px) {
   .nav-footer { display: none; }
 }
