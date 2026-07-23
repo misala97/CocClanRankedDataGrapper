@@ -1,0 +1,10 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+   SHARED Sign In / Register toggle — two real links (full navigation), not
+   a JS tab panel, so each route's own server-rendered error state renders
+   correctly without client-side state to reconcile. Reads `active_tab`
+   ('login' | 'register'), set by the including page before this include.
+   ═══════════════════════════════════════════════════════════════════════ -#}
+<nav class="auth-toggle" aria-label="Sign in or register">
+    <a href="/login" class="auth-toggle-link{% if active_tab == 'login' %} is-active{% endif %}"{% if active_tab == 'login' %} aria-current="page"{% endif %}>Sign In</a>
+    <a href="/register" class="auth-toggle-link{% if active_tab == 'register' %} is-active{% endif %}"{% if active_tab == 'register' %} aria-current="page"{% endif %}>Register</a>
+</nav>

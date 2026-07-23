@@ -1,0 +1,54 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+   SHARED content panel (left) — brand mark + product pitch. Identical on
+   /login and /register, in every state (including register's success
+   takeover, which only replaces the form panel). Self-contained, no params.
+   ═══════════════════════════════════════════════════════════════════════ -#}
+<aside class="auth-panel">
+    <a href="/" class="auth-brand">
+        <span class="auth-crest">
+            <span class="auth-crest-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
+                    <path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                    <path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/>
+                    <path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/>
+                    <path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/>
+                    <path d="M15.5 9H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5S16.33 9 15.5 9z"/>
+                    <path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/>
+                    <path d="M8.5 15H10v-1.5c0-.83-.67-1.5-1.5-1.5S7 12.67 7 13.5 7.67 15 8.5 15z"/>
+                </svg>
+            </span>
+        </span>
+        <span class="auth-brand-text">CoC Analytics</span>
+    </a>
+
+    <div class="auth-pitch">
+        <h1 class="auth-headline">One command center for the clan</h1>
+        <p class="auth-pitch-body">War, CWL, Raid, Ranked, and Roster — one place, real verdicts, not spreadsheets and screenshots.</p>
+
+        <ul class="auth-points">
+            <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+                <span>Verdicts over raw numbers</span>
+            </li>
+            <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-3-3.87"/><path d="M7 21v-2a4 4 0 0 1 3-3.87"/><circle cx="9" cy="7" r="4"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>Built for leaders and members alike</span>
+            </li>
+            <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 12 8 12 10 6 14 18 16 12 21 12"/></svg>
+                <span>Live war &amp; raid tracking</span>
+            </li>
+        </ul>
+    </div>
+
+    <svg class="auth-reticle" viewBox="0 0 280 280" aria-hidden="true" focusable="false">
+        <circle cx="140" cy="140" r="60"/>
+        <circle cx="140" cy="140" r="100"/>
+        <circle cx="140" cy="140" r="139"/>
+        <line x1="140" y1="6" x2="140" y2="46"/>
+        <line x1="140" y1="234" x2="140" y2="274"/>
+        <line x1="6" y1="140" x2="46" y2="140"/>
+        <line x1="234" y1="140" x2="274" y2="140"/>
+    </svg>
+</aside>

@@ -2,101 +2,49 @@
 <html lang="en">
 {% set page_title = 'Register – CoC Analytics' %}
 {% include '_head.html' %}
-        body { display: flex; align-items: center; justify-content: center; padding: 24px; }
-        body::before {
-            content: '';
-            position: fixed; inset: 0; pointer-events: none;
-            background:
-                radial-gradient(ellipse 50% 50% at 30% 40%, rgba(240,165,0,0.05) 0%, transparent 70%),
-                radial-gradient(ellipse 40% 40% at 70% 60%, rgba(88,166,255,0.04) 0%, transparent 70%);
-        }
-        .card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 16px; padding: 48px 40px;
-            width: 100%; max-width: 400px;
-            position: relative; z-index: 1;
-            box-shadow: 0 24px 64px rgba(0,0,0,0.4);
-        }
-        .login-logo { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 36px; }
-        .logo-icon {
-            width: 38px; height: 38px;
-            background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border-radius: 9px; display: flex; align-items: center; justify-content: center;
-            font-size: 18px; box-shadow: 0 0 20px rgba(240,165,0,0.3);
-        }
-        .login-logo span { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 20px; letter-spacing: 0.5px; }
-        .title { font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 700; text-align: center; margin-bottom: 6px; }
-        .subtitle { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 32px; }
-        .form-group { margin-bottom: 18px; }
-        label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 7px; letter-spacing: 0.4px; text-transform: uppercase; }
-        input[type="text"], input[type="password"] {
-            width: 100%; padding: 11px 14px;
-            background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-size: 14px;
-            font-family: 'DM Sans', sans-serif;
-            transition: border-color 0.15s, box-shadow 0.15s; outline: none;
-        }
-        input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(240,165,0,0.12); }
-        .error-msg {
-            background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.25);
-            border-radius: 8px; padding: 10px 14px;
-            font-size: 13px; color: var(--red); margin-bottom: 20px;
-        }
-        .success-msg {
-            background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.25);
-            border-radius: 8px; padding: 16px 14px;
-            font-size: 14px; color: var(--green); text-align: center; line-height: 1.6;
-        }
-        .btn {
-            width: 100%; padding: 12px;
-            background: linear-gradient(135deg, var(--accent), var(--acc2));
-            border: none; border-radius: 8px;
-            font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700;
-            letter-spacing: 0.5px; color: #0d1117; cursor: pointer;
-            transition: opacity 0.15s, box-shadow 0.15s; margin-top: 8px;
-        }
-        .btn:hover { opacity: 0.9; box-shadow: 0 4px 20px rgba(240,165,0,0.25); }
-        .links { display: flex; flex-direction: column; gap: 8px; margin-top: 24px; text-align: center; }
-        .links a { font-size: 13px; color: var(--muted); transition: color 0.15s; }
-        .links a:hover { color: var(--text); }
+        {% include 'auth/_auth_style.html' %}
     </style>
 </head>
 <body>
-<div class="card">
-    <div class="login-logo">
-        <div class="logo-icon">⚔️</div>
-        <span>CoC Analytics</span>
-    </div>
-    <div class="title">Create Account</div>
-    <div class="subtitle">Your account will need admin approval before you can log in</div>
+<div class="auth-shell">
+    {% include 'auth/_auth_panel.html' %}
 
-    {% if success %}
-    <div class="success-msg">
-        ✓ {{ success }}<br><br>
-        <a href="/login" style="color:var(--green);font-weight:600;">← Back to login</a>
-    </div>
-    {% else %}
+    <main class="auth-form-col">
+        <div class="auth-form-wrap">
+            {% if success %}
+            <div class="auth-success">
+                <span class="auth-success-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span>
+                <h2 class="auth-success-title">Account Created</h2>
+                <span class="auth-pending-tag">Pending Approval</span>
+                <p class="auth-success-body">{{ success }}</p>
+                <a href="/login" class="auth-submit auth-submit-link">Back to Sign In</a>
+            </div>
+            {% else %}
+            {% set active_tab = 'register' %}
+            {% include 'auth/_auth_toggle.html' %}
 
-    {% if error %}
-    <div class="error-msg">⚠ {{ error }}</div>
-    {% endif %}
+            <form method="POST" class="auth-form" novalidate>
+                {% if error %}
+                <div class="auth-error" role="alert">{{ error }}</div>
+                {% endif %}
 
-    <form method="POST">
-        <div class="form-group">
-            <label for="username">Username</label>
-            <input type="text" id="username" name="username" autocomplete="username" autofocus minlength="3" maxlength="30" required>
+                <div class="auth-field">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" value="{{ request.form.get('username', '') }}" autocomplete="username" autofocus minlength="3" maxlength="30" required>
+                </div>
+                <div class="auth-field">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" autocomplete="new-password" minlength="6" required>
+                </div>
+
+                <button type="submit" class="auth-submit">Register</button>
+            </form>
+            {% include 'auth/_auth_submit_script.html' %}
+            {% endif %}
         </div>
-        <div class="form-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" autocomplete="new-password" minlength="6" required>
-        </div>
-        <button type="submit" class="btn">Register</button>
-    </form>
-
-    <div class="links">
-        <a href="/login">Already have an account? Sign in</a>
-    </div>
-    {% endif %}
+    </main>
 </div>
 </body>
 </html>
