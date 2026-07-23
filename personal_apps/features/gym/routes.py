@@ -271,24 +271,56 @@ def performed_from_session(session_):
 
 @gym_bp.route('/gym', strict_slashes=False)
 @login_required
-def gym_dashboard():
+def gym_heute():
+    now = dt.datetime.utcnow()
     active_session = _get_active_session()
-    exercises = Exercise.query.order_by(Exercise.name).all()
-    templates = WorkoutTemplate.query.order_by(WorkoutTemplate.name).all()
-    past_sessions = (
+
+    # Eager-loaded: each routine panel shows its own exercise list, and
+    # walking .exercises / .exercise per template without this would be an
+    # N+1 (one query per template, one more per template-exercise) -- exactly
+    # the pattern this page exists to avoid (see load_performed() below).
+    templates = (
+        WorkoutTemplate.query
+        .options(joinedload(WorkoutTemplate.exercises).joinedload(TemplateExercise.exercise))
+        .order_by(WorkoutTemplate.name)
+        .all()
+    )
+    routine_sessions = (
+        WorkoutSession.query
+        .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.template_id.isnot(None))
+        .all()
+    )
+    recent_sessions = (
         WorkoutSession.query
         .filter(WorkoutSession.finished_at.isnot(None))
         .order_by(WorkoutSession.started_at.desc())
-        .limit(20)
+        .limit(5)
         .all()
     )
+    catalogue_groups = {e.muscle_group or stats.NO_GROUP_LABEL for e in Exercise.query.all()}
+
+    # The one bulk load this whole page runs on -- every completed set ever
+    # logged, across every exercise. Every stats.py call below is fed from
+    # this single result; must not be called again no matter how many of
+    # them need it (see load_performed()'s own docstring).
+    performed = load_performed()
+    rows_by_exercise = {}
+    session_started_at = {}
+    for row in performed:
+        rows_by_exercise.setdefault(row.exercise_id, []).append(row)
+        session_started_at[row.session_id] = row.started_at
+
     return render_template(
-        'gym/dashboard.html',
+        'gym/heute.html',
+        now=now,
         active_session=active_session,
-        exercises_by_group=stats.group_exercises_by_muscle(exercises, MUSCLE_GROUPS),
+        consistency=stats.consistency(list(session_started_at.values()), now),
+        routines=stats.routine_memory(templates, routine_sessions, now),
+        recent_sessions=recent_sessions,
+        stalls=stats.stall_report(rows_by_exercise),
+        balance=stats.muscle_group_volume(performed, catalogue_groups, now),
+        tonnage=stats.weekly_tonnage(performed, now),
         templates=templates,
-        past_sessions=past_sessions,
-        muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
     )
 
@@ -706,7 +738,7 @@ def gym_delete_session(session_id):
     # TODO(Task 11): gym.gym_verlauf doesn't exist yet -- deleting a finished
     # workout should return to workout history, not the dashboard. Point this
     # at gym.gym_verlauf once that route is built.
-    return redirect(url_for('gym.gym_dashboard'))
+    return redirect(url_for('gym.gym_heute'))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/update_template', methods=['POST'])
@@ -736,6 +768,20 @@ def gym_save_as_template(session_id):
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
+@gym_bp.route('/gym/templates/<int:template_id>/rename', methods=['POST'])
+@login_required
+def gym_rename_template(template_id):
+    """Heute's small per-routine edit affordance. WorkoutTemplate.name carries
+    no unique constraint (unlike Exercise.name), so unlike gym_update_exercise
+    there is no collision case to reject -- any non-empty name is accepted."""
+    template = db.get_or_404(WorkoutTemplate, template_id)
+    new_name = request.form.get('name', '').strip()
+    if new_name:
+        template.name = new_name
+        db.session.commit()
+    return redirect(url_for('gym.gym_heute'))
+
+
 @gym_bp.route('/gym/templates/<int:template_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_template(template_id):
@@ -745,7 +791,7 @@ def gym_delete_template(template_id):
     WorkoutSession.query.filter_by(template_id=template.id).update({'template_id': None})
     db.session.delete(template)
     db.session.commit()
-    return redirect(url_for('gym.gym_dashboard'))
+    return redirect(url_for('gym.gym_heute'))
 
 
 @gym_bp.route('/gym/export')
@@ -929,7 +975,7 @@ def gym_add_exercise():
             is_unilateral=request.form.get('is_unilateral') == 'on',
         ))
         db.session.commit()
-    return redirect(url_for('gym.gym_dashboard'))
+    return redirect(url_for('gym.gym_heute'))
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
@@ -963,7 +1009,7 @@ def gym_delete_exercise(exercise_id):
     if not exercise.session_exercises and not exercise.template_exercises:
         db.session.delete(exercise)
         db.session.commit()
-    return redirect(url_for('gym.gym_dashboard'))
+    return redirect(url_for('gym.gym_heute'))
 
 
 @gym_bp.route('/gym/push/subscribe', methods=['POST'])

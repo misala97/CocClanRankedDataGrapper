@@ -9,13 +9,13 @@
    context automatically by inject_gym_nav_context() in routes.py -- no view
    needs to pass it explicitly.
 
-   Endpoint names: gym.gym_heute / gym.gym_uebungen / gym.gym_verlauf don't
-   exist until Tasks 9-11 build them. Every <a href> below points at
-   gym.gym_dashboard (the only real page today) -- but each tab's *is-active*
-   check already compares against its real, future endpoint name, so the
-   Task 11 rewire only has to change the href/url_for() targets, not the
-   active-state logic. Today that means no tab is lit while on the
-   dashboard; that is expected and temporary, not a bug. #}
+   Endpoint names: gym.gym_uebungen / gym.gym_verlauf don't exist until
+   Tasks 10-11 build them (gym.gym_heute is real as of Task 9). Every
+   <a href> below still points at gym.gym_heute (the only real page so far)
+   -- but each tab's *is-active* check already compares against its real,
+   future endpoint name, so the Task 11 rewire only has to change the
+   href/url_for() targets, not the active-state logic. Today that means only
+   the Heute tab is ever lit; that is expected and temporary, not a bug. #}
 {% set gym_nav_items = [
     {'label': 'Heute', 'endpoint': 'gym.gym_heute'},
     {'label': 'Übungen', 'endpoint': 'gym.gym_uebungen'},
@@ -26,7 +26,7 @@
     <span class="topbar__brand">Gym Tracker</span>
     <div class="topbar__nav">
         {% for item in gym_nav_items %}
-        <a href="{{ url_for('gym.gym_dashboard') }}" class="topbar__link{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
+        <a href="{{ url_for('gym.gym_heute') }}" class="topbar__link{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
         {% endfor %}
         <a href="/logout" class="topbar__link">Abmelden</a>
     </div>
@@ -63,7 +63,7 @@
 
 <nav class="tabbar" aria-label="Hauptnavigation">
     {% for item in gym_nav_items %}
-    <a href="{{ url_for('gym.gym_dashboard') }}" class="tabbar__tab{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
+    <a href="{{ url_for('gym.gym_heute') }}" class="tabbar__tab{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
     {% endfor %}
 </nav>
 

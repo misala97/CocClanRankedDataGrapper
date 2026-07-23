@@ -1001,6 +1001,131 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .finished-actions form { margin-inline-start: auto; }
 
 /* ============================================================================
+   HEUTE  ·  the landing page (heute.html)
+   ----------------------------------------------------------------------------
+   One template, two compositions: a single CSS Grid whose named areas are
+   fully redefined per breakpoint. Phone stacks single-column in launcher
+   order (head, routines, start, recent, board); desktop rearranges into a
+   planning cockpit (head+start as one bar, the three-panel board, then
+   routines/recent as two columns). No markup differs between the two --
+   only grid-template-areas/-columns change, plus one button re-skin below.
+   .hbar / .vbars / .vbar already exist (built in Task 5 for this page); only
+   layout glue and the two new list/disclosure patterns are added here.
+   ============================================================================ */
+
+.heute {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "head"
+    "routines"
+    "start"
+    "recent"
+    "board";
+}
+@media (min-width: 900px) {
+  .heute {
+    grid-template-columns: 3fr 2fr;
+    grid-template-areas:
+      "head     start"
+      "divider  divider"
+      "board    board"
+      "routines recent";
+    align-items: start;
+    gap: var(--sp-6);
+  }
+}
+
+.heute__head     { grid-area: head; }
+.heute__start    { grid-area: start; }
+.heute__routines { grid-area: routines; }
+.heute__recent   { grid-area: recent; }
+.heute__board    { grid-area: board; display: flex; flex-direction: column; gap: var(--sp-3); }
+.heute__board .panel + .panel { margin-top: 0; }   /* .heute__board's own gap already spaces them; avoid doubling up */
+
+/* the bar's dividing line, as its own full-width grid row -- not a border on
+   .heute__head/.heute__start individually, which (once the start-form wraps
+   to two lines in its narrower column) would end up at two different
+   heights instead of reading as one bar's bottom edge. Phone doesn't have
+   this row at all: a genuinely desktop-only element, hidden rather than
+   given a phone-side grid-area (see spec 6.1's "hidden in CSS" allowance). */
+.heute__divider { display: none; }
+
+@media (min-width: 900px) {
+  .heute__divider { display: block; grid-area: divider; border: 0; block-size: 1px; background: var(--edge); margin: 0; }
+  .heute__board { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
+  .heute__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
+  .heute__start { display: flex; align-items: flex-end; }
+  .heute__start form, .heute__start .heute__active-note { inline-size: 100%; }
+}
+
+.heute__title h1 { margin-bottom: var(--sp-1); }
+.heute__window-label { display: none; }
+.heute__consistency { color: var(--dim); font-size: var(--t-sm); }
+@media (min-width: 900px) {
+  .heute__window-label { display: block; margin-bottom: var(--sp-1); text-align: right; }
+  .heute__consistency-block { text-align: right; }
+}
+
+/* free-workout-start form: fields flow, wrap gracefully on a phone */
+.heute-start-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
+.heute-start-form .btn { flex: none; }
+/* phone: a secondary path (routines' own Starten buttons are primary, spec
+   6.1); desktop: the bar's one deliberate action, promoted to live/amber.
+   Same button, same markup -- only the skin changes with the breakpoint. */
+@media (min-width: 900px) {
+  .heute__start .btn--ghost {
+    background: var(--live); color: var(--ground); border-color: var(--live);
+    box-shadow: var(--press-live);
+  }
+  .heute__start .btn--ghost:hover { background: var(--live-hi); }
+}
+
+.heute__active-note { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+/* one chassis panel per routine -- not rows in a shared panel (spec 6.1) */
+.routine__title { min-inline-size: 0; }
+.routine__exercises { margin: var(--sp-2) 0 var(--sp-3); overflow-wrap: anywhere; }
+
+/* edit affordance: closed by default, anchored under its toggle as a small
+   popover rather than pushed inline -- so opening it never reflows the card
+   or squeezes the rename input into whatever width a flex item shrinks to. */
+.routine__edit { position: relative; flex: none; }
+.routine__edit-toggle {
+  display: inline-grid; place-items: center;
+  inline-size: 44px; block-size: 44px;
+  color: var(--dim); border-radius: var(--r-control);
+  cursor: pointer; list-style: none;
+  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+.routine__edit-toggle::-webkit-details-marker { display: none; }
+.routine__edit-toggle:hover { color: var(--ink); background: var(--raised); }
+.routine__edit[open] > .routine__edit-toggle { color: var(--ink); background: var(--raised); }
+.routine__edit-body {
+  position: absolute; z-index: 2; right: 0; top: calc(100% + var(--sp-1));
+  inline-size: max(220px, min(280px, calc(100vw - 3rem)));
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--raised);
+  border: 1px solid var(--edge-hi);
+  border-radius: var(--r-panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.routine__edit-form { display: flex; gap: var(--sp-2); }
+.routine__edit-form .input { flex: 1; min-inline-size: 0; }
+
+/* Letzte Workouts: a divided list inside one panel, not a card per row --
+   same "not a card per row" philosophy as session_finished.html's Nach
+   Übung rows, but independent classes so the two pages stay free to diverge. */
+.recent-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-block-size: 44px; }
+.recent-row + .recent-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+.recent-row__main { min-inline-size: 0; overflow-wrap: anywhere; }
+.recent-row__meta { margin-top: 2px; }
+
+.tonnage__note { margin-top: var(--sp-2); color: var(--live); }
+
+/* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
 
