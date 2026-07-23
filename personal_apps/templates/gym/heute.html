@@ -79,7 +79,7 @@
         <div class="section-head"><span class="label">Routinen</span></div>
         {% if routines %}
         {% for entry in routines %}
-        <div class="panel routine">
+        <div class="panel routine" style="--i: {{ [loop.index0, 6] | min }}">
             <div class="panel__head">
                 <div class="routine__title">
                     <p class="name">{{ entry.template.name }}</p>
