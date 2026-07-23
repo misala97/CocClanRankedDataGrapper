@@ -1126,6 +1126,61 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .tonnage__note { margin-top: var(--sp-2); color: var(--live); }
 
 /* ============================================================================
+   ÜBUNGEN  ·  the exercise catalogue (uebungen.html)
+   ----------------------------------------------------------------------------
+   One responsive composition, no phone/desktop split (spec 6.2). Search and
+   sort are entirely client-side over the rows the server renders once (see
+   uebungen.html's own script) -- sorting moves the real .uebungen-row /
+   .uebungen-group-header nodes rather than re-rendering, so the divided-list
+   border below and every other row detail survive any reorder untouched.
+
+   [hidden] must win over a row/header's own `display: flex` -- a bare class
+   selector ties the UA stylesheet's default `[hidden]{display:none}` on
+   specificity, and author rules win ties, so without the boost below a
+   "hidden" row would still render.
+   ============================================================================ */
+
+.uebungen__head { margin-bottom: var(--sp-4); }
+
+.uebungen__controls {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.uebungen-sort {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3);
+  flex: 1 1 auto; border: 0;
+}
+.uebungen-sort legend { padding: 0; margin-bottom: var(--sp-1); inline-size: 100%; }
+.uebungen-sort__opt {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  min-block-size: 36px;
+  font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim);
+  cursor: pointer;
+}
+.uebungen-sort__opt input { accent-color: var(--live); }
+
+.uebungen-group-header { padding: var(--sp-2) 0; margin-top: var(--sp-1); }
+.uebungen-group-header:first-child { margin-top: 0; }
+
+/* one divided row per exercise -- same "not a card per row" pattern as
+   .recent-row / .ex-report-row */
+.uebungen-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3);
+  min-block-size: 44px;
+}
+.uebungen-row + .uebungen-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+.uebungen-row[hidden], .uebungen-group-header[hidden] { display: none; }
+
+.uebungen-row__main { flex: 1 1 12rem; min-inline-size: 0; overflow-wrap: anywhere; }
+.uebungen-row__meta { margin-top: 2px; }
+.uebungen-row__best { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.uebungen-row__e1rm { white-space: nowrap; }
+.uebungen-row .chip { flex: none; }
+.uebungen-row__delete { flex: none; }
+
+.uebungen-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
+
+/* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
 

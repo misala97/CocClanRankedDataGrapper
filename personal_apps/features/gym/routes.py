@@ -32,6 +32,16 @@ def gym_service_worker():
 
 DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest time is given
 
+# stats.exercise_state()'s return value -> (chip CSS modifier, display label),
+# spec 5.6's table. A state of None means "no chip" and has no entry here --
+# callers must check before indexing.
+EXERCISE_STATE_CHIP = {
+    'neu': ('neu', 'Neu'),
+    'rekord': ('record', 'Rekord'),
+    'stagniert': ('stall', 'Stagniert'),
+    'steigend': ('up', 'Steigend'),
+}
+
 
 def _to_float(value, fallback=None):
     try:
@@ -864,6 +874,77 @@ def gym_export():
     return resp
 
 
+@gym_bp.route('/gym/uebungen')
+@login_required
+def gym_uebungen():
+    exercises = Exercise.query.order_by(Exercise.name).all()
+
+    # Delete-eligibility depends on ANY session_exercises/template_exercises
+    # row existing, not just ones with a completed set -- so it can't reuse
+    # rows_by_exercise below. Exercise.session_exercises/.template_exercises
+    # are lazy relationships (models.py) that would issue one query per
+    # exercise if touched per-row here; two bulk id sets instead, each
+    # gathered once regardless of catalogue size.
+    exercise_ids_with_sessions = {
+        row.exercise_id for row in db.session.query(SessionExercise.exercise_id).distinct()
+    }
+    exercise_ids_with_templates = {
+        row.exercise_id for row in db.session.query(TemplateExercise.exercise_id).distinct()
+    }
+
+    # The one bulk load this whole page runs on -- every completed set ever
+    # logged, across the whole catalogue. Every exercise's state/last-done/
+    # best-weight/best-e1RM below is computed from this single result,
+    # grouped by exercise_id in Python; must not be queried again per
+    # exercise (see load_performed()'s own docstring, spec 5.4).
+    performed = load_performed()
+    rows_by_exercise = {}
+    for row in performed:
+        rows_by_exercise.setdefault(row.exercise_id, []).append(row)
+
+    entries_by_id = {}
+    for exercise in exercises:
+        rows = rows_by_exercise.get(exercise.id, [])
+        # dominant_position() requires at least one row -- a brand new
+        # exercise (no rows) has no position to speak of, and exercise_state
+        # returns 'neu' from its own empty-rows check before position is
+        # ever consulted, so None is a safe stand-in here.
+        position = stats.dominant_position(rows) if rows else None
+        best_e1rm = max((stats.best_e1rm(row) for row in rows), default=None)
+        state = stats.exercise_state(rows, position=position)
+        chip_class, chip_label = EXERCISE_STATE_CHIP.get(state, (None, None))
+        entries_by_id[exercise.id] = {
+            'exercise': exercise,
+            'state': state,
+            'chip_class': chip_class,
+            'chip_label': chip_label,
+            'last_done': max((row.started_at for row in rows), default=None),
+            'best_weight': max((stats.best_weight(row) for row in rows), default=None),
+            'best_e1rm': round(best_e1rm, 1) if best_e1rm is not None else None,
+            'sessions_since_pr': stats.sessions_since_pr(rows, position=position) if rows else None,
+            'can_delete': (
+                exercise.id not in exercise_ids_with_sessions
+                and exercise.id not in exercise_ids_with_templates
+            ),
+        }
+
+    # Default/grouped view (spec 6.2's "nach Muskelgruppe"). The two flat
+    # sorts ("am längsten ohne PR", "zuletzt gemacht") are client-side
+    # re-orderings of these SAME rows in uebungen.html's own script, not a
+    # second server round trip -- every exercise's data attributes carry
+    # what that script needs (see the template).
+    grouped = [
+        (group_name, [entries_by_id[e.id] for e in group_exercises])
+        for group_name, group_exercises in stats.group_exercises_by_muscle(exercises, MUSCLE_GROUPS)
+    ]
+
+    return render_template(
+        'gym/uebungen.html',
+        grouped=grouped,
+        muscle_groups=MUSCLE_GROUPS,
+    )
+
+
 def _exercise_progress_shim(rows, position):
     """Temporary shim: the old templates predate stats.py's key names. Deleted
     when exercise_detail.html and session_finished.html are rebuilt.
@@ -975,7 +1056,7 @@ def gym_add_exercise():
             is_unilateral=request.form.get('is_unilateral') == 'on',
         ))
         db.session.commit()
-    return redirect(url_for('gym.gym_heute'))
+    return redirect(url_for('gym.gym_uebungen'))
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
@@ -1009,7 +1090,7 @@ def gym_delete_exercise(exercise_id):
     if not exercise.session_exercises and not exercise.template_exercises:
         db.session.delete(exercise)
         db.session.commit()
-    return redirect(url_for('gym.gym_heute'))
+    return redirect(url_for('gym.gym_uebungen'))
 
 
 @gym_bp.route('/gym/push/subscribe', methods=['POST'])
