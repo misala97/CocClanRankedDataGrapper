@@ -33,18 +33,16 @@
 
     function render(data) {
         let html = '';
-        if (data.pr_max_weight) {
-            const volLabel = data.is_unilateral ? 'Bestes Satzvolumen (beidseitig)' : 'Bestes Satzvolumen';
-            const volReps = data.is_unilateral ? `${esc(data.pr_max_volume.reps)} je Seite` : esc(data.pr_max_volume.reps);
+        if (data.pr_weight && data.pr_e1rm) {
             html += `<div class="pr-grid">
-                <div class="pr-card"><div class="label">Max. Gewicht</div><div class="val">${esc(data.pr_max_weight.weight)} kg</div><div class="sub">${esc(data.pr_max_weight.reps)} Wdh. &middot; ${esc(data.pr_max_weight.date)}</div></div>
-                <div class="pr-card"><div class="label">${volLabel}</div><div class="val">${esc(data.pr_max_volume.volume)} kg</div><div class="sub">${esc(data.pr_max_volume.weight)} kg &times; ${volReps} &middot; ${esc(data.pr_max_volume.date)}</div></div>
+                <div class="pr-card"><div class="label">Max. Gewicht</div><div class="val">${esc(data.pr_weight.weight)} kg</div><div class="sub">${esc(data.pr_weight.reps)} Wdh. &middot; Pos. ${esc(data.pr_weight.position)} &middot; ${esc(data.pr_weight.date)}</div></div>
+                <div class="pr-card"><div class="label">Bestes e1RM</div><div class="val">${esc(data.pr_e1rm.e1rm)} kg</div><div class="sub">${esc(data.pr_e1rm.weight)} kg &times; ${esc(data.pr_e1rm.reps)} &middot; Pos. ${esc(data.pr_e1rm.position)} &middot; ${esc(data.pr_e1rm.date)}</div></div>
             </div>`;
         }
-        if (data.position) {
-            html += `<div class="modal-position-note">Basierend auf Position ${esc(data.position)} im Workout (gleiche Reihenfolge wie heute)</div>`;
+        if (data.selected_position) {
+            html += `<div class="modal-position-note">Basierend auf Position ${esc(data.selected_position)} im Workout (gleiche Reihenfolge wie heute)</div>`;
         }
-        if (data.chart_labels && data.chart_labels.length) {
+        if (data.series && data.series.length) {
             html += '<div class="modal-chart-wrap"><canvas id="modal-chart"></canvas></div>';
         } else {
             html += '<div class="empty">Noch keine erledigten Sätze für diese Übung.</div>';
@@ -56,12 +54,10 @@
             modalChart.destroy();
             modalChart = null;
         }
-        if (data.chart_labels && data.chart_labels.length) {
+        if (data.series && data.series.length) {
             modalChart = GymChart.renderProgressChart(document.getElementById('modal-chart'), {
-                labels: data.chart_labels,
-                weights: data.chart_weights,
-                minWeights: data.chart_min_weights,
-                volumes: data.chart_volumes,
+                series: data.series,
+                tokens: GymChart.resolveTokens(),
             });
         }
     }

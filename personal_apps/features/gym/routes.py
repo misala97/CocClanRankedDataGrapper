@@ -1018,62 +1018,18 @@ def gym_uebungen():
     )
 
 
-def _exercise_progress_shim(rows, position):
-    """Temporary shim: the old templates predate stats.py's key names. Deleted
-    when exercise_detail.html and session_finished.html are rebuilt.
-
-    stats.exercise_progress() doesn't carry two things this old page's
-    template still needs: the heaviest single SET by volume (a different
-    number from stats.py's e1RM-based pr_e1rm, which the new pages use
-    instead), and each row's lowest set weight (for the chart's low end).
-    It also deliberately reports pr_weight/pr_e1rm across every position
-    regardless of the position filter -- fine for the pages Task 10/12
-    build, but this old page's PR cards were always scoped to whatever
-    position is currently filtered. All of that is cheap to rebuild here
-    from the same rows stats.exercise_progress() was given.
-    """
-    data = stats.exercise_progress(rows, position=position)
-    shown = [row for row in rows if row.position == position] if position is not None else rows
-
-    pr_max_weight = None   # {'weight', 'reps', 'date'}
-    pr_max_volume = None   # {'weight', 'reps', 'volume', 'date'}
-    for row in shown:
-        for weight, reps in row.sets:
-            if pr_max_weight is None or weight > pr_max_weight['weight']:
-                pr_max_weight = {'weight': weight, 'reps': reps, 'date': row.started_at}
-            volume = stats.set_volume(weight, reps, row.is_unilateral)
-            if pr_max_volume is None or volume > pr_max_volume['volume']:
-                pr_max_volume = {'weight': weight, 'reps': reps, 'volume': volume, 'date': row.started_at}
-
-    return {
-        'rows': [
-            {
-                'session': {'started_at': row.started_at},
-                'position': row.position,
-                'sets_display': ', '.join('{}kg×{}'.format(weight, reps) for weight, reps in row.sets),
-                'volume': stats.row_volume(row),
-            }
-            for row in reversed(shown)
-        ],
-        'pr_max_weight': pr_max_weight,
-        'pr_max_volume': pr_max_volume,
-        'chart_labels': [row.started_at.strftime('%d.%m.%Y') for row in shown],
-        'chart_weights': [stats.best_weight(row) for row in shown],
-        'chart_min_weights': [min(weight for weight, _ in row.sets) for row in shown],
-        'chart_volumes': [stats.row_volume(row) for row in shown],
-        'available_positions': data['available_positions'],
-        'selected_position': data['selected_position'],
-    }
-
-
 @gym_bp.route('/gym/exercises/<int:exercise_id>')
 @login_required
 def exercise_detail(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     position = request.args.get('position', type=int)
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
-    data = _exercise_progress_shim(rows, position)
-    return render_template('gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS, **data)
+    data = stats.exercise_progress(rows, position=position)
+    chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
+    return render_template(
+        'gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS,
+        chip_class=chip_class, chip_label=chip_label, **data,
+    )
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/progress.json')
@@ -1090,30 +1046,28 @@ def gym_exercise_progress_json(exercise_id):
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
     progress = stats.exercise_progress(rows, position=position)
     if position is not None and not progress['table']:
-        position = None
-    data = _exercise_progress_shim(rows, position)
+        progress = stats.exercise_progress(rows, position=None)
 
-    def fmt_pr(pr):
+    def fmt_weight_pr(pr):
         if not pr:
             return None
-        return {'weight': pr['weight'], 'reps': pr['reps'], 'date': pr['date'].strftime('%d.%m.%Y')}
+        return {'weight': pr['weight'], 'reps': pr['reps'], 'position': pr['position'],
+                'date': pr['started_at'].strftime('%d.%m.%Y')}
 
-    def fmt_pr_volume(pr):
+    def fmt_e1rm_pr(pr):
         if not pr:
             return None
-        return {'weight': pr['weight'], 'reps': pr['reps'], 'volume': pr['volume'], 'date': pr['date'].strftime('%d.%m.%Y')}
+        return {'e1rm': pr['e1rm'], 'weight': pr['weight'], 'reps': pr['reps'], 'position': pr['position'],
+                'date': pr['started_at'].strftime('%d.%m.%Y')}
 
     return jsonify({
         'exercise_id': exercise.id,
         'name': exercise.name,
         'is_unilateral': exercise.is_unilateral,
-        'position': position,
-        'pr_max_weight': fmt_pr(data['pr_max_weight']),
-        'pr_max_volume': fmt_pr_volume(data['pr_max_volume']),
-        'chart_labels': data['chart_labels'],
-        'chart_weights': data['chart_weights'],
-        'chart_min_weights': data['chart_min_weights'],
-        'chart_volumes': data['chart_volumes'],
+        'selected_position': progress['selected_position'],
+        'series': progress['series'],
+        'pr_weight': fmt_weight_pr(progress['pr_weight']),
+        'pr_e1rm': fmt_e1rm_pr(progress['pr_e1rm']),
     })
 
 

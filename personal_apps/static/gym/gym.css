@@ -1204,6 +1204,123 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .verlauf-row__delete { flex: none; }
 
 /* ============================================================================
+   EXERCISE DETAIL  ·  the single-exercise instrument (exercise_detail.html)
+   ----------------------------------------------------------------------------
+   Four blocks (spec 6.3): verdict band, chart (position as series, via
+   GymChart.renderProgressChart in gym.js), history table, metadata behind a
+   disclosure. Mobile stacks verdict->chart->history->meta, matching the
+   template's own block order; desktop puts the chart and the verdict/PR rail
+   on one row (chart wide, rail a fixed 22rem) with history and metadata full
+   width below. `.pr-grid`/`.pr-card` are the PROGRESS MODAL section's
+   components above, reused verbatim -- same PR-card concept, same look, on
+   both surfaces (page and modal) since both render the exact same
+   pr_weight/pr_e1rm shape from stats.exercise_progress().
+   ============================================================================ */
+
+.exercise-detail {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "head"
+    "verdict"
+    "chart"
+    "history"
+    "meta";
+}
+@media (min-width: 900px) {
+  .exercise-detail {
+    grid-template-columns: 1fr 22rem;
+    grid-template-areas:
+      "head     head"
+      "chart    verdict"
+      "history  history"
+      "meta     meta";
+    align-items: start;
+    gap: var(--sp-6);
+  }
+  /* No chart/history to lay out (zero history, or a hand-typed position
+     filter with nothing in it) -- let the verdict panel span full width
+     instead of sitting pinned to the right rail with an empty gap beside it. */
+  .exercise-detail--empty {
+    grid-template-areas:
+      "head    head"
+      "verdict verdict"
+      "meta    meta";
+  }
+}
+
+/* Every direct child of .exercise-detail MUST get an explicit grid-area.
+   CSS Grid auto-places anything without one into a fresh implicit row after
+   every named area in the template -- silently, with no error -- which is
+   exactly the bug this comment exists to prevent regressing: an unassigned
+   .exercise-detail__head previously auto-placed itself after "meta",
+   rendering the exercise's own name at the BOTTOM of the page. */
+.exercise-detail__head    { grid-area: head; }
+.exercise-detail__verdict { grid-area: verdict; }
+.exercise-detail__chart   { grid-area: chart; }
+.exercise-detail__history { grid-area: history; }
+.exercise-detail__meta    { grid-area: meta; }
+
+.exercise-detail__name-warning { margin-top: var(--sp-3); }
+
+.exercise-detail__verdict .panel { display: flex; flex-direction: column; gap: var(--sp-3); }
+.verdict-last { margin-top: calc(-1 * var(--sp-1)); color: var(--ink); font-size: var(--t-sm); line-height: 1.5; }
+.verdict-last__sets { display: block; margin-top: 2px; }
+
+/* position filter: real navigation links (?position=N / back to unfiltered),
+   not a client-side toggle -- isolating one slot is a different view of the
+   data, worth its own URL. "active" borrows the same amber = currently-
+   selected convention .topbar__link.is-active / .tabbar__tab.is-active
+   already use, not a repurposed state hue -- selection isn't one of the
+   five states. */
+.exercise-detail__positions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.position-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-block-size: 36px; padding: 0 var(--sp-3);
+  font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--dim);
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-chip);
+  transition: color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+.position-pill:hover { color: var(--ink); border-color: var(--edge-hi); }
+.position-pill.is-active { color: var(--live); border-color: var(--live); background: transparent; box-shadow: var(--glow-live); }
+
+.exercise-detail__chart-wrap { position: relative; block-size: 280px; }
+@media (min-width: 900px) {
+  .exercise-detail__chart-wrap { block-size: 420px; }
+}
+
+.exercise-detail__note { margin-bottom: var(--sp-3); color: var(--dim); font-size: var(--t-meta); line-height: 1.5; }
+.exercise-detail__table-wrap { overflow-x: auto; }
+
+/* metadata: closed-by-default disclosure, deliberately quiet (spec 6.3 --
+   "maintenance, not the reason you opened the page"). Body flows inline
+   (unlike .routine__edit's floating popover) -- there's no tight card here
+   to avoid reflowing. Auto-opened by the template when a rename attempt just
+   bounced off a taken name, so the warning and the form to try again land
+   together instead of the user having to reopen what they just submitted. */
+.meta-edit { margin-top: var(--sp-1); }
+.meta-edit__toggle {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  min-block-size: 44px;
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+  color: var(--dim);
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.meta-edit__toggle::-webkit-details-marker { display: none; }
+.meta-edit__toggle:hover { color: var(--ink); }
+.meta-edit[open] > .meta-edit__toggle { color: var(--ink); }
+.meta-edit__body { margin-top: var(--sp-2); }
+.exercise-detail-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
+
+/* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
 
