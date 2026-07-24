@@ -310,6 +310,16 @@ class ClanWarAttack(db.Model):
     clan_war = db.relationship('ClanWar', back_populates='attacks')
 
 
+class WarCombo(db.Model):
+    __tablename__ = 'war_combo'
+
+    label_a       = db.Column(db.String(20), primary_key=True)
+    label_b       = db.Column(db.String(20), primary_key=True)
+    score         = db.Column(db.Integer, nullable=False)
+    verdict_label = db.Column(db.String(60), nullable=False)
+    created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 # ── Clan War League ───────────────────────────────────────────────────────────
 
 class CWLSeason(db.Model):
