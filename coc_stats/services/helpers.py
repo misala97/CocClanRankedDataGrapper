@@ -6,6 +6,9 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
+from flask import g
+
+from models import WarCombo
 
 load_dotenv(override=True)
 LOCAL_TZ = ZoneInfo(os.getenv("TIMEZONE", "Europe/Berlin"))
@@ -16,6 +19,15 @@ IMPORT_WINDOW     = timedelta(minutes=2)
 
 RAID_DISTRICT_MEDALS     = {1: 135, 2: 225, 3: 350, 4: 405, 5: 460}
 RAID_CAPITAL_PEAK_MEDALS = {2: 180, 3: 360, 4: 585, 5: 810, 6: 1115, 7: 1240, 8: 1260, 9: 1375, 10: 1450}
+
+
+def get_combos():
+    """Load the war_combo table once per request, cached on Flask's g.
+    Returns {(label_a, label_b): (score, verdict_label)} for get_war_verdict()."""
+    if 'war_combos' not in g:
+        g.war_combos = {(c.label_a, c.label_b): (c.score, c.verdict_label) for c in WarCombo.query.all()}
+    return g.war_combos
+
 
 def _is_attack(log):
     return log.attack is True or log.attack == 1
