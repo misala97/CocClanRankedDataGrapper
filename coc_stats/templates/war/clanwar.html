@@ -571,7 +571,7 @@ function buildWVDetails(v) {
             <span>Attacks: <strong style="color:var(--text)">${v.attacks_used} / 2</strong></span>
             <span>Combo: <strong style="color:var(--text)">${comboKey}</strong></span>
             <span>Score: <strong style="color:var(--accent)">${v.score}</strong></span>
-            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${v.label}</span></span>
+            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${escapeHTML(v.label)}</span></span>
         </div>
         <div class="atk-cards">${cards}</div>
     </div></div>`;
@@ -609,8 +609,8 @@ function buildWarVerdictTable() {
             `${renderWarStars(a.stars)} ${renderAttackLabel(a.label)} <span style="font-size:11px;color:var(--muted);">→ ${escapeHTML(a.defender_name)} TH${a.defender_th}</span>`
         ).join('<br>') || `<span style="color:var(--muted);opacity:.45;">—</span>`;
 
-        const badgeContent = (v.badge === 'badge-undefined' ? '?' : v.label) + (v.score > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${v.score}` : '');
-        const badgeTitle = v.badge === 'badge-undefined' ? v.label : '';
+        const badgeContent = (v.badge === 'badge-undefined' ? '?' : escapeHTML(v.label)) + (v.score > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${v.score}` : '');
+        const badgeTitle = v.badge === 'badge-undefined' ? escapeHTML(v.label) : '';
         const badgeCell = (v.badge === 'badge-undefined' && CAN_EDIT_COMBOS)
             ? `<button type="button" class="judgment ${v.badge} judgment-add-btn" title="${badgeTitle} — click to name it" onclick="event.stopPropagation(); openComboAdd(this, '${v.player_tag}')">${badgeContent}</button>`
             : `<span class="judgment ${v.badge}" title="${badgeTitle}">${badgeContent}</span>`;
