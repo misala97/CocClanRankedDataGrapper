@@ -668,7 +668,7 @@ def _raid_level_mult(level):
         level = int(level)
     except (TypeError, ValueError):
         level = 5
-    return 1.0 + (level - 4) * (0.10 if level >= 5 else 0.05)
+    return 1.0 + (level - 4) * (0.175 if level >= 5 else 0.05)
 
 
 def raid_score_verdict(adj_per_attack, solo_wipes, att_count, missing_text=''):
