@@ -11,6 +11,7 @@ from services.helpers import (
     _ranked_verdict, _calc_ranked_score,
     _district_stats, _raid_verdict, LOCAL_TZ,
     _is_attack, week_cutoff, filter_import_window,
+    get_combos,
 )
 
 
@@ -37,7 +38,7 @@ def _war_player_verdict(player_tag, player_th, player_attacks, all_attacks_in_wa
     while len(labels) < 2:
         labels.append('no_attack')
 
-    score, verdict_label, badge = get_war_verdict(labels[0], labels[1])
+    score, verdict_label, badge = get_war_verdict(labels[0], labels[1], get_combos())
     return score, verdict_label, badge, labels
 
 
@@ -1262,6 +1263,13 @@ def _calculate_scores_bulk(player_tags, period='month'):
 # hash of the roster so a join/leave auto-invalidates; TTL bounds staleness.
 _BULK_STANDING_CACHE = {}          # (period, roster_hash) -> (expires_at, results)
 _BULK_STANDING_TTL   = 300         # seconds
+
+
+def clear_bulk_standing_cache():
+    """Called after a WarCombo is added so the admin's own addition is
+    visible on /player/<tag>'s clan-standing widget immediately, instead of
+    waiting out the up-to-5-minute TTL above."""
+    _BULK_STANDING_CACHE.clear()
 
 
 def _bulk_scores_cached(in_clan_tags, period):
