@@ -701,6 +701,7 @@ function openComboAdd(btn, playerTag) {
     if (!v) return;
     _comboLabels = v.atk_labels;
     const p = ensureComboPop();
+    if (p.matches(':popover-open')) p.hidePopover();
     p.querySelector('#cpError').style.display = 'none';
     p.querySelector('#cpScore').value = '';
     p.querySelector('#cpLabel').value = '';
