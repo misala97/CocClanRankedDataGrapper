@@ -1,13 +1,15 @@
 import datetime as dt
 
 from flask import Blueprint, render_template, request, jsonify
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import ClanWar, ClanWarMember
+from models import ClanWar, ClanWarMember, WarCombo
 from features.auth.routes import _can_edit_clan_war
-from services.helpers import avg_league_name, league_rank, SKIP_LEAGUES
+from services.helpers import avg_league_name, league_rank, SKIP_LEAGUES, get_combos
 from features.war.war_combos import classify_attack, get_war_verdict, get_attack_context
+from features.player.routes import clear_bulk_standing_cache
 
 war_bp = Blueprint('war', __name__)
 
@@ -129,7 +131,7 @@ def clan_war_page():
             while len(labels) < 2:
                 labels.append('no_attack')
 
-            score, verdict_label, badge = get_war_verdict(labels[0], labels[1])
+            score, verdict_label, badge = get_war_verdict(labels[0], labels[1], get_combos())
 
             war_verdicts.append({
                 'player_name':    m.player_name or m.player_tag,
@@ -276,3 +278,36 @@ def war_toggle_member_troll(member_id):
     m.is_troll = not m.is_troll
     db.session.commit()
     return jsonify(ok=True, value=m.is_troll)
+
+
+@war_bp.route('/war/api/combo/add', methods=['POST'])
+def war_add_combo():
+    if not _can_edit_clan_war():
+        return jsonify(error='Forbidden'), 403
+
+    data = request.get_json(silent=True) or {}
+    label_a = str(data.get('label_a') or '').strip()
+    label_b = str(data.get('label_b') or '').strip()
+    verdict_label = str(data.get('verdict_label') or '').strip()
+
+    if not label_a or not label_b:
+        return jsonify(error='Missing attack labels'), 400
+    try:
+        score = int(data.get('score'))
+    except (TypeError, ValueError):
+        return jsonify(error='Score must be a number'), 400
+    if not (0 <= score <= 100):
+        return jsonify(error='Score must be between 0 and 100'), 400
+    if not verdict_label or len(verdict_label) > 60:
+        return jsonify(error='Verdict label must be 1-60 characters'), 400
+
+    a, b = sorted([label_a, label_b])
+    db.session.add(WarCombo(label_a=a, label_b=b, score=score, verdict_label=verdict_label))
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify(error='Combo already named'), 409
+
+    clear_bulk_standing_cache()
+    return jsonify(ok=True)
