@@ -23,6 +23,21 @@
         .selector { min-width: 260px; }
         .selector:focus { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent); }
 
+        /* ── COMBO-ADD POPOVER (admin-only; mirrors player_profile.html's .detail-pop) ── */
+        .judgment-add-btn { appearance: none; -webkit-appearance: none; cursor: pointer; }
+        .judgment-add-btn:hover, .judgment-add-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .combo-pop {
+            position: fixed; margin: 0; inset: auto; background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px 14px; width: 240px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+            color: var(--text); font-family: 'Manrope', sans-serif; z-index: 9999;
+        }
+        .combo-pop h5 { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px; }
+        .cp-row + .cp-row { margin-top: 8px; }
+        .cp-row label { display: block; font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+        .cp-row input { width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; color: var(--text); font-family: 'Manrope', sans-serif; font-size: 13px; }
+        .cp-error { margin-top: 8px; font-size: 11px; color: var(--red); }
+        .cp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
         {% include "war/_war_unit_style.html" %}
     </style>
     <script src="/static/js/war_shared.js"></script>
@@ -473,6 +488,7 @@ registerWarCard(0, { attacks: WAR_ATTACKS });
 
 {% if war_verdicts %}
 const WAR_VERDICTS = {{ war_verdicts | tojson | safe }};
+const CAN_EDIT_COMBOS = {{ can_edit_clan_war | tojson }};
 let wvSort = { col: 'score', dir: 'desc' };
 
 function renderWVStars(n) {
@@ -555,7 +571,7 @@ function buildWVDetails(v) {
             <span>Attacks: <strong style="color:var(--text)">${v.attacks_used} / 2</strong></span>
             <span>Combo: <strong style="color:var(--text)">${comboKey}</strong></span>
             <span>Score: <strong style="color:var(--accent)">${v.score}</strong></span>
-            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${v.label}</span></span>
+            <span>Verdict: <span class="judgment ${v.badge}" style="font-size:10px;padding:2px 8px;">${escapeHTML(v.label)}</span></span>
         </div>
         <div class="atk-cards">${cards}</div>
     </div></div>`;
@@ -593,6 +609,12 @@ function buildWarVerdictTable() {
             `${renderWarStars(a.stars)} ${renderAttackLabel(a.label)} <span style="font-size:11px;color:var(--muted);">→ ${escapeHTML(a.defender_name)} TH${a.defender_th}</span>`
         ).join('<br>') || `<span style="color:var(--muted);opacity:.45;">—</span>`;
 
+        const badgeContent = (v.badge === 'badge-undefined' ? '?' : escapeHTML(v.label)) + (v.score > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${v.score}` : '');
+        const badgeTitle = v.badge === 'badge-undefined' ? escapeHTML(v.label) : '';
+        const badgeCell = (v.badge === 'badge-undefined' && CAN_EDIT_COMBOS)
+            ? `<button type="button" class="judgment ${v.badge} judgment-add-btn" title="${badgeTitle} — click to name it" onclick="event.stopPropagation(); openComboAdd(this, '${v.player_tag}')">${badgeContent}</button>`
+            : `<span class="judgment ${v.badge}" title="${badgeTitle}">${badgeContent}</span>`;
+
         row.innerHTML = `
             <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--muted);font-size:13px;">#${v.map_pos}</td>
             <td>
@@ -601,7 +623,7 @@ function buildWarVerdictTable() {
             </td>
             <td style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.league ? escapeHTML(v.league) : '—'}</td>
             <td style="text-align:center;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;">${v.attacks_used}<span style="font-size:12px;color:var(--muted);font-weight:400;">/2</span></td>
-            <td style="text-align:center;"><span class="judgment ${v.badge}" title="${v.badge === 'badge-undefined' ? v.label : ''}">${v.badge === 'badge-undefined' ? '?' : v.label}${v.score > 0 ? ` <span style="opacity:0.6;font-size:0.9em;">·</span> ${v.score}` : ''}</span></td>
+            <td style="text-align:center;">${badgeCell}</td>
             <td><button type="button" class="action-btn details-toggle" onclick="event.stopPropagation(); toggleWarVerdictDetails(this)">Details</button></td>
         `;
 
@@ -651,6 +673,89 @@ function toggleWarVerdicts() {
     chevron.classList.toggle('open', opening);
     if (opening && !document.getElementById('warVerdictTbody').children.length) buildWarVerdictTable();
 }
+
+// ── Combo-add popover (admin-only; keyboard + touch reachable, escapes table clip) ──
+let comboPop, _comboLabels = null;
+function ensureComboPop() {
+    if (!comboPop) {
+        comboPop = document.createElement('div');
+        comboPop.className = 'combo-pop';
+        comboPop.setAttribute('popover', 'auto');
+        comboPop.setAttribute('role', 'dialog');
+        comboPop.setAttribute('aria-label', 'Name this combo');
+        comboPop.innerHTML = `
+            <h5>Name this combo</h5>
+            <div class="cp-row"><label for="cpScore">Score (0–100)</label><input id="cpScore" type="number" min="0" max="100" step="1"></div>
+            <div class="cp-row"><label for="cpLabel">Verdict label</label><input id="cpLabel" type="text" maxlength="60"></div>
+            <div class="cp-error" id="cpError" style="display:none;"></div>
+            <div class="cp-actions">
+                <button type="button" class="action-btn" onclick="comboPop.hidePopover()">Cancel</button>
+                <button type="button" class="action-btn" onclick="submitComboAdd()">Save</button>
+            </div>`;
+        document.body.appendChild(comboPop);
+    }
+    return comboPop;
+}
+function openComboAdd(btn, playerTag) {
+    const v = WAR_VERDICTS.find(x => x.player_tag === playerTag);
+    if (!v) return;
+    _comboLabels = v.atk_labels;
+    const p = ensureComboPop();
+    if (p.matches(':popover-open')) p.hidePopover();
+    p.querySelector('#cpError').style.display = 'none';
+    p.querySelector('#cpScore').value = '';
+    p.querySelector('#cpLabel').value = '';
+    p.showPopover();
+    const r = btn.getBoundingClientRect();
+    const w = 240;
+    const ph = p.offsetHeight;
+    let top = r.bottom + 6;
+    if (top + ph > window.innerHeight - 12) {
+        top = Math.max(12, r.top - ph - 6);
+    }
+    p.style.left = Math.max(12, Math.min(window.innerWidth - w - 12, r.right - w)) + 'px';
+    p.style.top = top + 'px';
+    p.querySelector('#cpScore').focus();
+}
+function submitComboAdd() {
+    const p = comboPop;
+    const scoreEl = p.querySelector('#cpScore');
+    const labelEl = p.querySelector('#cpLabel');
+    const errEl = p.querySelector('#cpError');
+    const score = parseInt(scoreEl.value, 10);
+    const label = labelEl.value.trim();
+    if (isNaN(score) || score < 0 || score > 100) {
+        errEl.textContent = 'Score must be 0-100.';
+        errEl.style.display = 'block';
+        return;
+    }
+    if (!label) {
+        errEl.textContent = 'Verdict label is required.';
+        errEl.style.display = 'block';
+        return;
+    }
+    fetch('/war/api/combo/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({label_a: _comboLabels[0], label_b: _comboLabels[1], score: score, verdict_label: label})
+    })
+    .then(r => r.json().then(data => ({status: r.status, data})))
+    .then(({status, data}) => {
+        if (status === 200 && data.ok) {
+            location.reload();
+        } else {
+            errEl.textContent = data.error || 'Could not save — try again.';
+            errEl.style.display = 'block';
+        }
+    })
+    .catch(() => {
+        errEl.textContent = 'Network error — try again.';
+        errEl.style.display = 'block';
+    });
+}
+window.addEventListener('scroll', () => {
+    if (comboPop && comboPop.matches(':popover-open')) comboPop.hidePopover();
+}, { passive: true });
 {% endif %}
 
 // ── M5 · inline matchup analysis (mounts the shared buildCompareHTML output —

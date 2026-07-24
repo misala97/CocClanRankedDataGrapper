@@ -39,49 +39,24 @@ def classify_attack(stars, attacker_th, dfn_th, already_3starred, partially_atta
 
 
 # ── Combination verdicts ─────────────────────────────────────────────────────
-# Key:   tuple(sorted([label_a, label_b]))  — order does not matter
-# Value: (score_0_to_100, 'Verdict Label')
-#
-# Add entries here whenever you see a new 'Undefined' combination in a war.
-# Example entries:
-   
-#   (CLEAR, FAILED_CLEAR):             (75,  'Solid'),
-#   (CLEAR, NO_ATTACK):                (40,  'Half Job'),
-#   (NO_ATTACK, NO_ATTACK):            (0,   'No Show'),
-
-WAR_COMBOS = {
-    (CLEAR, CLEAR):                    (100, 'Flawless'),
-    
-    (LOW_CLEAR, CLEAN_UP):             (90,  'War Crimes'),
-    (CLEAR, LOW_CLEAR):                (90, 'Scaredy Cat'),
-    (CLEAR, CLEAN_UP):                  (90, 'Missing Confidence'),
-    
-    (LOW_CLEAR, FARM):                 (75,  'Lazy Farmer'),
-    
-    (CLEAR, FAILED_CLEAR):              (50,  'Fumble'),
-    (FARM, FARM):                      (50,  'Farmer'),
-    (LOW_CLEAR, FAILED_CLEAR):         (50,  'Fumble'),
-    
-    
-    (FAILED_FARM, FARM):                (25,  'Inconsistent Farmer'),
-    (WASTED, FARM):                     (25,  'Inconsistent Farmer'),
-    
-    (FAILED_CLEAR, FAILED_CLEAR):       (15, 'Failure'),
-    (WASTED, WASTED):                  (15, 'Wasted'),
-    (NO_ATTACK, NO_ATTACK):            (0,   'No Show'),
-}
-
-# Normalize all keys so write order never matters
-WAR_COMBOS = {tuple(sorted(k)): v for k, v in WAR_COMBOS.items()}
+# Named combos live in the war_combo DB table (models.WarCombo), added from the
+# '?' badge on /war when an admin sees a first-time combination. This module
+# stays Flask/db-free — get_war_verdict() takes the loaded table as `combos`,
+# supplied by the caller via services.helpers.get_combos().
 
 _DEFAULT_SCORE = 50
 _DEFAULT_LABEL = 'First Time Combination'
 
 
-def get_war_verdict(label_a, label_b):
-    """Look up the combined verdict for two attack labels. Returns (score, label, badge)."""
+def get_war_verdict(label_a, label_b, combos):
+    """Look up the combined verdict for two attack labels.
+
+    combos: {(label_a, label_b) sorted: (score, verdict_label)}, loaded by the
+    caller (see services.helpers.get_combos()) — this function never touches
+    the database itself. Returns (score, label, badge).
+    """
     key = tuple(sorted([label_a, label_b]))
-    score, label = WAR_COMBOS.get(key, (_DEFAULT_SCORE, _DEFAULT_LABEL))
+    score, label = (combos or {}).get(key, (_DEFAULT_SCORE, _DEFAULT_LABEL))
 
     if label == _DEFAULT_LABEL:
         badge = 'badge-undefined'
