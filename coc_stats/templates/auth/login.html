@@ -15,6 +15,7 @@
             {% include 'auth/_auth_toggle.html' %}
 
             <form method="POST" class="auth-form" novalidate>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 {% if error %}
                 <div class="auth-error" role="alert">{{ error }}</div>
                 {% endif %}

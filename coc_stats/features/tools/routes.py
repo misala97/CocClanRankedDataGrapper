@@ -10,6 +10,24 @@ from services.api import api_fetch_player_data
 
 tools_bp = Blueprint('tools', __name__)
 
+# Canonical hero-equipment names — mirrors the EQUIP_HERO / EQUIP_IMAGES maps in
+# templates/tools/equipment.html (the only other place this full name list is kept).
+# equipment_save() uses this to reject any equipment_name the client sends that
+# isn't a real piece of equipment, since EquipmentGoal.equipment_name is otherwise
+# stored (and later rendered) verbatim from client-supplied JSON keys.
+_VALID_EQUIPMENT_NAMES = frozenset({
+    'Barbarian Puppet', 'Earthquake Boots', 'Rage Vial', 'Snake Bracelet', 'Vampstache',
+    'Giant Gauntlet', 'Spiky Ball',
+    'Archer Puppet', 'Frozen Arrow', 'Giant Arrow', 'Healer Puppet', 'Invisibility Vial',
+    'Magic Mirror', 'Monolith Arrow', 'WWE Action Figure', 'Action Figure',
+    'Eternal Tome', 'Fireball', 'Healing Tome', 'Life Gem', 'Rage Gem', 'Lavaloon Puppet',
+    'Electro Boots', 'Haste Vial', 'Hog Rider Puppet', 'Royal Gem', 'Seeking Shield',
+    'Frost Flake', 'Rocket Spear',
+    'Dark Crown', 'Dark Orb', 'Henchmen Puppet', 'Power Pump', 'Noble Iron', 'Meteor Staff',
+    'Iron Pants', 'Metal Pants',
+    'Electro Fangs', 'Fire Heart', 'Flame Blower', 'Rocket Backpack', 'Stun Blast',
+})
+
 _WAR_ORE = {
     8:  (380, 15, 0), 9:  (410, 18, 0), 10: (460, 21, 3), 11: (560, 24, 3),
     12: (610, 27, 4), 13: (710, 30, 4), 14: (810, 33, 5), 15: (960, 36, 5),
@@ -167,8 +185,8 @@ def equipment_calculator():
     _empty = '{"shiny":0,"glowy":0,"starry":0,"attacks":0,"wars":0}'
     if not player:
         return render_template('tools/equipment.html', player=None, equipment=None, error=None,
-                               saved_goals_json='{}', saved_ores_json='{"shiny":0,"glowy":0,"starry":0}',
-                               war_stats_json=_empty, cwl_stats_json=_empty, gain_settings_json='null')
+                               saved_goals={}, saved_ores={'shiny': 0, 'glowy': 0, 'starry': 0},
+                               war_stats_json=_empty, cwl_stats_json=_empty, gain_settings=None)
 
     try:
         data = api_fetch_player_data(player.tag)
@@ -207,8 +225,8 @@ def equipment_calculator():
 
     except RuntimeError as e:
         return render_template('tools/equipment.html', player=player, equipment=None, error=str(e),
-                               saved_goals_json='{}', saved_ores_json='{"shiny":0,"glowy":0,"starry":0}',
-                               war_stats_json=_empty, cwl_stats_json=_empty, gain_settings_json='null')
+                               saved_goals={}, saved_ores={'shiny': 0, 'glowy': 0, 'starry': 0},
+                               war_stats_json=_empty, cwl_stats_json=_empty, gain_settings=None)
 
     goals = {g.equipment_name: {'target': g.target_level, 'priority': g.priority}
              for g in EquipmentGoal.query.filter_by(user_id=user.id).all()}
@@ -244,16 +262,21 @@ def equipment_calculator():
         except Exception:
             db.session.rollback()
 
+    try:
+        gain_settings = json.loads(user.gain_settings) if user.gain_settings else None
+    except (TypeError, ValueError):
+        gain_settings = None
+
     return render_template(
         'tools/equipment.html',
         player=player,
         equipment=equipment,
         error=None,
-        saved_goals_json=json.dumps(goals),
-        saved_ores_json=json.dumps(ores),
+        saved_goals=goals,
+        saved_ores=ores,
         war_stats_json=json.dumps(war_stats),
         cwl_stats_json=json.dumps(cwl_stats),
-        gain_settings_json=user.gain_settings or 'null',
+        gain_settings=gain_settings,
         equip_pulse_json=json.dumps(pulse) if pulse else 'null',
         equip_pulse_since=json.dumps(prev_seen.isoformat()) if prev_seen else 'null',
     )
@@ -262,7 +285,7 @@ def equipment_calculator():
 @tools_bp.route('/tools/equipment/save', methods=['POST'])
 def equipment_save():
     user = _current_user()
-    if not user:
+    if not user or not _any_access():
         return jsonify({'error': 'not logged in'}), 401
 
     data = request.get_json(silent=True) or {}
@@ -276,10 +299,14 @@ def equipment_save():
         user.gain_settings = json.dumps(gain_settings)
 
     incoming = data.get('goals', {})  # {name: {target, priority} | null}
+    if not isinstance(incoming, dict):
+        incoming = {}
 
     existing = {g.equipment_name: g for g in EquipmentGoal.query.filter_by(user_id=user.id).all()}
 
     for name, goal in incoming.items():
+        if name not in _VALID_EQUIPMENT_NAMES:
+            continue
         if goal is None:
             if name in existing:
                 db.session.delete(existing[name])

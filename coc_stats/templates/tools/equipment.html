@@ -935,9 +935,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.eq-slider').forEach(sl => sliderGradient(sl, parseInt(sl.dataset.current), parseInt(sl.dataset.current), parseInt(sl.dataset.max)));
 
     initGoalState();
-    applySaved({ ores: {{ saved_ores_json | default("{}") | safe }}, goals: {{ saved_goals_json | default("{}") | safe }} });
+    applySaved({ ores: {{ saved_ores | default({}) | tojson }}, goals: {{ saved_goals | default({}) | tojson }} });
 
-    OreGain.init({ getBalance, getTotalCost: calcTotalPlanCost, savedSettings: {{ gain_settings_json | default('null') | safe }} });
+    OreGain.init({ getBalance, getTotalCost: calcTotalPlanCost, savedSettings: {{ gain_settings | tojson }} });
     OreGain.applyStarBonus({{ (player.current_th if player else 0) | tojson }}, {{ ((player.league_tier or 'Unranked') if player else 'Unranked') | tojson }});
     OreGain.applyWarStats({{ war_stats_json | default('{}') | safe }});
     OreGain.applyCwlStats({{ cwl_stats_json | default('{}') | safe }});

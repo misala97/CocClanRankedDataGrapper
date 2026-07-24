@@ -299,7 +299,7 @@ def index():
 
     # ── Player-specific hero data ────────────────────────────────────────────
     player_ranked_left        = None
-    player_gain_settings_json = 'null'
+    player_gain_settings      = None
     _zero_stats = '{"shiny":0,"glowy":0,"starry":0,"attacks":0,"wars":0}'
     player_war_stats_json     = _zero_stats
     player_cwl_stats_json     = _zero_stats
@@ -332,7 +332,10 @@ def index():
             from features.tools.routes import _compute_war_stats, _compute_cwl_stats
             _ws = _compute_war_stats(_p.tag)
             _cs = _compute_cwl_stats(_p.tag)
-            player_gain_settings_json = _idx_user.gain_settings or 'null'
+            try:
+                player_gain_settings = json.loads(_idx_user.gain_settings) if _idx_user.gain_settings else None
+            except (TypeError, ValueError):
+                player_gain_settings = None
             player_war_stats_json     = json.dumps(_ws)
             player_cwl_stats_json     = json.dumps(_cs)
             player_th                 = _p.current_th or 0
@@ -376,7 +379,7 @@ def index():
         last_cwl_war=last_cwl_war,
         CLAN_TAG=CLAN_TAG,
         player_ranked_left=player_ranked_left,
-        player_gain_settings_json=player_gain_settings_json,
+        player_gain_settings=player_gain_settings,
         player_war_stats_json=player_war_stats_json,
         player_cwl_stats_json=player_cwl_stats_json,
         player_th=player_th,

@@ -903,7 +903,7 @@
 <script src="/static/js/ore_gain.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    OreGain.init({ savedSettings: {{ player_gain_settings_json|safe }} });
+    OreGain.init({ savedSettings: {{ player_gain_settings | tojson }} });
     OreGain.applyStarBonus({{ player_th|tojson }}, {{ player_league|tojson }});
     OreGain.applyWarStats({{ player_war_stats_json|safe }});
     OreGain.applyCwlStats({{ player_cwl_stats_json|safe }});

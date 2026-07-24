@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request, url_fo
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from features.auth.routes import _current_user
+from features.auth.routes import _any_access, _current_user
 from features.ranked.stats import (
     DEFAULT_WINDOW, VERDICT_BANDS, WINDOWS, build_record_page,
 )
@@ -403,6 +403,8 @@ def ranked_analysis_run():
     user = _current_user()
     if not user or not user.linked_player_tag:
         return jsonify(ok=False, error='Link a player to your account first.'), 403
+    if not _any_access():
+        return jsonify(ok=False, error='Forbidden'), 403
 
     row = db.session.get(RankedWeekAnalysis, user.id)
     if not row:
