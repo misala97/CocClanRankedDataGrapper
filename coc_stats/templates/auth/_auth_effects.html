@@ -1,0 +1,93 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+   SHARED reactive effects — the cursor-chasing targeting lock (.auth-lock,
+   markup in _auth_lock.html), magnetic buttons, a one-time entrance for the
+   live-status row, and the member-count count-up. Pure front-end, no data
+   dependency. Fully skipped under prefers-reduced-motion: reduce (the
+   static resting appearance is the fallback, not a degraded one). Included
+   by both /login and /register.
+   ═══════════════════════════════════════════════════════════════════════ -#}
+<script>
+(function () {
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return;
+
+    // ── Targeting lock: eases toward the REAL cursor position every frame
+    //    (a continuous rAF loop, not a one-shot handler), fixed to the
+    //    viewport so it's visible over the whole shell, not just the panel.
+    //    Left stationary, it keeps closing the gap frame over frame until it
+    //    visibly reaches the pointer — a lerp, not a capped nudge. ──
+    var canHover = !window.matchMedia || window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    var lock = document.querySelector('.auth-lock');
+    if (lock && canHover) {
+        var mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
+        var curX = mouseX, curY = mouseY;
+        var hasMoved = false;
+        var LERP = 0.01125; // half speed again -- ~99% converged after ~12s stationary
+        document.addEventListener('pointermove', function (e) {
+            mouseX = e.clientX; mouseY = e.clientY;
+            if (!hasMoved) { hasMoved = true; curX = mouseX; curY = mouseY; lock.classList.add('is-active'); }
+        }, { passive: true });
+        (function loop() {
+            if (hasMoved) {
+                curX += (mouseX - curX) * LERP;
+                curY += (mouseY - curY) * LERP;
+                lock.style.left = curX.toFixed(1) + 'px';
+                lock.style.top = curY.toFixed(1) + 'px';
+            }
+            requestAnimationFrame(loop);
+        })();
+    }
+
+    // ── Magnetic buttons: submit + toggle links nudge toward the pointer ──
+    var MAGNET_MAX = 12;
+    var clampMagnet = function (v) { return Math.max(-MAGNET_MAX, Math.min(MAGNET_MAX, v)); };
+    var magnets = document.querySelectorAll('.auth-submit, .auth-toggle-link');
+    magnets.forEach(function (el) {
+        var mx = 0, my = 0, mRaf = null;
+        var applyMagnet = function () {
+            el.style.transform = 'translate(' + mx.toFixed(1) + 'px, ' + my.toFixed(1) + 'px)';
+            mRaf = null;
+        };
+        el.addEventListener('pointermove', function (e) {
+            var r = el.getBoundingClientRect();
+            mx = clampMagnet((e.clientX - r.left - r.width / 2) * 0.16);
+            my = clampMagnet((e.clientY - r.top - r.height / 2) * 0.16);
+            if (!mRaf) mRaf = requestAnimationFrame(applyMagnet);
+        });
+        el.addEventListener('pointerleave', function () {
+            mx = 0; my = 0;
+            if (!mRaf) mRaf = requestAnimationFrame(applyMagnet);
+        });
+    });
+
+    // ── Live-status row: one brief entrance, not an orchestrated page load ──
+    var live = document.querySelector('.auth-live');
+    if (live && 'animate' in live) {
+        live.animate(
+            [{ opacity: 0, transform: 'translateY(4px) scale(.96)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
+            { duration: 420, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' }
+        );
+    }
+
+    // ── Member-count figure: counts up from 0 on load instead of just
+    //    appearing — a real number doing real work reads more convincingly
+    //    when it visibly ticks up, not as a fabricated affordance. ──
+    var figVal = document.querySelector('.auth-readout .v');
+    if (figVal) {
+        var target = parseInt(figVal.textContent, 10);
+        if (!isNaN(target)) {
+            var start = null;
+            var DUR = 800;
+            var tick = function (now) {
+                if (start === null) start = now;
+                var p = Math.min(1, (now - start) / DUR);
+                var eased = 1 - Math.pow(1 - p, 3);
+                figVal.textContent = Math.round(eased * target);
+                if (p < 1) requestAnimationFrame(tick);
+            };
+            figVal.textContent = '0';
+            requestAnimationFrame(tick);
+        }
+    }
+})();
+</script>

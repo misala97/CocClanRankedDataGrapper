@@ -1,0 +1,22 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+   SHARED targeting-lock scope — `position: fixed`, so it renders over the
+   ENTIRE auth-shell (both the content panel and the form column), not
+   clipped by .auth-panel's `overflow: hidden`. JS eases its position toward
+   the real cursor coordinates every frame; left stationary a couple of
+   seconds it visibly converges onto the pointer instead of just nudging in
+   its direction. Desktop/mouse only (gated on `hover:hover` + `pointer:fine`
+   in both CSS and JS) — there's no persistent cursor to chase on touch.
+   Included once per page, at the auth-shell level, by both /login and
+   /register.
+   ═══════════════════════════════════════════════════════════════════════ -#}
+<div class="auth-lock" aria-hidden="true">
+    <div class="auth-lock-sweep"></div>
+    <svg class="auth-lock-rings" viewBox="0 0 220 220" focusable="false">
+        <circle cx="110" cy="110" r="46"/>
+        <circle cx="110" cy="110" r="72" class="auth-lock-dashed"/>
+        <line x1="110" y1="4" x2="110" y2="26"/>
+        <line x1="110" y1="194" x2="110" y2="216"/>
+        <line x1="4" y1="110" x2="26" y2="110"/>
+        <line x1="194" y1="110" x2="216" y2="110"/>
+    </svg>
+</div>

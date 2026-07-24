@@ -1,0 +1,199 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+   SHARED auth shell styles — split-screen brand/pitch panel + form panel.
+   Included inside the page's already-open <style> (the _head.html convention).
+   Consumed by BOTH /login and /register so the shell can never drift between
+   the two. No mode hue: this is the one page before any game-mode context
+   exists, so it stays on the sitewide --accent signal only.
+   ═══════════════════════════════════════════════════════════════════════ -#}
+        .auth-shell { min-height: 100vh; display: grid; grid-template-columns: minmax(360px, 40%) 1fr; }
+
+        /* ── Content panel (left, static on both pages/states) ───────────── */
+        .auth-panel {
+            position: relative; overflow: hidden; background: var(--surface);
+            border-right: 1px solid var(--border); padding: 40px 48px;
+            display: flex; flex-direction: column; justify-content: flex-start;
+        }
+        .auth-brand { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; transition: opacity .15s; }
+        .auth-brand:hover { opacity: .82; }
+        .auth-crest {
+            width: 32px; height: 28px; flex-shrink: 0; padding: 1.5px;
+            background: linear-gradient(150deg, var(--accent), var(--acc2));
+            clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+        }
+        .auth-crest-inner {
+            width: 100%; height: 100%; background: var(--bg);
+            clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .auth-crest-inner svg { width: 60%; height: 60%; }
+        .auth-brand-text { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 17px; letter-spacing: .6px; text-transform: uppercase; }
+
+        /* Heartbeat glow — gated to `.is-live` (recon.live_label truthy) so
+           this is a state signal ("something real is happening right now"),
+           never an idle decorative loop. Static otherwise, matching the
+           Ticket component's live-dot rule in DESIGN.md. */
+        .auth-crest.is-live { animation: authCrestPulse 2.4s ease-in-out infinite; }
+        @keyframes authCrestPulse {
+            0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 45%, transparent); }
+            50%      { box-shadow: 0 0 16px 2px color-mix(in oklch, var(--accent) 45%, transparent); }
+        }
+
+        .auth-pitch { margin: auto 0; max-width: 40ch; position: relative; z-index: 1; }
+        .auth-headline {
+            font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+            font-size: clamp(30px, 3.4vw, 44px); line-height: 1.05; letter-spacing: .3px;
+            text-transform: uppercase; text-wrap: balance;
+        }
+        .auth-pitch-body { font-family: 'Manrope', sans-serif; color: var(--muted); font-size: 14.5px; line-height: 1.6; margin-top: 16px; }
+
+        /* ── Live-status readout — real data, not decoration. Only rendered
+           when something is genuinely happening in the clan right now. ── */
+        .auth-live {
+            display: flex; align-items: center; gap: 10px; width: fit-content; margin-top: 22px;
+            padding: 9px 16px; border-radius: 8px;
+            background: color-mix(in oklch, var(--accent) 16%, transparent);
+            border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent);
+            box-shadow: 0 0 22px color-mix(in oklch, var(--accent) 20%, transparent);
+        }
+        .auth-live-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--accent);
+            box-shadow: 0 0 9px color-mix(in oklch, var(--accent) 70%, transparent);
+            animation: authLivePulse 1.8s ease-in-out infinite;
+        }
+        @keyframes authLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+        .auth-live-label { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--accent); }
+
+        /* Reuses _head.html's sitewide `.readout`/`.fig` mono-figure vocabulary
+           (the "signature moment" pattern) instead of inventing a new stat style. */
+        .auth-readout { margin-top: 20px; border-top: none; padding-top: 0; }
+        .auth-readout .fig { padding: 0; }
+
+        .auth-points { list-style: none; margin-top: 32px; display: flex; flex-direction: column; gap: 14px; }
+        .auth-points li { display: flex; align-items: center; gap: 11px; font-family: 'Manrope', sans-serif; font-size: 13.5px; color: var(--text); }
+        .auth-points svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--accent); }
+
+        /* Targeting-lock scope — `position: fixed` so it spans the WHOLE
+           auth-shell (both panel and form column), unclipped by any
+           ancestor's `overflow: hidden`. JS eases `left`/`top` toward the
+           real cursor every animation frame (a continuous lerp loop, not a
+           one-shot event handler), so it visibly chases and, given a couple
+           of stationary seconds, converges onto the pointer — a scope that
+           actually hunts you, not a corner ornament nudged by it. Rotation
+           lives on the inner rings/sweep (a separate transform from the
+           outer position layer) so the two don't fight over one property.
+           Desktop/mouse only — see the `hover:hover` + `pointer:fine` gate
+           below and the matching JS check; there's no persistent cursor to
+           chase on touch. */
+        .auth-lock {
+            position: fixed; top: 0; left: 0; width: 220px; height: 220px;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
+            opacity: 0; transition: opacity .5s ease;
+        }
+        .auth-lock.is-active { opacity: .55; }
+        .auth-lock-rings { width: 100%; height: 100%; display: block; animation: authLockSpin 40s linear infinite; }
+        .auth-lock-rings circle, .auth-lock-rings line { stroke: var(--accent); stroke-width: 1.2; fill: none; }
+        .auth-lock-rings circle.auth-lock-dashed { stroke-dasharray: 3 7; stroke: color-mix(in oklch, var(--accent) 65%, transparent); }
+        /* Radar sweep: a rotating wedge of light, on-brand for the "night
+           ops scope" identity. Screen-blended and low-opacity so it reads
+           as a light sweep, not a filled gradient surface — DESIGN.md's
+           gradient ban is about surface/text fills, not this kind of
+           atmosphere on the one page that's explicitly this system's
+           single deliberate exception to "quiet at rest." */
+        .auth-lock-sweep {
+            position: absolute; inset: 0; border-radius: 50%; mix-blend-mode: screen;
+            background: conic-gradient(from 0deg, color-mix(in oklch, var(--accent) 55%, transparent), transparent 20%);
+            animation: authLockSpin 3.5s linear infinite;
+        }
+        @keyframes authLockSpin { to { transform: rotate(360deg); } }
+        @media not all and (hover: hover) and (pointer: fine) {
+            .auth-lock { display: none; }
+        }
+
+        /* ── Toggle (Sign In / Register — two real links, not a JS tab panel) ── */
+        .auth-toggle { display: flex; gap: 4px; background: var(--surf2); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 28px; }
+        .auth-toggle-link {
+            flex: 1; text-align: center; padding: 9px 0; border-radius: 7px;
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12.5px;
+            letter-spacing: .5px; text-transform: uppercase; color: var(--muted);
+            transition: background .15s, color .15s, transform .15s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .auth-toggle-link:hover { color: var(--text); }
+        .auth-toggle-link.is-active { background: color-mix(in oklch, var(--accent) 16%, transparent); color: var(--accent); }
+        .auth-toggle-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        /* ── Form column (right, everything that changes) ────────────────── */
+        .auth-form-col { display: flex; align-items: center; justify-content: center; padding: 40px 32px; }
+        .auth-form-wrap { width: 100%; max-width: 380px; }
+
+        .auth-field { margin-bottom: 18px; }
+        .auth-field label { display: block; font-family: 'Manrope', sans-serif; font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 7px; }
+        .auth-field input {
+            width: 100%; padding: 11px 14px; background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 14px; font-family: 'Manrope', sans-serif;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .auth-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent); }
+
+        .auth-submit {
+            width: 100%; padding: 12px; margin-top: 6px; border: none; border-radius: 8px; cursor: pointer;
+            background: var(--accent); color: var(--bg);
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13.5px;
+            letter-spacing: .5px; text-transform: uppercase;
+            transition: background .15s, box-shadow .15s, transform .15s cubic-bezier(0.16, 1, 0.3, 1);
+            display: inline-flex; align-items: center; justify-content: center; text-align: center;
+        }
+        .auth-submit:hover { background: var(--acc2); box-shadow: 0 0 16px color-mix(in oklch, var(--accent) 26%, transparent); }
+        .auth-submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .auth-error {
+            background: color-mix(in oklch, var(--red) 8%, transparent); border: 1px solid color-mix(in oklch, var(--red) 30%, transparent);
+            border-radius: 8px; padding: 11px 14px; font-size: 13px; color: oklch(0.72 0.12 25); margin-bottom: 18px; line-height: 1.5;
+        }
+
+        /* ── Register success — full takeover of the form panel only ─────── */
+        .auth-success { text-align: center; padding: 8px 4px; }
+        .auth-success-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 52px; height: 52px; border-radius: 50%; margin-bottom: 18px;
+            background: color-mix(in oklch, var(--green) 14%, transparent); border: 1px solid color-mix(in oklch, var(--green) 34%, transparent);
+            color: var(--green);
+        }
+        .auth-success-icon svg { width: 26px; height: 26px; }
+        .auth-success-title { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 24px; text-transform: uppercase; letter-spacing: .4px; }
+        .auth-pending-tag {
+            display: inline-block; margin-top: 12px; padding: 5px 14px; border-radius: 20px;
+            background: color-mix(in oklch, var(--yellow) 15%, transparent); border: 1px solid color-mix(in oklch, var(--yellow) 38%, transparent);
+            color: var(--yellow); font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: .5px; text-transform: uppercase;
+        }
+        .auth-success-body { margin-top: 18px; font-size: 14px; color: var(--muted); line-height: 1.6; }
+        .auth-submit-link { margin-top: 24px; text-decoration: none; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .auth-brand, .auth-toggle-link, .auth-field input, .auth-submit, .auth-lock { transition: none; }
+            .auth-crest.is-live, .auth-live-dot, .auth-lock-rings, .auth-lock-sweep { animation: none; }
+            .auth-lock { display: none; }
+        }
+
+        /* ── Responsive: content panel compresses to brand + headline only ─
+           Below 860px there isn't room for a genuine two-column split, and
+           this page's whole job is getting to the form fast — so the panel
+           drops to a thin identity band instead of stacking its full pitch
+           above the form. Body sentence, points, and the lock scope are
+           dropped entirely, not just shrunk — a 220px scope roaming a
+           390px-wide screen has nowhere to go regardless of pointer type. ── */
+        @media (max-width: 860px) {
+            .auth-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+            .auth-panel { border-right: none; border-bottom: 1px solid var(--border); padding: 26px 24px; }
+            .auth-pitch { margin: 20px 0 0; max-width: none; }
+            .auth-pitch-body, .auth-points { display: none; }
+            .auth-lock { display: none; }
+            .auth-headline { font-size: clamp(24px, 6vw, 30px); }
+            .auth-form-col { padding: 28px 20px 40px; }
+            /* 44px touch-target floor, matching the sitewide mobile-controls
+               rule in _head.html — measured 35-43px here before this fix. */
+            .auth-toggle-link, .auth-field input, .auth-submit { min-height: 44px; box-sizing: border-box; }
+        }
+        @media (max-width: 420px) {
+            .auth-panel { padding: 20px 18px; }
+            .auth-brand-text { font-size: 15px; }
+        }

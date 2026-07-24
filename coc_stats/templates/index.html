@@ -176,15 +176,39 @@
     .ops-ore-strip {
         display: flex; border: 1px solid var(--ops-line); border-radius: 10px;
         overflow: hidden; text-decoration: none; max-width: 460px;
-        transition: border-color .15s var(--ease), transform .15s var(--ease);
+        transition: border-color .15s var(--ease), transform .15s var(--ease), background .15s var(--ease);
     }
     .ops-ore-strip:hover { border-color: color-mix(in oklch, var(--ops-gold) 40%, transparent); transform: translateY(-1px); }
     .ops-ore-strip:active { transform: translateY(-1px) scale(0.99); transition-duration: .1s; }
-    .ops-ore-cell { flex: 1; padding: 14px 12px; text-align: center; border-right: 1px solid var(--ops-line); }
+    .ops-ore-cell {
+        flex: 1; padding: 13px 12px; display: flex; align-items: center; gap: 9px;
+        border-right: 1px solid var(--ops-line);
+    }
     .ops-ore-cell:last-child { border-right: none; }
-    .ops-ore-icon { width: 16px; height: 16px; object-fit: contain; margin-bottom: 7px; }
-    .ops-ore-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px; line-height: 1; }
-    .ops-ore-sub { font-family: 'Manrope', sans-serif; font-size: 10.5px; color: var(--ops-ink-dim); margin-top: 5px; }
+    .ops-ore-icon { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+    .ops-ore-figs { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    /* Daily gain rate leads — it's the number pulled from real war/CWL/Star Bonus data.
+       Current balance is a close second: it's whatever the member last typed in, easy to
+       go stale, and can't be read from the game at all. */
+    .ops-ore-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 19px; line-height: 1; }
+    .ops-ore-unit { font-size: 11px; font-weight: 600; color: var(--ops-ink-dim); margin-left: 1px; }
+    .ops-ore-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ops-ink-dim); line-height: 1.3; }
+    @media (max-width: 480px) {
+        .ops-ore-cell { padding: 11px 8px; gap: 6px; }
+        .ops-ore-icon { width: 17px; height: 17px; }
+        .ops-ore-val { font-size: 14px; }
+        .ops-ore-sub { font-size: 9px; }
+        .ops-ore-empty { flex-direction: column; align-items: flex-start; gap: 6px; padding: 13px 14px; }
+    }
+    /* First visit — nothing tracked yet. One inviting line instead of three flat zeros;
+       same "teach, don't just say nothing here" pattern the rest of the site uses for
+       empty states. */
+    .ops-ore-empty {
+        flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 14px 16px; font-family: 'Manrope', sans-serif; font-size: 12.5px; color: var(--ops-ink-dim);
+    }
+    .ops-ore-empty b { color: var(--ops-ink); font-weight: 700; }
+    .ops-ore-empty-cta { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--ops-gold); white-space: nowrap; }
 
     /* ── EVENTS BAND (WAR ROOM) ── */
     .ops-events-grid {
@@ -519,21 +543,32 @@
                     {% endif %}
                 </div>
 
-                <a href="/tools/equipment" class="ops-ore-strip" title="Ore balance — open the equipment planner">
+                {# Empty state is decided client-side (see the boot script below) — the
+                   interesting number here is the daily GAIN RATE, pulled from real war/CWL/
+                   Star Bonus data, and that's only known once OreGain finishes computing it.
+                   Balance alone being 0 doesn't mean there's nothing worth showing. #}
+                <a href="/tools/equipment" class="ops-ore-strip" id="opsOreStrip" title="Ore income — open the equipment planner"
+                   data-bal-shiny="{{ player_ore.shiny }}" data-bal-glowy="{{ player_ore.glowy }}" data-bal-starry="{{ player_ore.starry }}">
                     <div class="ops-ore-cell">
                         <img src="/static/img/shiny.png" class="ops-ore-icon" alt="">
-                        <div class="ops-ore-val" style="color:var(--ops-gold);">{{ "{:,}".format(player_ore.shiny) }}</div>
-                        <div class="ops-ore-sub"><span id="pog-shiny-d">—</span>/d · <span id="pog-shiny-m">—</span>/mo</div>
+                        <div class="ops-ore-figs">
+                            <div class="ops-ore-val" style="color:var(--ops-gold);"><span id="pog-shiny-d">—</span><span class="ops-ore-unit">/d</span></div>
+                            <div class="ops-ore-sub"><span id="pog-shiny-m">—</span>/mo &middot; {{ "{:,}".format(player_ore.shiny) }} on hand</div>
+                        </div>
                     </div>
                     <div class="ops-ore-cell">
                         <img src="/static/img/glowy.png" class="ops-ore-icon" alt="">
-                        <div class="ops-ore-val" style="color:var(--ops-win);">{{ "{:,}".format(player_ore.glowy) }}</div>
-                        <div class="ops-ore-sub"><span id="pog-glowy-d">—</span>/d · <span id="pog-glowy-m">—</span>/mo</div>
+                        <div class="ops-ore-figs">
+                            <div class="ops-ore-val" style="color:var(--ops-win);"><span id="pog-glowy-d">—</span><span class="ops-ore-unit">/d</span></div>
+                            <div class="ops-ore-sub"><span id="pog-glowy-m">—</span>/mo &middot; {{ "{:,}".format(player_ore.glowy) }} on hand</div>
+                        </div>
                     </div>
                     <div class="ops-ore-cell">
                         <img src="/static/img/starry.png" class="ops-ore-icon" alt="">
-                        <div class="ops-ore-val" style="color:var(--ops-elixir);">{{ player_ore.starry }}</div>
-                        <div class="ops-ore-sub"><span id="pog-starry-d">—</span>/d · <span id="pog-starry-m">—</span>/mo</div>
+                        <div class="ops-ore-figs">
+                            <div class="ops-ore-val" style="color:var(--ops-elixir);"><span id="pog-starry-d">—</span><span class="ops-ore-unit">/d</span></div>
+                            <div class="ops-ore-sub"><span id="pog-starry-m">—</span>/mo &middot; {{ player_ore.starry }} on hand</div>
+                        </div>
                     </div>
                 </a>
             </div>
@@ -868,10 +903,24 @@
 <script src="/static/js/ore_gain.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    OreGain.init({ savedSettings: {{ player_gain_settings_json|safe }} });
+    OreGain.init({ savedSettings: {{ player_gain_settings | tojson }} });
     OreGain.applyStarBonus({{ player_th|tojson }}, {{ player_league|tojson }});
     OreGain.applyWarStats({{ player_war_stats_json|safe }});
     OreGain.applyCwlStats({{ player_cwl_stats_json|safe }});
+
+    // Nothing to show only when there's truly no signal at all: zero computed income
+    // (no war/CWL/Star Bonus data yet) AND zero balance on file. A real, nonzero rate is
+    // the interesting case and must win even if the member never bothered to type in a
+    // balance — that's the whole point of leading with the rate over the balance.
+    var strip = document.getElementById('opsOreStrip');
+    if (strip) {
+        var daily = OreGain.getDailyGain();
+        var rateEmpty = !((daily.shiny||0) > 0 || (daily.glowy||0) > 0 || (daily.starry||0) > 0);
+        var balEmpty  = !(parseInt(strip.dataset.balShiny) || parseInt(strip.dataset.balGlowy) || parseInt(strip.dataset.balStarry));
+        if (rateEmpty && balEmpty) {
+            strip.innerHTML = '<div class="ops-ore-empty"><span>Track your <b>ore income</b> and see how many days to your next hero upgrade.</span><span class="ops-ore-empty-cta">Open Armory &rarr;</span></div>';
+        }
+    }
 });
 </script>
 {% endif %}

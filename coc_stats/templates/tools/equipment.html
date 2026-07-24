@@ -1,1548 +1,956 @@
 <!DOCTYPE html>
 <html lang="en">
-{% set page_title = 'Equipment Calculator – CoC Analytics' %}
+{% set page_title = 'The Armory – CoC Analytics' %}
+{% set favicon_icon = '🛡️' %}
 {% include '_head.html' %}
 
-        .container { max-width: 100%; }
+        /* ══════════════════════════════════════════════════════════════════
+           THE ARMORY — /tools/equipment
+           Forecast-first equipment planner. Mode hue: Targeting Cyan (~195) —
+           the one open slot in the night-ops palette, distinct from every mode
+           hue and every ore colour. IFF-green marks "locked / affordable now".
+           ══════════════════════════════════════════════════════════════════ */
+        body {
+            --mode:      oklch(0.74 0.115 195);   /* targeting cyan */
+            --mode-2:    oklch(0.60 0.095 195);   /* dim cyan */
+            --mode-ink:  oklch(0.82 0.075 195);   /* cyan text on tint */
+            --mode-tint: color-mix(in oklch, var(--mode) 13%, transparent);
+            --mode-line: color-mix(in oklch, var(--mode) 32%, transparent);
+            --ore-shiny:  #f0a500;
+            --ore-glowy:  #3fb950;
+            --ore-starry: #a78bfa;
+            /* lets the shared ore_gain.js Trader control pick up this page's cyan instead
+               of sitewide magenta, without touching that file's behavior for other pages */
+            --gain-accent: var(--mode);
+        }
+        /* Page title accent: every mode page overrides this locally (raid = amber, ranked =
+           blue) so the headline reads in its own hue instead of the sitewide interactive
+           magenta default in _head.html. */
+        body.armory-page .page-header h1 span { color: var(--mode); }
+        .arm-wrap { max-width: 1500px; margin: 0 auto; padding: 22px 32px 40px; }
+        .arm-wrap :focus-visible { outline: 2px solid var(--mode); outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) {
+            .fc-bar-fill, .eq-fill-target, .arm-blank-cta, .pulse-add, .rate-toggle, .bal-reset,
+            .eq-slider::-webkit-slider-thumb, .rate-toggle .caret { transition: none !important; }
+        }
 
-        .no-link {
+        /* ── Empty / error states ─────────────────────────────────────────── */
+        /* ── Header identity chip (page_header_right slot) ───────────────── */
+        .id-chip { display: flex; align-items: center; gap: 16px; padding: 4px 2px; }
+        .id-chip-part { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .id-chip-league-icon { width: 50px; height: 50px; object-fit: contain; }
+        .id-chip-lbl { font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; white-space: nowrap; }
+        .id-chip-div { width: 1px; height: 40px; background: var(--border); flex-shrink: 0; }
+        .id-chip-th { font-family: 'JetBrains Mono', monospace; font-size: 25px; font-weight: 700; color: var(--mode-ink); line-height: 1; }
+        @media (max-width: 640px) { .id-chip { gap: 12px; } .id-chip-league-icon { width: 38px; height: 38px; } .id-chip-th { font-size: 20px; } }
+
+        .arm-blank {
             background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-            padding: 48px 32px; text-align: center; margin-top: 12px;
+            padding: 56px 32px; text-align: center; margin-top: 16px;
         }
-        .no-link-icon { font-size: 40px; margin-bottom: 12px; }
-        .no-link-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 6px; }
-        .no-link-sub { font-size: 14px; color: var(--muted); }
-
-        .error-box {
-            background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.3);
-            border-radius: 10px; padding: 16px 20px; margin-bottom: 20px;
-            font-size: 13px; color: var(--red);
+        .arm-blank-icon { font-size: 40px; margin-bottom: 14px; }
+        .arm-blank-title { font-family: 'Big Shoulders Display', sans-serif; font-size: 26px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+        .arm-blank-sub { font-size: 14px; color: var(--muted); margin-top: 8px; max-width: 46ch; margin-inline: auto; line-height: 1.55; }
+        .arm-blank-cta {
+            display: inline-block; margin-top: 18px; padding: 10px 20px; border-radius: 9px;
+            background: var(--mode-tint); border: 1px solid var(--mode-line); color: var(--mode-ink);
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 13px;
+            text-transform: uppercase; letter-spacing: .5px; transition: background .15s, border-color .15s;
         }
-
-        .section-label {
-            font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
-            margin-bottom: 12px; margin-top: 24px;
-        }
-
-        .equip-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 10px;
+        .arm-blank-cta:hover { background: color-mix(in oklch, var(--mode) 22%, transparent); border-color: var(--mode); }
+        .arm-error {
+            background: color-mix(in oklch, var(--red) 8%, transparent); border: 1px solid color-mix(in oklch, var(--red) 30%, transparent);
+            border-radius: 10px; padding: 15px 18px; margin-top: 16px; font-size: 13px; color: oklch(0.72 0.12 25);
         }
 
-        .equip-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-            padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
-            transition: border-color .15s;
+        /* ── Layout: inventory main + sticky rail (Arrangement C) ─────────── */
+        .arm-layout { display: grid; grid-template-columns: minmax(0,1fr) 372px; gap: 22px; align-items: start; margin-top: 6px; }
+        /* Pinned on desktop only (see the ≤1080px override below, where it un-pins to a
+           static top band). Capped to the viewport with its own internal scroll — a long
+           forecast list or the expanded income editor must never push the Rate/Balance
+           zones this rail promises to keep "always in view" out of reach. */
+        .arm-rail {
+            position: sticky; top: calc(var(--nav-h, 63px) + 14px); display: flex; flex-direction: column; gap: 12px;
+            max-height: calc(100vh - var(--nav-h, 63px) - 28px); overflow-y: auto; overflow-x: hidden;
+            scrollbar-width: thin; scrollbar-color: color-mix(in oklch, var(--muted) 45%, transparent) transparent;
         }
-        .equip-card:hover { border-color: var(--accent); }
-        .equip-card.has-upgrade { border-color: rgba(240,165,0,.4); }
+        .arm-rail::-webkit-scrollbar { width: 9px; }
+        .arm-rail::-webkit-scrollbar-track { background: transparent; }
+        .arm-rail::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--muted) 38%, transparent); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+        .arm-rail::-webkit-scrollbar-thumb:hover { background: color-mix(in oklch, var(--muted) 62%, transparent); background-clip: padding-box; }
 
-        .equip-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
-
-        .equip-level-row {
-            display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        }
-        .equip-level {
-            font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700;
-            color: var(--accent); line-height: 1;
-        }
-        .equip-max { font-family: 'Rajdhani', sans-serif; font-size: 11px; color: var(--muted); }
-
-        .equip-bar-wrap {
-            height: 4px; background: var(--bord2, rgba(255,255,255,.08)); border-radius: 2px; overflow: hidden;
-        }
-        .equip-bar {
-            height: 100%; border-radius: 2px;
-            background: linear-gradient(90deg, var(--accent), var(--acc2, #e8912b));
-            transition: width .3s;
-        }
-        .equip-bar.equip-bar-max { background: linear-gradient(90deg, #3fb950, #27c26e); }
-
-        .equip-range-header {
-            display: flex; justify-content: space-between; align-items: baseline;
-            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-            margin-top: 4px;
-        }
-        .equip-range-header .rh-cur { color: var(--muted); }
-        .equip-range-header .rh-tgt { color: var(--accent); }
-
-        .equip-target-range {
-            -webkit-appearance: none; appearance: none;
-            width: 100%; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
-            background: var(--bord2, rgba(255,255,255,.08));
-        }
-        .equip-target-range::-webkit-slider-thumb {
-            -webkit-appearance: none; appearance: none;
-            width: 16px; height: 16px; border-radius: 50%;
-            background: var(--accent); border: 2px solid var(--bg);
-            box-shadow: 0 0 0 2px var(--accent);
-            cursor: pointer; transition: transform .1s;
-        }
-        .equip-target-range::-webkit-slider-thumb:hover { transform: scale(1.2); }
-        .equip-target-range::-moz-range-thumb {
-            width: 16px; height: 16px; border-radius: 50%;
-            background: var(--accent); border: 2px solid var(--bg);
-            box-shadow: 0 0 0 2px var(--accent); cursor: pointer;
-        }
-        .equip-range-maxed {
-            background: linear-gradient(to right, #3fb950 100%, #3fb950 100%) !important;
-            opacity: .35; cursor: default; pointer-events: none;
-        }
-        .equip-range-maxed::-webkit-slider-thumb { background: #3fb950; box-shadow: 0 0 0 2px #3fb950; }
-        .equip-range-maxed::-moz-range-thumb     { background: #3fb950; box-shadow: 0 0 0 2px #3fb950; }
-
-        .equip-upgrade-cost {
-            display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px;
-        }
-        .ore-pill {
-            display: inline-flex; align-items: center; gap: 3px;
-            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-            padding: 2px 7px; border-radius: 5px;
-        }
-        .ore-shiny  { background: rgba(240,165,0,.12);  border: 1px solid rgba(240,165,0,.25); }
-        .ore-glowy  { background: rgba(63,185,80,.12);  border: 1px solid rgba(63,185,80,.25); }
-        .ore-starry { background: rgba(130,80,255,.12); border: 1px solid rgba(130,80,255,.25); }
-        .ore-img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
-
-        /* ── Equipment image ── */
-        .equip-img-wrap {
-            display: flex; justify-content: center; align-items: center;
-            min-height: 60px; margin-bottom: 2px;
-        }
-        .equip-img-wrap img { width: 60px; height: 60px; object-fit: contain; }
-
-        /* ── Sticky Panel ── */
-        .sp-panel {
-            position: sticky; top: var(--nav-h, 63px); z-index: 50;
-            display: grid; grid-template-columns: auto 1px 1fr;
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 14px; margin-bottom: 16px;
-            box-shadow: 0 4px 24px rgba(0,0,0,.3);
-            overflow: hidden;
-        }
-        .sp-col { padding: 18px 22px; }
-        .sp-vdiv { background: var(--border); }
-        .sp-heading {
-            font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
-            margin-bottom: 14px;
-        }
-        .sp-ore-rows { display: flex; flex-direction: column; gap: 10px; }
-        .sp-ore-row { display: flex; align-items: center; gap: 10px; }
-        .sp-ore-row img { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
-        .sp-ore-input {
-            width: 120px; background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-family: 'Rajdhani', sans-serif;
-            font-size: 16px; font-weight: 700; padding: 6px 10px; text-align: right;
-            -moz-appearance: textfield;
-        }
-        .sp-ore-input::-webkit-outer-spin-button,
-        .sp-ore-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .sp-ore-input:focus { outline: none; border-color: var(--accent); }
-        .sp-plan-col { display: flex; flex-direction: column; gap: 10px; }
-        .sp-cost-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-        .sp-cost-item { display: flex; align-items: center; gap: 7px; }
-        .sp-cost-item img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
-        .sp-cost-val {
-            font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; line-height: 1;
-        }
-        .sp-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-        .sp-count-txt {
-            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted);
-        }
-        .sp-days-txt {
-            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; color: var(--muted);
-        }
-        .sp-gain-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
-        .gr-item { display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; }
-        .gr-item img { width: 16px; height: 16px; object-fit: contain; }
-        .gr-d { font-size: 13px; font-weight: 700; }
-        .gr-sep { font-size: 11px; color: var(--border); margin: 0 1px; }
-        .gr-m { font-size: 11px; font-weight: 600; color: var(--muted); }
-        .sp-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .sp-btn {
-            background: none; border: 1px solid var(--border); border-radius: 7px;
-            color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
-            padding: 5px 12px; cursor: pointer; transition: border-color .12s, color .12s; white-space: nowrap;
-        }
-        .sp-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .sp-btn-reset:hover { border-color: var(--red); color: var(--red); }
-        .ore-img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
-        #save-indicator {
-            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-            opacity: 0; transition: opacity .3s;
+        /* ── Shared card shell ────────────────────────────────────────────── */
+        .arm-card { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; }
+        .arm-eyebrow {
+            font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted);
         }
 
-        /* Priority badge on cards */
-        .equip-card { position: relative; }
-        .priority-wrap {
-            position: absolute; top: 10px; right: 10px;
+        /* ── ZONE A · Since-last-visit pulse ──────────────────────────────── */
+        .pulse {
+            position: relative; overflow: hidden; padding: 15px 17px;
+            background: linear-gradient(180deg, color-mix(in oklch, var(--mode) 9%, var(--surface)), var(--surface));
+            border: 1px solid var(--mode-line); border-radius: 13px;
         }
-        .priority-input {
-            width: 38px; background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 6px; color: var(--accent); font-family: 'Rajdhani', sans-serif;
-            font-size: 13px; font-weight: 700; padding: 2px 5px; text-align: center;
-            -moz-appearance: textfield;
+        .pulse-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .pulse-title { color: var(--mode-ink); }
+        .pulse-when { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+        .pulse-body { margin-top: 10px; }
+        .pulse-earned { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .pulse-note { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+        .pulse-note b { color: var(--text); font-weight: 700; }
+        .pulse-quiet { font-size: 13px; color: var(--muted); line-height: 1.5; }
+        .pulse-add {
+            margin-top: 11px; width: 100%; padding: 9px 12px; border-radius: 8px; cursor: pointer;
+            background: var(--mode-tint); border: 1px solid var(--mode-line); color: var(--mode-ink);
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px;
+            text-transform: uppercase; letter-spacing: .6px; transition: background .14s, border-color .14s, opacity .2s;
         }
-        .priority-input::-webkit-outer-spin-button,
-        .priority-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .priority-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(240,165,0,.15); }
-        .priority-input::placeholder { color: var(--border); }
+        .pulse-add:hover { background: color-mix(in oklch, var(--mode) 22%, transparent); border-color: var(--mode); }
+        .pulse-add:disabled { opacity: .5; cursor: default; }
 
-        /* Bench collapsible arrow */
-        details[open] .bench-arrow { transform: rotate(90deg); }
-        .bench-arrow { display:inline-block; transition: transform 0.15s; }
+        /* ── ZONE B · Forecast (Lock-On readout) ──────────────────────────── */
+        .fc { padding: 16px 17px; }
+        .fc-hero { border-radius: 11px; border: 1px solid var(--border); background: var(--surf2); padding: 14px 15px; }
+        .fc-hero-lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted); }
+        .fc-hero-date {
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; line-height: 1;
+            font-size: clamp(26px, 3vw, 34px); color: var(--text); margin-top: 8px; letter-spacing: -0.5px;
+        }
+        .fc-hero-sub { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+        .fc-days { color: var(--mode-ink); font-weight: 700; }
+        .fc-limit { color: var(--muted); }
+        .fc-limit b { color: var(--text); }
+        .fc-hero.is-locked { border-color: color-mix(in oklch, var(--green) 40%, transparent); background: color-mix(in oklch, var(--green) 8%, var(--surf2)); }
+        .fc-hero.is-locked .fc-hero-date { color: var(--green); }
+        .fc-hero.is-blocked { border-color: color-mix(in oklch, var(--red) 34%, transparent); }
+        .fc-hero.is-blocked .fc-hero-date { color: oklch(0.70 0.13 25); font-size: clamp(18px,2vw,22px); }
+        .fc-empty { padding: 6px 2px 2px; font-size: 13px; color: var(--muted); line-height: 1.55; }
 
-        /* ── Daily Ore Gain modal ── */
-        #gain-modal {
-            display: none; position: fixed; inset: 0; z-index: 9999;
-            background: rgba(0,0,0,.65); backdrop-filter: blur(4px);
-            align-items: center; justify-content: center;
+        .fc-list { margin-top: 13px; display: flex; flex-direction: column; gap: 8px; }
+        .fc-row {
+            display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "pri name eta" "bar bar bar";
+            gap: 5px 9px; align-items: center; padding: 9px 11px; border-radius: 9px;
+            background: var(--surf2); border: 1px solid var(--bord2);
         }
-        #gain-modal.open { display: flex; }
-        .gain-modal-box {
-            background: var(--bg); border: 1px solid var(--border); border-radius: 18px;
-            width: min(1200px, 95vw); max-height: 90vh;
-            display: flex; flex-direction: column; overflow: hidden;
-            box-shadow: 0 24px 80px rgba(0,0,0,.6);
+        .fc-row.is-locked { border-color: color-mix(in oklch, var(--green) 30%, transparent); }
+        .fc-pri {
+            grid-area: pri; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+            min-width: 22px; height: 20px; padding: 0 6px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center;
+            background: var(--mode-tint); color: var(--mode-ink); border: 1px solid var(--mode-line);
         }
-        .gain-modal-head {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+        .fc-pri.none { background: transparent; color: var(--muted); border-color: var(--border); }
+        .fc-row.is-locked .fc-pri { background: color-mix(in oklch, var(--green) 15%, transparent); color: var(--green); border-color: color-mix(in oklch, var(--green) 32%, transparent); }
+        .fc-name { grid-area: name; font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fc-name .fc-lv { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); margin-left: 6px; }
+        .fc-eta { grid-area: eta; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--mode-ink); text-align: right; white-space: nowrap; }
+        .fc-row.is-locked .fc-eta { color: var(--green); }
+        .fc-bar { grid-area: bar; height: 5px; border-radius: 3px; background: color-mix(in oklch, var(--muted) 16%, transparent); overflow: hidden; margin-top: 2px; }
+        .fc-bar-fill { height: 100%; border-radius: 3px; background: var(--mode); transition: width .5s cubic-bezier(.22,1,.36,1); }
+        .fc-row.is-locked .fc-bar-fill { background: var(--green); }
+
+        /* ── ZONE C · Earning-rate readout + inline income editor ─────────── */
+        .rate { padding: 14px 16px; }
+        .rate-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+        .rate-figs { margin-top: 11px; display: flex; flex-wrap: wrap; gap: 7px; }
+        .rate-fig {
+            display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px;
+            background: var(--surf2); border: 1px solid var(--bord2);
         }
-        .gain-modal-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; color: var(--text);
+        .rate-fig img { width: 16px; height: 16px; object-fit: contain; }
+        .rate-d { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; }
+        .rate-u { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+        .rate-toggle {
+            margin-top: 12px; width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer;
+            background: transparent; border: 1px solid var(--border); color: var(--muted);
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 11.5px;
+            text-transform: uppercase; letter-spacing: .6px; transition: border-color .14s, color .14s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
         }
-        .gain-modal-close {
-            background: none; border: 1px solid var(--border); border-radius: 6px;
-            color: var(--muted); font-size: 13px; padding: 4px 10px; cursor: pointer;
-            font-family: 'Rajdhani', sans-serif; font-weight: 700; transition: border-color .12s, color .12s;
+        .rate-toggle:hover { border-color: var(--mode); color: var(--mode-ink); }
+        .rate-toggle .caret { transition: transform .2s; font-size: 9px; }
+        .rate-toggle.open .caret { transform: rotate(90deg); }
+
+        /* income editor lives inline (no modal). #gain-modal wraps #gain-cards. */
+        #gain-modal { display: none; }
+        #gain-modal.open { display: block; margin-top: 12px; }
+        #gain-cards { display: flex; flex-direction: column; gap: 9px; }
+        .gain-card { background: var(--surf2); border: 1px solid var(--bord2); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 9px; transition: opacity .2s; }
+        .gain-card.gain-card-off { opacity: .5; }
+        /* auto sources (Star / War / CWL carry a "Synced from…" label) read as pre-locked live data */
+        .gain-card:has(.gain-auto-lbl) { border-color: var(--mode-line); background: color-mix(in oklch, var(--mode) 6%, var(--surf2)); }
+        .gain-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .gain-card-title { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 7px; text-transform: uppercase; letter-spacing: .4px; }
+        .gain-card-ores { display: flex; gap: 6px; }
+        .gain-card-ore { display: flex; align-items: center; gap: 5px; flex: 1; }
+        .gain-card-ore img { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+        .gain-ore-val, .gain-card-freq {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+            font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; padding: 5px 7px;
+            text-align: right; -moz-appearance: textfield; min-width: 0; width: 100%;
         }
-        .gain-modal-close:hover { border-color: var(--red); color: var(--red); }
-        .gain-modal-body { overflow-y: auto; padding: 16px 20px; flex: 1; }
-        #gain-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-        @media (max-width: 660px) { #gain-cards { grid-template-columns: repeat(2, 1fr); } }
-        .gain-card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 12px; padding: 14px;
-            display: flex; flex-direction: column; gap: 10px; transition: opacity .2s;
-        }
-        .gain-card.gain-card-off { opacity: .45; }
-        .gain-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-        .gain-card-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700;
-            color: var(--text); display: flex; align-items: center; gap: 6px;
-        }
-        .gain-card-ores { display: flex; flex-direction: column; gap: 6px; }
-        .gain-card-ore { display: flex; align-items: center; gap: 6px; }
-        .gain-card-ore img { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
-        .gain-ore-val {
-            flex: 1; min-width: 0; background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 5px; color: var(--text); font-family: 'Rajdhani', sans-serif;
-            font-size: 14px; font-weight: 700; padding: 4px 6px; text-align: right;
-            -moz-appearance: textfield;
-        }
-        .gain-ore-val::-webkit-outer-spin-button,
-        .gain-ore-val::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .gain-ore-val:focus { outline: none; border-color: var(--accent); }
-        .gain-card-freq {
-            width: 100%; background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 5px; color: var(--muted); font-family: 'Rajdhani', sans-serif;
-            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
-            padding: 4px 6px; cursor: pointer; text-align: center;
-        }
-        .gain-card-freq:focus { outline: none; border-color: var(--accent); }
-        .gain-modal-foot {
-            display: flex; align-items: center; gap: 10px;
-            padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
-            background: var(--surf2);
-        }
-        .gain-foot-lbl {
-            font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: .7px; color: var(--muted); white-space: nowrap;
-        }
-        #gain-days { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); }
+        .gain-ore-val::-webkit-outer-spin-button, .gain-ore-val::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .gain-ore-val:focus, .gain-card-freq:focus { outline: none; border-color: var(--mode); }
+        /* No width:100% here on purpose — this class also sits inside inline flex:0 0 auto /
+           flex:1 pairs (Star Bonus TH+league row); forcing width:100% there collapsed flex-basis
+           and broke the layout (league name overflowed its box). Let flex distribute instead. */
         .gain-ore-ro {
-            flex: 1; min-width: 0; background: var(--surf2); border: 1px solid var(--bord2);
-            border-radius: 5px; color: var(--muted); font-family: 'Rajdhani', sans-serif;
-            font-size: 14px; font-weight: 700; padding: 4px 6px; text-align: right; user-select: none;
+            background: transparent; border: 1px solid var(--bord2); border-radius: 6px; color: var(--muted);
+            font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; padding: 5px 7px;
+            text-align: center; min-width: 0; user-select: none;
         }
-        .gain-auto-lbl {
-            font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: .5px; color: var(--muted); text-align: center;
-        }
-        .gain-ore-table {
-            display: grid; grid-template-columns: 18px 1fr 1fr; gap: 4px 8px; align-items: center;
-        }
-        .gain-ore-table > img { width: 16px; height: 16px; object-fit: contain; justify-self: center; }
-        .gain-ore-hd {
-            font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: .7px; color: var(--muted); text-align: right;
-        }
-        .gain-ore-num {
-            background: var(--surf2); border: 1px solid var(--bord2); border-radius: 5px;
-            padding: 4px 8px; font-family: 'Rajdhani', sans-serif; font-size: 13px;
-            font-weight: 700; color: var(--text); text-align: right;
-        }
-        .gain-ore-num.dim { background: transparent; border-color: transparent; color: var(--muted); font-size: 12px; padding-right: 4px; }
+        .gain-card-freq { text-align: center; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; cursor: pointer; }
+        .gain-ore-table { display: grid; grid-template-columns: 18px 1fr 1fr; gap: 4px 8px; align-items: center; }
+        .gain-ore-table > img { width: 15px; height: 15px; object-fit: contain; justify-self: center; }
+        .gain-ore-hd { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); text-align: right; }
+        .gain-ore-num { background: var(--surface); border: 1px solid var(--bord2); border-radius: 5px; padding: 4px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--text); text-align: right; }
+        .gain-ore-num.dim { background: transparent; border-color: transparent; color: var(--muted); font-size: 11px; }
+        .gain-auto-lbl { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--mode-ink); display: flex; align-items: center; gap: 5px; }
+        .gain-auto-lbl::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--mode); box-shadow: 0 0 6px var(--mode); }
         .gain-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
         .gain-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
-        .gain-t-track {
-            display: inline-block; width: 32px; height: 18px; border-radius: 9px; flex-shrink: 0;
-            background: var(--bord2, rgba(255,255,255,.08)); border: 1px solid var(--border);
-            transition: background .2s, border-color .2s;
-        }
-        .gain-t-thumb {
-            position: absolute; left: 3px; width: 12px; height: 12px;
-            background: var(--muted); border-radius: 50%;
-            transition: transform .2s, background .2s; pointer-events: none;
-        }
-        .gain-toggle input:checked ~ .gain-t-track { background: var(--accent); border-color: var(--accent); }
-        .gain-toggle input:checked ~ .gain-t-thumb { transform: translateX(14px); background: #fff; }
+        .gain-t-track { display: inline-block; width: 32px; height: 18px; border-radius: 9px; background: var(--bord2); border: 1px solid var(--border); transition: background .2s, border-color .2s; }
+        .gain-t-thumb { position: absolute; left: 3px; width: 12px; height: 12px; background: var(--muted); border-radius: 50%; transition: transform .2s, background .2s; pointer-events: none; }
+        .gain-toggle input:checked ~ .gain-t-track { background: var(--mode); border-color: var(--mode); }
+        .gain-toggle input:checked ~ .gain-t-thumb { transform: translateX(14px); background: var(--bg); }
 
-        /* Upgrade plan panel */
-        #plan-section {
-            margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border);
-            border-radius: 14px; overflow: hidden;
+        /* ── ZONE D · Balance ─────────────────────────────────────────────── */
+        .bal { padding: 14px 16px; }
+        .bal-rows { margin-top: 11px; display: flex; flex-direction: column; gap: 8px; }
+        .bal-row { display: flex; align-items: center; gap: 10px; }
+        .bal-row img { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
+        .bal-row .bal-name { font-size: 12px; color: var(--muted); flex: 1; text-transform: capitalize; }
+        .bal-input {
+            width: 128px; background: var(--surf2); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+            font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; padding: 7px 11px; text-align: right; -moz-appearance: textfield;
         }
-        .plan-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 14px 20px; border-bottom: 1px solid var(--border);
-            background: var(--surf2);
+        .bal-input::-webkit-outer-spin-button, .bal-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .bal-input:focus { outline: none; border-color: var(--mode); }
+        .bal-foot { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--bord2); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .bal-reset { background: none; border: 1px solid var(--border); border-radius: 7px; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; padding: 6px 12px; cursor: pointer; text-transform: uppercase; letter-spacing: .4px; transition: border-color .14s, color .14s; }
+        .bal-reset:hover { border-color: var(--red); color: oklch(0.70 0.13 25); }
+        #save-indicator { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; opacity: 0; transition: opacity .3s; }
+
+        /* ── Inventory (dense divided rows, grouped) ──────────────────────── */
+        .inv-groupbar { display: flex; align-items: center; gap: 10px; margin: 20px 2px 10px; }
+        .inv-groupbar:first-child { margin-top: 4px; }
+        .inv-village { font-family: 'Big Shoulders Display', sans-serif; font-size: 17px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--text); }
+        .inv-village-line { flex: 1; height: 1px; background: var(--border); }
+        .inv-hero {
+            display: flex; align-items: center; gap: 9px; margin: 14px 2px 7px;
+            font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1px; color: var(--mode-ink);
         }
-        .plan-header-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: 1px; color: var(--accent);
+        .inv-hero img { width: 26px; height: 26px; object-fit: contain; border-radius: 6px; background: var(--surf2); border: 1px solid var(--bord2); padding: 2px; }
+        .inv-hero .n { color: var(--muted); font-weight: 700; font-size: 10px; letter-spacing: .8px; }
+        .inv-list { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; overflow: hidden; }
+
+        .eq-row {
+            display: grid; grid-template-columns: 44px minmax(0,1fr) 190px 46px;
+            grid-template-areas: "thumb id target pri" "thumb cost cost pri";
+            gap: 3px 13px; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--bord2);
+            transition: background .13s;
         }
-        .plan-header-sub { font-size: 12px; color: var(--muted); }
-        #plan-list { padding: 0; }
-        .plan-empty {
-            padding: 32px 20px; text-align: center; color: var(--muted);
-            font-size: 13px;
+        .eq-row:last-child { border-bottom: none; }
+        .eq-row:hover { background: color-mix(in oklch, var(--mode) 4%, transparent); }
+        .eq-row.eq-queued { background: color-mix(in oklch, var(--mode) 7%, transparent); }
+        .eq-row.eq-row-max { opacity: .62; }
+        .eq-thumb { grid-area: thumb; width: 44px; height: 44px; border-radius: 8px; background: var(--surf2) center/contain no-repeat; border: 1px solid var(--bord2); }
+        .eq-id { grid-area: id; min-width: 0; }
+        .eq-name { font-size: 13.5px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .eq-lvl { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+        .eq-cur { color: var(--text); font-weight: 700; }
+        .eq-max { color: var(--muted); }
+        .eq-maxtag { color: var(--green); font-weight: 700; letter-spacing: .5px; }
+        .eq-equipped { color: var(--mode-ink); font-weight: 700; letter-spacing: .4px; font-size: 9.5px; text-transform: uppercase; }
+        .eq-track { position: relative; height: 4px; border-radius: 2px; background: color-mix(in oklch, var(--muted) 15%, transparent); margin-top: 6px; max-width: 240px; }
+        .eq-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 2px; background: var(--mode); }
+        .eq-fill.eq-fill-max { background: var(--green); }
+        /* Overlay segment from current level to the queued target — the row's own
+           "progress toward the chosen target" dimension, distinct from .eq-fill's
+           current/max. Zero width until a target is set above current. */
+        .eq-fill-target { position: absolute; top: 0; height: 100%; border-radius: 0 2px 2px 0; background: var(--mode-ink); opacity: .5; width: 0; transition: width .3s cubic-bezier(.22,1,.36,1); }
+
+        .eq-target { grid-area: target; display: flex; align-items: center; gap: 9px; }
+        .eq-slider { -webkit-appearance: none; appearance: none; flex: 1; min-width: 60px; height: 4px; border-radius: 2px; outline: none; cursor: pointer; background: color-mix(in oklch, var(--muted) 15%, transparent); }
+        .eq-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--mode); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--mode); cursor: pointer; transition: transform .1s; }
+        .eq-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+        .eq-slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--mode); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--mode); cursor: pointer; }
+        .eq-tnum { display: inline-flex; align-items: center; gap: 3px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+        .eq-arrow { color: var(--muted); }
+        .eq-tinput { width: 40px; background: var(--surf2); border: 1px solid var(--border); border-radius: 6px; color: var(--mode-ink); font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; padding: 4px 3px; text-align: center; -moz-appearance: textfield; }
+        .eq-tinput::-webkit-outer-spin-button, .eq-tinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .eq-tinput:focus { outline: none; border-color: var(--mode); }
+        .eq-target-max { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--green); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; width: 100%; text-align: center; }
+
+        .eq-pri { grid-area: pri; }
+        .eq-pinput { width: 44px; background: var(--surf2); border: 1px solid var(--border); border-radius: 7px; color: var(--mode-ink); font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; padding: 6px 3px; text-align: center; -moz-appearance: textfield; }
+        .eq-pinput::-webkit-outer-spin-button, .eq-pinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .eq-pinput::placeholder { color: color-mix(in oklch, var(--muted) 55%, transparent); }
+        .eq-pinput:focus { outline: none; border-color: var(--mode); }
+        .eq-cost { grid-area: cost; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 0; }
+        .eq-cost:empty { display: none; }
+
+        .ore-pill { display: inline-flex; align-items: center; gap: 3px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 5px; }
+        .ore-pill img { width: 14px; height: 14px; object-fit: contain; flex-shrink: 0; }
+        .ore-shiny  { background: color-mix(in oklch, var(--ore-shiny) 12%, transparent);  border: 1px solid color-mix(in oklch, var(--ore-shiny) 26%, transparent);  color: var(--ore-shiny); }
+        .ore-glowy  { background: color-mix(in oklch, var(--ore-glowy) 12%, transparent);  border: 1px solid color-mix(in oklch, var(--ore-glowy) 26%, transparent);  color: var(--ore-glowy); }
+        .ore-starry { background: color-mix(in oklch, var(--ore-starry) 14%, transparent); border: 1px solid color-mix(in oklch, var(--ore-starry) 30%, transparent); color: var(--ore-starry); }
+
+        .inv-bench { margin-top: 4px; }
+        .inv-bench > summary { list-style: none; cursor: pointer; padding: 8px 2px; display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+        .inv-bench > summary::-webkit-details-marker { display: none; }
+        .inv-bench .bench-caret { font-size: 8px; transition: transform .15s; }
+        .inv-bench[open] .bench-caret { transform: rotate(90deg); }
+        .bench-queued { color: var(--mode-ink); font-weight: 700; }
+
+        /* ── Responsive ───────────────────────────────────────────────────── */
+        @media (max-width: 1080px) {
+            .arm-layout { grid-template-columns: 1fr; }
+            .arm-rail { position: static; order: -1; max-height: none; overflow: visible; }
+            .fc-hero-date { font-size: 30px; }
         }
-        .plan-row {
-            display: flex; flex-direction: column; gap: 6px;
-            padding: 14px 20px; border-bottom: 1px solid var(--bord2, rgba(255,255,255,.04));
+        @media (max-width: 620px) {
+            .arm-wrap { padding: 16px 14px 32px; }
+            .eq-row { grid-template-columns: 40px minmax(0,1fr) 48px; grid-template-areas: "thumb id pri" "thumb target target" "thumb cost cost"; gap: 8px 11px; padding: 13px 12px; }
+            .eq-thumb { width: 40px; height: 40px; }
+            .eq-target { width: 100%; }
+            .eq-track { max-width: none; }
+            .arm-rail { gap: 10px; }
+            /* touch-target floor (44px) for the precise per-row + balance controls */
+            .eq-tinput, .eq-pinput { min-height: 44px; box-sizing: border-box; }
+            .eq-pinput { width: 48px; }
+            .bal-input { min-height: 44px; box-sizing: border-box; }
+            /* 24px meets WCAG 2.5.8 AA target size; the exact-number input beside it
+               (44px, above) is the precise-entry path, so the thumb stays a native-feeling
+               slider rather than growing to the 44px button floor. */
+            .eq-slider { min-height: 24px; }
+            .eq-slider::-webkit-slider-thumb { width: 24px; height: 24px; }
+            .eq-slider::-moz-range-thumb { width: 24px; height: 24px; }
+            .pulse-add, .rate-toggle, .bal-reset, .arm-blank-cta { min-height: 44px; box-sizing: border-box; }
         }
-        .plan-row:last-child { border-bottom: none; }
-        .plan-row-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-        .plan-left  { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .plan-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-        .plan-pri {
-            font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
-            padding: 2px 6px; border-radius: 4px; letter-spacing: .5px;
-            background: rgba(240,165,0,.12); border: 1px solid rgba(240,165,0,.3); color: var(--accent);
-            flex-shrink: 0;
-        }
-        .plan-pri-none { background: transparent; border-color: var(--border); color: var(--muted); }
-        .plan-name { font-size: 13px; font-weight: 600; }
-        .plan-levels {
-            font-family: 'Rajdhani', sans-serif; font-size: 12px; color: var(--muted);
-            white-space: nowrap;
-        }
-        .plan-reach { font-family: 'Rajdhani', sans-serif; font-size: 12px; color: var(--yellow); }
-        .plan-status-icon { font-size: 14px; flex-shrink: 0; }
-        .plan-after {
-            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-            padding: 5px 8px; background: var(--surf2); border-radius: 6px;
-            font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
-        }
-        .plan-after-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
-        .plan-status-full    { border-left: 4px solid var(--green); }
-        .plan-status-partial { border-left: 4px solid var(--yellow); }
-        .plan-status-none    { border-left: 4px solid var(--border); opacity: .65; }
 
     </style>
 </head>
-<body>
+<body class="armory-page">
 
 {% include '_nav.html' %}
 
-{% set page_header_title = 'Equipment <span>Calculator</span>' %}
-{% set page_header_desc = 'Hero equipment levels for your linked account.' %}
+{% set _th = (player.current_th if player else 0) %}
+{% set page_header_title = 'The <span>Armory</span>' %}
+{% set page_header_desc = 'Plan your hero-equipment upgrades against the ore you actually earn.' %}
+{% if player %}
+{# TH + League already carried by the id-chip (icon-driven) below — meta stays to
+   just what the chip doesn't cover, so the header doesn't say the same two facts twice. #}
+{% set page_header_meta = [
+    {'value': (equipment | length) if equipment else 0, 'label': 'Equipment'},
+] %}
+{% set page_header_right %}
+<div class="id-chip">
+    <div class="id-chip-part">
+        {% if player.league_icon %}<img src="{{ player.league_icon }}" class="id-chip-league-icon" alt="">{% endif %}
+        <span class="id-chip-lbl">{{ player.league_tier or 'Unranked' }}</span>
+    </div>
+    <div class="id-chip-div"></div>
+    <div class="id-chip-part">
+        <span class="id-chip-th">{{ _th or '?' }}</span>
+        <span class="id-chip-lbl">Town Hall</span>
+    </div>
+</div>
+{% endset %}
+{% endif %}
 {% include '_page_header.html' %}
 
-<div class="container">
+<div class="arm-wrap">
 
 {% if not player %}
-    <div class="no-link">
-        <div class="no-link-icon">🔗</div>
-        <div class="no-link-title">No player linked</div>
-        <div class="no-link-sub">Ask a super admin to link your account to a Clash of Clans player in the admin panel.</div>
+    <div class="arm-blank">
+        <div class="arm-blank-icon">🛡️</div>
+        <div class="arm-blank-title">Link your account</div>
+        <div class="arm-blank-sub">The Armory reads your real hero equipment, Town Hall, league and war earnings. Link your Clash of Clans player to unlock your upgrade forecast.</div>
+        <a class="arm-blank-cta" href="/profile">Go to profile →</a>
     </div>
 
 {% elif error %}
-    <div class="error-box">⚠️ Could not load player data: {{ error }}</div>
+    <div class="arm-error">
+        <div>⚠️ Could not load equipment data: {{ error }}</div>
+        <a class="arm-blank-cta" style="margin-top:12px;" href="{{ request.path }}">Retry</a>
+    </div>
 
 {% elif equipment is not none %}
 
-    <!-- Sticky Panel -->
-    <div class="sp-panel" id="ore-bar">
-        <!-- Balance column -->
-        <div class="sp-col">
-            <div class="sp-heading">Balance</div>
-            <div class="sp-ore-rows">
-                <div class="sp-ore-row">
-                    <img src="/static/img/shiny.png">
-                    <input class="sp-ore-input" id="ore-shiny" type="number" min="0" placeholder="0" oninput="onOreChange()">
+    <div class="arm-layout" id="arm-layout">
+
+        <!-- ══ MAIN · Inventory ══ -->
+        <main class="arm-main">
+        {% if equipment %}
+            <div class="arm-eyebrow" style="margin:2px 2px 16px; font-weight:600; letter-spacing:.3px; text-transform:none; color:var(--muted); font-family:'Manrope',sans-serif; font-size:12.5px;">
+                Drag a piece's target level, then rank it <span style="color:var(--mode-ink); font-family:'JetBrains Mono',monospace; font-weight:700;">P1–P9</span> (1 goes first) to queue it for your forecast.
+            </div>
+            {% macro equip_row(e, idx) %}
+            {% set lvl = e.level %}{% set maxlvl = e.maxLevel %}
+            {% set pct = ((lvl / maxlvl) * 100) | round | int if maxlvl else 0 %}
+            {% set cid = 'eq-' ~ idx %}
+            <div class="eq-row{% if lvl >= maxlvl %} eq-row-max{% endif %}" id="card-{{ cid }}"
+                 data-name="{{ e.name }}" data-current="{{ lvl }}" data-max="{{ maxlvl }}">
+                <div class="eq-thumb" data-equip="{{ e.name }}"></div>
+                <div class="eq-id">
+                    <div class="eq-name">{{ e.name }}</div>
+                    <div class="eq-lvl">
+                        <span class="eq-cur">{{ lvl }}</span><span class="eq-max">/ {{ maxlvl }}</span>
+                        {% if lvl >= maxlvl %}<span class="eq-maxtag">✓ MAX</span>{% endif %}
+                        {% if e.equipped_on %}<span class="eq-equipped">Equipped</span>{% endif %}
+                    </div>
+                    <div class="eq-track"><div class="eq-fill{% if lvl >= maxlvl %} eq-fill-max{% endif %}" style="width:{{ pct }}%;"></div><div class="eq-fill-target" id="filltarget-{{ cid }}"></div></div>
                 </div>
-                <div class="sp-ore-row">
-                    <img src="/static/img/glowy.png">
-                    <input class="sp-ore-input" id="ore-glowy" type="number" min="0" placeholder="0" oninput="onOreChange()">
+                <div class="eq-target">
+                    {% if lvl < maxlvl %}
+                    <input type="range" class="eq-slider" data-cid="{{ cid }}" data-current="{{ lvl }}" data-max="{{ maxlvl }}"
+                           min="{{ lvl }}" max="{{ maxlvl }}" value="{{ lvl }}" aria-label="{{ e.name }} target level" oninput="onSlider(this)">
+                    <span class="eq-tnum"><span class="eq-arrow">→</span>
+                        <input type="number" class="eq-tinput" data-cid="{{ cid }}" min="{{ lvl }}" max="{{ maxlvl }}" value="{{ lvl }}" aria-label="{{ e.name }} target level (number)" oninput="onTargetNum(this)">
+                    </span>
+                    {% else %}
+                    <span class="eq-target-max">Maxed</span>
+                    {% endif %}
                 </div>
-                <div class="sp-ore-row" id="starry-input-group">
-                    <img src="/static/img/starry.png">
-                    <input class="sp-ore-input" id="ore-starry" type="number" min="0" placeholder="0" oninput="onOreChange()">
+                <div class="eq-pri">
+                    {% if lvl < maxlvl %}
+                    <input type="number" class="eq-pinput" min="1" max="9" placeholder="P#" data-cid="{{ cid }}"
+                           aria-label="{{ e.name }} priority" title="Upgrade priority (1 = first)" oninput="onPriority(this)">
+                    {% endif %}
                 </div>
+                <div class="eq-cost" id="cost-{{ cid }}"></div>
             </div>
-        </div>
-        <div class="sp-vdiv"></div>
-        <!-- Plan summary column -->
-        <div class="sp-col sp-plan-col">
-            <div class="sp-heading">Total Cost</div>
-            <div class="sp-cost-row">
-                <div class="sp-cost-item" id="sum-shiny"><img src="/static/img/shiny.png"> <span class="sp-cost-val" id="sum-shiny-val" style="color:#f0a500;">0</span></div>
-                <div class="sp-cost-item" id="sum-glowy"><img src="/static/img/glowy.png"> <span class="sp-cost-val" id="sum-glowy-val" style="color:#3fb950;">0</span></div>
-                <div class="sp-cost-item" id="sum-starry" style="display:none;"><img src="/static/img/starry.png"> <span class="sp-cost-val" id="sum-starry-val" style="color:#a78bfa;">0</span></div>
-            </div>
-            <div class="sp-gain-row" id="gain-pills"></div>
-            <div class="sp-actions">
-                <button id="gain-open-btn" class="sp-btn" onclick="OreGain.open()">Ore Gains</button>
-                <button id="sum-reset" class="sp-btn sp-btn-reset" onclick="resetAll()">Reset</button>
-                <span id="save-indicator"></span>
-            </div>
-        </div>
-    </div>
+            {% endmacro %}
 
-    {% macro equip_card(e, idx) %}
-    {% set lvl = e.level %}
-    {% set maxlvl = e.maxLevel %}
-    {% set pct = ((lvl / maxlvl) * 100) | round | int if maxlvl else 0 %}
-    {% set cid = 'eq-' ~ idx %}
-    <div class="equip-card" id="card-{{ cid }}" data-equip="{{ e.name }}" data-name="{{ e.name }}" data-current="{{ lvl }}" data-max="{{ maxlvl }}">
-        <div class="priority-wrap">
-            <input type="number" class="priority-input" min="1" max="9" placeholder="P#"
-                   data-cid="{{ cid }}" oninput="onPriorityChange(this)" title="Upgrade priority (1 = highest)">
-        </div>
-        <div class="equip-img-wrap"></div>
-        <div class="equip-name">{{ e.name }}</div>
-        <div class="equip-level-row">
-            <span class="equip-level">{{ lvl }}</span>
-            <span class="equip-max">/ {{ maxlvl }}</span>
-        </div>
-        <div class="equip-bar-wrap">
-            <div class="equip-bar {% if lvl == maxlvl %}equip-bar-max{% endif %}" style="width:{{ pct }}%;"></div>
-        </div>
-        {% if e.equipped_on %}
-        <div style="font-size:10px;color:var(--accent);font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">⚔️ Equipped</div>
-        {% endif %}
-        <div class="equip-range-header">
-            <span class="rh-cur">Lv {{ lvl }}</span>
-            {% if lvl == maxlvl %}
-            <span style="color:#3fb950;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;">✓ MAX</span>
-            {% else %}
-            <span class="rh-tgt" id="tgt-{{ cid }}">→ {{ lvl }}</span>
-            {% endif %}
-        </div>
-        <input type="range"
-               class="equip-target-range{% if lvl >= maxlvl %} equip-range-maxed{% endif %}"
-               data-cid="{{ cid }}"
-               data-current="{{ lvl }}"
-               data-max="{{ maxlvl }}"
-               {% if lvl < maxlvl %}oninput="onTargetChange(this)"{% else %}disabled{% endif %}
-               min="1"
-               max="{{ maxlvl }}"
-               value="{{ lvl }}">
-        <div class="equip-upgrade-cost" id="cost-{{ cid }}" style="min-height:22px;"></div>
-    </div>
-    {% endmacro %}
-
-    <!-- Upgrade Plan -->
-    <div id="plan-section">
-        <div class="plan-header">
-            <div style="display:flex;align-items:center;gap:14px;">
-                <span class="plan-header-title">&#x1F4CB; Upgrade Plan</span>
-                <span class="plan-header-sub" id="sum-count"></span>
-                <span class="plan-header-sub" id="gain-days-short"></span>
-            </div>
-        </div>
-        <div id="plan-list"><div class="plan-empty">Set target levels and priority on cards below to build your plan.</div></div>
-    </div>
-
-    {% if equipment %}
-        {% set villages = [('home', 'Home Village'), ('builderBase', 'Builder Base')] %}
-        {% set card_idx = namespace(val=0) %}
-
-        {% for village_key, village_label in villages %}
-            {% set vil_equip = equipment | selectattr('village', 'equalto', village_key) | list %}
-            {% if vil_equip %}
-            <div class="section-label">{{ village_label }}</div>
-
-            {# Collect ordered hero list for this village #}
-            {% set heroes_seen = namespace(val=[]) %}
-            {% for e in vil_equip %}
-                {% if e.equipped_on and e.equipped_on not in heroes_seen.val %}
-                    {% set heroes_seen.val = heroes_seen.val + [e.equipped_on] %}
-                {% endif %}
-            {% endfor %}
-            {% set unequipped = vil_equip | rejectattr('equipped_on') | list %}
-
-            {# Hero image map #}
             {% set HERO_IMGS = {
-                'Barbarian King':  'Hero_Barbarian_King.png',
-                'Archer Queen':    'Hero_Archer_Queen.png',
-                'Grand Warden':    'Hero_Grand_Warden.png',
-                'Royal Champion':  'Hero_Royal_Champion.png',
-                'Minion Prince':   'Hero_Minion_Prince.png',
-                'Dragon Duke':     'Hero_Dragon_Duke.png',
-                'Dark Prince':     'Hero_Dragon_Duke.png',
-            } %}
-
-            {# Static equipment → hero ownership map #}
+                'Barbarian King':'Hero_Barbarian_King.png','Archer Queen':'Hero_Archer_Queen.png',
+                'Grand Warden':'Hero_Grand_Warden.png','Royal Champion':'Hero_Royal_Champion.png',
+                'Minion Prince':'Hero_Minion_Prince.png','Dragon Duke':'Hero_Dragon_Duke.png','Dark Prince':'Hero_Dragon_Duke.png' } %}
             {% set EQUIP_HERO = {
-                'Barbarian Puppet':'Barbarian King','Earthquake Boots':'Barbarian King',
-                'Rage Vial':'Barbarian King','Snake Bracelet':'Barbarian King',
-                'Vampstache':'Barbarian King','Giant Gauntlet':'Barbarian King','Spiky Ball':'Barbarian King',
-                'Archer Puppet':'Archer Queen','Frozen Arrow':'Archer Queen',
-                'Giant Arrow':'Archer Queen','Healer Puppet':'Archer Queen',
-                'Invisibility Vial':'Archer Queen','Magic Mirror':'Archer Queen',
-                'Monolith Arrow':'Archer Queen','WWE Action Figure':'Archer Queen','Action Figure':'Archer Queen',
-                'Eternal Tome':'Grand Warden','Fireball':'Grand Warden',
-                'Healing Tome':'Grand Warden','Life Gem':'Grand Warden',
-                'Rage Gem':'Grand Warden','Lavaloon Puppet':'Grand Warden',
-                'Electro Boots':'Royal Champion','Haste Vial':'Royal Champion',
-                'Hog Rider Puppet':'Royal Champion','Royal Gem':'Royal Champion',
-                'Seeking Shield':'Royal Champion','Frost Flake':'Royal Champion','Rocket Spear':'Royal Champion',
-                'Dark Crown':'Minion Prince','Dark Orb':'Minion Prince',
-                'Henchmen Puppet':'Minion Prince','Power Pump':'Minion Prince',
-                'Noble Iron':'Minion Prince','Meteor Staff':'Minion Prince',
-                'Iron Pants':'Minion Prince','Metal Pants':'Minion Prince',
-                'Electro Fangs':'Dragon Duke','Fire Heart':'Dragon Duke',
-                'Flame Blower':'Dragon Duke','Rocket Backpack':'Dragon Duke','Stun Blast':'Dragon Duke',
-            } %}
+                'Barbarian Puppet':'Barbarian King','Earthquake Boots':'Barbarian King','Rage Vial':'Barbarian King','Snake Bracelet':'Barbarian King','Vampstache':'Barbarian King','Giant Gauntlet':'Barbarian King','Spiky Ball':'Barbarian King',
+                'Archer Puppet':'Archer Queen','Frozen Arrow':'Archer Queen','Giant Arrow':'Archer Queen','Healer Puppet':'Archer Queen','Invisibility Vial':'Archer Queen','Magic Mirror':'Archer Queen','Monolith Arrow':'Archer Queen','WWE Action Figure':'Archer Queen','Action Figure':'Archer Queen',
+                'Eternal Tome':'Grand Warden','Fireball':'Grand Warden','Healing Tome':'Grand Warden','Life Gem':'Grand Warden','Rage Gem':'Grand Warden','Lavaloon Puppet':'Grand Warden',
+                'Electro Boots':'Royal Champion','Haste Vial':'Royal Champion','Hog Rider Puppet':'Royal Champion','Royal Gem':'Royal Champion','Seeking Shield':'Royal Champion','Frost Flake':'Royal Champion','Rocket Spear':'Royal Champion',
+                'Dark Crown':'Minion Prince','Dark Orb':'Minion Prince','Henchmen Puppet':'Minion Prince','Power Pump':'Minion Prince','Noble Iron':'Minion Prince','Meteor Staff':'Minion Prince','Iron Pants':'Minion Prince','Metal Pants':'Minion Prince',
+                'Electro Fangs':'Dragon Duke','Fire Heart':'Dragon Duke','Flame Blower':'Dragon Duke','Rocket Backpack':'Dragon Duke','Stun Blast':'Dragon Duke' } %}
+            {% set villages = [('home','Home Village'), ('builderBase','Builder Base')] %}
+            {% set card_idx = namespace(val=0) %}
 
-            {# Hero columns — one per hero, fill all available width #}
-            <div style="display:flex; align-items:flex-start; gap:12px;">
+            {% for village_key, village_label in villages %}
+                {% set vil_equip = equipment | selectattr('village', 'equalto', village_key) | list %}
+                {% if vil_equip %}
+                <div class="inv-groupbar"><span class="inv-village">{{ village_label }}</span><span class="inv-village-line"></span></div>
+
+                {% set heroes_seen = namespace(val=[]) %}
+                {% for e in vil_equip %}{% if e.equipped_on and e.equipped_on not in heroes_seen.val %}{% set heroes_seen.val = heroes_seen.val + [e.equipped_on] %}{% endif %}{% endfor %}
+                {% set unequipped = vil_equip | rejectattr('equipped_on') | list %}
+
                 {% for hero in heroes_seen.val %}
-                {% set hero_items = vil_equip | selectattr('equipped_on', 'equalto', hero) | list %}
+                    {% set hero_items = vil_equip | selectattr('equipped_on', 'equalto', hero) | list %}
+                    {% set bench = namespace(items=[]) %}
+                    {% for e in unequipped %}{% if EQUIP_HERO.get(e.name, '') == hero %}{% set bench.items = bench.items + [e] %}{% endif %}{% endfor %}
 
-                {# Bench items: unequipped items that belong to this hero #}
-                {% set bench = namespace(items=[]) %}
-                {% for e in unequipped %}
-                    {% if EQUIP_HERO.get(e.name, '') == hero %}
-                        {% set bench.items = bench.items + [e] %}
-                    {% endif %}
-                {% endfor %}
-
-                <div class="hero-col" style="flex:1; min-width:0; background:var(--surface);
-                            border:1px solid var(--border); border-radius:12px; padding:10px;">
-                    <!-- Hero banner -->
-                    <div style="position:relative; overflow:hidden; height:88px;
-                                background:var(--surf2); border:1px solid var(--border);
-                                border-radius:8px; margin-bottom:10px;">
-                        {% if hero in HERO_IMGS %}
-                        <img src="/static/img/heros/{{ HERO_IMGS[hero] }}"
-                             style="position:absolute; right:0; top:0; height:160%; width:auto;
-                                    opacity:0.55; pointer-events:none; object-fit:contain;
-                                    object-position:top center; filter:saturate(0.75);">
+                    <div class="inv-hero">
+                        {% if hero in HERO_IMGS %}<img src="/static/img/heros/{{ HERO_IMGS[hero] }}" alt="">{% endif %}
+                        <span>{{ hero }}</span>
+                        <span class="n">{{ hero_items | length }} equipped{% if bench.items %} · {{ bench.items | length }} bench{% endif %}</span>
+                    </div>
+                    <div class="inv-list">
+                        {% for e2 in hero_items %}{{ equip_row(e2, card_idx.val) }}{% set card_idx.val = card_idx.val + 1 %}{% endfor %}
+                        {% if bench.items %}
+                        <details class="inv-bench">
+                            <summary><span class="bench-caret">▶</span> Bench · {{ bench.items | length }} not equipped</summary>
+                            {% for e3 in bench.items %}{{ equip_row(e3, card_idx.val) }}{% set card_idx.val = card_idx.val + 1 %}{% endfor %}
+                        </details>
                         {% endif %}
-                        <div style="position:absolute; inset:0;
-                                    background:linear-gradient(to right, var(--bg) 30%, transparent 75%);"></div>
-                        <div style="position:absolute; bottom:12px; left:14px;
-                                    font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:700;
-                                    text-transform:uppercase; letter-spacing:1px; color:var(--accent);">
-                            {{ hero }}
-                        </div>
                     </div>
-                    <div style="display:flex; flex-direction:column; gap:8px;">
-                    {% for e2 in hero_items %}
-                        {{ equip_card(e2, card_idx.val) }}
-                        {% set card_idx.val = card_idx.val + 1 %}
-                    {% endfor %}
-                    {% if bench.items %}
-                    <details style="margin-top:6px;">
-                        <summary style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
-                                        text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
-                                        cursor:pointer; padding:6px 0; border-top:1px solid var(--bord2);
-                                        list-style:none; display:flex; align-items:center; gap:5px;">
-                            <span class="bench-arrow" style="font-size:8px;">&#9654;</span>
-                            Bench ({{ bench.items|length }})
-                        </summary>
-                        {% for e3 in bench.items %}
-                            {{ equip_card(e3, card_idx.val) }}
-                            {% set card_idx.val = card_idx.val + 1 %}
-                        {% endfor %}
-                    </details>
-                    {% endif %}
-                    </div>
-                </div>
                 {% endfor %}
-            </div>
 
-            {# Truly unclassified items (no hero mapping) #}
-            {% set orphans = namespace(items=[]) %}
-            {% for e in unequipped %}
-                {% if EQUIP_HERO.get(e.name, '') not in heroes_seen.val %}
-                    {% set orphans.items = orphans.items + [e] %}
+                {% set orphans = namespace(items=[]) %}
+                {% for e in unequipped %}{% if EQUIP_HERO.get(e.name, '') not in heroes_seen.val %}{% set orphans.items = orphans.items + [e] %}{% endif %}{% endfor %}
+                {% if orphans.items %}
+                <div class="inv-hero"><span>Other</span><span class="n">{{ orphans.items | length }} pieces</span></div>
+                <div class="inv-list">
+                    {% for e in orphans.items %}{{ equip_row(e, card_idx.val) }}{% set card_idx.val = card_idx.val + 1 %}{% endfor %}
+                </div>
+                {% endif %}
                 {% endif %}
             {% endfor %}
-            {% if orphans.items %}
-            <div style="margin-top:16px;">
-                <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
-                            text-transform:uppercase;letter-spacing:1px;color:var(--muted);
-                            margin-bottom:10px;">Other</div>
-                <div class="equip-grid">
-                {% for e in orphans.items %}
-                    {{ equip_card(e, card_idx.val) }}
-                    {% set card_idx.val = card_idx.val + 1 %}
-                {% endfor %}
-                </div>
+
+            {% set other_equip = equipment | rejectattr('village', 'in', ['home','builderBase']) | list %}
+            {% if other_equip %}
+            <div class="inv-groupbar"><span class="inv-village">Other</span><span class="inv-village-line"></span></div>
+            <div class="inv-list">
+                {% for e in other_equip %}{{ equip_row(e, card_idx.val) }}{% set card_idx.val = card_idx.val + 1 %}{% endfor %}
             </div>
             {% endif %}
-            {% endif %}
-        {% endfor %}
 
-        {% set other_equip = equipment | rejectattr('village', 'in', ['home', 'builderBase']) | list %}
-        {% if other_equip %}
-        <div class="section-label">Other</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            {% for e in other_equip %}
-                {{ equip_card(e, card_idx.val) }}
-                {% set card_idx.val = card_idx.val + 1 %}
-            {% endfor %}
-        </div>
+        {% else %}
+            <div class="arm-blank">
+                <div class="arm-blank-icon">⚙️</div>
+                <div class="arm-blank-title">No equipment found</div>
+                <div class="arm-blank-sub">The API returned no equipment data for this player yet.</div>
+            </div>
         {% endif %}
+        </main>
 
-    {% else %}
-        <div class="no-link">
-            <div class="no-link-icon">⚙️</div>
-            <div class="no-link-title">No equipment found</div>
-            <div class="no-link-sub">The API returned no equipment data for this player.</div>
-        </div>
-    {% endif %}
+        <!-- ══ RAIL · pulse → forecast → rate → balance ══ -->
+        <aside class="arm-rail">
 
+            <!-- ZONE A · pulse -->
+            <div class="pulse" id="pulse" style="display:none;"></div>
+
+            <!-- ZONE B · forecast -->
+            <section class="arm-card fc" aria-label="Upgrade forecast">
+                <div class="rate-head">
+                    <span class="arm-eyebrow" style="color:var(--mode-ink);">◎ Firing Solution</span>
+                    <span class="arm-eyebrow" id="fc-count"></span>
+                </div>
+                <div id="fc-hero" class="fc-hero" style="margin-top:11px;" role="status" aria-live="polite"></div>
+                <div class="fc-list" id="fc-list" aria-live="polite"></div>
+            </section>
+
+            <!-- ZONE C · rate readout + inline income editor -->
+            <section class="arm-card rate" aria-label="Ore income">
+                <div class="rate-head">
+                    <span class="arm-eyebrow">⚡ Earning rate</span>
+                    <span class="arm-eyebrow" id="rate-mo"></span>
+                </div>
+                <div class="rate-figs" id="rate-figs"></div>
+                <button type="button" class="rate-toggle" id="rate-toggle" aria-expanded="false" onclick="toggleIncome()">
+                    <span id="rate-toggle-lbl">Adjust income sources</span><span class="caret">▶</span>
+                </button>
+                <div id="gain-modal"><div id="gain-cards"></div></div>
+            </section>
+
+            <!-- ZONE D · balance -->
+            <section class="arm-card bal" aria-label="Ore balance">
+                <span class="arm-eyebrow">🎒 Ore on hand</span>
+                <div class="bal-rows">
+                    <div class="bal-row"><img src="/static/img/shiny.png" alt="Shiny ore"><span class="bal-name">Shiny</span>
+                        <input class="bal-input" id="ore-shiny" type="number" min="0" placeholder="0" aria-label="Shiny ore balance" oninput="onBalance()"></div>
+                    <div class="bal-row"><img src="/static/img/glowy.png" alt="Glowy ore"><span class="bal-name">Glowy</span>
+                        <input class="bal-input" id="ore-glowy" type="number" min="0" placeholder="0" aria-label="Glowy ore balance" oninput="onBalance()"></div>
+                    <div class="bal-row"><img src="/static/img/starry.png" alt="Starry ore"><span class="bal-name">Starry</span>
+                        <input class="bal-input" id="ore-starry" type="number" min="0" placeholder="0" aria-label="Starry ore balance" oninput="onBalance()"></div>
+                </div>
+                <div class="bal-foot">
+                    <span id="save-indicator" role="status" aria-live="polite"></span>
+                    <button class="bal-reset" id="reset-btn" onclick="onResetClick()">Reset plan</button>
+                </div>
+            </section>
+
+        </aside>
+    </div>
 {% endif %}
 
 </div>
 
 <script>
-// Cost to upgrade TO level N (index = target level)
-// [shiny, glowy, starry]
-const COMMON_COSTS = [
-    null,
-    [0,    0,   0],   // 1
-    [120,  0,   0],   // 2
-    [240,  20,  0],   // 3
-    [400,  0,   0],   // 4
-    [600,  0,   0],   // 5
-    [840,  100, 0],   // 6
-    [1120, 0,   0],   // 7
-    [1440, 0,   0],   // 8
-    [1800, 200, 0],   // 9
-    [1900, 0,   0],   // 10
-    [2000, 0,   0],   // 11
-    [2100, 400, 0],   // 12
-    [2200, 0,   0],   // 13
-    [2300, 0,   0],   // 14
-    [2400, 600, 0],   // 15
-    [2500, 0,   0],   // 16
-    [2600, 0,   0],   // 17
-    [2700, 600, 0],   // 18
-];
-
-const EPIC_COSTS = [
-    null,
-    [0,    0,   0],   // 1
-    [120,  0,   0],   // 2
-    [240,  20,  0],   // 3
-    [400,  0,   0],   // 4
-    [600,  0,   0],   // 5
-    [840,  100, 0],   // 6
-    [1120, 0,   0],   // 7
-    [1440, 0,   0],   // 8
-    [1800, 200, 10],  // 9
-    [1900, 0,   0],   // 10
-    [2000, 0,   0],   // 11
-    [2100, 400, 20],  // 12
-    [2200, 0,   0],   // 13
-    [2300, 0,   0],   // 14
-    [2400, 600, 30],  // 15
-    [2500, 0,   0],   // 16
-    [2600, 0,   0],   // 17
-    [2700, 600, 50],  // 18
-    [2800, 0,   0],   // 19
-    [2900, 0,   0],   // 20
-    [3000, 600, 100], // 21
-    [3100, 0,   0],   // 22
-    [3200, 0,   0],   // 23
-    [3300, 600, 120], // 24
-    [3400, 0,   0],   // 25
-    [3500, 0,   0],   // 26
-    [3600, 600, 150], // 27
-];
-
+// ══ Cost tables — ore to upgrade TO level N [shiny, glowy, starry] ══
+const COMMON_COSTS = [null,[0,0,0],[120,0,0],[240,20,0],[400,0,0],[600,0,0],[840,100,0],[1120,0,0],[1440,0,0],[1800,200,0],[1900,0,0],[2000,0,0],[2100,400,0],[2200,0,0],[2300,0,0],[2400,600,0],[2500,0,0],[2600,0,0],[2700,600,0]];
+const EPIC_COSTS   = [null,[0,0,0],[120,0,0],[240,20,0],[400,0,0],[600,0,0],[840,100,0],[1120,0,0],[1440,0,0],[1800,200,10],[1900,0,0],[2000,0,0],[2100,400,20],[2200,0,0],[2300,0,0],[2400,600,30],[2500,0,0],[2600,0,0],[2700,600,50],[2800,0,0],[2900,0,0],[3000,600,100],[3100,0,0],[3200,0,0],[3300,600,120],[3400,0,0],[3500,0,0],[3600,600,150]];
 function calcCost(from, to, maxLevel) {
     const table = maxLevel > 18 ? EPIC_COSTS : COMMON_COSTS;
     let shiny = 0, glowy = 0, starry = 0;
-    for (let lvl = from + 1; lvl <= to; lvl++) {
-        const row = table[lvl];
-        if (row) { shiny += row[0]; glowy += row[1]; starry += row[2]; }
-    }
+    for (let lvl = from + 1; lvl <= to; lvl++) { const r = table[lvl]; if (r) { shiny += r[0]; glowy += r[1]; starry += r[2]; } }
     return { shiny, glowy, starry };
 }
+const fmt = n => (n || 0).toLocaleString('en-GB');
+const ORE_LABEL = { shiny: 'Shiny', glowy: 'Glowy', starry: 'Starry' };
 
-function fmt(n) { return n.toLocaleString(); }
+const EQUIP_IMAGES = {
+    'Barbarian Puppet':'Hero_Equipment_BK_Barbarian_Puppet.png','Earthquake Boots':'Hero_Equipment_BK_Earthquake_Boots.png','Rage Vial':'Hero_Equipment_BK_Rage_Vial.png','Snake Bracelet':'Hero_Equipment_BK_SnakeBracelet.png','Vampstache':'Hero_Equipment_BK_Vampstache.png','Giant Gauntlet':'Hero_Equipment_BQ_Giant_Gauntlet.png','Spiky Ball':'Hero_Equipment_BK_Spiky_Ball.png',
+    'Archer Puppet':'Hero_Equipment_AQ_Archer_Puppet.png','Frozen Arrow':'Hero_Equipment_AQ_Frozen_Arrow.png','Giant Arrow':'Hero_Equipment_AQ_Giant_Arrow.png','Healer Puppet':'Hero_Equipment_AQ_Healer_Puppet.png','Invisibility Vial':'Hero_Equipment_AQ_Invisibility_Vial.png','Magic Mirror':'Hero_Equipment_AQ_Magic_Mirror.png','Monolith Arrow':'Hero_Equipment_AQ_MonolithArrow.png','WWE Action Figure':'Hero_Equipment_AQ_WWEActionFigure.png','Action Figure':'Hero_Equipment_AQ_WWEActionFigure.png',
+    'Eternal Tome':'Hero_Equipment_GW_Eternal_Tome.png','Fireball':'Hero_Equipment_GW_Fireball.png','Healing Tome':'Hero_Equipment_GW_Healing_Tome.png','Life Gem':'Hero_Equipment_GW_Life_Gem.png','Rage Gem':'Hero_Equipment_GW_Rage_Gem.png','Lavaloon Puppet':'icon_gear_GW_LavaloonPuppet.png',
+    'Electro Boots':'Hero_Equipment_RC_ElectroBoots.png','Haste Vial':'Hero_Equipment_RC_Haste_Vial.png','Hog Rider Puppet':'Hero_Equipment_RC_Hog_Rider_Doll.png','Royal Gem':'Hero_Equipment_RC_Royal_Gem.png','Seeking Shield':'Hero_Equipment_RC_Seeking_Shield.png','Frost Flake':'Hero_Equipment_rc_frost_flake.png','Rocket Spear':'HeroGear_RoyalChampion_RocketSpear_Equipment_02.png',
+    'Dark Crown':'HeroGear_MP_DarkCrown_2k.png','Dark Orb':'Hero_Equipment_MP_DarkOrb.png','Henchmen Puppet':'Hero_Equipment_MP_Henchman.png','Power Pump':'Hero_Equipment_MP_PowerPump.png','Noble Iron':'Hero_Equipment_MP_PowerPump.png','Meteor Staff':'HeroGear_MP_MeteoriteSceptre.png','Iron Pants':'HeroEquipment_MP_IronPants.png','Metal Pants':'HeroEquipment_MP_IronPants.png',
+    'Electro Fangs':'HG_DD_Electro_Fangs.png','Fire Heart':'HG_DD_Fire Heart.png','Flame Blower':'HG_DD_Flame Blower.png','Rocket Backpack':'HG_DD_Rocket_BackPack.png','Stun Blast':'HG_DD_StunBlast.png',
+};
 
-function sliderGradient(slider, current, target, max) {
-    const tgtPct = ((target  - 1) / (max - 1)) * 100;
-    const curPct = ((current - 1) / (max - 1)) * 100;
-    const dark   = 'var(--bord2, rgba(255,255,255,.08))';
-    const fill   = target > current ? 'var(--accent)' : 'rgba(240,165,0,0.28)';
-    const pct    = target > current ? tgtPct : curPct;
-    slider.style.background = `linear-gradient(to right, ${fill} ${pct}%, ${dark} ${pct}%)`;
-}
-
-// ── Goal state ────────────────────────────────────────────────────────────────
-const goalState = {}; // name -> {name, current, maxLevel, target, priority}
-
+// ══ Goal state (single source of truth; keyed by equipment name) ══
+const goalState = {};   // name -> { name, current, maxLevel, target, priority, cid }
 function initGoalState() {
-    document.querySelectorAll('.equip-card[data-name]').forEach(card => {
-        const name    = card.dataset.name;
-        const current = parseInt(card.dataset.current);
-        const max     = parseInt(card.dataset.max);
-        goalState[name] = { name, current, maxLevel: max, target: current, priority: null };
+    document.querySelectorAll('.eq-row[data-name]').forEach(row => {
+        const name = row.dataset.name, current = parseInt(row.dataset.current), max = parseInt(row.dataset.max);
+        const slider = row.querySelector('.eq-slider');
+        goalState[name] = { name, current, maxLevel: max, target: current, priority: null, cid: slider ? slider.dataset.cid : null };
     });
 }
 
-function applySavedData(saved) {
-    const ores  = saved.ores  || {};
-    const goals = saved.goals || {};
-    document.getElementById('ore-shiny').value  = ores.shiny  || 0;
-    document.getElementById('ore-glowy').value  = ores.glowy  || 0;
-    document.getElementById('ore-starry').value = ores.starry || 0;
-
-    Object.entries(goals).forEach(([name, g]) => {
-        if (!goalState[name]) return;
-        goalState[name].target   = g.target   ?? goalState[name].current;
-        goalState[name].priority = g.priority ?? null;
-    });
-
-    document.querySelectorAll('.equip-card[data-name]').forEach(card => {
-        const name  = card.dataset.name;
-        const state = goalState[name];
-        if (!state) return;
-        const slider = card.querySelector('.equip-target-range');
-        if (slider && state.target > state.current) {
-            slider.value = state.target;
-            _applySliderVisuals(slider, state.current, state.target, state.maxLevel);
-        }
-        const priInput = card.querySelector('.priority-input');
-        if (priInput && state.priority != null) priInput.value = state.priority;
-    });
-
-    updateSummary();
-    computeAndRenderPlan();
-}
-
-// ── Auto-save ──────────────────────────────────────────────────────────────
-let _saveTimer = null;
-
-function scheduleAutoSave() {
-    clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(doSave, 900);
-}
-
-async function doSave() {
-    const goals = {};
-    Object.values(goalState).forEach(s => {
-        if (s.target > s.current) {
-            goals[s.name] = { target: s.target, priority: s.priority };
-        } else {
-            goals[s.name] = null; // delete any previously saved goal
-        }
-    });
-    const body = {
-        shiny:  parseInt(document.getElementById('ore-shiny').value)  || 0,
-        glowy:  parseInt(document.getElementById('ore-glowy').value)  || 0,
-        starry: parseInt(document.getElementById('ore-starry').value) || 0,
-        goals,
-        gainSettings: OreGain.getSettings(),
-    };
-    try {
-        const r = await fetch('/tools/equipment/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-        showSave(r.ok ? 'Saved' : 'Error', !r.ok);
-    } catch { showSave('Error', true); }
-}
-
-function showSave(text, err = false) {
-    for (const id of ['save-indicator', 'gain-modal-save']) {
-        const el = document.getElementById(id);
-        if (!el) continue;
-        el.textContent = text;
-        el.style.color = err ? 'var(--red)' : 'var(--green)';
-        el.style.opacity = '1';
-        clearTimeout(el._t);
-        el._t = setTimeout(() => { el.style.opacity = '0'; }, 2200);
-    }
-}
-
-// ── Slider ────────────────────────────────────────────────────────────────
-function _applySliderVisuals(slider, current, target, max) {
-    sliderGradient(slider, current, target, max);
-    const tgtLbl  = document.getElementById('tgt-' + slider.dataset.cid);
-    const costDiv = document.getElementById('cost-' + slider.dataset.cid);
-    const card    = slider.closest('.equip-card');
-    if (target <= current) {
-        if (tgtLbl)  { tgtLbl.textContent = `→ ${current}`; tgtLbl.style.color = 'var(--muted)'; }
-        if (costDiv)   costDiv.innerHTML = '';
-        if (card)      card.classList.remove('has-upgrade');
-    } else {
-        if (tgtLbl)  { tgtLbl.textContent = `→ ${target}${target === max ? ' ★' : ''}`; tgtLbl.style.color = 'var(--accent)'; }
-        if (costDiv) {
-            const { shiny, glowy, starry } = calcCost(current, target, max);
-            let html = '';
-            if (shiny  > 0) html += `<span class="ore-pill ore-shiny"><img src="/static/img/shiny.png" class="ore-img"> <span style="color:#f0a500;">${fmt(shiny)}</span></span>`;
-            if (glowy  > 0) html += `<span class="ore-pill ore-glowy"><img src="/static/img/glowy.png" class="ore-img"> <span style="color:#3fb950;">${fmt(glowy)}</span></span>`;
-            if (starry > 0) html += `<span class="ore-pill ore-starry"><img src="/static/img/starry.png" class="ore-img"> <span style="color:#a78bfa;">${fmt(starry)}</span></span>`;
-            costDiv.innerHTML = html;
-        }
-        if (card) card.classList.add('has-upgrade');
-    }
-}
-
-function onTargetChange(slider) {
-    const current = parseInt(slider.dataset.current);
-    const max     = parseInt(slider.dataset.max);
-    let   target  = parseInt(slider.value);
-    if (target < current) { slider.value = current; target = current; }
-
-    _applySliderVisuals(slider, current, target, max);
-
-    const card = slider.closest('.equip-card');
-    const name = card?.dataset.name;
-    if (name && goalState[name]) goalState[name].target = target;
-
-    updateSummary();
-    computeAndRenderPlan();
-    scheduleAutoSave();
-}
-
-function onPriorityChange(input) {
-    const card = input.closest('.equip-card');
-    const name = card?.dataset.name;
-    const val  = parseInt(input.value);
-    if (name && goalState[name]) goalState[name].priority = isNaN(val) ? null : Math.max(1, Math.min(9, val));
-    computeAndRenderPlan();
-    scheduleAutoSave();
-}
-
-function onOreChange() {
-    computeAndRenderPlan();
-    scheduleAutoSave();
-}
-
-function updateSummary() {
-    let totalShiny = 0, totalGlowy = 0, totalStarry = 0, count = 0;
-    document.querySelectorAll('.equip-target-range').forEach(slider => {
-        const current = parseInt(slider.dataset.current);
-        const max     = parseInt(slider.dataset.max);
-        const target  = parseInt(slider.value);
-        if (target > current) {
-            const { shiny, glowy, starry } = calcCost(current, target, max);
-            totalShiny += shiny; totalGlowy += glowy; totalStarry += starry;
-            count++;
-        }
-    });
-    document.getElementById('sum-shiny').style.display  = 'flex';
-    document.getElementById('sum-glowy').style.display  = 'flex';
-    document.getElementById('sum-starry').style.display = totalStarry > 0 ? 'flex' : 'none';
-    document.getElementById('sum-shiny-val').textContent  = fmt(totalShiny);
-    document.getElementById('sum-glowy-val').textContent  = fmt(totalGlowy);
-    document.getElementById('sum-starry-val').textContent = fmt(totalStarry);
-    document.getElementById('sum-count').textContent =
-        count === 0 ? 'No upgrades selected' :
-        count === 1 ? '1 piece selected' : `${count} pieces selected`;
-}
-
-// ── Upgrade Plan ──────────────────────────────────────────────────────────
-function computeAndRenderPlan() {
-    const ores = {
+// ══ Ore cost / income math ══
+function getBalance() {
+    return {
         shiny:  parseInt(document.getElementById('ore-shiny')?.value)  || 0,
         glowy:  parseInt(document.getElementById('ore-glowy')?.value)  || 0,
         starry: parseInt(document.getElementById('ore-starry')?.value) || 0,
     };
-    const items = Object.values(goalState).filter(s => s.target > s.current);
-    items.sort((a, b) => {
-        if (a.priority == null && b.priority == null) return a.name.localeCompare(b.name);
-        if (a.priority == null) return 1;
-        if (b.priority == null) return -1;
-        return a.priority !== b.priority ? a.priority - b.priority : a.name.localeCompare(b.name);
-    });
-
-    let balance = { ...ores };
-    const results = [];
-    for (const item of items) {
-        const cost = calcCost(item.current, item.target, item.maxLevel);
-        const canFull = balance.shiny >= cost.shiny && balance.glowy >= cost.glowy && balance.starry >= cost.starry;
-        if (canFull) {
-            balance.shiny -= cost.shiny; balance.glowy -= cost.glowy; balance.starry -= cost.starry;
-            results.push({ ...item, cost, status: 'full', reachable: item.target, after: { ...balance } });
-        } else {
-            let b = { ...balance }, reachable = item.current;
-            for (let lvl = item.current + 1; lvl <= item.target; lvl++) {
-                const step = calcCost(lvl - 1, lvl, item.maxLevel);
-                if (b.shiny >= step.shiny && b.glowy >= step.glowy && b.starry >= step.starry) {
-                    b.shiny -= step.shiny; b.glowy -= step.glowy; b.starry -= step.starry;
-                    reachable = lvl;
-                } else break;
-            }
-            if (reachable > item.current) {
-                balance = { ...b };
-                results.push({ ...item, cost, status: 'partial', reachable, after: { ...balance } });
-            } else {
-                results.push({ ...item, cost, status: 'none', reachable: item.current, after: { ...balance } });
-            }
-        }
-    }
-    renderPlan(results);
-    OreGain.updateSummary();
 }
-
-function renderPlan(results) {
-    const el = document.getElementById('plan-list');
-    if (!el) return;
-    if (!results.length) {
-        el.innerHTML = '<div class="plan-empty">No upgrades selected. Set target levels on cards above.</div>';
-        return;
-    }
-    const oreHtml = (cost) => {
-        let h = '';
-        if (cost.shiny  > 0) h += `<span class="ore-pill ore-shiny"><img src="/static/img/shiny.png" class="ore-img"> <span style="color:#f0a500;">${fmt(cost.shiny)}</span></span>`;
-        if (cost.glowy  > 0) h += `<span class="ore-pill ore-glowy"><img src="/static/img/glowy.png" class="ore-img"> <span style="color:#3fb950;">${fmt(cost.glowy)}</span></span>`;
-        if (cost.starry > 0) h += `<span class="ore-pill ore-starry"><img src="/static/img/starry.png" class="ore-img"> <span style="color:#a78bfa;">${fmt(cost.starry)}</span></span>`;
-        return h;
-    };
-    el.innerHTML = results.map(r => {
-        const priLabel  = r.priority != null
-            ? `<span class="plan-pri">P${r.priority}</span>`
-            : `<span class="plan-pri plan-pri-none">--</span>`;
-        const icon      = r.status === 'full' ? '✅' : r.status === 'partial' ? '⚡' : '❌';
-        const reachNote = r.status === 'partial'
-            ? ` <span class="plan-reach">(→ ${r.reachable} possible)</span>` : '';
-        const afterHtml = r.status !== 'none' ? `
-            <div class="plan-after">
-                <span class="plan-after-label">Remaining</span>
-                <span style="color:#f0a500;">${fmt(r.after.shiny)} shiny</span>
-                <span style="color:#3fb950;">${fmt(r.after.glowy)} glowy</span>
-                ${r.after.starry > 0 ? `<span style="color:#a78bfa;">${fmt(r.after.starry)} starry</span>` : ''}
-            </div>` : '';
-        return `<div class="plan-row plan-status-${r.status}">
-            <div class="plan-row-main">
-                <div class="plan-left">
-                    ${priLabel}
-                    <span class="plan-name">${r.name}</span>
-                    <span class="plan-levels">${r.current} → ${r.target}</span>
-                    ${reachNote}
-                </div>
-                <div class="plan-right">
-                    ${oreHtml(r.cost)}
-                    <span class="plan-status-icon">${icon}</span>
-                </div>
-            </div>
-            ${afterHtml}
-        </div>`;
-    }).join('');
-}
-
-// ── Equipment images ──
-const EQUIP_IMAGES = {
-    // Barbarian King
-    'Barbarian Puppet':  'Hero_Equipment_BK_Barbarian_Puppet.png',
-    'Earthquake Boots':  'Hero_Equipment_BK_Earthquake_Boots.png',
-    'Rage Vial':         'Hero_Equipment_BK_Rage_Vial.png',
-    'Snake Bracelet':    'Hero_Equipment_BK_SnakeBracelet.png',
-    'Vampstache':        'Hero_Equipment_BK_Vampstache.png',
-    'Giant Gauntlet':    'Hero_Equipment_BQ_Giant_Gauntlet.png',
-    'Spiky Ball':        'Hero_Equipment_BK_Spiky_Ball.png',
-    // Archer Queen
-    'Archer Puppet':     'Hero_Equipment_AQ_Archer_Puppet.png',
-    'Frozen Arrow':      'Hero_Equipment_AQ_Frozen_Arrow.png',
-    'Giant Arrow':       'Hero_Equipment_AQ_Giant_Arrow.png',
-    'Healer Puppet':     'Hero_Equipment_AQ_Healer_Puppet.png',
-    'Invisibility Vial': 'Hero_Equipment_AQ_Invisibility_Vial.png',
-    'Magic Mirror':      'Hero_Equipment_AQ_Magic_Mirror.png',
-    'Monolith Arrow':    'Hero_Equipment_AQ_MonolithArrow.png',
-    'WWE Action Figure': 'Hero_Equipment_AQ_WWEActionFigure.png',
-    'Action Figure':     'Hero_Equipment_AQ_WWEActionFigure.png',
-    // Grand Warden
-    'Eternal Tome':      'Hero_Equipment_GW_Eternal_Tome.png',
-    'Fireball':          'Hero_Equipment_GW_Fireball.png',
-    'Healing Tome':      'Hero_Equipment_GW_Healing_Tome.png',
-    'Life Gem':          'Hero_Equipment_GW_Life_Gem.png',
-    'Rage Gem':          'Hero_Equipment_GW_Rage_Gem.png',
-    'Lavaloon Puppet':   'icon_gear_GW_LavaloonPuppet.png',
-    // Royal Champion
-    'Electro Boots':     'Hero_Equipment_RC_ElectroBoots.png',
-    'Haste Vial':        'Hero_Equipment_RC_Haste_Vial.png',
-    'Hog Rider Puppet':  'Hero_Equipment_RC_Hog_Rider_Doll.png',
-    'Royal Gem':         'Hero_Equipment_RC_Royal_Gem.png',
-    'Seeking Shield':    'Hero_Equipment_RC_Seeking_Shield.png',
-    'Frost Flake':       'Hero_Equipment_rc_frost_flake.png',
-    'Rocket Spear':      'HeroGear_RoyalChampion_RocketSpear_Equipment_02.png',
-    // Minion Prince
-    'Dark Crown':        'HeroGear_MP_DarkCrown_2k.png',
-    'Dark Orb':          'Hero_Equipment_MP_DarkOrb.png',
-    'Henchmen Puppet':   'Hero_Equipment_MP_Henchman.png',
-    'Power Pump':        'Hero_Equipment_MP_PowerPump.png',
-    'Noble Iron':        'Hero_Equipment_MP_PowerPump.png',
-    'Meteor Staff':      'HeroGear_MP_MeteoriteSceptre.png',
-    'Iron Pants':        'HeroEquipment_MP_IronPants.png',
-    'Metal Pants':       'HeroEquipment_MP_IronPants.png',
-    // Dark Prince (DD)
-    'Electro Fangs':     'HG_DD_Electro_Fangs.png',
-    'Fire Heart':        'HG_DD_Fire Heart.png',
-    'Flame Blower':      'HG_DD_Flame Blower.png',
-    'Rocket Backpack':   'HG_DD_Rocket_BackPack.png',
-    'Stun Blast':        'HG_DD_StunBlast.png',
-};
-
-// ── Daily Ore Gain ─────────────────────────────────────────────────────────
-let gainSources = [
-    { id: 'star',   name: 'Star Bonus',      icon: '⭐', freq: 'daily',   shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  th: 0, league: 'Unranked' },
-    { id: 'war',    name: 'Clan War',        icon: '⚔️', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  attacks: 0, wars: 0 },
-    { id: 'cwl',    name: 'CWL',             icon: '🏆', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: true,  attacks: 0, wars: 0 },
-    { id: 'trader', name: 'Trader (Medals)', icon: '🪙', freq: 'weekly',  shiny: 1000, glowy: 100, starry: 10, enabled: true, shinyBuys: 2, glowyBuys: 2, starryBuys: 2 },
-    { id: 'prosp',  name: 'Prospector',      icon: '⛏️', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: false },
-    { id: 'event',  name: 'Event Pass',      icon: '🎟️', freq: 'monthly', shiny: 150, glowy: 75,  starry: 15, enabled: false },
-    { id: 'custom', name: 'Custom',          icon: '✨', freq: 'monthly', shiny: 0,   glowy: 0,   starry: 0,  enabled: false },
-];
-const GAIN_LS_KEY = 'coc_ore_gain';
-
-function loadGainSources() {
-    try {
-        const saved = JSON.parse(localStorage.getItem(GAIN_LS_KEY) || 'null');
-        if (!Array.isArray(saved)) return;
-        const map = Object.fromEntries(saved.map(s => [s.id, s]));
-        const AUTO = new Set(['star', 'war', 'cwl']);
-        gainSources.forEach(s => {
-            const sv = map[s.id];
-            if (!sv) return;
-            if (sv.shiny      != null) s.shiny      = sv.shiny;
-            if (sv.glowy      != null) s.glowy      = sv.glowy;
-            if (sv.starry     != null) s.starry     = sv.starry;
-            if (sv.freq       != null) s.freq       = sv.freq;
-            if (sv.enabled    != null && !AUTO.has(s.id)) s.enabled = sv.enabled;
-            if (sv.shinyBuys  != null) s.shinyBuys  = sv.shinyBuys;
-            if (sv.glowyBuys  != null) s.glowyBuys  = sv.glowyBuys;
-            if (sv.starryBuys != null) s.starryBuys = sv.starryBuys;
-        });
-    } catch(e) {}
-}
-
-function saveGainSources() {
-    try {
-        localStorage.setItem(GAIN_LS_KEY, JSON.stringify(
-            gainSources.map(({ id, shiny, glowy, starry, freq, enabled, shinyBuys, glowyBuys, starryBuys }) =>
-                ({ id, shiny, glowy, starry, freq, enabled, shinyBuys, glowyBuys, starryBuys }))
-        ));
-        // re-derive trader ore amounts from per-bundle buy counts
-        const trader = gainSources.find(s => s.id === 'trader');
-        if (trader) {
-            trader.shiny  = TRADER_BUNDLES.shiny  * (trader.shinyBuys  ?? 2);
-            trader.glowy  = TRADER_BUNDLES.glowy  * (trader.glowyBuys  ?? 2);
-            trader.starry = TRADER_BUNDLES.starry * (trader.starryBuys ?? 2);
-            trader.freq   = 'weekly';
-            trader.enabled = trader.shiny > 0 || trader.glowy > 0 || trader.starry > 0;
-        }
-    } catch(e) {}
-}
-
-function calcDailyGain() {
-    
-    const M = { daily: 1, weekly: 1/7, monthly: 1/30 };
-    return gainSources.filter(s => s.enabled).reduce((acc, s) => {
-        const m = M[s.freq] || 0;
-        acc.shiny  += s.shiny  * m;
-        acc.glowy  += s.glowy  * m;
-        acc.starry += s.starry * m;
-        return acc;
-    }, { shiny: 0, glowy: 0, starry: 0 });
-}
-
 function calcTotalPlanCost() {
-    return Object.values(goalState).reduce((acc, s) => {
-        if (s.target > s.current) {
-            const c = calcCost(s.current, s.target, s.maxLevel);
-            acc.shiny  += c.shiny;
-            acc.glowy  += c.glowy;
-            acc.starry += c.starry;
-        }
-        return acc;
-    }, { shiny: 0, glowy: 0, starry: 0 });
+    let shiny = 0, glowy = 0, starry = 0;
+    Object.values(goalState).forEach(s => { if (s.target > s.current) { const c = calcCost(s.current, s.target, s.maxLevel); shiny += c.shiny; glowy += c.glowy; starry += c.starry; } });
+    return { shiny, glowy, starry };
 }
-
 function calcDaysToCover(total, balance, daily) {
-    const rem = {
-        shiny:  Math.max(0, total.shiny  - balance.shiny),
-        glowy:  Math.max(0, total.glowy  - balance.glowy),
-        starry: Math.max(0, total.starry - balance.starry),
-    };
+    const rem = { shiny: Math.max(0, total.shiny - balance.shiny), glowy: Math.max(0, total.glowy - balance.glowy), starry: Math.max(0, total.starry - balance.starry) };
     if (rem.shiny === 0 && rem.glowy === 0 && rem.starry === 0) return 0;
-    if ((rem.shiny  > 0 && daily.shiny  === 0) ||
-        (rem.glowy  > 0 && daily.glowy  === 0) ||
-        (rem.starry > 0 && daily.starry === 0)) return Infinity;
+    if ((rem.shiny > 0 && daily.shiny <= 0) || (rem.glowy > 0 && daily.glowy <= 0) || (rem.starry > 0 && daily.starry <= 0)) return Infinity;
     let days = 0;
     if (daily.shiny  > 0) days = Math.max(days, rem.shiny  / daily.shiny);
     if (daily.glowy  > 0) days = Math.max(days, rem.glowy  / daily.glowy);
     if (daily.starry > 0) days = Math.max(days, rem.starry / daily.starry);
     return days;
 }
-
-function openGainModal()  { document.getElementById('gain-modal')?.classList.add('open'); }
-function closeGainModal() { document.getElementById('gain-modal')?.classList.remove('open'); }
-
-// ── Star Bonus lookup table ────────────────────────────────────────────────
-const SB_LEAGUES = ['Unranked','Skeleton 1','Skeleton 2','Skeleton 3','Barbarian 4','Barbarian 5','Barbarian 6','Archer 7','Archer 8','Archer 9','Wizard 10','Wizard 11','Wizard 12','Valkyrie 13','Valkyrie 14','Valkyrie 15','Witch 16','Witch 17','Witch 18','Golem 19','Golem 20','Golem 21','P.E.K.K.A 22','P.E.K.K.A 23','P.E.K.K.A 24','Titan 25','Titan 26','Titan 27','Dragon 28','Dragon 29','Dragon 30','Electro 31','Electro 32','Electro 33','Legend'];
-const SB_RAW = {
-    8:  [[360,23,0],[390,25,1],[395,25,1],[400,25,1],[450,30,1],[455,30,1],[460,30,1],[510,35,1],[515,35,1],[520,35,1],[570,38,1],[575,38,1],[580,38,1],[630,43,1],[635,43,1],[640,43,1],[690,46,1],[695,46,1],[700,46,1],[750,49,1],[755,49,1],[760,49,1],[770,52,1],[775,52,1],[780,52,1],[790,55,1],[795,55,1],[800,55,1],[810,56,1],[815,56,1],[820,56,1],[830,57,2],[835,57,2],[840,57,2],[850,58,2]],
-    9:  [[450,27,0],[490,30,1],[495,30,1],[500,30,1],[550,35,1],[555,35,1],[560,35,1],[610,40,1],[615,40,1],[620,40,1],[670,43,1],[675,43,1],[680,43,1],[730,48,1],[735,48,1],[740,48,1],[790,51,1],[795,51,1],[800,51,1],[850,54,1],[855,54,1],[860,54,1],[870,57,1],[875,57,1],[880,57,1],[890,60,1],[895,60,1],[900,60,1],[910,61,1],[915,61,1],[920,61,1],[930,62,2],[935,62,2],[940,62,2],[950,63,2]],
-    10: [[590,33,0],[590,31,1],[595,31,1],[600,31,1],[650,36,1],[655,36,1],[660,36,1],[710,41,1],[715,41,1],[720,41,1],[770,44,1],[775,44,1],[780,44,1],[830,49,1],[835,49,1],[840,49,1],[890,52,1],[895,52,1],[900,52,1],[950,55,1],[955,55,1],[960,55,1],[970,58,1],[975,58,1],[980,58,1],[990,61,1],[995,61,1],[1000,61,1],[1010,62,1],[1015,62,1],[1020,62,1],[1030,63,2],[1035,63,2],[1040,63,2],[1050,64,2]],
-    11: [[640,34,0],[640,32,1],[645,32,1],[650,32,1],[700,37,1],[705,37,1],[710,37,1],[760,42,1],[765,42,1],[770,42,1],[820,45,1],[825,45,1],[830,45,1],[880,50,1],[885,50,1],[890,50,1],[940,53,1],[945,53,1],[950,53,1],[1000,56,1],[1005,56,1],[1010,56,1],[1020,59,1],[1025,59,1],[1030,59,1],[1040,62,1],[1045,62,1],[1050,62,1],[1060,63,1],[1065,63,1],[1070,63,1],[1080,64,2],[1085,64,2],[1090,64,2],[1100,65,2]],
-    12: [[730,39,1],[690,33,1],[695,33,1],[700,33,1],[750,38,1],[755,38,1],[760,38,1],[810,43,1],[815,43,1],[820,43,1],[870,46,1],[875,46,1],[880,46,1],[930,51,1],[935,51,1],[940,51,1],[990,54,1],[995,54,1],[1000,54,1],[1050,57,1],[1055,57,1],[1060,57,1],[1070,60,1],[1075,60,1],[1080,60,1],[1090,63,1],[1095,63,1],[1100,63,1],[1110,64,1],[1115,64,1],[1120,64,1],[1130,65,2],[1135,65,2],[1140,65,2],[1150,66,2]],
-    13: [[830,43,1],[740,34,1],[745,34,1],[750,34,1],[800,39,1],[805,39,1],[810,39,1],[860,44,1],[865,44,1],[870,44,1],[920,47,1],[925,47,1],[930,47,1],[980,52,1],[985,52,1],[990,52,1],[1040,55,1],[1045,55,1],[1050,55,1],[1100,58,1],[1105,58,1],[1110,58,1],[1120,61,1],[1125,61,1],[1130,61,1],[1140,64,1],[1145,64,1],[1150,64,1],[1160,65,1],[1165,65,1],[1170,65,1],[1180,66,2],[1185,66,2],[1190,66,2],[1200,67,2]],
-    14: [[900,48,1],[750,35,1],[755,35,1],[760,35,1],[810,40,1],[815,40,1],[820,40,1],[870,45,1],[875,45,1],[880,45,1],[930,48,1],[935,48,1],[940,48,1],[990,53,1],[995,53,1],[1000,53,1],[1050,56,1],[1055,56,1],[1060,56,1],[1110,59,1],[1115,59,1],[1120,59,1],[1130,62,1],[1135,62,1],[1140,62,1],[1150,65,1],[1155,65,1],[1160,65,1],[1170,66,1],[1175,66,1],[1180,66,1],[1190,67,2],[1195,67,2],[1200,67,2],[1210,68,2]],
-    15: [[960,52,1],[760,36,1],[765,36,1],[770,36,1],[820,41,1],[825,41,1],[830,41,1],[880,46,1],[885,46,1],[890,46,1],[940,49,1],[945,49,1],[950,49,1],[1000,54,1],[1005,54,1],[1010,54,1],[1060,57,1],[1065,57,1],[1070,57,1],[1120,60,1],[1125,60,1],[1130,60,1],[1140,63,1],[1145,63,1],[1150,63,1],[1160,66,1],[1165,66,1],[1170,66,1],[1180,67,1],[1185,67,1],[1190,67,1],[1200,68,2],[1205,68,2],[1210,68,2],[1220,69,2]],
-    16: [[1020,55,1],[770,37,1],[775,37,1],[780,37,1],[830,42,1],[835,42,1],[840,42,1],[890,47,1],[895,47,1],[900,47,1],[950,50,1],[955,50,1],[960,50,1],[1010,55,1],[1015,55,1],[1020,55,1],[1070,58,1],[1075,58,1],[1080,58,1],[1130,61,1],[1135,61,1],[1140,61,1],[1150,64,1],[1155,64,1],[1160,64,1],[1170,67,1],[1175,67,1],[1180,67,1],[1190,68,1],[1195,68,1],[1200,68,1],[1210,69,2],[1215,69,2],[1220,69,2],[1230,70,2]],
-    17: [[1050,59,1],[780,38,1],[785,38,1],[790,38,1],[840,43,1],[845,43,1],[850,43,1],[900,48,1],[905,48,1],[910,48,1],[960,51,1],[965,51,1],[970,51,1],[1020,56,1],[1025,56,1],[1030,56,1],[1080,59,1],[1085,59,1],[1090,59,1],[1140,62,1],[1145,62,1],[1150,62,1],[1160,65,1],[1165,65,1],[1170,65,1],[1180,68,1],[1185,68,1],[1190,68,1],[1200,69,1],[1205,69,1],[1210,69,1],[1220,70,2],[1225,70,2],[1230,70,2],[1240,71,2]],
-    18: [[1080,63,1],[790,39,1],[795,39,1],[800,39,1],[850,44,1],[855,44,1],[860,44,1],[910,49,1],[915,49,1],[920,49,1],[970,52,1],[975,52,1],[980,52,1],[1030,57,1],[1035,57,1],[1040,57,1],[1090,60,1],[1095,60,1],[1100,60,1],[1150,63,1],[1155,63,1],[1160,63,1],[1170,66,1],[1175,66,1],[1180,66,1],[1190,69,1],[1195,69,1],[1200,69,1],[1210,70,1],[1215,70,1],[1220,70,1],[1230,71,2],[1235,71,2],[1240,71,2],[1250,72,2]],
-};
-
-function lookupStarBonus(th, league) {
-    const idx  = SB_LEAGUES.indexOf(league.replace("League ", ""));
-    const rows = SB_RAW[th];
-    if (!rows || idx < 0 || !rows[idx]) return { shiny: 0, glowy: 0, starry: 0 };
-    return { shiny: rows[idx][0], glowy: rows[idx][1], starry: rows[idx][2] };
+function orderedGoals() {
+    return Object.values(goalState).filter(s => s.target > s.current).sort((a, b) => {
+        if (a.priority == null && b.priority == null) return a.name.localeCompare(b.name);
+        if (a.priority == null) return 1;
+        if (b.priority == null) return -1;
+        return a.priority !== b.priority ? a.priority - b.priority : a.name.localeCompare(b.name);
+    });
 }
 
-function applyStarBonus(th, league) {
-    const star = gainSources.find(s => s.id === 'star');
-    if (!star) return;
-    star.th = th; star.league = league;
-    const v = lookupStarBonus(th, league);
-    star.shiny = v.shiny; star.glowy = v.glowy; star.starry = v.starry;
-    star.freq = "daily"
-    const upd   = k => { const el = document.getElementById('star-' + k);       if (el) el.textContent = (v[k]||0).toLocaleString(); };
-    const updMo = k => { const el = document.getElementById('star-' + k + '-mo'); if (el) el.textContent = fmtOreMo(v[k]); };
-    upd('shiny'); upd('glowy'); upd('starry');
-    updMo('shiny'); updMo('glowy'); updMo('starry');
-    saveGainSources();
-    updateGainSummary();
-}
-
-
-function fmtOreD(n) {
-    const d = (n || 0) / 30;
-    return Number.isInteger(d) ? d.toLocaleString() : d.toFixed(1);
-}
-function fmtOreMo(n) { return Math.round((n || 0) * 30).toLocaleString(); }
-
-function renderStarCard(s) {
-    const v = lookupStarBonus(s.th, s.league);
-    const thLabel = s.th ? `TH${s.th}` : '—';
-    return `
-        <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-star">
-            <div class="gain-card-head">
-                <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
-            </div>
-            <div style="display:flex;gap:6px;">
-                <div class="gain-ore-ro" style="flex:0 0 auto;padding:4px 10px;">${thLabel}</div>
-                <div class="gain-ore-ro" style="flex:1;text-align:left;">${s.league || 'Unranked'}</div>
-            </div>
-            <div class="gain-ore-table">
-                <span></span>
-                <div class="gain-ore-hd">Daily</div>
-                <div class="gain-ore-hd">Monthly</div>
-                <img src="/static/img/shiny.png">
-                <div class="gain-ore-num" id="star-shiny">${v.shiny.toLocaleString()}</div>
-                <div class="gain-ore-num dim" id="star-shiny-mo">${fmtOreMo(v.shiny)}</div>
-                <img src="/static/img/glowy.png">
-                <div class="gain-ore-num" id="star-glowy">${v.glowy.toLocaleString()}</div>
-                <div class="gain-ore-num dim" id="star-glowy-mo">${fmtOreMo(v.glowy)}</div>
-                <img src="/static/img/starry.png">
-                <div class="gain-ore-num" id="star-starry">${v.starry.toLocaleString()}</div>
-                <div class="gain-ore-num dim" id="star-starry-mo">${fmtOreMo(v.starry)}</div>
-            </div>
-            <div class="gain-auto-lbl">Synced from profile</div>
-        </div>`;
-}
-
-function renderWarCard(s) {
-    const a = s.attacks || 0, w = s.wars || 0;
-    const countTxt = a > 0
-        ? `${a} attack${a !== 1 ? 's' : ''} · ${w} war${w !== 1 ? 's' : ''} · last 30d`
-        : 'No war attacks in last 30d';
-    return `
-        <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-war">
-            <div class="gain-card-head">
-                <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
-            </div>
-            <div class="gain-ore-ro" style="text-align:left;font-size:12px;" id="war-count">${countTxt}</div>
-            <div class="gain-ore-table">
-                <span></span>
-                <div class="gain-ore-hd">Daily</div>
-                <div class="gain-ore-hd">Monthly</div>
-                <img src="/static/img/shiny.png">
-                <div class="gain-ore-num dim" id="war-shiny-d">${fmtOreD(s.shiny)}</div>
-                <div class="gain-ore-num" id="war-shiny">${(s.shiny || 0).toLocaleString()}</div>
-                <img src="/static/img/glowy.png">
-                <div class="gain-ore-num dim" id="war-glowy-d">${fmtOreD(s.glowy)}</div>
-                <div class="gain-ore-num" id="war-glowy">${(s.glowy || 0).toLocaleString()}</div>
-                <img src="/static/img/starry.png">
-                <div class="gain-ore-num dim" id="war-starry-d">${fmtOreD(s.starry)}</div>
-                <div class="gain-ore-num" id="war-starry">${(s.starry || 0).toLocaleString()}</div>
-            </div>
-            <div class="gain-auto-lbl">Synced from war log</div>
-        </div>`;
-}
-
-function applyWarStats(data) {
-    const war = gainSources.find(s => s.id === 'war');
-    if (!war) return;
-    war.freq    = 'monthly';   // always 30-day totals — override any stale localStorage value
-    war.shiny   = data.shiny   || 0;
-    war.glowy   = data.glowy   || 0;
-    war.starry  = data.starry  || 0;
-    war.attacks = data.attacks || 0;
-    war.wars    = data.wars    || 0;
-    const upd  = k => { const el = document.getElementById('war-' + k);       if (el) el.textContent = (data[k]||0).toLocaleString(); };
-    const updD = k => { const el = document.getElementById('war-' + k + '-d'); if (el) el.textContent = fmtOreD(data[k]); };
-    upd('shiny');  upd('glowy');  upd('starry');
-    updD('shiny'); updD('glowy'); updD('starry');
-    const countEl = document.getElementById('war-count');
-    if (countEl) {
-        const a = data.attacks || 0, w = data.wars || 0;
-        countEl.textContent = a > 0
-            ? `${a} attack${a !== 1 ? 's' : ''} · ${w} war${w !== 1 ? 's' : ''} (last 30d)`
-            : 'No war attacks in last 30d';
-    }
-    saveGainSources();
-    updateGainSummary();
-}
-
-function renderCwlCard(s) {
-    const a = s.attacks || 0, w = s.wars || 0;
-    const countTxt = a > 0
-        ? `${a} attack${a !== 1 ? 's' : ''} · ${w} round${w !== 1 ? 's' : ''} · last CWL season`
-        : 'No CWL data in last 31d';
-    return `
-        <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-cwl">
-            <div class="gain-card-head">
-                <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
-            </div>
-            <div class="gain-ore-ro" style="text-align:left;font-size:12px;" id="cwl-count">${countTxt}</div>
-            <div class="gain-ore-table">
-                <span></span>
-                <div class="gain-ore-hd">Daily</div>
-                <div class="gain-ore-hd">Monthly</div>
-                <img src="/static/img/shiny.png">
-                <div class="gain-ore-num dim" id="cwl-shiny-d">${fmtOreD(s.shiny)}</div>
-                <div class="gain-ore-num" id="cwl-shiny">${(s.shiny || 0).toLocaleString()}</div>
-                <img src="/static/img/glowy.png">
-                <div class="gain-ore-num dim" id="cwl-glowy-d">${fmtOreD(s.glowy)}</div>
-                <div class="gain-ore-num" id="cwl-glowy">${(s.glowy || 0).toLocaleString()}</div>
-                <img src="/static/img/starry.png">
-                <div class="gain-ore-num dim" id="cwl-starry-d">${fmtOreD(s.starry)}</div>
-                <div class="gain-ore-num" id="cwl-starry">${(s.starry || 0).toLocaleString()}</div>
-            </div>
-            <div class="gain-auto-lbl">Synced from CWL season</div>
-        </div>`;
-}
-
-function applyCwlStats(data) {
-    const cwl = gainSources.find(s => s.id === 'cwl');
-    if (!cwl) return;
-    cwl.freq    = 'monthly';
-    cwl.shiny   = data.shiny   || 0;
-    cwl.glowy   = data.glowy   || 0;
-    cwl.starry  = data.starry  || 0;
-    cwl.attacks = data.attacks || 0;
-    cwl.wars    = data.wars    || 0;
-    const upd  = k => { const el = document.getElementById('cwl-' + k);       if (el) el.textContent = (data[k]||0).toLocaleString(); };
-    const updD = k => { const el = document.getElementById('cwl-' + k + '-d'); if (el) el.textContent = fmtOreD(data[k]); };
-    upd('shiny');  upd('glowy');  upd('starry');
-    updD('shiny'); updD('glowy'); updD('starry');
-    const countEl = document.getElementById('cwl-count');
-    if (countEl) {
-        const a = data.attacks || 0, w = data.wars || 0;
-        countEl.textContent = a > 0
-            ? `${a} attack${a !== 1 ? 's' : ''} · ${w} round${w !== 1 ? 's' : ''} · last CWL season`
-            : 'No CWL data in last 31d';
-    }
-    saveGainSources();
-    updateGainSummary();
-}
-
-// Trader: 3 independent bundles, each buyable 0–2× per week
-const TRADER_BUNDLES = { shiny: 500, glowy: 50, starry: 5 };
-
-function _traderBuysBtn(ore, n, active) {
-    return `<button onclick="setTraderBuys('${ore}',${n})" id="trader-${ore}-${n}"
-        style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;padding:2px 6px;
-               border-radius:4px;cursor:pointer;
-               background:${active?'var(--accent)':'var(--surf2)'};
-               color:${active?'var(--bg)':'var(--muted)'};
-               border:1px solid ${active?'var(--accent)':'var(--border)'};">${n}×</button>`;
-}
-
-function _traderFmtD(weekly) { const d = weekly / 7; return d < 10 ? d.toFixed(1) : Math.round(d).toString(); }
-
-function renderTraderCard(s) {
-    const bs = s.shinyBuys ?? 2, bg = s.glowyBuys ?? 2, bst = s.starryBuys ?? 2;
-    const ws = TRADER_BUNDLES.shiny * bs, wg = TRADER_BUNDLES.glowy * bg, wst = TRADER_BUNDLES.starry * bst;
-    const btns = (ore, buys) => `<div style="display:flex;gap:3px;">${[0,1,2].map(n => _traderBuysBtn(ore, n, buys===n)).join('')}</div>`;
-    return `
-        <div class="gain-card" id="gain-card-trader">
-            <div class="gain-card-head">
-                <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
-            </div>
-            <div style="display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:4px 8px;align-items:center;">
-                <span></span>
-                <div class="gain-ore-hd"></div>
-                <div class="gain-ore-hd">Daily</div>
-                <div class="gain-ore-hd">Weekly</div>
-                <img src="/static/img/shiny.png" style="width:16px;height:16px;object-fit:contain;justify-self:center;">
-                ${btns('shiny', bs)}
-                <div class="gain-ore-num dim" id="trader-shiny-d">${_traderFmtD(ws)}</div>
-                <div class="gain-ore-num" id="trader-shiny-mo">${ws}</div>
-                <img src="/static/img/glowy.png" style="width:16px;height:16px;object-fit:contain;justify-self:center;">
-                ${btns('glowy', bg)}
-                <div class="gain-ore-num dim" id="trader-glowy-d">${_traderFmtD(wg)}</div>
-                <div class="gain-ore-num" id="trader-glowy-mo">${wg}</div>
-                <img src="/static/img/starry.png" style="width:16px;height:16px;object-fit:contain;justify-self:center;">
-                ${btns('starry', bst)}
-                <div class="gain-ore-num dim" id="trader-starry-d">${_traderFmtD(wst)}</div>
-                <div class="gain-ore-num" id="trader-starry-mo">${wst}</div>
-            </div>
-        </div>`;
-}
-
-function setTraderBuys(ore, val) {
-    const src = gainSources.find(s => s.id === 'trader');
-    if (!src) return;
-    if (ore === 'shiny')  src.shinyBuys  = val;
-    if (ore === 'glowy')  src.glowyBuys  = val;
-    if (ore === 'starry') src.starryBuys = val;
-    src.shiny  = TRADER_BUNDLES.shiny  * (src.shinyBuys  ?? 2);
-    src.glowy  = TRADER_BUNDLES.glowy  * (src.glowyBuys  ?? 2);
-    src.starry = TRADER_BUNDLES.starry * (src.starryBuys ?? 2);
-    src.freq   = 'weekly';
-    src.enabled = src.shiny > 0 || src.glowy > 0 || src.starry > 0;
-    const upd = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    upd('trader-shiny-d',   _traderFmtD(src.shiny));
-    upd('trader-shiny-mo',  src.shiny);
-    upd('trader-glowy-d',   _traderFmtD(src.glowy));
-    upd('trader-glowy-mo',  src.glowy);
-    upd('trader-starry-d',  _traderFmtD(src.starry));
-    upd('trader-starry-mo', src.starry);
-    ['shiny','glowy','starry'].forEach(o => [0,1,2].forEach(n => {
-        const btn = document.getElementById(`trader-${o}-${n}`);
-        if (!btn) return;
-        const buys = o === 'shiny' ? src.shinyBuys : o === 'glowy' ? src.glowyBuys : src.starryBuys;
-        const active = buys === n;
-        btn.style.background  = active ? 'var(--accent)' : 'var(--surf2)';
-        btn.style.color       = active ? 'var(--bg)'     : 'var(--muted)';
-        btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-    }));
-    saveGainSources();
-    updateGainSummary();
-}
-
-function renderGainCards() {
-    const container = document.getElementById('gain-cards');
-    if (!container) return;
-    container.innerHTML = gainSources.map(s => {
-        if (s.id === 'star')   return renderStarCard(s);
-        if (s.id === 'war')    return renderWarCard(s);
-        if (s.id === 'cwl')    return renderCwlCard(s);
-        if (s.id === 'trader') return renderTraderCard(s);
-        return `
-        <div class="gain-card ${s.enabled ? '' : 'gain-card-off'}" id="gain-card-${s.id}">
-            <div class="gain-card-head">
-                <div class="gain-card-title"><span>${s.icon}</span><span>${s.name}</span></div>
-                <label class="gain-toggle">
-                    <input type="checkbox" data-id="${s.id}" onchange="onGainToggle(this)" ${s.enabled ? 'checked' : ''}>
-                    <span class="gain-t-track"></span>
-                    <span class="gain-t-thumb"></span>
-                </label>
-            </div>
-            <div class="gain-card-ores">
-                <div class="gain-card-ore"><img src="/static/img/shiny.png">
-                    <input class="gain-ore-val" type="number" min="0" value="${s.shiny}" data-id="${s.id}" data-ore="shiny" oninput="onGainInput(this)"></div>
-                <div class="gain-card-ore"><img src="/static/img/glowy.png">
-                    <input class="gain-ore-val" type="number" min="0" value="${s.glowy}" data-id="${s.id}" data-ore="glowy" oninput="onGainInput(this)"></div>
-                <div class="gain-card-ore"><img src="/static/img/starry.png">
-                    <input class="gain-ore-val" type="number" min="0" value="${s.starry}" data-id="${s.id}" data-ore="starry" oninput="onGainInput(this)"></div>
-            </div>
-            <select class="gain-card-freq" data-id="${s.id}" onchange="onGainFreq(this)">
-                <option value="daily"   ${s.freq==='daily'   ? 'selected':''}>Per Day</option>
-                <option value="weekly"  ${s.freq==='weekly'  ? 'selected':''}>Per Week</option>
-                <option value="monthly" ${s.freq==='monthly' ? 'selected':''}>Per Month</option>
-            </select>
-        </div>`;
-    }).join('');
-    updateGainSummary();
-}
-
-function updateGainSummary() {
-    const daily   = calcDailyGain();
-    const balance = {
-        shiny:  parseInt(document.getElementById('ore-shiny')?.value)  || 0,
-        glowy:  parseInt(document.getElementById('ore-glowy')?.value)  || 0,
-        starry: parseInt(document.getElementById('ore-starry')?.value) || 0,
-    };
+// ══ Forecast (cumulative per-piece ETA + whole-plan finish) ══
+function computeForecast() {
+    const balance = getBalance();
+    const daily   = (window.OreGain && OreGain.getDailyGain) ? OreGain.getDailyGain() : { shiny: 0, glowy: 0, starry: 0 };
+    const items   = orderedGoals();
+    let cum = { shiny: 0, glowy: 0, starry: 0 };
+    const rows = items.map(it => {
+        const cost = calcCost(it.current, it.target, it.maxLevel);
+        cum = { shiny: cum.shiny + cost.shiny, glowy: cum.glowy + cost.glowy, starry: cum.starry + cost.starry };
+        const eta = calcDaysToCover(cum, balance, daily);
+        let cov = 1;
+        ['shiny', 'glowy', 'starry'].forEach(o => { if (cum[o] > 0) cov = Math.min(cov, balance[o] / cum[o]); });
+        cov = Math.max(0, Math.min(1, cov));
+        const locked = eta === 0;
+        return { ...it, cost, eta, coverage: locked ? 1 : cov, locked };
+    });
     const total = calcTotalPlanCost();
-    const days  = calcDaysToCover(total, balance, daily);
-    const fd = n => n < 10 ? n.toFixed(1) : Math.round(n).toString();
+    const planEta = calcDaysToCover(total, balance, daily);
+    let bottleneck = null, worst = -1, missing = null;
+    ['shiny', 'glowy', 'starry'].forEach(o => {
+        const rem = Math.max(0, total[o] - balance[o]);
+        if (rem <= 0) return;
+        if (daily[o] <= 0) { missing = missing || o; return; }
+        const d = rem / daily[o];
+        if (d > worst) { worst = d; bottleneck = o; }
+    });
+    return { rows, total, planEta, bottleneck, missing, hasPlan: items.length > 0, daily, balance };
+}
 
-    const pillsEl = document.getElementById('gain-pills');
-    const fmo = n => Math.round(n * 30).toLocaleString();
-    if (pillsEl) pillsEl.innerHTML =
-        `<span class="gr-item"><img src="/static/img/shiny.png"><span class="gr-d" style="color:#f0a500;">${fd(daily.shiny)}/d</span><span class="gr-sep">·</span><span class="gr-m">${fmo(daily.shiny)}/mo</span></span>` +
-        `<span class="gr-item"><img src="/static/img/glowy.png"><span class="gr-d" style="color:#3fb950;">${fd(daily.glowy)}/d</span><span class="gr-sep">·</span><span class="gr-m">${fmo(daily.glowy)}/mo</span></span>` +
-        (daily.starry > 0 ? `<span class="gr-item"><img src="/static/img/starry.png"><span class="gr-d" style="color:#a78bfa;">${fd(daily.starry)}/d</span><span class="gr-sep">·</span><span class="gr-m">${fmo(daily.starry)}/mo</span></span>` : '');
+function finishDate(days) {
+    const dt = new Date(); dt.setDate(dt.getDate() + Math.ceil(days));
+    return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
-    const dailyEl = document.getElementById('gain-daily');
-    if (dailyEl) dailyEl.innerHTML =
-        `<span class="ore-pill ore-shiny"><img src="/static/img/shiny.png" class="ore-img"> <span style="color:#f0a500;">${fd(daily.shiny)}</span></span>` +
-        `<span class="ore-pill ore-glowy"><img src="/static/img/glowy.png" class="ore-img"> <span style="color:#3fb950;">${fd(daily.glowy)}</span></span>` +
-        (daily.starry > 0 ? `<span class="ore-pill ore-starry"><img src="/static/img/starry.png" class="ore-img"> <span style="color:#a78bfa;">${fd(daily.starry)}</span></span>` : '');
+function orePill(kind, val) {
+    return `<span class="ore-pill ore-${kind}"><img src="/static/img/${kind}.png" alt=""> ${fmt(val)}</span>`;
+}
 
-    const daysEl  = document.getElementById('gain-days');
-    const lblEl   = document.getElementById('gain-days-lbl');
-    const shortEl = document.getElementById('gain-days-short');
-    const hasPlan = total.shiny > 0 || total.glowy > 0 || total.starry > 0;
+// ══ Render: forecast hero + list, rate readout, balance queue markers ══
+function renderForecast() {
+    const f = computeForecast();
 
-    if (!hasPlan) {
-        if (daysEl)  daysEl.textContent = '';
-        if (lblEl)   lblEl.style.display = 'none';
-        if (shortEl) shortEl.textContent = '';
-    } else if (days === 0) {
-        if (daysEl)  { daysEl.textContent = 'Affordable now'; daysEl.style.color = 'var(--green)'; }
-        if (lblEl)   { lblEl.style.display = 'inline'; }
-        if (shortEl) { shortEl.textContent = 'Plan: affordable now'; shortEl.style.color = 'var(--green)'; }
-    } else if (!isFinite(days)) {
-        if (daysEl)  { daysEl.textContent = 'Enable more sources'; daysEl.style.color = 'var(--red)'; }
-        if (lblEl)   lblEl.style.display = 'none';
-        if (shortEl) { shortEl.textContent = 'Missing ore source'; shortEl.style.color = 'var(--muted)'; }
+    // --- Zone B hero ---
+    const hero = document.getElementById('fc-hero');
+    const list = document.getElementById('fc-list');
+    const count = document.getElementById('fc-count');
+    hero.className = 'fc-hero';
+    if (!f.hasPlan) {
+        hero.innerHTML = `<div class="fc-empty">No upgrades queued yet. Set a target level and priority on any piece in the inventory, and its finish date locks in here.</div>`;
+        list.innerHTML = '';
+        count.textContent = '';
     } else {
-        const d  = Math.ceil(days);
-        const dt = new Date(); dt.setDate(dt.getDate() + d);
-        const ds = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-        const tx = `~${d} day${d !== 1 ? 's' : ''} (by ${ds})`;
-        if (daysEl)  { daysEl.textContent = tx; daysEl.style.color = 'var(--text)'; }
-        if (lblEl)   { lblEl.style.display = 'inline'; }
-        if (shortEl) { shortEl.textContent = `Plan done in ${tx}`; shortEl.style.color = 'var(--muted)'; }
+        count.textContent = f.rows.length === 1 ? '1 piece' : `${f.rows.length} pieces`;
+        if (!isFinite(f.planEta)) {
+            hero.classList.add('is-blocked');
+            hero.innerHTML = `<div class="fc-hero-lbl">Rate can't cover this</div>
+                <div class="fc-hero-date">NO ${ (ORE_LABEL[f.missing] || '').toUpperCase() } INCOME</div>
+                <div class="fc-hero-sub"><span class="fc-limit">Enable a source that yields <b>${ORE_LABEL[f.missing] || 'that ore'}</b> in the rate panel below.</span></div>`;
+        } else if (f.planEta === 0) {
+            hero.classList.add('is-locked');
+            hero.innerHTML = `<div class="fc-hero-lbl">Firing solution</div>
+                <div class="fc-hero-date">ALL LOCKED</div>
+                <div class="fc-hero-sub"><span class="fc-days">Everything you've queued is affordable right now.</span></div>`;
+        } else {
+            const d = Math.ceil(f.planEta);
+            hero.innerHTML = `<div class="fc-hero-lbl">Plan complete</div>
+                <div class="fc-hero-date">${finishDate(f.planEta)}</div>
+                <div class="fc-hero-sub"><span class="fc-days">~${d} day${d !== 1 ? 's' : ''}</span>${ f.bottleneck ? `<span class="fc-limit">limiting&nbsp;·&nbsp;<b>${ORE_LABEL[f.bottleneck]}</b></span>` : '' }</div>`;
+        }
+
+        // --- Zone B list ---
+        list.innerHTML = f.rows.map(r => {
+            const pri = r.priority != null ? `<span class="fc-pri">P${r.priority}</span>` : `<span class="fc-pri none">—</span>`;
+            const eta = r.locked ? 'LOCKED' : `~${Math.ceil(r.eta)}d · ${finishDate(r.eta)}`;
+            return `<div class="fc-row${r.locked ? ' is-locked' : ''}">
+                ${pri}
+                <span class="fc-name">${r.name}<span class="fc-lv">${r.current}→${r.target}</span></span>
+                <span class="fc-eta">${eta}</span>
+                <div class="fc-bar"><div class="fc-bar-fill" style="width:${(r.coverage * 100).toFixed(1)}%;"></div></div>
+            </div>`;
+        }).join('');
+    }
+
+    // --- Zone C collapsed rate ---
+    renderRate(f.daily);
+
+    // --- inventory queue markers ---
+    document.querySelectorAll('.eq-row[data-name]').forEach(row => {
+        const s = goalState[row.dataset.name];
+        row.classList.toggle('eq-queued', !!(s && s.target > s.current));
+    });
+}
+
+function renderRate(daily) {
+    const figs = document.getElementById('rate-figs');
+    const mo   = document.getElementById('rate-mo');
+    if (!figs) return;
+    const fd = n => n < 10 ? (Math.round(n * 10) / 10) : Math.round(n);
+    const col = { shiny: 'var(--ore-shiny)', glowy: 'var(--ore-glowy)', starry: 'var(--ore-starry)' };
+    let html = '';
+    ['shiny', 'glowy', 'starry'].forEach(o => {
+        if (o === 'starry' && daily.starry <= 0) return;
+        html += `<span class="rate-fig"><img src="/static/img/${o}.png" alt="${ORE_LABEL[o]}"><span class="rate-d" style="color:${col[o]};">${fd(daily[o])}</span><span class="rate-u">/day</span></span>`;
+    });
+    figs.innerHTML = html || `<span class="rate-u" style="color:var(--muted);">No income sources enabled</span>`;
+    const totMo = Math.round((daily.shiny + daily.glowy + daily.starry) * 30);
+    mo.textContent = totMo > 0 ? `${totMo.toLocaleString()}/mo total` : '';
+}
+
+// ══ Income editor toggle (reuses OreGain, rendered inline — no modal) ══
+let _incomeOpen = false;
+function toggleIncome() {
+    _incomeOpen = !_incomeOpen;
+    const btn = document.getElementById('rate-toggle');
+    const lbl = document.getElementById('rate-toggle-lbl');
+    if (_incomeOpen) { OreGain.open(); btn.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); lbl.textContent = 'Hide income sources'; }
+    else { OreGain.close(); btn.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); lbl.textContent = 'Adjust income sources'; }
+}
+
+// ══ Since-last-visit pulse ══
+const PULSE       = {{ equip_pulse_json  | default('null') | safe }};
+const PULSE_SINCE = {{ equip_pulse_since | default('null') | safe }};
+let _pulseAdded = false;
+function renderPulse() {
+    const el = document.getElementById('pulse');
+    if (!el) return;
+    if (PULSE_SINCE === null) {
+        // First ever visit — welcome baseline, no delta.
+        el.style.display = 'block';
+        el.innerHTML = `<div class="pulse-head"><span class="arm-eyebrow pulse-title">◈ Welcome to the Armory</span></div>
+            <div class="pulse-body"><div class="pulse-quiet">Queue your upgrades and I'll track the ore you earn between visits.</div></div>`;
+        return;
+    }
+    const p = PULSE || { shiny: 0, glowy: 0, starry: 0, war_attacks: 0, war_count: 0, cwl_attacks: 0, cwl_rounds: 0 };
+    const earned = (p.shiny || 0) + (p.glowy || 0) + (p.starry || 0);
+    const since = new Date(PULSE_SINCE + 'Z');
+    const daysAgo = Math.max(0, Math.floor((Date.now() - since.getTime()) / 86400000));
+    const whenTxt = daysAgo === 0 ? 'since earlier today' : `${daysAgo} day${daysAgo !== 1 ? 's' : ''} ago`;
+    el.style.display = 'block';
+
+    if (earned <= 0) {
+        el.innerHTML = `<div class="pulse-head"><span class="arm-eyebrow pulse-title">◈ Since last visit</span><span class="pulse-when">${whenTxt}</span></div>
+            <div class="pulse-body"><div class="pulse-quiet">No new war or CWL ore since you last checked in. Your forecast below is current.</div></div>`;
+        return;
+    }
+    const atk = (p.war_attacks || 0) + (p.cwl_attacks || 0);
+    const srcBits = [];
+    if (p.war_count)  srcBits.push(`${p.war_count} war${p.war_count !== 1 ? 's' : ''}`);
+    if (p.cwl_rounds) srcBits.push(`${p.cwl_rounds} CWL round${p.cwl_rounds !== 1 ? 's' : ''}`);
+    let chips = '';
+    if (p.shiny  > 0) chips += orePill('shiny',  '+' + fmt(p.shiny));
+    if (p.glowy  > 0) chips += orePill('glowy',  '+' + fmt(p.glowy));
+    if (p.starry > 0) chips += orePill('starry', '+' + fmt(p.starry));
+    el.innerHTML = `<div class="pulse-head"><span class="arm-eyebrow pulse-title">◈ Since last visit</span><span class="pulse-when">${whenTxt}</span></div>
+        <div class="pulse-body">
+            <div class="pulse-earned">${chips}</div>
+            <div class="pulse-note">Earned from <b>${atk} attack${atk !== 1 ? 's' : ''}</b>${ srcBits.length ? ' across ' + srcBits.join(' + ') : '' }.</div>
+            <button class="pulse-add" id="pulse-add" onclick="addPulseToBalance()">Add to ore on hand</button>
+        </div>`;
+}
+function addPulseToBalance() {
+    if (_pulseAdded || !PULSE) return;
+    const add = (id, v) => { const el = document.getElementById(id); if (el) el.value = (parseInt(el.value) || 0) + (v || 0); };
+    add('ore-shiny', PULSE.shiny); add('ore-glowy', PULSE.glowy); add('ore-starry', PULSE.starry);
+    _pulseAdded = true;
+    const btn = document.getElementById('pulse-add');
+    if (btn) { btn.textContent = '✓ Added to balance'; btn.disabled = true; }
+    onModelChange();
+}
+
+// ══ Inventory row interactions ══
+function sliderGradient(slider, current, target, max) {
+    const pct = max > current ? ((target - current) / (max - current)) * 100 : 0;
+    slider.style.background = `linear-gradient(to right, var(--mode) ${pct}%, color-mix(in oklch, var(--muted) 15%, transparent) ${pct}%)`;
+}
+function applyRowVisual(cid, current, target, max) {
+    const numEl  = document.querySelector(`.eq-tinput[data-cid="${cid}"]`);
+    const slider = document.querySelector(`.eq-slider[data-cid="${cid}"]`);
+    const costEl = document.getElementById('cost-' + cid);
+    const fillTgt = document.getElementById('filltarget-' + cid);
+    if (slider) { slider.value = target; sliderGradient(slider, current, target, max); }
+    if (numEl && document.activeElement !== numEl) numEl.value = target;
+    if (fillTgt) {
+        if (target > current && max > 0) {
+            fillTgt.style.left  = ((current / max) * 100) + '%';
+            fillTgt.style.width = (((target - current) / max) * 100) + '%';
+        } else {
+            fillTgt.style.width = '0%';
+        }
+    }
+    if (costEl) {
+        if (target > current) {
+            const c = calcCost(current, target, max);
+            let h = '';
+            if (c.shiny  > 0) h += orePill('shiny',  c.shiny);
+            if (c.glowy  > 0) h += orePill('glowy',  c.glowy);
+            if (c.starry > 0) h += orePill('starry', c.starry);
+            costEl.innerHTML = h;
+        } else { costEl.innerHTML = ''; }
     }
 }
-
-function onGainInput(input) {
-    const src = gainSources.find(s => s.id === input.dataset.id);
-    if (src) src[input.dataset.ore] = Math.max(0, parseInt(input.value) || 0);
-    saveGainSources();
-    updateGainSummary();
+function _commitTarget(cid, rawTarget) {
+    const slider = document.querySelector(`.eq-slider[data-cid="${cid}"]`);
+    const row    = document.getElementById('card-' + cid);
+    if (!row) return;
+    const current = parseInt(row.dataset.current), max = parseInt(row.dataset.max);
+    let target = parseInt(rawTarget);
+    if (isNaN(target) || target < current) target = current;
+    if (target > max) target = max;
+    applyRowVisual(cid, current, target, max);
+    const s = goalState[row.dataset.name];
+    if (s) s.target = target;
+    onModelChange();
 }
-
-function onGainFreq(select) {
-    const src = gainSources.find(s => s.id === select.dataset.id);
-    if (src) src.freq = select.value;
-    saveGainSources();
-    updateGainSummary();
+function onSlider(slider)  { _commitTarget(slider.dataset.cid, slider.value); }
+function onTargetNum(input){ _commitTarget(input.dataset.cid, input.value); }
+function onPriority(input) {
+    const row = document.getElementById('card-' + input.dataset.cid);
+    if (!row) return;
+    const s = goalState[row.dataset.name];
+    const v = parseInt(input.value);
+    if (s) s.priority = isNaN(v) ? null : Math.max(1, Math.min(9, v));
+    onModelChange();
 }
+function onBalance() { onModelChange(); }
 
-function onGainToggle(cb) {
-    const src = gainSources.find(s => s.id === cb.dataset.id);
-    if (!src) return;
-    src.enabled = cb.checked;
-    const card = document.getElementById('gain-card-' + src.id);
-    if (card) card.classList.toggle('gain-card-off', !src.enabled);
-    saveGainSources();
-    updateGainSummary();
+// ══ Change bus — one place drives the live loop + debounced save ══
+function onModelChange() { renderForecast(); updateBenchBadges(false); scheduleSave(); }
+window.scheduleAutoSave = onModelChange;   // OreGain source edits route through here
+
+let _saveTimer = null;
+function scheduleSave() { clearTimeout(_saveTimer); _saveTimer = setTimeout(doSave, 900); }
+async function doSave() {
+    const goals = {};
+    Object.values(goalState).forEach(s => { goals[s.name] = s.target > s.current ? { target: s.target, priority: s.priority } : null; });
+    const body = { ...getBalance(), goals, gainSettings: (window.OreGain && OreGain.getSettings) ? OreGain.getSettings() : undefined };
+    try {
+        const r = await fetch('/tools/equipment/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        showSave(r.ok ? 'Saved' : 'Error', !r.ok);
+    } catch { showSave('Error', true); }
 }
-
-
-
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.equip-card[data-equip]').forEach(card => {
-        const name = card.dataset.equip;
-        const file = EQUIP_IMAGES[name];
-        const wrap = card.querySelector('.equip-img-wrap');
-        if (file && wrap) {
-            wrap.innerHTML = `<img src="/static/img/equipment/${encodeURIComponent(file)}" alt="${name}">`;
-        }
-    });
-
-    document.querySelectorAll('.equip-target-range:not(:disabled)').forEach(slider => {
-        const current = parseInt(slider.dataset.current);
-        const max     = parseInt(slider.dataset.max);
-        sliderGradient(slider, current, current, max);
-    });
-
-    initGoalState();
-    applySavedData({ ores: {{ saved_ores_json|safe }}, goals: {{ saved_goals_json|safe }} });
-    OreGain.init({
-        getBalance:    () => ({
-            shiny:  parseInt(document.getElementById('ore-shiny')?.value)  || 0,
-            glowy:  parseInt(document.getElementById('ore-glowy')?.value)  || 0,
-            starry: parseInt(document.getElementById('ore-starry')?.value) || 0,
-        }),
-        getTotalCost:  calcTotalPlanCost,
-        savedSettings: {{ gain_settings_json|safe }},
-    });
-    // Star Bonus and Clan War always synced from DB, never from localStorage
-    OreGain.applyStarBonus(
-        {{ (player.current_th if player else 0) | tojson }},
-        {{ ((player.league_tier or 'Unranked') if player else 'Unranked') | tojson }}
-    );
-    OreGain.applyWarStats({{ war_stats_json|safe }});
-    OreGain.applyCwlStats({{ cwl_stats_json|safe }});
-});
+function showSave(text, err = false) {
+    const el = document.getElementById('save-indicator');
+    if (!el) return;
+    el.textContent = text; el.style.color = err ? 'oklch(0.70 0.13 25)' : 'var(--green)'; el.style.opacity = '1';
+    clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, 2200);
+}
 
 function resetAll() {
-    document.querySelectorAll('.equip-target-range').forEach(slider => {
-        const current = parseInt(slider.dataset.current);
-        slider.value = current;
-        sliderGradient(slider, current, current, parseInt(slider.dataset.max));
-        const cid = slider.dataset.cid;
-        const tgtLbl = document.getElementById('tgt-' + cid);
-        if (tgtLbl) { tgtLbl.textContent = `→ ${current}`; tgtLbl.style.color = 'var(--muted)'; }
-        const costDiv = document.getElementById('cost-' + cid);
-        if (costDiv) costDiv.innerHTML = '';
-        const card = slider.closest('.equip-card');
-        if (card) {
-            card.classList.remove('has-upgrade');
-            const name = card.dataset.name;
-            if (name && goalState[name]) { goalState[name].target = current; }
+    Object.values(goalState).forEach(s => { s.target = s.current; s.priority = null; if (s.cid) applyRowVisual(s.cid, s.current, s.current, s.maxLevel); });
+    document.querySelectorAll('.eq-pinput').forEach(i => i.value = '');
+    onModelChange();
+}
+
+// A bench holding a queued (saved-target) piece is surfaced with a count badge on its
+// closed summary; on the initial load only, it's also auto-expanded so a returning user
+// doesn't have to remember and re-open it to find the piece they already queued.
+function updateBenchBadges(autoOpen) {
+    document.querySelectorAll('.inv-bench').forEach(bench => {
+        const queued = [...bench.querySelectorAll('.eq-row')].filter(r => { const s = goalState[r.dataset.name]; return s && s.target > s.current; }).length;
+        const summary = bench.querySelector('summary');
+        let badge = summary.querySelector('.bench-queued');
+        if (queued > 0) {
+            if (!badge) { badge = document.createElement('span'); badge.className = 'bench-queued'; summary.appendChild(badge); }
+            badge.textContent = ` · ${queued} queued`;
+            if (autoOpen) bench.open = true;
+        } else if (badge) {
+            badge.remove();
         }
     });
-    document.querySelectorAll('.priority-input').forEach(inp => {
-        inp.value = '';
-        const card = inp.closest('.equip-card');
-        const name = card?.dataset.name;
-        if (name && goalState[name]) goalState[name].priority = null;
-    });
-    updateSummary();
-    computeAndRenderPlan();
-    scheduleAutoSave();
 }
+
+// Reset is destructive (wipes every target/priority and autosaves immediately) — require
+// a second click within a few seconds rather than a native confirm() dialog.
+let _resetArmed = false, _resetTimer = null;
+function onResetClick() {
+    const btn = document.getElementById('reset-btn');
+    if (!_resetArmed) {
+        _resetArmed = true;
+        btn.textContent = 'Click again to confirm';
+        btn.style.borderColor = 'oklch(0.63 0.2 25)'; btn.style.color = 'oklch(0.70 0.13 25)';
+        clearTimeout(_resetTimer);
+        _resetTimer = setTimeout(() => { _resetArmed = false; btn.textContent = 'Reset plan'; btn.style.borderColor = ''; btn.style.color = ''; }, 4000);
+        return;
+    }
+    clearTimeout(_resetTimer);
+    _resetArmed = false;
+    btn.textContent = 'Reset plan'; btn.style.borderColor = ''; btn.style.color = '';
+    resetAll();
+}
+
+// ══ Restore saved goals + ore ══
+function applySaved(saved) {
+    const ores = saved.ores || {}, goals = saved.goals || {};
+    const setv = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || 0; };
+    setv('ore-shiny', ores.shiny); setv('ore-glowy', ores.glowy); setv('ore-starry', ores.starry);
+    Object.entries(goals).forEach(([name, g]) => {
+        const s = goalState[name];
+        if (!s || !g) return;
+        s.target = g.target ?? s.current;
+        s.priority = g.priority ?? null;
+        if (s.cid) {
+            applyRowVisual(s.cid, s.current, s.target, s.maxLevel);
+            const p = document.querySelector(`.eq-pinput[data-cid="${s.cid}"]`);
+            if (p && s.priority != null) p.value = s.priority;
+        }
+    });
+    updateBenchBadges(true);
+}
+
+// ══ Boot ══
+document.addEventListener('DOMContentLoaded', () => {
+    if (!document.getElementById('arm-layout')) { renderPulse(); return; }
+
+    // thumbnails
+    document.querySelectorAll('.eq-thumb[data-equip]').forEach(t => {
+        const f = EQUIP_IMAGES[t.dataset.equip];
+        if (f) t.style.backgroundImage = `url("/static/img/equipment/${encodeURIComponent(f)}")`;
+    });
+    // slider fills at rest
+    document.querySelectorAll('.eq-slider').forEach(sl => sliderGradient(sl, parseInt(sl.dataset.current), parseInt(sl.dataset.current), parseInt(sl.dataset.max)));
+
+    initGoalState();
+    applySaved({ ores: {{ saved_ores | default({}) | tojson }}, goals: {{ saved_goals | default({}) | tojson }} });
+
+    OreGain.init({ getBalance, getTotalCost: calcTotalPlanCost, savedSettings: {{ gain_settings | tojson }} });
+    OreGain.applyStarBonus({{ (player.current_th if player else 0) | tojson }}, {{ ((player.league_tier or 'Unranked') if player else 'Unranked') | tojson }});
+    OreGain.applyWarStats({{ war_stats_json | default('{}') | safe }});
+    OreGain.applyCwlStats({{ cwl_stats_json | default('{}') | safe }});
+    // Prospector is a real, actively-used income source (ore exchange) — keep it.
+    // Custom stays hidden: a blank freeform slot with no real data behind it, unlike
+    // every other source on this page.
+    document.getElementById('gain-card-custom')?.remove();
+
+    renderPulse();
+    renderForecast();
+});
 </script>
 
-{% include '_ore_gain_modal.html' %}
 <script src="/static/js/ore_gain.js"></script>
 </body>
 </html>

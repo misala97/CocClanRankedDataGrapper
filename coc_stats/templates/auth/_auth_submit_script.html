@@ -1,0 +1,18 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+   SHARED submit-feedback script — disables the button and shows an in-flight
+   label on click so a slow POST round-trip doesn't read as unresponsive.
+   Progressive enhancement only: the form still submits natively if this
+   fails to run. Included by both /login and /register.
+   ═══════════════════════════════════════════════════════════════════════ -#}
+<script>
+(function () {
+    var f = document.querySelector('.auth-form');
+    if (!f) return;
+    f.addEventListener('submit', function () {
+        var btn = f.querySelector('.auth-submit');
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        btn.textContent = btn.textContent.trim() + '…';
+    });
+})();
+</script>

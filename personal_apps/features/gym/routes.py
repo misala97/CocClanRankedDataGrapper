@@ -12,6 +12,7 @@ from models import (
 )
 from auth import login_required
 from features.gym import stats
+from features.gym.push import is_valid_push_endpoint
 
 gym_bp = Blueprint('gym', __name__)
 
@@ -1142,6 +1143,8 @@ def gym_push_subscribe():
     auth_key = keys.get('auth')
     if not endpoint or not p256dh or not auth_key:
         return jsonify({'status': 'error', 'message': 'invalid subscription'}), 400
+    if not is_valid_push_endpoint(endpoint):
+        return jsonify({'status': 'error', 'message': 'unrecognized push service endpoint'}), 400
 
     sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
     if sub:

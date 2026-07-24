@@ -372,6 +372,13 @@
 <div class="toast-wrap" id="toastWrap" role="status" aria-live="polite"></div>
 
 <script>
+// Player name/tag are synced verbatim from the CoC API with no server-side
+// sanitization — escape before any innerHTML interpolation below.
+function escapeHTML(s) {
+    return String(s || '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function toast(msg, kind, action) {
     const w = document.getElementById('toastWrap');
     const t = document.createElement('div');
@@ -581,7 +588,7 @@ function nmRow(p, i) {
         return `<div class="nm-row" id="${rowId}" style="--i:${i}">
             <div class="nm-main">
                 <span class="nm-verdict v-decline">Error</span>
-                <div class="nm-idblk" style="flex:1;"><div class="nm-name">${p.name}</div><div class="nm-sub">${p.tag}</div>
+                <div class="nm-idblk" style="flex:1;"><div class="nm-name">${escapeHTML(p.name)}</div><div class="nm-sub">${escapeHTML(p.tag)}</div>
                     <div class="nm-err">Live API error: ${p.error}</div></div>
                 <div class="nm-act"><button class="nm-mark" onclick="markChecked('${p.tag}','${rowId}')">${_CHECK} Mark checked</button></div>
             </div></div>`;
@@ -596,8 +603,8 @@ function nmRow(p, i) {
             <span class="nm-verdict ${v.cls}">${v.label}</span>
             <span class="nm-th">TH${p.th}</span>
             <div class="nm-idblk">
-                <div class="nm-name"><a href="/player/${tagClean}" target="_blank" rel="noopener">${p.name}</a></div>
-                <div class="nm-sub">${p.tag}</div>
+                <div class="nm-name"><a href="/player/${tagClean}" target="_blank" rel="noopener">${escapeHTML(p.name)}</a></div>
+                <div class="nm-sub">${escapeHTML(p.tag)}</div>
                 <div class="nm-join">${p.join_date && p.join_date !== '?' ? p.join_date : ''}${joined}</div>
             </div>
             <div class="nm-hero" title="Heroes at ${p.hero_pct}% of TH max">

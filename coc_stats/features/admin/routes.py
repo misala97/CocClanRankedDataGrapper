@@ -4,11 +4,9 @@ from collections import defaultdict
 import requests as req_lib
 
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, abort
-from sqlalchemy import or_
-from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import AppUser, Player, BattleLog, RankedWeek, UptimeTracker, ClanWar, ClanWarMember, ClanWarAttack, CWLBonus
+from models import AppUser, Player, UptimeTracker, ClanWar, ClanWarMember, ClanWarAttack, CWLBonus
 from features.auth.routes import require_super_admin, _current_user
 
 admin_bp = Blueprint('admin', __name__)
@@ -727,76 +725,6 @@ def admin_member_update(tag):
         player.newbie_check = bool(data['newbie_check'])
     db.session.commit()
     return jsonify(ok=True)
-
-
-@admin_bp.route('/debug')
-@require_super_admin
-def debug_dashboard():
-    filter_tag = request.args.get('player_tag', default='').strip()
-    sort_by = request.args.get('sort', default='tag')
-
-    players_query = Player.query
-    if filter_tag:
-        search_term = f"%{filter_tag}%"
-        players_query = players_query.filter(
-            or_(Player.tag.ilike(search_term), Player.name.ilike(search_term))
-        )
-
-    if sort_by == 'name':
-        players_query = players_query.order_by(Player.name.asc())
-    elif sort_by == 'last_updated':
-        players_query = players_query.order_by(Player.last_updated.desc())
-    else:
-        players_query = players_query.order_by(Player.tag.asc())
-
-    players = players_query.options(
-        selectinload(Player.ranked_weeks).selectinload(RankedWeek.battle_logs),
-        selectinload(Player.battle_logs)
-    ).all()
-
-    selected_player = None
-    battle_logs = []
-    ranked_weeks = []
-    if filter_tag:
-        selected_player = db.session.get(Player, filter_tag)
-        if not selected_player:
-            selected_player = Player.query.filter(Player.tag.ilike(filter_tag)).first()
-        if selected_player:
-            battle_logs = (
-                BattleLog.query
-                .filter(BattleLog.player_tag == selected_player.tag)
-                .order_by(BattleLog.time.desc())
-                .limit(100)
-                .all()
-            )
-            ranked_weeks = (
-                RankedWeek.query
-                .filter(RankedWeek.player_tag == selected_player.tag)
-                .order_by(RankedWeek.start_day.desc())
-                .all()
-            )
-
-    uptime_tracker_objs = UptimeTracker.query.order_by(UptimeTracker.time.desc()).limit(100).all()
-    uptime_trackers = [
-        {
-            'id': t.id,
-            'function': t.function,
-            'time': t.time.isoformat() if t.time else None,
-        }
-        for t in uptime_tracker_objs
-    ]
-
-    return render_template(
-        'admin/debug_dashboard.html',
-        players=players,
-        selected_player=selected_player,
-        battle_logs=battle_logs,
-        ranked_weeks=ranked_weeks,
-        uptime_trackers=uptime_tracker_objs,
-        uptime_trackers_json=uptime_trackers,
-        current_tag=filter_tag,
-        current_sort=sort_by,
-    )
 
 
 # ── New Member Evaluation ─────────────────────────────────────────────────────

@@ -13,8 +13,6 @@ load_dotenv(override=True)
 setup_root_logger()
 
 CLAN_TAG   = os.getenv("CLAN_TAG", "#2QRC8998U")
-ADMIN_USER = os.getenv("ADMIN_USER", "")
-ADMIN_PASS = os.getenv("ADMIN_PASS", "")
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 
@@ -25,10 +23,10 @@ DB_PASS = os.getenv("DB_PASS", "")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("DB_NAME", "coc_stats")
 
-_secret_key = os.getenv("SECRET_KEY")
+_secret_key = os.getenv("COC_SECRET_KEY")
 if not _secret_key:
     import logging
-    logging.getLogger().warning("SECRET_KEY not set in .env — using random key, sessions reset on restart.")
+    logging.getLogger().warning("COC_SECRET_KEY not set in .env — using random key, sessions reset on restart.")
     _secret_key = secrets.token_hex(32)
 
 app.config['SECRET_KEY'] = _secret_key
@@ -59,7 +57,6 @@ from features.battles.routes import battles_bp
 from features.player.routes  import player_bp
 from features.cwl.routes     import cwl_bp
 from features.profile.routes import profile_bp
-from features.compare.routes import compare_bp
 from features.tools.routes   import tools_bp
 
 app.register_blueprint(auth_bp)
@@ -71,7 +68,6 @@ app.register_blueprint(battles_bp)
 app.register_blueprint(player_bp)
 app.register_blueprint(cwl_bp)
 app.register_blueprint(profile_bp)
-app.register_blueprint(compare_bp)
 app.register_blueprint(tools_bp)
 
 # ── Template filters ─────────────────────────────────────────────────────────
@@ -303,7 +299,7 @@ def index():
 
     # ── Player-specific hero data ────────────────────────────────────────────
     player_ranked_left        = None
-    player_gain_settings_json = 'null'
+    player_gain_settings      = None
     _zero_stats = '{"shiny":0,"glowy":0,"starry":0,"attacks":0,"wars":0}'
     player_war_stats_json     = _zero_stats
     player_cwl_stats_json     = _zero_stats
@@ -336,7 +332,10 @@ def index():
             from features.tools.routes import _compute_war_stats, _compute_cwl_stats
             _ws = _compute_war_stats(_p.tag)
             _cs = _compute_cwl_stats(_p.tag)
-            player_gain_settings_json = _idx_user.gain_settings or 'null'
+            try:
+                player_gain_settings = json.loads(_idx_user.gain_settings) if _idx_user.gain_settings else None
+            except (TypeError, ValueError):
+                player_gain_settings = None
             player_war_stats_json     = json.dumps(_ws)
             player_cwl_stats_json     = json.dumps(_cs)
             player_th                 = _p.current_th or 0
@@ -380,7 +379,7 @@ def index():
         last_cwl_war=last_cwl_war,
         CLAN_TAG=CLAN_TAG,
         player_ranked_left=player_ranked_left,
-        player_gain_settings_json=player_gain_settings_json,
+        player_gain_settings=player_gain_settings,
         player_war_stats_json=player_war_stats_json,
         player_cwl_stats_json=player_cwl_stats_json,
         player_th=player_th,
