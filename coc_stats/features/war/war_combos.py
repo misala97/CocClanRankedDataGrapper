@@ -24,10 +24,10 @@ def classify_attack(stars, attacker_th, dfn_th, already_3starred, partially_atta
             return FAILED_FARM if stars == 0 else FARM
         return WASTED
 
-    if abs(th_diff) <= 2:
+    if -2 <= th_diff <= 1:
         return CLEAR if stars == 3 else FAILED_CLEAR
 
-    if th_diff > 1:  # attacking significantly up
+    if th_diff > 1:  # attacking significantly up (2+ TH levels)
         if stars == 3:
             return HIGH_CLEAR
         return FAILED_FARM if stars == 0 else FARM
