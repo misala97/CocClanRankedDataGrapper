@@ -140,7 +140,7 @@ failure (e.g. 409), show an inline error in the dialog and don't reload.
 ### 7. Migration
 
 One Alembic revision: `create_table('war_combo', ...)` followed by
-`op.bulk_insert(...)` seeding the current 12 hardcoded entries, so scoring
+`op.bulk_insert(...)` seeding the current 13 hardcoded entries, so scoring
 behavior is byte-for-byte identical the moment this deploys — nothing reverts
 to "First Time Combination" that wasn't already undefined before. Follows the
 existing `clan_config` migration's shape (`migrations/versions/b3e7c1a9f042_add_clan_config_table.py`).
@@ -183,7 +183,7 @@ Decided during brainstorming:
 
 No test suite in this project (manual verification, per project convention).
 
-1. Run the migration locally, confirm `war_combo` has exactly 12 rows matching
+1. Run the migration locally, confirm `war_combo` has exactly 13 rows matching
    the current hardcoded dict (`SELECT * FROM war_combo`).
 2. Load `/war` on a war with at least one already-known combo (e.g. two
    `CLEAR` attacks) — confirm score/label/badge unchanged from before the
