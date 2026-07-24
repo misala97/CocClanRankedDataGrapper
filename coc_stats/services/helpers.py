@@ -663,12 +663,14 @@ def _compute_cleanup_ids(logs):
     return cleanup_ids
 
 
-def _raid_level_mult(level):
+def _raid_level_mult(level, is_capital=False):
     try:
         level = int(level)
     except (TypeError, ValueError):
         level = 5
-    return 1.0 + (level - 4) * (0.175 if level >= 5 else 0.05)
+    if level < 5:
+        return 1.0 + (level - 4) * 0.05
+    return 1.0 + (level - 4) * (0.175 if is_capital else 0.10)
 
 
 def raid_score_verdict(adj_per_attack, solo_wipes, att_count, missing_text=''):
@@ -744,7 +746,7 @@ def _raid_verdict(logs):
     for l in logs:
         if l.id in cleanup_ids:
             continue
-        total_adj += (l.percentage or 0) * _raid_level_mult(l.district_level or 5)
+        total_adj += (l.percentage or 0) * _raid_level_mult(l.district_level or 5, is_capital_peak(l.district_name))
     adj_per_attack = total_adj / effective_max
     score_100, _, badge_class, label = raid_score_verdict(adj_per_attack, solo_wipe_count, len(logs))
     return badge_class, label, score_100
