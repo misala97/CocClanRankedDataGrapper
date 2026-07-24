@@ -203,7 +203,7 @@ def raid_weekend_page():
                 level = int(level)
             except (TypeError, ValueError):
                 level = 5
-            level_mult = round(_raid_level_mult(level), 2)
+            level_mult = round(_raid_level_mult(level, is_capital_peak(log.district_name)), 2)
             pct = log.percentage or 0
             p['attack_logs'].append({
                 'log_id':           log.id,
