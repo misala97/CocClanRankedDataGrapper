@@ -22,9 +22,43 @@
         <div class="session-head__main">
             <h1>{{ session.name or 'Workout' }}</h1>
             <span class="chip chip--live">Aktiv</span>
+            {% if session.is_deload %}<span class="chip chip--deload">Deload</span>{% endif %}
         </div>
         <div class="num num--md session-head__clock" id="session-duration" data-started="{{ session.started_at.isoformat() }}">--:--:--</div>
     </header>
+
+    {# Deload: no colour of its own -- the app has exactly three semantic hues
+       and this is none of them. It is a settled fact about the session, so it
+       reads as dim ink plus the word. The percentage picks only appear while
+       nothing is completed, because past that point changing the percentage
+       can no longer rewrite anything. #}
+    <div class="deload-bar{{ ' is-on' if session.is_deload else '' }}">
+        <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
+            <input type="hidden" name="on" value="{{ '0' if session.is_deload else '1' }}">
+            <input type="hidden" name="pct" value="{{ session.deload_pct or deload_default_pct }}">
+            <button type="submit" class="btn btn--ghost btn--sm deload-bar__toggle">
+                {{ 'Deload beenden' if session.is_deload else 'Als Deload markieren' }}
+            </button>
+        </form>
+        {% if session.is_deload %}
+        <span class="label deload-bar__state">
+            {{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht
+        </span>
+        {% if not has_completed_set %}
+        <div class="deload-bar__picks">
+            {% for pct in deload_pcts %}
+            <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
+                <input type="hidden" name="on" value="1">
+                <input type="hidden" name="pct" value="{{ pct }}">
+                <button type="submit"
+                        class="deload-bar__pick{{ ' is-active' if pct == session.deload_pct else '' }}"
+                        {% if pct == session.deload_pct %}aria-current="true"{% endif %}>{{ pct }} %</button>
+            </form>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
 
     {# Every mutating fetch below can fail (dropped connection, gym wifi) --
        this banner is the one shared, visible answer to "did that save?" when

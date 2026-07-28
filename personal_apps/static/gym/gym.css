@@ -479,6 +479,31 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .chip--up     { border-color: var(--edge-hi); color: var(--ink); background: transparent; }  /* steigend */
 .chip--neu    { border-color: var(--edge); color: var(--dim); background: transparent; }     /* neu */
 
+/* Deload carries no hue: the app has exactly three semantic colours and a
+   deliberately light session is none of them. It is a settled fact, so it
+   reads as dim ink plus the word -- same treatment as .chip--neu. */
+.chip--deload { border-color: var(--edge); color: var(--dim); background: transparent; }
+
+.deload-bar {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--sp-3); margin-block-end: var(--sp-4);
+}
+.deload-bar.is-on {
+  padding: var(--sp-3); border-radius: var(--r-panel); background: var(--raised);
+}
+.deload-bar__toggle { min-block-size: 44px; }
+.deload-bar__state { color: var(--dim); font-variant-numeric: tabular-nums; }
+.deload-bar__picks { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.deload-bar__pick {
+  min-inline-size: 44px; min-block-size: 44px;
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--edge); border-radius: var(--r-control);
+  background: transparent; color: var(--dim);
+  font: inherit; font-variant-numeric: tabular-nums;
+  cursor: pointer; transition: color 120ms ease-out, border-color 120ms ease-out;
+}
+.deload-bar__pick.is-active { border-color: var(--edge-hi); color: var(--ink); }
+
 /* tag: quiet metadata (position, set count), never a state */
 .tag {
   font-family: var(--font-mono);

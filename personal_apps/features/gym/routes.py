@@ -479,19 +479,27 @@ def session_detail(session_id):
             by_exercise.setdefault(row.exercise_id, []).append(row)
     stagnation_counts = {}
     record_set_ids = set()
-    for se in visible_exercises:
-        prior = by_exercise.get(se.exercise_id, [])
-        count = stats.sessions_since_pr(prior, position=se.position)
-        if count is not None and count >= stats.STAGNATION_THRESHOLD:
-            stagnation_counts[se.id] = count
-        # Live equivalent of the finished-session PR flare (session_report's
-        # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
-        # same prior-sessions-only pool, so a set can light up cyan the
-        # instant it's confirmed rather than only on the recap screen an
-        # hour later.
-        for s in se.sets:
-            if s.completed and stats.is_new_best(s.weight, s.reps, prior):
-                record_set_ids.add(s.id)
+    # Both signals below are progress judgements, and a deload session is not
+    # an attempt at progress -- so neither is computed during one. The PR flare
+    # must agree with the recap screen (session_report awards no record on a
+    # deload), and a "go heavier" nudge is wrong advice beside deliberately
+    # reduced weights. Guarding the whole loop rather than `continue`-ing per
+    # iteration: is_deload is loop-invariant, and a per-iteration skip would
+    # let a later maintainer add work above it that silently never runs.
+    if not session_.is_deload:
+        for se in visible_exercises:
+            prior = by_exercise.get(se.exercise_id, [])
+            count = stats.sessions_since_pr(prior, position=se.position)
+            if count is not None and count >= stats.STAGNATION_THRESHOLD:
+                stagnation_counts[se.id] = count
+            # Live equivalent of the finished-session PR flare (session_report's
+            # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
+            # same prior-sessions-only pool, so a set can light up cyan the
+            # instant it's confirmed rather than only on the recap screen an
+            # hour later.
+            for s in se.sets:
+                if s.completed and stats.is_new_best(s.weight, s.reps, prior):
+                    record_set_ids.add(s.id)
     exercises = Exercise.query.order_by(Exercise.name).all()
     return render_template(
         'gym/session_detail.html',
@@ -508,6 +516,9 @@ def session_detail(session_id):
         # "already set up" signal here, not something narrower the schema
         # doesn't actually track.
         has_push_subscription=PushSubscription.query.first() is not None,
+        has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
+        deload_pcts=stats.DELOAD_ALLOWED_PCTS,
+        deload_default_pct=stats.DELOAD_DEFAULT_PCT,
     )
 
 
