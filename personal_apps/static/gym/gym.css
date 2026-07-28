@@ -941,6 +941,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 
 /* record flare: gold, top of screen, one sharp pulse then settles */
 .flare {
+  /* the numeral below sizes against this box (cqi), so it can never outgrow it */
+  container-type: inline-size;
   padding: var(--sp-4);
   background: linear-gradient(var(--wash-record), var(--wash-record)), var(--chassis);
   border: 1px solid var(--record);
@@ -954,7 +956,13 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 .flare__value {
   font-family: var(--font-display); font-weight: var(--w-bold);
-  font-variant-numeric: tabular-nums; font-size: var(--num-xl); line-height: 1;
+  font-variant-numeric: tabular-nums; line-height: 1;
+  /* capped against the flare's own width, not left to scale unbounded: at
+     200 % text a six-figure record ("1636.0 kg") ran past the viewport and
+     took the page's horizontal scroll with it. min() keeps --num-xl at every
+     normal size and only bites when the numeral would not otherwise fit,
+     so the figure stays whole -- which is what WCAG 1.4.4 actually asks. */
+  font-size: min(var(--num-xl), 20cqi);
   letter-spacing: var(--track-num); color: var(--record); text-shadow: var(--glow-record);
 }
 @keyframes flare-pulse {
@@ -1024,6 +1032,83 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   font-size: var(--t-sm);
 }
 .empty .label { display: block; margin-bottom: var(--sp-2); color: var(--unlit); }
+
+/* ============================================================================
+   ROW  ·  the shared divided-list row
+   ----------------------------------------------------------------------------
+   One anatomy, previously four implementations: .recent-row and .ex-report-row
+   (heute), .routine-row (heute), .verlauf-row (verlauf), .ex-report-row again
+   (session finished). Three carried a byte-identical divider rule, and the tap
+   feedback had already been patched across .recent-row + .verlauf-row__main --
+   two names sharing one declaration is what gave the duplication away.
+
+   Anatomy, every slot optional except __main:
+
+     .row
+       .row__lead     leading control (a checkbox), never grows
+       .row__main     name + __meta; the part that is usually the link
+       .row__wide     full-width line BELOW the main line, same row
+       .row__trail    trailing cluster (a chip, stats, action buttons)
+
+   __wide is what lets a row own more than one line without breaking the
+   divider: a <details> or an exercise list placed as a sibling of __main
+   would otherwise sit between two rows and cut the adjacent-sibling border on
+   every row after it. Inside the row, it is still one row.
+
+   Deliberately NOT merged: .uebungen-row is `display: contents` inside a grid
+   table, so its cells align to shared column tracks across every row. Same
+   word, different job -- leave it alone.
+   ============================================================================ */
+
+.row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  min-block-size: 44px;
+}
+.row + .row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+/* An author `display` beats the UA sheet's `[hidden] { display: none }`, so a
+   flex row ignores the attribute unless told otherwise. Verlauf's search sets
+   `hidden` to filter, and without this it set it on rows that stayed fully
+   visible -- the search updated its count and changed nothing on screen.
+   .uebungen-row already carried this guard; the shared row now carries it for
+   every list, so the next filterable surface cannot rediscover the bug. */
+.row[hidden] { display: none; }
+
+/* top-aligned variant: for rows whose trailing cluster is a stack of controls
+   rather than a single chip, where centring floats the buttons off the title */
+.row--top { align-items: flex-start; }
+
+.row__lead  { flex: none; }
+.row__main  { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
+.row__meta  { margin-top: 2px; }
+.row__wide  { flex-basis: 100%; margin: var(--sp-1) 0 0; }
+/* a secondary line inside __main that is prose, not a label: the exercise
+   list under a workout's name. Needs the body face explicitly, or it inherits
+   the uppercase letterspaced .label treatment and turns into a block the
+   reader has to decode word by word. */
+.row__sub {
+  font-family: var(--font-body); font-size: var(--t-meta); line-height: 1.5;
+  color: var(--dim); text-transform: none; letter-spacing: 0; margin-top: 2px;
+}
+.row__trail { display: flex; align-items: center; gap: var(--sp-2); flex: none; margin-inline-start: auto; }
+/* stacked trail: two figures reading down (a load and its chip), not across */
+.row__trail--stack { flex-direction: column; align-items: flex-end; gap: var(--sp-1); }
+
+/* Tap feedback, keyed off the element rather than a modifier class: whichever
+   part is the real <a> gets it, whether that is the whole row (heute's recent
+   workouts) or only the main region (verlauf, session finished). These carry a
+   whole row of content and previously answered a tap with nothing until the
+   next page painted -- the longest unacknowledged gap in the app. Both values
+   sit under the 80 ms perceptual threshold, so it reads as the row responding
+   rather than an animation playing. */
+a.row, a.row__main {
+  border-radius: var(--r-inset);
+  transition: background var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
+}
+a.row:hover, a.row__main:hover { background: var(--raised); }
+a.row:active, a.row__main:active { transform: scale(0.99); }
+/* the name itself lights on hover, so the target reads as the lift, not the row */
+a.row__main:hover .name { color: var(--live); }
 
 /* ============================================================================
    SESSION DETAIL  ·  the live workout view (session_detail.html)
@@ -1357,16 +1442,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 @media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .stat__value.is-record { color: var(--record); text-shadow: var(--glow-record); }
 
-/* Nach Übung: a divided list inside one panel, not a card per row. Each row
-   is wrapped (.ex-report-row) so the optional correction disclosure below
-   the summary line still counts as "one row" for the divider -- otherwise a
-   <details> sitting between two .ex-report siblings would break the
-   adjacent-sibling border on every row that follows one with sets to edit. */
-.ex-report-row + .ex-report-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
-.ex-report { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
-.ex-report__main { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
-.ex-report__sets { margin-top: 2px; }
-.ex-report .chip { flex: none; }
+/* Nach Übung: a divided list inside one panel, not a card per row. Uses the
+   shared .row; the correction disclosure below the summary line is a
+   .row__wide child, so it still counts as part of the same row for the
+   divider instead of cutting it. */
 
 /* correction affordance: closed-by-default native disclosure (no JS, free
    keyboard support via <summary>'s implicit button semantics) revealing one
@@ -1388,7 +1467,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .set-correct__toggle:hover { color: var(--ink); }
 .set-correct[open] > .set-correct__toggle { color: var(--ink); }
 .set-correct__body { display: flex; flex-direction: column; gap: var(--sp-2); padding-bottom: var(--sp-1); }
-.set-correct__row { display: flex; align-items: center; gap: var(--sp-2); }
+/* wraps rather than overflowing: at 200 % text two 5.75rem number fields plus
+   the unit, the x and the save button cannot sit on one 390px line, and a
+   non-wrapping flex row pushed the whole page sideways (WCAG 1.4.4). */
+.set-correct__row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .set-correct__idx { inline-size: 1.25rem; flex: none; text-align: center; }
 .set-correct__row .input--num { inline-size: 5.75rem; min-inline-size: 5ch; max-inline-size: 100%; min-block-size: 44px; padding-inline: var(--sp-2); font-size: var(--t-name); }
 
@@ -1546,22 +1628,11 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .routine--lead .name { font-size: var(--num-sm); }
 
 .routine-rest { padding-block: var(--sp-1); }
-.routine-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  /* actions may wrap under the title once the text is scaled up */
-  flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-3);
-  padding-block: var(--sp-3);
-}
-.routine-row + .routine-row { border-top: 1px solid var(--edge); }
-.routine-row__main { min-inline-size: 0; }
-.routine-row__name { margin-bottom: var(--sp-1); }
-.routine-row__exercises { grid-column: 1 / -1; margin: var(--sp-1) 0 0; }
-.routine-row__actions {
-  display: flex; align-items: center; gap: var(--sp-1); flex: none;
-}
+/* the routine list uses the shared .row (--top, so the Starten/edit cluster
+   sits level with the title rather than floating beside a two-line block).
+   Only the padding is local: these rows sit inside a tighter panel. */
+.routine-rest .row { padding-block: var(--sp-3); }
+.routine-rest .row + .row { margin-top: 0; padding-top: var(--sp-3); }
 
 /* skip link: off-screen until focused, then a real target at the top-left */
 .skip-link {
@@ -1582,9 +1653,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 #gym-main:focus { outline: none; }   /* programmatic target, not a focus stop */
 
-/* the finished-workout exercise rows are links into that lift's history */
-.ex-report__main { display: block; min-inline-size: 0; border-radius: var(--r-inset); }
-.ex-report__main:hover .name { color: var(--live); }
 
 /* inline icons sit on the text baseline-ish and inherit the control's colour */
 .icon { flex: none; }
@@ -1624,13 +1692,9 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .routine__edit-form { display: flex; gap: var(--sp-2); }
 .routine__edit-form .input { flex: 1; min-inline-size: 0; }
 
-/* Letzte Workouts: a divided list inside one panel, not a card per row --
-   same "not a card per row" philosophy as session_finished.html's Nach
-   Übung rows, but independent classes so the two pages stay free to diverge. */
-.recent-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-block-size: 44px; }
-.recent-row + .recent-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
-.recent-row__main { min-inline-size: 0; overflow-wrap: anywhere; }
-.recent-row__meta { margin-top: 2px; }
+/* Letzte Workouts and Steht still both use the shared .row. They previously
+   had their own classes so the pages "stayed free to diverge" -- they diverged
+   into inconsistency instead, which is what pulled them into one component. */
 
 .tonnage__note { margin-top: var(--sp-2); color: var(--live); }
 
@@ -1787,8 +1851,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    Two panels: the export controls (spec 6.6 -- same behavior as the old
    dashboard's export panel, restyled with this system's own primitives, not
    the old .export-panel/.form-row classes), then one divided list of every
-   finished session, newest first -- the same "not a card per row" pattern as
-   .recent-row / .ex-report-row / .uebungen-row.
+   finished session, newest first -- the shared .row, same as heute and the
+   finished-session debrief.
    ============================================================================ */
 
 .verlauf__head { margin-bottom: var(--sp-4); }
@@ -1796,8 +1860,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .verlauf-export__presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
 .verlauf-export__action { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
 
-.verlauf-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
-.verlauf-row + .verlauf-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
 /* checkbox has no adjacent label text (aria-label carries the name instead),
    so unlike .uebungen-check / .exercise-detail-check -- which get their
    44px-wide tap target for free from the text beside them -- this one needs
@@ -1808,12 +1870,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   flex: none;
   cursor: pointer;
 }
-.verlauf-row__main { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
-.verlauf-row__meta { margin-top: 2px; }
-.verlauf-row__exercises {
-  font-family: var(--font-body); font-size: var(--t-meta); line-height: 1.5;
-  color: var(--dim); text-transform: none; letter-spacing: 0; margin-top: 2px; }
-.verlauf-row__stats { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); flex: none; }
 .verlauf__search { margin-bottom: var(--sp-4); }
 .verlauf__count { margin-inline-start: auto; color: var(--unlit); }
 
@@ -2010,23 +2066,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   animation: disclosure-pop 180ms var(--ease-out);
   transform-origin: top right;
 }
-
-/* ============================================================================
-   ROW FEEDBACK  .  every tappable row acknowledges the tap
-   ----------------------------------------------------------------------------
-   These are real links carrying a whole row of content, and they previously
-   answered a tap with nothing at all until the next page painted -- the
-   longest unacknowledged gap in the app. Background on hover, a small
-   compression on press, both under the 80ms perceptual threshold so it reads
-   as the row responding rather than an animation playing.
-   ============================================================================ */
-
-.recent-row, .verlauf-row__main {
-  border-radius: var(--r-inset);
-  transition: background var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
-}
-.recent-row:hover, .verlauf-row__main:hover { background: var(--raised); }
-.recent-row:active, .verlauf-row__main:active { transform: scale(0.99); }
 
 /* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition

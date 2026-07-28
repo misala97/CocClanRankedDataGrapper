@@ -178,6 +178,18 @@ Rules that are not negotiable:
   one entry, use two tiers: one featured item carrying the primary action, the
   rest as divided rows in a single shared panel. See `.routine--lead` /
   `.routine-rest`, and `.stat-grid` (a divided readout band, not four tiles).
+- **Those divided rows are one component: `.row`.** Anatomy is
+  `__lead?` · `__main` (`.name` + `__meta`, optionally `__sub`) · `__wide?` ·
+  `__trail?`, with `--top` and `__trail--stack` as the only modifiers. Every
+  list on Heute, Verlauf and the finished-session debrief uses it. It replaced
+  four hand-rolled families (`.recent-row`, `.ex-report-row`, `.routine-row`,
+  `.verlauf-row`) that had drifted apart after the Athletik rebuild — three of
+  them carried a byte-identical divider rule. **Do not add a fifth.** A new
+  list surface composes `.row`; if it genuinely cannot, that is a signal the
+  component needs a variant, not that the page needs its own classes.
+  The one deliberate exception is `.uebungen-row`, which is `display: contents`
+  inside a grid table so its cells align to shared column tracks — same word,
+  different job.
 - **Controls are pills; boxes are not.** `--r-control` is a pill radius — it is
   correct on buttons and on 44×44 icon targets, and wrong on anything that
   holds more than one line of text. Those take `--r-panel`.

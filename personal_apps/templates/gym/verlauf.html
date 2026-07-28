@@ -55,17 +55,17 @@
         </div>
         <p class="empty" id="verlauf-empty" hidden>Kein Workout gefunden.</p>
         {% for entry in history %}
-        <div class="verlauf-row"
+        <div class="row"
              data-search="{{ ((entry.session.name or 'Workout') ~ ' ' ~ entry.session.exercises|map(attribute='exercise.name')|join(' '))|lower }}">
-            <label class="verlauf-check" aria-label="{{ entry.session.name or 'Workout' }} für Export auswählen">
+            <label class="verlauf-check row__lead" aria-label="{{ entry.session.name or 'Workout' }} für Export auswählen">
                 <input type="checkbox" class="check export-row-check" value="{{ entry.session.id }}" data-started="{{ entry.session.started_at.isoformat() }}">
             </label>
-            <a href="{{ url_for('gym.session_detail', session_id=entry.session.id) }}" class="verlauf-row__main">
+            <a href="{{ url_for('gym.session_detail', session_id=entry.session.id) }}" class="row__main">
                 <div class="name">{{ entry.session.name or 'Workout' }}</div>
-                <p class="label verlauf-row__meta">{{ entry.session.started_at.strftime('%d.%m.%Y %H:%M') }} · {{ entry.session.finished_at - entry.session.started_at }}</p>
-                <p class="verlauf-row__exercises">{{ entry.session.exercises|map(attribute='exercise.name')|join(' · ') }}</p>
+                <p class="label row__meta">{{ entry.session.started_at.strftime('%d.%m.%Y %H:%M') }} · {{ entry.session.finished_at - entry.session.started_at }}</p>
+                <p class="row__sub">{{ entry.session.exercises|map(attribute='exercise.name')|join(' · ') }}</p>
             </a>
-            <div class="verlauf-row__stats">
+            <div class="row__trail row__trail--stack">
                 <span class="load"><span class="load__val">{{ entry.volume }}</span><span class="load__unit">kg</span></span>
                 {% if entry.session.is_deload %}
                 <span class="chip chip--deload">Deload</span>
@@ -143,7 +143,10 @@
 // checkboxes and their selection survive filtering untouched.
 (function setupVerlaufSearch() {
     var input = document.getElementById('verlauf-search');
-    var rows = Array.prototype.slice.call(document.querySelectorAll('.verlauf-row'));
+    // keyed off [data-search], not a layout class: the rows use the shared
+    // .row component, so selecting on .row would also catch every other list
+    // row that ever lands on this page.
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.verlauf__list [data-search]'));
     var note = document.getElementById('verlauf-empty');
     var count = document.getElementById('verlauf-count');
     if (!input || !rows.length) return;

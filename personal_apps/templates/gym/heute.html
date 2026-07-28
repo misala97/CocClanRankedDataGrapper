@@ -120,18 +120,18 @@
         {% if routines|length > 1 %}
         <div class="panel routine-rest" style="--i: 1">
             {% for entry in routines[1:] %}
-            <div class="routine-row">
-                <div class="routine-row__main">
-                    <p class="name routine-row__name">{{ entry.template.name }}</p>
+            <div class="row row--top">
+                <div class="row__main">
+                    <p class="name">{{ entry.template.name }}</p>
                     <p class="label">{% if entry.days_ago is not none %}vor {{ entry.days_ago }} Tagen{% else %}Noch nie gemacht{% endif %}</p>
                 </div>
                 {# full-width, below the title/action line: an exercise list is
                    long enough that squeezing it beside the buttons turns it
                    into a narrow ragged column #}
-                <p class="routine__exercises routine-row__exercises">
+                <p class="routine__exercises row__wide">
                     {% if entry.template.exercises %}{{ entry.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
                 </p>
-                <div class="routine-row__actions">
+                <div class="row__trail">
                     <form method="post" action="{{ url_for('gym.gym_start') }}">
                         <input type="hidden" name="template_id" value="{{ entry.template.id }}">
                         <button type="submit" class="btn btn--ghost btn--sm">Starten</button>
@@ -170,10 +170,10 @@
         <div class="panel">
             {% if recent_sessions %}
             {% for s in recent_sessions %}
-            <a href="{{ url_for('gym.session_detail', session_id=s.id) }}" class="recent-row">
-                <div class="recent-row__main">
+            <a href="{{ url_for('gym.session_detail', session_id=s.id) }}" class="row">
+                <div class="row__main">
                     <div class="name">{{ s.name or 'Workout' }}</div>
-                    <div class="label recent-row__meta">{{ s.started_at.strftime('%d.%m.%Y') }} · {{ s.finished_at - s.started_at }}</div>
+                    <div class="label row__meta">{{ s.started_at.strftime('%d.%m.%Y') }} · {{ s.finished_at - s.started_at }}</div>
                 </div>
             </a>
             {% endfor %}
@@ -198,14 +198,12 @@
             {% endif %}
             {% if stalls %}
             {% for item in stalls %}
-            <div class="ex-report-row">
-                <div class="ex-report">
-                    <div class="ex-report__main">
-                        <div class="name">{{ item.name }}</div>
-                        <div class="label ex-report__sets">Position {{ item.position }} · {{ item.stuck_at }} kg</div>
-                    </div>
-                    <span class="chip chip--stall">{{ item.sessions_since_pr }} ohne PR</span>
+            <div class="row">
+                <div class="row__main">
+                    <div class="name">{{ item.name }}</div>
+                    <div class="label row__meta">Position {{ item.position }} · {{ item.stuck_at }} kg</div>
                 </div>
+                <span class="chip chip--stall row__trail">{{ item.sessions_since_pr }} ohne PR</span>
             </div>
             {% endfor %}
             {% else %}

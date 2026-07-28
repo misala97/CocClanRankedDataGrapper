@@ -104,32 +104,30 @@
         <div class="section-head"><h2 class="label">Nach Übung</h2></div>
         {% if exercises %}
         {% for entry in exercises %}
-        <div class="ex-report-row">
-            <div class="ex-report">
-                {# the exercise name is a way back INTO the loop: from the
-                   debrief straight to that lift's progression. Previously this
-                   screen had exactly one exit and it was "Verlauf". #}
-                <a class="ex-report__main" href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise_id) }}">
-                    <div class="name">{{ entry.name }}</div>
-                    <div class="label ex-report__sets">Pos. {{ entry.position }} · {{ entry.sets_display }}</div>
-                </a>
-                {% if entry.verdict == 'rekord' %}
-                <span class="chip chip--record">Rekord</span>
-                {% elif entry.verdict == 'stagniert' %}
-                <span class="chip chip--stall">{{ entry.sessions_since_pr }} ohne PR</span>
-                {% elif entry.verdict == 'steigend' %}
-                <span class="chip chip--up">+{{ entry.volume_delta_pct }} % Vol.</span>
-                {% elif entry.verdict == 'neu' %}
-                <span class="chip chip--neu">Erste Aufzeichnung</span>
-                {% endif %}
-            </div>
+        <div class="row">
+            {# the exercise name is a way back INTO the loop: from the
+               debrief straight to that lift's progression. Previously this
+               screen had exactly one exit and it was "Verlauf". #}
+            <a class="row__main" href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise_id) }}">
+                <div class="name">{{ entry.name }}</div>
+                <div class="label row__meta">Pos. {{ entry.position }} · {{ entry.sets_display }}</div>
+            </a>
+            {% if entry.verdict == 'rekord' %}
+            <span class="chip chip--record row__trail">Rekord</span>
+            {% elif entry.verdict == 'stagniert' %}
+            <span class="chip chip--stall row__trail">{{ entry.sessions_since_pr }} ohne PR</span>
+            {% elif entry.verdict == 'steigend' %}
+            <span class="chip chip--up row__trail">+{{ entry.volume_delta_pct }} % Vol.</span>
+            {% elif entry.verdict == 'neu' %}
+            <span class="chip chip--neu row__trail">Erste Aufzeichnung</span>
+            {% endif %}
             {% if entry.set_rows %}
             {# Quiet correction affordance -- fixing a typo'd weight/reps after
                the fact, not a primary action, so it stays a closed-by-default
                native disclosure rather than competing with the chip/flare for
                attention. Each set posts individually to the untouched
                gym_update_set endpoint. #}
-            <details class="set-correct">
+            <details class="set-correct row__wide">
                 <summary class="set-correct__toggle">{% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}<span>Sätze korrigieren</span></summary>
                 <div class="set-correct__body">
                     {% for s in entry.set_rows %}
