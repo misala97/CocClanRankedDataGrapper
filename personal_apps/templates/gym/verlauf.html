@@ -67,6 +67,9 @@
             </a>
             <div class="verlauf-row__stats">
                 <span class="load"><span class="load__val">{{ entry.volume }}</span><span class="load__unit">kg</span></span>
+                {% if entry.session.is_deload %}
+                <span class="chip chip--deload">Deload</span>
+                {% endif %}
                 {% if entry.record_count %}
                 <span class="chip chip--record">{{ entry.record_count }} {{ 'Rekord' if entry.record_count == 1 else 'Rekorde' }}</span>
                 {% endif %}
