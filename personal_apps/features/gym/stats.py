@@ -110,7 +110,13 @@ def is_new_best(weight, reps, prior_rows):
     gets at session end), just applied to one set the moment it's checked
     instead of a whole session's aggregate after the fact. False with no
     prior history to beat -- a first attempt at an exercise isn't a record
-    of anything yet."""
+    of anything yet.
+
+    Deload sessions are excluded from `prior_rows`: a light week must not
+    lower the bar a normal set is judged against. If deloads are the only
+    history, this is False, the same as having no history at all.
+    """
+    prior_rows = _progression_rows(prior_rows)
     if not prior_rows:
         return False
     return (
@@ -121,6 +127,19 @@ def is_new_best(weight, reps, prior_rows):
 
 def _chronological(rows):
     return sorted(rows, key=lambda row: (row.started_at, row.session_id))
+
+
+def _progression_rows(rows):
+    """Only the rows that count as an attempt at progress.
+
+    A deload session is deliberately light: its numbers are not a failed
+    attempt at a record, and treating them as one manufactures exactly the
+    plateau the deload existed to break. Every function that makes a
+    *judgement* -- records, stagnation, volume averages -- starts here.
+    Functions that report what actually happened (tonnage, balance,
+    consistency, the history table) deliberately do not.
+    """
+    return [row for row in rows if not row.is_deload]
 
 
 def dominant_position(rows):
@@ -149,8 +168,9 @@ def _scoped(rows, position):
 
 def sessions_since_pr(rows, position=None):
     """How many completed sessions in a row have passed without a new best
-    estimated 1RM. None when there is too little history to say anything."""
-    scoped = _scoped(rows, position)
+    estimated 1RM. None when there is too little history to say anything.
+    Deload sessions are not counted -- see _progression_rows()."""
+    scoped = _scoped(_progression_rows(rows), position)
     if len(scoped) < 2:
         return None
     best_ever = None
@@ -167,7 +187,10 @@ def sessions_since_pr(rows, position=None):
 
 def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):
     """One of 'neu', 'rekord', 'stagniert', 'steigend', or None for stable.
-    Mutually exclusive; first match wins."""
+    Mutually exclusive; first match wins. Deload sessions are excluded
+    throughout -- an exercise whose only history is deloads reads 'neu',
+    because there is no honest basis for comparison."""
+    rows = _progression_rows(rows)
     if not rows:
         return 'neu'
     scoped = _scoped(rows, position)
@@ -191,6 +214,7 @@ def stall_report(rows_by_exercise, threshold=STAGNATION_THRESHOLD):
     """
     report = []
     for exercise_id, rows in rows_by_exercise.items():
+        rows = _progression_rows(rows)
         if not rows:
             continue
         position = dominant_position(rows)
@@ -215,9 +239,9 @@ def _sets_display(row):
 
 
 def _pr_weight(rows):
-    """The heaviest single set ever logged."""
+    """The heaviest single set ever logged. A deload cannot hold a record."""
     best = None
-    for row in rows:
+    for row in _progression_rows(rows):
         for weight, reps in row.sets:
             if best is None or weight > best['weight']:
                 best = {'weight': weight, 'reps': reps,
@@ -227,9 +251,10 @@ def _pr_weight(rows):
 
 def _pr_e1rm(rows):
     """The single set with the highest estimated 1RM -- not always the
-    heaviest one, since more reps at less weight can estimate higher."""
+    heaviest one, since more reps at less weight can estimate higher. A
+    deload cannot hold a record."""
     best = None
-    for row in rows:
+    for row in _progression_rows(rows):
         for weight, reps in row.sets:
             value = epley_1rm(weight, reps)
             if best is None or value > best['e1rm']:

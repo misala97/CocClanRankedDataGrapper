@@ -584,3 +584,56 @@ def test_deload_weight_never_floors_a_light_weight_to_zero():
 def test_deload_weight_preserves_the_shape_of_a_ramped_session():
     session = [80.0, 80.0, 75.0]
     assert [stats.deload_weight(w, 70, False) for w in session] == [55.0, 55.0, 52.5]
+
+
+def test_deload_row_does_not_count_as_a_session_without_a_pr():
+    # Without the exclusion this is 2 sessions since the PR; the deload in the
+    # middle is not a failed attempt at one.
+    rows = [
+        perf([(80.0, 8)], started_at=day(0)),
+        perf([(85.0, 8)], started_at=day(7)),                   # the PR
+        perf([(60.0, 8)], started_at=day(14), is_deload=True),  # deliberately light
+        perf([(85.0, 8)], started_at=day(21)),
+    ]
+    assert stats.sessions_since_pr(rows) == 1
+
+
+def test_a_run_of_deloads_cannot_push_an_exercise_to_stagniert():
+    rows = [perf([(80.0, 8)], started_at=day(0)), perf([(85.0, 8)], started_at=day(7))]
+    rows += [perf([(60.0, 8)], started_at=day(14 + 7 * n), is_deload=True) for n in range(6)]
+    assert stats.exercise_state(rows) != 'stagniert'
+
+
+def test_a_deload_session_cannot_set_a_record():
+    # 200 kg logged in a deload session must not become the exercise's PR.
+    rows = [perf([(80.0, 8)], started_at=day(0)),
+            perf([(200.0, 8)], started_at=day(7), is_deload=True)]
+    assert stats._pr_weight(rows)['weight'] == 80.0
+    assert stats._pr_e1rm(rows)['weight'] == 80.0
+
+
+def test_a_deload_row_is_not_the_baseline_a_later_set_is_judged_against():
+    # A 60 kg deload must not make a normal 70 kg set look like a new best
+    # when the real history already holds 80 kg.
+    prior = [perf([(80.0, 8)], started_at=day(0)),
+             perf([(60.0, 8)], started_at=day(7), is_deload=True)]
+    assert stats.is_new_best(70.0, 8, prior) is False
+
+
+def test_is_new_best_is_false_when_only_deload_history_exists():
+    # No real history to beat -- the same "a first attempt isn't a record"
+    # rule the empty case already has.
+    prior = [perf([(60.0, 8)], started_at=day(0), is_deload=True)]
+    assert stats.is_new_best(200.0, 8, prior) is False
+
+
+def test_stall_report_ignores_deload_sessions():
+    rows = [perf([(80.0, 8)], started_at=day(0)), perf([(85.0, 8)], started_at=day(7))]
+    rows += [perf([(60.0, 8)], started_at=day(14 + 7 * n), is_deload=True) for n in range(6)]
+    assert stats.stall_report({1: rows}) == []
+
+
+def test_exercise_state_is_neu_when_every_row_is_a_deload():
+    rows = [perf([(60.0, 8)], started_at=day(0), is_deload=True),
+            perf([(60.0, 8)], started_at=day(7), is_deload=True)]
+    assert stats.exercise_state(rows) == 'neu'
