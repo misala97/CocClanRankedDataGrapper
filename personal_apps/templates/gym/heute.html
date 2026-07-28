@@ -193,6 +193,7 @@
             {% if deload_suggestion %}
             <p class="deload-note">
                 {{ deload_suggestion.count }} aktive Übungen stehen still — ein Deload könnte fällig sein.
+                <span class="deload-note__lifts">{{ deload_suggestion.stalls|map(attribute='name')|join(' · ') }}</span>
             </p>
             {% endif %}
             {% if stalls %}

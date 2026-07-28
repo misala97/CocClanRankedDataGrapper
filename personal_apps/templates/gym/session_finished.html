@@ -45,8 +45,10 @@
         {{ record_count }} neue{{ '' if record_count == 1 else '' }} {{ 'Rekord' if record_count == 1 else 'Rekorde' }}.
         {%- elif total_sets == 0 -%}
         Kein Satz erfasst — dieses Workout zählt nicht in die Statistik.
-        {%- elif session.is_deload -%}
+        {%- elif session.is_deload and deload_applied -%}
         Deload — {{ deload_pct or deload_default_pct }} %. Bewusst leichter.
+        {%- elif session.is_deload -%}
+        Als Deload markiert. Bewusst leichter.
         {%- elif total_volume_delta_pct is not none and total_volume_delta_pct >= 5 -%}
         {{ '%+d'|format(total_volume_delta_pct) }} % über deinem Schnitt.
         {%- elif total_volume_delta_pct is not none and total_volume_delta_pct <= -5 -%}

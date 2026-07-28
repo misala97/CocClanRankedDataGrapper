@@ -148,7 +148,7 @@ def _chronological(rows):
     return sorted(rows, key=lambda row: (row.started_at, row.session_id))
 
 
-def _progression_rows(rows):
+def progression_rows(rows):
     """Only the rows that count as an attempt at progress.
 
     A deload session is deliberately light: its numbers are not a failed
@@ -157,8 +157,18 @@ def _progression_rows(rows):
     *judgement* -- records, stagnation, volume averages -- starts here.
     Functions that report what actually happened (tonnage, balance,
     consistency, the history table) deliberately do not.
+
+    Public (and called directly from routes.py) because the exercise
+    catalogue route has to make the same judgement/report split on its own
+    unfiltered rows before handing them to dominant_position/best_e1rm/
+    best_weight -- see gym_uebungen()'s own comment for why.
     """
     return [row for row in rows if not row.is_deload]
+
+
+# Old name, kept so existing internal call sites and tests that reach past
+# the public API keep working.
+_progression_rows = progression_rows
 
 
 def dominant_position(rows):

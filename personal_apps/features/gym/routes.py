@@ -1076,6 +1076,8 @@ def gym_export():
                 'template_name': s.template.name if s.template else None,
                 'started_at': s.started_at.isoformat() + 'Z',
                 'finished_at': s.finished_at.isoformat() + 'Z',
+                'is_deload': s.is_deload,
+                'deload_pct': s.deload_pct,
                 'exercises': [
                     {
                         'exercise_name': se.exercise.name,
@@ -1134,13 +1136,23 @@ def gym_uebungen():
     entries_by_id = {}
     for exercise in exercises:
         rows = rows_by_exercise.get(exercise.id, [])
+        # Judged slot, record weight and record e1RM must agree with what
+        # the exercise's own detail page shows and with what stall_report()
+        # judges on the dashboard, so deload rows are dropped BEFORE they
+        # reach dominant_position/best_e1rm/best_weight/sessions_since_pr --
+        # the same filter-before-judge order stall_report() uses (see its
+        # own docstring). `last_done` stays on the unfiltered `rows`: "when
+        # did I last do this" is a fact a deload session legitimately
+        # answers, it is not a judgement.
+        progression = stats.progression_rows(rows)
         # dominant_position() requires at least one row -- a brand new
-        # exercise (no rows) has no position to speak of, and exercise_state
-        # returns 'neu' from its own empty-rows check before position is
-        # ever consulted, so None is a safe stand-in here.
-        position = stats.dominant_position(rows) if rows else None
-        best_e1rm = max((stats.best_e1rm(row) for row in rows), default=None)
-        state = stats.exercise_state(rows, position=position)
+        # exercise, or one whose only history is deloads, has no position to
+        # speak of, and exercise_state returns 'neu' from its own
+        # empty-rows check before position is ever consulted, so None is a
+        # safe stand-in here.
+        position = stats.dominant_position(progression) if progression else None
+        best_e1rm = max((stats.best_e1rm(row) for row in progression), default=None)
+        state = stats.exercise_state(progression, position=position)
         chip_class, chip_label = EXERCISE_STATE_CHIP.get(state, (None, None))
         entries_by_id[exercise.id] = {
             'exercise': exercise,
@@ -1148,9 +1160,9 @@ def gym_uebungen():
             'chip_class': chip_class,
             'chip_label': chip_label,
             'last_done': max((row.started_at for row in rows), default=None),
-            'best_weight': max((stats.best_weight(row) for row in rows), default=None),
+            'best_weight': max((stats.best_weight(row) for row in progression), default=None),
             'best_e1rm': round(best_e1rm, 1) if best_e1rm is not None else None,
-            'sessions_since_pr': stats.sessions_since_pr(rows, position=position) if rows else None,
+            'sessions_since_pr': stats.sessions_since_pr(progression, position=position) if progression else None,
             'can_delete': (
                 exercise.id not in exercise_ids_with_sessions
                 and exercise.id not in exercise_ids_with_templates

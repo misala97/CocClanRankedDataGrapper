@@ -897,7 +897,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    dimmed: the bar's height is the datum, so fading it reads as "no training
    that week" -- the opposite of what it means. No hue: this is an
    explanation, not a fourth semantic state. */
-.vbar--deload {
+.vbar.vbar--deload {
   background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--chassis) 3px 6px);
 }
 
@@ -905,6 +905,14 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   margin-block-end: var(--sp-3);
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+}
+/* The lifts behind the count, named rather than left to a bare number --
+   inherits --dim from .deload-note, just set on its own line so the roster
+   below it (which is not recency-filtered and may list more) doesn't read
+   as a mismatch. */
+.deload-note__lifts {
+  display: block;
+  margin-top: var(--sp-1);
 }
 .vbars__axis { display: flex; justify-content: space-between; margin-top: var(--sp-1);
   font-family: var(--font-mono); font-size: var(--t-micro); color: var(--unlit); letter-spacing: 0.04em; }
