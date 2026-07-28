@@ -150,3 +150,22 @@ def test_progression_ranking_skips_an_exercise_whose_history_is_all_deloads():
 
 def test_progression_ranking_on_no_history_is_empty():
     assert analytics.progression_ranking([]) == []
+
+
+def test_progression_ranking_treats_one_exercise_twice_in_a_session_as_one_point():
+    """An exercise performed in two slots of the same workout is one data
+    point on its curve -- its best showing that day -- not two sessions.
+    Every other test here has at most one row per exercise per session, so an
+    implementation that counted both would pass all of them.
+    """
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1, position=1),
+        # same workout, second slot, heavier
+        perf([(105.0, 8)], started_at=day(0), session_id=1, position=4),
+        perf([(110.0, 8)], started_at=day(7), session_id=2, position=1),
+    ]
+    entry = analytics.progression_ranking(rows)[0]
+    assert entry['sessions'] == 2, 'counted two slots as two sessions'
+    assert len(entry['points']) == 2, 'plotted two slots as two points'
+    # the first session contributes its BEST showing, 105 not 100
+    assert entry['first_e1rm'] == round(stats.epley_1rm(105.0, 8), 1)
