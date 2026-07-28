@@ -19,6 +19,24 @@ def _is_logged_in():
     return bool(session.get('logged_in'))
 
 
+def _on_full_access_host():
+    return request.host.split(':')[0] == FULL_ACCESS_HOST
+
+
+@auth_bp.app_context_processor
+def _inject_host_flags():
+    # Templates brand themselves per hostname: the public pubquiz domain must
+    # look like the pub quiz it serves, not like a generic credential form.
+    return {'is_full_access_host': _on_full_access_host()}
+
+
+@auth_bp.after_request
+def _no_index(response):
+    # Keep the login form out of search/crawler indexes entirely.
+    response.headers['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    return response
+
+
 def _post_login_redirect():
     if request.host.split(':')[0] == FULL_ACCESS_HOST:
         return redirect(url_for('index'))

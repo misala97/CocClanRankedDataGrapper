@@ -1,9 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ 'en' if is_full_access_host else 'de' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    {% if is_full_access_host %}
     <title>Login – Personal Apps</title>
+    {% else %}
+    <title>Quizmaster-Login – Pub Quiz Mainz</title>
+    <meta name="description" content="Interner Login für die Quizmaster des Pub Quiz Mainz. Die Ergebnisse sind ohne Login öffentlich einsehbar.">
+    {% endif %}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -37,7 +43,7 @@
             font-size: 22px; box-shadow: 0 0 24px rgba(109,106,246,0.35);
         }
         .login-title { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 6px; }
-        .login-subtitle { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 28px; }
+        .login-subtitle { font-size: 13px; line-height: 1.55; color: var(--muted); text-align: center; margin-bottom: 28px; }
         .form-group { margin-bottom: 18px; }
         label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 7px; letter-spacing: 0.4px; text-transform: uppercase; }
         input[type="text"], input[type="password"] {
@@ -61,13 +67,28 @@
             color: #0b0d14; cursor: pointer; transition: opacity 0.15s;
         }
         .btn-login:hover { opacity: 0.9; }
+        .back-link {
+            display: block; margin-top: 22px; text-align: center;
+            font-size: 13px; color: var(--muted); text-decoration: none;
+            transition: color 0.15s;
+        }
+        .back-link:hover { color: var(--text); }
     </style>
 </head>
 <body>
 <div class="login-card">
-    <div class="login-icon">🔐</div>
+    {% if is_full_access_host %}
+    <div class="login-icon">🗂️</div>
     <div class="login-title">Personal Apps</div>
     <div class="login-subtitle">Sign in to continue</div>
+    {% else %}
+    <div class="login-icon">🍻</div>
+    <div class="login-title">Pub Quiz Mainz</div>
+    <div class="login-subtitle">
+        Quizmaster-Bereich zum Eintragen der Punkte.<br>
+        Die Ergebnisse sind öffentlich — dafür brauchst du keinen Login.
+    </div>
+    {% endif %}
 
     {% if error %}
     <div class="error-msg">⚠ {{ error }}</div>
@@ -75,15 +96,19 @@
 
     <form method="POST">
         <div class="form-group">
-            <label for="username">Username</label>
+            <label for="username">{{ 'Username' if is_full_access_host else 'Benutzername' }}</label>
             <input type="text" id="username" name="username" autocomplete="username" autofocus>
         </div>
         <div class="form-group">
-            <label for="password">Password</label>
+            <label for="password">{{ 'Password' if is_full_access_host else 'Passwort' }}</label>
             <input type="password" id="password" name="password" autocomplete="current-password">
         </div>
-        <button type="submit" class="btn-login">Sign In</button>
+        <button type="submit" class="btn-login">{{ 'Sign In' if is_full_access_host else 'Anmelden' }}</button>
     </form>
+
+    {% if not is_full_access_host %}
+    <a class="back-link" href="{{ url_for('pubquiz.pubquiz') }}">← Zurück zu den Ergebnissen</a>
+    {% endif %}
 </div>
 </body>
 </html>
