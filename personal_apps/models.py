@@ -196,6 +196,16 @@ class WorkoutSession(db.Model):
     finished_at  = db.Column(db.DateTime, nullable=True)
     rest_ends_at = db.Column(db.DateTime, nullable=True)  # display-only target for the in-page countdown
     resting_set_id = db.Column(db.Integer, db.ForeignKey('gym_session_sets.id'), nullable=True)  # which set's completion started the current rest timer, for the per-set progress bar
+    # A deliberately light session. Excluded from every judgement that assumes
+    # an attempt at progress (records, stagnation, volume averages, next
+    # session's pre-fill) and kept in every figure where it is simply true
+    # (tonnage, balance, consistency). See features/gym/stats.py.
+    is_deload    = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    # The percentage of normal working weight actually used, stored per session
+    # rather than read from a constant: changing the default later must not
+    # retroactively rewrite what past sessions claim to have been, and it makes
+    # deload depth a measurable variable. NULL on every non-deload session.
+    deload_pct   = db.Column(db.SmallInteger, nullable=True)
 
     template = db.relationship('WorkoutTemplate', back_populates='sessions_started_from')
     exercises = db.relationship(
