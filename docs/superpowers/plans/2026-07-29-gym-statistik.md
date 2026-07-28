@@ -619,11 +619,17 @@ git commit -m "feat(gym): add rep-range and within-session fatigue analytics"
 
 **Background:** All three are descriptions — deloads included.
 
-Dayparts are `morgens` 08:00–13:59 and `abends` 19:00–22:59, matching the two clusters actually present in the data; sessions outside both are counted in an `andere` bucket that never carries a finding.
+Dayparts are `morning` 08:00–13:59 and `evening` 19:00–22:59, matching the two clusters actually present in the data; sessions outside both are counted in an `other` bucket that never carries a finding.
+
+**Keys are English; the template maps them to German.** This module holds no
+user-visible copy — that is what lets the wording change without editing
+Python, and it is why weekdays are returned as an index rather than a label.
 
 `daypart_volume` is statable only when **both** compared buckets clear the threshold — comparing 11 sessions against 2 is not a comparison.
 
-Weekday labels are German short forms, in Monday-first order, because the template renders them directly: `Mo Di Mi Do Fr Sa So`. This is the one place a German string legitimately lives in the module — it is a data label, not prose.
+Weekdays are returned as `weekday` 0–6 (Monday-first, matching
+`datetime.weekday()`), never as labels. The template owns the German short
+forms.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -638,15 +644,15 @@ def at(hour, days=0, session_id=1, weight=100.0, reps=10):
 def test_daypart_volume_separates_morning_from_evening():
     rows = [at(9, days=0, session_id=1), at(20, days=1, session_id=2)]
     parts = {p['label']: p for p in analytics.daypart_volume(rows)['parts']}
-    assert parts['morgens']['sessions'] == 1
-    assert parts['abends']['sessions'] == 1
+    assert parts['morning']['sessions'] == 1
+    assert parts['evening']['sessions'] == 1
 
 
 def test_daypart_volume_reports_volume_per_session_not_total():
     rows = [at(9, days=0, session_id=1, reps=10), at(9, days=1, session_id=2, reps=30)]
     parts = {p['label']: p for p in analytics.daypart_volume(rows)['parts']}
     # 1000 + 3000 across two sessions -> 2000 average
-    assert parts['morgens']['avg_volume'] == 2000.0
+    assert parts['morning']['avg_volume'] == 2000.0
 
 
 def test_daypart_volume_needs_both_buckets_to_clear_the_threshold():
@@ -673,15 +679,16 @@ def test_weekday_distribution_counts_sessions_per_weekday():
     # 2026-06-01 is a Monday
     rows = [at(9, days=0, session_id=1), at(9, days=0, session_id=1),
             at(9, days=1, session_id=2)]
-    days = {d['label']: d['sessions'] for d in analytics.weekday_distribution(rows)['days']}
-    assert days['Mo'] == 1      # one session, two rows
-    assert days['Di'] == 1
-    assert days['So'] == 0
+    days = {d['weekday']: d['sessions'] for d in analytics.weekday_distribution(rows)['days']}
+    assert days[0] == 1      # Monday: one session, two rows
+    assert days[1] == 1
+    assert days[6] == 0      # Sunday: never trained, still present
 
 
-def test_weekday_distribution_lists_monday_first():
-    labels = [d['label'] for d in analytics.weekday_distribution([])['days']]
-    assert labels == ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+def test_weekday_distribution_lists_monday_first_and_carries_no_copy():
+    days = analytics.weekday_distribution([])['days']
+    assert [d['weekday'] for d in days] == [0, 1, 2, 3, 4, 5, 6]
+    assert all('label' not in d for d in days), 'weekday copy belongs in the template'
 
 
 def test_rest_gap_effect_buckets_by_days_since_the_previous_session():
@@ -727,8 +734,8 @@ Append the functions:
 # The two clusters the training log actually contains. Sessions outside both
 # fall into `andere`, which is reported but never carries a finding -- a
 # bucket defined as "everything else" cannot support a claim about behaviour.
-DAYPARTS = (('morgens', 8, 14), ('abends', 19, 23))
-WEEKDAY_LABELS = ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So')
+DAYPARTS = (('morning', 8, 14), ('evening', 19, 23))
+WEEKDAYS = tuple(range(7))   # 0 = Monday, matching datetime.weekday()
 GAP_BUCKETS = (('0-1', 0, 1), ('2', 2, 2), ('3', 3, 3), ('4+', 4, None))
 
 
@@ -753,23 +760,23 @@ def daypart_volume(rows):
     """
     sessions = _session_volumes(rows)
     buckets = {label: [] for label, _, _ in DAYPARTS}
-    buckets['andere'] = []
+    buckets['other'] = []
     for started_at, volume in sessions:
         for label, low, high in DAYPARTS:
             if low <= started_at.hour < high:
                 buckets[label].append(volume)
                 break
         else:
-            buckets['andere'].append(volume)
+            buckets['other'].append(volume)
 
     parts = [
         {'label': label,
          'sessions': len(buckets[label]),
          'volume': round(sum(buckets[label]), 1),
          'avg_volume': round(sum(buckets[label]) / len(buckets[label]), 1) if buckets[label] else 0.0}
-        for label in list(dict.fromkeys([label for label, _, _ in DAYPARTS] + ['andere']))
+        for label in list(dict.fromkeys([label for label, _, _ in DAYPARTS] + ['other']))
     ]
-    named = [p for p in parts if p['label'] != 'andere']
+    named = [p for p in parts if p['label'] != 'other']
     return {
         'parts': parts,
         'statable': all(p['sessions'] >= MIN_SESSIONS_PER_DAYPART for p in named),
@@ -777,20 +784,23 @@ def daypart_volume(rows):
 
 
 def weekday_distribution(rows):
-    """Sessions per weekday, Monday first. Every weekday is always present,
-    including the ones never trained -- a missing Sunday and a Sunday at zero
-    are different facts, and only one of them is true."""
+    """Sessions per weekday, Monday first, as an INDEX (0-6) not a label --
+    this module holds no user-visible copy.
+
+    Every weekday is always present, including the ones never trained: a
+    missing Sunday and a Sunday at zero are different facts, and only one of
+    them is true."""
     sessions = _session_volumes(rows)
-    counts = {label: 0 for label in WEEKDAY_LABELS}
+    counts = {index: 0 for index in WEEKDAYS}
     for started_at, _ in sessions:
-        counts[WEEKDAY_LABELS[started_at.weekday()]] += 1
+        counts[started_at.weekday()] += 1
 
     total = len(sessions)
     return {
         'days': [
-            {'label': label, 'sessions': counts[label],
-             'share': round(counts[label] / total * 100, 1) if total else 0.0}
-            for label in WEEKDAY_LABELS
+            {'weekday': index, 'sessions': counts[index],
+             'share': round(counts[index] / total * 100, 1) if total else 0.0}
+            for index in WEEKDAYS
         ],
         'sample': total,
         'statable': total >= MIN_SESSIONS_FOR_WEEKDAY,
@@ -1430,12 +1440,17 @@ In `personal_apps/static/gym/gym.css`, append a new section at the end of the fi
   grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
   gap: 0;
 }
+/* Dividers drawn as a background layer rather than per-item borders: with
+   auto-fit the band wraps, and a :first-child reset only clears the very
+   first item -- the first item of every LATER row would keep a stray leading
+   rule. Insetting the item's own background over the gap gives clean
+   dividers at any column count. */
 .werk__item {
   display: flex; flex-direction: column; gap: var(--sp-1);
   padding: var(--sp-4);
-  border-inline-start: 1px solid var(--edge);
+  box-shadow: inset 1px 0 0 var(--edge);
 }
-.werk__item:first-child { border-inline-start: 0; }
+.werk__item:first-child { box-shadow: none; }
 .werk__unit { margin-inline-start: 0.2em; font-size: var(--t-meta); color: var(--dim); }
 .werk__meta { color: var(--unlit); }
 
@@ -1451,10 +1466,13 @@ In `personal_apps/static/gym/gym.css`, append a new section at the end of the fi
 Verify every custom property used above already exists:
 
 ```bash
-cd personal_apps && for t in --sp-1 --sp-3 --sp-4 --sp-5 --sp-6 --edge --ink --dim --unlit --live --t-name --t-meta; do grep -q -- "$t:" static/gym/gym.css && echo "$t ok" || echo "$t MISSING"; done
+cd personal_apps && for t in --sp-1 --sp-3 --sp-4 --sp-5 --sp-6 --edge --ink --dim --unlit --live --t-name --t-meta; do grep -qE "(^|[^a-z-])$t:" static/gym/gym.css && echo "$t ok" || echo "$t MISSING"; done
 ```
 
-Expected: every line reports `ok`. If one is missing, grep `gym.css` for the correct token name and use that — do not invent one.
+Expected: every line reports `ok`. Several tokens share a line in the `:root`
+block, so the pattern must not assume one definition per line. If one really is
+missing, grep `gym.css` for the correct name and use that — never invent a
+token.
 
 - [ ] **Step 3: Add progressive sorting**
 
@@ -1538,7 +1556,16 @@ git commit -m "feat(gym): render the Das Werk and Fortschritt zones"
 - Consumes: `rep_range`, `fatigue`, `daypart`, `weekday`, `rest_gap` from Task 7; the `.row` component and `.hbar` primitive.
 - Produces: CSS class `.finding-bar`.
 
-**Background:** **This is the zone the page exists for.** It must not be a grid of identical cards — that is banned. Two tiers: the rep-range finding is featured (it is the most characterising and has by far the strongest sample), the rest are divided `.row`s in one shared panel.
+**Background:** `analytics.py` returns English keys and weekday indexes; this
+template owns every German word. Define the two maps once at the top of the
+zone and reuse them:
+
+```jinja
+{% set DAYPART_LABELS = {'morning': 'morgens', 'evening': 'abends', 'other': 'sonst'} %}
+{% set WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] %}
+```
+
+**This is the zone the page exists for.** It must not be a grid of identical cards — that is banned. Two tiers: the rep-range finding is featured (it is the most characterising and has by far the strongest sample), the rest are divided `.row`s in one shared panel.
 
 The `.row` component from the recent refactor: `__main` for the sentence, `__wide` for a full-width chart below it, `__trail` for the headline figure. `.row + .row` supplies the divider.
 
@@ -1586,7 +1613,7 @@ In `personal_apps/templates/gym/statistik.html`, after the Fortschritt section:
                     {% if daypart.statable %}
                     {% set parts = daypart.parts|selectattr('sessions')|sort(attribute='avg_volume', reverse=true)|list %}
                     <p class="statistik__finding">
-                        Du bewegst {{ parts[0].label }} mehr Gewicht pro Workout als {{ parts[-1].label }}.
+                        Du bewegst {{ DAYPART_LABELS[parts[0].label] }} mehr Gewicht pro Workout als {{ DAYPART_LABELS[parts[-1].label] }}.
                     </p>
                     {% else %}
                     <p class="statistik__finding statistik__finding--quiet">Tageszeit: noch zu wenig Daten für eine Aussage.</p>
@@ -1596,7 +1623,7 @@ In `personal_apps/templates/gym/statistik.html`, after the Fortschritt section:
                     {% set peak = (daypart.parts|map(attribute='avg_volume')|max) or 1 %}
                     {% for part in daypart.parts if part.sessions %}
                     <div class="hbar">
-                        <span class="hbar__name">{{ part.label }}</span>
+                        <span class="hbar__name">{{ DAYPART_LABELS[part.label] }}</span>
                         <span class="hbar__track"><span class="hbar__fill" style="width:{{ (part.avg_volume / peak * 100)|round(1) }}%"></span></span>
                         <span class="hbar__val">{{ part.avg_volume|round|int }} kg</span>
                     </div>
@@ -1625,7 +1652,7 @@ In `personal_apps/templates/gym/statistik.html`, after the Fortschritt section:
                 <div class="row__main">
                     {% if weekday.statable %}
                     {% set top = weekday.days|sort(attribute='sessions', reverse=true)|first %}
-                    <p class="statistik__finding">Dein häufigster Trainingstag ist {{ top.label }} ({{ top.sessions }} Workouts).</p>
+                    <p class="statistik__finding">Dein häufigster Trainingstag ist {{ WEEKDAY_LABELS[top.weekday] }} ({{ top.sessions }} Workouts).</p>
                     {% else %}
                     <p class="statistik__finding statistik__finding--quiet">Wochentage: noch zu wenig Daten für eine Aussage.</p>
                     {% endif %}
@@ -1638,7 +1665,7 @@ In `personal_apps/templates/gym/statistik.html`, after the Fortschritt section:
                         {% endfor %}
                     </div>
                     <div class="vbars__axis">
-                        {% for d in weekday.days %}<span>{{ d.label }}</span>{% endfor %}
+                        {% for d in weekday.days %}<span>{{ WEEKDAY_LABELS[d.weekday] }}</span>{% endfor %}
                     </div>
                 </div>
             </div>
