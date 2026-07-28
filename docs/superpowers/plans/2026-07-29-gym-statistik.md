@@ -1604,6 +1604,16 @@ In `personal_apps/templates/gym/statistik.html`, after the Fortschritt section:
                 <span class="hbar__val">{{ bucket.sets }}</span>
             </div>
             {% endfor %}
+            {# analytics excludes 0-rep sets from the distribution on purpose --
+               a failed attempt is not a rep range -- but it reports how many it
+               dropped so the exclusion stays visible. Silently discarding this
+               count here would put the silent-drop bug straight back, one layer
+               up from where it was fixed. #}
+            {% if rep_range.skipped %}
+            <p class="label finding-bar__note">
+                {{ rep_range.skipped }} {{ 'Satz' if rep_range.skipped == 1 else 'Sätze' }} ohne Wiederholung — nicht gewertet
+            </p>
+            {% endif %}
         </div>
 
         <div class="panel">
