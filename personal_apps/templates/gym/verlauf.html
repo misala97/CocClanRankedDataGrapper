@@ -22,7 +22,7 @@
 
     {% if history %}
     <section class="panel verlauf__export">
-        <div class="section-head"><span class="label">Export</span></div>
+        <div class="section-head"><h2 class="label">Export</h2></div>
         {# Presets bulk-check matching rows in the list below rather than
            filling a date range -- gym.js-free inline script further down
            owns the checking/counting logic. "Alle" (data-days="") checks
@@ -40,17 +40,30 @@
     {% endif %}
 
     <section class="panel verlauf__list">
-        <div class="section-head"><span class="label">Workouts</span></div>
+        <div class="section-head">
+            <h2 class="label">Workouts</h2>
+            <span class="label verlauf__count" id="verlauf-count">{{ history|length }}</span>
+        </div>
         {% if history %}
+        {# The list grows by one row per workout forever and had no way in
+           except scrolling. Filters on workout name AND exercise names, so
+           "bench" finds every session containing it. #}
+        <div class="field verlauf__search">
+            <label class="label" for="verlauf-search">Suche</label>
+            <input type="search" id="verlauf-search" class="input"
+                   placeholder="Workout oder Übung…" autocomplete="off">
+        </div>
+        <p class="empty" id="verlauf-empty" hidden>Kein Workout gefunden.</p>
         {% for entry in history %}
-        <div class="verlauf-row">
+        <div class="verlauf-row"
+             data-search="{{ ((entry.session.name or 'Workout') ~ ' ' ~ entry.session.exercises|map(attribute='exercise.name')|join(' '))|lower }}">
             <label class="verlauf-check" aria-label="{{ entry.session.name or 'Workout' }} für Export auswählen">
                 <input type="checkbox" class="check export-row-check" value="{{ entry.session.id }}" data-started="{{ entry.session.started_at.isoformat() }}">
             </label>
             <a href="{{ url_for('gym.session_detail', session_id=entry.session.id) }}" class="verlauf-row__main">
                 <div class="name">{{ entry.session.name or 'Workout' }}</div>
                 <p class="label verlauf-row__meta">{{ entry.session.started_at.strftime('%d.%m.%Y %H:%M') }} · {{ entry.session.finished_at - entry.session.started_at }}</p>
-                <p class="label verlauf-row__exercises">{{ entry.session.exercises|map(attribute='exercise.name')|join(' · ') }}</p>
+                <p class="verlauf-row__exercises">{{ entry.session.exercises|map(attribute='exercise.name')|join(' · ') }}</p>
             </a>
             <div class="verlauf-row__stats">
                 <span class="load"><span class="load__val">{{ entry.volume }}</span><span class="load__unit">kg</span></span>
@@ -58,9 +71,6 @@
                 <span class="chip chip--record">{{ entry.record_count }} {{ 'Rekord' if entry.record_count == 1 else 'Rekorde' }}</span>
                 {% endif %}
             </div>
-            <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=entry.session.id) }}" class="verlauf-row__delete" onsubmit="return confirm('Workout unwiderruflich löschen?')">
-                <button type="submit" class="btn btn--stall btn--sm">Löschen</button>
-            </form>
         </div>
         {% endfor %}
         {% else %}
@@ -121,6 +131,34 @@
     });
 
     refresh();
+})();
+
+// ---- search -------------------------------------------------------------
+// Plain substring match over a data-search attribute the server already
+// rendered (name + every exercise name, lowercased). No fetch, no re-render:
+// it only toggles `hidden` on rows that are already in the DOM, so the export
+// checkboxes and their selection survive filtering untouched.
+(function setupVerlaufSearch() {
+    var input = document.getElementById('verlauf-search');
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.verlauf-row'));
+    var note = document.getElementById('verlauf-empty');
+    var count = document.getElementById('verlauf-count');
+    if (!input || !rows.length) return;
+
+    function apply() {
+        var q = input.value.trim().toLowerCase();
+        var shown = 0;
+        rows.forEach(function (row) {
+            var match = !q || (row.dataset.search || '').indexOf(q) !== -1;
+            row.hidden = !match;
+            if (match) shown += 1;
+        });
+        if (note) note.hidden = shown > 0;
+        if (count) count.textContent = q ? shown + ' / ' + rows.length : rows.length;
+    }
+
+    input.addEventListener('input', apply);
+    apply();
 })();
 </script>
 {% endblock %}

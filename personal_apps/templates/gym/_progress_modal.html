@@ -11,7 +11,15 @@
    gym.js in <head>; Chart.js itself is only touched when a chart actually
    renders (a user click, well after load), so a page including this partial
    just needs Chart.js present by then. #}
-<div class="modal hidden" id="progress-modal">
+{# role/aria-modal/aria-labelledby and the focus handling below are what make
+   this an actual dialog rather than a div that looks like one: without them a
+   screen reader never learns it opened, and Tab walks straight through to the
+   page behind the overlay. Kept as a div (not <dialog>) because it is included
+   inside a form-heavy page and ::backdrop/top-layer would change the existing
+   stacking and dismiss behaviour; the ARIA contract is implemented explicitly
+   instead. #}
+<div class="modal hidden" id="progress-modal" role="dialog" aria-modal="true"
+     aria-labelledby="progress-modal-title" aria-hidden="true">
     <div class="modal__box">
         <div class="modal__head">
             <h2 class="modal__title" id="progress-modal-title">Fortschritt</h2>
@@ -30,6 +38,68 @@
 
     const esc = window.GymUtils.escapeHtml;
     let modalChart = null;
+
+    // Chart.js on demand. session_detail.html deliberately does not ship it:
+    // it is 208 KB from a third party, and on the live-workout screen it is
+    // only needed if this modal is actually opened. Pinned to an exact version
+    // with an integrity hash -- a floating "@4" could change under the app.
+    // The promise is cached, so a second open never refetches.
+    const CHART_SRC = 'https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js';
+    const CHART_SRI = 'sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ';
+    let chartLib = null;
+
+    function loadChartLib() {
+        if (typeof window.Chart !== 'undefined') return Promise.resolve();
+        if (chartLib) return chartLib;
+        chartLib = new Promise((resolve, reject) => {
+            const el = document.createElement('script');
+            el.src = CHART_SRC;
+            el.integrity = CHART_SRI;
+            el.crossOrigin = 'anonymous';
+            el.referrerPolicy = 'no-referrer';
+            el.onload = () => resolve();
+            el.onerror = () => { chartLib = null; reject(new Error('chart.js failed to load')); };
+            document.head.appendChild(el);
+        });
+        return chartLib;
+    }
+    let lastFocused = null;   // the control that opened it, to restore on close
+
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), '
+        + 'select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+    function focusable() {
+        return [...modal.querySelectorAll(FOCUSABLE)]
+            .filter((el) => el.offsetParent !== null || el === document.activeElement);
+    }
+
+    function openModal(opener) {
+        lastFocused = opener || document.activeElement;
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        // background must not scroll under the overlay
+        document.body.style.overflow = 'hidden';
+        // Move focus IN -- the close button is the safe, always-present target.
+        // Deferred a frame: .modal.hidden carries `visibility: hidden`, and
+        // focus() on a still-invisible element is silently dropped, which is
+        // exactly how this looked "implemented but not working".
+        // Double rAF: a single frame fires before style/layout has flushed the
+        // class removal, so the button can still compute as visibility:hidden
+        // and focus() is silently dropped. The second frame is past that.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            const close = document.getElementById('progress-modal-close');
+            if (close) close.focus();
+        }));
+    }
+
+    function closeModal() {
+        if (modal.classList.contains('hidden')) return;
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
+        lastFocused = null;
+    }
 
     function render(data) {
         let html = '';
@@ -55,9 +125,18 @@
             modalChart = null;
         }
         if (data.series && data.series.length) {
-            modalChart = GymChart.renderProgressChart(document.getElementById('modal-chart'), {
-                series: data.series,
-                tokens: GymChart.resolveTokens(),
+            const wrap = document.getElementById('modal-chart');
+            loadChartLib().then(() => {
+                // the body may have been replaced by a later open in the
+                // meantime; only draw if this canvas is still on the page
+                if (!wrap || !wrap.isConnected) return;
+                modalChart = GymChart.renderProgressChart(wrap, {
+                    series: data.series,
+                    tokens: GymChart.resolveTokens(),
+                });
+            }).catch(() => {
+                const w = document.querySelector('.modal-chart-wrap');
+                if (w) w.innerHTML = '<div class="empty">Diagramm konnte nicht geladen werden.</div>';
             });
         }
     }
@@ -69,20 +148,36 @@
             const position = btn.dataset.position;
             title.textContent = 'Fortschritt';
             body.innerHTML = '<div class="empty">Lädt…</div>';
-            modal.classList.remove('hidden');
+            openModal(btn);
             fetch(`/gym/exercises/${exerciseId}/progress.json?position=${encodeURIComponent(position)}`, { credentials: 'same-origin' })
                 .then((r) => r.json())
                 .then((data) => { title.textContent = data.name; render(data); })
                 .catch(() => { body.innerHTML = '<div class="empty">Fehler beim Laden.</div>'; });
             return;
         }
-        if (e.target.id === 'progress-modal-close' || e.target === modal) {
-            modal.classList.add('hidden');
+        if (e.target.closest('#progress-modal-close') || e.target === modal) {
+            closeModal();
         }
     });
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') modal.classList.add('hidden');
+        if (modal.classList.contains('hidden')) return;
+        if (e.key === 'Escape') { closeModal(); return; }
+        if (e.key !== 'Tab') return;
+        // trap: cycle focus inside the dialog instead of letting Tab escape
+        // to the page underneath (which is inert to the eye but was not to
+        // the keyboard)
+        const items = focusable();
+        if (!items.length) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault(); first.focus();
+        } else if (!modal.contains(document.activeElement)) {
+            e.preventDefault(); first.focus();
+        }
     });
 })();
 </script>

@@ -49,49 +49,48 @@ phone, in a busy gym.
 
 ---
 
-## Design brief — "Readout"
+## Design brief — "Athletik"
 
 **This section is the brief impeccable designs against — not a design to
 transcribe.**
 
-A one-pass visual sketch (`2026-07-23-gym-readout-reference.html`) was produced
-to let the owner choose a direction. It used Windows system fonts as stand-ins
-and hex values that were invented, not derived, and never contrast-tested. It is
-evidence of the approved **feel**, nothing more. Its values, spacing, radii, and
-component layouts are **not** specification.
+Supersedes the earlier "Readout" brief (equipment panel: industrial condensed
+numerals, machined chassis, amber/cyan/red). Readout was built and shipped; the
+owner reviewed it in place and rejected it. Note *why*, because it is the useful
+part: Readout was simultaneously the first-order reflex for this category (dark
++ neon accent + big numerals) and the second-order one (the "not-neon" escape
+into industrial/console). Both at once. Any future direction has to clear both.
+
+Athletik was one of two directions rejected *alone* during the original
+brainstorm — dismissed then as "reads as every other fitness app." The owner
+reconsidered and chose it in a later cycle. That criticism is real and is the
+standing risk on this brief: the lane is crowded, so the execution has to be
+better than the lane, not merely inside it.
 
 ### 4.0 What is locked, and what impeccable decides
-
-The reference HTML beside the spec is a **sketch**, produced in one pass to let
-the owner choose a direction. It used Windows system fonts as stand-ins and hex
-values that were invented, not derived, and never contrast-tested. It is
-committed as **evidence of the approved feel**, nothing more. Do not treat its
-values, spacing, radii, or component layouts as specification.
 
 | Locked — an owner decision, do not overturn | Open — impeccable's job |
 |---|---|
 | Dark only | The actual palette: every value re-derived and validated |
-| The thesis: an equipment readout (§4.1) | How that thesis is expressed in colour, weight, and rhythm |
+| Mobile-first (390×844 primary) | How each breakpoint composes |
+| The thesis: sport broadcast (§4.1) | How that thesis is expressed in colour, weight, and rhythm |
 | The five-state model and its meanings (§4.2) | How each state is rendered |
 | Token **names and semantics** (§4.3) — templates reference them | Token **values** |
-| Numerals condensed, tabular, largest in their container (§4.4) | Which family; the full type scale; every size and weight |
-| Machined not soft; motion mechanical not elastic (§4.5) | Radii, depth, shadow, easing, duration |
-| The anti-references (§4.6) | Everything not named above |
+| German UI copy | — |
+| Numerals tabular and dominant in their container (§4.4) | Which family; the full type scale; every size and weight |
 
-If a locked item turns out to be wrong under real execution — e.g. the state
-model cannot be made accessible, or the direction fights the content — say so and
-raise it. Don't silently deviate, and don't silently comply either.
+If a locked item turns out to be wrong under real execution, say so and raise
+it. Don't silently deviate, and don't silently comply either.
 
 ### 4.1 Thesis
 
-The display on a serious piece of equipment — a rowing monitor, a timing system,
-a scoreboard. Industrial condensed numerals and machined chassis edges, with
-emissive semantic colour. **The numbers glow because they are lit, not because a
-gradient was applied.**
+Sport broadcast. Heavy oblique numerals that lean into the direction of travel,
+a single electric accent reserved entirely for NOW, and **gold for a record
+because gold already means record** — the one piece of semantics the app does
+not have to teach.
 
-This is a deliberate synthesis of two rejected-alone directions: a pure
-industrial treatment reads as grey and shouty; a pure athletic treatment reads as
-every other fitness app. Readout is both, and neither.
+The lean is the signature. It appears on names, numerals and the primary
+action, and nowhere else, so it reads as one gesture rather than a texture.
 
 ### 4.2 The state model — the load-bearing rule
 
@@ -101,100 +100,92 @@ history rows. This is what makes it one app rather than five screens.
 
 | State | Means | Treatment |
 |---|---|---|
-| **Unlit** | Present but not yet done — e.g. a set prefilled from last time | Outline only, dimmed text, transparent fill |
-| **Live** | Happening now — the current set, the running rest timer, the primary action | Amber, with a soft emissive halo. **Only ever one thing at a time on screen.** |
-| **Done** | Logged and settled | Full-brightness white, solid filled tick. Reads as fact, not achievement. |
-| **Rekord** | Beat a previous best | Cyan, one sharp flare then settles. Rare by construction — that rarity is what makes it land. |
-| **Stagniert** | Needs attention | Red outline **plus the word**. |
+| **Unlit** | Present but not yet done | Outline only, dimmed text, transparent fill |
+| **Live** | Happening now | Electric blue, with lift. **Only ever one thing at a time on screen.** |
+| **Done** | Logged and settled | Full-brightness ink, solid filled tick. Reads as fact, not achievement. |
+| **Rekord** | Beat a previous best | Gold, one sharp flare then settles. Rare by construction. |
+| **Stagniert** | Needs attention | Red **plus the word**. |
 
-**Every state must carry a shape or a word as well as a colour.** Colour alone is
-not an acceptable signal — it has to survive daylight on a phone screen and colour
-blindness.
+**Every state must carry a shape or a word as well as a colour.**
 
 ### 4.3 Token contract
 
 **The names and their meanings are the contract** — templates reference these
-tokens directly, so the set must exist and a token may never be repurposed. **The
-values are impeccable's to derive.**
+tokens directly, so the set must exist and a token may never be repurposed.
 
 ```
---ground     page background; the unlit bezel
+--ground     page background, deepest field
 --chassis    panel surface
 --raised     inset / nested surface
 --edge       panel border
---edge-hi    the lit top edge of a panel
---ink        primary text; the DONE state — reads as fact
+--edge-hi    lifted border, inert bar fill
+--ink        primary text; the DONE state
 --dim        labels, secondary text
 --unlit      inert text, content not yet reached
 --live       NOW: current set, running rest, primary action
 --live-deep  the pressed / bottom edge of a live control
 --record     RECORD: a previous best beaten
 --stall      ATTENTION: stagnation, destructive actions
+--on-live / --on-record / --on-stall   text sitting ON a saturated fill
 ```
 
 Constraints on the palette, in priority order:
 
-1. `--live`, `--record`, and `--stall` must be **unmistakable from each other** at
-   a glance, in daylight, on a phone, and under deuteranopia and protanopia. This
-   is the binding constraint — if a hue choice fails it, the hue is wrong, however
-   good it looks.
-2. Every text/background pairing that actually occurs must meet **WCAG AA**. Check
-   the real pairings, not the convenient ones: `--live` and `--record` appear on
-   `--chassis` far more often than on `--ground`, and `--dim` on `--chassis` is the
-   easiest one to get wrong.
-3. Neutrals are chosen, not defaulted — give them a deliberate hue bias rather than
-   using pure greys.
+1. `--live`, `--record`, and `--stall` must be **unmistakable from each other**
+   at a glance, in daylight, on a phone, and under deuteranopia and protanopia.
+2. Every text/background pairing that **actually occurs** must meet **WCAG AA** —
+   including text on the accent fills, not only accent-on-panel.
+3. Neutrals are chosen, not defaulted — a deliberate hue bias, not pure grey.
 4. Exactly three semantic hues. No fourth. Nothing decorative gets a colour.
 
-The sketch used an amber / cyan / red triad on a near-black cool-neutral ground.
-That combination satisfies constraint 1 and is a reasonable starting hypothesis —
-but it is a hypothesis. Derive and validate; don't inherit.
+Current values, and the arithmetic behind them, are documented in gym.css's
+header comment; `scratchpad/palette.py` is the script that measured them. One
+finding worth carrying forward: a single blue cannot satisfy both "readable as
+text on a dark panel" and "readable under white text in a button" at AA — the
+two requirements are arithmetically incompatible. Hence `--on-live`.
 
 ### 4.4 Type
 
-Three roles are required: a **condensed face for display and numerals**, a **body
-face**, and something for **dense tabular data and small uppercase labels**.
-Whether those are three cuts of one family or a deliberate pairing is impeccable's
-call — as is the family itself. IBM Plex (Sans Condensed / Sans / Mono) satisfies
-the roles and is one candidate, not a requirement; the note in §4.6 about avoiding
-the faces that read as templated applies here too.
-
-Self-hosted Flask app, so a webfont link is fine — there is no CSP constraint.
-Whatever is chosen must ship real weights and **true tabular figures**; a face
-without them fails the first rule below and is disqualified regardless of how it
-looks.
+**Saira**, one variable family carrying all three roles via its **width axis**
+rather than a second typeface: 112% for display and numerals, 100% for body,
+80% for dense tables and small uppercase labels. It ships true tabular figures
+(verified by measurement, not assumption).
 
 Rules that are not negotiable:
-- **Numerals are condensed, tabular (`font-variant-numeric: tabular-nums`), and
-  the largest thing in their container.** Weight, volume, e1RM, duration,
-  countdown.
-- Labels are small, uppercase, letterspaced, and quiet.
-- Exercise names are condensed uppercase.
+- **Numerals are tabular (`font-variant-numeric: tabular-nums`) and the largest
+  thing in their container.**
+- Labels are small, uppercase, letterspaced, narrow, and quiet.
+- **A roster of exercise names is not a label.** Proper nouns get sentence case
+  and the body face. Uppercasing a seven-item exercise list turns it into a
+  block the reader has to decode word by word — this was the single least
+  readable thing in the previous build and it must not come back.
 - Body copy stays modest — this app is read in glances, not paragraphs.
 
 ### 4.5 Surface and motion
 
-The required qualities, with the sketch's implementation given only as one way to
-reach them:
-
-- **Panels read as machined, never soft.** They should look lit from above and
-  edged, not floated on a diffuse shadow. *(Sketch: `--chassis` fill, 1px `--edge`
-  border with `--edge-hi` on the top edge only, small radius.)*
-- **Primary controls have real press depth** — pressing one should feel like it
-  travelled. *(Sketch: solid `--live`, inset top highlight, hard `--live-deep`
-  bottom edge that compresses on `:active`.)*
-- **Motion is mechanical.** Bars fill linearly, counters tick, the record flare is
-  a single sharp pulse that settles. **No bounce, no elastic easing.** Honour
-  `prefers-reduced-motion`: it disables the flare, the fills, and every
-  transition.
+- **Panels are borderless at rest.** A panel is legible because it sits on a
+  darker ground, not because a line is drawn around it. A visible border MEANS
+  something (live, stall). This is what stops a page of panels reading as a
+  card grid.
+- **Repeated identical cards are banned outright.** Where a list has more than
+  one entry, use two tiers: one featured item carrying the primary action, the
+  rest as divided rows in a single shared panel. See `.routine--lead` /
+  `.routine-rest`, and `.stat-grid` (a divided readout band, not four tiles).
+- **Controls are pills; boxes are not.** `--r-control` is a pill radius — it is
+  correct on buttons and on 44×44 icon targets, and wrong on anything that
+  holds more than one line of text. Those take `--r-panel`.
+- **Motion is fast and decisive.** Ease-out curves, 90–220 ms. **No bounce, no
+  elastic.** Honour `prefers-reduced-motion`: it disables the flare, the fills,
+  and every transition.
 
 ### 4.6 Anti-references
 
-Explicitly not: lime or acid-green on near-black (what this replaces);
-violet-to-teal fitness gradients; large soft-rounded cards with wide diffuse
-shadows; colour used decoratively; emoji as section markers; the faces that
-currently read as an AI default pick (Inter and Space Grotesk as the "safe"
-choice, Outfit — the two this app is replacing).
+Explicitly not: the amber-on-near-black instrument panel this replaces; lime or
+acid-green on near-black (what *that* replaced); violet-to-teal fitness
+gradients; colour used decoratively; **emoji as icons** (the app now has one
+shared inline-SVG set — `_icon_edit.html`, `_icon_chart.html` — precisely so
+that emoji never come back); the faces that read as an AI default pick (Inter,
+Space Grotesk, Outfit).
 
 ## Accessibility & Inclusion
 

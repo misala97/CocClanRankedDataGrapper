@@ -26,6 +26,29 @@
     </header>
     <p class="label session-finished__date">{{ session.started_at.strftime('%d.%m.%Y') }}</p>
 
+    {# The verdict. This screen is the last thing seen after every workout, so
+       it has to answer "war das ein gutes Workout?" before it shows a single
+       raw number -- previously it opened with four figures and closed with a
+       red delete button, which is a receipt, not a debrief. Every branch says
+       something: the zero-record case gets a real substitute rather than
+       falling through to silence, which is what made the screen feel empty on
+       an ordinary day. #}
+    <p class="session-verdict{{ ' session-verdict--record' if record_count else '' }}">
+        {%- if record_count > 0 -%}
+        {{ record_count }} neue{{ '' if record_count == 1 else '' }} {{ 'Rekord' if record_count == 1 else 'Rekorde' }}.
+        {%- elif total_sets == 0 -%}
+        Kein Satz erfasst — dieses Workout zählt nicht in die Statistik.
+        {%- elif total_volume_delta_pct is not none and total_volume_delta_pct >= 5 -%}
+        {{ '%+d'|format(total_volume_delta_pct) }} % über deinem Schnitt.
+        {%- elif total_volume_delta_pct is not none and total_volume_delta_pct <= -5 -%}
+        Leichter als sonst — {{ '%+d'|format(total_volume_delta_pct) }} % gegenüber deinem Schnitt.
+        {%- elif total_volume_delta_pct is not none -%}
+        Genau auf deinem Schnitt.
+        {%- else -%}
+        {{ total_sets }} {{ 'Satz' if total_sets == 1 else 'Sätze' }} erledigt.
+        {%- endif -%}
+    </p>
+
     {% if record_count > 0 %}
     <section class="pr-flares">
         {% for record in records %}
@@ -62,15 +85,18 @@
     </div>
 
     <div class="panel">
-        <div class="section-head"><span class="label">Nach Übung</span></div>
+        <div class="section-head"><h2 class="label">Nach Übung</h2></div>
         {% if exercises %}
         {% for entry in exercises %}
         <div class="ex-report-row">
             <div class="ex-report">
-                <div class="ex-report__main">
+                {# the exercise name is a way back INTO the loop: from the
+                   debrief straight to that lift's progression. Previously this
+                   screen had exactly one exit and it was "Verlauf". #}
+                <a class="ex-report__main" href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise_id) }}">
                     <div class="name">{{ entry.name }}</div>
                     <div class="label ex-report__sets">Pos. {{ entry.position }} · {{ entry.sets_display }}</div>
-                </div>
+                </a>
                 {% if entry.verdict == 'rekord' %}
                 <span class="chip chip--record">Rekord</span>
                 {% elif entry.verdict == 'stagniert' %}
@@ -88,7 +114,7 @@
                attention. Each set posts individually to the untouched
                gym_update_set endpoint. #}
             <details class="set-correct">
-                <summary class="set-correct__toggle">✏️ Sätze korrigieren</summary>
+                <summary class="set-correct__toggle">{% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}<span>Sätze korrigieren</span></summary>
                 <div class="set-correct__body">
                     {% for s in entry.set_rows %}
                     <form method="post" action="{{ url_for('gym.gym_update_set', set_id=s.id) }}" class="set-correct__row">
@@ -96,7 +122,7 @@
                         <input type="number" name="weight" step="0.5" min="0" class="input input--num" value="{{ s.weight }}" aria-label="{{ entry.name }}, Satz {{ loop.index }}, Gewicht in kg">
                         <span class="load__unit">kg</span><span class="load__x">×</span>
                         <input type="number" name="reps" min="0" class="input input--num" value="{{ s.reps }}" aria-label="{{ entry.name }}, Satz {{ loop.index }}, Wiederholungen">
-                        <button type="submit" class="icon-btn" aria-label="Satz {{ loop.index }} speichern" title="Speichern">💾</button>
+                        <button type="submit" class="icon-btn" aria-label="Satz {{ loop.index }} speichern" title="Speichern">{% with icon='save' %}{% include 'gym/_icon.html' %}{% endwith %}</button>
                     </form>
                     {% endfor %}
                 </div>
@@ -111,7 +137,7 @@
 
     {% if advice %}
     <div class="panel">
-        <div class="section-head"><span class="label">Nächstes Mal</span></div>
+        <div class="section-head"><h2 class="label">Nächstes Mal</h2></div>
         {% for item in advice %}
         <div class="note-stall">
             <strong>{{ item.name }}</strong> steht seit {{ item.sessions }} Workouts auf {{ item.stuck_at }} kg — auf <strong>{{ item.suggested_weight }} kg</strong> gehen, notfalls 2 Wdh. weniger.
@@ -131,10 +157,18 @@
     </div>
     {% endif %}
 
+    {# Deleting a workout is a rare correction, not the way out of this screen.
+       It used to be the largest, brightest, right-most element here -- the
+       loudest thing on the page you see after every single workout. It is now
+       a quiet text action, visually subordinate to both forward paths, and it
+       keeps its confirm. #}
     <div class="finished-actions">
+        <a href="{{ url_for('gym.gym_heute') }}" class="btn btn--ghost">Zurück zu Heute</a>
         <a href="{{ url_for('gym.gym_verlauf') }}" class="btn btn--ghost">Verlauf</a>
+    </div>
+    <div class="finished-destructive">
         <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=session.id) }}" onsubmit="return confirm('Workout unwiderruflich löschen?')">
-            <button type="submit" class="btn btn--stall">Workout löschen</button>
+            <button type="submit" class="finished-delete">Workout löschen</button>
         </form>
     </div>
 

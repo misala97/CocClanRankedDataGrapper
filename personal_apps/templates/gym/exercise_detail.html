@@ -116,7 +116,7 @@
 
     <section class="exercise-detail__history">
         <div class="panel">
-            <div class="section-head"><span class="label">Verlauf</span></div>
+            <div class="section-head"><h2 class="label">Verlauf</h2></div>
             {% if exercise.is_unilateral %}
             <p class="exercise-detail__note">Einseitig: Gewicht &amp; Wdh. sind je Seite geloggt, Volumen zählt beide Seiten (×2).</p>
             {% endif %}
@@ -145,7 +145,7 @@
 
     <section class="exercise-detail__meta">
         <details class="meta-edit"{{ ' open' if request.args.get('name_taken') else '' }}>
-            <summary class="meta-edit__toggle">✏️ Bearbeiten</summary>
+            <summary class="meta-edit__toggle">{% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}<span>Bearbeiten</span></summary>
             <div class="panel meta-edit__body">
                 <form method="post" action="{{ url_for('gym.gym_update_exercise', exercise_id=exercise.id) }}" class="add-exercise">
                     <div class="field grow">
@@ -183,7 +183,13 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{# Pinned exactly and integrity-checked. "@4" floated to whatever the
+   latest 4.x was at request time, so the charting library could change
+   under the app with no code change and no way to notice. Eager here is
+   correct: this page draws its chart on load. #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+        integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 {% if table %}
 <script>
 GymChart.renderProgressChart(document.getElementById('progress-chart'), {

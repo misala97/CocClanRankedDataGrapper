@@ -75,41 +75,84 @@
         {% endif %}
     </section>
 
+    {# Two tiers, not a stack of identical cards. The most recently trained
+       routine is the one you are most likely to reach for, so it gets the
+       featured treatment and the single primary action on the page; every
+       other routine drops to a divided row inside ONE shared panel. Nothing
+       is hidden -- each row still carries its name, its recency and its full
+       exercise list -- but only one blue slab is ever on screen, which is
+       what keeps the section from reading as a card grid. #}
     <section class="heute__routines">
-        <div class="section-head"><span class="label">Routinen</span></div>
+        <div class="section-head"><h2 class="label">Routinen</h2></div>
         {% if routines %}
-        {% for entry in routines %}
-        <div class="panel routine" style="--i: {{ [loop.index0, 6] | min }}">
+        {% set lead = routines[0] %}
+        <div class="panel routine routine--lead" style="--i: 0">
             <div class="panel__head">
                 <div class="routine__title">
-                    <p class="name">{{ entry.template.name }}</p>
-                    <p class="label">{% if entry.days_ago is not none %}vor {{ entry.days_ago }} Tagen{% else %}Noch nie gemacht{% endif %}</p>
+                    <p class="name">{{ lead.template.name }}</p>
+                    <p class="label">{% if lead.days_ago is not none %}vor {{ lead.days_ago }} Tagen{% else %}Noch nie gemacht{% endif %}</p>
                 </div>
                 {# Small edit affordance (spec 6.1): rename + delete, closed by
                    default, anchored under the toggle rather than pushed into
                    the flex row so an open popover never reflows the card. #}
                 <details class="routine__edit">
-                    <summary class="routine__edit-toggle" aria-label="{{ entry.template.name }} bearbeiten">✏️</summary>
+                    <summary class="routine__edit-toggle" aria-label="{{ lead.template.name }} bearbeiten">{% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}</summary>
                     <div class="routine__edit-body">
-                        <form method="post" action="{{ url_for('gym.gym_rename_template', template_id=entry.template.id) }}" class="routine__edit-form">
-                            <input type="text" name="name" value="{{ entry.template.name }}" class="input" aria-label="Neuer Name für {{ entry.template.name }}" required>
+                        <form method="post" action="{{ url_for('gym.gym_rename_template', template_id=lead.template.id) }}" class="routine__edit-form">
+                            <input type="text" name="name" value="{{ lead.template.name }}" class="input" aria-label="Neuer Name für {{ lead.template.name }}" required>
                             <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
                         </form>
-                        <form method="post" action="{{ url_for('gym.gym_delete_template', template_id=entry.template.id) }}" onsubmit="return confirm('Vorlage löschen?')">
+                        <form method="post" action="{{ url_for('gym.gym_delete_template', template_id=lead.template.id) }}" onsubmit="return confirm('Vorlage löschen?')">
                             <button type="submit" class="btn btn--stall btn--sm btn--block">Löschen</button>
                         </form>
                     </div>
                 </details>
             </div>
-            <p class="label routine__exercises">
-                {% if entry.template.exercises %}{{ entry.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
+            <p class="routine__exercises">
+                {% if lead.template.exercises %}{{ lead.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
             </p>
             <form method="post" action="{{ url_for('gym.gym_start') }}">
-                <input type="hidden" name="template_id" value="{{ entry.template.id }}">
+                <input type="hidden" name="template_id" value="{{ lead.template.id }}">
                 <button type="submit" class="btn btn--live btn--block">Starten</button>
             </form>
         </div>
-        {% endfor %}
+
+        {% if routines|length > 1 %}
+        <div class="panel routine-rest" style="--i: 1">
+            {% for entry in routines[1:] %}
+            <div class="routine-row">
+                <div class="routine-row__main">
+                    <p class="name routine-row__name">{{ entry.template.name }}</p>
+                    <p class="label">{% if entry.days_ago is not none %}vor {{ entry.days_ago }} Tagen{% else %}Noch nie gemacht{% endif %}</p>
+                </div>
+                {# full-width, below the title/action line: an exercise list is
+                   long enough that squeezing it beside the buttons turns it
+                   into a narrow ragged column #}
+                <p class="routine__exercises routine-row__exercises">
+                    {% if entry.template.exercises %}{{ entry.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
+                </p>
+                <div class="routine-row__actions">
+                    <form method="post" action="{{ url_for('gym.gym_start') }}">
+                        <input type="hidden" name="template_id" value="{{ entry.template.id }}">
+                        <button type="submit" class="btn btn--ghost btn--sm">Starten</button>
+                    </form>
+                    <details class="routine__edit">
+                        <summary class="routine__edit-toggle" aria-label="{{ entry.template.name }} bearbeiten">{% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}</summary>
+                        <div class="routine__edit-body">
+                            <form method="post" action="{{ url_for('gym.gym_rename_template', template_id=entry.template.id) }}" class="routine__edit-form">
+                                <input type="text" name="name" value="{{ entry.template.name }}" class="input" aria-label="Neuer Name für {{ entry.template.name }}" required>
+                                <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
+                            </form>
+                            <form method="post" action="{{ url_for('gym.gym_delete_template', template_id=entry.template.id) }}" onsubmit="return confirm('Vorlage löschen?')">
+                                <button type="submit" class="btn btn--stall btn--sm btn--block">Löschen</button>
+                            </form>
+                        </div>
+                    </details>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
         {% else %}
         <div class="empty">
             <span class="label">Noch keine Vorlagen</span>
@@ -123,7 +166,7 @@
            section-head -- both columns share this grid row, so the label
            has to be in the same place in both or the panels below start at
            two different heights and the row reads as misaligned. #}
-        <div class="section-head"><span class="label">Letzte Workouts</span></div>
+        <div class="section-head"><h2 class="label">Letzte Workouts</h2></div>
         <div class="panel">
             {% if recent_sessions %}
             {% for s in recent_sessions %}
@@ -142,7 +185,7 @@
 
     <section class="heute__board">
         <div class="panel">
-            <div class="section-head"><span class="label">Steht still</span></div>
+            <div class="section-head"><h2 class="label">Steht still</h2></div>
             {% if stalls %}
             {% for item in stalls %}
             <div class="ex-report-row">
@@ -161,7 +204,7 @@
         </div>
 
         <div class="panel">
-            <div class="section-head"><span class="label">Sätze pro Muskelgruppe</span></div>
+            <div class="section-head"><h2 class="label">Sätze pro Muskelgruppe</h2></div>
             {% if balance %}
             {% for bucket in balance %}
             <div class="hbar">
@@ -176,7 +219,7 @@
         </div>
 
         <div class="panel">
-            <div class="section-head"><span class="label">Tonnage pro Woche</span></div>
+            <div class="section-head"><h2 class="label">Tonnage pro Woche</h2></div>
             {# is_current is always the last bucket (stats.weekly_tonnage's own
                contract) -- lit amber AND spelled out below, so a short bar
                from a week that's still running never reads as a decline. #}
