@@ -314,3 +314,77 @@ def test_fatigue_curve_averages_across_rows_rather_than_reporting_one():
     assert result['weight_change_pct'] == -15.0
     assert result['first_reps'] == 11.0
     assert result['last_reps'] == 7.0
+
+
+def at(hour, days=0, session_id=1, weight=100.0, reps=10):
+    return perf([(weight, reps)], session_id=session_id,
+                started_at=dt.datetime(2026, 6, 1, hour, 0) + dt.timedelta(days=days))
+
+
+def test_daypart_volume_separates_morning_from_evening():
+    rows = [at(9, days=0, session_id=1), at(20, days=1, session_id=2)]
+    parts = {p['label']: p for p in analytics.daypart_volume(rows)['parts']}
+    assert parts['morning']['sessions'] == 1
+    assert parts['evening']['sessions'] == 1
+
+
+def test_daypart_volume_reports_volume_per_session_not_total():
+    rows = [at(9, days=0, session_id=1, reps=10), at(9, days=1, session_id=2, reps=30)]
+    parts = {p['label']: p for p in analytics.daypart_volume(rows)['parts']}
+    # 1000 + 3000 across two sessions -> 2000 average
+    assert parts['morning']['avg_volume'] == 2000.0
+
+
+def test_daypart_volume_needs_both_buckets_to_clear_the_threshold():
+    # plenty of mornings, one evening -- not a comparison
+    rows = [at(9, days=i, session_id=i) for i in range(analytics.MIN_SESSIONS_PER_DAYPART)]
+    rows.append(at(20, days=99, session_id=99))
+    assert analytics.daypart_volume(rows)['statable'] is False
+
+
+def test_daypart_volume_is_statable_when_both_buckets_clear_it():
+    n = analytics.MIN_SESSIONS_PER_DAYPART
+    rows = [at(9, days=i, session_id=i) for i in range(n)]
+    rows += [at(20, days=100 + i, session_id=100 + i) for i in range(n)]
+    assert analytics.daypart_volume(rows)['statable'] is True
+
+
+def test_daypart_volume_on_no_history_is_empty_not_broken():
+    result = analytics.daypart_volume([])
+    assert result['statable'] is False
+    assert all(p['sessions'] == 0 for p in result['parts'])
+
+
+def test_weekday_distribution_counts_sessions_per_weekday():
+    # 2026-06-01 is a Monday
+    rows = [at(9, days=0, session_id=1), at(9, days=0, session_id=1),
+            at(9, days=1, session_id=2)]
+    days = {d['weekday']: d['sessions'] for d in analytics.weekday_distribution(rows)['days']}
+    assert days[0] == 1      # Monday: one session, two rows
+    assert days[1] == 1
+    assert days[6] == 0      # Sunday: never trained, still present
+
+
+def test_weekday_distribution_lists_monday_first_and_carries_no_copy():
+    days = analytics.weekday_distribution([])['days']
+    assert [d['weekday'] for d in days] == [0, 1, 2, 3, 4, 5, 6]
+    assert all('label' not in d for d in days), 'weekday copy belongs in the template'
+
+
+def test_rest_gap_effect_buckets_by_days_since_the_previous_session():
+    rows = [at(9, days=0, session_id=1), at(9, days=1, session_id=2),
+            at(9, days=5, session_id=3)]
+    buckets = {b['label']: b for b in analytics.rest_gap_effect(rows)['buckets']}
+    assert buckets['0-1']['sessions'] == 1     # session 2, one day after session 1
+    assert buckets['4+']['sessions'] == 1      # session 3, four days after session 2
+
+
+def test_rest_gap_effect_is_not_statable_on_tiny_buckets():
+    rows = [at(9, days=i * 2, session_id=i) for i in range(4)]
+    assert analytics.rest_gap_effect(rows)['statable'] is False
+
+
+def test_rest_gap_effect_on_no_history_is_empty_not_broken():
+    result = analytics.rest_gap_effect([])
+    assert result['statable'] is False
+    assert all(b['sessions'] == 0 for b in result['buckets'])

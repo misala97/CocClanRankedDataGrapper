@@ -35,6 +35,9 @@ from . import stats
 # with its own sample size, so nothing is ever hidden.
 MIN_SETS_FOR_REP_RANGE = 50
 MIN_ROWS_FOR_FATIGUE = 30
+MIN_SESSIONS_PER_DAYPART = 8
+MIN_SESSIONS_PER_GAP_BUCKET = 5
+MIN_SESSIONS_FOR_WEEKDAY = 14
 
 
 def _sessions(rows):
@@ -216,4 +219,111 @@ def fatigue_curve(rows):
                               if weight_deltas else None),
         'first_reps': round(sum(first_reps) / sample, 1),
         'last_reps': round(sum(last_reps) / sample, 1),
+    }
+
+
+# The two clusters the training log actually contains. Sessions outside both
+# fall into `other`, which is reported but never carries a finding -- a
+# bucket defined as "everything else" cannot support a claim about behaviour.
+DAYPARTS = (('morning', 8, 14), ('evening', 19, 23))
+WEEKDAYS = tuple(range(7))   # 0 = Monday, matching datetime.weekday()
+GAP_BUCKETS = (('0-1', 0, 1), ('2', 2, 2), ('3', 3, 3), ('4+', 4, None))
+
+
+def _session_volumes(rows):
+    """[(started_at, volume)] per session, chronological."""
+    volume = defaultdict(float)
+    started = {}
+    for row in rows:
+        volume[row.session_id] += stats.row_volume(row)
+        started[row.session_id] = row.started_at
+    return sorted((started[sid], volume[sid]) for sid in volume)
+
+
+def daypart_volume(rows):
+    """Volume per session by time of day.
+
+    Per session, not total: a bucket with more sessions in it would otherwise
+    always "win", which measures how often you train then, not how well.
+
+    Statable only when BOTH named buckets clear the threshold -- eleven
+    mornings against two evenings is not a comparison, it is one bucket.
+    """
+    sessions = _session_volumes(rows)
+    buckets = {label: [] for label, _, _ in DAYPARTS}
+    buckets['other'] = []
+    for started_at, volume in sessions:
+        for label, low, high in DAYPARTS:
+            if low <= started_at.hour < high:
+                buckets[label].append(volume)
+                break
+        else:
+            buckets['other'].append(volume)
+
+    parts = [
+        {'label': label,
+         'sessions': len(buckets[label]),
+         'volume': round(sum(buckets[label]), 1),
+         'avg_volume': round(sum(buckets[label]) / len(buckets[label]), 1) if buckets[label] else 0.0}
+        for label in list(dict.fromkeys([label for label, _, _ in DAYPARTS] + ['other']))
+    ]
+    named = [p for p in parts if p['label'] != 'other']
+    return {
+        'parts': parts,
+        'statable': all(p['sessions'] >= MIN_SESSIONS_PER_DAYPART for p in named),
+    }
+
+
+def weekday_distribution(rows):
+    """Sessions per weekday, Monday first, as an INDEX (0-6) not a label --
+    this module holds no user-visible copy.
+
+    Every weekday is always present, including the ones never trained: a
+    missing Sunday and a Sunday at zero are different facts, and only one of
+    them is true."""
+    sessions = _session_volumes(rows)
+    counts = {index: 0 for index in WEEKDAYS}
+    for started_at, _ in sessions:
+        counts[started_at.weekday()] += 1
+
+    total = len(sessions)
+    return {
+        'days': [
+            {'weekday': index, 'sessions': counts[index],
+             'share': round(counts[index] / total * 100, 1) if total else 0.0}
+            for index in WEEKDAYS
+        ],
+        'sample': total,
+        'statable': total >= MIN_SESSIONS_FOR_WEEKDAY,
+    }
+
+
+def rest_gap_effect(rows):
+    """Volume as a function of days since the previous session.
+
+    The first session has no previous one and is excluded -- it has no gap,
+    which is not the same as a gap of zero.
+    """
+    sessions = _session_volumes(rows)
+    buckets = {label: [] for label, _, _ in GAP_BUCKETS}
+    for index in range(1, len(sessions)):
+        gap = (sessions[index][0] - sessions[index - 1][0]).days
+        for label, low, high in GAP_BUCKETS:
+            if gap >= low and (high is None or gap <= high):
+                buckets[label].append(sessions[index][1])
+                break
+
+    result = [
+        {'label': label,
+         'sessions': len(buckets[label]),
+         'avg_volume': round(sum(buckets[label]) / len(buckets[label]), 1) if buckets[label] else 0.0}
+        for label, _, _ in GAP_BUCKETS
+    ]
+    populated = [b for b in result if b['sessions']]
+    return {
+        'buckets': result,
+        # every bucket that exists at all must be big enough, and there must be
+        # at least two of them -- one bucket is a number, not a relationship
+        'statable': (len(populated) >= 2
+                     and all(b['sessions'] >= MIN_SESSIONS_PER_GAP_BUCKET for b in populated)),
     }
