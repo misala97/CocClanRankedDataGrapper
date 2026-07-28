@@ -712,7 +712,7 @@ def stalled(exercise_id, name, last_trained):
 
 def signal_input(count, last_trained_offsets=None, now=None):
     """Build (report, rows_by_exercise) for `count` stalled exercises."""
-    now = now or dt.datetime(2026, 7, 28, 18, 0)
+    now = now or DELOAD_NOW
     offsets = last_trained_offsets or [1] * count
     report, rows_by_exercise = [], {}
     for index, offset in enumerate(offsets, start=1):
@@ -723,12 +723,12 @@ def signal_input(count, last_trained_offsets=None, now=None):
     return report, rows_by_exercise
 
 
-NOW = dt.datetime(2026, 7, 28, 18, 0)
+DELOAD_NOW = dt.datetime(2026, 7, 28, 18, 0)
 
 
 def test_deload_signal_fires_at_the_threshold():
     report, rows = signal_input(4)
-    signal = stats.deload_signal(report, rows, NOW)
+    signal = stats.deload_signal(report, rows, DELOAD_NOW)
     assert signal is not None
     assert signal['count'] == 4
     assert len(signal['stalls']) == 4
@@ -736,31 +736,51 @@ def test_deload_signal_fires_at_the_threshold():
 
 def test_deload_signal_stays_quiet_below_the_threshold():
     report, rows = signal_input(3)
-    assert stats.deload_signal(report, rows, NOW) is None
+    assert stats.deload_signal(report, rows, DELOAD_NOW) is None
 
 
 def test_deload_signal_ignores_exercises_not_trained_in_the_window():
     # Four stalls, but two are lifts abandoned months ago -- stagnating from
     # disuse, which says nothing about how recovered the lifter is.
     report, rows = signal_input(4, last_trained_offsets=[1, 3, 200, 300])
-    assert stats.deload_signal(report, rows, NOW) is None
+    assert stats.deload_signal(report, rows, DELOAD_NOW) is None
+
+
+def test_deload_signal_counts_only_the_recently_trained_stalls():
+    # Five stalls, four of them recent -- proves the filter SELECTS correctly,
+    # not merely that it can suppress. The existing "ignores" test drops below
+    # the threshold either way, so it cannot show which entries survived.
+    report, rows = signal_input(5, last_trained_offsets=[1, 2, 3, 4, 200])
+    signal = stats.deload_signal(report, rows, DELOAD_NOW)
+    assert signal['count'] == 4
+    assert 5 not in [entry['exercise_id'] for entry in signal['stalls']]
 
 
 def test_deload_signal_is_suppressed_soon_after_a_deload():
     report, rows = signal_input(4)
-    assert stats.deload_signal(report, rows, NOW,
-                               last_deload_at=NOW - dt.timedelta(days=7)) is None
+    assert stats.deload_signal(report, rows, DELOAD_NOW,
+                               last_deload_at=DELOAD_NOW - dt.timedelta(days=7)) is None
+
+
+def test_deload_signal_fires_exactly_at_the_suppression_boundary():
+    # DELOAD_SUPPRESSION_DAYS days out is NOT suppressed: the implementation
+    # checks `(now - last_deload_at).days < suppression_days`, so equality
+    # falls through to firing rather than being suppressed.
+    report, rows = signal_input(4)
+    boundary = DELOAD_NOW - dt.timedelta(days=stats.DELOAD_SUPPRESSION_DAYS)
+    assert stats.deload_signal(report, rows, DELOAD_NOW,
+                               last_deload_at=boundary) is not None
 
 
 def test_deload_signal_fires_again_once_the_suppression_window_passes():
     report, rows = signal_input(4)
-    assert stats.deload_signal(report, rows, NOW,
-                               last_deload_at=NOW - dt.timedelta(days=22)) is not None
+    assert stats.deload_signal(report, rows, DELOAD_NOW,
+                               last_deload_at=DELOAD_NOW - dt.timedelta(days=22)) is not None
 
 
 def test_deload_signal_fires_for_someone_who_has_never_deloaded():
     report, rows = signal_input(4)
-    assert stats.deload_signal(report, rows, NOW, last_deload_at=None) is not None
+    assert stats.deload_signal(report, rows, DELOAD_NOW, last_deload_at=None) is not None
 
 
 def test_weekly_tonnage_marks_a_week_containing_a_deload():

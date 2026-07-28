@@ -266,6 +266,11 @@ def deload_signal(report, rows_by_exercise, now, last_deload_at=None,
     nothing about how recovered the lifter is; counting it would leave the
     suggestion permanently lit for anyone with a long catalogue.
 
+    Unlike the progress judgements (which use _progression_rows to exclude
+    deload rows), this recency check counts a deload session as recent
+    training: the lift is still in the active rotation even though its
+    numbers do not count toward a record.
+
     Returns None when the signal does not fire, otherwise the qualifying
     stalls so the page can name the lifts rather than assert a vague verdict.
     """
