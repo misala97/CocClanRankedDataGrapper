@@ -14,6 +14,39 @@ def client():
         yield test_client
 
 
+import datetime as dt
+
+
+@pytest.fixture()
+def scratch_session():
+    """A throwaway session with one exercise and two uncompleted sets.
+
+    Deleted afterwards whatever the test does -- this suite runs against the
+    real local development database.
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    with flask_app.app_context():
+        exercise = Exercise.query.first()
+        assert exercise is not None, 'the dev database needs at least one exercise'
+        session_ = WorkoutSession(name='pytest scratch', started_at=dt.datetime.utcnow())
+        session_exercise = SessionExercise(exercise_id=exercise.id, position=1)
+        session_exercise.sets = [
+            SessionSet(position=1, weight=80.0, reps=8, completed=False),
+            SessionSet(position=2, weight=75.0, reps=8, completed=False),
+        ]
+        session_.exercises.append(session_exercise)
+        db.session.add(session_)
+        db.session.commit()
+        session_id = session_.id
+    yield session_id
+    with flask_app.app_context():
+        doomed = db.session.get(WorkoutSession, session_id)
+        if doomed is not None:
+            db.session.delete(doomed)
+            db.session.commit()
+
+
 def test_dashboard_renders(client):
     assert client.get('/gym').status_code == 200
 
@@ -47,3 +80,75 @@ def test_session_pages_render_for_every_finished_session(client):
         # Follow it through to the real destination so this smoke test still
         # catches a broken render, not just a broken redirect.
         assert client.get('/gym/session/{}/summary'.format(session_id), follow_redirects=True).status_code == 200
+
+
+def set_weights(session_id):
+    from models import WorkoutSession
+    from extensions import db
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, session_id)
+        return [s.weight for se in session_.exercises for s in se.sets]
+
+
+def deload_state(session_id):
+    from models import WorkoutSession
+    from extensions import db
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, session_id)
+        return session_.is_deload, session_.deload_pct
+
+
+def test_deload_on_rewrites_every_weight_when_nothing_is_completed(client, scratch_session):
+    response = client.post('/gym/session/{}/deload'.format(scratch_session),
+                           data={'on': '1', 'pct': '70'})
+    assert response.status_code in (302, 303)
+    # 80 * 0.7 = 56 -> 55.0 ; 75 * 0.7 = 52.5 -> 52.5
+    assert set_weights(scratch_session) == [55.0, 52.5]
+    assert deload_state(scratch_session) == (True, 70)
+
+
+def test_deload_off_restores_the_seeded_weights_exactly(client, scratch_session):
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
+    # Not 55 / 0.7 = 78.57 -> 77.5. Toggling must not walk the weights down.
+    assert set_weights(scratch_session) != [77.5, 75.0]
+    assert deload_state(scratch_session) == (False, None)
+
+
+def test_deload_on_rewrites_nothing_once_a_set_is_completed(client, scratch_session):
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_.exercises[0].sets[0].completed = True
+        db.session.commit()
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(scratch_session) == [80.0, 75.0]
+    assert deload_state(scratch_session) == (True, 70)
+
+
+def test_deload_on_a_finished_session_is_label_only(client, scratch_session):
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_.exercises[0].sets[0].completed = True
+        session_.finished_at = dt.datetime.utcnow()
+        db.session.commit()
+    response = client.post('/gym/session/{}/deload'.format(scratch_session),
+                           data={'on': '1', 'pct': '70'})
+    assert response.status_code in (302, 303)
+    assert set_weights(scratch_session) == [80.0, 75.0]
+    assert deload_state(scratch_session) == (True, 70)
+
+
+def test_deload_pct_out_of_range_falls_back_to_the_default(client, scratch_session):
+    client.post('/gym/session/{}/deload'.format(scratch_session),
+                data={'on': '1', 'pct': '999'})
+    assert deload_state(scratch_session) == (True, 70)
+
+
+def test_deload_pct_that_is_not_a_number_falls_back_to_the_default(client, scratch_session):
+    client.post('/gym/session/{}/deload'.format(scratch_session),
+                data={'on': '1', 'pct': 'schwer'})
+    assert deload_state(scratch_session) == (True, 70)

@@ -764,6 +764,54 @@ def gym_finish_session(session_id):
     return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
 
 
+@gym_bp.route('/gym/session/<int:session_id>/deload', methods=['POST'])
+@login_required
+def gym_toggle_deload(session_id):
+    """Mark (or unmark) a session as a deliberately light one.
+
+    The flag is always editable -- including on a finished session, since
+    labelling a workout you already did is a first-class flow and the reason
+    this feature exists. What is gated is the *prescription*: weights are only
+    rewritten when the session has no completed set, so nothing actually
+    lifted is ever overwritten.
+
+    That test is computed, not latched: un-completing a set re-enables the
+    rewrite, so a mis-tap is always recoverable.
+
+    Toggling off re-seeds from history rather than dividing the weights back
+    up. Reversing the arithmetic after deload_weight()'s floor is lossy
+    (80 -> 55 -> 78.57 -> 77.5), so repeated toggling would walk the weights
+    downward.
+    """
+    session_ = db.get_or_404(WorkoutSession, session_id)
+
+    on = request.form.get('on') == '1'
+    pct = _to_int(request.form.get('pct', ''), fallback=stats.DELOAD_DEFAULT_PCT)
+    if pct not in stats.DELOAD_ALLOWED_PCTS:
+        pct = stats.DELOAD_DEFAULT_PCT
+
+    session_.is_deload = on
+    session_.deload_pct = pct if on else None
+
+    has_completed_set = any(
+        s.completed for se in session_.exercises for s in se.sets
+    )
+    if not has_completed_set:
+        for session_exercise in session_.exercises:
+            if on:
+                is_unilateral = session_exercise.exercise.is_unilateral
+                for s in session_exercise.sets:
+                    s.weight = stats.deload_weight(s.weight, pct, is_unilateral)
+            else:
+                seeded = _last_full_performance(
+                    session_exercise.exercise_id, position=session_exercise.position)
+                for s, previous in zip(session_exercise.sets, seeded):
+                    s.weight = previous['weight']
+
+    db.session.commit()
+    return redirect(url_for('gym.session_detail', session_id=session_.id))
+
+
 @gym_bp.route('/gym/session/<int:session_id>/summary')
 @login_required
 def gym_session_summary(session_id):
