@@ -10,6 +10,7 @@ performed in one session, carrying only *completed* sets. routes.py builds
 these from the ORM in one pass and everything here consumes them.
 """
 import datetime as dt
+import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -28,6 +29,14 @@ TONNAGE_WEEKS = 8
 # sets counts as under-trained. Relative rather than absolute so the flag stays
 # meaningful as overall training volume changes.
 UNDER_TRAINED_RATIO = 0.25
+
+# The default depth of a deload: 70 % of normal working weight. Stored per
+# session rather than read from here at display time, so changing this never
+# rewrites what a past session claims to have been.
+DELOAD_DEFAULT_PCT = 70
+# The depths offered in the UI. Anything outside this falls back to the
+# default rather than erroring -- losing the toggle is worse than an odd value.
+DELOAD_ALLOWED_PCTS = (50, 60, 70, 80, 90)
 
 NO_GROUP_LABEL = 'Ohne Muskelgruppe'
 
@@ -292,6 +301,23 @@ def _next_weight(weight, is_unilateral):
     """The smallest honest jump up. 2.5 kg is the smallest pair of plates on
     most bars; a unilateral lift moves one side at a time, so half that."""
     return weight + (1.25 if is_unilateral else 2.5)
+
+
+def deload_weight(weight, pct, is_unilateral):
+    """`pct` of a working weight, rounded DOWN to a loadable increment.
+
+    Down, not to nearest: rounding a deload up makes it heavier than
+    prescribed, which is the one direction that defeats the point. The
+    increments mirror _next_weight() -- 2.5 kg is the smallest pair of plates
+    on most bars, and a unilateral lift moves one side at a time.
+
+    Applied per set by the caller, never to the top set alone, so any ramping
+    or drop-off in the session's shape survives the deload.
+    """
+    if weight <= 0:
+        return weight          # a bodyweight set stays bodyweight
+    step = 1.25 if is_unilateral else 2.5
+    return max(step, math.floor(weight * pct / 100.0 / step) * step)
 
 
 def _verdict(entry, since):

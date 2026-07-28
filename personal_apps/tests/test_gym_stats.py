@@ -544,3 +544,34 @@ def test_session_record_counts_agrees_with_session_report_for_every_session():
         history = [row for row in all_rows if row.session_id != session_id]
         report = stats.session_report(current, history)
         assert bulk_counts.get(session_id, 0) == report['record_count'], session_id
+
+
+def test_deload_weight_takes_the_percentage_and_rounds_down_to_a_plate():
+    # 80 * 0.70 = 56.0, which is not loadable in 2.5 kg steps -> 55.0
+    assert stats.deload_weight(80.0, 70, False) == 55.0
+
+
+def test_deload_weight_rounds_down_not_to_nearest():
+    # 100 * 0.70 = 70.0 exactly; 90 * 0.70 = 63.0 -> 62.5, not 65.0
+    assert stats.deload_weight(100.0, 70, False) == 70.0
+    assert stats.deload_weight(90.0, 70, False) == 62.5
+
+
+def test_deload_weight_uses_the_half_step_for_unilateral():
+    # 20 * 0.70 = 14.0 -> 13.75 in 1.25 kg steps, not 12.5 in 2.5 kg steps
+    assert stats.deload_weight(20.0, 70, True) == 13.75
+
+
+def test_deload_weight_leaves_a_bodyweight_set_alone():
+    assert stats.deload_weight(0.0, 70, False) == 0.0
+
+
+def test_deload_weight_never_floors_a_light_weight_to_zero():
+    # 2.5 * 0.70 = 1.75 -> would floor to 0.0; one increment is the minimum.
+    assert stats.deload_weight(2.5, 70, False) == 2.5
+    assert stats.deload_weight(1.25, 70, True) == 1.25
+
+
+def test_deload_weight_preserves_the_shape_of_a_ramped_session():
+    session = [80.0, 80.0, 75.0]
+    assert [stats.deload_weight(w, 70, False) for w in session] == [55.0, 55.0, 52.5]
