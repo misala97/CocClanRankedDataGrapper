@@ -68,3 +68,53 @@ def totals(rows, now):
             'volume': round(volume_by_session[best_id], 1),
         },
     }
+
+
+def progression_ranking(rows):
+    """Fortschritt: every exercise ranked by all-time change in estimated 1RM.
+
+    A judgement, so deload rows are dropped via stats.progression_rows() --
+    a deliberately light session is not an attempt at a heavier one, and a
+    200 kg typo in a deload week must not become anyone's "current".
+
+    An exercise needs two qualifying sessions: with one there is no
+    first-versus-current to compute, and reporting 0 % would be a claim the
+    data does not make.
+
+    `points` is the per-session best e1RM in chronological order, for the
+    sparkline. One point per session, not per set.
+    """
+    by_exercise = defaultdict(list)
+    for row in stats.progression_rows(rows):
+        by_exercise[row.exercise_id].append(row)
+
+    ranking = []
+    for exercise_id, exercise_rows in by_exercise.items():
+        # one entry per session: an exercise performed twice in a session
+        # (two slots) is still one data point on its curve
+        best_per_session = {}
+        for row in exercise_rows:
+            current = stats.best_e1rm(row)
+            seen = best_per_session.get(row.session_id)
+            if seen is None or current > seen[1]:
+                best_per_session[row.session_id] = (row.started_at, current)
+
+        ordered = sorted(best_per_session.values())
+        if len(ordered) < 2:
+            continue
+
+        first_e1rm = ordered[0][1]
+        current_e1rm = ordered[-1][1]
+        ranking.append({
+            'exercise_id': exercise_id,
+            'name': exercise_rows[0].name,
+            'sessions': len(ordered),
+            'first_e1rm': round(first_e1rm, 1),
+            'current_e1rm': round(current_e1rm, 1),
+            'change_pct': round((current_e1rm - first_e1rm) / first_e1rm * 100, 1),
+            'best_weight': max(stats.best_weight(row) for row in exercise_rows),
+            'points': [round(value, 1) for _, value in ordered],
+        })
+
+    ranking.sort(key=lambda entry: (-entry['change_pct'], entry['name']))
+    return ranking

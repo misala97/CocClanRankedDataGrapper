@@ -97,3 +97,56 @@ def test_totals_treats_rows_sharing_a_session_id_as_one_session():
     assert result['sessions'] == 2, 'counted rows instead of sessions'
     assert result['best_session']['session_id'] == 1, 'compared rows instead of summed sessions'
     assert result['best_session']['volume'] == 1200.0
+
+
+def test_progression_ranking_reports_first_to_current_change():
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1),
+        perf([(110.0, 8)], started_at=day(7), session_id=2),
+    ]
+    entry = analytics.progression_ranking(rows)[0]
+    assert entry['sessions'] == 2
+    assert entry['first_e1rm'] == round(stats.epley_1rm(100.0, 8), 1)
+    assert entry['current_e1rm'] == round(stats.epley_1rm(110.0, 8), 1)
+    assert entry['change_pct'] == 10.0
+    assert entry['best_weight'] == 110.0
+    assert len(entry['points']) == 2
+
+
+def test_progression_ranking_sorts_biggest_gain_first():
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1, exercise_id=1, name='Klein'),
+        perf([(105.0, 8)], started_at=day(7), session_id=2, exercise_id=1, name='Klein'),
+        perf([(50.0, 8)], started_at=day(0), session_id=1, exercise_id=2, name='Gross'),
+        perf([(75.0, 8)], started_at=day(7), session_id=2, exercise_id=2, name='Gross'),
+    ]
+    assert [e['name'] for e in analytics.progression_ranking(rows)] == ['Gross', 'Klein']
+
+
+def test_progression_ranking_excludes_deload_sessions():
+    # a 200 kg deload must not become the "current" figure
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1),
+        perf([(110.0, 8)], started_at=day(7), session_id=2),
+        perf([(200.0, 8)], started_at=day(14), session_id=3, is_deload=True),
+    ]
+    entry = analytics.progression_ranking(rows)[0]
+    assert entry['sessions'] == 2
+    assert entry['current_e1rm'] == round(stats.epley_1rm(110.0, 8), 1)
+
+
+def test_progression_ranking_skips_an_exercise_with_one_session():
+    rows = [perf([(100.0, 8)], started_at=day(0), session_id=1)]
+    assert analytics.progression_ranking(rows) == []
+
+
+def test_progression_ranking_skips_an_exercise_whose_history_is_all_deloads():
+    rows = [
+        perf([(60.0, 8)], started_at=day(0), session_id=1, is_deload=True),
+        perf([(60.0, 8)], started_at=day(7), session_id=2, is_deload=True),
+    ]
+    assert analytics.progression_ranking(rows) == []
+
+
+def test_progression_ranking_on_no_history_is_empty():
+    assert analytics.progression_ranking([]) == []
