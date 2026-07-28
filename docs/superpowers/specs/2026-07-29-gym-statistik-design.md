@@ -204,11 +204,14 @@ The app already has token-native CSS bar primitives — `.vbars` / `.vbar` and
 
 - Zones 1, 3 and 4 use those. Distributions and shares do not need a chart
   library.
-- Zone 2's sparklines/progression lines use **Chart.js**, because a multi-series
-  time axis genuinely needs it — **lazy-loaded** the way `_progress_modal.html`
-  already does it, not the render-blocking `<script>` tag on
-  `exercise_detail.html`. Chart.js is a 208 KB third-party payload and must not
-  block this page's first paint.
+- Zone 2's sparklines are **inline SVG polylines, no chart library**.
+  *(Superseded during planning: this originally specified lazy-loaded Chart.js.
+  Fourteen sparklines in fourteen table cells is the case a chart library is
+  worst at — a 208 KB payload for decoration, canvas unable to resolve `var()`
+  so every line would need its tokens resolved in JavaScript first, fourteen
+  render loops, and no axes, legend, tooltip or interaction to justify any of
+  it. An SVG polyline inherits `currentColor`, scales with its row, and prints.
+  Net result: the page loads no charting library at all.)*
 - Chart.js cannot resolve `var()` or `color-mix()` on canvas; tokens are
   resolved to computed `rgb()` strings in the template before reaching the
   chart config, the same pattern the existing charts use.
