@@ -198,3 +198,67 @@ def test_progression_ranking_skips_an_exercise_that_started_at_bodyweight():
         perf([(20.0, 10)], started_at=day(7), session_id=2),
     ]
     assert analytics.progression_ranking(rows) == []
+
+
+def test_rep_range_distribution_buckets_every_set():
+    rows = [perf([(100.0, 3), (100.0, 7), (100.0, 10), (100.0, 15)])]
+    result = analytics.rep_range_distribution(rows)
+    counts = {b['label']: b['sets'] for b in result['buckets']}
+    assert counts == {'1-5': 1, '6-8': 1, '9-12': 1, '13+': 1}
+    assert result['sample'] == 4
+
+
+def test_rep_range_distribution_reports_the_dominant_bucket_share():
+    rows = [perf([(100.0, 7)] * 3 + [(100.0, 10)])]
+    result = analytics.rep_range_distribution(rows)
+    assert result['dominant']['label'] == '6-8'
+    assert result['dominant']['share'] == 75.0
+
+
+def test_rep_range_distribution_is_not_statable_below_the_threshold():
+    rows = [perf([(100.0, 8)] * (analytics.MIN_SETS_FOR_REP_RANGE - 1))]
+    assert analytics.rep_range_distribution(rows)['statable'] is False
+
+
+def test_rep_range_distribution_is_statable_at_the_threshold():
+    rows = [perf([(100.0, 8)] * analytics.MIN_SETS_FOR_REP_RANGE)]
+    assert analytics.rep_range_distribution(rows)['statable'] is True
+
+
+def test_rep_range_distribution_includes_deloads_because_it_describes():
+    rows = [perf([(60.0, 8)] * analytics.MIN_SETS_FOR_REP_RANGE, is_deload=True)]
+    assert analytics.rep_range_distribution(rows)['sample'] == analytics.MIN_SETS_FOR_REP_RANGE
+
+
+def test_rep_range_distribution_on_no_history_is_empty_not_broken():
+    result = analytics.rep_range_distribution([])
+    assert result['sample'] == 0
+    assert result['statable'] is False
+    assert result['dominant'] is None
+
+
+def test_fatigue_curve_averages_first_versus_last_set():
+    rows = [perf([(100.0, 10), (90.0, 8)])]        # -10 % weight, 10 -> 8 reps
+    result = analytics.fatigue_curve(rows)
+    assert result['weight_change_pct'] == -10.0
+    assert result['first_reps'] == 10.0
+    assert result['last_reps'] == 8.0
+    assert result['sample'] == 1
+
+
+def test_fatigue_curve_ignores_rows_with_a_single_set():
+    rows = [perf([(100.0, 10)]), perf([(100.0, 10), (90.0, 8)], session_id=2)]
+    assert analytics.fatigue_curve(rows)['sample'] == 1
+
+
+def test_fatigue_curve_is_not_statable_below_the_threshold():
+    rows = [perf([(100.0, 10), (90.0, 8)], session_id=i)
+            for i in range(analytics.MIN_ROWS_FOR_FATIGUE - 1)]
+    assert analytics.fatigue_curve(rows)['statable'] is False
+
+
+def test_fatigue_curve_on_no_history_is_empty_not_broken():
+    result = analytics.fatigue_curve([])
+    assert result['sample'] == 0
+    assert result['statable'] is False
+    assert result['weight_change_pct'] is None

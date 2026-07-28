@@ -27,6 +27,15 @@ from collections import defaultdict
 
 from . import stats
 
+# --- silence thresholds -----------------------------------------------------
+# A stated finding must never outrun its sample. Each figure below is the
+# point at which a pattern stops being plausibly coincidental for one lifter's
+# log, set deliberately low enough that the page says something in its first
+# months. They gate the SENTENCE only -- the chart always renders, annotated
+# with its own sample size, so nothing is ever hidden.
+MIN_SETS_FOR_REP_RANGE = 50
+MIN_ROWS_FOR_FATIGUE = 30
+
 
 def _sessions(rows):
     """{session_id: started_at} across the given rows."""
@@ -128,3 +137,74 @@ def progression_ranking(rows):
 
     ranking.sort(key=lambda entry: (-entry['change_pct'], entry['name']))
     return ranking
+
+
+# Rep buckets, and the boundaries the app already uses when it talks about
+# rep ranges: heavy / working / hypertrophy / endurance.
+REP_BUCKETS = (('1-5', 1, 5), ('6-8', 6, 8), ('9-12', 9, 12), ('13+', 13, None))
+
+
+def rep_range_distribution(rows):
+    """How the lifter's sets distribute across rep ranges, all time.
+
+    A description, so deload sets are included -- eight reps in a light week
+    is still eight reps.
+    """
+    counts = {label: 0 for label, _, _ in REP_BUCKETS}
+    for row in rows:
+        for _, reps in row.sets:
+            for label, low, high in REP_BUCKETS:
+                if reps >= low and (high is None or reps <= high):
+                    counts[label] += 1
+                    break
+
+    sample = sum(counts.values())
+    buckets = [
+        {'label': label, 'sets': counts[label],
+         'share': round(counts[label] / sample * 100, 1) if sample else 0.0}
+        for label, _, _ in REP_BUCKETS
+    ]
+    dominant = max(buckets, key=lambda b: b['sets']) if sample else None
+    return {
+        'buckets': buckets,
+        'sample': sample,
+        'dominant': dominant,
+        'statable': sample >= MIN_SETS_FOR_REP_RANGE,
+    }
+
+
+def fatigue_curve(rows):
+    """How much the lifter drops off within one exercise: first set vs last.
+
+    Only rows with at least two sets can answer this; a single-set row has no
+    drop-off to measure and is excluded from the sample rather than counted as
+    zero, which would flatten the average toward nothing.
+
+    A description, so deloads are included.
+    """
+    weight_deltas = []
+    first_reps = []
+    last_reps = []
+    for row in rows:
+        if len(row.sets) < 2:
+            continue
+        (first_weight, first_rep) = row.sets[0]
+        (last_weight, last_rep) = row.sets[-1]
+        if first_weight > 0:
+            weight_deltas.append((last_weight - first_weight) / first_weight * 100)
+        first_reps.append(first_rep)
+        last_reps.append(last_rep)
+
+    sample = len(first_reps)
+    if not sample:
+        return {'sample': 0, 'statable': False, 'weight_change_pct': None,
+                'first_reps': None, 'last_reps': None}
+
+    return {
+        'sample': sample,
+        'statable': sample >= MIN_ROWS_FOR_FATIGUE,
+        'weight_change_pct': (round(sum(weight_deltas) / len(weight_deltas), 1)
+                              if weight_deltas else None),
+        'first_reps': round(sum(first_reps) / sample, 1),
+        'last_reps': round(sum(last_reps) / sample, 1),
+    }
