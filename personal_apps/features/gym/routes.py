@@ -517,7 +517,7 @@ def session_detail(session_id):
         # doesn't actually track.
         has_push_subscription=PushSubscription.query.first() is not None,
         has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
-        deload_pcts=stats.DELOAD_ALLOWED_PCTS,
+        deload_pcts=stats.DELOAD_QUICK_PCTS,
         deload_default_pct=stats.DELOAD_DEFAULT_PCT,
     )
 
