@@ -76,3 +76,24 @@ def test_totals_on_no_history_is_zeroed_not_broken():
     assert result['first_session'] is None
     assert result['days_training'] is None
     assert result['best_session'] is None
+
+
+def test_totals_treats_rows_sharing_a_session_id_as_one_session():
+    """Rows are one-exercise-per-session, so a workout with several exercises
+    produces several rows carrying the same session_id. Counting rows instead
+    of sessions, or comparing a single row's volume instead of the session's
+    summed total, both pass every other test in this file -- neither ever puts
+    two rows in one session.
+    """
+    rows = [
+        # session 1: two exercises, 600 + 600 = 1200 kg together
+        perf([(60.0, 10)], session_id=1, exercise_id=1, name='Bank'),
+        perf([(60.0, 10)], session_id=1, exercise_id=2, name='Rudern'),
+        # session 2: one exercise, 1000 kg -- bigger than either single row
+        # above, but smaller than session 1 once its rows are summed
+        perf([(100.0, 10)], session_id=2, exercise_id=3, name='Kniebeuge'),
+    ]
+    result = analytics.totals(rows, NOW)
+    assert result['sessions'] == 2, 'counted rows instead of sessions'
+    assert result['best_session']['session_id'] == 1, 'compared rows instead of summed sessions'
+    assert result['best_session']['volume'] == 1200.0
