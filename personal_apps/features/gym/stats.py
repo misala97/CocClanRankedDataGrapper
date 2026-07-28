@@ -389,6 +389,13 @@ def exercise_progress(rows, position=None):
         'pr_e1rm': _pr_e1rm(chronological),
         'state': exercise_state(rows, position=position),
         'sessions_since_pr': sessions_since_pr(rows, position=position),
+        # The newest row that counts as an attempt at progress. `table[0]` is
+        # the newest row of ANY kind and can be a deload, so anything quoting
+        # "the weight you are stuck at" must read this instead -- otherwise
+        # the stagnation advice tells you to add 2.5 kg to a weight you went
+        # deliberately light on. None when there is no non-deload history.
+        'last_progression': next(
+            (row for row in table if not row['is_deload']), None),
     }
 
 

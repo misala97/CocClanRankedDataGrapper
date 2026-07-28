@@ -61,6 +61,11 @@
                 <span class="label verdict-last__sets">{{ table[0].sets_display }}</span>
             </p>
 
+            {# pr_weight/pr_e1rm are None when every session for this exercise
+               was a deload -- table is non-empty but nothing in it holds a
+               record. Before deloads existed, a non-empty table always implied
+               a PR, so this block was unguarded. #}
+            {% if pr_weight and pr_e1rm %}
             <div class="pr-grid">
                 <div class="pr-card">
                     <div class="label">Bestes Gewicht</div>
@@ -73,16 +78,22 @@
                     <div class="sub">{{ pr_e1rm.weight }} kg × {{ pr_e1rm.reps }} · Pos. {{ pr_e1rm.position }} · {{ pr_e1rm.started_at.strftime('%d.%m.%Y') }}</div>
                 </div>
             </div>
+            {% else %}
+            <p class="empty">Noch kein Rekord — bisher nur Deload-Sätze protokolliert.</p>
+            {% endif %}
 
             {% if sessions_since_pr and sessions_since_pr > 0 %}
             <p class="label">Seit {{ sessions_since_pr }} Workout{{ 's' if sessions_since_pr != 1 else '' }} kein neuer e1RM-PR</p>
             {% endif %}
 
-            {% if state == 'stagniert' %}
+            {# Reads last_progression, NOT table[0]: the newest row can be a
+               deload, and quoting its weight back would tell you to add 2.5 kg
+               to a weight you deliberately went light on. #}
+            {% if state == 'stagniert' and last_progression %}
             <div class="note-stall">
                 <span class="note-stall__label">Stagniert</span>
-                Seit {{ sessions_since_pr }} Workouts auf {{ table[0].best_weight }} kg (Position {{ table[0].position }}) — auf
-                <strong>{{ (table[0].best_weight + 1.25) if exercise.is_unilateral else (table[0].best_weight + 2.5) }} kg</strong>
+                Seit {{ sessions_since_pr }} Workouts auf {{ last_progression.best_weight }} kg (Position {{ last_progression.position }}) — auf
+                <strong>{{ (last_progression.best_weight + 1.25) if exercise.is_unilateral else (last_progression.best_weight + 2.5) }} kg</strong>
                 gehen, notfalls 2 Wdh. weniger.
             </div>
             {% endif %}
@@ -126,10 +137,17 @@
                         <tr><th>Datum</th><th>Pos.</th><th>Sätze</th><th class="num">Volumen</th><th class="num">e1RM</th></tr>
                     </thead>
                     <tbody>
+                        {# Deload rows stay in this table: they are the record
+                           of what was performed, and dropping them would leave
+                           unexplained gaps in the history and holes in the
+                           chart. They are labelled instead, because a 60 kg row
+                           between two 85 kg rows otherwise reads as a bad
+                           session. They hold no records -- exercise_progress
+                           excludes them from pr_weight/pr_e1rm/state. #}
                         {% for row in table %}
                         {% set is_record = (pr_e1rm and row.started_at == pr_e1rm.started_at) or (pr_weight and row.started_at == pr_weight.started_at) %}
-                        <tr class="{{ 'is-record' if is_record else '' }}">
-                            <td>{{ row.started_at.strftime('%d.%m.%Y') }}</td>
+                        <tr class="{{ 'is-record' if is_record else '' }}{{ ' is-deload' if row.is_deload else '' }}">
+                            <td>{{ row.started_at.strftime('%d.%m.%Y') }}{% if row.is_deload %} <span class="chip chip--deload">Deload</span>{% endif %}</td>
                             <td>{{ row.position }}</td>
                             <td>{{ row.sets_display }}</td>
                             <td class="num">{{ row.volume }} kg</td>

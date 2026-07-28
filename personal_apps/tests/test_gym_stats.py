@@ -702,6 +702,24 @@ def test_exercise_progress_keeps_deload_rows_but_marks_them():
     assert progress['pr_weight']['weight'] == 80.0
 
 
+def test_exercise_progress_reports_the_last_non_deload_row():
+    # The newest row is the deload; stagnation advice must not quote its
+    # weight back as the weight you are stuck at.
+    rows = [perf([(85.0, 8)], started_at=day(0)),
+            perf([(60.0, 8)], started_at=day(7), is_deload=True)]
+    progress = stats.exercise_progress(rows)
+    assert progress['table'][0]['is_deload'] is True          # newest overall
+    assert progress['last_progression']['best_weight'] == 85.0
+
+
+def test_exercise_progress_has_no_last_progression_when_only_deloads_exist():
+    rows = [perf([(60.0, 8)], started_at=day(0), is_deload=True)]
+    progress = stats.exercise_progress(rows)
+    assert progress['last_progression'] is None
+    assert progress['pr_weight'] is None
+    assert progress['table'] != []      # the row is still reported
+
+
 def stalled(exercise_id, name, last_trained):
     """One stall_report entry plus the history row that dates it."""
     entry = {'exercise_id': exercise_id, 'name': name, 'position': 1,
