@@ -1380,9 +1380,36 @@ Then change the `render_template` call: replace `stalls=stats.stall_report(rows_
 
 so `stall_report` is called exactly once.
 
-- [ ] **Step 4: Pass `deload_pct` to the finished-session template**
+- [ ] **Step 4: Exclude deloads from the comparable-session cohort**
 
-In `session_detail`'s finished branch, change the final render of that branch:
+**Spec §5 requires this and the plan previously missed it.** `session_report` receives `comparable_session_volumes` as a list of bare floats with no flag attached, so it *cannot* filter them itself — the exclusion has to happen where the cohort is built. Without this, a past deload's total volume stays in `avg_total_volume`, deflating the baseline every future session of that template is measured against. That is the same defect the per-exercise `avg_volume` fix in Task 5 closed, one level up.
+
+In `session_detail`'s finished branch, add one clause to the cohort query:
+
+```python
+        comparable = []
+        if session_.template_id:
+            cohort = (
+                WorkoutSession.query
+                .filter(
+                    WorkoutSession.id != session_.id,
+                    WorkoutSession.finished_at.isnot(None),
+                    WorkoutSession.template_id == session_.template_id,
+                    # A deliberately light session must not deflate the average
+                    # every later session of this template is compared against.
+                    # session_report cannot do this itself -- it receives bare
+                    # floats with no flag to filter on.
+                    WorkoutSession.is_deload.is_(False),
+                )
+                .all()
+            )
+```
+
+Leave the rest of the block unchanged.
+
+- [ ] **Step 5: Pass `deload_pct` to the finished-session template**
+
+In the same branch, change its final render:
 
 ```python
         # session_report only sees PerformedExercise rows, which do not carry
@@ -1391,7 +1418,7 @@ In `session_detail`'s finished branch, change the final render of that branch:
         return render_template('gym/session_finished.html', session=session_, **data)
 ```
 
-- [ ] **Step 5: Verify every route still renders**
+- [ ] **Step 6: Verify every route still renders**
 
 ```bash
 cd personal_apps && python -m pytest tests/test_gym_routes_smoke.py -v
@@ -1399,7 +1426,7 @@ cd personal_apps && python -m pytest tests/test_gym_routes_smoke.py -v
 
 Expected: PASS, all tests.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add personal_apps/features/gym/routes.py personal_apps/tests/test_gym_routes_smoke.py
