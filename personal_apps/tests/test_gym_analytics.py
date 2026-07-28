@@ -169,3 +169,32 @@ def test_progression_ranking_treats_one_exercise_twice_in_a_session_as_one_point
     assert len(entry['points']) == 2, 'plotted two slots as two points'
     # the first session contributes its BEST showing, 105 not 100
     assert entry['first_e1rm'] == round(stats.epley_1rm(105.0, 8), 1)
+
+
+def test_progression_ranking_reports_the_latest_session_not_the_best_one():
+    """Current means most recent, not peak. With a dip at the end, an
+    implementation using min()/max() instead of first-and-last-by-date would
+    report 120 as current -- every other test here rises monotonically, where
+    the two readings coincide and nothing would catch the difference.
+    """
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1),
+        perf([(120.0, 8)], started_at=day(7), session_id=2),
+        perf([(110.0, 8)], started_at=day(14), session_id=3),
+    ]
+    entry = analytics.progression_ranking(rows)[0]
+    assert entry['first_e1rm'] == round(stats.epley_1rm(100.0, 8), 1)
+    assert entry['current_e1rm'] == round(stats.epley_1rm(110.0, 8), 1)
+    assert entry['points'][-1] == round(stats.epley_1rm(110.0, 8), 1)
+
+
+def test_progression_ranking_skips_an_exercise_that_started_at_bodyweight():
+    """A bodyweight first session gives an e1RM of 0, and a percentage change
+    from zero is not a number. The exercise is omitted rather than crashing
+    the ranking it sits in.
+    """
+    rows = [
+        perf([(0.0, 10)], started_at=day(0), session_id=1),
+        perf([(20.0, 10)], started_at=day(7), session_id=2),
+    ]
+    assert analytics.progression_ranking(rows) == []

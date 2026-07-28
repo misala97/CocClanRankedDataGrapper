@@ -105,6 +105,16 @@ def progression_ranking(rows):
 
         first_e1rm = ordered[0][1]
         current_e1rm = ordered[-1][1]
+
+        # No baseline, no percentage. epley_1rm() returns 0 for a bodyweight
+        # set (weight 0), which this app supports deliberately -- see
+        # stats.deload_weight()'s own bodyweight branch. Dividing by it would
+        # raise inside this loop and take the whole ranking down with it, so
+        # the exercise is skipped for the same reason a single-session one is:
+        # there is nothing to measure the change against.
+        if first_e1rm <= 0:
+            continue
+
         ranking.append({
             'exercise_id': exercise_id,
             'name': exercise_rows[0].name,
