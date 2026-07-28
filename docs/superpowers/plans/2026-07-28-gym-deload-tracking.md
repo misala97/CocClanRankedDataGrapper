@@ -1277,6 +1277,158 @@ git commit -m "feat(gym): add the deload toggle route"
 
 ---
 
+## Task 8b: Make the toggle idempotent by persisting the baseline weight
+
+**Added after the Task 8 review found a Critical defect.** Task 8's route scales `s.weight` — the *currently stored* value — so applying it twice compounds. This is reachable from Task 10's own UI, which renders five percentage buttons that each POST `on=1`: picking 70 % then 60 % yields `80 → 55 → 32.5` instead of 47.5, and a mobile double-tap or POST retry does the same. Toggling off only re-seeds from history, so for an exercise with no history the damage is permanent.
+
+Re-seeding from history *before* scaling fixes the common case but not these: an exercise with no history at all (nothing to restore to), or fewer history entries than planned sets (the tail sets stay deloaded and then compound on the next application). Both leave a session in a silently wrong, unrecoverable state.
+
+**Decision: persist the pre-deload weight per set.** One nullable column makes the toggle exactly idempotent and exactly reversible, removes the dependency on `_last_full_performance` in the off-branch entirely, and fixes the spec-level wart that toggling off restored *history* rather than *what was actually there* — so a manually adjusted planned weight now survives a deload round-trip.
+
+**Files:**
+- Modify: `personal_apps/models.py` (the `SessionSet` class)
+- Create: `personal_apps/migrations/versions/<rev>_add_base_weight_to_session_sets.py`
+- Modify: `personal_apps/features/gym/routes.py` (`gym_toggle_deload`)
+- Test: `personal_apps/tests/test_gym_routes_smoke.py`
+
+**Interfaces:**
+- Produces: `SessionSet.base_weight` (`float | None`) — the working weight this set held before a deload rewrote it; `NULL` whenever the set is not currently deloaded.
+
+- [ ] **Step 1: Add the column**
+
+In `personal_apps/models.py`, in `class SessionSet`, after `completed`:
+
+```python
+    # The working weight this set held before a deload rewrote it; NULL
+    # whenever the set is not currently deloaded. Persisted rather than
+    # re-derived so the deload toggle is idempotent (re-applying it, or
+    # changing the percentage, always scales from the baseline instead of
+    # compounding) and exactly reversible even for an exercise with no
+    # history to re-seed from.
+    base_weight         = db.Column(db.Float, nullable=True)
+```
+
+- [ ] **Step 2: Write and apply the migration**
+
+Confirm the current head first (`cd personal_apps/migrations/versions && grep -h "^revision\|^down_revision" *.py` — the head is the revision id that never appears as a `down_revision`; it should be `f2a7c31d9b48` from Task 1). Then create the revision with `down_revision` set to it:
+
+```python
+def upgrade():
+    # Nullable with no server_default: existing rows are not deloaded, and
+    # NULL is exactly what "no baseline stored" means.
+    op.add_column('gym_session_sets', sa.Column('base_weight', sa.Float(), nullable=True))
+
+
+def downgrade():
+    op.drop_column('gym_session_sets', 'base_weight')
+```
+
+Apply with `cd personal_apps && flask db upgrade`.
+
+- [ ] **Step 3: Rewrite the route's weight-handling block**
+
+Replace the `if not has_completed_set:` block in `gym_toggle_deload` with:
+
+```python
+    if not has_completed_set:
+        for session_exercise in session_.exercises:
+            is_unilateral = session_exercise.exercise.is_unilateral
+            for s in session_exercise.sets:
+                if on:
+                    # Capture the baseline the first time only. Re-applying the
+                    # toggle, or changing the percentage, then always scales
+                    # from the working weight rather than from the already
+                    # reduced one -- without this, 70 % followed by 60 % gives
+                    # 32.5 kg instead of 47.5 kg, and a double-tap compounds.
+                    if s.base_weight is None:
+                        s.base_weight = s.weight
+                    s.weight = stats.deload_weight(s.base_weight, pct, is_unilateral)
+                elif s.base_weight is not None:
+                    s.weight = s.base_weight
+                    s.base_weight = None
+```
+
+Delete the `_last_full_performance` re-seed from this route — the baseline restores the exact prior value, including a manually adjusted one, and works for an exercise with no history. Update the docstring paragraph that explained the re-seed to describe the baseline instead, keeping the reason it must not divide back up.
+
+- [ ] **Step 4: Write the tests**
+
+`set_weights` already exists. Add a `base_weights(session_id)` reader alongside it, then:
+
+```python
+def test_deload_percentage_change_scales_from_the_baseline_not_the_deloaded_weight(client, scratch_session):
+    """The compounding regression. Two picks in a row must not stack."""
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(scratch_session) == [55.0, 52.5]
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '60'})
+    # 60 % of the 80/75 baseline -> 47.5 / 45.0.
+    # Compounding from 55/52.5 would give 32.5 / 30.0.
+    assert set_weights(scratch_session) == [47.5, 45.0]
+
+
+def test_deload_applied_twice_at_the_same_percentage_is_idempotent(client, scratch_session):
+    """A double-tap or a POST retry must not reduce the weights twice."""
+    for _ in range(2):
+        client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(scratch_session) == [55.0, 52.5]
+
+
+def test_deload_off_restores_the_exact_pre_deload_weights(client, scratch_session):
+    """Replaces the old test, which asserted `!= [77.5, 75.0]` and so passed
+    even when the off-branch did nothing at all."""
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
+    assert set_weights(scratch_session) == [80.0, 75.0]
+    assert base_weights(scratch_session) == [None, None]
+    assert deload_state(scratch_session) == (False, None)
+
+
+def test_deload_off_restores_a_manually_adjusted_weight_not_last_sessions(client, scratch_session):
+    """The baseline is what was actually planned, which may not match history."""
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_.exercises[0].sets[0].weight = 92.5      # user bumped it before starting
+        db.session.commit()
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
+    assert set_weights(scratch_session)[0] == 92.5
+```
+
+Delete `test_deload_off_restores_the_seeded_weights_exactly` — the third test above replaces it with a real assertion.
+
+- [ ] **Step 5: Harden the fixture's teardown**
+
+`gym_delete_session` nulls `resting_set_id` before deleting a session, because the foreign key from the session to a set it owns otherwise blocks the delete. The `scratch_session` fixture deletes without doing so. It cannot fail today (no test starts a rest timer), but any future test that completes a set through the route would trip `_schedule_rest` and leave an orphan row in the user's real database. Add to the teardown, before `db.session.delete(doomed)`:
+
+```python
+            doomed.resting_set_id = None
+            db.session.commit()
+```
+
+- [ ] **Step 6: Verify**
+
+```bash
+cd personal_apps && python -m pytest tests/ -v
+```
+
+Expect all green. Then confirm no scratch rows leaked:
+
+```bash
+cd personal_apps && python -c "from app import app; from models import WorkoutSession; app.app_context().push(); print(WorkoutSession.query.filter(WorkoutSession.name.like('pytest%')).count())"
+```
+
+Expected: `0`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add personal_apps/models.py personal_apps/migrations/versions/ personal_apps/features/gym/routes.py personal_apps/tests/test_gym_routes_smoke.py
+git commit -m "fix(gym): make the deload toggle idempotent via a persisted baseline weight"
+```
+
+---
+
 ## Task 9: Wire `deload_signal` into Heute, and the seeding regression test
 
 **Files:**
