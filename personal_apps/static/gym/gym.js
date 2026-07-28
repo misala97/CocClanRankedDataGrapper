@@ -118,11 +118,22 @@ window.GymChart = {
         // fully determined by data the chart already has -- and because a
         // record IS "the best so far", so computing it from the series keeps
         // the definition in one place instead of two.
+        //
+        // Deload points are excluded from the running-best comparison: a
+        // deload is a deliberately light session, not an attempt at a
+        // record, so it must never be eligible to set or beat one -- even
+        // when its e1RM numerically happens to exceed the prior best. This
+        // has to agree with the server side, which excludes deloads from
+        // `_pr_weight` / `_pr_e1rm` in features/gym/stats.py for the same
+        // reason; the PR cards on this same page already reflect that. The
+        // points themselves are still plotted below (spanGaps stays false,
+        // nothing is filtered out of `series`) -- only their eligibility to
+        // BE a record changes, so the line has no holes.
         const bestByTime = new Map();
         let runningBest = -Infinity;
         allTimes.forEach((t) => {
             const onDate = series
-                .flatMap((s) => s.points.filter((p) => new Date(p.started_at).getTime() === t))
+                .flatMap((s) => s.points.filter((p) => new Date(p.started_at).getTime() === t && !p.is_deload))
                 .map((p) => p.e1rm);
             const dayBest = onDate.length ? Math.max(...onDate) : null;
             if (dayBest !== null && dayBest > runningBest) {
@@ -137,7 +148,13 @@ window.GymChart = {
             const aligned = allTimes.map((t) => byTime.get(t) || null);
             const isRecord = allTimes.map((t, idx) => {
                 const p = aligned[idx];
-                return !!(p && bestByTime.get(t) === p.e1rm);
+                // p.is_deload is checked again here (not just when building
+                // bestByTime above): without it, a deload point whose e1RM
+                // happens to numerically match that day's real best -- set
+                // by a different position, or by itself before dedup -- would
+                // still get flagged, since the value alone can't tell a
+                // deload apart from the record it happens to tie.
+                return !!(p && !p.is_deload && bestByTime.get(t) === p.e1rm);
             });
             return {
                 label: `Position ${s.position}`,

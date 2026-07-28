@@ -253,6 +253,7 @@ def test_exercise_progress_on_an_exercise_with_no_history_is_empty_not_broken():
     assert result['pr_weight'] is None
     assert result['pr_e1rm'] is None
     assert result['state'] == 'neu'
+    assert result['last_progression'] is None
 
 
 def test_session_report_totals_and_flags_a_weight_record():
@@ -703,10 +704,11 @@ def test_exercise_progress_keeps_deload_rows_but_marks_them():
 
 
 def test_exercise_progress_reports_the_last_non_deload_row():
-    # The newest row is the deload; stagnation advice must not quote its
-    # weight back as the weight you are stuck at.
-    rows = [perf([(85.0, 8)], started_at=day(0)),
-            perf([(60.0, 8)], started_at=day(7), is_deload=True)]
+    # Three rows so "newest non-deload" is distinguishable from "any
+    # non-deload": an implementation returning the OLDEST would give 80.0.
+    rows = [perf([(80.0, 8)], started_at=day(0)),
+            perf([(85.0, 8)], started_at=day(7)),
+            perf([(60.0, 8)], started_at=day(14), is_deload=True)]
     progress = stats.exercise_progress(rows)
     assert progress['table'][0]['is_deload'] is True          # newest overall
     assert progress['last_progression']['best_weight'] == 85.0

@@ -892,10 +892,14 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .vbars { display: flex; align-items: flex-end; gap: var(--sp-1); block-size: 108px; }
 .vbar { flex: 1; min-block-size: 2px; background: var(--edge-hi); border-radius: var(--r-inset) var(--r-inset) 0 0; }
 .vbar.is-live { background: var(--live); box-shadow: var(--glow-live); }
-/* A deload week's dip is deliberate, so the bar is dimmed and spelled out
-   below the chart rather than left looking like a collapse. No hue: this is
-   an explanation, not a fourth semantic state. */
-.vbar--deload { opacity: 0.45; }
+/* A deload week's dip is deliberate, so the bar is hatched and spelled out
+   below the chart rather than left looking like a collapse. Hatched, not
+   dimmed: the bar's height is the datum, so fading it reads as "no training
+   that week" -- the opposite of what it means. No hue: this is an
+   explanation, not a fourth semantic state. */
+.vbar--deload {
+  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--chassis) 3px 6px);
+}
 
 .deload-note {
   margin-block-end: var(--sp-3);
