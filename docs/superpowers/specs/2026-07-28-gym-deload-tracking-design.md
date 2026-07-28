@@ -269,8 +269,16 @@ New chip variant `chip--deload`, alongside the existing `chip--done` and
 
 ### 8.4 Tonnage chart — `heute.html`
 
-Deload weeks marked so the dip reads as explained rather than as a gap. Dimmed
+Deload weeks marked so the dip reads as explained rather than as a gap. **Hatched**
 bar, no new hue.
+
+> Superseded during implementation: this section originally specified a *dimmed*
+> bar. Dimming was built and rejected — the bar's **height is the datum**, so
+> fading it to 45 % dropped it to roughly 1.37:1 against the panel and read as
+> "no training that week", the opposite of the meaning. It also left the state
+> carried by brightness alone, against §4.2. A diagonal hatch keeps full
+> legibility and supplies the required shape. The rationale lives beside the
+> rule in `gym.css`.
 
 The tonnage chart is **not** Chart.js — it is plain CSS bars (`.vbars` /
 `.vbar` divs in `heute.html`, heights set inline from a percentage of the

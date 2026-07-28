@@ -201,7 +201,13 @@
         </form>
         {% if session.is_deload %}
         <span class="label deload-bar__state">
-            {% if deload_applied %}{{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Als Deload markiert — {{ session.deload_pct or deload_default_pct }} %{% endif %}
+            {# No percentage in the else-branch: on a retroactively flagged
+               session deload_pct is always the hidden field's default, because
+               this page offers no depth picker -- so printing it would surface
+               a number the user never chose about weights that never carried
+               it. The verdict line and the stat band above already omit it for
+               the same reason; all three now agree. #}
+            {% if deload_applied %}{{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Als Deload markiert{% endif %}
         </span>
         {% endif %}
     </div>
