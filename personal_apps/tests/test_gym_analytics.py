@@ -335,6 +335,40 @@ def test_daypart_volume_reports_volume_per_session_not_total():
     assert parts['morning']['avg_volume'] == 2000.0
 
 
+def test_daypart_volume_averages_over_sessions_not_rows():
+    """A workout is several rows sharing one session_id, so averaging rows
+    would quietly weight long sessions higher. Every other daypart test gives
+    each session a single row, where the two readings coincide and nothing
+    would catch the difference.
+
+    Session 1 is one 1000 kg row; session 2 is two, 2000 kg together.
+    Per session: (1000 + 2000) / 2 = 1500. Per row: 3000 / 3 = 1000.
+    """
+    rows = [
+        at(9, days=0, session_id=1, weight=100.0, reps=10),
+        at(9, days=1, session_id=2, weight=100.0, reps=10),
+        at(9, days=1, session_id=2, weight=100.0, reps=10),
+    ]
+    parts = {p['label']: p for p in analytics.daypart_volume(rows)['parts']}
+    assert parts['morning']['sessions'] == 2, 'counted rows as sessions'
+    assert parts['morning']['avg_volume'] == 1500.0, 'averaged rows instead of sessions'
+
+
+def test_daypart_boundaries_are_half_open():
+    """08:00 and 19:00 are inside their parts; 14:00 and 23:00 have fallen out
+    of them. Interior hours alone cannot catch a < / <= slip."""
+    rows = [
+        at(8, days=0, session_id=1),    # first morning hour
+        at(14, days=1, session_id=2),   # just past morning
+        at(19, days=2, session_id=3),   # first evening hour
+        at(23, days=3, session_id=4),   # just past evening
+    ]
+    parts = {p['label']: p for p in analytics.daypart_volume(rows)['parts']}
+    assert parts['morning']['sessions'] == 1
+    assert parts['evening']['sessions'] == 1
+    assert parts['other']['sessions'] == 2
+
+
 def test_daypart_volume_needs_both_buckets_to_clear_the_threshold():
     # plenty of mornings, one evening -- not a comparison
     rows = [at(9, days=i, session_id=i) for i in range(analytics.MIN_SESSIONS_PER_DAYPART)]
@@ -369,6 +403,21 @@ def test_weekday_distribution_lists_monday_first_and_carries_no_copy():
     days = analytics.weekday_distribution([])['days']
     assert [d['weekday'] for d in days] == [0, 1, 2, 3, 4, 5, 6]
     assert all('label' not in d for d in days), 'weekday copy belongs in the template'
+
+
+def test_weekday_distribution_is_statable_at_the_threshold():
+    """Pins the >= comparison and proves the flag can ever be True -- the
+    only other assertion on it is the empty case, which a hardcoded False
+    would also satisfy."""
+    rows = [at(9, days=i, session_id=i) for i in range(analytics.MIN_SESSIONS_FOR_WEEKDAY)]
+    result = analytics.weekday_distribution(rows)
+    assert result['sample'] == analytics.MIN_SESSIONS_FOR_WEEKDAY
+    assert result['statable'] is True
+
+
+def test_weekday_distribution_is_not_statable_below_the_threshold():
+    rows = [at(9, days=i, session_id=i) for i in range(analytics.MIN_SESSIONS_FOR_WEEKDAY - 1)]
+    assert analytics.weekday_distribution(rows)['statable'] is False
 
 
 def test_rest_gap_effect_buckets_by_days_since_the_previous_session():
