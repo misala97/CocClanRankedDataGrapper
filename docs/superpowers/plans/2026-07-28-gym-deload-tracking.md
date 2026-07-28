@@ -1434,28 +1434,30 @@ The same applies to `stagnation_counts`: its chip is a nudge to go heavier, whic
 In `personal_apps/features/gym/routes.py`, in `session_detail`'s active branch, change the `for se in visible_exercises:` loop:
 
 ```python
-    for se in visible_exercises:
-        prior = by_exercise.get(se.exercise_id, [])
-        # Both signals below are progress judgements, and a deload session is
-        # not an attempt at progress. The PR flare must agree with the recap
-        # screen (session_report awards no record on a deload), and a "go
-        # heavier" nudge is wrong advice during a deliberately light session.
-        if session_.is_deload:
-            continue
-        count = stats.sessions_since_pr(prior, position=se.position)
-        if count is not None and count >= stats.STAGNATION_THRESHOLD:
-            stagnation_counts[se.id] = count
-        # Live equivalent of the finished-session PR flare (session_report's
-        # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
-        # same prior-sessions-only pool, so a set can light up cyan the
-        # instant it's confirmed rather than only on the recap screen an
-        # hour later.
-        for s in se.sets:
-            if s.completed and stats.is_new_best(s.weight, s.reps, prior):
-                record_set_ids.add(s.id)
+    # Both signals below are progress judgements, and a deload session is not
+    # an attempt at progress -- so neither is computed during one. The PR flare
+    # must agree with the recap screen (session_report awards no record on a
+    # deload), and a "go heavier" nudge is wrong advice beside deliberately
+    # reduced weights. Guarding the whole loop rather than `continue`-ing per
+    # iteration: is_deload is loop-invariant, and a per-iteration skip would
+    # let a later maintainer add work above it that silently never runs.
+    if not session_.is_deload:
+        for se in visible_exercises:
+            prior = by_exercise.get(se.exercise_id, [])
+            count = stats.sessions_since_pr(prior, position=se.position)
+            if count is not None and count >= stats.STAGNATION_THRESHOLD:
+                stagnation_counts[se.id] = count
+            # Live equivalent of the finished-session PR flare (session_report's
+            # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
+            # same prior-sessions-only pool, so a set can light up cyan the
+            # instant it's confirmed rather than only on the recap screen an
+            # hour later.
+            for s in se.sets:
+                if s.completed and stats.is_new_best(s.weight, s.reps, prior):
+                    record_set_ids.add(s.id)
 ```
 
-Keep the existing comment above the inner loop; add only the new one.
+Keep the existing comment above the inner loop; add only the new one. Note the whole loop body shifts one indent level to the right.
 
 - [ ] **Step 2: Pass the needed values to the active-session template**
 
