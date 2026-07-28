@@ -244,12 +244,22 @@ class SessionSet(db.Model):
     weight              = db.Column(db.Float, nullable=False)
     reps                = db.Column(db.Integer, nullable=False)
     completed           = db.Column(db.Boolean, nullable=False, default=False)  # False for sets pre-filled from a template/history and not yet actually performed this session
-    # The working weight this set held before a deload rewrote it; NULL
-    # whenever the set is not currently deloaded. Persisted rather than
-    # re-derived so the deload toggle is idempotent (re-applying it, or
-    # changing the percentage, always scales from the baseline instead of
-    # compounding) and exactly reversible even for an exercise with no
-    # history to re-seed from.
+    # The working weight this set held before a deload rewrote it. The
+    # invariant this column actually maintains: it is non-NULL exactly when
+    # `weight` currently holds a deload-scaled value, and NULL whenever
+    # `weight` is the real working weight. Persisted rather than re-derived
+    # so the deload toggle is idempotent (re-applying it, or changing the
+    # percentage, always scales from the baseline instead of compounding)
+    # and exactly reversible even for an exercise with no history to re-seed
+    # from.
+    #
+    # Do NOT read `base_weight IS NOT NULL` as "this set belongs to a deload
+    # session" -- the completed-set gate in gym_toggle_deload can leave it
+    # set after the session's `is_deload` flag has been toggled back off
+    # (nothing actually lifted is ever overwritten), and a session marked
+    # deload retroactively, after every set was already logged, never
+    # touches `base_weight` at all. The session's own `is_deload` flag is
+    # the only thing that answers "is this a deload session".
     base_weight         = db.Column(db.Float, nullable=True)
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')

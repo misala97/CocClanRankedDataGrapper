@@ -194,3 +194,51 @@ def test_deload_pct_that_is_not_a_number_falls_back_to_the_default(client, scrat
     client.post('/gym/session/{}/deload'.format(scratch_session),
                 data={'on': '1', 'pct': 'schwer'})
     assert deload_state(scratch_session) == (True, 70)
+
+
+def test_deload_on_records_the_baseline_it_captured(client, scratch_session):
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    assert base_weights(scratch_session) == [80.0, 75.0]
+
+
+def test_completing_a_set_freezes_the_weights_and_un_completing_thaws_them(client, scratch_session):
+    """The "computed, not latched" guarantee: the completed-set gate is
+    re-evaluated per request, so un-completing a set makes the toggle able to
+    rewrite again and a mis-tap is always recoverable."""
+    from extensions import db
+    from models import WorkoutSession
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(scratch_session) == [55.0, 52.5]
+
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_.exercises[0].sets[0].completed = True
+        db.session.commit()
+    # Frozen: a completed set gates the rewrite, so toggling off changes the
+    # flag but leaves every weight alone.
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
+    assert set_weights(scratch_session) == [55.0, 52.5]
+
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_.exercises[0].sets[0].completed = False
+        db.session.commit()
+    # Thawed: nothing is completed any more, so the gate opens and the
+    # baseline restores exactly.
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
+    assert set_weights(scratch_session) == [80.0, 75.0]
+    assert base_weights(scratch_session) == [None, None]
+
+
+def test_a_weight_typed_during_a_deload_survives_turning_it_off(client, scratch_session):
+    """Fix 1's regression: a stale baseline must not overwrite a hand-typed
+    weight. Before the fix this restored 80.0 and lost the 60.0 entirely."""
+    from extensions import db
+    from models import WorkoutSession
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        set_id = session_.exercises[0].sets[0].id
+    client.post('/gym/set/{}/update'.format(set_id), data={'weight': '60', 'reps': '8'})
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
+    assert set_weights(scratch_session)[0] == 60.0

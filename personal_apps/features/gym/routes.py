@@ -674,6 +674,10 @@ def gym_toggle_set_complete(set_id):
     reps = _to_int(request.form.get('reps', ''))
     if weight is not None:
         set_.weight = weight
+        # A hand-typed weight is ground truth from now on. Leaving a stale
+        # base_weight in place would let a later deload toggle-off silently
+        # replace what the user just entered with a number they never chose.
+        set_.base_weight = None
     if reps is not None:
         set_.reps = reps
 
@@ -706,6 +710,10 @@ def gym_update_set(set_id):
     reps = _to_int(request.form.get('reps', ''))
     if weight is not None:
         set_.weight = weight
+        # A hand-typed weight is ground truth from now on. Leaving a stale
+        # base_weight in place would let a later deload toggle-off silently
+        # replace what the user just entered with a number they never chose.
+        set_.base_weight = None
     if reps is not None:
         set_.reps = reps
     db.session.commit()
