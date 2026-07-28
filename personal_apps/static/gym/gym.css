@@ -491,8 +491,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .deload-bar.is-on {
   padding: var(--sp-3); border-radius: var(--r-panel); background: var(--raised);
 }
-.deload-bar__toggle { min-block-size: 44px; }
-.deload-bar__state { color: var(--dim); font-variant-numeric: tabular-nums; }
+.deload-bar__state { font-variant-numeric: tabular-nums; }
 .deload-bar__picks { display: flex; flex-wrap: wrap; gap: var(--sp-2); flex: 1 1 100%; }
 .deload-bar__pick {
   min-inline-size: 44px; min-block-size: 44px;
@@ -501,9 +500,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   background: transparent; color: var(--dim);
   font: inherit; font-variant-numeric: tabular-nums;
   cursor: pointer; transition: color 120ms ease-out, border-color 120ms ease-out;
-  flex: 1 1 auto;
 }
-.deload-bar__pick.is-active { border-color: var(--edge-hi); color: var(--ink); }
+.deload-bar__pick.is-active { border-color: var(--edge-hi); color: var(--ink); font-weight: var(--w-bold); }
 
 /* tag: quiet metadata (position, set count), never a state */
 .tag {

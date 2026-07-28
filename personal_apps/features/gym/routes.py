@@ -517,6 +517,14 @@ def session_detail(session_id):
         # doesn't actually track.
         has_push_subscription=PushSubscription.query.first() is not None,
         has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
+        # Whether the deload percentage was actually applied to the weights.
+        # base_weight is non-NULL exactly when a set's weight is deload-scaled,
+        # so this is the honest test -- the session's is_deload flag is not,
+        # because a session flagged after a set was already logged keeps its
+        # full working weights and would otherwise display a percentage that
+        # describes nothing on screen.
+        deload_applied=any(
+            s.base_weight is not None for se in session_.exercises for s in se.sets),
         deload_pcts=stats.DELOAD_QUICK_PCTS,
         deload_default_pct=stats.DELOAD_DEFAULT_PCT,
     )

@@ -42,10 +42,10 @@
         </form>
         {% if session.is_deload %}
         <span class="label deload-bar__state">
-            {{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht
+            {% if deload_applied %}{{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Nur markiert — Gewichte unverändert{% endif %}
         </span>
         {% if not has_completed_set %}
-        <div class="deload-bar__picks">
+        <div class="deload-bar__picks" role="group" aria-label="Deload-Tiefe">
             {% for pct in deload_pcts %}
             <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
                 <input type="hidden" name="on" value="1">

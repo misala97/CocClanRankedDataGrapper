@@ -43,6 +43,10 @@ DELOAD_ALLOWED_PCTS = (50, 60, 70, 80, 90)
 # few times a year, so three options is a decision, five is a menu.
 DELOAD_QUICK_PCTS = (60, 70, 80)
 
+# A quick-pick the route would reject is a button that silently does something
+# other than what it says.
+assert set(DELOAD_QUICK_PCTS) <= set(DELOAD_ALLOWED_PCTS)
+
 # How many exercises from the *active* rotation must be stalled at once before
 # it reads as accumulated fatigue rather than a set of individual weak points.
 # STAGNATION_THRESHOLD counts sessions, not weeks, and isolation lifts cross it
