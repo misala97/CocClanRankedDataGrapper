@@ -211,9 +211,18 @@ def stall_report(rows_by_exercise, threshold=STAGNATION_THRESHOLD):
     entry reports the slot it was judged in, the weight it is stuck at, and
     when the plateau started, so the page can say something specific rather
     than just flagging a name.
+
+    The slot an exercise is judged in (`dominant_position`) is chosen from
+    these deload-filtered rows too, so a deload session cannot skew which
+    position counts as dominant.
     """
     report = []
     for exercise_id, rows in rows_by_exercise.items():
+        # Filtered here; exercise_state() and sessions_since_pr() below each
+        # filter again internally. That's by design, not dead code -- both
+        # are called elsewhere on unfiltered rows and must stay correct on
+        # their own, so _progression_rows() being idempotent means calling
+        # it again here costs nothing but keeps this loop honest too.
         rows = _progression_rows(rows)
         if not rows:
             continue

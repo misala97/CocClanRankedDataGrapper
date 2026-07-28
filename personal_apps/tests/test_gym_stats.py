@@ -613,11 +613,13 @@ def test_a_deload_session_cannot_set_a_record():
 
 
 def test_a_deload_row_is_not_the_baseline_a_later_set_is_judged_against():
-    # A 60 kg deload must not make a normal 70 kg set look like a new best
-    # when the real history already holds 80 kg.
+    # The direction that actually depends on the filter: a heavy deload must
+    # not BLOCK a real record. Asserting False here could never discriminate --
+    # filtering only shrinks the set that max() runs over, so anything true
+    # before the filter stays true after it.
     prior = [perf([(80.0, 8)], started_at=day(0)),
-             perf([(60.0, 8)], started_at=day(7), is_deload=True)]
-    assert stats.is_new_best(70.0, 8, prior) is False
+             perf([(200.0, 8)], started_at=day(7), is_deload=True)]
+    assert stats.is_new_best(85.0, 8, prior) is True
 
 
 def test_is_new_best_is_false_when_only_deload_history_exists():
