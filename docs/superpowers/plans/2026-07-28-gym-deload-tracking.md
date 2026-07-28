@@ -1062,10 +1062,12 @@ git commit -m "feat(gym): never seed a new session from a deload"
 
 **Background:** The rule from the spec, §6.2:
 
+> ⚠️ **The off-branch mechanism below is superseded by Task 8b.** Re-seeding from `_last_full_performance()` proved non-idempotent and broken for exercises with no history; the off-branch now restores a persisted `SessionSet.base_weight` instead. The observable behaviour in the table is unchanged — only the mechanism. Read Task 8b before implementing this route.
+
 | Session state when toggled | Flag | Weights |
 |---|---|---|
 | No completed sets, toggled **on** | set | every `SessionSet.weight` rewritten through `deload_weight()` |
-| No completed sets, toggled **off** | cleared | **re-seeded** from `_last_full_performance()` |
+| No completed sets, toggled **off** | cleared | ~~re-seeded from `_last_full_performance()`~~ → restored from `base_weight` (Task 8b) |
 | Any completed set, either direction | set / cleared | untouched |
 
 The "any completed set" test is **computed, not latched** — it asks whether the session has a completed set *right now*, so un-completing a set re-enables prescription and a mis-tap is always recoverable.
