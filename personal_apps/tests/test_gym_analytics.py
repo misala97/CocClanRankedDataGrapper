@@ -262,3 +262,55 @@ def test_fatigue_curve_on_no_history_is_empty_not_broken():
     assert result['sample'] == 0
     assert result['statable'] is False
     assert result['weight_change_pct'] is None
+
+
+def test_rep_range_distribution_excludes_a_zero_rep_set_and_says_so():
+    """A failed attempt logged at 0 reps is not a rep range. It is excluded
+    deliberately and reported, rather than silently shrinking the sample."""
+    rows = [perf([(100.0, 8), (100.0, 0)])]
+    result = analytics.rep_range_distribution(rows)
+    assert result['sample'] == 1
+    assert result['skipped'] == 1
+
+
+def test_rep_range_distribution_boundaries_are_inclusive_as_labelled():
+    """Every label names an inclusive range, so each edge value belongs to the
+    bucket it is named in. Interior values alone cannot catch an off-by-one."""
+    rows = [perf([(100.0, 1), (100.0, 5), (100.0, 6), (100.0, 8),
+                  (100.0, 9), (100.0, 12), (100.0, 13)])]
+    counts = {b['label']: b['sets'] for b in analytics.rep_range_distribution(rows)['buckets']}
+    assert counts == {'1-5': 2, '6-8': 2, '9-12': 2, '13+': 1}
+
+
+def test_fatigue_curve_is_statable_at_the_threshold():
+    """Pins >= rather than >. The below-threshold test alone would still pass
+    if the comparison were weakened."""
+    rows = [perf([(100.0, 10), (90.0, 8)], session_id=i)
+            for i in range(analytics.MIN_ROWS_FOR_FATIGUE)]
+    assert analytics.fatigue_curve(rows)['statable'] is True
+
+
+def test_fatigue_curve_survives_a_bodyweight_row():
+    """Weight 0 is legitimate here (see stats.deload_weight's own bodyweight
+    branch). The percentage is undefined for such a row, so it contributes
+    only its reps -- and must not divide by zero doing so."""
+    rows = [perf([(0.0, 12), (0.0, 9)])]
+    result = analytics.fatigue_curve(rows)
+    assert result['sample'] == 1
+    assert result['first_reps'] == 12.0
+    assert result['last_reps'] == 9.0
+    assert result['weight_change_pct'] is None
+
+
+def test_fatigue_curve_averages_across_rows_rather_than_reporting_one():
+    """Two rows with different drop-offs: the result must be their mean, not
+    either row's own numbers."""
+    rows = [
+        perf([(100.0, 10), (90.0, 8)], session_id=1),    # -10 %, 10 -> 8
+        perf([(100.0, 12), (80.0, 6)], session_id=2),    # -20 %, 12 -> 6
+    ]
+    result = analytics.fatigue_curve(rows)
+    assert result['sample'] == 2
+    assert result['weight_change_pct'] == -15.0
+    assert result['first_reps'] == 11.0
+    assert result['last_reps'] == 7.0

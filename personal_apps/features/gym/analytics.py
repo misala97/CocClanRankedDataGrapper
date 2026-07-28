@@ -151,12 +151,20 @@ def rep_range_distribution(rows):
     is still eight reps.
     """
     counts = {label: 0 for label, _, _ in REP_BUCKETS}
+    skipped = 0
     for row in rows:
         for _, reps in row.sets:
             for label, low, high in REP_BUCKETS:
                 if reps >= low and (high is None or reps <= high):
                     counts[label] += 1
                     break
+            else:
+                # A set logged at zero (or fewer) reps is a failed attempt, not
+                # a rep range -- filing it under "1-5" would be a lie, and
+                # letting it fall through the buckets unnoticed would quietly
+                # shrink the sample this function's finding is judged against.
+                # Excluded on purpose, and counted so the caller can say so.
+                skipped += 1
 
     sample = sum(counts.values())
     buckets = [
@@ -170,6 +178,7 @@ def rep_range_distribution(rows):
         'sample': sample,
         'dominant': dominant,
         'statable': sample >= MIN_SETS_FOR_REP_RANGE,
+        'skipped': skipped,
     }
 
 
