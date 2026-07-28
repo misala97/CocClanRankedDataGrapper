@@ -75,16 +75,24 @@
         {% endif %}
     </section>
 
-    {# Two tiers, not a stack of identical cards. The most recently trained
-       routine is the one you are most likely to reach for, so it gets the
-       featured treatment and the single primary action on the page; every
-       other routine drops to a divided row inside ONE shared panel. Nothing
-       is hidden -- each row still carries its name, its recency and its full
-       exercise list -- but only one blue slab is ever on screen, which is
-       what keeps the section from reading as a card grid. #}
+    {# Two tiers, not a stack of identical cards. routine_memory() sorts
+       LONGEST-AGO first -- the routine you are most overdue for is the one you
+       are about to do, so it leads and carries the single primary action on
+       the page; every other routine drops to a divided row inside ONE shared
+       panel. Nothing is hidden -- each row still carries its name, its recency
+       and its full exercise list -- but only one blue slab is ever on screen,
+       which is what keeps the section from reading as a card grid.
+
+       The featured tier needs something to be featured ABOVE. At two routines
+       it degenerates: the "rest" panel holds a single row, so the page shows
+       two panels of near-identical weight whose only difference is the button,
+       and that reads as inconsistency rather than hierarchy. Below three, both
+       routines render as equal rows in one panel instead. #}
     <section class="heute__routines">
         <div class="section-head"><h2 class="label">Routinen</h2></div>
         {% if routines %}
+        {% set featured = routines|length >= 3 %}
+        {% if featured %}
         {% set lead = routines[0] %}
         <div class="panel routine routine--lead" style="--i: 0">
             <div class="panel__head">
@@ -117,9 +125,12 @@
             </form>
         </div>
 
-        {% if routines|length > 1 %}
-        <div class="panel routine-rest" style="--i: 1">
-            {% for entry in routines[1:] %}
+        {% endif %}
+
+        {% set rest = routines[1:] if featured else routines %}
+        {% if rest %}
+        <div class="panel routine-rest" style="--i: {{ 1 if featured else 0 }}">
+            {% for entry in rest %}
             <div class="row row--top">
                 <div class="row__main">
                     <p class="name">{{ entry.template.name }}</p>
