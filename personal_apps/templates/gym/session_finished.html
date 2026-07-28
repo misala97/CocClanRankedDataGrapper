@@ -22,6 +22,7 @@
         <div class="session-head__main">
             <h1>{{ session.name or 'Workout' }}</h1>
             <span class="chip chip--done">Beendet</span>
+            {% if session.is_deload %}<span class="chip chip--deload">Deload</span>{% endif %}
         </div>
     </header>
     <p class="label session-finished__date">{{ session.started_at.strftime('%d.%m.%Y') }}</p>
@@ -32,12 +33,20 @@
        red delete button, which is a receipt, not a debrief. Every branch says
        something: the zero-record case gets a real substitute rather than
        falling through to silence, which is what made the screen feel empty on
-       an ordinary day. #}
+       an ordinary day.
+
+       The deload branch sits after the empty-session case (an empty session is
+       empty whatever it is labelled) and before every volume branch: without
+       it, a deload that worked exactly as intended falls through to "Leichter
+       als sonst -- -35 % gegenueber deinem Schnitt", which frames the point of
+       the session as a shortfall. #}
     <p class="session-verdict{{ ' session-verdict--record' if record_count else '' }}">
         {%- if record_count > 0 -%}
         {{ record_count }} neue{{ '' if record_count == 1 else '' }} {{ 'Rekord' if record_count == 1 else 'Rekorde' }}.
         {%- elif total_sets == 0 -%}
         Kein Satz erfasst — dieses Workout zählt nicht in die Statistik.
+        {%- elif session.is_deload -%}
+        Deload — {{ deload_pct or 70 }} %. Bewusst leichter.
         {%- elif total_volume_delta_pct is not none and total_volume_delta_pct >= 5 -%}
         {{ '%+d'|format(total_volume_delta_pct) }} % über deinem Schnitt.
         {%- elif total_volume_delta_pct is not none and total_volume_delta_pct <= -5 -%}
@@ -66,8 +75,13 @@
         <div class="stat">
             <span class="stat__label">Volumen</span>
             <span class="stat__value">{{ total_volume }} kg</span>
-            {% if total_volume_delta_pct is not none %}
+            {# No delta on a deload: comparing a deliberately light session
+               against the normal average produces a number that is correct
+               and meaningless. #}
+            {% if total_volume_delta_pct is not none and not session.is_deload %}
             <span class="stat__delta{{ ' is-up' if total_volume_delta_pct >= 0 else '' }}">{{ '%+d'|format(total_volume_delta_pct) }} % ggü. Ø</span>
+            {% elif session.is_deload %}
+            <span class="stat__delta">{{ deload_pct or 70 }} % Deload</span>
             {% endif %}
         </div>
         <div class="stat">
@@ -135,7 +149,7 @@
         {% endif %}
     </div>
 
-    {% if advice %}
+    {% if advice and not session.is_deload %}
     <div class="panel">
         <div class="section-head"><h2 class="label">Nächstes Mal</h2></div>
         {% for item in advice %}
@@ -170,6 +184,22 @@
         <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=session.id) }}" onsubmit="return confirm('Workout unwiderruflich löschen?')">
             <button type="submit" class="finished-delete">Workout löschen</button>
         </form>
+    </div>
+
+    {# Retroactively labelling a workout you already did is the flow this
+       feature was built for. It is label-only: every set is already completed,
+       so gym_toggle_deload rewrites nothing. #}
+    <div class="deload-bar{{ ' is-on' if session.is_deload else '' }}">
+        <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
+            <input type="hidden" name="on" value="{{ '0' if session.is_deload else '1' }}">
+            <input type="hidden" name="pct" value="{{ session.deload_pct or 70 }}">
+            <button type="submit" class="btn btn--ghost btn--sm deload-bar__toggle">
+                {{ 'Deload-Markierung entfernen' if session.is_deload else 'War ein Deload' }}
+            </button>
+        </form>
+        {% if session.is_deload %}
+        <span class="label deload-bar__state">{{ session.deload_pct or 70 }} % vom Arbeitsgewicht</span>
+        {% endif %}
     </div>
 
 </div>
