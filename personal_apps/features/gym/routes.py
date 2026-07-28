@@ -344,6 +344,22 @@ def gym_heute():
         rows_by_exercise.setdefault(row.exercise_id, []).append(row)
         session_started_at[row.session_id] = row.started_at
 
+    # stall_report() lists every stalled lift in the catalogue, which is what
+    # the "Steht still" roster should show. The deload signal is a narrower
+    # read of the same data -- only the active rotation -- so it is computed
+    # here from the report rather than by changing stall_report itself.
+    stalls = stats.stall_report(rows_by_exercise)
+    last_deload = (
+        WorkoutSession.query
+        .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.is_deload.is_(True))
+        .order_by(WorkoutSession.started_at.desc())
+        .first()
+    )
+    deload_suggestion = stats.deload_signal(
+        stalls, rows_by_exercise, now,
+        last_deload_at=last_deload.started_at if last_deload else None,
+    )
+
     return render_template(
         'gym/heute.html',
         now=now,
@@ -351,7 +367,8 @@ def gym_heute():
         consistency=stats.consistency(list(session_started_at.values()), now),
         routines=stats.routine_memory(templates, routine_sessions, now),
         recent_sessions=recent_sessions,
-        stalls=stats.stall_report(rows_by_exercise),
+        stalls=stalls,
+        deload_suggestion=deload_suggestion,
         balance=stats.muscle_group_volume(performed, catalogue_groups, now),
         tonnage=stats.weekly_tonnage(performed, now),
         templates=templates,
@@ -412,6 +429,11 @@ def session_detail(session_id):
                     WorkoutSession.id != session_.id,
                     WorkoutSession.finished_at.isnot(None),
                     WorkoutSession.template_id == session_.template_id,
+                    # A deliberately light session must not deflate the average
+                    # every later session of this template is compared against.
+                    # session_report cannot do this itself -- it receives bare
+                    # floats with no flag to filter on.
+                    WorkoutSession.is_deload.is_(False),
                 )
                 .all()
             )
@@ -438,6 +460,9 @@ def session_detail(session_id):
         ]
         for entry, se in zip(data['exercises'], reported_session_exercises):
             entry['set_rows'] = [s for s in se.sets if s.completed]
+        # session_report only sees PerformedExercise rows, which do not carry
+        # the percentage -- it belongs to the session row itself.
+        data['deload_pct'] = session_.deload_pct
         return render_template('gym/session_finished.html', session=session_, **data)
 
     # A replaced original is hidden from the active view, so its suggestion

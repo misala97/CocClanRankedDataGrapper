@@ -260,3 +260,45 @@ def test_ticking_a_set_done_does_not_destroy_its_deload_baseline(client, scratch
     client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
     assert set_weights(scratch_session) == [80.0, 75.0]
     assert base_weights(scratch_session) == [None, None]
+
+
+def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload(client):
+    """The regression this whole feature exists to prevent.
+
+    Without the filter in _last_session_exercise, the session after a deload
+    pre-fills at 70 %, the one after that seeds from *that*, and the lifter
+    silently never returns to their real working weight.
+    """
+    from extensions import db
+    from features.gym.routes import _last_full_performance
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+
+    created = []
+    try:
+        with flask_app.app_context():
+            exercise = Exercise.query.first()
+            assert exercise is not None
+            for offset, weight, deload in ((2, 100.0, False), (1, 70.0, True)):
+                started = dt.datetime.utcnow() - dt.timedelta(days=offset)
+                session_ = WorkoutSession(
+                    name='pytest seed {}'.format(offset), started_at=started,
+                    finished_at=started + dt.timedelta(hours=1), is_deload=deload,
+                    deload_pct=70 if deload else None)
+                session_exercise = SessionExercise(exercise_id=exercise.id, position=1)
+                session_exercise.sets = [
+                    SessionSet(position=1, weight=weight, reps=8, completed=True)]
+                session_.exercises.append(session_exercise)
+                db.session.add(session_)
+                db.session.commit()
+                created.append(session_.id)
+
+            seeded = _last_full_performance(exercise.id, position=1)
+            assert seeded, 'expected the normal session to be found'
+            assert seeded[0]['weight'] == 100.0, 'seeded from the deload'
+    finally:
+        with flask_app.app_context():
+            for session_id in created:
+                doomed = db.session.get(WorkoutSession, session_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+            db.session.commit()
