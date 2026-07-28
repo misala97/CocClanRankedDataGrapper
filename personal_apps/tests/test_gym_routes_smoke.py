@@ -327,3 +327,95 @@ def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload():
                     if doomed_exercise is not None:
                         db.session.delete(doomed_exercise)
                     db.session.commit()
+
+
+def _seed_slot_history(rows):
+    """Create a throwaway exercise plus one finished session per (days_ago,
+    position, weight). Returns (exercise_id, [session_ids]).
+
+    Its own exercise, so no real training data can influence which session the
+    seeding query considers most recent.
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    exercise = Exercise(name='pytest slot lift', is_unilateral=False)
+    db.session.add(exercise)
+    db.session.flush()
+    created = []
+    for days_ago, position, weight in rows:
+        started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+        session_ = WorkoutSession(name='pytest slot %d' % days_ago, started_at=started,
+                                  finished_at=started + dt.timedelta(hours=1))
+        session_exercise = SessionExercise(exercise_id=exercise.id, position=position)
+        session_exercise.sets = [SessionSet(position=1, weight=weight, reps=8, completed=True)]
+        session_.exercises.append(session_exercise)
+        db.session.add(session_)
+        db.session.commit()
+        created.append(session_.id)
+    return exercise.id, created
+
+
+def _drop_slot_history(exercise_id, session_ids):
+    from extensions import db
+    from models import Exercise, WorkoutSession
+    try:
+        for session_id in session_ids:
+            doomed = db.session.get(WorkoutSession, session_id)
+            if doomed is not None:
+                doomed.resting_set_id = None
+                db.session.commit()
+                db.session.delete(doomed)
+        db.session.commit()
+    finally:
+        if exercise_id is not None:
+            doomed_exercise = db.session.get(Exercise, exercise_id)
+            if doomed_exercise is not None:
+                db.session.delete(doomed_exercise)
+                db.session.commit()
+
+
+def test_stale_slot_history_does_not_beat_a_recent_performance():
+    """Reordering an exercise months ago must not resurrect the weight from
+    whatever slot the template still names.
+
+    Slot 1 was last trained 200 days ago at 40 kg; the lifter has since been
+    doing it at slot 2 and is now on 70 kg. Starting from a template that
+    still puts it in slot 1 must pre-fill 70, not 40 -- the slot's own history
+    is only the fairer comparison while it is still current.
+    """
+    from features.gym.routes import _last_full_performance
+    exercise_id = None
+    created = []
+    try:
+        with flask_app.app_context():
+            exercise_id, created = _seed_slot_history([
+                (200, 1, 40.0),   # stale slot-1 history
+                (3, 2, 70.0),     # current working weight, different slot
+            ])
+            seeded = _last_full_performance(exercise_id, position=1)
+            assert seeded, 'expected some history to be found'
+            assert seeded[0]['weight'] == 70.0, 'seeded from stale slot history'
+    finally:
+        with flask_app.app_context():
+            _drop_slot_history(exercise_id, created)
+
+
+def test_recent_slot_history_still_wins_over_another_slot():
+    """The fatigue rule still holds while the slot's data is current: an
+    exercise recently trained in this very slot pre-fills from that slot, even
+    though a lighter/heavier performance exists in another one."""
+    from features.gym.routes import _last_full_performance
+    exercise_id = None
+    created = []
+    try:
+        with flask_app.app_context():
+            exercise_id, created = _seed_slot_history([
+                (5, 3, 61.0),     # recent, in the slot we will ask for
+                (2, 2, 69.0),     # more recent, but a fresher slot
+            ])
+            seeded = _last_full_performance(exercise_id, position=3)
+            assert seeded, 'expected some history to be found'
+            assert seeded[0]['weight'] == 61.0, 'ignored still-current slot history'
+    finally:
+        with flask_app.app_context():
+            _drop_slot_history(exercise_id, created)

@@ -110,8 +110,23 @@ def _last_session_exercise(exercise_id, position=None):
     fatigue (the same exercise done 1st is fresher than done 3rd), so a
     suggestion should reflect what you actually did in that same slot
     before, not just the most recent time you did the exercise at all.
-    Falls back to the most recent regardless of position if you've never
-    done it in that position before.
+
+    That preference is only honoured while the slot's own history is still
+    CURRENT (within stats.ROLLING_WINDOW_DAYS). Reorder an exercise and never
+    update the template, and months later the template still names the old
+    slot -- without the recency guard the pre-fill would resurrect whatever
+    you lifted there back then, which can be far below your actual working
+    weight today. Seated Row, real data: slot 2 is on 69 kg while slot 3 still
+    remembered 61 kg from months earlier, so starting the template pre-filled
+    61 and had to be corrected by hand every time.
+
+    The fatigue argument is about being fresher or more tired in a given
+    slot, and it only holds while both numbers describe the same training
+    period. Once the slot's record is stale, "most recent, any position" is
+    the more honest answer, and the lifter adjusts in the moment.
+
+    Falls back to the most recent regardless of position if you've never done
+    it in that position, or if that record has gone stale.
 
     Deload sessions are skipped entirely. They are a deliberately light week,
     not what you should come back to -- seeding from one would carry the
@@ -131,7 +146,10 @@ def _last_session_exercise(exercise_id, position=None):
     )
     if position is not None:
         match = base_query.filter(SessionExercise.position == position).order_by(WorkoutSession.started_at.desc()).first()
-        if match:
+        # same slot, but only while that record still describes current
+        # training -- see the docstring for why staleness overrides fatigue
+        cutoff = dt.datetime.utcnow() - dt.timedelta(days=stats.ROLLING_WINDOW_DAYS)
+        if match and match.session.started_at >= cutoff:
             return match
     return base_query.order_by(WorkoutSession.started_at.desc()).first()
 
