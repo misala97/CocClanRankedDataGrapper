@@ -260,6 +260,17 @@ class SessionSet(db.Model):
     # deload retroactively, after every set was already logged, never
     # touches `base_weight` at all. The session's own `is_deload` flag is
     # the only thing that answers "is this a deload session".
+    #
+    # A hand-typed weight also clears it: gym_toggle_set_complete and
+    # gym_update_set drop the baseline when the submitted weight differs from
+    # the stored one, because the typed number becomes ground truth and a
+    # later toggle-off must not overwrite it. An unchanged submitted value is
+    # the form echoing itself (the weight input and the check button share one
+    # form) and deliberately does not count -- otherwise ticking a set done
+    # and undoing it would lose its working weight for good. The corollary:
+    # deliberately retyping the same number reads as "no change", so the
+    # baseline survives it. Distinguishing the two would need a dirty flag
+    # from the client and is not worth it.
     base_weight         = db.Column(db.Float, nullable=True)
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')
