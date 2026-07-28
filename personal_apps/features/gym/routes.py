@@ -112,11 +112,22 @@ def _last_session_exercise(exercise_id, position=None):
     before, not just the most recent time you did the exercise at all.
     Falls back to the most recent regardless of position if you've never
     done it in that position before.
+
+    Deload sessions are skipped entirely. They are a deliberately light week,
+    not what you should come back to -- seeding from one would carry the
+    reduction forward into every session after it.
     """
     base_query = (
         SessionExercise.query
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(SessionExercise.exercise_id == exercise_id, SessionExercise.sets.any(SessionSet.completed == True))
+        .filter(
+            SessionExercise.exercise_id == exercise_id,
+            SessionExercise.sets.any(SessionSet.completed == True),
+            # Never seed from a deload. Pre-filling the next session at 70 %
+            # would make the following one seed from *that*, and the lifter
+            # would silently never return to their real working weight.
+            WorkoutSession.is_deload == False,
+        )
     )
     if position is not None:
         match = base_query.filter(SessionExercise.position == position).order_by(WorkoutSession.started_at.desc()).first()
