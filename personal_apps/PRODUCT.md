@@ -108,6 +108,13 @@ history rows. This is what makes it one app rather than five screens.
 
 **Every state must carry a shape or a word as well as a colour.**
 
+**Deload is a label, not a sixth state.** A session can be marked as a
+deliberately light one. It carries **no hue** — the three-hue rule stands — and
+renders as `--dim` ink plus the literal word `Deload`, the same treatment as
+the `neu` chip. It describes a whole session rather than one set's progress,
+and its job is to stop the statistics reading a planned light week as a
+plateau. Do not promote it to a colour.
+
 ### 4.3 Token contract
 
 **The names and their meanings are the contract** — templates reference these
