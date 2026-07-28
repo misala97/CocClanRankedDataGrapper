@@ -1766,6 +1766,11 @@ with sync_playwright() as p:
 
 Adjust the URL to an active session's path. Read the PNG with the Read tool and confirm the bar renders with no colour of its own and the picks are ≥44 px.
 
+**Two checks carried over from the Task 8 review — both must be confirmed here, not assumed:**
+
+1. **The percentage picks disappear once any set is completed.** This is not cosmetic: `deload_pct` is assigned outside the route's completed-set gate, so a pick submitted after a set lands would store a percentage that does not match the weights. Hiding the control is the agreed mitigation, so verify it actually happens rather than trusting the template condition.
+2. **Reordering an exercise during a deload visibly resets it to full working weight.** `gym_reorder_session_exercises` rebuilds sets from history with no baseline. The resulting state is internally consistent and needs no code change, but confirm the visible jump and note it — if it reads as a bug in use, raise it rather than shipping it silently.
+
 - [ ] **Step 8: Commit**
 
 ```bash
