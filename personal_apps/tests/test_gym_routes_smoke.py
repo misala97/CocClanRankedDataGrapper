@@ -242,3 +242,21 @@ def test_a_weight_typed_during_a_deload_survives_turning_it_off(client, scratch_
     client.post('/gym/set/{}/update'.format(set_id), data={'weight': '60', 'reps': '8'})
     client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
     assert set_weights(scratch_session)[0] == 60.0
+
+
+def test_ticking_a_set_done_does_not_destroy_its_deload_baseline(client, scratch_session):
+    """The check button submits the whole row, so an unchanged weight must not
+    read as a hand-typed one -- otherwise completing and un-completing a set
+    during a deload loses its working weight for good."""
+    from extensions import db
+    from models import WorkoutSession
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        set_id = session_.exercises[0].sets[0].id
+    # Tick done, then undo -- exactly what the form posts, weight unchanged.
+    client.post('/gym/set/{}/toggle_complete'.format(set_id), data={'weight': '55.0', 'reps': '8'})
+    client.post('/gym/set/{}/toggle_complete'.format(set_id), data={'weight': '55.0', 'reps': '8'})
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
+    assert set_weights(scratch_session) == [80.0, 75.0]
+    assert base_weights(scratch_session) == [None, None]

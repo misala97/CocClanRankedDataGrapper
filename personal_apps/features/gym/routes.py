@@ -673,11 +673,16 @@ def gym_toggle_set_complete(set_id):
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
     if weight is not None:
+        if weight != set_.weight:
+            # Changed by hand -- ground truth from now on, so drop any stale
+            # deload baseline that would otherwise overwrite it later. An
+            # unchanged value is just the form echoing what is already stored
+            # (the weight input and the check button share one form), and must
+            # NOT count as an edit: clearing the baseline there would leave a
+            # completed-then-un-completed set unable to return to its working
+            # weight.
+            set_.base_weight = None
         set_.weight = weight
-        # A hand-typed weight is ground truth from now on. Leaving a stale
-        # base_weight in place would let a later deload toggle-off silently
-        # replace what the user just entered with a number they never chose.
-        set_.base_weight = None
     if reps is not None:
         set_.reps = reps
 
@@ -709,11 +714,16 @@ def gym_update_set(set_id):
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
     if weight is not None:
+        if weight != set_.weight:
+            # Changed by hand -- ground truth from now on, so drop any stale
+            # deload baseline that would otherwise overwrite it later. An
+            # unchanged value is just the form echoing what is already stored
+            # (the weight input and the check button share one form), and must
+            # NOT count as an edit: clearing the baseline there would leave a
+            # completed-then-un-completed set unable to return to its working
+            # weight.
+            set_.base_weight = None
         set_.weight = weight
-        # A hand-typed weight is ground truth from now on. Leaving a stale
-        # base_weight in place would let a later deload toggle-off silently
-        # replace what the user just entered with a number they never chose.
-        set_.base_weight = None
     if reps is not None:
         set_.reps = reps
     db.session.commit()
@@ -790,6 +800,13 @@ def gym_toggle_deload(session_id):
     dividing the weights back up. Reversing the arithmetic after
     deload_weight()'s floor is lossy (80 -> 55 -> 78.57 -> 77.5), so repeated
     toggling would walk the weights downward.
+
+    Editing a set's weight by hand mid-deload drops that set's own baseline
+    (see gym_toggle_set_complete/gym_update_set), so deload on -> edit one set
+    by hand -> deload off leaves that set holding the typed number while every
+    other set returns to its own working weight. This asymmetry is intended:
+    each set independently reflects whatever the user most recently said
+    about it, not a single all-or-nothing session state.
     """
     session_ = db.get_or_404(WorkoutSession, session_id)
 
