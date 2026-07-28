@@ -1425,9 +1425,41 @@ The percentage picks are shown only while nothing is completed: once a set is do
 
 Every pick is a real `<button>` at ≥44×44. All CSS goes in `gym.css` — never open a second `<style>` tag in a page template, it silently swallows the next rule.
 
-- [ ] **Step 1: Pass the needed values to the active-session template**
+- [ ] **Step 1: Suppress the live PR flare and stagnation nudge during a deload**
 
-In `personal_apps/features/gym/routes.py`, in `session_detail`'s active branch, add to the `render_template('gym/session_detail.html', ...)` call:
+**This closes a hole the rest of the feature would otherwise leave open.** `session_detail`'s active branch computes `record_set_ids` by calling `stats.is_new_best()` per completed set — the live equivalent of the finished-session PR flare. Task 4 filtered `is_new_best`'s *prior* rows, and Task 5 stops a deload session awarding records at session end, but **nothing checks whether the session being logged right now is a deload.** Without this, a set logged during a deload flares gold mid-workout and then earns no record on the recap screen — the two disagree, which is exactly the invariant `is_new_best`'s own docstring promises.
+
+The same applies to `stagnation_counts`: its chip is a nudge to go heavier, which is wrong advice during a deliberately light session.
+
+In `personal_apps/features/gym/routes.py`, in `session_detail`'s active branch, change the `for se in visible_exercises:` loop:
+
+```python
+    for se in visible_exercises:
+        prior = by_exercise.get(se.exercise_id, [])
+        # Both signals below are progress judgements, and a deload session is
+        # not an attempt at progress. The PR flare must agree with the recap
+        # screen (session_report awards no record on a deload), and a "go
+        # heavier" nudge is wrong advice during a deliberately light session.
+        if session_.is_deload:
+            continue
+        count = stats.sessions_since_pr(prior, position=se.position)
+        if count is not None and count >= stats.STAGNATION_THRESHOLD:
+            stagnation_counts[se.id] = count
+        # Live equivalent of the finished-session PR flare (session_report's
+        # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
+        # same prior-sessions-only pool, so a set can light up cyan the
+        # instant it's confirmed rather than only on the recap screen an
+        # hour later.
+        for s in se.sets:
+            if s.completed and stats.is_new_best(s.weight, s.reps, prior):
+                record_set_ids.add(s.id)
+```
+
+Keep the existing comment above the inner loop; add only the new one.
+
+- [ ] **Step 2: Pass the needed values to the active-session template**
+
+In the same `render_template('gym/session_detail.html', ...)` call, add:
 
 ```python
         has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
@@ -1435,7 +1467,7 @@ In `personal_apps/features/gym/routes.py`, in `session_detail`'s active branch, 
         deload_default_pct=stats.DELOAD_DEFAULT_PCT,
 ```
 
-- [ ] **Step 2: Add the chip and the toggle to the header**
+- [ ] **Step 3: Add the chip and the toggle to the header**
 
 In `personal_apps/templates/gym/session_detail.html`, replace the `.session-head__main` block:
 
@@ -1447,7 +1479,7 @@ In `personal_apps/templates/gym/session_detail.html`, replace the `.session-head
         </div>
 ```
 
-- [ ] **Step 3: Add the deload bar below the header**
+- [ ] **Step 4: Add the deload bar below the header**
 
 Immediately after the closing `</header>`, before the save-error banner:
 
@@ -1486,7 +1518,7 @@ Immediately after the closing `</header>`, before the save-error banner:
     </div>
 ```
 
-- [ ] **Step 4: Add the CSS**
+- [ ] **Step 5: Add the CSS**
 
 In `personal_apps/static/gym/gym.css`, after the `.chip--neu` rule:
 
@@ -1519,7 +1551,7 @@ In `personal_apps/static/gym/gym.css`, after the `.chip--neu` rule:
 
 If any custom property used above (`--sp-2`, `--sp-3`, `--sp-4`, `--r-panel`, `--r-control`, `--raised`, `--edge`, `--edge-hi`, `--dim`, `--ink`) does not exist, grep `gym.css` for the correct name and use that — do **not** invent a new token.
 
-- [ ] **Step 5: Confirm the reduced-motion block covers the new transition**
+- [ ] **Step 6: Confirm the reduced-motion block covers the new transition**
 
 ```bash
 cd personal_apps && grep -n "prefers-reduced-motion" -A 12 static/gym/gym.css
@@ -1527,7 +1559,7 @@ cd personal_apps && grep -n "prefers-reduced-motion" -A 12 static/gym/gym.css
 
 Expected: a block containing a blanket `transition: none` (typically on `*` or a broad selector). If it only lists specific selectors, add `.deload-bar__pick` to it.
 
-- [ ] **Step 6: Verify in the browser**
+- [ ] **Step 7: Verify in the browser**
 
 Start the app, open an active session, and confirm: the toggle marks the session, the chip appears, the weights drop, and the picks vanish once a set is completed.
 
@@ -1551,7 +1583,7 @@ with sync_playwright() as p:
 
 Adjust the URL to an active session's path. Read the PNG with the Read tool and confirm the bar renders with no colour of its own and the picks are ≥44 px.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add personal_apps/templates/gym/session_detail.html personal_apps/features/gym/routes.py personal_apps/static/gym/gym.css
