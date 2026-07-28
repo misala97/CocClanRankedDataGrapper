@@ -244,6 +244,13 @@ class SessionSet(db.Model):
     weight              = db.Column(db.Float, nullable=False)
     reps                = db.Column(db.Integer, nullable=False)
     completed           = db.Column(db.Boolean, nullable=False, default=False)  # False for sets pre-filled from a template/history and not yet actually performed this session
+    # The working weight this set held before a deload rewrote it; NULL
+    # whenever the set is not currently deloaded. Persisted rather than
+    # re-derived so the deload toggle is idempotent (re-applying it, or
+    # changing the percentage, always scales from the baseline instead of
+    # compounding) and exactly reversible even for an exercise with no
+    # history to re-seed from.
+    base_weight         = db.Column(db.Float, nullable=True)
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')
 

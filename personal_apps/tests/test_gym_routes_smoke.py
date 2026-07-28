@@ -43,6 +43,8 @@ def scratch_session():
     with flask_app.app_context():
         doomed = db.session.get(WorkoutSession, session_id)
         if doomed is not None:
+            doomed.resting_set_id = None
+            db.session.commit()
             db.session.delete(doomed)
             db.session.commit()
 
@@ -98,6 +100,14 @@ def deload_state(session_id):
         return session_.is_deload, session_.deload_pct
 
 
+def base_weights(session_id):
+    from models import WorkoutSession
+    from extensions import db
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, session_id)
+        return [s.base_weight for se in session_.exercises for s in se.sets]
+
+
 def test_deload_on_rewrites_every_weight_when_nothing_is_completed(client, scratch_session):
     response = client.post('/gym/session/{}/deload'.format(scratch_session),
                            data={'on': '1', 'pct': '70'})
@@ -107,12 +117,44 @@ def test_deload_on_rewrites_every_weight_when_nothing_is_completed(client, scrat
     assert deload_state(scratch_session) == (True, 70)
 
 
-def test_deload_off_restores_the_seeded_weights_exactly(client, scratch_session):
+def test_deload_percentage_change_scales_from_the_baseline_not_the_deloaded_weight(client, scratch_session):
+    """The compounding regression. Two picks in a row must not stack."""
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(scratch_session) == [55.0, 52.5]
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '60'})
+    # 60 % of the 80/75 baseline -> 47.5 / 45.0.
+    # Compounding from 55/52.5 would give 32.5 / 30.0.
+    assert set_weights(scratch_session) == [47.5, 45.0]
+
+
+def test_deload_applied_twice_at_the_same_percentage_is_idempotent(client, scratch_session):
+    """A double-tap or a POST retry must not reduce the weights twice."""
+    for _ in range(2):
+        client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(scratch_session) == [55.0, 52.5]
+
+
+def test_deload_off_restores_the_exact_pre_deload_weights(client, scratch_session):
+    """Replaces the old test, which asserted `!= [77.5, 75.0]` and so passed
+    even when the off-branch did nothing at all."""
     client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
     client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
-    # Not 55 / 0.7 = 78.57 -> 77.5. Toggling must not walk the weights down.
-    assert set_weights(scratch_session) != [77.5, 75.0]
+    assert set_weights(scratch_session) == [80.0, 75.0]
+    assert base_weights(scratch_session) == [None, None]
     assert deload_state(scratch_session) == (False, None)
+
+
+def test_deload_off_restores_a_manually_adjusted_weight_not_last_sessions(client, scratch_session):
+    """The baseline is what was actually planned, which may not match history."""
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_.exercises[0].sets[0].weight = 92.5      # user bumped it before starting
+        db.session.commit()
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
+    assert set_weights(scratch_session)[0] == 92.5
 
 
 def test_deload_on_rewrites_nothing_once_a_set_is_completed(client, scratch_session):
