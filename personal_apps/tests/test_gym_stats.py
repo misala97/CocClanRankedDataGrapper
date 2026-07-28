@@ -557,6 +557,15 @@ def test_deload_weight_rounds_down_not_to_nearest():
     assert stats.deload_weight(90.0, 70, False) == 62.5
 
 
+def test_deload_weight_rounds_down_even_when_nearest_would_round_up():
+    # The discriminating case: 81 * 0.70 = 56.7, which is 22.68 increments of
+    # 2.5 kg. Rounding to nearest would give 23 increments (57.5 kg) -- heavier
+    # than the 81 kg lift's own prescription implies. Flooring gives 55.0.
+    # Every other case in this file has a remainder below 0.5, where floor and
+    # round-to-nearest agree, so only this one proves the direction.
+    assert stats.deload_weight(81.0, 70, False) == 55.0
+
+
 def test_deload_weight_uses_the_half_step_for_unilateral():
     # 20 * 0.70 = 14.0 -> 13.75 in 1.25 kg steps, not 12.5 in 2.5 kg steps
     assert stats.deload_weight(20.0, 70, True) == 13.75
