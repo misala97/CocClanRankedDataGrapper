@@ -96,6 +96,9 @@ preserves its one-call-per-request contract.
 | PR detection — `_pr_weight`, `_pr_e1rm`, `is_weight_pr` / `is_volume_pr` / `is_e1rm_pr`, `is_new_best`, `session_record_counts` | **excluded**, as candidate *and* as baseline | A deload cannot set a record, and its lighter numbers must not lower the bar the next real session is judged against. |
 | `session_report` volume averages (`avg_volume`, `volume_delta_pct`, `comparable_session_volumes`) | **excluded** | Averaging a 70 % week into "normal" quietly deflates the baseline for every future session. |
 | `_last_full_performance` / `_last_performance` seeding | **excluded** | **The critical one.** The next normal session must pre-fill from the last *real* session. Seeding from a deload leaves the lifter at 70 % permanently — the feature would sabotage the training it exists to support. |
+| `exercise_progress` — `table` and `series` | **included, marked** | These are the record of what was performed. Dropping the rows would leave unexplained gaps in the history table and holes in the chart line. Each row/point carries `is_deload` so the page can dim it. |
+| `exercise_progress` — `pr_weight`, `pr_e1rm`, `state`, `sessions_since_pr` | **excluded** | Same function, but these four are judgements, and fall under the rows above. |
+| `exercise_progress` — new `last_progression` | **excluded** | Keeping deload rows in `table` means `table[0]` (the newest row) can *be* the deload. Anything quoting "the weight you are stuck at" must read the newest **non-deload** row instead, or the stagnation advice tells you to add 2.5 kg to a weight you deliberately went light on. Also `None` when an exercise's only history is deloads — which newly breaks the old invariant that a non-empty `table` implies a `pr_weight`. |
 | `weekly_tonnage` | **included, marked** | The dip is true and should be visible. An unexplained hole in the chart is worse than a labelled one. |
 | `consistency` | **included** | The session happened. |
 | `muscle_group_volume` (balance) | **included** | The sets were performed; the muscle was trained. Excluding them would fake an under-trained group. |
@@ -267,10 +270,13 @@ New chip variant `chip--deload`, alongside the existing `chip--done` and
 ### 8.4 Tonnage chart — `heute.html`
 
 Deload weeks marked so the dip reads as explained rather than as a gap. Dimmed
-bar plus label, no new hue. Chart.js cannot resolve `var()` or `color-mix()` on
-canvas, so the token must be resolved to a computed `rgb()` string in the
-template before being handed to the chart config — the same pattern the
-existing charts use.
+bar, no new hue.
+
+The tonnage chart is **not** Chart.js — it is plain CSS bars (`.vbars` /
+`.vbar` divs in `heute.html`, heights set inline from a percentage of the
+peak). Marking a week is therefore just a modifier class, `.vbar--deload`, with
+no canvas colour-resolution concern. (Chart.js is used only on exercise detail
+and the progress modal, neither of which changes here.)
 
 `weekly_tonnage()` gains a per-week `has_deload` flag. A week containing both
 normal and deload sessions counts as a deload week for marking purposes; the
