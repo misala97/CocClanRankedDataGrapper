@@ -38,6 +38,16 @@ DELOAD_DEFAULT_PCT = 70
 # default rather than erroring -- losing the toggle is worse than an odd value.
 DELOAD_ALLOWED_PCTS = (50, 60, 70, 80, 90)
 
+# How many exercises from the *active* rotation must be stalled at once before
+# it reads as accumulated fatigue rather than a set of individual weak points.
+# STAGNATION_THRESHOLD counts sessions, not weeks, and isolation lifts cross it
+# routinely -- at 3 this would fire during ordinary training and be learned-
+# ignored. With a rotation of roughly 12-15 exercises, 4 is about a third.
+DELOAD_STALL_THRESHOLD = 4
+# Don't re-suggest a deload this soon after one, so a stall that survives the
+# deload doesn't nag every single session.
+DELOAD_SUPPRESSION_DAYS = 21
+
 NO_GROUP_LABEL = 'Ohne Muskelgruppe'
 
 
@@ -241,6 +251,37 @@ def stall_report(rows_by_exercise, threshold=STAGNATION_THRESHOLD):
         })
     report.sort(key=lambda entry: (-entry['sessions_since_pr'], entry['name']))
     return report
+
+
+def deload_signal(report, rows_by_exercise, now, last_deload_at=None,
+                  days=ROLLING_WINDOW_DAYS, threshold=DELOAD_STALL_THRESHOLD,
+                  suppression_days=DELOAD_SUPPRESSION_DAYS):
+    """Whether the data says a deload is due, and the lifts that say so.
+
+    `report` is stall_report()'s output and `rows_by_exercise` the map the
+    caller already holds, so this costs no extra query.
+
+    Only exercises actually trained inside the rolling window count. A lift
+    abandoned six months ago drifts into 'stagniert' from disuse and says
+    nothing about how recovered the lifter is; counting it would leave the
+    suggestion permanently lit for anyone with a long catalogue.
+
+    Returns None when the signal does not fire, otherwise the qualifying
+    stalls so the page can name the lifts rather than assert a vague verdict.
+    """
+    if last_deload_at is not None and (now - last_deload_at).days < suppression_days:
+        return None
+
+    cutoff = now - dt.timedelta(days=days)
+    active = []
+    for entry in report:
+        rows = rows_by_exercise.get(entry['exercise_id']) or []
+        if any(row.started_at >= cutoff for row in rows):
+            active.append(entry)
+
+    if len(active) < threshold:
+        return None
+    return {'count': len(active), 'stalls': active}
 
 
 def _sets_display(row):
@@ -604,17 +645,26 @@ def weekly_tonnage(rows, now, weeks=TONNAGE_WEEKS):
     The last bucket is a partial week by definition. It is flagged
     `is_current` so the page can label it as still running -- unflagged, a
     Tuesday would always look like a collapse in training.
+
+    `has_deload` marks a week containing at least one deload session, so the
+    page can label the dip instead of leaving it looking like a collapse. The
+    volume itself still totals every session, deload or not -- the work was
+    done and the chart reports what happened.
     """
     current_start = _week_start(now)
     starts = [current_start - dt.timedelta(weeks=offset) for offset in range(weeks - 1, -1, -1)]
     buckets = {start: 0.0 for start in starts}
+    deload_weeks = set()
     for row in rows:
         start = _week_start(row.started_at)
         if start in buckets:
             buckets[start] += row_volume(row)
+            if row.is_deload:
+                deload_weeks.add(start)
     return [
         {'week_start': start, 'volume': round(buckets[start], 1),
-         'is_current': start == current_start}
+         'is_current': start == current_start,
+         'has_deload': start in deload_weeks}
         for start in starts
     ]
 

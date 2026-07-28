@@ -700,3 +700,84 @@ def test_exercise_progress_keeps_deload_rows_but_marks_them():
     assert [point['is_deload'] for point in progress['series'][0]['points']] == [False, True]
     # ...but the deload still holds no record
     assert progress['pr_weight']['weight'] == 80.0
+
+
+def stalled(exercise_id, name, last_trained):
+    """One stall_report entry plus the history row that dates it."""
+    entry = {'exercise_id': exercise_id, 'name': name, 'position': 1,
+             'stuck_at': 80.0, 'since': last_trained, 'sessions_since_pr': 5}
+    row = perf([(80.0, 8)], started_at=last_trained, exercise_id=exercise_id, name=name)
+    return entry, row
+
+
+def signal_input(count, last_trained_offsets=None, now=None):
+    """Build (report, rows_by_exercise) for `count` stalled exercises."""
+    now = now or dt.datetime(2026, 7, 28, 18, 0)
+    offsets = last_trained_offsets or [1] * count
+    report, rows_by_exercise = [], {}
+    for index, offset in enumerate(offsets, start=1):
+        entry, row = stalled(index, 'Uebung {}'.format(index),
+                             now - dt.timedelta(days=offset))
+        report.append(entry)
+        rows_by_exercise[index] = [row]
+    return report, rows_by_exercise
+
+
+NOW = dt.datetime(2026, 7, 28, 18, 0)
+
+
+def test_deload_signal_fires_at_the_threshold():
+    report, rows = signal_input(4)
+    signal = stats.deload_signal(report, rows, NOW)
+    assert signal is not None
+    assert signal['count'] == 4
+    assert len(signal['stalls']) == 4
+
+
+def test_deload_signal_stays_quiet_below_the_threshold():
+    report, rows = signal_input(3)
+    assert stats.deload_signal(report, rows, NOW) is None
+
+
+def test_deload_signal_ignores_exercises_not_trained_in_the_window():
+    # Four stalls, but two are lifts abandoned months ago -- stagnating from
+    # disuse, which says nothing about how recovered the lifter is.
+    report, rows = signal_input(4, last_trained_offsets=[1, 3, 200, 300])
+    assert stats.deload_signal(report, rows, NOW) is None
+
+
+def test_deload_signal_is_suppressed_soon_after_a_deload():
+    report, rows = signal_input(4)
+    assert stats.deload_signal(report, rows, NOW,
+                               last_deload_at=NOW - dt.timedelta(days=7)) is None
+
+
+def test_deload_signal_fires_again_once_the_suppression_window_passes():
+    report, rows = signal_input(4)
+    assert stats.deload_signal(report, rows, NOW,
+                               last_deload_at=NOW - dt.timedelta(days=22)) is not None
+
+
+def test_deload_signal_fires_for_someone_who_has_never_deloaded():
+    report, rows = signal_input(4)
+    assert stats.deload_signal(report, rows, NOW, last_deload_at=None) is not None
+
+
+def test_weekly_tonnage_marks_a_week_containing_a_deload():
+    now = dt.datetime(2026, 7, 29, 18, 0)          # a Wednesday
+    rows = [
+        perf([(80.0, 10)], started_at=now - dt.timedelta(days=1)),
+        perf([(60.0, 10)], started_at=now, is_deload=True),
+        perf([(80.0, 10)], started_at=now - dt.timedelta(days=8)),
+    ]
+    weeks = stats.weekly_tonnage(rows, now)
+    assert weeks[-1]['has_deload'] is True
+    assert weeks[-2]['has_deload'] is False
+    # the volume itself still totals everything
+    assert weeks[-1]['volume'] == 800.0 + 600.0
+
+
+def test_weekly_tonnage_marks_an_empty_week_as_no_deload():
+    now = dt.datetime(2026, 7, 29, 18, 0)
+    weeks = stats.weekly_tonnage([], now)
+    assert all(week['has_deload'] is False for week in weeks)
