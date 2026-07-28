@@ -639,3 +639,64 @@ def test_exercise_state_is_neu_when_every_row_is_a_deload():
     rows = [perf([(60.0, 8)], started_at=day(0), is_deload=True),
             perf([(60.0, 8)], started_at=day(7), is_deload=True)]
     assert stats.exercise_state(rows) == 'neu'
+
+
+def test_session_report_excludes_deloads_from_the_volume_average():
+    current = [perf([(80.0, 10)], started_at=day(21))]                       # 800
+    history = [
+        perf([(80.0, 10)], started_at=day(0)),                               # 800
+        perf([(40.0, 10)], started_at=day(7), is_deload=True),               # 400, ignored
+    ]
+    report = stats.session_report(current, history)
+    assert report['exercises'][0]['avg_volume'] == 800.0
+    assert report['exercises'][0]['volume_delta_pct'] == 0
+
+
+def test_session_report_awards_no_record_when_the_session_is_a_deload():
+    current = [perf([(200.0, 8)], started_at=day(7), is_deload=True)]
+    history = [perf([(80.0, 8)], started_at=day(0))]
+    report = stats.session_report(current, history)
+    assert report['records'] == []
+    assert report['record_count'] == 0
+    assert report['exercises'][0]['is_weight_pr'] is False
+
+
+def test_session_report_gives_no_stagnation_advice_on_a_deload():
+    current = [perf([(60.0, 8)], started_at=day(35), is_deload=True)]
+    history = [perf([(85.0, 8)], started_at=day(0))]
+    history += [perf([(80.0, 8)], started_at=day(7 * n)) for n in range(1, 5)]
+    report = stats.session_report(current, history)
+    assert report['advice'] == []
+    assert report['exercises'][0]['verdict'] != 'stagniert'
+
+
+def test_session_report_reports_its_own_deload_state():
+    plain = stats.session_report([perf([(80.0, 8)])], [])
+    assert plain['is_deload'] is False
+    loaded = stats.session_report([perf([(80.0, 8)], is_deload=True)], [])
+    assert loaded['is_deload'] is True
+
+
+def test_session_report_on_an_empty_session_is_not_a_deload():
+    assert stats.session_report([], [])['is_deload'] is False
+
+
+def test_session_record_counts_ignores_deload_sessions():
+    rows = [
+        perf([(80.0, 8)], started_at=day(0), session_id=1),
+        perf([(200.0, 8)], started_at=day(7), session_id=2, is_deload=True),
+    ]
+    assert stats.session_record_counts(rows) == {}
+
+
+def test_exercise_progress_keeps_deload_rows_but_marks_them():
+    rows = [perf([(80.0, 8)], started_at=day(0)),
+            perf([(60.0, 8)], started_at=day(7), is_deload=True)]
+    progress = stats.exercise_progress(rows)
+    assert len(progress['table']) == 2
+    # table is newest-first
+    assert progress['table'][0]['is_deload'] is True
+    assert progress['table'][1]['is_deload'] is False
+    assert [point['is_deload'] for point in progress['series'][0]['points']] == [False, True]
+    # ...but the deload still holds no record
+    assert progress['pr_weight']['weight'] == 80.0

@@ -282,6 +282,10 @@ def exercise_progress(rows, position=None):
 
     `available_positions` always describes the unfiltered data, so the page can
     keep offering the other slots even while one is isolated.
+
+    `table` and `series` keep deload rows and mark them `is_deload`: they are
+    the record of what was performed, and dropping them would leave holes in
+    the chart. The PR and state fields below exclude them.
     """
     chronological = _chronological(rows)
     available_positions = sorted({row.position for row in chronological})
@@ -293,6 +297,7 @@ def exercise_progress(rows, position=None):
             'session_id': row.session_id,
             'started_at': row.started_at,
             'position': row.position,
+            'is_deload': row.is_deload,
             'sets_display': _sets_display(row),
             'best_weight': best_weight(row),
             'volume': round(row_volume(row), 1),
@@ -311,6 +316,7 @@ def exercise_progress(rows, position=None):
             'points': [
                 {
                     'started_at': row.started_at,
+                    'is_deload': row.is_deload,
                     'e1rm': round(best_e1rm(row), 1),
                     'best_weight': best_weight(row),
                     'volume': round(row_volume(row), 1),
@@ -377,9 +383,18 @@ def session_report(current, history, comparable_session_volumes=()):
     sessions built from the same template, and is empty for freeform workouts:
     averaging a leg day into a push day produces a number that is arithmetically
     correct and completely meaningless.
+
+    A deload session awards no records and produces no stagnation advice: it
+    was never an attempt at either. Past deloads are dropped from `history`
+    so they cannot become a baseline or deflate an average.
     """
+    # This session's own deload state. Every row in `current` comes from the
+    # same session, so any of them answers it; an empty session (no completed
+    # sets) is not a deload.
+    is_deload = bool(current) and current[0].is_deload
+
     by_exercise = {}
-    for row in history:
+    for row in _progression_rows(history):
         by_exercise.setdefault(row.exercise_id, []).append(row)
 
     exercises = []
@@ -413,14 +428,14 @@ def session_report(current, history, comparable_session_volumes=()):
             'avg_volume': round(avg_volume, 1) if has_history else None,
             'volume_delta_pct': (round((volume - avg_volume) / avg_volume * 100)
                                  if avg_volume else None),
-            'is_weight_pr': has_history and weight > max(best_weight(p) for p in past),
-            'is_volume_pr': has_history and volume > max(past_volumes),
-            'is_e1rm_pr': has_history and e1rm > max(best_e1rm(p) for p in past),
+            'is_weight_pr': (not is_deload) and has_history and weight > max(best_weight(p) for p in past),
+            'is_volume_pr': (not is_deload) and has_history and volume > max(past_volumes),
+            'is_e1rm_pr': (not is_deload) and has_history and e1rm > max(best_e1rm(p) for p in past),
         }
 
-        since = sessions_since_pr(past + [row], position=row.position)
+        since = sessions_since_pr(past + ([] if is_deload else [row]), position=row.position)
         entry['sessions_since_pr'] = since
-        entry['verdict'] = _verdict(entry, since)
+        entry['verdict'] = None if is_deload else _verdict(entry, since)
         exercises.append(entry)
 
         # One record per exercise, strongest kind first -- three badges on one
@@ -466,6 +481,12 @@ def session_report(current, history, comparable_session_volumes=()):
         'records': records,
         'record_count': len(records),
         'advice': advice,
+        'is_deload': is_deload,
+        # The percentage is a property of the session row, not of the
+        # performed rows, so the route supplies it to the template directly.
+        # Reported here as None so the shape is stable for any caller reading
+        # the dict alone.
+        'deload_pct': None,
     }
 
 
@@ -508,9 +529,12 @@ def session_record_counts(rows):
     per-exercise decision into the single best-of-both-rows number, which is
     the same one-record-per-exercise-per-session outcome session_report
     produces in the overwhelmingly common case of one row per exercise.
+
+    Deload sessions are excluded outright: they can neither hold a record nor
+    be the bar another session has to clear.
     """
     rows_by_exercise = {}
-    for row in rows:
+    for row in _progression_rows(rows):
         by_session = rows_by_exercise.setdefault(row.exercise_id, {})
         by_session.setdefault(row.session_id, []).append(row)
 
