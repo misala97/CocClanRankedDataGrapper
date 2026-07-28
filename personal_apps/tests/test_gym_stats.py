@@ -6,7 +6,8 @@ from features.gym import stats
 
 
 def perf(sets, position=1, started_at=None, is_unilateral=False,
-         exercise_id=1, name='Bankdruecken', muscle_group='Brust', session_id=1):
+         exercise_id=1, name='Bankdruecken', muscle_group='Brust', session_id=1,
+         is_deload=False):
     """Build one PerformedExercise. `sets` is [(weight, reps), ...]."""
     return stats.PerformedExercise(
         exercise_id=exercise_id,
@@ -17,7 +18,16 @@ def perf(sets, position=1, started_at=None, is_unilateral=False,
         session_id=session_id,
         started_at=started_at or dt.datetime(2026, 7, 1, 18, 0),
         sets=tuple(sets),
+        is_deload=is_deload,
     )
+
+
+def test_performed_exercise_defaults_to_not_deload():
+    assert perf([(80.0, 8)]).is_deload is False
+
+
+def test_performed_exercise_carries_the_deload_flag():
+    assert perf([(80.0, 8)], is_deload=True).is_deload is True
 
 
 def test_epley_1rm_at_one_rep_is_the_weight_itself():

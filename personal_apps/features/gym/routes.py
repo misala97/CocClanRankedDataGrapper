@@ -266,6 +266,9 @@ def _to_performed(session_exercise, completed_sets):
         session_id=session_exercise.session_id,
         started_at=session_exercise.session.started_at,
         sets=completed_sets,
+        # session is already joinedload()ed by load_performed(), so this costs
+        # no extra query.
+        is_deload=session_exercise.session.is_deload,
     )
 
 

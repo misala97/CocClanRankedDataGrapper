@@ -44,6 +44,10 @@ class PerformedExercise:
 
     weight and reps are as logged. For a unilateral exercise that means *per
     side*; volume doubles them, display never does.
+
+    `is_deload` marks a row performed during a deliberate deload. It is a
+    property of the session, not the exercise -- every row from one session
+    carries the same value.
     """
     exercise_id: int
     name: str
@@ -53,6 +57,12 @@ class PerformedExercise:
     session_id: int
     started_at: dt.datetime
     sets: Tuple
+    # True when this row was performed in a deliberately light session. Every
+    # function below that makes a *judgement* (records, stagnation, averages)
+    # drops these rows via _progression_rows(); every function that reports
+    # what actually happened (tonnage, balance, consistency) keeps them.
+    # Defaulted so callers predating the flag keep working.
+    is_deload: bool = False
 
 
 def epley_1rm(weight, reps):
