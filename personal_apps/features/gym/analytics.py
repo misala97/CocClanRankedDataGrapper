@@ -327,3 +327,47 @@ def rest_gap_effect(rows):
         'statable': (len(populated) >= 2
                      and all(b['sessions'] >= MIN_SESSIONS_PER_GAP_BUCKET for b in populated)),
     }
+
+
+def _share_table(pairs, total):
+    """[{label, volume, sets, share}] sorted by volume, biggest first."""
+    table = [
+        {'label': label, 'volume': round(volume, 1), 'sets': sets,
+         'share': round(volume / total * 100, 1) if total else 0.0}
+        for label, (volume, sets) in pairs.items()
+    ]
+    table.sort(key=lambda entry: (-entry['volume'], entry['label']))
+    return table
+
+
+def effort_distribution(rows):
+    """Wohin die Arbeit geht: where the tonnage actually went, all time.
+
+    Split two ways -- by muscle group and by exercise -- because they answer
+    different questions: whether the body is trained evenly, and which lifts
+    the training is actually made of.
+
+    A description, so deloads are included.
+
+    Nothing is synthesised at zero. An exercise never performed has no row
+    here at all, and a group with no trained exercises simply does not appear.
+    Heute's muscle_group_volume() deliberately does the opposite, because
+    there a group at zero IS the finding; here absence is just absence.
+    """
+    groups = defaultdict(lambda: [0.0, 0])
+    exercises = defaultdict(lambda: [0.0, 0])
+    total = 0.0
+    for row in rows:
+        volume = stats.row_volume(row)
+        total += volume
+        group = row.muscle_group or stats.NO_GROUP_LABEL
+        groups[group][0] += volume
+        groups[group][1] += len(row.sets)
+        exercises[row.name][0] += volume
+        exercises[row.name][1] += len(row.sets)
+
+    return {
+        'groups': _share_table({k: tuple(v) for k, v in groups.items()}, total),
+        'exercises': _share_table({k: tuple(v) for k, v in exercises.items()}, total),
+        'total_volume': round(total, 1),
+    }

@@ -437,3 +437,45 @@ def test_rest_gap_effect_on_no_history_is_empty_not_broken():
     result = analytics.rest_gap_effect([])
     assert result['statable'] is False
     assert all(b['sessions'] == 0 for b in result['buckets'])
+
+
+def test_effort_distribution_splits_tonnage_by_muscle_group():
+    rows = [
+        perf([(100.0, 10)], muscle_group='Brust', exercise_id=1, name='Bank'),
+        perf([(50.0, 10)], muscle_group='Ruecken', exercise_id=2, name='Rudern', session_id=2),
+    ]
+    groups = {g['label']: g for g in analytics.effort_distribution(rows)['groups']}
+    assert groups['Brust']['volume'] == 1000.0
+    assert groups['Brust']['share'] == round(1000 / 1500 * 100, 1)
+    assert groups['Ruecken']['volume'] == 500.0
+
+
+def test_effort_distribution_sorts_biggest_share_first():
+    rows = [
+        perf([(10.0, 10)], muscle_group='Klein', exercise_id=1, name='A'),
+        perf([(100.0, 10)], muscle_group='Gross', exercise_id=2, name='B', session_id=2),
+    ]
+    assert [g['label'] for g in analytics.effort_distribution(rows)['groups']] == ['Gross', 'Klein']
+
+
+def test_effort_distribution_also_breaks_down_per_exercise():
+    rows = [perf([(100.0, 10)], exercise_id=1, name='Bankdruecken')]
+    exercises = analytics.effort_distribution(rows)['exercises']
+    assert exercises[0]['label'] == 'Bankdruecken'
+    assert exercises[0]['sets'] == 1
+
+
+def test_effort_distribution_labels_an_exercise_without_a_group():
+    rows = [perf([(100.0, 10)], muscle_group=None)]
+    assert analytics.effort_distribution(rows)['groups'][0]['label'] == stats.NO_GROUP_LABEL
+
+
+def test_effort_distribution_includes_deloads_because_it_describes():
+    rows = [perf([(60.0, 10)], muscle_group='Brust', is_deload=True)]
+    assert analytics.effort_distribution(rows)['groups'][0]['volume'] == 600.0
+
+
+def test_effort_distribution_on_no_history_is_empty_not_broken():
+    result = analytics.effort_distribution([])
+    assert result['groups'] == []
+    assert result['exercises'] == []
