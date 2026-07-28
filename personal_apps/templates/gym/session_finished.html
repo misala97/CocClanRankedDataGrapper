@@ -46,7 +46,7 @@
         {%- elif total_sets == 0 -%}
         Kein Satz erfasst — dieses Workout zählt nicht in die Statistik.
         {%- elif session.is_deload -%}
-        Deload — {{ deload_pct or 70 }} %. Bewusst leichter.
+        Deload — {{ deload_pct or deload_default_pct }} %. Bewusst leichter.
         {%- elif total_volume_delta_pct is not none and total_volume_delta_pct >= 5 -%}
         {{ '%+d'|format(total_volume_delta_pct) }} % über deinem Schnitt.
         {%- elif total_volume_delta_pct is not none and total_volume_delta_pct <= -5 -%}
@@ -80,8 +80,8 @@
                and meaningless. #}
             {% if total_volume_delta_pct is not none and not session.is_deload %}
             <span class="stat__delta{{ ' is-up' if total_volume_delta_pct >= 0 else '' }}">{{ '%+d'|format(total_volume_delta_pct) }} % ggü. Ø</span>
-            {% elif session.is_deload %}
-            <span class="stat__delta">{{ deload_pct or 70 }} % Deload</span>
+            {% elif session.is_deload and total_sets > 0 %}
+            <span class="stat__delta">{% if deload_applied %}{{ deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Deload{% endif %}</span>
             {% endif %}
         </div>
         <div class="stat">
@@ -192,13 +192,15 @@
     <div class="deload-bar{{ ' is-on' if session.is_deload else '' }}">
         <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
             <input type="hidden" name="on" value="{{ '0' if session.is_deload else '1' }}">
-            <input type="hidden" name="pct" value="{{ session.deload_pct or 70 }}">
+            <input type="hidden" name="pct" value="{{ session.deload_pct or deload_default_pct }}">
             <button type="submit" class="btn btn--ghost btn--sm deload-bar__toggle">
                 {{ 'Deload-Markierung entfernen' if session.is_deload else 'War ein Deload' }}
             </button>
         </form>
         {% if session.is_deload %}
-        <span class="label deload-bar__state">{{ session.deload_pct or 70 }} % vom Arbeitsgewicht</span>
+        <span class="label deload-bar__state">
+            {% if deload_applied %}{{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Als Deload markiert — {{ session.deload_pct or deload_default_pct }} %{% endif %}
+        </span>
         {% endif %}
     </div>
 

@@ -463,6 +463,14 @@ def session_detail(session_id):
         # session_report only sees PerformedExercise rows, which do not carry
         # the percentage -- it belongs to the session row itself.
         data['deload_pct'] = session_.deload_pct
+        # Whether the deload percentage was actually applied to these weights.
+        # A finished session always has completed sets, so flagging one
+        # retroactively never rewrites anything -- without this the page would
+        # claim a percentage of the working weight over the real weights the
+        # user lifted. Same test the live page uses.
+        data['deload_applied'] = any(
+            s.base_weight is not None for se in session_.exercises for s in se.sets)
+        data['deload_default_pct'] = stats.DELOAD_DEFAULT_PCT
         return render_template('gym/session_finished.html', session=session_, **data)
 
     # A replaced original is hidden from the active view, so its suggestion
