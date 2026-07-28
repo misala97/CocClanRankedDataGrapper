@@ -186,6 +186,15 @@
     <section class="heute__board">
         <div class="panel">
             <div class="section-head"><h2 class="label">Steht still</h2></div>
+            {# The lead element of this panel rather than a panel of its own:
+               it is the same data read more narrowly (only the active
+               rotation), and a page of near-identical panels is exactly what
+               the brief bans. #}
+            {% if deload_suggestion %}
+            <p class="deload-note">
+                {{ deload_suggestion.count }} aktive Übungen stehen still — ein Deload könnte fällig sein.
+            </p>
+            {% endif %}
             {% if stalls %}
             {% for item in stalls %}
             <div class="ex-report-row">
@@ -222,12 +231,15 @@
             <div class="section-head"><h2 class="label">Tonnage pro Woche</h2></div>
             {# is_current is always the last bucket (stats.weekly_tonnage's own
                contract) -- lit amber AND spelled out below, so a short bar
-               from a week that's still running never reads as a decline. #}
+               from a week that's still running never reads as a decline.
+               has_deload is marked the same way, for the same reason: an
+               unexplained dip reads as a collapse. #}
             {% set volumes = tonnage|map(attribute='volume')|list %}
             {% set peak = (volumes|max) if volumes and (volumes|max) > 0 else 1 %}
             <div class="vbars">
                 {% for week in tonnage %}
-                <div class="vbar{{ ' is-live' if week.is_current else '' }}" style="height:{{ ((week.volume / peak) * 100)|round(1) }}%"></div>
+                <div class="vbar{{ ' is-live' if week.is_current else '' }}{{ ' vbar--deload' if week.has_deload else '' }}"
+                     style="height:{{ ((week.volume / peak) * 100)|round(1) }}%"></div>
                 {% endfor %}
             </div>
             <div class="vbars__axis">
@@ -237,6 +249,10 @@
             </div>
             {% if tonnage and tonnage[-1].is_current %}
             <p class="label tonnage__note">{{ tonnage[-1].volume }} kg diese Woche bisher — läuft noch</p>
+            {% endif %}
+            {% set deload_weeks = tonnage|selectattr('has_deload')|list %}
+            {% if deload_weeks %}
+            <p class="label tonnage__note">Gedimmte Balken: Deload-Wochen — der Einbruch ist beabsichtigt.</p>
             {% endif %}
         </div>
     </section>
