@@ -307,13 +307,23 @@ def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload():
             assert seeded[0]['weight'] == 100.0, 'seeded from the deload'
     finally:
         with flask_app.app_context():
-            for session_id in created:
-                doomed = db.session.get(WorkoutSession, session_id)
-                if doomed is not None:
-                    db.session.delete(doomed)
-            db.session.commit()
-            if exercise_id is not None:
-                doomed_exercise = db.session.get(Exercise, exercise_id)
-                if doomed_exercise is not None:
-                    db.session.delete(doomed_exercise)
+            # The exercise delete is in its own finally: if the session delete
+            # above raised, the exercise would otherwise leak -- and because
+            # Exercise.name is unique, a stranded 'pytest seed lift' row would
+            # sit in the real catalogue and make every later run of this test
+            # fail at insert. Sessions must still go first: Exercise
+            # .session_exercises has no cascade, so deleting the exercise
+            # while its SessionExercise rows are live would try to null a
+            # NOT NULL foreign key.
+            try:
+                for session_id in created:
+                    doomed = db.session.get(WorkoutSession, session_id)
+                    if doomed is not None:
+                        db.session.delete(doomed)
                 db.session.commit()
+            finally:
+                if exercise_id is not None:
+                    doomed_exercise = db.session.get(Exercise, exercise_id)
+                    if doomed_exercise is not None:
+                        db.session.delete(doomed_exercise)
+                    db.session.commit()
