@@ -1081,6 +1081,7 @@ def gym_statistik():
         daypart=analytics.daypart_volume(performed),
         weekday=analytics.weekday_distribution(performed),
         rest_gap=analytics.rest_gap_effect(performed),
+        min_sets_for_rep_range=analytics.MIN_SETS_FOR_REP_RANGE,
         effort=analytics.effort_distribution(performed),
         records=analytics.record_timeline(performed),
     )

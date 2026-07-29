@@ -2118,6 +2118,11 @@ a.row__main:hover .name { color: var(--live); }
 .prog-table th[data-sort]:focus-visible { outline: 2px solid var(--live); outline-offset: -2px; }
 .prog-table th[aria-sort] { color: var(--ink); }
 
+.finding-bar__note { margin-top: var(--sp-2); color: var(--unlit); }
+/* the findings panel holds charts inside rows, so its rows need room to
+   breathe that a plain list row does not */
+.statistik__zone .row__wide { margin-top: var(--sp-3); }
+
 /* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
