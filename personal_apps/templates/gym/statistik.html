@@ -249,6 +249,69 @@
         </div>
     </section>
 
+    <section class="statistik__zone">
+        <div class="section-head"><h2 class="label">Wohin die Arbeit geht</h2></div>
+        {% if effort.groups %}
+        <p class="statistik__finding">
+            {{ effort.groups[0].label }} trägt mit {{ effort.groups[0].share }} % den größten Anteil deiner Tonnage.
+        </p>
+        {% endif %}
+        <div class="statistik__cols">
+            <div class="panel">
+                <div class="section-head"><h3 class="label">Nach Muskelgruppe</h3></div>
+                {% for group in effort.groups %}
+                <div class="hbar">
+                    <span class="hbar__name">{{ group.label }}</span>
+                    <span class="hbar__track"><span class="hbar__fill" style="width:{{ group.share }}%"></span></span>
+                    <span class="hbar__val">{{ group.share }} %</span>
+                </div>
+                {% else %}
+                <div class="empty">Noch keine Sätze protokolliert.</div>
+                {% endfor %}
+            </div>
+            <div class="panel">
+                <div class="section-head"><h3 class="label">Nach Übung</h3></div>
+                {# |max raises on an empty sequence, and this list is empty on a
+                   fresh database -- materialise first, then guard #}
+                {% set shares = effort.exercises|map(attribute='share')|list %}
+                {% set peak = (shares|max) if shares else 1 %}
+                {% for exercise in effort.exercises %}
+                <div class="hbar">
+                    <span class="hbar__name">{{ exercise.label }}</span>
+                    <span class="hbar__track"><span class="hbar__fill" style="width:{{ (exercise.share / peak * 100)|round(1) }}%"></span></span>
+                    <span class="hbar__val">{{ exercise.share }} %</span>
+                </div>
+                {% else %}
+                <div class="empty">Noch keine Sätze protokolliert.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="statistik__zone">
+        <div class="section-head"><h2 class="label">Rekorde</h2></div>
+        <div class="panel">
+            {% if records %}
+            <p class="statistik__finding">{{ records|length }} persönliche Rekorde seit Beginn.</p>
+            {% for record in records %}
+            <div class="row">
+                <div class="row__main">
+                    <div class="name">{{ record.name }}</div>
+                    <div class="label row__meta">
+                        {{ record.started_at.strftime('%d.%m.%Y') }} ·
+                        {{ 'Gewicht' if record.kind == 'weight' else 'e1RM' }} ·
+                        vorher {{ record.previous }} kg
+                    </div>
+                </div>
+                <span class="row__trail num num--md record-row__value">{{ record.value }} kg</span>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty">Noch keine Rekorde — dafür braucht eine Übung mindestens zwei Workouts.</div>
+            {% endif %}
+        </div>
+    </section>
+
     {% endif %}
 
 </div>
