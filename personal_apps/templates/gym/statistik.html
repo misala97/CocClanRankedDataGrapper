@@ -259,10 +259,19 @@
         <div class="statistik__cols">
             <div class="panel">
                 <div class="section-head"><h3 class="label">Nach Muskelgruppe</h3></div>
+                {# Both columns scale their bars against their own largest
+                   entry, and both label with share of total tonnage -- the
+                   convention .hbar already follows elsewhere in this app
+                   (Heute's muscle bars are peak-relative with an absolute
+                   count beside them). Scaling the two columns differently
+                   while they sit side by side made one bar's length mean
+                   something the other's did not. #}
+                {% set group_shares = effort.groups|map(attribute='share')|list %}
+                {% set group_peak = (group_shares|max) if group_shares else 1 %}
                 {% for group in effort.groups %}
                 <div class="hbar">
                     <span class="hbar__name">{{ group.label }}</span>
-                    <span class="hbar__track"><span class="hbar__fill" style="width:{{ group.share }}%"></span></span>
+                    <span class="hbar__track"><span class="hbar__fill" style="width:{{ (group.share / group_peak * 100)|round(1) }}%"></span></span>
                     <span class="hbar__val">{{ group.share }} %</span>
                 </div>
                 {% else %}
