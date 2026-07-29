@@ -212,9 +212,6 @@ The app already has token-native CSS bar primitives — `.vbars` / `.vbar` and
   render loops, and no axes, legend, tooltip or interaction to justify any of
   it. An SVG polyline inherits `currentColor`, scales with its row, and prints.
   Net result: the page loads no charting library at all.)*
-- Chart.js cannot resolve `var()` or `color-mix()` on canvas; tokens are
-  resolved to computed `rgb()` strings in the template before reaching the
-  chart config, the same pattern the existing charts use.
 
 ## 7. Composition
 

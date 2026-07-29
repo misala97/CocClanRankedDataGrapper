@@ -22,7 +22,6 @@ It also contains NO German prose. Every function returns figures plus a
 Copy belongs in one place, and a module that returns numbers is one that can
 be unit-tested.
 """
-import datetime as dt
 from collections import defaultdict
 
 from . import stats

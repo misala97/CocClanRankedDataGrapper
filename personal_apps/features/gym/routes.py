@@ -994,7 +994,7 @@ def gym_delete_template(template_id):
 @login_required
 def gym_verlauf():
     """Every finished workout, newest first, with its own total volume and
-    record count -- spec 6.6, one of the three real nav destinations."""
+    record count -- spec 6.6, one of the four real nav destinations."""
     # Eager-loaded for the exercise-list column: WorkoutSession.exercises and
     # SessionExercise.exercise are lazy relationships (models.py). This page
     # can list every finished session ever logged, and touching either per
@@ -1068,12 +1068,21 @@ def gym_statistik():
     page -- same discipline as Heute/Uebungen/Verlauf (spec 5.4): never one
     query per exercise, no matter how long the history gets. All analysis
     lives in analytics.py.
+
+    Unlike gym_verlauf, this does NOT exclude a replaced-away original's sets.
+    That is deliberate. Verlauf reports a session's volume as the sum of the
+    slots it ran, so an abandoned original would double-count a slot the
+    substitute already represents. Statistik describes what was lifted, and a
+    set you performed before swapping the exercise out was still performed --
+    the same reason deload sessions count toward tonnage here. The consequence
+    is that "Groesstes Workout" can exceed the figure Verlauf shows for that
+    same session; if that ever needs to change, change it here, not by
+    quietly filtering one of them.
     """
     now = dt.datetime.utcnow()
     performed = load_performed()
     return render_template(
         'gym/statistik.html',
-        now=now,
         totals=analytics.totals(performed, now),
         progression=analytics.progression_ranking(performed),
         rep_range=analytics.rep_range_distribution(performed),

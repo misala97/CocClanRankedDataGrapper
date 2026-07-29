@@ -6,7 +6,7 @@
 
 **Architecture:** A new pure module `features/gym/analytics.py` holds every all-time aggregate, split from `stats.py` along the same boundary the pages use — `stats.py` answers windowed per-session judgements (Heute), `analytics.py` answers all-time descriptions (Statistik). A thin route makes one `load_performed()` call and hands the rows over. Analytics returns **structured data plus a `statable` flag**, never German prose; the template owns all copy.
 
-**Tech Stack:** Python 3.12, Flask, Jinja2, pytest. Existing CSS bar primitives (`.hbar`, `.vbars`) for distributions; Chart.js 4.5.1 lazy-loaded for sparklines only. No new dependencies.
+**Tech Stack:** Python 3.12, Flask, Jinja2, pytest. Existing CSS bar primitives (`.hbar`, `.vbars`) for distributions; sparklines are inline SVG, so the page loads no charting library. No new dependencies.
 
 **Spec:** [`docs/superpowers/specs/2026-07-29-gym-statistik-design.md`](../specs/2026-07-29-gym-statistik-design.md)
 

@@ -212,7 +212,7 @@
                     <p class="statistik__finding statistik__finding--quiet">Ermüdung: noch zu wenig Daten für eine Aussage.</p>
                     {% endif %}
                 </div>
-                <span class="row__trail num num--md">{{ fatigue.sample }}</span>
+                <span class="row__trail label">{{ fatigue.sample }} Übungen ausgewertet</span>
             </div>
 
             {# weekday spread #}
@@ -235,6 +235,7 @@
                     <div class="vbars__axis">
                         {% for d in weekday.days %}<span>{{ WEEKDAY_LABELS[d.weekday] }}</span>{% endfor %}
                     </div>
+                    <p class="label finding-bar__note">{{ weekday.sample }} Workouts</p>
                 </div>
             </div>
 
