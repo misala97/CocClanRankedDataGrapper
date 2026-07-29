@@ -61,6 +61,10 @@ def test_verlauf_renders(client):
     assert client.get('/gym/verlauf').status_code == 200
 
 
+def test_statistik_renders(client):
+    assert client.get('/gym/statistik').status_code == 200
+
+
 def test_exercise_detail_renders_for_every_exercise(client):
     with flask_app.app_context():
         from models import Exercise

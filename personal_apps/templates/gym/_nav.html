@@ -15,6 +15,7 @@
     {'label': 'Heute', 'endpoint': 'gym.gym_heute'},
     {'label': 'Übungen', 'endpoint': 'gym.gym_uebungen'},
     {'label': 'Verlauf', 'endpoint': 'gym.gym_verlauf'},
+    {'label': 'Statistik', 'endpoint': 'gym.gym_statistik', 'desktop_only': true},
 ] %}
 
 <nav class="topbar" aria-label="Hauptnavigation">
@@ -57,7 +58,10 @@
 {% endif %}
 
 <nav class="tabbar" aria-label="Hauptnavigation">
-    {% for item in gym_nav_items %}
+    {# desktop_only items are skipped here: the bar is a fixed 3-column grid
+       and Statistik is composed for a width a phone does not have. The route
+       stays reachable by URL. #}
+    {% for item in gym_nav_items if not item.get('desktop_only') %}
     <a href="{{ url_for(item.endpoint) }}" class="tabbar__tab{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
     {% endfor %}
 </nav>

@@ -12,6 +12,7 @@ from models import (
 )
 from auth import login_required
 from features.gym import stats
+from . import analytics
 
 gym_bp = Blueprint('gym', __name__)
 
@@ -1053,6 +1054,36 @@ def gym_verlauf():
     ]
 
     return render_template('gym/verlauf.html', history=history)
+
+
+@gym_bp.route('/gym/statistik')
+@login_required
+def gym_statistik():
+    """All-time analytics (spec 2026-07-29). Desktop-only in the navigation,
+    but the URL stays reachable: opening it on a phone renders the page
+    single-column rather than redirecting, because hiding data the user asked
+    for is worse than showing it in a cramped layout.
+
+    Thin by construction. The one bulk load below feeds every figure on the
+    page -- same discipline as Heute/Uebungen/Verlauf (spec 5.4): never one
+    query per exercise, no matter how long the history gets. All analysis
+    lives in analytics.py.
+    """
+    now = dt.datetime.utcnow()
+    performed = load_performed()
+    return render_template(
+        'gym/statistik.html',
+        now=now,
+        totals=analytics.totals(performed, now),
+        progression=analytics.progression_ranking(performed),
+        rep_range=analytics.rep_range_distribution(performed),
+        fatigue=analytics.fatigue_curve(performed),
+        daypart=analytics.daypart_volume(performed),
+        weekday=analytics.weekday_distribution(performed),
+        rest_gap=analytics.rest_gap_effect(performed),
+        effort=analytics.effort_distribution(performed),
+        records=analytics.record_timeline(performed),
+    )
 
 
 @gym_bp.route('/gym/export')

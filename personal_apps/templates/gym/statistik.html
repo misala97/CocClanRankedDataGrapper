@@ -1,0 +1,42 @@
+{% extends 'gym/_base.html' %}
+
+{# Statistik: all-time analytics over the whole training history.
+
+   The division against Heute is by TIME HORIZON, not by metric: Heute is
+   windowed (28-day balance, 8 weeks of tonnage, last 5 workouts, what is
+   stalling now), this page has no window at all. Any future figure belongs
+   here if it answers "about everything" and on Heute if it answers "about
+   now".
+
+   Composed for the desktop width -- it is not linked from the mobile tab bar
+   (see _nav.html). Opening the URL on a phone renders it single-column.
+
+   Every zone states its finding in words with the figures beneath, and every
+   finding is gated on `statable`: below its sample threshold the chart still
+   renders and the sentence does not. See analytics.py's threshold block. #}
+
+{% block title %}Statistik · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="gym-wrap statistik">
+
+    <header class="statistik__head">
+        <h1>Statistik</h1>
+        {% if totals.first_session %}
+        <p class="label">Seit {{ totals.first_session.strftime('%d.%m.%Y') }} · {{ totals.days_training }} Tage</p>
+        {% endif %}
+    </header>
+
+    {% if totals.sessions == 0 %}
+    <div class="empty">
+        <span class="label">Noch keine Daten</span>
+        Sobald du dein erstes Workout abgeschlossen hast, entsteht hier deine Auswertung.
+    </div>
+    {% else %}
+
+    {# zones are filled in by the following tasks #}
+
+    {% endif %}
+
+</div>
+{% endblock %}
