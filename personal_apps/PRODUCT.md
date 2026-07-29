@@ -41,6 +41,24 @@ planning features are deliberately absent — no routine builder, no scheduler, 
 per-exercise targets; routines are derived from finished sessions, and the
 desktop surface must make history legible enough to plan from in your head.
 
+### Heute vs Statistik
+
+Two surfaces answer the same kinds of question at different **time horizons**,
+and that is the whole rule for deciding where a new figure belongs:
+
+- **Heute is windowed.** 28-day muscle balance, eight weeks of tonnage, the
+  last five workouts, what is stalling now. It answers *what should I do
+  today*.
+- **Statistik has no window.** Cumulative totals, all-time progression per
+  exercise, behavioural patterns, every record ever. It answers *what does my
+  training say about me*.
+
+Ask of any new statistic: is this about now, or about everything? The answer
+picks the page — and the module, since `stats.py` serves the first and
+`features/gym/analytics.py` the second. Statistik is desktop-only: it is
+composed for the width and is not in the mobile tab bar, though its URL stays
+reachable.
+
 ## Positioning
 
 The instrument you read mid-set and plan from between sessions: what is still
