@@ -212,7 +212,12 @@
                     <p class="statistik__finding statistik__finding--quiet">Ermüdung: noch zu wenig Daten für eine Aussage.</p>
                     {% endif %}
                 </div>
-                <span class="row__trail label">{{ fatigue.sample }} Übungen ausgewertet</span>
+                {# The sample sits in __wide, not __trail, like the other three
+                   charts' notes. __trail is flex: none, so a full sentence in
+                   it cannot shrink -- at 200 % text it measured 345px and
+                   pushed the page 20px sideways. A count is a note, not a
+                   trailing figure. #}
+                <p class="label finding-bar__note row__wide">{{ fatigue.sample }} Übungen ausgewertet</p>
             </div>
 
             {# weekday spread #}
