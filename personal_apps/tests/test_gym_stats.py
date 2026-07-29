@@ -6,7 +6,8 @@ from features.gym import stats
 
 
 def perf(sets, position=1, started_at=None, is_unilateral=False,
-         exercise_id=1, name='Bankdruecken', muscle_group='Brust', session_id=1):
+         exercise_id=1, name='Bankdruecken', muscle_group='Brust', session_id=1,
+         is_deload=False):
     """Build one PerformedExercise. `sets` is [(weight, reps), ...]."""
     return stats.PerformedExercise(
         exercise_id=exercise_id,
@@ -17,7 +18,16 @@ def perf(sets, position=1, started_at=None, is_unilateral=False,
         session_id=session_id,
         started_at=started_at or dt.datetime(2026, 7, 1, 18, 0),
         sets=tuple(sets),
+        is_deload=is_deload,
     )
+
+
+def test_performed_exercise_defaults_to_not_deload():
+    assert perf([(80.0, 8)]).is_deload is False
+
+
+def test_performed_exercise_carries_the_deload_flag():
+    assert perf([(80.0, 8)], is_deload=True).is_deload is True
 
 
 def test_epley_1rm_at_one_rep_is_the_weight_itself():
@@ -243,6 +253,7 @@ def test_exercise_progress_on_an_exercise_with_no_history_is_empty_not_broken():
     assert result['pr_weight'] is None
     assert result['pr_e1rm'] is None
     assert result['state'] == 'neu'
+    assert result['last_progression'] is None
 
 
 def test_session_report_totals_and_flags_a_weight_record():
@@ -534,3 +545,279 @@ def test_session_record_counts_agrees_with_session_report_for_every_session():
         history = [row for row in all_rows if row.session_id != session_id]
         report = stats.session_report(current, history)
         assert bulk_counts.get(session_id, 0) == report['record_count'], session_id
+
+
+def test_deload_weight_takes_the_percentage_and_rounds_down_to_a_plate():
+    # 80 * 0.70 = 56.0, which is not loadable in 2.5 kg steps -> 55.0
+    assert stats.deload_weight(80.0, 70, False) == 55.0
+
+
+def test_deload_weight_rounds_down_not_to_nearest():
+    # 100 * 0.70 = 70.0 exactly; 90 * 0.70 = 63.0 -> 62.5, not 65.0
+    assert stats.deload_weight(100.0, 70, False) == 70.0
+    assert stats.deload_weight(90.0, 70, False) == 62.5
+
+
+def test_deload_weight_rounds_down_even_when_nearest_would_round_up():
+    # The discriminating case: 81 * 0.70 = 56.7, which is 22.68 increments of
+    # 2.5 kg. Rounding to nearest would give 23 increments (57.5 kg) -- heavier
+    # than the 81 kg lift's own prescription implies. Flooring gives 55.0.
+    # Every other case in this file has a remainder below 0.5, where floor and
+    # round-to-nearest agree, so only this one proves the direction.
+    assert stats.deload_weight(81.0, 70, False) == 55.0
+
+
+def test_deload_weight_uses_the_half_step_for_unilateral():
+    # 20 * 0.70 = 14.0 -> 13.75 in 1.25 kg steps, not 12.5 in 2.5 kg steps
+    assert stats.deload_weight(20.0, 70, True) == 13.75
+
+
+def test_deload_weight_leaves_a_bodyweight_set_alone():
+    assert stats.deload_weight(0.0, 70, False) == 0.0
+
+
+def test_deload_weight_never_floors_a_light_weight_to_zero():
+    # 2.5 * 0.70 = 1.75 -> would floor to 0.0; one increment is the minimum.
+    assert stats.deload_weight(2.5, 70, False) == 2.5
+    assert stats.deload_weight(1.25, 70, True) == 1.25
+
+
+def test_deload_weight_preserves_the_shape_of_a_ramped_session():
+    session = [80.0, 80.0, 75.0]
+    assert [stats.deload_weight(w, 70, False) for w in session] == [55.0, 55.0, 52.5]
+
+
+def test_deload_row_does_not_count_as_a_session_without_a_pr():
+    # Without the exclusion this is 2 sessions since the PR; the deload in the
+    # middle is not a failed attempt at one.
+    rows = [
+        perf([(80.0, 8)], started_at=day(0)),
+        perf([(85.0, 8)], started_at=day(7)),                   # the PR
+        perf([(60.0, 8)], started_at=day(14), is_deload=True),  # deliberately light
+        perf([(85.0, 8)], started_at=day(21)),
+    ]
+    assert stats.sessions_since_pr(rows) == 1
+
+
+def test_a_run_of_deloads_cannot_push_an_exercise_to_stagniert():
+    rows = [perf([(80.0, 8)], started_at=day(0)), perf([(85.0, 8)], started_at=day(7))]
+    rows += [perf([(60.0, 8)], started_at=day(14 + 7 * n), is_deload=True) for n in range(6)]
+    assert stats.exercise_state(rows) != 'stagniert'
+
+
+def test_a_deload_session_cannot_set_a_record():
+    # 200 kg logged in a deload session must not become the exercise's PR.
+    rows = [perf([(80.0, 8)], started_at=day(0)),
+            perf([(200.0, 8)], started_at=day(7), is_deload=True)]
+    assert stats._pr_weight(rows)['weight'] == 80.0
+    assert stats._pr_e1rm(rows)['weight'] == 80.0
+
+
+def test_a_deload_row_is_not_the_baseline_a_later_set_is_judged_against():
+    # The direction that actually depends on the filter: a heavy deload must
+    # not BLOCK a real record. Asserting False here could never discriminate --
+    # filtering only shrinks the set that max() runs over, so anything true
+    # before the filter stays true after it.
+    prior = [perf([(80.0, 8)], started_at=day(0)),
+             perf([(200.0, 8)], started_at=day(7), is_deload=True)]
+    assert stats.is_new_best(85.0, 8, prior) is True
+
+
+def test_is_new_best_is_false_when_only_deload_history_exists():
+    # No real history to beat -- the same "a first attempt isn't a record"
+    # rule the empty case already has.
+    prior = [perf([(60.0, 8)], started_at=day(0), is_deload=True)]
+    assert stats.is_new_best(200.0, 8, prior) is False
+
+
+def test_stall_report_ignores_deload_sessions():
+    rows = [perf([(80.0, 8)], started_at=day(0)), perf([(85.0, 8)], started_at=day(7))]
+    rows += [perf([(60.0, 8)], started_at=day(14 + 7 * n), is_deload=True) for n in range(6)]
+    assert stats.stall_report({1: rows}) == []
+
+
+def test_exercise_state_is_neu_when_every_row_is_a_deload():
+    rows = [perf([(60.0, 8)], started_at=day(0), is_deload=True),
+            perf([(60.0, 8)], started_at=day(7), is_deload=True)]
+    assert stats.exercise_state(rows) == 'neu'
+
+
+def test_session_report_excludes_deloads_from_the_volume_average():
+    current = [perf([(80.0, 10)], started_at=day(21))]                       # 800
+    history = [
+        perf([(80.0, 10)], started_at=day(0)),                               # 800
+        perf([(40.0, 10)], started_at=day(7), is_deload=True),               # 400, ignored
+    ]
+    report = stats.session_report(current, history)
+    assert report['exercises'][0]['avg_volume'] == 800.0
+    assert report['exercises'][0]['volume_delta_pct'] == 0
+
+
+def test_session_report_awards_no_record_when_the_session_is_a_deload():
+    current = [perf([(200.0, 8)], started_at=day(7), is_deload=True)]
+    history = [perf([(80.0, 8)], started_at=day(0))]
+    report = stats.session_report(current, history)
+    assert report['records'] == []
+    assert report['record_count'] == 0
+    assert report['exercises'][0]['is_weight_pr'] is False
+
+
+def test_session_report_gives_no_stagnation_advice_on_a_deload():
+    current = [perf([(60.0, 8)], started_at=day(35), is_deload=True)]
+    history = [perf([(85.0, 8)], started_at=day(0))]
+    history += [perf([(80.0, 8)], started_at=day(7 * n)) for n in range(1, 5)]
+    report = stats.session_report(current, history)
+    assert report['advice'] == []
+    assert report['exercises'][0]['verdict'] != 'stagniert'
+
+
+def test_session_report_reports_its_own_deload_state():
+    plain = stats.session_report([perf([(80.0, 8)])], [])
+    assert plain['is_deload'] is False
+    loaded = stats.session_report([perf([(80.0, 8)], is_deload=True)], [])
+    assert loaded['is_deload'] is True
+
+
+def test_session_report_on_an_empty_session_is_not_a_deload():
+    assert stats.session_report([], [])['is_deload'] is False
+
+
+def test_session_record_counts_ignores_deload_sessions():
+    rows = [
+        perf([(80.0, 8)], started_at=day(0), session_id=1),
+        perf([(200.0, 8)], started_at=day(7), session_id=2, is_deload=True),
+    ]
+    assert stats.session_record_counts(rows) == {}
+
+
+def test_exercise_progress_keeps_deload_rows_but_marks_them():
+    rows = [perf([(80.0, 8)], started_at=day(0)),
+            perf([(60.0, 8)], started_at=day(7), is_deload=True)]
+    progress = stats.exercise_progress(rows)
+    assert len(progress['table']) == 2
+    # table is newest-first
+    assert progress['table'][0]['is_deload'] is True
+    assert progress['table'][1]['is_deload'] is False
+    assert [point['is_deload'] for point in progress['series'][0]['points']] == [False, True]
+    # ...but the deload still holds no record
+    assert progress['pr_weight']['weight'] == 80.0
+
+
+def test_exercise_progress_reports_the_last_non_deload_row():
+    # Three rows so "newest non-deload" is distinguishable from "any
+    # non-deload": an implementation returning the OLDEST would give 80.0.
+    rows = [perf([(80.0, 8)], started_at=day(0)),
+            perf([(85.0, 8)], started_at=day(7)),
+            perf([(60.0, 8)], started_at=day(14), is_deload=True)]
+    progress = stats.exercise_progress(rows)
+    assert progress['table'][0]['is_deload'] is True          # newest overall
+    assert progress['last_progression']['best_weight'] == 85.0
+
+
+def test_exercise_progress_has_no_last_progression_when_only_deloads_exist():
+    rows = [perf([(60.0, 8)], started_at=day(0), is_deload=True)]
+    progress = stats.exercise_progress(rows)
+    assert progress['last_progression'] is None
+    assert progress['pr_weight'] is None
+    assert progress['table'] != []      # the row is still reported
+
+
+def stalled(exercise_id, name, last_trained):
+    """One stall_report entry plus the history row that dates it."""
+    entry = {'exercise_id': exercise_id, 'name': name, 'position': 1,
+             'stuck_at': 80.0, 'since': last_trained, 'sessions_since_pr': 5}
+    row = perf([(80.0, 8)], started_at=last_trained, exercise_id=exercise_id, name=name)
+    return entry, row
+
+
+def signal_input(count, last_trained_offsets=None, now=None):
+    """Build (report, rows_by_exercise) for `count` stalled exercises."""
+    now = now or DELOAD_NOW
+    offsets = last_trained_offsets or [1] * count
+    report, rows_by_exercise = [], {}
+    for index, offset in enumerate(offsets, start=1):
+        entry, row = stalled(index, 'Uebung {}'.format(index),
+                             now - dt.timedelta(days=offset))
+        report.append(entry)
+        rows_by_exercise[index] = [row]
+    return report, rows_by_exercise
+
+
+DELOAD_NOW = dt.datetime(2026, 7, 28, 18, 0)
+
+
+def test_deload_signal_fires_at_the_threshold():
+    report, rows = signal_input(4)
+    signal = stats.deload_signal(report, rows, DELOAD_NOW)
+    assert signal is not None
+    assert signal['count'] == 4
+    assert len(signal['stalls']) == 4
+
+
+def test_deload_signal_stays_quiet_below_the_threshold():
+    report, rows = signal_input(3)
+    assert stats.deload_signal(report, rows, DELOAD_NOW) is None
+
+
+def test_deload_signal_ignores_exercises_not_trained_in_the_window():
+    # Four stalls, but two are lifts abandoned months ago -- stagnating from
+    # disuse, which says nothing about how recovered the lifter is.
+    report, rows = signal_input(4, last_trained_offsets=[1, 3, 200, 300])
+    assert stats.deload_signal(report, rows, DELOAD_NOW) is None
+
+
+def test_deload_signal_counts_only_the_recently_trained_stalls():
+    # Five stalls, four of them recent -- proves the filter SELECTS correctly,
+    # not merely that it can suppress. The existing "ignores" test drops below
+    # the threshold either way, so it cannot show which entries survived.
+    report, rows = signal_input(5, last_trained_offsets=[1, 2, 3, 4, 200])
+    signal = stats.deload_signal(report, rows, DELOAD_NOW)
+    assert signal['count'] == 4
+    assert 5 not in [entry['exercise_id'] for entry in signal['stalls']]
+
+
+def test_deload_signal_is_suppressed_soon_after_a_deload():
+    report, rows = signal_input(4)
+    assert stats.deload_signal(report, rows, DELOAD_NOW,
+                               last_deload_at=DELOAD_NOW - dt.timedelta(days=7)) is None
+
+
+def test_deload_signal_fires_exactly_at_the_suppression_boundary():
+    # DELOAD_SUPPRESSION_DAYS days out is NOT suppressed: the implementation
+    # checks `(now - last_deload_at).days < suppression_days`, so equality
+    # falls through to firing rather than being suppressed.
+    report, rows = signal_input(4)
+    boundary = DELOAD_NOW - dt.timedelta(days=stats.DELOAD_SUPPRESSION_DAYS)
+    assert stats.deload_signal(report, rows, DELOAD_NOW,
+                               last_deload_at=boundary) is not None
+
+
+def test_deload_signal_fires_again_once_the_suppression_window_passes():
+    report, rows = signal_input(4)
+    assert stats.deload_signal(report, rows, DELOAD_NOW,
+                               last_deload_at=DELOAD_NOW - dt.timedelta(days=22)) is not None
+
+
+def test_deload_signal_fires_for_someone_who_has_never_deloaded():
+    report, rows = signal_input(4)
+    assert stats.deload_signal(report, rows, DELOAD_NOW, last_deload_at=None) is not None
+
+
+def test_weekly_tonnage_marks_a_week_containing_a_deload():
+    now = dt.datetime(2026, 7, 29, 18, 0)          # a Wednesday
+    rows = [
+        perf([(80.0, 10)], started_at=now - dt.timedelta(days=1)),
+        perf([(60.0, 10)], started_at=now, is_deload=True),
+        perf([(80.0, 10)], started_at=now - dt.timedelta(days=8)),
+    ]
+    weeks = stats.weekly_tonnage(rows, now)
+    assert weeks[-1]['has_deload'] is True
+    assert weeks[-2]['has_deload'] is False
+    # the volume itself still totals everything
+    assert weeks[-1]['volume'] == 800.0 + 600.0
+
+
+def test_weekly_tonnage_marks_an_empty_week_as_no_deload():
+    now = dt.datetime(2026, 7, 29, 18, 0)
+    weeks = stats.weekly_tonnage([], now)
+    assert all(week['has_deload'] is False for week in weeks)

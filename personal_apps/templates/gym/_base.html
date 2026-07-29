@@ -1,8 +1,8 @@
-{# Shared shell for every gym page: doctype/meta/PWA tags, the IBM Plex
-   webfont link (see gym.css's header comment -- three weight sets for the
-   three type roles: Sans Condensed / Sans / Mono), gym.css, gym.js, the nav
-   include, and the three blocks a page fills in. See personal_apps/
-   PRODUCT.md for the "Readout" design brief this all serves.
+{# Shared shell for every gym page: doctype/meta/PWA tags, the self-hosted
+   Saira webfont (see gym.css's header comment -- ONE variable family carrying
+   all three type roles via its width axis: 112% display / 100% body / 80% dense),
+   gym.css, gym.js, the nav include, and the three blocks a page fills in. See
+   personal_apps/PRODUCT.md for the "Athletik" design brief this all serves.
 
    gym.js is loaded here (not deferred) so window.GymClock/GymUtils/GymChart
    already exist by the time any inline <script> later in the body runs --
@@ -24,18 +24,31 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
-    <meta name="theme-color" content="#0d1014">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+    <meta name="theme-color" content="#0b0c10">
+    {# Saira is served from this app, not linked from Google -- see the header
+       of static/gym/saira.css for why. Preloading the two faces the German UI
+       actually uses (latin roman + latin italic) means they start downloading
+       with the stylesheet rather than after it. #}
+    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/saira-latin-roman.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/saira-latin-italic.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='gym/saira.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
     <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
 </head>
 <body{% if gym_active_session and request.endpoint != 'gym.session_detail' %} class="has-resume"{% endif %}>
 
+{# Skip link: the tab bar / top bar puts several nav links before the content
+   on every page, so a keyboard or screen-reader user had to walk the whole
+   nav on every navigation. Visually hidden until focused. #}
+<a class="skip-link" href="#gym-main">Zum Inhalt springen</a>
+
 {% include 'gym/_nav.html' %}
 
+{# The app had no <main> landmark on any page -- assistive tech had no way to
+   jump past the chrome to the actual page content. #}
+<main id="gym-main" tabindex="-1">
 {% block content %}{% endblock %}
+</main>
 
 {% block scripts %}{% endblock %}
 

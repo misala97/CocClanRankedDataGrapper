@@ -196,6 +196,16 @@ class WorkoutSession(db.Model):
     finished_at  = db.Column(db.DateTime, nullable=True)
     rest_ends_at = db.Column(db.DateTime, nullable=True)  # display-only target for the in-page countdown
     resting_set_id = db.Column(db.Integer, db.ForeignKey('gym_session_sets.id'), nullable=True)  # which set's completion started the current rest timer, for the per-set progress bar
+    # A deliberately light session. Excluded from every judgement that assumes
+    # an attempt at progress (records, stagnation, volume averages, next
+    # session's pre-fill) and kept in every figure where it is simply true
+    # (tonnage, balance, consistency). See features/gym/stats.py.
+    is_deload    = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    # The percentage of normal working weight actually used, stored per session
+    # rather than read from a constant: changing the default later must not
+    # retroactively rewrite what past sessions claim to have been, and it makes
+    # deload depth a measurable variable. NULL on every non-deload session.
+    deload_pct   = db.Column(db.SmallInteger, nullable=True)
 
     template = db.relationship('WorkoutTemplate', back_populates='sessions_started_from')
     exercises = db.relationship(
@@ -234,6 +244,34 @@ class SessionSet(db.Model):
     weight              = db.Column(db.Float, nullable=False)
     reps                = db.Column(db.Integer, nullable=False)
     completed           = db.Column(db.Boolean, nullable=False, default=False)  # False for sets pre-filled from a template/history and not yet actually performed this session
+    # The working weight this set held before a deload rewrote it. The
+    # invariant this column actually maintains: it is non-NULL exactly when
+    # `weight` currently holds a deload-scaled value, and NULL whenever
+    # `weight` is the real working weight. Persisted rather than re-derived
+    # so the deload toggle is idempotent (re-applying it, or changing the
+    # percentage, always scales from the baseline instead of compounding)
+    # and exactly reversible even for an exercise with no history to re-seed
+    # from.
+    #
+    # Do NOT read `base_weight IS NOT NULL` as "this set belongs to a deload
+    # session" -- the completed-set gate in gym_toggle_deload can leave it
+    # set after the session's `is_deload` flag has been toggled back off
+    # (nothing actually lifted is ever overwritten), and a session marked
+    # deload retroactively, after every set was already logged, never
+    # touches `base_weight` at all. The session's own `is_deload` flag is
+    # the only thing that answers "is this a deload session".
+    #
+    # A hand-typed weight also clears it: gym_toggle_set_complete and
+    # gym_update_set drop the baseline when the submitted weight differs from
+    # the stored one, because the typed number becomes ground truth and a
+    # later toggle-off must not overwrite it. An unchanged submitted value is
+    # the form echoing itself (the weight input and the check button share one
+    # form) and deliberately does not count -- otherwise ticking a set done
+    # and undoing it would lose its working weight for good. The corollary:
+    # deliberately retyping the same number reads as "no change", so the
+    # baseline survives it. Distinguishing the two would need a dirty flag
+    # from the client and is not worth it.
+    base_weight         = db.Column(db.Float, nullable=True)
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')
 

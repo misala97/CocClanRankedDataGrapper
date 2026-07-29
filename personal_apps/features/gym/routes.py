@@ -13,6 +13,7 @@ from models import (
 from auth import login_required
 from features.gym import stats
 from features.gym.push import is_valid_push_endpoint
+from . import analytics
 
 gym_bp = Blueprint('gym', __name__)
 
@@ -111,17 +112,46 @@ def _last_session_exercise(exercise_id, position=None):
     fatigue (the same exercise done 1st is fresher than done 3rd), so a
     suggestion should reflect what you actually did in that same slot
     before, not just the most recent time you did the exercise at all.
-    Falls back to the most recent regardless of position if you've never
-    done it in that position before.
+
+    That preference is only honoured while the slot's own history is still
+    CURRENT (within stats.ROLLING_WINDOW_DAYS). Reorder an exercise and never
+    update the template, and months later the template still names the old
+    slot -- without the recency guard the pre-fill would resurrect whatever
+    you lifted there back then, which can be far below your actual working
+    weight today. Seated Row, real data: slot 2 is on 69 kg while slot 3 still
+    remembered 61 kg from months earlier, so starting the template pre-filled
+    61 and had to be corrected by hand every time.
+
+    The fatigue argument is about being fresher or more tired in a given
+    slot, and it only holds while both numbers describe the same training
+    period. Once the slot's record is stale, "most recent, any position" is
+    the more honest answer, and the lifter adjusts in the moment.
+
+    Falls back to the most recent regardless of position if you've never done
+    it in that position, or if that record has gone stale.
+
+    Deload sessions are skipped entirely. They are a deliberately light week,
+    not what you should come back to -- seeding from one would carry the
+    reduction forward into every session after it.
     """
     base_query = (
         SessionExercise.query
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(SessionExercise.exercise_id == exercise_id, SessionExercise.sets.any(SessionSet.completed == True))
+        .filter(
+            SessionExercise.exercise_id == exercise_id,
+            SessionExercise.sets.any(SessionSet.completed == True),
+            # Never seed from a deload. Pre-filling the next session at 70 %
+            # would make the following one seed from *that*, and the lifter
+            # would silently never return to their real working weight.
+            WorkoutSession.is_deload == False,
+        )
     )
     if position is not None:
         match = base_query.filter(SessionExercise.position == position).order_by(WorkoutSession.started_at.desc()).first()
-        if match:
+        # same slot, but only while that record still describes current
+        # training -- see the docstring for why staleness overrides fatigue
+        cutoff = dt.datetime.utcnow() - dt.timedelta(days=stats.ROLLING_WINDOW_DAYS)
+        if match and match.session.started_at >= cutoff:
             return match
     return base_query.order_by(WorkoutSession.started_at.desc()).first()
 
@@ -267,6 +297,9 @@ def _to_performed(session_exercise, completed_sets):
         session_id=session_exercise.session_id,
         started_at=session_exercise.session.started_at,
         sets=completed_sets,
+        # session is already joinedload()ed by load_performed(), so this costs
+        # no extra query.
+        is_deload=session_exercise.session.is_deload,
     )
 
 
@@ -331,6 +364,22 @@ def gym_heute():
         rows_by_exercise.setdefault(row.exercise_id, []).append(row)
         session_started_at[row.session_id] = row.started_at
 
+    # stall_report() lists every stalled lift in the catalogue, which is what
+    # the "Steht still" roster should show. The deload signal is a narrower
+    # read of the same data -- only the active rotation -- so it is computed
+    # here from the report rather than by changing stall_report itself.
+    stalls = stats.stall_report(rows_by_exercise)
+    last_deload = (
+        WorkoutSession.query
+        .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.is_deload.is_(True))
+        .order_by(WorkoutSession.started_at.desc())
+        .first()
+    )
+    deload_suggestion = stats.deload_signal(
+        stalls, rows_by_exercise, now,
+        last_deload_at=last_deload.started_at if last_deload else None,
+    )
+
     return render_template(
         'gym/heute.html',
         now=now,
@@ -338,7 +387,8 @@ def gym_heute():
         consistency=stats.consistency(list(session_started_at.values()), now),
         routines=stats.routine_memory(templates, routine_sessions, now),
         recent_sessions=recent_sessions,
-        stalls=stats.stall_report(rows_by_exercise),
+        stalls=stalls,
+        deload_suggestion=deload_suggestion,
         balance=stats.muscle_group_volume(performed, catalogue_groups, now),
         tonnage=stats.weekly_tonnage(performed, now),
         templates=templates,
@@ -399,6 +449,11 @@ def session_detail(session_id):
                     WorkoutSession.id != session_.id,
                     WorkoutSession.finished_at.isnot(None),
                     WorkoutSession.template_id == session_.template_id,
+                    # A deliberately light session must not deflate the average
+                    # every later session of this template is compared against.
+                    # session_report cannot do this itself -- it receives bare
+                    # floats with no flag to filter on.
+                    WorkoutSession.is_deload.is_(False),
                 )
                 .all()
             )
@@ -425,6 +480,17 @@ def session_detail(session_id):
         ]
         for entry, se in zip(data['exercises'], reported_session_exercises):
             entry['set_rows'] = [s for s in se.sets if s.completed]
+        # session_report only sees PerformedExercise rows, which do not carry
+        # the percentage -- it belongs to the session row itself.
+        data['deload_pct'] = session_.deload_pct
+        # Whether the deload percentage was actually applied to these weights.
+        # A finished session always has completed sets, so flagging one
+        # retroactively never rewrites anything -- without this the page would
+        # claim a percentage of the working weight over the real weights the
+        # user lifted. Same test the live page uses.
+        data['deload_applied'] = any(
+            s.base_weight is not None for se in session_.exercises for s in se.sets)
+        data['deload_default_pct'] = stats.DELOAD_DEFAULT_PCT
         return render_template('gym/session_finished.html', session=session_, **data)
 
     # A replaced original is hidden from the active view, so its suggestion
@@ -441,19 +507,27 @@ def session_detail(session_id):
             by_exercise.setdefault(row.exercise_id, []).append(row)
     stagnation_counts = {}
     record_set_ids = set()
-    for se in visible_exercises:
-        prior = by_exercise.get(se.exercise_id, [])
-        count = stats.sessions_since_pr(prior, position=se.position)
-        if count is not None and count >= stats.STAGNATION_THRESHOLD:
-            stagnation_counts[se.id] = count
-        # Live equivalent of the finished-session PR flare (session_report's
-        # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
-        # same prior-sessions-only pool, so a set can light up cyan the
-        # instant it's confirmed rather than only on the recap screen an
-        # hour later.
-        for s in se.sets:
-            if s.completed and stats.is_new_best(s.weight, s.reps, prior):
-                record_set_ids.add(s.id)
+    # Both signals below are progress judgements, and a deload session is not
+    # an attempt at progress -- so neither is computed during one. The PR flare
+    # must agree with the recap screen (session_report awards no record on a
+    # deload), and a "go heavier" nudge is wrong advice beside deliberately
+    # reduced weights. Guarding the whole loop rather than `continue`-ing per
+    # iteration: is_deload is loop-invariant, and a per-iteration skip would
+    # let a later maintainer add work above it that silently never runs.
+    if not session_.is_deload:
+        for se in visible_exercises:
+            prior = by_exercise.get(se.exercise_id, [])
+            count = stats.sessions_since_pr(prior, position=se.position)
+            if count is not None and count >= stats.STAGNATION_THRESHOLD:
+                stagnation_counts[se.id] = count
+            # Live equivalent of the finished-session PR flare (session_report's
+            # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
+            # same prior-sessions-only pool, so a set can light up cyan the
+            # instant it's confirmed rather than only on the recap screen an
+            # hour later.
+            for s in se.sets:
+                if s.completed and stats.is_new_best(s.weight, s.reps, prior):
+                    record_set_ids.add(s.id)
     exercises = Exercise.query.order_by(Exercise.name).all()
     return render_template(
         'gym/session_detail.html',
@@ -470,6 +544,17 @@ def session_detail(session_id):
         # "already set up" signal here, not something narrower the schema
         # doesn't actually track.
         has_push_subscription=PushSubscription.query.first() is not None,
+        has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
+        # Whether the deload percentage was actually applied to the weights.
+        # base_weight is non-NULL exactly when a set's weight is deload-scaled,
+        # so this is the honest test -- the session's is_deload flag is not,
+        # because a session flagged after a set was already logged keeps its
+        # full working weights and would otherwise display a percentage that
+        # describes nothing on screen.
+        deload_applied=any(
+            s.base_weight is not None for se in session_.exercises for s in se.sets),
+        deload_pcts=stats.DELOAD_QUICK_PCTS,
+        deload_default_pct=stats.DELOAD_DEFAULT_PCT,
     )
 
 
@@ -660,6 +745,15 @@ def gym_toggle_set_complete(set_id):
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
     if weight is not None:
+        if weight != set_.weight:
+            # Changed by hand -- ground truth from now on, so drop any stale
+            # deload baseline that would otherwise overwrite it later. An
+            # unchanged value is just the form echoing what is already stored
+            # (the weight input and the check button share one form), and must
+            # NOT count as an edit: clearing the baseline there would leave a
+            # completed-then-un-completed set unable to return to its working
+            # weight.
+            set_.base_weight = None
         set_.weight = weight
     if reps is not None:
         set_.reps = reps
@@ -692,6 +786,15 @@ def gym_update_set(set_id):
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
     if weight is not None:
+        if weight != set_.weight:
+            # Changed by hand -- ground truth from now on, so drop any stale
+            # deload baseline that would otherwise overwrite it later. An
+            # unchanged value is just the form echoing what is already stored
+            # (the weight input and the check button share one form), and must
+            # NOT count as an edit: clearing the baseline there would leave a
+            # completed-then-un-completed set unable to return to its working
+            # weight.
+            set_.base_weight = None
         set_.weight = weight
     if reps is not None:
         set_.reps = reps
@@ -749,6 +852,66 @@ def gym_finish_session(session_id):
     _cancel_pending_push(session_)
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
+
+
+@gym_bp.route('/gym/session/<int:session_id>/deload', methods=['POST'])
+@login_required
+def gym_toggle_deload(session_id):
+    """Mark (or unmark) a session as a deliberately light one.
+
+    The flag is always editable -- including on a finished session, since
+    labelling a workout you already did is a first-class flow and the reason
+    this feature exists. What is gated is the *prescription*: weights are only
+    rewritten when the session has no completed set, so nothing actually
+    lifted is ever overwritten.
+
+    That test is computed, not latched: un-completing a set re-enables the
+    rewrite, so a mis-tap is always recoverable.
+
+    Toggling off restores the persisted pre-deload baseline rather than
+    dividing the weights back up. Reversing the arithmetic after
+    deload_weight()'s floor is lossy (80 -> 55 -> 78.57 -> 77.5), so repeated
+    toggling would walk the weights downward.
+
+    Editing a set's weight by hand mid-deload drops that set's own baseline
+    (see gym_toggle_set_complete/gym_update_set), so deload on -> edit one set
+    by hand -> deload off leaves that set holding the typed number while every
+    other set returns to its own working weight. This asymmetry is intended:
+    each set independently reflects whatever the user most recently said
+    about it, not a single all-or-nothing session state.
+    """
+    session_ = db.get_or_404(WorkoutSession, session_id)
+
+    on = request.form.get('on') == '1'
+    pct = _to_int(request.form.get('pct', ''), fallback=stats.DELOAD_DEFAULT_PCT)
+    if pct not in stats.DELOAD_ALLOWED_PCTS:
+        pct = stats.DELOAD_DEFAULT_PCT
+
+    session_.is_deload = on
+    session_.deload_pct = pct if on else None
+
+    has_completed_set = any(
+        s.completed for se in session_.exercises for s in se.sets
+    )
+    if not has_completed_set:
+        for session_exercise in session_.exercises:
+            is_unilateral = session_exercise.exercise.is_unilateral
+            for s in session_exercise.sets:
+                if on:
+                    # Capture the baseline the first time only. Re-applying the
+                    # toggle, or changing the percentage, then always scales
+                    # from the working weight rather than from the already
+                    # reduced one -- without this, 70 % followed by 60 % gives
+                    # 32.5 kg instead of 47.5 kg, and a double-tap compounds.
+                    if s.base_weight is None:
+                        s.base_weight = s.weight
+                    s.weight = stats.deload_weight(s.base_weight, pct, is_unilateral)
+                elif s.base_weight is not None:
+                    s.weight = s.base_weight
+                    s.base_weight = None
+
+    db.session.commit()
+    return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/summary')
@@ -832,7 +995,7 @@ def gym_delete_template(template_id):
 @login_required
 def gym_verlauf():
     """Every finished workout, newest first, with its own total volume and
-    record count -- spec 6.6, one of the three real nav destinations."""
+    record count -- spec 6.6, one of the four real nav destinations."""
     # Eager-loaded for the exercise-list column: WorkoutSession.exercises and
     # SessionExercise.exercise are lazy relationships (models.py). This page
     # can list every finished session ever logged, and touching either per
@@ -894,6 +1057,46 @@ def gym_verlauf():
     return render_template('gym/verlauf.html', history=history)
 
 
+@gym_bp.route('/gym/statistik')
+@login_required
+def gym_statistik():
+    """All-time analytics (spec 2026-07-29). Desktop-only in the navigation,
+    but the URL stays reachable: opening it on a phone renders the page
+    single-column rather than redirecting, because hiding data the user asked
+    for is worse than showing it in a cramped layout.
+
+    Thin by construction. The one bulk load below feeds every figure on the
+    page -- same discipline as Heute/Uebungen/Verlauf (spec 5.4): never one
+    query per exercise, no matter how long the history gets. All analysis
+    lives in analytics.py.
+
+    Unlike gym_verlauf, this does NOT exclude a replaced-away original's sets.
+    That is deliberate. Verlauf reports a session's volume as the sum of the
+    slots it ran, so an abandoned original would double-count a slot the
+    substitute already represents. Statistik describes what was lifted, and a
+    set you performed before swapping the exercise out was still performed --
+    the same reason deload sessions count toward tonnage here. The consequence
+    is that "Groesstes Workout" can exceed the figure Verlauf shows for that
+    same session; if that ever needs to change, change it here, not by
+    quietly filtering one of them.
+    """
+    now = dt.datetime.utcnow()
+    performed = load_performed()
+    return render_template(
+        'gym/statistik.html',
+        totals=analytics.totals(performed, now),
+        progression=analytics.progression_ranking(performed),
+        rep_range=analytics.rep_range_distribution(performed),
+        fatigue=analytics.fatigue_curve(performed),
+        daypart=analytics.daypart_volume(performed),
+        weekday=analytics.weekday_distribution(performed),
+        rest_gap=analytics.rest_gap_effect(performed),
+        min_sets_for_rep_range=analytics.MIN_SETS_FOR_REP_RANGE,
+        effort=analytics.effort_distribution(performed),
+        records=analytics.record_timeline(performed),
+    )
+
+
 @gym_bp.route('/gym/export')
 @login_required
 def gym_export():
@@ -933,6 +1136,8 @@ def gym_export():
                 'template_name': s.template.name if s.template else None,
                 'started_at': s.started_at.isoformat() + 'Z',
                 'finished_at': s.finished_at.isoformat() + 'Z',
+                'is_deload': s.is_deload,
+                'deload_pct': s.deload_pct,
                 'exercises': [
                     {
                         'exercise_name': se.exercise.name,
@@ -991,13 +1196,23 @@ def gym_uebungen():
     entries_by_id = {}
     for exercise in exercises:
         rows = rows_by_exercise.get(exercise.id, [])
+        # Judged slot, record weight and record e1RM must agree with what
+        # the exercise's own detail page shows and with what stall_report()
+        # judges on the dashboard, so deload rows are dropped BEFORE they
+        # reach dominant_position/best_e1rm/best_weight/sessions_since_pr --
+        # the same filter-before-judge order stall_report() uses (see its
+        # own docstring). `last_done` stays on the unfiltered `rows`: "when
+        # did I last do this" is a fact a deload session legitimately
+        # answers, it is not a judgement.
+        progression = stats.progression_rows(rows)
         # dominant_position() requires at least one row -- a brand new
-        # exercise (no rows) has no position to speak of, and exercise_state
-        # returns 'neu' from its own empty-rows check before position is
-        # ever consulted, so None is a safe stand-in here.
-        position = stats.dominant_position(rows) if rows else None
-        best_e1rm = max((stats.best_e1rm(row) for row in rows), default=None)
-        state = stats.exercise_state(rows, position=position)
+        # exercise, or one whose only history is deloads, has no position to
+        # speak of, and exercise_state returns 'neu' from its own
+        # empty-rows check before position is ever consulted, so None is a
+        # safe stand-in here.
+        position = stats.dominant_position(progression) if progression else None
+        best_e1rm = max((stats.best_e1rm(row) for row in progression), default=None)
+        state = stats.exercise_state(progression, position=position)
         chip_class, chip_label = EXERCISE_STATE_CHIP.get(state, (None, None))
         entries_by_id[exercise.id] = {
             'exercise': exercise,
@@ -1005,9 +1220,9 @@ def gym_uebungen():
             'chip_class': chip_class,
             'chip_label': chip_label,
             'last_done': max((row.started_at for row in rows), default=None),
-            'best_weight': max((stats.best_weight(row) for row in rows), default=None),
+            'best_weight': max((stats.best_weight(row) for row in progression), default=None),
             'best_e1rm': round(best_e1rm, 1) if best_e1rm is not None else None,
-            'sessions_since_pr': stats.sessions_since_pr(rows, position=position) if rows else None,
+            'sessions_since_pr': stats.sessions_since_pr(progression, position=position) if progression else None,
             'can_delete': (
                 exercise.id not in exercise_ids_with_sessions
                 and exercise.id not in exercise_ids_with_templates

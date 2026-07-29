@@ -1,129 +1,151 @@
 /* ============================================================================
-   GYM TRACKER  ·  "READOUT" VISUAL SYSTEM
+   GYM TRACKER  ·  "ATHLETIK" VISUAL SYSTEM
    ----------------------------------------------------------------------------
-   The display on a serious piece of equipment: industrial condensed numerals,
-   a machined chassis, and emissive semantic colour. Numbers glow because they
-   are lit, not because a gradient was applied. Dark only, tuned properly.
+   Sport broadcast, not equipment panel. Numerals lean into the direction of
+   travel; the record is gold because gold already means record; NOW is an
+   electric blue that nothing else in the app is allowed to use. Dark only.
 
    Self-contained: no dependency on _head.html, coc_stats, or any other
    personal_apps palette. Every gym template links this file directly.
 
-   FONTS (loaded by the template <head>, e.g. _base.html):
-     <link rel="preconnect" href="https://fonts.googleapis.com">
-     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   FONT (loaded by the template <head>, e.g. _base.html):
      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?\
-       family=IBM+Plex+Mono:wght@400;500;600&\
-       family=IBM+Plex+Sans:wght@400;500&\
-       family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
-   One engineered superfamily across three roles: Sans Condensed for display and
-   numerals, Sans for body, Mono for dense data and small uppercase labels. All
-   three cuts ship true tabular figures (font-variant-numeric: tabular-nums).
+       family=Saira:ital,wdth,wght@0,75..112,400..900;1,75..112,800..900\
+       &display=swap">
+   ONE family, three roles, separated by the variable WIDTH axis rather than by
+   a second typeface:
+     --font-display  Saira 112% width, 900, italic  · names, headings
+     --font-body     Saira 100% width, 400-600      · sentences, controls
+     --font-mono     Saira  80% width, 500-700      · dense tables, labels
+   The name `--font-mono` is kept because templates reference it; its ROLE is
+   unchanged (dense tabular data + small uppercase labels), only the face is.
+   Saira ships true tabular figures -- verified, not assumed: with
+   `font-variant-numeric: tabular-nums`, "111" and "000" both measure 74.4px at
+   40px; without it, 45.1px and 80.5px. The 80%-width cut is what lets the
+   exercise-detail history table hold its columns on a 390px phone.
 
    COLOUR  ·  derived in OKLCH, validated as hex (contrast + CVD tested).
-     token        oklch(L C H)        hex        role
-     --ground     0.170 0.010 255     #0d1014    page bg, the unlit bezel
-     --chassis    0.222 0.012 255     #171b21    panel surface
-     --raised     0.270 0.013 255     #22272d    inset / nested surface
-     --edge       0.320 0.013 255     #2e333a    panel border
-     --edge-hi    0.420 0.015 255     #484e55    the lit top edge
-     --ink        0.950 0.006 255     #eceff2    primary text; the DONE state
-     --dim        0.720 0.013 255     #9fa5ad    labels, secondary text
-     --unlit      0.664 0.013 255     #8e949c    inert text, not yet reached
-     --live       0.800 0.165 072     #fea91e    NOW: current set, rest, action
-     --live-deep  0.530 0.113 066     #975c0e    pressed / bottom edge of live
-     --record     0.820 0.130 200     #34dde5    RECORD: a previous best beaten
-     --stall      0.648 0.190 023     #ec5255    ATTENTION: stagnation, destroy
-   Neutrals carry a deliberate cool bias (hue 255, low chroma): blued graphite,
-   not dead grey. Exactly three semantic hues; nothing decorative gets colour.
+     token        role
+     --ground     page bg, deepest field
+     --chassis    panel surface
+     --raised     inset / nested surface
+     --edge       panel border
+     --edge-hi    lifted border, inert bar fill
+     --ink        primary text; the DONE state
+     --dim        labels, secondary text
+     --unlit      inert text, content not yet reached
+     --live       NOW: current set, running rest, primary action   (electric blue)
+     --live-deep  pressed / bottom edge of a live control
+     --record     RECORD: a previous best beaten                   (gold)
+     --stall      ATTENTION: stagnation, destructive actions       (red)
 
-   Measured WCAG contrast (all required text pairings meet AA):
-     ink/chassis 14.97   dim/chassis 6.96   live/chassis 8.98
-     record/chassis 10.39   stall/chassis 4.86
-     unlit/chassis 5.65   unlit/ground 6.23   unlit/live-wash 4.72
-   (--unlit lifted 0.601->0.664 in Task 7: the set-row index / "kg" / "x"
-    labels are the first small inert text rendered on --chassis and inside a
-    live panel's amber wash; at the old value those two pairings were 4.39 and
-    3.67, both under the 4.5 AA floor for small text. The lift clears both and
-    only raises the unlit pairings -- the five above are unchanged.)
-   Colour is never the sole signal: every state also carries a shape or a word,
-   so it survives daylight and red-green colour blindness (deuteranopia and
-   protanopia simulation confirmed live / record / stall stay distinct).
+   Measured WCAG contrast -- every pairing that actually occurs, not the
+   convenient ones (script: scratchpad/palette.py):
+     ink/ground 18.07   ink/chassis 16.56   ink/raised 14.70
+     dim/ground  8.79   dim/chassis  8.06   dim/raised  7.15
+     unlit/ground 5.08  unlit/chassis 5.39  unlit/raised 4.78
+     live/ground  5.74  live/chassis  5.26  live/raised  4.67
+     record/ground 12.36 record/chassis 11.33 record/raised 10.06
+     stall/ground 6.35  stall/chassis  5.82  stall/raised  5.17
+   Text ON the accent fills: --on-live 5.40, --on-record 10.42, --on-stall 6.01.
+   (--unlit was lifted from #7b8293 to #868d9e: on --raised it measured 4.13,
+    under the 4.5 AA floor for the small inert labels that sit there. A single
+    blue cannot serve both `--live` text on a dark panel AND white-on-blue in a
+    button -- the two requirements are arithmetically incompatible -- so the
+    primary button carries a near-black-navy label instead of white, which is
+    also the harder-hitting of the two.)
+
+   CVD: live / record / stall stay separable under protanopia and deuteranopia
+   (simulated, minimum pair distance 79 of 255). Colour is still never the sole
+   signal -- every state carries a shape or a word as well.
    ============================================================================ */
 
 :root {
   /* ---- colour: the token contract ---- */
-  --ground:    #0d1014;
-  --chassis:   #171b21;
-  --raised:    #22272d;
-  --edge:      #2e333a;
-  --edge-hi:   #484e55;
-  --ink:       #eceff2;
-  --dim:       #9fa5ad;
-  --unlit:     #8e949c;
-  --live:      #fea91e;
-  --live-deep: #975c0e;
-  --live-hi:   #ffbe47;   /* lightness variant of --live for hover / brighter-lit */
-  --record:    #34dde5;
-  --stall:     #ec5255;
+  --ground:    #0b0c10;
+  --chassis:   #15171d;
+  --raised:    #1f222a;
+  --edge:      #2c303a;
+  --edge-hi:   #454b59;
+  --ink:       #f4f6fa;
+  --dim:       #a8aebc;
+  --unlit:     #868d9e;
+  --live:      #4d86ff;
+  --live-deep: #1f4bad;
+  --live-hi:   #7aa4ff;   /* lightness variant of --live for hover */
+  --record:    #ffc531;
+  --stall:     #ff5a4d;
 
-  /* ---- emitted light (halos): the "lit, not painted" quality ---- */
-  --glow-live:   0 0 16px rgba(254, 169, 30, 0.42);
-  --glow-record: 0 0 18px rgba(52, 221, 229, 0.48);
-  /* faint state washes for lit surfaces; kept <=12% so text contrast measured
+  /* label colours for text sitting ON a saturated fill (all AA against it) */
+  --on-live:   #07132e;
+  --on-record: #2a1d00;
+  --on-stall:  #2b0703;
+
+  /* ---- emitted light: the accent carries a halo, nothing else does ---- */
+  --glow-live:   0 0 24px rgba(77, 134, 255, 0.42);
+  --glow-record: 0 0 24px rgba(255, 197, 49, 0.40);
+  --lift-live:   0 8px 24px -8px rgba(77, 134, 255, 0.75);
+  /* faint state washes for lit surfaces; kept <=13% so text contrast measured
      against --chassis still holds on the tinted row */
-  --wash-live:   rgba(254, 169, 30, 0.10);
-  --wash-record: rgba(52, 221, 229, 0.10);
-  --wash-stall:  rgba(236, 82, 85, 0.10);
+  --wash-live:   rgba(77, 134, 255, 0.13);
+  --wash-record: rgba(255, 197, 49, 0.12);
+  --wash-stall:  rgba(255, 90, 77, 0.12);
 
-  /* ---- type: families ---- */
-  --font-display: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
-  --font-body:    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono:    "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* ---- type: one family, three widths ---- */
+  --font-display: "Saira", "Saira Condensed", system-ui, sans-serif;
+  --font-body:    "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    "Saira", "Saira Condensed", ui-monospace, monospace;
 
-  /* ---- type: role sizes (fixed rem scale; labels cluster, numerals leap) ---- */
-  --t-micro: 0.625rem;   /* 10px  tab labels, tiniest meta */
-  --t-label: 0.6875rem;  /* 11px  uppercase panel labels */
-  --t-meta:  0.75rem;    /* 12px  secondary meta, chip text */
-  --t-sm:    0.875rem;   /* 14px  dense body, table cells */
+  --wd-display: 112;   /* font-stretch %, applied by the primitives below */
+  --wd-body:    100;
+  --wd-dense:    80;
+
+  /* ---- type: role sizes (fixed rem scale, ~1.2 ratio; numerals leap) ---- */
+  --t-micro: 0.6875rem;  /* 11px  tab labels, tiniest meta */
+  --t-label: 0.75rem;    /* 12px  uppercase panel labels */
+  --t-meta:  0.8125rem;  /* 13px  secondary meta, chip text */
+  --t-sm:    0.9375rem;  /* 15px  dense body, table cells */
   --t-body:  1rem;       /* 16px  sentences (notes, advice) */
-  --t-name:  1.125rem;   /* 18px  exercise / panel names */
-  --num-sm:  1.375rem;   /* 22px  set-row load values */
-  --num-md:  1.75rem;    /* 28px  clock, section metrics */
-  --num-lg:  2.25rem;    /* 36px  finished-workout readouts */
-  --num-xl:  3rem;       /* 48px  the record flare value */
+  --t-name:  1.1875rem;  /* 19px  exercise / panel names */
+  --num-sm:  1.5rem;     /* 24px  set-row load values */
+  --num-md:  1.875rem;   /* 30px  clock, section metrics */
+  --num-lg:  2.5rem;     /* 40px  finished-workout readouts */
+  --num-xl:  3.25rem;    /* 52px  the record flare value */
 
   --w-body: 400;
   --w-med:  500;
   --w-semi: 600;
-  --w-bold: 700;
+  --w-bold: 800;
+  --w-max:  900;
 
-  --track-label: 0.12em;   /* uppercase labels sit too tight by default */
-  --track-name:  0.03em;   /* condensed display names, gently opened */
-  --track-num:  -0.01em;   /* big tabular numerals, gently closed */
+  --track-label: 0.14em;   /* uppercase labels sit too tight by default */
+  --track-name: -0.025em;  /* heavy italic display, closed up */
+  --track-num:  -0.035em;  /* big tabular numerals, closed harder */
 
   /* ---- space: 4pt base ---- */
   --sp-1: 0.25rem; --sp-2: 0.5rem;  --sp-3: 0.75rem; --sp-4: 1rem;
   --sp-5: 1.25rem; --sp-6: 1.5rem;  --sp-8: 2rem;    --sp-10: 2.5rem;
   --sp-12: 3rem;   --sp-16: 4rem;
 
-  /* ---- machined geometry: small radii, hard edges, no soft float ---- */
-  --r-inset:   2px;
-  --r-chip:    3px;
-  --r-control: 4px;
-  --r-panel:   6px;
+  /* ---- geometry: controls are pills, surfaces are generous ---- */
+  --r-inset:   8px;
+  --r-chip:    999px;
+  --r-control: 999px;
+  --r-panel:   16px;
+  --r-field:   10px;    /* inputs stay rectangular-ish so they read as editable */
 
-  /* lit-from-above top highlight + a hard 1px bottom line; never a diffuse blur */
-  --edge-lit:   inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  --edge-drop:  0 1px 0 rgba(0, 0, 0, 0.5);
-  --press-live: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 3px 0 var(--live-deep);
-  --press-ghost: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 0 rgba(0, 0, 0, 0.55);
+  /* elevation, not machined edges: a soft seat plus a hairline top light */
+  --edge-lit:   inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --edge-drop:  0 2px 10px -4px rgba(0, 0, 0, 0.7);
+  --press-live: var(--lift-live);
+  --press-ghost: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
-  /* ---- motion: mechanical, not elastic ---- */
+  /* ---- motion: fast and decisive, no bounce, no elastic ---- */
   --dur-1: 90ms;    /* instant feedback: press */
   --dur-2: 150ms;   /* state change: hover, check */
   --dur-3: 220ms;   /* reveal, collapse */
-  --ease: cubic-bezier(0.2, 0, 0.2, 1);          /* decisive, no overshoot */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);     /* confident settle for the flare */
+  --ease: cubic-bezier(0.25, 1, 0.5, 1);          /* ease-out-quart */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);     /* confident settle for the flare */
 
   /* ---- z-scale: semantic, never 9999 ---- */
   --z-resume: 80;
@@ -133,7 +155,7 @@
 
   /* ---- shell metrics ---- */
   --wrap-max: 1160px;
-  --tabbar-h: 60px;
+  --tabbar-h: 62px;
   --resume-h: 52px;   /* deliberate, not content-derived -- see body.has-resume below */
 }
 
@@ -168,7 +190,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 input, select, textarea { font: inherit; color: inherit; }
 svg { display: block; }
 
-::selection { background: var(--live); color: var(--ground); }
+::selection { background: var(--live); color: var(--on-live); }
 
 /* Neutral, unmistakable focus. Focus is orthogonal to the five-state model,
    so it never borrows a semantic hue. */
@@ -201,20 +223,27 @@ svg { display: block; }
    TYPOGRAPHIC PRIMITIVES
    ============================================================================ */
 
+/* The display voice: heavy, italic, slightly extended. The lean is the app's
+   signature -- it appears on names, numerals and the primary action, and
+   nowhere else, so it reads as one gesture rather than a texture. */
 h1, h2, h3 {
   font-family: var(--font-display);
-  font-weight: var(--w-bold);
+  font-stretch: 112%;
+  font-style: italic;
+  font-weight: var(--w-max);
   letter-spacing: var(--track-name);
-  line-height: 1.1;
+  line-height: 1.05;
   text-transform: uppercase;
 }
 h1 { font-size: var(--num-md); }
 h2 { font-size: var(--t-name); }
-h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
+h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 
-/* Small, quiet, letterspaced. The instrument-panel label. */
+/* Small, quiet, letterspaced. Upright and narrow -- deliberately the opposite
+   of the display voice, so labels recede instead of competing. */
 .label {
   font-family: var(--font-mono);
+  font-stretch: 80%;
   font-size: var(--t-label);
   font-weight: var(--w-semi);
   letter-spacing: var(--track-label);
@@ -223,21 +252,25 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 .label--micro { font-size: var(--t-micro); }
 
-/* Condensed uppercase name (exercise, routine, workout). */
+/* Name of a thing (exercise, routine, workout): the display voice, smaller. */
 .name {
   font-family: var(--font-display);
+  font-stretch: 112%;
+  font-style: italic;
   font-size: var(--t-name);
-  font-weight: var(--w-semi);
+  font-weight: var(--w-bold);
   letter-spacing: var(--track-name);
   text-transform: uppercase;
   color: var(--ink);
 }
 
-/* Every numeral in the app: condensed, tabular, tight, the largest thing in
-   its container. Size comes from the container or a --num-* modifier. */
+/* Every numeral in the app: italic, tabular, tight, the largest thing in its
+   container. Size comes from the container or a --num-* modifier. */
 .num {
   font-family: var(--font-display);
-  font-weight: var(--w-bold);
+  font-stretch: 112%;
+  font-style: italic;
+  font-weight: var(--w-max);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   letter-spacing: var(--track-num);
@@ -254,10 +287,11 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 
 /* The load readout: weight KG x reps, numerals dominant, units quiet. */
 .load { display: inline-flex; align-items: baseline; gap: 0.15em; }
-.load__val { font-family: var(--font-display); font-weight: var(--w-bold);
+.load__val { font-family: var(--font-display); font-weight: var(--w-max);
+  font-stretch: 112%; font-style: italic;
   font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
   font-size: var(--num-sm); letter-spacing: var(--track-num); line-height: 1; }
-.load__unit { font-family: var(--font-mono); font-size: var(--t-meta);
+.load__unit { font-family: var(--font-mono); font-stretch: 80%; font-size: var(--t-meta);
   font-weight: var(--w-med); letter-spacing: 0.04em; color: var(--dim);
   text-transform: uppercase; }
 .load__x { font-size: var(--t-meta); color: var(--unlit); padding-inline: 0.15em; }
@@ -269,13 +303,17 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 
 /* ============================================================================
-   PANEL  ·  the machined chassis surface
+   PANEL  ·  a seated surface
+   ----------------------------------------------------------------------------
+   Borderless by default: the panel is legible because it sits on a darker
+   ground, not because a line was drawn around it. A visible border now MEANS
+   something (live, stall) instead of being the resting state -- which is what
+   stops a page of panels reading as a card grid.
    ============================================================================ */
 
 .panel {
   background: var(--chassis);
-  border: 1px solid var(--edge);
-  border-top-color: var(--edge-hi);          /* lit from above */
+  border: 1px solid transparent;
   border-radius: var(--r-panel);
   box-shadow: var(--edge-lit), var(--edge-drop);
   padding: var(--sp-4);
@@ -295,12 +333,12 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   box-shadow: none;
   opacity: 0.72;
 }
-/* The one live panel: lit top edge + faint amber wash + halo. Full border, no
-   side stripe. */
+/* The one live panel: full blue border + faint wash + a real lift off the
+   page. Full border, no side stripe. Only ever one on screen. */
 .panel--live {
   border-color: var(--live);
   background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
-  box-shadow: var(--glow-live), var(--edge-lit);
+  box-shadow: var(--lift-live), var(--edge-lit);
 }
 
 /* Settled summary row (a completed exercise collapsed). */
@@ -312,23 +350,23 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 
 .set {
   display: grid;
-  grid-template-columns: 1.5rem 1fr auto;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-1) var(--sp-2);
-  border: 1px solid var(--edge);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid transparent;
   border-radius: var(--r-inset);
-  background: var(--ground);
+  background: var(--raised);
   transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
-.set + .set { margin-top: var(--sp-1); }
+.set + .set { margin-top: var(--sp-2); }
 .set__idx {
-  font-family: var(--font-mono); font-size: var(--t-meta);
-  color: var(--unlit); text-align: center;
+  font-family: var(--font-mono); font-stretch: 80%; font-size: var(--t-meta);
+  font-weight: var(--w-semi); color: var(--unlit); text-align: center;
 }
 
 /* the check: an empty <button aria-label="..."> gives a 44x44 tap target; the
-   26px machined box (::before) and the tick (::after) are drawn in CSS, so no
+   26px box (::before) and the tick (::after) are drawn in CSS, so no
    glyph markup is needed and there is no glyph/box z-order fight */
 .set__check {
   position: relative;
@@ -347,7 +385,13 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   inline-size: 6px; block-size: 11px;
   border: solid var(--ground); border-width: 0 2px 2px 0;
   transform: translate(-50%, -55%) rotate(45deg);
-  opacity: 0; transition: opacity var(--dur-2) var(--ease);
+  /* the tick DRAWS rather than fades: clipped from the far end of the stroke,
+     which -- because the mark is rotated 45deg -- wipes along the stroke
+     itself. This is the most repeated interaction in the app; it is worth
+     180ms to make completing a set feel like completing something. */
+  opacity: 0; clip-path: inset(0 0 100% 0);
+  transition: opacity var(--dur-1) var(--ease),
+              clip-path 180ms var(--ease-out);
 }
 
 /* UNLIT: prefilled, inert */
@@ -355,7 +399,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .set--unlit .load__val { color: var(--unlit); }
 .set--unlit .load__unit { color: var(--unlit); }
 
-/* LIVE: the current set. Amber, halo, full border (no stripe). One at a time. */
+/* LIVE: the current set. Blue, halo, full border (no stripe). One at a time. */
 .set--live {
   border-color: var(--live);
   background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
@@ -368,7 +412,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .set--done .set__check::before { background: var(--ink); border-color: var(--ink); }
 .set--done .set__check::after { opacity: 1; }
 
-/* RECORD: a set that beat a previous best. Cyan. */
+/* RECORD: a set that beat a previous best. Gold. */
 .set--record {
   border-color: var(--record);
   background: linear-gradient(var(--wash-record), var(--wash-record)), var(--chassis);
@@ -386,7 +430,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    itself always gets an answer regardless of round-trip time; the swapped-in
    node then just shows the settled true state. Confirming (becoming done) is
    its own animation, distinct from resetting (undoing a done set) -- a
-   revert is a quieter, unlit motion, never the same amber pulse as progress. */
+   revert is a quieter, unlit motion, never the same blue pulse as progress. */
 @keyframes set-confirm-pulse {
   0%   { transform: scale(1); }
   40%  { transform: scale(1.025); border-color: var(--live); box-shadow: var(--glow-live); }
@@ -414,43 +458,69 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .chip {
   display: inline-flex; align-items: center; gap: 0.35em;
   font-family: var(--font-mono);
+  font-stretch: 80%;
   font-size: var(--t-micro);
-  font-weight: var(--w-semi);
-  letter-spacing: 0.06em;
+  font-weight: var(--w-bold);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 0.25em 0.55em;
+  padding: 0.3em 0.7em;
   border-radius: var(--r-chip);
-  border: 1px solid var(--edge);
+  border: 1px solid transparent;
   background: var(--raised);
   color: var(--dim);
   white-space: nowrap;
 }
 /* filled chips (record / done) carry dark ink text; outline chips (live / stall)
    carry the hue as text, so each state reads by shape as well as colour */
-.chip--live   { border-color: var(--live);   color: var(--live);   background: transparent; box-shadow: var(--glow-live); }
-.chip--record { border-color: var(--record); color: var(--ground); background: var(--record); box-shadow: var(--glow-record); }
-.chip--done   { border-color: var(--edge-hi); color: var(--ink); }
-.chip--stall  { border-color: var(--stall);  color: var(--stall);  background: transparent; }
-.chip--up     { border-color: var(--edge-hi); color: var(--ink); }   /* steigend */
-.chip--neu    { border-color: var(--edge); color: var(--dim); }      /* neu */
+.chip--live   { color: var(--on-live);   background: var(--live);   box-shadow: var(--glow-live); }
+.chip--record { color: var(--on-record); background: var(--record); box-shadow: var(--glow-record); }
+.chip--done   { border-color: var(--edge-hi); color: var(--ink); background: transparent; }
+.chip--stall  { color: var(--on-stall);  background: var(--stall); }
+.chip--up     { border-color: var(--edge-hi); color: var(--ink); background: transparent; }  /* steigend */
+.chip--neu    { border-color: var(--edge); color: var(--dim); background: transparent; }     /* neu */
+
+/* Deload carries no hue: the app has exactly three semantic colours and a
+   deliberately light session is none of them. It is a settled fact, so it
+   reads as dim ink plus the word -- same treatment as .chip--neu. */
+.chip--deload { border-color: var(--edge); color: var(--dim); background: transparent; }
+
+.deload-bar {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--sp-3); margin-block-end: var(--sp-4);
+}
+.deload-bar.is-on {
+  padding: var(--sp-3); border-radius: var(--r-panel); background: var(--raised);
+}
+.deload-bar__state { font-variant-numeric: tabular-nums; }
+.deload-bar__picks { display: flex; flex-wrap: wrap; gap: var(--sp-2); flex: 1 1 100%; }
+.deload-bar__pick {
+  min-inline-size: 44px; min-block-size: 44px;
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--edge); border-radius: var(--r-control);
+  background: transparent; color: var(--dim);
+  font: inherit; font-variant-numeric: tabular-nums;
+  cursor: pointer; transition: color 120ms ease-out, border-color 120ms ease-out;
+}
+.deload-bar__pick.is-active { border-color: var(--edge-hi); color: var(--ink); font-weight: var(--w-bold); }
 
 /* tag: quiet metadata (position, set count), never a state */
 .tag {
   font-family: var(--font-mono);
+  font-stretch: 80%;
   font-size: var(--t-micro);
-  font-weight: var(--w-med);
-  letter-spacing: 0.06em;
+  font-weight: var(--w-semi);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 0.2em 0.45em;
-  border-radius: var(--r-inset);
+  padding: 0.22em 0.6em;
+  border-radius: var(--r-chip);
   background: var(--raised);
-  border: 1px solid var(--edge);
+  border: 1px solid transparent;
   color: var(--dim);
 }
-.tag--live { background: var(--live); border-color: var(--live); color: var(--ground); }
+.tag--live { background: var(--live); border-color: var(--live); color: var(--on-live); }
 
 /* ============================================================================
-   REST BAR  ·  amber, inside the live panel, linear fill
+   REST BAR  ·  blue, inside the live panel, linear fill
    ============================================================================ */
 
 .rest {
@@ -463,12 +533,13 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
 .rest__value {
-  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-family: var(--font-display); font-weight: var(--w-max);
+  font-stretch: 112%; font-style: italic; letter-spacing: var(--track-num);
   font-variant-numeric: tabular-nums; font-size: var(--num-sm);
   line-height: 1; color: var(--live); text-shadow: var(--glow-live);
 }
 .rest__track {
-  block-size: 6px; border-radius: var(--r-inset);
+  block-size: 8px; border-radius: var(--r-chip);
   background: var(--ground); overflow: hidden;
 }
 .rest__fill {
@@ -502,11 +573,18 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   min-block-size: 44px;
   padding: 0 var(--sp-5);
   font-family: var(--font-display);
+  font-stretch: 112%;
+  font-style: italic;
   font-size: var(--t-name);
-  font-weight: var(--w-bold);
-  letter-spacing: 0.06em;
+  font-weight: var(--w-max);
+  letter-spacing: 0.01em;
   text-transform: uppercase;
   border-radius: var(--r-control);
+  /* German labels are long ("Freies Workout starten"); at 200% text one of
+     them measured 336px inside a 390px viewport. Let the label wrap and the
+     control cap at its container rather than widening the page. */
+  max-inline-size: 100%;
+  text-wrap: balance;
   transition: transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease),
               background var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
   -webkit-tap-highlight-color: transparent;
@@ -516,28 +594,31 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    the same treatment via a class instead. */
 .btn:disabled, .btn.is-disabled { opacity: 0.45; pointer-events: none; }
 
-/* the primary action is LIVE: solid amber, inset top highlight, hard bottom edge
-   that compresses on press so the control feels like it travelled */
+/* the primary action is LIVE: solid blue pill that sits ON the page rather
+   than in it. Its label is near-black navy, not white -- a single blue cannot
+   satisfy both "readable as text on a dark panel" and "readable under white
+   text" at AA, and the dark label is the harder-hitting of the two. */
 .btn--live {
   background: var(--live);
-  color: var(--ground);
-  box-shadow: var(--press-live);
+  color: var(--on-live);
+  box-shadow: none;
 }
 .btn--live:hover { background: var(--live-hi); }
 .btn--live:active {
-  transform: translateY(2px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1px 0 var(--live-deep);
+  transform: scale(0.985);
+  box-shadow: 0 4px 14px -8px rgba(77, 134, 255, 0.8);
 }
 
-/* ghost: machined outline, its own quieter press depth */
+/* ghost: a filled neutral pill, not an outline -- so the primary/secondary
+   difference is hue and lift, never presence-of-border */
 .btn--ghost {
-  background: var(--chassis);
+  background: var(--raised);
   color: var(--ink);
-  border: 1px solid var(--edge-hi);
+  border: 1px solid transparent;
   box-shadow: var(--press-ghost);
 }
-.btn--ghost:hover { border-color: var(--ink); }
-.btn--ghost:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 0 rgba(0,0,0,0.55); }
+.btn--ghost:hover { background: var(--edge); }
+.btn--ghost:active { transform: scale(0.985); }
 
 /* destructive: stall outline, fills on press. Never a bare coloured word. */
 .btn--stall {
@@ -545,33 +626,36 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   color: var(--stall);
   border: 1px solid var(--stall);
 }
+.btn--stall:active { transform: scale(0.985); }
 .btn--stall:hover { background: var(--wash-stall); }
 
-.btn--sm { min-block-size: 36px; padding: 0 var(--sp-3); font-size: var(--t-meta); letter-spacing: 0.08em; }
+.btn--sm { min-block-size: 44px; padding: 0 var(--sp-4); font-size: var(--t-meta); letter-spacing: 0.03em; }
 .btn--block { display: flex; inline-size: 100%; }
 
 /* icon button: 44x44 tap target regardless of the glyph size */
 .icon-btn {
   position: relative; display: inline-grid; place-items: center;
   inline-size: 44px; block-size: 44px;
+  min-inline-size: 44px; min-block-size: 44px;   /* rounding must never take it under */
+  flex: none;
   color: var(--dim); border-radius: var(--r-control);
   transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
 .icon-btn:hover { color: var(--ink); background: var(--raised); }
 
 /* ============================================================================
-   FORM CONTROLS  ·  recessed machined wells
+   FORM CONTROLS  ·  recessed wells
    ============================================================================ */
 
 .field { display: flex; flex-direction: column; gap: var(--sp-1); }
 .field > .label { color: var(--dim); }
 
 .input, .select, .textarea {
-  min-block-size: 40px;
+  min-block-size: 44px;
   padding: var(--sp-2) var(--sp-3);
   background: var(--ground);
   border: 1px solid var(--edge);
-  border-radius: var(--r-control);
+  border-radius: var(--r-field);
   color: var(--ink);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);   /* reads as recessed */
   transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
@@ -584,9 +668,32 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 /* numeric wells use the tabular display face so digits line up as you type */
 .input--num {
-  font-family: var(--font-display); font-weight: var(--w-semi);
-  font-variant-numeric: tabular-nums; font-size: var(--t-name);
-  text-align: center; inline-size: 5rem;
+  /* A DISPLAY numeral and an EDITABLE one are not the same job. The display
+     cut (112% width, 900, italic, -0.035em) exists to be read at a glance
+     across a room; inside a 62px field it simply did not fit, and "24.0"
+     overflowed its own padding box -- desktop rendered every rest value as
+     "15(". Sizing by `ch` made it worse, because the global
+     `box-sizing: border-box` counts the new gutters against the same width.
+
+     So these fields step off the display cut: body face, upright, weight 600,
+     normal tracking. They keep tabular figures, so digits still align as you
+     type, and they stay the largest thing in their own row -- but they are
+     sized to be typed into rather than admired. The 900-weight italic still
+     carries every numeral the user only READS (.load__val, .num, .stat__value,
+     the rest clock). */
+  font-family: var(--font-body);
+  font-weight: var(--w-semi);
+  font-stretch: 100%;
+  font-style: normal;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-name);
+  text-align: center;
+  /* 5.75rem holds "100.0" at t-name with the gutters -- measured, not
+     guessed: the string renders 83px wide and a 5rem box gave 78px of
+     content. Three-digit weights are the real ceiling here. */
+  inline-size: 5.75rem;
+  padding-inline: var(--sp-2);
 }
 .check {
   inline-size: 20px; block-size: 20px; accent-color: var(--live);
@@ -596,7 +703,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    SHELL  ·  tab bar (mobile) + top bar (desktop) + resume strip
    ============================================================================ */
 
-/* mobile bottom tab bar: solid chassis, three real routes, active lit amber.
+/* mobile bottom tab bar: solid chassis, three real routes, active lit blue.
    No frosted glass. */
 .tabbar {
   position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-bar);
@@ -611,16 +718,17 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: var(--sp-1);
   min-block-size: var(--tabbar-h);
-  font-family: var(--font-mono); font-size: var(--t-micro); font-weight: var(--w-semi);
-  letter-spacing: 0.08em; text-transform: uppercase;
+  font-family: var(--font-mono); font-stretch: 80%; font-size: var(--t-micro);
+  font-weight: var(--w-bold);
+  letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--unlit);
 }
 .tabbar__tab .icon-btn, .tabbar__tab svg { color: inherit; }
-/* the active tab is lit: an amber indicator rail across its top edge, amber label */
+/* the active tab is lit: a blue indicator rail across its top edge, blue label */
 .tabbar__tab::before {
   content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  inline-size: 22px; block-size: 2px;
-  border-radius: 0 0 2px 2px; background: transparent;
+  inline-size: 26px; block-size: 3px;
+  border-radius: 0 0 var(--r-chip) var(--r-chip); background: transparent;
 }
 .tabbar__tab.is-active { color: var(--live); }
 .tabbar__tab.is-active::before { background: var(--live); box-shadow: var(--glow-live); }
@@ -653,7 +761,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   .topbar__link.is-active { color: var(--live); }
 }
 
-/* resume strip: the active workout, always reachable. Amber chassis strip,
+/* resume strip: the active workout, always reachable. Blue chassis strip,
    pinned above the tab bar on mobile / below the top bar on desktop. It is not
    a tab. */
 .resume {
@@ -737,26 +845,32 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 
 /* ============================================================================
-   READOUTS + BOARD  ·  stat tiles, bars, the record flare
+   READOUTS + BOARD  ·  stat readouts, bars, the record flare
    (state-model expressions the dashboard and finished pages consume)
    ============================================================================ */
 
-/* stat readout: quiet label, dominant tabular number, optional delta */
+/* stat readout: quiet label, dominant tabular number, optional delta.
+   NOT a box. Four identical bordered tiles in a 2x2 is the single most
+   recognisable "a machine designed this" pattern there is, and it was the
+   first thing to jump out once the numerals got heavier. The figures are
+   now a divided readout band: one surface, hairline rules between cells,
+   so the numbers carry the weight instead of four containers. */
 .stat {
-  display: flex; flex-direction: column; gap: var(--sp-1);
+  display: flex; flex-direction: column; gap: var(--sp-1); min-inline-size: 0;
   padding: var(--sp-3) var(--sp-4);
-  background: var(--chassis);
-  border: 1px solid var(--edge);
-  border-top-color: var(--edge-hi);
-  border-radius: var(--r-panel);
-  box-shadow: var(--edge-lit), var(--edge-drop);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 .stat__label {
-  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  font-family: var(--font-mono); font-stretch: 80%;
+  font-size: var(--t-label); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
 .stat__value {
-  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-family: var(--font-display); font-weight: var(--w-max);
+  font-stretch: 112%; font-style: italic;
   font-variant-numeric: tabular-nums; font-size: var(--num-lg);
   line-height: 1; letter-spacing: var(--track-num); color: var(--ink);
 }
@@ -766,7 +880,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .stat__delta.is-stall { color: var(--stall); }
 
 /* horizontal bar (muscle-group balance): fixed label + track + tabular count */
-.hbar { display: grid; grid-template-columns: 5rem 1fr 2.5rem; gap: var(--sp-2); align-items: center; }
+.hbar { display: grid; grid-template-columns: minmax(0, 5rem) minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; }
 .hbar + .hbar { margin-top: var(--sp-2); }
 .hbar__name { font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim); letter-spacing: 0.03em; }
 .hbar__track { block-size: 8px; background: var(--ground); border-radius: var(--r-inset); overflow: hidden; }
@@ -774,15 +888,61 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .hbar__fill.is-stall { background: var(--stall); }   /* under-trained group */
 .hbar__val { font-family: var(--font-display); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; font-size: var(--t-name); text-align: right; color: var(--dim); }
 
-/* vertical bars (weekly tonnage): the current, partial week is lit amber */
+/* vertical bars (weekly tonnage): the current, partial week is lit blue */
 .vbars { display: flex; align-items: flex-end; gap: var(--sp-1); block-size: 108px; }
 .vbar { flex: 1; min-block-size: 2px; background: var(--edge-hi); border-radius: var(--r-inset) var(--r-inset) 0 0; }
 .vbar.is-live { background: var(--live); box-shadow: var(--glow-live); }
+/* A deload week's dip is deliberate, so the bar is hatched and spelled out
+   below the chart rather than left looking like a collapse. Hatched, not
+   dimmed: the bar's height is the datum, so fading it reads as "no training
+   that week" -- the opposite of what it means. No hue: this is an
+   explanation, not a fourth semantic state. */
+.vbar.vbar--deload {
+  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--chassis) 3px 6px);
+}
+
+.deload-note {
+  margin-block-end: var(--sp-3);
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+/* The lifts behind the count, named rather than left to a bare number --
+   inherits --dim from .deload-note, just set on its own line so the roster
+   below it (which is not recency-filtered and may list more) doesn't read
+   as a mismatch. */
+.deload-note__lifts {
+  display: block;
+  margin-top: var(--sp-1);
+}
 .vbars__axis { display: flex; justify-content: space-between; margin-top: var(--sp-1);
   font-family: var(--font-mono); font-size: var(--t-micro); color: var(--unlit); letter-spacing: 0.04em; }
+/* Each label must be able to shrink below its own min-content, or eight dates
+   set a floor the viewport cannot honour once the text is scaled.
 
-/* record flare: cyan, top of screen, one sharp pulse then settles */
+   Clipping alone was not good enough: eight truncated dates ran together into
+   "08.15.22.29.06.13.20.Je", which is worse than no axis at all. So the middle
+   labels step aside when the panel gets narrow RELATIVE TO ITS OWN TEXT --
+   which is what an em-based container query measures, and why this responds
+   to browser text zoom rather than to viewport width. First and last stay:
+   they are the ones that say what range you are looking at. */
+.vbars__axis > * {
+  min-inline-size: 0; overflow: hidden; text-overflow: clip; white-space: nowrap;
+}
+.panel:has(.vbars) { container-type: inline-size; }
+@container (max-width: 15em) {
+  /* the hidden ones keep their track (so the two survivors stay aligned with
+     the first and last bar) but give up their share of the width */
+  .vbars__axis > *:not(:first-child):not(:last-child) { visibility: hidden; flex: 1 1 0; }
+  .vbars__axis > *:first-child,
+  .vbars__axis > *:last-child { flex: 0 0 auto; overflow: visible; }
+  .vbars__axis > *:first-child { text-align: start; }
+  .vbars__axis > *:last-child  { text-align: end; }
+}
+
+/* record flare: gold, top of screen, one sharp pulse then settles */
 .flare {
+  /* the numeral below sizes against this box (cqi), so it can never outgrow it */
+  container-type: inline-size;
   padding: var(--sp-4);
   background: linear-gradient(var(--wash-record), var(--wash-record)), var(--chassis);
   border: 1px solid var(--record);
@@ -796,7 +956,13 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 .flare__value {
   font-family: var(--font-display); font-weight: var(--w-bold);
-  font-variant-numeric: tabular-nums; font-size: var(--num-xl); line-height: 1;
+  font-variant-numeric: tabular-nums; line-height: 1;
+  /* capped against the flare's own width, not left to scale unbounded: at
+     200 % text a six-figure record ("1636.0 kg") ran past the viewport and
+     took the page's horizontal scroll with it. min() keeps --num-xl at every
+     normal size and only bites when the numeral would not otherwise fit,
+     so the figure stays whole -- which is what WCAG 1.4.4 actually asks. */
+  font-size: min(var(--num-xl), 20cqi);
   letter-spacing: var(--track-num); color: var(--record); text-shadow: var(--glow-record);
 }
 @keyframes flare-pulse {
@@ -806,20 +972,35 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 
 /* ============================================================================
-   TABLE  ·  dense history, tabular figures, record rows lit cyan
+   TABLE  ·  dense history, tabular figures, record rows lit gold
    ============================================================================ */
 
-.table { inline-size: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+/* The dense 80%-width cut earns its place here: at the body width this table
+   could not hold five columns on a 390px phone, so the last one (e1RM) was
+   clipped behind the wrapper's overflow with no affordance saying it scrolled.
+   Narrowing the face and the gutters lets it fit outright, which is a better
+   answer than teaching the user to swipe. The overflow-x wrapper stays as the
+   safety net for very long set strings. */
+.table {
+  inline-size: 100%; border-collapse: collapse;
+  font-family: var(--font-mono); font-stretch: 80%;
+  font-size: var(--t-sm); font-variant-numeric: tabular-nums;
+}
 .table th {
-  text-align: left; padding: var(--sp-2) var(--sp-3);
-  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
+  text-align: left; padding: var(--sp-2);
+  font-family: var(--font-mono); font-stretch: 80%;
+  font-size: var(--t-label); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
   border-bottom: 1px solid var(--edge);
+  white-space: nowrap;
 }
-.table td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--edge); color: var(--ink); }
-.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table td { padding: var(--sp-2); border-bottom: 1px solid var(--edge); color: var(--ink); }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table tr:last-child td { border-bottom: 0; }
 .table tr.is-record td { color: var(--record); background: var(--wash-record); }
+/* A deload row in the history table is dimmed as well as labelled, so a
+   lighter number in the middle of a progression doesn't read as a bad day. */
+.table tr.is-deload td { color: var(--dim); }
 
 /* ============================================================================
    NOTES + EMPTY STATES
@@ -831,7 +1012,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   padding: var(--sp-3) var(--sp-4);
   background: var(--wash-stall);
   border: 1px solid var(--stall);
-  border-radius: var(--r-control);
+  border-radius: var(--r-panel);
   color: var(--ink);
   font-size: var(--t-body); line-height: 1.5;   /* real prose: the debrief is the point */
 }
@@ -853,6 +1034,83 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .empty .label { display: block; margin-bottom: var(--sp-2); color: var(--unlit); }
 
 /* ============================================================================
+   ROW  ·  the shared divided-list row
+   ----------------------------------------------------------------------------
+   One anatomy, previously four implementations: .recent-row and .ex-report-row
+   (heute), .routine-row (heute), .verlauf-row (verlauf), .ex-report-row again
+   (session finished). Three carried a byte-identical divider rule, and the tap
+   feedback had already been patched across .recent-row + .verlauf-row__main --
+   two names sharing one declaration is what gave the duplication away.
+
+   Anatomy, every slot optional except __main:
+
+     .row
+       .row__lead     leading control (a checkbox), never grows
+       .row__main     name + __meta; the part that is usually the link
+       .row__wide     full-width line BELOW the main line, same row
+       .row__trail    trailing cluster (a chip, stats, action buttons)
+
+   __wide is what lets a row own more than one line without breaking the
+   divider: a <details> or an exercise list placed as a sibling of __main
+   would otherwise sit between two rows and cut the adjacent-sibling border on
+   every row after it. Inside the row, it is still one row.
+
+   Deliberately NOT merged: .uebungen-row is `display: contents` inside a grid
+   table, so its cells align to shared column tracks across every row. Same
+   word, different job -- leave it alone.
+   ============================================================================ */
+
+.row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  min-block-size: 44px;
+}
+.row + .row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
+/* An author `display` beats the UA sheet's `[hidden] { display: none }`, so a
+   flex row ignores the attribute unless told otherwise. Verlauf's search sets
+   `hidden` to filter, and without this it set it on rows that stayed fully
+   visible -- the search updated its count and changed nothing on screen.
+   .uebungen-row already carried this guard; the shared row now carries it for
+   every list, so the next filterable surface cannot rediscover the bug. */
+.row[hidden] { display: none; }
+
+/* top-aligned variant: for rows whose trailing cluster is a stack of controls
+   rather than a single chip, where centring floats the buttons off the title */
+.row--top { align-items: flex-start; }
+
+.row__lead  { flex: none; }
+.row__main  { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
+.row__meta  { margin-top: 2px; }
+.row__wide  { flex-basis: 100%; margin: var(--sp-1) 0 0; }
+/* a secondary line inside __main that is prose, not a label: the exercise
+   list under a workout's name. Needs the body face explicitly, or it inherits
+   the uppercase letterspaced .label treatment and turns into a block the
+   reader has to decode word by word. */
+.row__sub {
+  font-family: var(--font-body); font-size: var(--t-meta); line-height: 1.5;
+  color: var(--dim); text-transform: none; letter-spacing: 0; margin-top: 2px;
+}
+.row__trail { display: flex; align-items: center; gap: var(--sp-2); flex: none; margin-inline-start: auto; }
+/* stacked trail: two figures reading down (a load and its chip), not across */
+.row__trail--stack { flex-direction: column; align-items: flex-end; gap: var(--sp-1); }
+
+/* Tap feedback, keyed off the element rather than a modifier class: whichever
+   part is the real <a> gets it, whether that is the whole row (heute's recent
+   workouts) or only the main region (verlauf, session finished). These carry a
+   whole row of content and previously answered a tap with nothing until the
+   next page painted -- the longest unacknowledged gap in the app. Both values
+   sit under the 80 ms perceptual threshold, so it reads as the row responding
+   rather than an animation playing. */
+a.row, a.row__main {
+  border-radius: var(--r-inset);
+  transition: background var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
+}
+a.row:hover, a.row__main:hover { background: var(--raised); }
+a.row:active, a.row__main:active { transform: scale(0.99); }
+/* the name itself lights on hover, so the target reads as the lift, not the row */
+a.row__main:hover .name { color: var(--live); }
+
+/* ============================================================================
    SESSION DETAIL  ·  the live workout view (session_detail.html)
    ----------------------------------------------------------------------------
    Composition over the primitives above. The load-bearing rule (spec 6.4):
@@ -867,7 +1125,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 /* Everything on this view is tapped one-handed, standing at the gym, so every
    control clears the 44px touch floor (spec 7) -- including the buttons/inputs
    the shared tokens otherwise draw at 36/40px for calmer desktop surfaces. */
-.session-view .btn--sm { min-block-size: 44px; }
+/* .btn--sm is 44px app-wide now; only the fields still need the bump here */
 .session-view .input, .session-view .select { min-block-size: 44px; }
 
 /* page header: workout name + status chip, elapsed clock on the right */
@@ -904,6 +1162,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .exercise-card.collapsed .card-title-area { flex-wrap: nowrap; }
 .exercise-card.collapsed .exercise-card__name {
   font-size: var(--t-sm);
+  font-stretch: 80%;
+  letter-spacing: 0;
   flex: 1; min-inline-size: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -935,7 +1195,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 /* per-exercise rest-seconds editor (auto-saves on change) */
 .rest-form { display: inline-flex; align-items: center; gap: var(--sp-1); }
 .rest-form__unit { color: var(--dim); }
-.rest-form__input { inline-size: 3.5rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
+.rest-form__input { inline-size: 4.25rem; min-inline-size: 4ch; max-inline-size: 100%; min-block-size: 44px; padding-inline: var(--sp-2); font-size: var(--t-name); }
 
 /* collapse: the header is the settled summary row; the body is the workspace */
 /* Animatable collapse via the grid-rows technique: display:none can't be
@@ -978,8 +1238,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    ever plays for the exercise whose state genuinely crossed that line on
    THIS action, never for the four other cards that happened to re-render
    alongside it, and never on a plain page load. just-lit borrows --live
-   (amber = current/now, its real meaning); just-finished deliberately does
-   NOT borrow --record (cyan means a PR specifically, not true here) -- it's
+   (blue = current/now, its real meaning); just-finished deliberately does
+   NOT borrow --record (gold means a PR specifically, not true here) -- it's
    an ink-white flash, matching how .set--done already reads DONE as "full-
    brightness ink, settled fact" rather than a coloured state. */
 @keyframes card-just-lit {
@@ -1001,8 +1261,19 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 
 /* editable live set row: weight/reps wells, the check pushed to the cell end,
    delete in the trailing grid column */
-.set__log { display: flex; align-items: center; gap: var(--sp-1); min-inline-size: 0; }
-.set__log .input--num { inline-size: 4rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
+/* wraps at large text sizes: two numeric fields, a unit, a multiplier and a
+   44px confirm target cannot share one line once the root font doubles, and
+   the confirm control is the one thing that must never leave the screen */
+.set__log { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1); min-inline-size: 0; }
+.set__log > * { min-inline-size: 0; }
+/* inline-size is the PREFERRED width; the min/max pair is what lets the field
+   give way when the text is scaled up rather than dragging the row off-screen.
+   5ch still holds a three-digit weight at any root size, because ch scales
+   with the font the way rem does. */
+.set__log .input--num {
+  inline-size: 5.75rem; min-inline-size: 5ch; max-inline-size: 100%;
+  min-block-size: 44px; padding-inline: var(--sp-2); font-size: var(--t-name);
+}
 .set__log .load__unit, .set__log .load__x { flex: none; }
 .set__log .set__check { margin-inline-start: auto; }
 .set__del { justify-self: end; }
@@ -1054,7 +1325,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 
 /* ============================================================================
    PROGRESS MODAL  ·  _progress_modal.html (shared: session detail + exercise
-   detail). PR cards read as records (cyan); the chart canvas gets a fixed box.
+   detail). PR cards read as records (gold); the chart canvas gets a fixed box.
    ============================================================================ */
 
 .hidden { display: none !important; }
@@ -1113,8 +1384,19 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .modal__title { font-size: var(--t-name); min-inline-size: 0; overflow-wrap: anywhere; }
 .modal__body { padding: var(--sp-4); }
 
-.pr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); margin-bottom: var(--sp-4); }
-.pr-card { padding: var(--sp-3); background: var(--raised); border: 1px solid var(--edge); border-radius: var(--r-control); }
+/* the two PR cards sit side by side until their own content stops fitting;
+   auto-fit lets them stack at 200% instead of forcing the page wider */
+.pr-grid {
+  display: grid;
+  /* 8rem, not 11: at 100% two cards still sit side by side in a 390px
+     phone panel (2x128 + gap < 326), and only at scaled-up text does the
+     minimum exceed the track and force the stack. 11rem stacked them
+     even at normal size, which lost compactness for no reason. */
+  grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr));
+  gap: var(--sp-3); margin-bottom: var(--sp-4);
+}
+.pr-card { min-inline-size: 0; }
+.pr-card { padding: var(--sp-3); background: var(--raised); border: 1px solid var(--edge); border-radius: var(--r-panel); }
 .pr-card .label { display: block; margin-bottom: var(--sp-1); }
 .pr-card .val {
   font-family: var(--font-display); font-weight: var(--w-bold);
@@ -1148,20 +1430,22 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .flare__meta { margin-top: var(--sp-2); }
 
 /* Volumen / Sätze / Dauer / Rekorde -- 2x2 on phone, 4-across once there's room */
-.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); }
-@media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
+.stat-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px;
+  margin-bottom: var(--sp-4);
+  background: var(--edge);              /* becomes the 1px rules between cells */
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  box-shadow: var(--edge-lit), var(--edge-drop);
+}
+.stat-grid > .stat { background: var(--chassis); }
+@media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .stat__value.is-record { color: var(--record); text-shadow: var(--glow-record); }
 
-/* Nach Übung: a divided list inside one panel, not a card per row. Each row
-   is wrapped (.ex-report-row) so the optional correction disclosure below
-   the summary line still counts as "one row" for the divider -- otherwise a
-   <details> sitting between two .ex-report siblings would break the
-   adjacent-sibling border on every row that follows one with sets to edit. */
-.ex-report-row + .ex-report-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
-.ex-report { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
-.ex-report__main { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
-.ex-report__sets { margin-top: 2px; }
-.ex-report .chip { flex: none; }
+/* Nach Übung: a divided list inside one panel, not a card per row. Uses the
+   shared .row; the correction disclosure below the summary line is a
+   .row__wide child, so it still counts as part of the same row for the
+   divider instead of cutting it. */
 
 /* correction affordance: closed-by-default native disclosure (no JS, free
    keyboard support via <summary>'s implicit button semantics) revealing one
@@ -1183,9 +1467,12 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .set-correct__toggle:hover { color: var(--ink); }
 .set-correct[open] > .set-correct__toggle { color: var(--ink); }
 .set-correct__body { display: flex; flex-direction: column; gap: var(--sp-2); padding-bottom: var(--sp-1); }
-.set-correct__row { display: flex; align-items: center; gap: var(--sp-2); }
+/* wraps rather than overflowing: at 200 % text two 5.75rem number fields plus
+   the unit, the x and the save button cannot sit on one 390px line, and a
+   non-wrapping flex row pushed the whole page sideways (WCAG 1.4.4). */
+.set-correct__row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .set-correct__idx { inline-size: 1.25rem; flex: none; text-align: center; }
-.set-correct__row .input--num { inline-size: 4rem; min-block-size: 44px; padding-inline: var(--sp-1); font-size: var(--t-name); }
+.set-correct__row .input--num { inline-size: 5.75rem; min-inline-size: 5ch; max-inline-size: 100%; min-block-size: 44px; padding-inline: var(--sp-2); font-size: var(--t-name); }
 
 .note-stall + .note-stall { margin-top: var(--sp-2); }
 .save-error__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
@@ -1193,7 +1480,40 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .template-prompt { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
 
 .finished-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); }
-.finished-actions form { margin-inline-start: auto; }
+
+/* The verdict line: the one sentence this screen exists to say. Sized between
+   a name and a numeral so it reads before any of the figures below it. Gold
+   only when records were actually set -- that is what gold means everywhere
+   else in the app, and spending it on an ordinary workout would spend it. */
+.session-verdict {
+  margin-top: var(--sp-3);
+  font-family: var(--font-display);
+  font-stretch: 112%;
+  font-style: italic;
+  font-weight: var(--w-max);
+  font-size: var(--num-sm);
+  line-height: 1.15;
+  letter-spacing: var(--track-name);
+  text-transform: uppercase;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.session-verdict--record { color: var(--record); text-shadow: var(--glow-record); }
+
+/* destructive action, deliberately demoted: no pill, no fill, no border --
+   it should be findable and never the thing your eye lands on */
+.finished-destructive { margin-top: var(--sp-8); }
+.finished-delete {
+  min-block-size: 44px; padding-inline: var(--sp-2);
+  font-family: var(--font-mono); font-stretch: 80%;
+  font-size: var(--t-meta); letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--unlit);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  transition: color var(--dur-2) var(--ease);
+}
+.finished-delete:hover { color: var(--stall); }
 
 /* ============================================================================
    HEUTE  ·  the landing page (heute.html)
@@ -1211,7 +1531,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .heute {
   display: grid;
   gap: var(--sp-4);
-  grid-template-columns: 1fr;
+  /* minmax(0, 1fr), not 1fr: see the TEXT RESIZE note at the end of this file */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     "head"
     "routines"
@@ -1219,9 +1540,12 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
     "recent"
     "board";
 }
+/* grid items default to min-inline-size:auto, which re-introduces the same
+   floor one level down */
+.heute > * { min-inline-size: 0; }
 @media (min-width: 900px) {
   .heute {
-    grid-template-columns: 3fr 2fr;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     grid-template-areas:
       "head     start"
       "divider  divider"
@@ -1249,7 +1573,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 
 @media (min-width: 900px) {
   .heute__divider { display: block; grid-area: divider; border: 0; block-size: 1px; background: var(--edge); margin: 0; }
-  .heute__board { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
+  .heute__board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); }
   .heute__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
   .heute__start { display: flex; align-items: flex-end; }
   .heute__start form, .heute__start .heute__active-note { inline-size: 100%; }
@@ -1267,21 +1591,79 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .heute-start-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
 .heute-start-form .btn { flex: none; }
 /* phone: a secondary path (routines' own Starten buttons are primary, spec
-   6.1); desktop: the bar's one deliberate action, promoted to live/amber.
+   6.1); desktop: the bar's one deliberate action, promoted to live/blue.
    Same button, same markup -- only the skin changes with the breakpoint. */
 @media (min-width: 900px) {
   .heute__start .btn--ghost {
-    background: var(--live); color: var(--ground); border-color: var(--live);
-    box-shadow: var(--press-live);
+    background: var(--live); color: var(--on-live); border-color: var(--live);
+    box-shadow: var(--lift-live);
   }
   .heute__start .btn--ghost:hover { background: var(--live-hi); }
 }
 
 .heute__active-note { display: flex; flex-direction: column; gap: var(--sp-2); }
 
-/* one chassis panel per routine -- not rows in a shared panel (spec 6.1) */
+/* Two tiers. The lead routine keeps its own panel and the page's one primary
+   action; every other routine drops to a divided row inside a single shared
+   panel. This is what stops N routines rendering as N identical blue slabs --
+   the failure the old one-panel-per-routine rule walked straight into once
+   the accent became a filled pill. No information is lost: the rows still
+   carry name, recency and the full exercise list. */
 .routine__title { min-inline-size: 0; }
-.routine__exercises { margin: var(--sp-2) 0 var(--sp-3); overflow-wrap: anywhere; }
+/* The roster is a list of proper nouns, not a label. It was inheriting
+   .label's uppercase + tracking, which turned seven exercise names into a
+   solid block you have to decode word by word -- the single least readable
+   thing on the page. Sentence case, body face, quiet colour. */
+.routine__exercises {
+  margin: var(--sp-2) 0 var(--sp-3);
+  font-family: var(--font-body);
+  font-size: var(--t-meta);
+  line-height: 1.55;
+  color: var(--dim);
+  text-transform: none;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.routine--lead .name { font-size: var(--num-sm); }
+
+.routine-rest { padding-block: var(--sp-1); }
+/* the routine list uses the shared .row (--top, so the Starten/edit cluster
+   sits level with the title rather than floating beside a two-line block).
+   Only the padding is local: these rows sit inside a tighter panel. */
+.routine-rest .row { padding-block: var(--sp-3); }
+.routine-rest .row + .row { margin-top: 0; padding-top: var(--sp-3); }
+
+/* skip link: off-screen until focused, then a real target at the top-left */
+.skip-link {
+  position: absolute; inset-inline-start: var(--sp-3); inset-block-start: -100px;
+  z-index: calc(var(--z-bar) + 1);
+  display: inline-flex; align-items: center; min-block-size: 44px;
+  padding-inline: var(--sp-4);
+  background: var(--live); color: var(--on-live);
+  font-family: var(--font-mono); font-stretch: 80%; font-size: var(--t-meta);
+  font-weight: var(--w-bold); letter-spacing: var(--track-label);
+  text-transform: uppercase; border-radius: var(--r-chip);
+  transition: inset-block-start var(--dur-2) var(--ease);
+}
+.skip-link:focus-visible { inset-block-start: var(--sp-3); }
+#gym-main {
+  inline-size: 100%;
+  min-inline-size: 0;   /* a wide descendant (the history table) must not set the floor */
+}
+#gym-main:focus { outline: none; }   /* programmatic target, not a focus stop */
+
+
+/* inline icons sit on the text baseline-ish and inherit the control's colour */
+.icon { flex: none; }
+/* reorder lock carries BOTH icons and swaps by class -- JS sets textContent on
+   the label span only, which cannot inject markup */
+#reorder-lock-btn .icon-unlock { display: none; }
+#reorder-lock-btn.is-unlocked .icon-lock { display: none; }
+#reorder-lock-btn.is-unlocked .icon-unlock { display: block; }
+.meta-edit__toggle, .set-correct__toggle {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+}
 
 /* edit affordance: closed by default, anchored under its toggle as a small
    popover rather than pushed inline -- so opening it never reflows the card
@@ -1310,13 +1692,9 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .routine__edit-form { display: flex; gap: var(--sp-2); }
 .routine__edit-form .input { flex: 1; min-inline-size: 0; }
 
-/* Letzte Workouts: a divided list inside one panel, not a card per row --
-   same "not a card per row" philosophy as session_finished.html's Nach
-   Übung rows, but independent classes so the two pages stay free to diverge. */
-.recent-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-block-size: 44px; }
-.recent-row + .recent-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
-.recent-row__main { min-inline-size: 0; overflow-wrap: anywhere; }
-.recent-row__meta { margin-top: 2px; }
+/* Letzte Workouts and Steht still both use the shared .row. They previously
+   had their own classes so the pages "stayed free to diverge" -- they diverged
+   into inconsistency instead, which is what pulled them into one component. */
 
 .tonnage__note { margin-top: var(--sp-2); color: var(--live); }
 
@@ -1334,42 +1712,19 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    finished page immediately, with no staggered pop-in).
    ============================================================================ */
 
-@keyframes boot-flicker {
-  0%, 100% { filter: brightness(1); }
-  8%  { filter: brightness(2.2); }
-  17% { filter: brightness(0.82); }
-  28% { filter: brightness(1.7); }
-  45% { filter: brightness(1); }
-}
-.heute { animation: boot-flicker 460ms var(--ease) both; }
+/* The section-by-section entrance stagger that used to live here is gone.
+   Two reasons, and the second is the real one:
 
-@keyframes boot-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to   { opacity: 1; transform: none; }
-}
-.heute__head,
-.heute__start,
-.heute__recent,
-.heute__board > .panel {
-  animation: boot-in 380ms var(--ease-out) both;
-  animation-delay: calc(var(--i, 0) * 45ms);
-}
-.heute__head                         { --i: 0; }
-.heute__start                        { --i: 1; }
-.heute__recent                       { --i: 2; }
-.heute__board > .panel:nth-child(1)  { --i: 3; }   /* Steht still */
-.heute__board > .panel:nth-child(2)  { --i: 4; }   /* Sätze pro Muskelgruppe */
-.heute__board > .panel:nth-child(3)  { --i: 5; }   /* Tonnage pro Woche */
+   1. Product motion doctrine: no orchestrated page-load choreography. You open
+      this page to answer "what am I training", not to watch six panels arrive.
+   2. It replayed on EVERY navigation. Combined with the route transition added
+      further down, that is a double animation on every tab tap -- the page
+      crossfades in, then its contents animate again underneath it. Once real
+      route transitions exist, a per-section entrance is not additive, it is
+      noise.
 
-/* Routinen: real cards (one per template), so the list gets its own rhythm
-   instead of moving as one block. Capped at --i:6 in heute.html so a long
-   template list can't push the last card's delay past the rest of the boot. */
-.heute__routines > .empty,
-.heute__routines > .routine {
-  animation: boot-in 380ms var(--ease-out) both;
-  animation-delay: calc(90ms + (var(--i, 0) * 45ms));
-}
-
+   The gauge sweeps below are deliberately KEPT: those encode magnitude, so the
+   motion carries information rather than announcing the page. */
 /* gauges: sweep from zero to the value already computed server-side, timed
    to start just after their own panel (--i: 4 / --i: 5 above) begins
    lighting up. transform, not width/height -- the real share/volume value
@@ -1377,8 +1732,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    only scales the already-correctly-sized bar up from its own baseline. */
 @keyframes gauge-sweep-v { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @keyframes gauge-sweep-h { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.vbar       { transform-origin: bottom; animation: gauge-sweep-v 420ms var(--ease-out) both; animation-delay: 295ms; }
-.hbar__fill { transform-origin: left;   animation: gauge-sweep-h 420ms var(--ease-out) both; animation-delay: 250ms; }
+.vbar       { transform-origin: bottom; animation: gauge-sweep-v 420ms var(--ease-out) both; animation-delay: 60ms; }
+.hbar__fill { transform-origin: left;   animation: gauge-sweep-h 420ms var(--ease-out) both; animation-delay: 40ms; }
 
 /* ============================================================================
    ÜBUNGEN  ·  the exercise catalogue (uebungen.html)
@@ -1407,11 +1762,20 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 .uebungen-sort legend { padding: 0; margin-bottom: var(--sp-1); inline-size: 100%; }
 .uebungen-sort__opt {
-  display: inline-flex; align-items: center; gap: var(--sp-1);
-  min-block-size: 36px;
-  font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim);
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  min-block-size: 44px;
+  padding-inline: var(--sp-3);
+  border-radius: var(--r-chip);
+  background: var(--raised);
+  font-family: var(--font-mono); font-stretch: 80%;
+  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
   cursor: pointer;
+  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
+/* the sort control offers three options; make it LOOK like three options
+   instead of three loose native radios adrift in a custom pill system */
+.uebungen-sort__opt:hover { color: var(--ink); }
+.uebungen-sort__opt:has(input:checked) { background: var(--edge); color: var(--ink); }
 .uebungen-sort__opt input { accent-color: var(--live); }
 
 /* A real table: one shared header names the columns once instead of every
@@ -1429,10 +1793,13 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    the DOM the script walks or the [hidden] toggle it sets. */
 .uebungen-table {
   display: grid;
-  grid-template-columns: 1fr auto auto 44px;
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 44px);
   column-gap: var(--sp-3);
   align-items: center;
 }
+/* the numeric columns are `auto`, so at 200% their content sets the track --
+   let them wrap rather than push the grid past the viewport */
+.uebungen-row__weight, .uebungen-row__e1rm { min-inline-size: 0; }
 .uebungen-table__head, .uebungen-list { display: contents; }
 .uebungen-table__head span:not(.uebungen-table__rule) {
   padding-bottom: var(--sp-2);
@@ -1484,8 +1851,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
    Two panels: the export controls (spec 6.6 -- same behavior as the old
    dashboard's export panel, restyled with this system's own primitives, not
    the old .export-panel/.form-row classes), then one divided list of every
-   finished session, newest first -- the same "not a card per row" pattern as
-   .recent-row / .ex-report-row / .uebungen-row.
+   finished session, newest first -- the shared .row, same as heute and the
+   finished-session debrief.
    ============================================================================ */
 
 .verlauf__head { margin-bottom: var(--sp-4); }
@@ -1493,8 +1860,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .verlauf-export__presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
 .verlauf-export__action { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
 
-.verlauf-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
-.verlauf-row + .verlauf-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
 /* checkbox has no adjacent label text (aria-label carries the name instead),
    so unlike .uebungen-check / .exercise-detail-check -- which get their
    44px-wide tap target for free from the text beside them -- this one needs
@@ -1505,14 +1870,11 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   flex: none;
   cursor: pointer;
 }
-.verlauf-row__main { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
-.verlauf-row__meta { margin-top: 2px; }
-.verlauf-row__exercises { margin-top: 2px; }
-.verlauf-row__stats { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); flex: none; }
-.verlauf-row__delete { flex: none; }
+.verlauf__search { margin-bottom: var(--sp-4); }
+.verlauf__count { margin-inline-start: auto; color: var(--unlit); }
 
 /* ============================================================================
-   EXERCISE DETAIL  ·  the single-exercise instrument (exercise_detail.html)
+   EXERCISE DETAIL  ·  the single-exercise record (exercise_detail.html)
    ----------------------------------------------------------------------------
    Four blocks (spec 6.3): verdict band, chart (position as series, via
    GymChart.renderProgressChart in gym.js), history table, metadata behind a
@@ -1538,7 +1900,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 }
 @media (min-width: 900px) {
   .exercise-detail {
-    grid-template-columns: 1fr 22rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
     grid-template-areas:
       "head     head"
       "chart    verdict"
@@ -1583,15 +1945,16 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 
 /* position filter: real navigation links (?position=N / back to unfiltered),
    not a client-side toggle -- isolating one slot is a different view of the
-   data, worth its own URL. "active" borrows the same amber = currently-
+   data, worth its own URL. "active" borrows the same blue = currently-
    selected convention .topbar__link.is-active / .tabbar__tab.is-active
    already use, not a repurposed state hue -- selection isn't one of the
    five states. */
 .exercise-detail__positions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
 .position-pill {
   display: inline-flex; align-items: center; justify-content: center;
-  min-block-size: 36px; padding: 0 var(--sp-3);
-  font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
+  min-block-size: 44px; padding: 0 var(--sp-4);
+  font-family: var(--font-mono); font-stretch: 80%;
+  font-size: var(--t-meta); font-weight: var(--w-semi);
   letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--dim);
   background: var(--raised);
@@ -1609,6 +1972,13 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 
 .exercise-detail__note { margin-bottom: var(--sp-3); color: var(--dim); font-size: var(--t-meta); line-height: 1.5; }
 .exercise-detail__table-wrap { overflow-x: auto; }
+
+@media (max-width: 520px) {
+  .table { font-size: var(--t-meta); }
+  .table th, .table td { padding: var(--sp-2) var(--sp-1); }
+  /* the date is the row's anchor: never let it break across lines */
+  .table td:first-child, .table th:first-child { white-space: nowrap; }
+}
 
 /* metadata: closed-by-default disclosure, deliberately quiet (spec 6.3 --
    "maintenance, not the reason you opened the page"). Body flows inline
@@ -1634,6 +2004,159 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
 .exercise-detail-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
 
 /* ============================================================================
+   ROUTE TRANSITIONS  ·  REMOVED, and why
+   ----------------------------------------------------------------------------
+   A cross-document view transition (`@view-transition { navigation: auto }`)
+   lived here. It is gone, because it wedged CSS transitions in the INCOMING
+   document: after any same-origin navigation, transitions in the new page
+   never advanced. Measured, reproducibly, on the progress modal:
+
+     with the opt-in   opacity 0, transform stuck at the closed-state
+                       matrix(0.98, 0, 0, 0.98, 0, 16), the transform
+                       transition permanently playState "running",
+                       requestAnimationFrame callbacks never firing
+     without it        opacity 1, transform none, zero pending animations
+
+   The user-visible consequence was that tapping the chart icon opened a fully
+   transparent modal that never faded in -- an invisible dialog trapping focus
+   rules. Narrowed further: removing the `view-transition-name` assignments
+   did NOT help, so it is the navigation opt-in itself, not the named
+   elements. Also worth recording: the transition was never observed firing
+   correctly in the first place (`pagereveal` never reported one, and the
+   engine logged "Transition was skipped").
+
+   A page-entry animation is NOT reinstated in its place. Product motion
+   doctrine is explicit that a task surface should not choreograph its own
+   arrival, and the section-by-section stagger that used to live further down
+   was removed on that ground independently of this.
+
+   If this is revisited: verify with a real cross-document navigation that a
+   CSS transition started AFTER the navigation still completes, before
+   shipping it. That is the check that would have caught this.
+   ============================================================================ */
+
+/* ============================================================================
+   DISCLOSURE  .  details/summary open + close
+   ----------------------------------------------------------------------------
+   Native <details> snaps. Two shapes need two answers: an INLINE body
+   (Bearbeiten, Ersetzen, Saetze korrigieren) grows the page, so it animates its
+   own height; the routine edit POPOVER is absolutely positioned and must not
+   animate height at all -- it rises and fades like the overlay it is.
+   ============================================================================ */
+
+@supports (interpolate-size: allow-keywords) {
+  :root { interpolate-size: allow-keywords; }
+  .meta-edit::details-content,
+  .replace::details-content,
+  .set-correct::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition: block-size var(--dur-3) var(--ease-out),
+                content-visibility var(--dur-3) allow-discrete;
+  }
+  .meta-edit[open]::details-content,
+  .replace[open]::details-content,
+  .set-correct[open]::details-content { block-size: auto; }
+}
+
+@keyframes disclosure-pop {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+}
+.routine__edit[open] > .routine__edit-body {
+  animation: disclosure-pop 180ms var(--ease-out);
+  transform-origin: top right;
+}
+
+/* ============================================================================
+   STATISTIK  ·  all-time analytics (statistik.html)
+   ----------------------------------------------------------------------------
+   Desktop-composed: this page is not in the mobile tab bar, so it is free to
+   use the width instead of stacking. It still renders single-column on a
+   phone (the URL stays reachable), which is why nothing here depends on a
+   minimum width to be legible -- only to be well arranged.
+   ============================================================================ */
+
+.statistik__head { margin-bottom: var(--sp-5); }
+.statistik__zone { margin-bottom: var(--sp-6); }
+
+/* the stated finding: the sentence the zone exists to make, above its evidence */
+.statistik__finding {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--t-name);
+  color: var(--ink);
+  text-wrap: pretty;
+}
+/* The "noch zu wenig Daten" line, where a finding's sample is too small to
+   state it. It has to LOOK different from a stated finding, or the silence
+   rule only exists in the wording and a glance reads both as conclusions --
+   which is precisely the confident-but-unfounded impression the rule exists
+   to prevent. Dimmed to the same level as any other secondary label. */
+.statistik__finding--quiet { color: var(--dim); }
+/* wide tables scroll in their own box; the page body never does */
+.statistik__table-wrap { overflow-x: auto; }
+
+/* Das Werk: one divided readout band, not five tiles. Same family as
+   .stat-grid -- repeated identical cards are banned, and five of them would
+   be the worst case of it on the page. */
+.werk {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  gap: 1px;
+  background: var(--edge);
+}
+/* Dividers are the container's background showing through the grid gap, not
+   a per-item border: a gap only ever exists between cells, so unlike a
+   :first-child-cleared inset shadow it can't leave a stray leading rule on
+   the first item of a wrapped row. */
+.werk__item {
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-4);
+  background: var(--chassis);
+}
+.werk__unit { margin-inline-start: 0.2em; font-size: var(--t-meta); color: var(--dim); }
+.werk__meta { color: var(--unlit); }
+
+.prog-table__delta { color: var(--dim); }
+.prog-table__delta.is-up { color: var(--ink); }
+/* sortable headers are <th>, so the affordance and the keyboard target are
+   both explicit -- a bare th has neither */
+.prog-table th[data-sort] { cursor: pointer; user-select: none; }
+.prog-table th[data-sort]:focus-visible { outline: 2px solid var(--live); outline-offset: -2px; }
+.prog-table th[aria-sort] { color: var(--ink); }
+
+.finding-bar__note { margin-top: var(--sp-2); color: var(--unlit); }
+/* the findings panel holds charts inside rows, so its rows need room to
+   breathe that a plain list row does not */
+.statistik__zone .row__wide { margin-top: var(--sp-3); }
+
+/* two columns where there is room, stacked where there is not -- no
+   breakpoint needed, auto-fit does it */
+.statistik__cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+  gap: var(--sp-4);
+}
+
+/* the one place gold is right on this page: it already means "record"
+   everywhere else in the app */
+.record-row__value { color: var(--record); }
+
+/* Sparkline: shape only. The first/current columns already carry the numbers,
+   so this exists to show whether the climb was steady or a spike followed by a
+   plateau -- two very different stories behind one identical delta. */
+.spark-cell { inline-size: 7rem; }
+.spark {
+  display: block; inline-size: 100%; block-size: 1.5rem;
+  overflow: visible; color: var(--dim);
+}
+.spark polyline {
+  fill: none; stroke: currentColor; stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;   /* preserveAspectRatio="none" would otherwise smear the stroke */
+  stroke-linejoin: round; stroke-linecap: round;
+}
+tr:hover .spark { color: var(--ink); }
+
+/* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
 
@@ -1647,4 +2170,32 @@ h3 { font-size: var(--t-name); font-weight: var(--w-semi); }
   }
   .rest__fill, .hbar__fill { transition: none !important; }
   .flare { animation: none !important; }
+  .set__check::after { clip-path: none !important; }
 }
+
+/* ============================================================================
+   TEXT RESIZE  ·  why so many tracks are minmax(0, 1fr)
+   ----------------------------------------------------------------------------
+   WCAG 2.2 SC 1.4.4 (Resize Text, AA) requires that text scale to 200%
+   without loss of content. Browser text zoom scales the root font size, so
+   every rem-based width in this file doubles with it while the viewport does
+   not -- which is correct and intended for spacing, but fatal for any track
+   that is allowed to size itself from its content.
+
+   A `1fr` track carries an implicit `min-content` floor, and a grid item
+   defaults to `min-inline-size: auto`. Together they mean: if any descendant's
+   min-content exceeds the viewport at 200%, the track grows to fit it and
+   every sibling in that track stretches to match. That is exactly what was
+   measured before this pass -- on Heute the header, the title, the h1 and the
+   start section all reported an identical 606.734px width in a 390px viewport.
+   Only one of them was actually too wide; the rest inherited the track.
+
+   `minmax(0, 1fr)` removes the floor, so content wraps (or scrolls inside its
+   own box) instead of widening the page. The numeric fields additionally keep
+   a `ch`-based min-inline-size: `ch` scales with the font, so a three-digit
+   weight still fits at any root size, while `max-inline-size: 100%` lets the
+   field give way rather than drag the row off-screen.
+
+   Verified at `html { font-size: 32px }` (200% of 16px) in a 390px viewport,
+   on every page, plus the 320px reflow case for SC 1.4.10.
+   ============================================================================ */

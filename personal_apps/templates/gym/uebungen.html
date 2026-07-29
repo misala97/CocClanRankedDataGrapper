@@ -46,7 +46,12 @@
             </div>
             <div id="uebungen-list" class="uebungen-list">
                 {% for group_name, group_entries in grouped %}
-                <button type="button" class="uebungen-group-header label" aria-expanded="false">
+                {# Groups open by default. Collapsed-by-default meant an arriving user saw
+                   ZERO exercises under a GEWICHT / E1RM column header row -- a
+                   catalogue that shows nothing is not a catalogue. 17 exercises
+                   across 5 groups is one scannable list; collapsing stays
+                   available for anyone who wants it. #}
+                <button type="button" class="uebungen-group-header label is-open" aria-expanded="true">
                     <span class="uebungen-group-header__chevron" aria-hidden="true">▸</span>
                     {{ group_name }} ({{ group_entries|length }})
                 </button>
@@ -85,7 +90,7 @@
 
     <section class="uebungen__add">
         <div class="panel">
-            <div class="section-head"><span class="label">Neue Übung</span></div>
+            <div class="section-head"><h2 class="label">Neue Übung</h2></div>
             <form method="post" action="{{ url_for('gym.gym_add_exercise') }}" class="add-exercise">
                 <div class="field grow">
                     <label class="label" for="uebungen-add-name">Name</label>

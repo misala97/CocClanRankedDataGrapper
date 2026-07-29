@@ -15,7 +15,6 @@
 {% block title %}{{ session.name or 'Workout' }} · Gym Tracker{% endblock %}
 
 {% block content %}
-{% include 'gym/_progress_modal.html' %}
 
 <div class="gym-wrap session-view">
 
@@ -23,9 +22,43 @@
         <div class="session-head__main">
             <h1>{{ session.name or 'Workout' }}</h1>
             <span class="chip chip--live">Aktiv</span>
+            {% if session.is_deload %}<span class="chip chip--deload">Deload</span>{% endif %}
         </div>
         <div class="num num--md session-head__clock" id="session-duration" data-started="{{ session.started_at.isoformat() }}">--:--:--</div>
     </header>
+
+    {# Deload: no colour of its own -- the app has exactly three semantic hues
+       and this is none of them. It is a settled fact about the session, so it
+       reads as dim ink plus the word. The percentage picks only appear while
+       nothing is completed, because past that point changing the percentage
+       can no longer rewrite anything. #}
+    <div class="deload-bar{{ ' is-on' if session.is_deload else '' }}">
+        <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
+            <input type="hidden" name="on" value="{{ '0' if session.is_deload else '1' }}">
+            <input type="hidden" name="pct" value="{{ session.deload_pct or deload_default_pct }}">
+            <button type="submit" class="btn btn--ghost btn--sm deload-bar__toggle">
+                {{ 'Deload beenden' if session.is_deload else 'Als Deload markieren' }}
+            </button>
+        </form>
+        {% if session.is_deload %}
+        <span class="label deload-bar__state">
+            {% if deload_applied %}{{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Nur markiert — Gewichte unverändert{% endif %}
+        </span>
+        {% if not has_completed_set %}
+        <div class="deload-bar__picks" role="group" aria-label="Deload-Tiefe">
+            {% for pct in deload_pcts %}
+            <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
+                <input type="hidden" name="on" value="1">
+                <input type="hidden" name="pct" value="{{ pct }}">
+                <button type="submit"
+                        class="deload-bar__pick{{ ' is-active' if pct == session.deload_pct else '' }}"
+                        {% if pct == session.deload_pct %}aria-current="true"{% endif %}>{{ pct }} %</button>
+            </form>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
 
     {# Every mutating fetch below can fail (dropped connection, gym wifi) --
        this banner is the one shared, visible answer to "did that save?" when
@@ -51,7 +84,7 @@
     {% endif %}
 
     <div class="reorder-row">
-        <button type="button" class="btn btn--ghost btn--sm" id="reorder-lock-btn">🔒 Reihenfolge gesperrt</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="reorder-lock-btn">{% with icon='lock' %}{% include 'gym/_icon.html' %}{% endwith %}{% with icon='unlock' %}{% include 'gym/_icon.html' %}{% endwith %}<span id="reorder-lock-label">Reihenfolge gesperrt</span></button>
     </div>
 
     {# the single live exercise = the first visible, non-skipped one that isn't
@@ -101,11 +134,11 @@
                 </div>
                 <div class="exercise-card__tools">
                     <form method="post" action="{{ url_for('gym.gym_update_session_exercise_rest', session_exercise_id=se.id) }}" class="rest-form" title="Pause in Sekunden — speichert automatisch">
-                        <span class="rest-form__unit label">⏱</span>
+                        <span class="rest-form__unit label">{% with icon='timer' %}{% include 'gym/_icon.html' %}{% endwith %}</span>
                         <input type="number" name="rest_seconds" min="0" class="input input--num rest-form__input" value="{{ se.rest_seconds if se.rest_seconds is not none else '' }}" aria-label="Pause in Sekunden">
                         <span class="rest-form__unit label">s</span>
                     </form>
-                    <button type="button" class="icon-btn progress-open-btn" data-exercise-id="{{ se.exercise_id }}" data-position="{{ se.position }}" aria-label="Fortschritt anzeigen" title="Fortschritt anzeigen">📊</button>
+                    <button type="button" class="icon-btn progress-open-btn" data-exercise-id="{{ se.exercise_id }}" data-position="{{ se.position }}" aria-label="Fortschritt anzeigen" title="Fortschritt anzeigen">{% with icon='chart' %}{% include 'gym/_icon.html' %}{% endwith %}</button>
                 </div>
             </div>
 
@@ -174,10 +207,10 @@
 
                 <div class="ex-actions">
                     <form method="post" action="{{ url_for('gym.gym_toggle_skip_session_exercise', session_exercise_id=se.id) }}">
-                        <button type="submit" class="btn btn--ghost btn--sm">{{ '↩️ Rückgängig' if se.skipped else '⏭️ Überspringen' }}</button>
+                        <button type="submit" class="btn btn--ghost btn--sm">{% if se.skipped %}{% with icon='undo' %}{% include 'gym/_icon.html' %}{% endwith %}<span>Rückgängig</span>{% else %}{% with icon='skip' %}{% include 'gym/_icon.html' %}{% endwith %}<span>Überspringen</span>{% endif %}</button>
                     </form>
                     <details class="replace">
-                        <summary class="btn btn--ghost btn--sm">🔁 Ersetzen</summary>
+                        <summary class="btn btn--ghost btn--sm">{% with icon='swap' %}{% include 'gym/_icon.html' %}{% endwith %}<span>Ersetzen</span></summary>
                         <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}" class="replace__form">
                             <div class="field grow">
                                 <label class="label" for="replace-select-{{ se.id }}">Ersatzübung</label>
@@ -206,7 +239,7 @@
     </div>
 
     <div class="panel">
-        <div class="section-head"><span class="label">Übung hinzufügen</span></div>
+        <div class="section-head"><h2 class="label">Übung hinzufügen</h2></div>
         <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" id="add-exercise-form" class="add-exercise">
             <div class="field grow">
                 <label class="label" for="exercise-select">Übung</label>
@@ -241,7 +274,7 @@
     </div>
 
     <div class="panel">
-        <div class="section-head"><span class="label">Als Vorlage speichern</span></div>
+        <div class="section-head"><h2 class="label">Als Vorlage speichern</h2></div>
         <form method="post" action="{{ url_for('gym.gym_save_as_template', session_id=session.id) }}" class="save-template">
             <div class="field grow">
                 <label class="label" for="template-name-input">Name der Vorlage</label>
@@ -251,10 +284,20 @@
         </form>
     </div>
 </div>
+
+{# The modal partial contains an <h2>; included at the TOP of the block it
+   put an h2 into the document before this page's own <h1>, so the heading
+   outline opened at level 2. It is position:fixed, so DOM order is free --
+   it lives at the end of the content now. #}
+{% include 'gym/_progress_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{# Chart.js is NOT loaded here. On this page it is only ever used by the
+   progress modal, which most workouts never open -- 208 KB from a third
+   party on every load of the screen you keep open during a whole
+   session, on gym wifi. _progress_modal.html now fetches it on first
+   open instead (pinned + SRI there). #}
 <script>
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -265,7 +308,9 @@ let reorderUnlocked = false;
 const reorderLockBtn = document.getElementById('reorder-lock-btn');
 function updateReorderLockButton() {
     if (!reorderLockBtn) return;
-    reorderLockBtn.textContent = reorderUnlocked ? '🔓 Entsperrt — ziehen zum Sortieren' : '🔒 Reihenfolge gesperrt';
+    reorderLockBtn.classList.toggle('is-unlocked', reorderUnlocked);
+    document.getElementById('reorder-lock-label').textContent =
+        reorderUnlocked ? 'Entsperrt — ziehen zum Sortieren' : 'Reihenfolge gesperrt';
     reorderLockBtn.classList.toggle('btn--live', reorderUnlocked);
     reorderLockBtn.classList.toggle('btn--ghost', !reorderUnlocked);
 }

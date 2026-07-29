@@ -20,7 +20,7 @@ window.GymChart = {
     // mode this exists to catch.
     resolveTokens() {
         const styles = getComputedStyle(document.documentElement);
-        const names = ['ink', 'dim', 'edge', 'live', 'record'];
+        const names = ['ink', 'dim', 'edge', 'unlit', 'live', 'record'];
         const tokens = {};
         names.forEach((name) => {
             const value = styles.getPropertyValue(`--${name}`).trim();
@@ -36,7 +36,7 @@ window.GymChart = {
     // any more than a fill colour can, so this has to be a literal -- kept
     // in exactly one place rather than repeated at every call site, so
     // there is only one spot to update if gym.css's stack ever changes.
-    _FONT_MONO: '"IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace',
+    _FONT_MONO: 'Saira, ui-monospace, "Cascadia Mono", Consolas, monospace',
 
     // Formats a server-sent RFC 822 date string (what Flask's tojson/jsonify
     // emit for a naive-UTC datetime.datetime -- see werkzeug.http.http_date)
@@ -57,18 +57,26 @@ window.GymChart = {
     // token contract permits exactly 3 semantic hues (live/record/stall)
     // with none spare for a 4th "which slot" meaning -- stall means
     // attention/destructive and is deliberately never repurposed here. So:
-    // 3 solid-hue slots (live amber / record cyan / ink near-white), each
-    // with its own point shape so colour is never the only thing telling
-    // two series apart -- gym.css's "colour is never the sole signal" rule
-    // for state, extended here to series identity. A 4th+ position -- never
-    // seen in real data, but not impossible -- cycles back through the same
-    // 3 hues on a dashed line rather than inventing a new colour.
+    // Series identity rides the NEUTRAL ramp, never a semantic hue.
+    //
+    // This used to be [live, record, ink] -- so a second position drew in
+    // gold purely because it was series #2, and the legend read "Position 6"
+    // in the exact colour that means REKORD on every other surface. PRODUCT.md
+    // 4.3 is explicit that a token may never be repurposed, and 4.3's fourth
+    // constraint is that nothing decorative gets a colour. A slot number is
+    // decorative here; the record is not.
+    //
+    // Lightness plus point shape separates the lines instead, which also
+    // keeps "colour is never the sole signal" true. --record is now spent
+    // where it earns its meaning: on the individual points that set a PR
+    // (see renderProgressChart). A 4th+ position cycles the same ramp on a
+    // dashed line rather than inventing a colour.
     _seriesStyle(index, tokens) {
-        const hues = [tokens.live, tokens.record, tokens.ink];
+        const ramp = [tokens.ink, tokens.dim, tokens.unlit];
         const shapes = ['circle', 'rectRot', 'triangle'];
-        const cycle = Math.floor(index / hues.length);
+        const cycle = Math.floor(index / ramp.length);
         return {
-            color: hues[index % hues.length],
+            color: ramp[index % ramp.length],
             pointStyle: shapes[index % shapes.length],
             dash: cycle > 0 ? [6, 4] : [],
         };
@@ -87,7 +95,7 @@ window.GymChart = {
     // series) and _progress_modal.html (fetched JSON) -- kept as one
     // implementation so the two never drift into two different chart looks.
     renderProgressChart(canvas, { series, tokens }) {
-        ['ink', 'dim', 'edge', 'live', 'record'].forEach((name) => {
+        ['ink', 'dim', 'edge', 'unlit', 'live', 'record'].forEach((name) => {
             if (!tokens || !tokens[name]) {
                 console.error(`GymChart.renderProgressChart: token "${name}" resolved empty -- the chart would silently lose that colour.`);
             }
@@ -104,22 +112,66 @@ window.GymChart = {
         )].sort((a, b) => a - b);
         const labels = allTimes.map((t) => GymChart._formatDate(new Date(t).toUTCString()));
 
+        // Which points were RECORDS: a point whose e1RM beats every earlier
+        // point of this exercise, across all positions, in chronological
+        // order. Derived here rather than added to the API because it is
+        // fully determined by data the chart already has -- and because a
+        // record IS "the best so far", so computing it from the series keeps
+        // the definition in one place instead of two.
+        //
+        // Deload points are excluded from the running-best comparison: a
+        // deload is a deliberately light session, not an attempt at a
+        // record, so it must never be eligible to set or beat one -- even
+        // when its e1RM numerically happens to exceed the prior best. This
+        // has to agree with the server side, which excludes deloads from
+        // `_pr_weight` / `_pr_e1rm` in features/gym/stats.py for the same
+        // reason; the PR cards on this same page already reflect that. The
+        // points themselves are still plotted below (spanGaps stays false,
+        // nothing is filtered out of `series`) -- only their eligibility to
+        // BE a record changes, so the line has no holes.
+        const bestByTime = new Map();
+        let runningBest = -Infinity;
+        allTimes.forEach((t) => {
+            const onDate = series
+                .flatMap((s) => s.points.filter((p) => new Date(p.started_at).getTime() === t && !p.is_deload))
+                .map((p) => p.e1rm);
+            const dayBest = onDate.length ? Math.max(...onDate) : null;
+            if (dayBest !== null && dayBest > runningBest) {
+                runningBest = dayBest;
+                bestByTime.set(t, dayBest);
+            }
+        });
+
         const datasets = series.map((s, i) => {
             const style = GymChart._seriesStyle(i, tokens);
             const byTime = new Map(s.points.map((p) => [new Date(p.started_at).getTime(), p]));
             const aligned = allTimes.map((t) => byTime.get(t) || null);
+            const isRecord = allTimes.map((t, idx) => {
+                const p = aligned[idx];
+                // p.is_deload is checked again here (not just when building
+                // bestByTime above): without it, a deload point whose e1RM
+                // happens to numerically match that day's real best -- set
+                // by a different position, or by itself before dedup -- would
+                // still get flagged, since the value alone can't tell a
+                // deload apart from the record it happens to tie.
+                return !!(p && !p.is_deload && bestByTime.get(t) === p.e1rm);
+            });
             return {
                 label: `Position ${s.position}`,
                 data: aligned.map((p) => (p ? p.e1rm : null)),
                 _points: aligned,   // parallel array; Chart.js ignores unknown keys -- read back in the tooltip callback below for weight/volume detail
+                _isRecord: isRecord,
                 borderColor: style.color,
                 backgroundColor: style.color,
                 pointStyle: style.pointStyle,
                 borderDash: style.dash,
+                // gold, and bigger, exactly on the points that set a new best
+                pointBackgroundColor: isRecord.map((r) => (r ? tokens.record : style.color)),
+                pointBorderColor: isRecord.map((r) => (r ? tokens.record : style.color)),
+                pointRadius: isRecord.map((r) => (r ? 7 : 4)),
                 spanGaps: false,
                 tension: 0.3,
-                pointRadius: 4,
-                pointHoverRadius: 6,
+                pointHoverRadius: 8,
             };
         });
 
