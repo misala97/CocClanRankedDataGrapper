@@ -479,3 +479,31 @@ def test_effort_distribution_on_no_history_is_empty_not_broken():
     result = analytics.effort_distribution([])
     assert result['groups'] == []
     assert result['exercises'] == []
+
+
+def test_effort_distribution_counts_sets_not_rows():
+    """One row can hold several sets, so counting rows would undercount every
+    real workout. Every other test here gives each row a single set, where the
+    two readings coincide and nothing would catch the difference.
+    """
+    rows = [
+        perf([(100.0, 10), (100.0, 8), (100.0, 6)], muscle_group='Brust',
+             exercise_id=1, name='Bank'),
+        perf([(50.0, 10)], muscle_group='Brust', exercise_id=2, name='Fly',
+             session_id=2),
+    ]
+    groups = {g['label']: g for g in analytics.effort_distribution(rows)['groups']}
+    assert groups['Brust']['sets'] == 4, 'counted rows instead of sets'
+    exercises = {e['label']: e for e in analytics.effort_distribution(rows)['exercises']}
+    assert exercises['Bank']['sets'] == 3
+    assert exercises['Fly']['sets'] == 1
+
+
+def test_effort_distribution_breaks_volume_ties_alphabetically():
+    """Equal volumes must order predictably, or the table reshuffles between
+    page loads for no visible reason."""
+    rows = [
+        perf([(100.0, 10)], muscle_group='Zebra', exercise_id=1, name='Z'),
+        perf([(100.0, 10)], muscle_group='Alpha', exercise_id=2, name='A', session_id=2),
+    ]
+    assert [g['label'] for g in analytics.effort_distribution(rows)['groups']] == ['Alpha', 'Zebra']

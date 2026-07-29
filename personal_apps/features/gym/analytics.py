@@ -353,6 +353,14 @@ def effort_distribution(rows):
     here at all, and a group with no trained exercises simply does not appear.
     Heute's muscle_group_volume() deliberately does the opposite, because
     there a group at zero IS the finding; here absence is just absence.
+
+    Exercises are keyed by name rather than id, which is safe for two reasons
+    worth stating because neither is local: Exercise.name is unique, so two
+    exercises can never collapse into one bucket; and _to_performed() resolves
+    the name through a live join, so every row carries the CURRENT name and a
+    rename moves an exercise's whole history rather than splitting it. If that
+    join were ever changed to snapshot the name at log time, this function
+    would start silently splitting renamed exercises in two.
     """
     groups = defaultdict(lambda: [0.0, 0])
     exercises = defaultdict(lambda: [0.0, 0])
