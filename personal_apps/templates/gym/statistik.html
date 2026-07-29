@@ -150,7 +150,13 @@
             <div class="row row--top">
                 <div class="row__main">
                     {% if daypart.statable %}
-                    {% set parts = daypart.parts|selectattr('sessions')|sort(attribute='avg_volume', reverse=true)|list %}
+                    {# Named buckets only. `other` is everything outside both
+                       windows, and analytics deliberately refuses to base a
+                       finding on it -- a bucket defined as "the rest" cannot
+                       support a claim about when you train well. Without this
+                       filter a single odd-hour session can become the thing
+                       mornings get compared against. #}
+                    {% set parts = daypart.parts|rejectattr('label', 'equalto', 'other')|selectattr('sessions')|sort(attribute='avg_volume', reverse=true)|list %}
                     <p class="statistik__finding">
                         Du bewegst {{ DAYPART_LABELS[parts[0].label] }} mehr Gewicht pro Workout als {{ DAYPART_LABELS[parts[-1].label] }}.
                     </p>
@@ -175,9 +181,16 @@
             <div class="row row--top">
                 <div class="row__main">
                     {% if fatigue.statable %}
+                    {# weight_change_pct is None when every qualifying row was
+                       bodyweight -- statable only counts rows, so the two can
+                       disagree, and formatting None here would 500 the page. #}
                     <p class="statistik__finding">
+                        {% if fatigue.weight_change_pct is not none %}
                         Im letzten Satz einer Übung bewegst du im Schnitt {{ '%+.1f'|format(fatigue.weight_change_pct) }} % Gewicht
                         und schaffst {{ fatigue.first_reps }} → {{ fatigue.last_reps }} Wiederholungen.
+                        {% else %}
+                        Im letzten Satz einer Übung schaffst du {{ fatigue.first_reps }} → {{ fatigue.last_reps }} Wiederholungen.
+                        {% endif %}
                     </p>
                     {% else %}
                     <p class="statistik__finding statistik__finding--quiet">Ermüdung: noch zu wenig Daten für eine Aussage.</p>
@@ -225,9 +238,12 @@
                     <div class="hbar">
                         <span class="hbar__name">{{ bucket.label }} Tage</span>
                         <span class="hbar__track"><span class="hbar__fill" style="width:{{ (bucket.avg_volume / peak * 100)|round(1) }}%"></span></span>
-                        <span class="hbar__val">{{ bucket.sessions }}</span>
+                        <span class="hbar__val">{{ bucket.avg_volume|round|int }} kg</span>
                     </div>
                     {% endfor %}
+                    <p class="label finding-bar__note">
+                        {{ rest_gap.buckets|selectattr('sessions')|map(attribute='sessions')|sum }} Workouts mit Vorgänger
+                    </p>
                 </div>
             </div>
         </div>
