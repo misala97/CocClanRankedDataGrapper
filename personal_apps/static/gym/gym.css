@@ -2086,6 +2086,12 @@ a.row__main:hover .name { color: var(--live); }
   color: var(--ink);
   text-wrap: pretty;
 }
+/* The "noch zu wenig Daten" line, where a finding's sample is too small to
+   state it. It has to LOOK different from a stated finding, or the silence
+   rule only exists in the wording and a glance reads both as conclusions --
+   which is precisely the confident-but-unfounded impression the rule exists
+   to prevent. Dimmed to the same level as any other secondary label. */
+.statistik__finding--quiet { color: var(--dim); }
 /* wide tables scroll in their own box; the page body never does */
 .statistik__table-wrap { overflow-x: auto; }
 
