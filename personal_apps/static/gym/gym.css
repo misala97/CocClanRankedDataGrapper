@@ -2068,6 +2068,60 @@ a.row__main:hover .name { color: var(--live); }
 }
 
 /* ============================================================================
+   STATISTIK  ·  all-time analytics (statistik.html)
+   ----------------------------------------------------------------------------
+   Desktop-composed: this page is not in the mobile tab bar, so it is free to
+   use the width instead of stacking. It still renders single-column on a
+   phone (the URL stays reachable), which is why nothing here depends on a
+   minimum width to be legible -- only to be well arranged.
+   ============================================================================ */
+
+.statistik__head { margin-bottom: var(--sp-5); }
+.statistik__zone { margin-bottom: var(--sp-6); }
+
+/* the stated finding: the sentence the zone exists to make, above its evidence */
+.statistik__finding {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--t-name);
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.statistik__finding--quiet { color: var(--dim); }
+
+/* wide tables scroll in their own box; the page body never does */
+.statistik__table-wrap { overflow-x: auto; }
+
+/* Das Werk: one divided readout band, not five tiles. Same family as
+   .stat-grid -- repeated identical cards are banned, and five of them would
+   be the worst case of it on the page. */
+.werk {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  gap: 0;
+}
+/* Dividers drawn as a background layer rather than per-item borders: with
+   auto-fit the band wraps, and a :first-child reset only clears the very
+   first item -- the first item of every LATER row would keep a stray leading
+   rule. Insetting the item's own background over the gap gives clean
+   dividers at any column count. */
+.werk__item {
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-4);
+  box-shadow: inset 1px 0 0 var(--edge);
+}
+.werk__item:first-child { box-shadow: none; }
+.werk__unit { margin-inline-start: 0.2em; font-size: var(--t-meta); color: var(--dim); }
+.werk__meta { color: var(--unlit); }
+
+.prog-table__delta { color: var(--dim); }
+.prog-table__delta.is-up { color: var(--ink); }
+/* sortable headers are <th>, so the affordance and the keyboard target are
+   both explicit -- a bare th has neither */
+.prog-table th[data-sort] { cursor: pointer; user-select: none; }
+.prog-table th[data-sort]:focus-visible { outline: 2px solid var(--live); outline-offset: -2px; }
+.prog-table th[aria-sort] { color: var(--ink); }
+
+/* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
 
