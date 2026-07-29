@@ -80,6 +80,7 @@
                             <th class="num" data-sort="num">Aktuell</th>
                             <th class="num" data-sort="num">Δ</th>
                             <th class="num" data-sort="num">Bestes Gewicht</th>
+                            <th>Verlauf</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -91,6 +92,21 @@
                             <td class="num">{{ entry.current_e1rm }}</td>
                             <td class="num prog-table__delta{{ ' is-up' if entry.change_pct > 0 else '' }}">{{ '%+.1f'|format(entry.change_pct) }} %</td>
                             <td class="num">{{ entry.best_weight }} kg</td>
+                            <td class="spark-cell">
+                                {# Inline SVG, no chart library: a normalised polyline
+                                   across the session-by-session e1RM values. Uses a
+                                   0-100 viewBox with preserveAspectRatio="none" so the
+                                   drawing needs no knowledge of its rendered size, and
+                                   stroke inherits currentColor so it needs no token
+                                   resolution. #}
+                                {% set lo = entry.points|min %}
+                                {% set hi = entry.points|max %}
+                                {% set span = (hi - lo) if hi > lo else 1 %}
+                                <svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none"
+                                     role="img" aria-label="Verlauf {{ entry.name }}: {{ entry.first_e1rm }} bis {{ entry.current_e1rm }}">
+                                    <polyline points="{% for p in entry.points %}{{ (loop.index0 / ((entry.points|length - 1) or 1) * 100)|round(2) }},{{ (22 - (p - lo) / span * 20)|round(2) }} {% endfor %}" />
+                                </svg>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>

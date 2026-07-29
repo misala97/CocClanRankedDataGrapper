@@ -2141,6 +2141,21 @@ a.row__main:hover .name { color: var(--live); }
    everywhere else in the app */
 .record-row__value { color: var(--record); }
 
+/* Sparkline: shape only. The first/current columns already carry the numbers,
+   so this exists to show whether the climb was steady or a spike followed by a
+   plateau -- two very different stories behind one identical delta. */
+.spark-cell { inline-size: 7rem; }
+.spark {
+  display: block; inline-size: 100%; block-size: 1.5rem;
+  overflow: visible; color: var(--dim);
+}
+.spark polyline {
+  fill: none; stroke: currentColor; stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;   /* preserveAspectRatio="none" would otherwise smear the stroke */
+  stroke-linejoin: round; stroke-linecap: round;
+}
+tr:hover .spark { color: var(--ink); }
+
 /* ============================================================================
    REDUCED MOTION  ·  disables the flare, the fills, and every transition
    ============================================================================ */
