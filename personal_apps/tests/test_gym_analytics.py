@@ -587,3 +587,33 @@ def test_record_timeline_judges_a_later_session_against_the_earlier_ones_best_sl
         perf([(110.0, 8)], started_at=day(7), session_id=2),
     ]
     assert analytics.record_timeline(rows) == []
+
+
+def test_record_timeline_collapses_a_session_to_its_best_slot_whatever_the_order():
+    """The heavier slot is logged FIRST here. Both existing collapse tests put
+    the heavier slot second, where "keep whichever row came last" produces the
+    same answer as max() and neither test can tell them apart.
+
+    Session 1's best is 120 kg. A later 110 kg session is therefore NOT a
+    record -- but a keep-last implementation would collapse session 1 to 100
+    and emit one.
+    """
+    rows = [
+        perf([(120.0, 8)], started_at=day(0), session_id=1, position=1),
+        perf([(100.0, 8)], started_at=day(0), session_id=1, position=4),
+        perf([(110.0, 8)], started_at=day(7), session_id=2, position=1),
+    ]
+    assert analytics.record_timeline(rows) == []
+
+
+def test_record_timeline_orders_same_day_records_predictably():
+    """Two exercises setting a record on the same day must come out in a
+    stable order, or the list reshuffles between page loads."""
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1, exercise_id=1, name='Alpha'),
+        perf([(100.0, 8)], started_at=day(0), session_id=1, exercise_id=2, name='Zebra'),
+        perf([(120.0, 8)], started_at=day(7), session_id=2, exercise_id=1, name='Alpha'),
+        perf([(120.0, 8)], started_at=day(7), session_id=2, exercise_id=2, name='Zebra'),
+    ]
+    weight_records = [r for r in analytics.record_timeline(rows) if r['kind'] == 'weight']
+    assert [r['name'] for r in weight_records] == ['Zebra', 'Alpha']
