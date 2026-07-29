@@ -379,3 +379,52 @@ def effort_distribution(rows):
         'exercises': _share_table({k: tuple(v) for k, v in exercises.items()}, total),
         'total_volume': round(total, 1),
     }
+
+
+def record_timeline(rows):
+    """Rekorde: every personal best ever set, newest first.
+
+    A judgement, so deload rows are dropped -- a light week cannot hold a
+    record.
+
+    Chronological by construction: a record is a session that beat every
+    EARLIER session for that exercise. stats.session_record_counts() asks a
+    deliberately different question ("beats every OTHER session") so a page can
+    show a count that does not change as later sessions arrive. A timeline is a
+    history, and history is what was true on the day.
+
+    The first session of an exercise is never a record: there was nothing to
+    beat, and calling it one would make every exercise's debut a milestone.
+    """
+    by_exercise = defaultdict(dict)
+    for row in stats.progression_rows(rows):
+        seen = by_exercise[row.exercise_id].get(row.session_id)
+        candidate = (row.started_at, stats.best_weight(row), stats.best_e1rm(row), row.name)
+        if seen is None:
+            by_exercise[row.exercise_id][row.session_id] = candidate
+        else:
+            # same exercise twice in one session: judge it as its best showing
+            by_exercise[row.exercise_id][row.session_id] = (
+                seen[0], max(seen[1], candidate[1]), max(seen[2], candidate[2]), seen[3])
+
+    timeline = []
+    for exercise_id, sessions in by_exercise.items():
+        ordered = sorted(sessions.items(), key=lambda item: item[1][0])
+        best_weight = None
+        best_e1rm = None
+        for session_id, (started_at, weight, e1rm, name) in ordered:
+            if best_weight is not None and weight > best_weight:
+                timeline.append({'started_at': started_at, 'session_id': session_id,
+                                 'exercise_id': exercise_id, 'name': name,
+                                 'kind': 'weight', 'value': round(weight, 1),
+                                 'previous': round(best_weight, 1)})
+            if best_e1rm is not None and e1rm > best_e1rm:
+                timeline.append({'started_at': started_at, 'session_id': session_id,
+                                 'exercise_id': exercise_id, 'name': name,
+                                 'kind': 'e1rm', 'value': round(e1rm, 1),
+                                 'previous': round(best_e1rm, 1)})
+            best_weight = weight if best_weight is None else max(best_weight, weight)
+            best_e1rm = e1rm if best_e1rm is None else max(best_e1rm, e1rm)
+
+    timeline.sort(key=lambda entry: (entry['started_at'], entry['name']), reverse=True)
+    return timeline

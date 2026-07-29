@@ -507,3 +507,83 @@ def test_effort_distribution_breaks_volume_ties_alphabetically():
         perf([(100.0, 10)], muscle_group='Alpha', exercise_id=2, name='A', session_id=2),
     ]
     assert [g['label'] for g in analytics.effort_distribution(rows)['groups']] == ['Alpha', 'Zebra']
+
+
+def test_record_timeline_reports_a_beaten_previous_best():
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1),
+        perf([(110.0, 8)], started_at=day(7), session_id=2),
+    ]
+    weight_records = [r for r in analytics.record_timeline(rows) if r['kind'] == 'weight']
+    assert len(weight_records) == 1
+    assert weight_records[0]['value'] == 110.0
+    assert weight_records[0]['previous'] == 100.0
+    assert weight_records[0]['started_at'] == day(7)
+
+
+def test_record_timeline_does_not_count_the_first_session():
+    rows = [perf([(100.0, 8)], started_at=day(0), session_id=1)]
+    assert analytics.record_timeline(rows) == []
+
+
+def test_record_timeline_is_newest_first():
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1),
+        perf([(110.0, 8)], started_at=day(7), session_id=2),
+        perf([(120.0, 8)], started_at=day(14), session_id=3),
+    ]
+    dates = [r['started_at'] for r in analytics.record_timeline(rows) if r['kind'] == 'weight']
+    assert dates == [day(14), day(7)]
+
+
+def test_record_timeline_excludes_deload_sessions():
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1),
+        perf([(200.0, 8)], started_at=day(7), session_id=2, is_deload=True),
+    ]
+    assert analytics.record_timeline(rows) == []
+
+
+def test_record_timeline_reports_weight_and_e1rm_separately():
+    # more reps at the same weight: an e1RM record but not a weight record
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1),
+        perf([(100.0, 12)], started_at=day(7), session_id=2),
+    ]
+    kinds = {r['kind'] for r in analytics.record_timeline(rows)}
+    assert kinds == {'e1rm'}
+
+
+def test_record_timeline_on_no_history_is_empty():
+    assert analytics.record_timeline([]) == []
+
+
+def test_record_timeline_collapses_two_slots_of_one_session_before_judging():
+    """An exercise performed twice in the same workout (two slots) is one
+    session, not two attempts to beat -- so a heavier second slot must not
+    register as beating the first slot's showing. Every test above gives
+    each session at most one row, where a per-row implementation and a
+    per-session one agree; this is the first session ever for the exercise,
+    so if either row were compared against the other one would wrongly look
+    like a beaten record even though there is no earlier SESSION to beat.
+    """
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1, position=1),
+        perf([(120.0, 8)], started_at=day(0), session_id=1, position=4),
+    ]
+    assert analytics.record_timeline(rows) == []
+
+
+def test_record_timeline_judges_a_later_session_against_the_earlier_ones_best_slot():
+    """Continuing the above: once a session has two slots, the LATER session
+    must be compared against that session's best showing, not against
+    whichever slot happens to be seen first. Session 1's best is 120 kg
+    (across two slots); session 2's 110 kg does not beat it and must not
+    appear as a record, even though 110 beats session 1's WORSE slot (100).
+    """
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1, position=1),
+        perf([(120.0, 8)], started_at=day(0), session_id=1, position=4),
+        perf([(110.0, 8)], started_at=day(7), session_id=2),
+    ]
+    assert analytics.record_timeline(rows) == []
