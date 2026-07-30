@@ -88,6 +88,41 @@ body{display:flex;flex-direction:column;overflow:hidden}
 }
 .go svg{width:22px;height:22px}
 
+/* ---- rest: the SAME slot as .go, so nothing on the screen moves ----
+   The countdown sits on --raised rather than on the draining fill: text that
+   straddles a moving boundary can't hold one contrast ratio, and this has to
+   stay legible at a glance from three metres away. The drain rail carries the
+   motion instead, which is what the eye reads anyway. */
+.rest{
+  width:100%;margin-top:var(--sp-4);min-height:var(--tap-primary);
+  border-radius:var(--r-control);background:var(--raised);
+  display:flex;flex-direction:column;justify-content:center;gap:var(--sp-2);
+  padding:var(--sp-3) var(--sp-4);position:relative;overflow:hidden;
+}
+.rest__row{display:flex;align-items:baseline;gap:var(--sp-3)}
+.rest__num{
+  font-size:var(--num-md);font-weight:var(--w-max);letter-spacing:-.04em;
+  line-height:1;color:var(--live-ink);
+}
+.rest__of{font-size:var(--t-meta);font-weight:var(--w-semi);color:var(--unlit)}
+.rest__sp{flex:1}
+.rest__skip{
+  font-size:var(--t-sm);font-weight:var(--w-semi);color:var(--dim);
+  /* a real 44px target without inflating the bar it sits in */
+  min-height:var(--tap);display:inline-flex;align-items:center;
+  padding-inline:var(--sp-2);margin:calc(var(--sp-3) * -1) calc(var(--sp-2) * -1);
+}
+.rest__track{height:8px;border-radius:4px;background:var(--edge);overflow:hidden}
+.rest__fill{display:block;height:100%;width:52%;border-radius:4px;background:var(--live)}
+
+/* the set that was just logged gets one beat, then settles into --done */
+@keyframes set-land{
+  0%{transform:scale(.94)}
+  55%{transform:scale(1.03)}
+  100%{transform:scale(1)}
+}
+.set.just-landed{animation:set-land var(--dur-3) var(--ease)}
+
 /* ---- what the session has become ---- */
 .grew{margin:var(--sp-5) var(--sp-4) 0;display:flex;align-items:flex-end;gap:var(--sp-3)}
 .grew__num{font-size:var(--num-lg);font-weight:var(--w-max);letter-spacing:-.045em;line-height:.88}
@@ -126,7 +161,7 @@ body{display:flex;flex-direction:column;overflow:hidden}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
     </button>
     <span class="head__name">Pull HBF</span>
-    <span class="head__clock">18:42</span>
+    <span class="head__clock">17:55</span>
     <button class="head__more" aria-label="Workout-Optionen">
       <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>
     </button>
@@ -147,8 +182,8 @@ body{display:flex;flex-direction:column;overflow:hidden}
 
   <div class="sets">
     <span class="set is-done">66 × 9</span>
-    <span class="set is-done">66 × 8</span>
-    <span class="set is-now">Satz 3</span>
+    <span class="set is-done just-landed">66 × 8</span>
+    <span class="set">Satz 3</span>
   </div>
 
   <div class="pair">
@@ -164,10 +199,15 @@ body{display:flex;flex-direction:column;overflow:hidden}
     </div>
   </div>
 
-  <button class="go">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-    Satz geschafft
-  </button>
+  <div class="rest" role="timer" aria-label="Pause, noch 47 Sekunden von 90">
+    <div class="rest__row">
+      <span class="rest__num">0:47</span>
+      <span class="rest__of">Pause</span>
+      <span class="rest__sp"></span>
+      <button class="rest__skip">Überspringen</button>
+    </div>
+    <span class="rest__track"><span class="rest__fill"></span></span>
+  </div>
 </section>
 
 <div class="grew">
@@ -177,9 +217,9 @@ body{display:flex;flex-direction:column;overflow:hidden}
   <span class="grew__side"><b>5</b> Sätze · <b>18</b> min</span>
 </div>
 
-<div class="ticks" role="img" aria-label="5 von 21 Sätzen erledigt, Satz 6 läuft">
+<div class="ticks" role="img" aria-label="5 von 21 Sätzen erledigt">
   <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick is-on"></span>
-  <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick is-hot"></span>
+  <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick "></span>
   <span class="tick"></span><span class="tick"></span><span class="tick"></span>
   <span class="tick"></span><span class="tick"></span><span class="tick"></span>
   <span class="tick"></span><span class="tick"></span><span class="tick"></span>
