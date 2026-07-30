@@ -179,6 +179,47 @@ def _last_full_performance(exercise_id, position=None):
     return [{'weight': s.weight, 'reps': s.reps} for s in last_session_exercise.sets if s.completed]
 
 
+def _seeded_sets(session_, exercise_id, position):
+    """Pending sets pre-filled from history for `exercise_id` in `position`,
+    honouring the session's deload if one is on.
+
+    History is always recorded at full working weight (_last_session_exercise
+    skips deload sessions on purpose), so seeding raw would hand a deload
+    session the untouched working weights. Every call site that re-seeds a
+    slot -- reorder, un-skip -- can run *after* the deload was switched on,
+    which is exactly when that silently undid the prescription. Scaling here,
+    at the one place sets are derived from history, keeps the two in step
+    wherever a new one is added.
+
+    base_weight is set the same way gym_toggle_deload sets it, so switching
+    the deload back off restores these sets to the working weight like any
+    other.
+    """
+    seeded = _last_full_performance(exercise_id, position=position)
+    if not seeded:
+        return []
+
+    pct = session_.deload_pct if session_.is_deload else None
+    if not pct:
+        return [
+            SessionSet(position=j, weight=prev['weight'], reps=prev['reps'], completed=False)
+            for j, prev in enumerate(seeded, start=1)
+        ]
+
+    exercise = db.session.get(Exercise, exercise_id)
+    is_unilateral = bool(exercise and exercise.is_unilateral)
+    return [
+        SessionSet(
+            position=j,
+            weight=stats.deload_weight(prev['weight'], pct, is_unilateral),
+            base_weight=prev['weight'],
+            reps=prev['reps'],
+            completed=False,
+        )
+        for j, prev in enumerate(seeded, start=1)
+    ]
+
+
 def _template_exercises_from_session(session_):
     """Build ordered, deduped TemplateExercise rows from a session's current
     exercises, carrying over each exercise's configured rest time so it's
@@ -416,10 +457,7 @@ def gym_start():
                     exercise_id=te.exercise_id, position=i,
                     rest_seconds=te.rest_seconds if te.rest_seconds is not None else te.exercise.default_rest_seconds,
                 )
-                for j, prev_set in enumerate(_last_full_performance(te.exercise_id, position=i), start=1):
-                    session_exercise.sets.append(SessionSet(
-                        position=j, weight=prev_set['weight'], reps=prev_set['reps'], completed=False,
-                    ))
+                session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
                 session_.exercises.append(session_exercise)
 
     db.session.add(session_)
@@ -709,8 +747,9 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
             if not s.completed:
                 db.session.delete(s)
     elif not session_exercise.sets:
-        for j, prev_set in enumerate(_last_full_performance(session_exercise.exercise_id, position=session_exercise.position), start=1):
-            session_exercise.sets.append(SessionSet(position=j, weight=prev_set['weight'], reps=prev_set['reps'], completed=False))
+        session_exercise.sets.extend(
+            _seeded_sets(session_, session_exercise.exercise_id, session_exercise.position)
+        )
 
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id))
@@ -829,10 +868,7 @@ def gym_reorder_session_exercises(session_id):
             # real in-progress data rather than a stale suggestion.
             if position != old_position and not any(s.completed for s in se.sets):
                 se.sets.clear()
-                se.sets.extend(
-                    SessionSet(position=j, weight=prev_set['weight'], reps=prev_set['reps'], completed=False)
-                    for j, prev_set in enumerate(_last_full_performance(se.exercise_id, position=position), start=1)
-                )
+                se.sets.extend(_seeded_sets(session_, se.exercise_id, position))
             position += 1
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_id))
