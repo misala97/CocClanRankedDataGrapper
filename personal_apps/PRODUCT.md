@@ -171,11 +171,29 @@ always semantic rather than descriptive, so only the values move.
 --done       LOGGED: a completed set, a finished exercise     (pale rose)
 --record     RECORD: a previous best beaten                   (gold)
 --stall      ATTENTION: stagnation                            (cold cyan)
---on-live / --on-done / --on-record / --on-stall   text sitting ON a saturated fill
+--on-live / --on-done / --on-record / --on-stall   text sitting ON those fills
+--live-ink / --done-ink / --record-ink / --stall-ink
+             the same four roles when the accent is TEXT on a surface
 ```
+
+Two additions, both forced by measurement rather than taste:
 
 `--done` is new. The previous system had no token for "logged" — it reused
 `--ink`, which is why completed work read as plain text rather than as a state.
+
+`*-ink` is new and is the light theme's doing. A colour bright enough to be a
+**fill** under dark label text is not dark enough to be **text** on a pale
+surface. In the dark theme the two coincide (a bright accent reads fine on an
+aubergine field) and `*-ink` simply equals its fill. In the light theme they
+cannot: gold at `#F0B429` is a fine chip but fails as text at 1.9:1, while gold
+dark enough to read as text is a brown. This is the same arithmetic collision
+the previous system hit with its blue and solved with `--on-live`; it is
+recorded here so the next person does not rediscover it.
+
+Measured with `scratchpad/palette_puls.py`, which is the source of truth and is
+runnable: **25/25 pairings pass AA in each theme** (light floor 4.79, dark floor
+4.57), and the three accent fills stay separable under protanopia and
+deuteranopia (closest pair 62 of 255 in dark, 109 in light).
 
 Constraints on the palette, in priority order:
 
