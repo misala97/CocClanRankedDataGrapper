@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A · Einzelblatt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FBFAF8; --surface:#FFFFFF; --sunk:#F1F0EC;
+  --ink:#15171A; --dim:#6B7078; --faint:#A8ADB5; --rule:#E3E2DD;
+  --go:#0E7C4A; --go-deep:#0A5E38; --go-wash:#E6F3EC; --on-go:#FFFFFF;
+  --alert:#B3341F;
+  --shadow:0 1px 2px rgba(20,22,26,.06), 0 8px 24px -12px rgba(20,22,26,.18);
+}
+html[data-theme="dark"]{
+  --paper:#101114; --surface:#191B1F; --sunk:#0A0B0D;
+  --ink:#F3F3F1; --dim:#9BA1A9; --faint:#6C727B; --rule:#292C31;
+  --go:#3FD98A; --go-deep:#2AB871; --go-wash:#13291F; --on-go:#06170E;
+  --alert:#FF7A63;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px -14px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Instrument Sans",system-ui,sans-serif;
+  background:var(--paper); color:var(--ink);
+  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+/* ---- top ribbon: the only chrome ---- */
+.ribbon{
+  flex:none; display:flex; align-items:center; gap:12px;
+  padding:14px 20px 12px; border-bottom:1px solid var(--rule);
+}
+.ribbon__name{font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.ribbon__clock{font-size:14px;font-weight:500;color:var(--dim);font-feature-settings:"tnum"}
+.ribbon__sp{flex:1}
+.ribbon__more{
+  width:36px;height:36px;margin:-6px -6px -6px 0;border-radius:8px;
+  display:grid;place-items:center;color:var(--dim);
+}
+.ribbon__more svg{width:20px;height:20px}
+
+/* exercise progress: seven marks, the current one is a bar not a dot */
+.marks{flex:none;display:flex;align-items:center;gap:5px;padding:12px 20px 0}
+.mark{height:4px;border-radius:2px;background:var(--rule);flex:1}
+.mark.is-done{background:var(--ink)}
+.mark.is-now{background:var(--go);flex:2.2}
+
+/* ---- the sheet: one set, nothing else ---- */
+.sheet{flex:1;display:flex;flex-direction:column;padding:22px 20px 0;min-height:0}
+.eyebrow{font-size:13px;color:var(--dim);letter-spacing:.01em}
+.exname{
+  font-size:26px;line-height:1.12;font-weight:600;letter-spacing:-.025em;
+  margin-top:6px;text-wrap:balance;
+}
+.setline{display:flex;align-items:baseline;gap:10px;margin-top:4px}
+.setline__n{font-size:13px;color:var(--dim)}
+.pips{display:flex;gap:4px;align-items:center}
+.pip{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--faint)}
+.pip.is-done{background:var(--ink);border-color:var(--ink)}
+.pip.is-now{background:var(--go);border-color:var(--go);box-shadow:0 0 0 3px var(--go-wash)}
+
+/* what you already did here, quietly — fills the sheet with fact, not filler */
+.log{margin-top:20px;border-top:1px solid var(--rule)}
+.log__row{
+  display:flex;align-items:baseline;gap:12px;padding:11px 0;
+  border-bottom:1px solid var(--rule);font-size:15px;
+}
+.log__n{width:14px;color:var(--faint);font-size:13px}
+.log__load{flex:1;font-weight:500;letter-spacing:-.015em}
+.log__note{font-size:13px;color:var(--dim)}
+.log__row--open .log__load{color:var(--go);font-weight:600}
+.log__row--open .log__note{color:var(--go)}
+.hint{margin-top:14px;font-size:13px;color:var(--faint);line-height:1.5}
+.hint b{font-weight:600;color:var(--dim)}
+
+/* the numbers ARE the interface */
+.figures{margin-block:auto;padding-bottom:6px}
+.fig{display:flex;align-items:center;gap:14px}
+.fig + .fig{margin-top:6px}
+.fig__step{
+  width:52px;height:52px;flex:none;border-radius:14px;
+  background:var(--sunk);display:grid;place-items:center;
+  font-size:24px;font-weight:500;color:var(--dim);
+}
+.fig__val{
+  flex:1;display:flex;align-items:baseline;justify-content:center;gap:6px;
+  min-width:0;
+}
+.fig__num{
+  font-size:62px;line-height:.92;font-weight:600;letter-spacing:-.045em;
+}
+.fig__unit{font-size:16px;font-weight:500;color:var(--dim)}
+.fig--reps .fig__num{font-size:52px}
+
+/* ---- thumb zone ---- */
+.foot{flex:none;padding:16px 20px calc(16px + env(safe-area-inset-bottom,0px))}
+.confirm{
+  width:100%;height:76px;border-radius:20px;
+  background:var(--go);color:var(--on-go);
+  font-size:19px;font-weight:600;letter-spacing:-.01em;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  box-shadow:var(--shadow);
+}
+.confirm svg{width:22px;height:22px}
+.next{
+  display:flex;align-items:center;gap:8px;justify-content:center;
+  margin-top:12px;font-size:13px;color:var(--dim);
+}
+.next b{font-weight:600;color:var(--ink)}
+.tally{
+  display:flex;justify-content:center;gap:18px;margin-top:14px;
+  font-size:12px;color:var(--faint);
+}
+.tally b{font-weight:600;color:var(--dim)}
+</style>
+</head>
+<body>
+
+<div class="ribbon">
+  <span class="ribbon__name">Pull HBF</span>
+  <span class="ribbon__clock">37:15</span>
+  <span class="ribbon__sp"></span>
+  <button class="ribbon__more" aria-label="Übersicht">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+</div>
+
+<div class="marks">
+  <span class="mark is-done"></span>
+  <span class="mark is-now"></span>
+  <span class="mark"></span><span class="mark"></span><span class="mark"></span>
+  <span class="mark"></span><span class="mark"></span>
+</div>
+
+<div class="sheet">
+  <div>
+    <div class="eyebrow">Übung 2 von 7</div>
+    <h1 class="exname">Seated Row (Machine, Good)</h1>
+    <div class="setline">
+      <span class="setline__n">Satz 3 von 3</span>
+      <span class="pips">
+        <span class="pip is-done"></span><span class="pip is-done"></span><span class="pip is-now"></span>
+      </span>
+    </div>
+
+    <div class="log">
+      <div class="log__row"><span class="log__n">1</span><span class="log__load">66,0 kg × 9</span><span class="log__note">✓ geloggt</span></div>
+      <div class="log__row"><span class="log__n">2</span><span class="log__load">66,0 kg × 8</span><span class="log__note">✓ geloggt</span></div>
+      <div class="log__row log__row--open"><span class="log__n">3</span><span class="log__load">66,0 kg × 8</span><span class="log__note">offen</span></div>
+    </div>
+    <p class="hint">Letztes Mal hier: <b>66,0 × 9 · 66,0 × 8 · 63,0 × 8</b></p>
+  </div>
+
+  <div class="figures">
+    <div class="fig">
+      <button class="fig__step">−</button>
+      <span class="fig__val"><span class="fig__num">66,0</span><span class="fig__unit">kg</span></span>
+      <button class="fig__step">+</button>
+    </div>
+    <div class="fig fig--reps">
+      <button class="fig__step">−</button>
+      <span class="fig__val"><span class="fig__num">8</span><span class="fig__unit">Wdh.</span></span>
+      <button class="fig__step">+</button>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  <button class="confirm">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+    Satz bestätigen
+  </button>
+  <div class="next">Als Nächstes <b>T Bar Row (Standing)</b></div>
+  <div class="tally"><span><b>12</b> Sätze</span><span><b>4.980</b> kg</span><span><b>37</b> min</span></div>
+</div>
+
+</body>
+</html>

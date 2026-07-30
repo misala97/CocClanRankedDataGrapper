@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C · Logbuch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page:#F7F5F0; --ink:#1A1A17; --mid:#55534C; --quiet:#918D83;
+  --rule:#DEDAD0; --rule-hard:#1A1A17;
+  --mark:#1A1A17; --on-mark:#F7F5F0;
+  --live:#1A1A17;            /* the ledger marks NOW with weight, not colour */
+  --record:#8A6A12;
+}
+html[data-theme="dark"]{
+  --page:#131311; --ink:#EFEDE6; --mid:#A7A399; --quiet:#77736A;
+  --rule:#2B2A26; --rule-hard:#EFEDE6;
+  --mark:#EFEDE6; --on-mark:#131311;
+  --live:#EFEDE6;
+  --record:#D6AC48;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:Newsreader,Georgia,serif; background:var(--page); color:var(--ink);
+  -webkit-font-smoothing:antialiased; display:flex;flex-direction:column;overflow:hidden;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+
+/* ---- masthead ---- */
+.mast{flex:none;padding:20px 22px 12px;display:flex;align-items:flex-end;gap:12px}
+.mast__title{font-size:27px;font-weight:500;letter-spacing:-.015em;line-height:1}
+.mast__sp{flex:1}
+.mast__clock{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:500;color:var(--mid);letter-spacing:.02em}
+.rule-hard{flex:none;height:2px;background:var(--rule-hard);margin:0 22px}
+.meta{
+  flex:none;display:flex;gap:16px;padding:8px 22px 0;
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--quiet);
+  letter-spacing:.04em;text-transform:uppercase;
+}
+
+/* ---- the ledger ---- */
+.ledger{flex:1;overflow:hidden;padding:14px 22px 0}
+.entry + .entry{margin-top:16px}
+.entry__head{display:flex;align-items:baseline;gap:8px;padding-bottom:5px;border-bottom:1px solid var(--rule)}
+.entry__mk{
+  width:16px;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--quiet);
+}
+.entry__name{flex:1;font-size:18px;font-weight:500;letter-spacing:-.01em;line-height:1.2}
+.entry--now .entry__mk{color:var(--ink)}
+.entry--now .entry__mk::before{
+  content:"";display:inline-block;width:7px;height:7px;background:var(--mark);
+}
+.entry--past .entry__name{color:var(--mid)}
+.entry__tot{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--quiet)}
+
+.lines{margin-top:2px}
+.line{
+  display:flex;align-items:baseline;gap:10px;padding:5px 0 5px 16px;
+  font-family:"IBM Plex Mono",monospace;font-size:14px;
+}
+.line + .line{border-top:1px solid var(--rule)}
+.line__n{width:14px;color:var(--quiet);font-size:11px}
+.line__load{flex:1;letter-spacing:-.01em}
+.line__tick{font-size:12px;color:var(--quiet)}
+.line--done .line__load{color:var(--ink)}
+.line--done .line__tick{color:var(--ink)}
+.line--todo .line__load{color:var(--quiet)}
+.line--now{
+  margin-left:-22px;padding-left:38px;padding-right:22px;
+  background:var(--ink);color:var(--page);
+}
+.line--now .line__n{color:var(--page);opacity:.65}
+.line--now .line__load{font-weight:600}
+.line--now .line__tick{color:var(--page);opacity:.7}
+
+.ahead{margin-top:20px}
+.ahead__lbl{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--quiet);padding-bottom:5px;
+  border-bottom:1px solid var(--rule);
+}
+.aline{display:flex;align-items:baseline;gap:8px;padding:7px 0}
+.aline + .aline{border-top:1px solid var(--rule)}
+.aline__mk{width:16px;flex:none;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--quiet)}
+.aline__name{flex:1;min-width:0;font-size:15px;color:var(--mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aline__plan{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--quiet)}
+
+/* ---- the sum + the one action ---- */
+.foot{flex:none;padding:12px 22px calc(16px + env(safe-area-inset-bottom,0px))}
+.sum{
+  display:flex;align-items:baseline;justify-content:space-between;
+  padding:9px 0;border-top:2px solid var(--rule-hard);border-bottom:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--mid);letter-spacing:.02em;
+}
+.sum__big{font-size:17px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+.act{
+  width:100%;margin-top:13px;height:62px;
+  background:var(--mark);color:var(--on-mark);
+  font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:500;
+  letter-spacing:.1em;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+}
+.act__load{font-size:16px;letter-spacing:-.01em;font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="mast">
+  <h1 class="mast__title">Pull HBF</h1>
+  <span class="mast__sp"></span>
+  <span class="mast__clock">37:15</span>
+</div>
+<div class="rule-hard"></div>
+<div class="meta"><span>Donnerstag, 31. Juli</span><span>Übung 2 / 7</span></div>
+
+<div class="ledger">
+
+  <div class="entry entry--past">
+    <div class="entry__head">
+      <span class="entry__mk">1</span>
+      <span class="entry__name">Lat Pulldown (Single Arm, Hauptbahnhof)</span>
+      <span class="entry__tot num">1.710 kg</span>
+    </div>
+    <div class="lines">
+      <div class="line line--done"><span class="line__n">1</span><span class="line__load">63,0 × 9</span><span class="line__tick">✓</span></div>
+      <div class="line line--done"><span class="line__n">2</span><span class="line__load">63,0 × 8</span><span class="line__tick">✓</span></div>
+      <div class="line line--done"><span class="line__n">3</span><span class="line__load">63,0 × 7</span><span class="line__tick">✓</span></div>
+    </div>
+  </div>
+
+  <div class="entry entry--now">
+    <div class="entry__head">
+      <span class="entry__mk"></span>
+      <span class="entry__name">Seated Row (Machine, Good)</span>
+      <span class="entry__tot num">1.122 kg</span>
+    </div>
+    <div class="lines">
+      <div class="line line--done"><span class="line__n">1</span><span class="line__load">66,0 × 9</span><span class="line__tick">✓</span></div>
+      <div class="line line--done"><span class="line__n">2</span><span class="line__load">66,0 × 8</span><span class="line__tick">✓</span></div>
+      <div class="line line--now"><span class="line__n">3</span><span class="line__load">66,0 × 8</span><span class="line__tick">offen</span></div>
+    </div>
+  </div>
+
+  <div class="ahead">
+    <div class="ahead__lbl">Danach</div>
+    <div class="aline"><span class="aline__mk">3</span><span class="aline__name">T Bar Row (Standing)</span><span class="aline__plan">3 × 45,0</span></div>
+    <div class="aline"><span class="aline__mk">4</span><span class="aline__name">Reverse Fly (Machine)</span><span class="aline__plan">3 × 32,5</span></div>
+    <div class="aline"><span class="aline__mk">5</span><span class="aline__name">Preacher Curl Bilateral</span><span class="aline__plan">3 × 27,5</span></div>
+    <div class="aline"><span class="aline__mk">6</span><span class="aline__name">Biceps Curl (Rotating)</span><span class="aline__plan">3 × 15,0</span></div>
+    <div class="aline"><span class="aline__mk">7</span><span class="aline__name">Hammer Curl (Dumbbell)</span><span class="aline__plan">3 × 14,0</span></div>
+  </div>
+</div>
+
+<div class="foot">
+  <div class="sum">
+    <span>Zwischensumme</span>
+    <span><span class="sum__big">4.980 kg</span> &nbsp;· 12 Sätze</span>
+  </div>
+  <button class="act">Eintragen <span class="act__load">66,0 × 8</span></button>
+</div>
+
+</body>
+</html>

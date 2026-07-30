@@ -97,13 +97,17 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;font-s
 
 /* the one list primitive: divided rows in a shared surface, never cards */
 .row{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) 0}
+.row--top{align-items:flex-start}
 .row + .row{border-top:1px solid var(--edge)}
 .row__lead{flex:none;width:20px;text-align:center;font-size:var(--t-meta);
   font-weight:var(--w-bold);color:var(--unlit)}
 .row__main{flex:1;min-width:0}
-.row__name{font-size:var(--t-body);font-weight:var(--w-med);color:var(--dim);
+/* name and meta are stacked lines, not inline runs -- as inline spans they
+   flow into each other and wrap underneath __trail, which reads as overlap */
+.row__name{display:block;font-size:var(--t-body);font-weight:var(--w-med);color:var(--dim);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row__meta{font-size:var(--t-meta);color:var(--unlit);margin-top:1px}
+.row__name--wrap{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.row__meta{display:block;font-size:var(--t-meta);color:var(--unlit);margin-top:1px}
 .row__trail{flex:none;font-size:var(--t-meta);font-weight:var(--w-semi);color:var(--unlit)}
 .row.is-done .row__name{color:var(--ink)}
 .row.is-done .row__lead{color:var(--done-ink)}

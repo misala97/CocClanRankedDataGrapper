@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B · Werkbank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#191714; --bench:#232019; --slot:#100E0C; --lip:#332E26; --lip-hi:#4A4237;
+  --ink:#F4F1EA; --dim:#A79E90; --off:#6E675C;
+  --paint:#DD6127; --paint-deep:#A54013; --on-paint:#160800;
+  --brass:#D9A83A; --flag:#D5503E;
+  --topglint:inset 0 1px 0 rgba(255,255,255,.06);
+  --seat:0 2px 0 var(--lip);
+}
+html[data-theme="light"]{
+  --ground:#E9E7E3; --bench:#FBFAF8; --slot:#DCD9D3; --lip:#C9C5BD; --lip-hi:#B0ABA1;
+  --ink:#1D1B18; --dim:#5F594F; --off:#8C8579;
+  --paint:#C6521C; --paint-deep:#9A3D11; --on-paint:#FFF6F0;
+  --brass:#9A7412; --flag:#B23524;
+  --topglint:inset 0 1px 0 rgba(255,255,255,.9);
+  --seat:0 2px 0 var(--lip);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:Archivo,system-ui,sans-serif; background:var(--ground); color:var(--ink);
+  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.lbl{font-size:10.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--off)}
+
+/* ---- head rail ---- */
+.rail{
+  flex:none;display:flex;align-items:center;gap:10px;
+  padding:12px 14px;background:var(--bench);
+  border-bottom:2px solid var(--lip);box-shadow:var(--topglint);
+}
+.rail__name{font-size:15px;font-weight:600}
+.rail__sp{flex:1}
+.rail__clock{font-size:15px;font-weight:600;color:var(--dim)}
+.rail__btn{width:34px;height:34px;margin:-4px -4px -4px 0;border-radius:6px;display:grid;place-items:center;color:var(--dim)}
+.rail__btn svg{width:19px;height:19px}
+
+/* ---- the work block: current exercise ---- */
+.block{flex:none;padding:14px;background:var(--bench);border-bottom:2px solid var(--lip);box-shadow:var(--topglint)}
+.block__head{display:flex;align-items:flex-start;gap:10px}
+.block__name{font-size:19px;font-weight:600;line-height:1.15;letter-spacing:-.015em;flex:1}
+.tag{
+  flex:none;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:5px 9px;border-radius:4px;background:var(--paint);color:var(--on-paint);
+}
+/* set ledger: chunky blocks, filled = logged */
+.blocks{display:flex;gap:5px;margin-top:12px}
+.blk{
+  flex:1;height:38px;border-radius:5px;background:var(--slot);
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  font-size:13px;font-weight:600;color:var(--off);
+  box-shadow:inset 0 1px 0 rgba(0,0,0,.35);
+}
+.blk.is-done{background:var(--lip-hi);color:var(--ink);box-shadow:var(--topglint)}
+.blk.is-now{background:transparent;border:2px solid var(--paint);color:var(--paint)}
+
+/* steppers: real controls */
+.ctrl{display:flex;align-items:stretch;gap:0;margin-top:10px;border-radius:8px;overflow:hidden;box-shadow:var(--seat)}
+.ctrl__key{
+  width:66px;flex:none;background:var(--lip);color:var(--ink);
+  font-size:26px;font-weight:500;display:grid;place-items:center;box-shadow:var(--topglint);
+}
+.ctrl__read{
+  flex:1;min-width:0;background:var(--slot);
+  display:flex;align-items:baseline;justify-content:center;gap:6px;
+  padding:10px 4px;box-shadow:inset 0 2px 4px rgba(0,0,0,.35);
+}
+.ctrl__num{font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.ctrl__unit{font-size:13px;font-weight:600;color:var(--dim)}
+
+/* the slab you hit */
+.slab{
+  width:100%;margin-top:12px;height:64px;border-radius:8px;
+  background:var(--paint);color:var(--on-paint);
+  font-size:17px;font-weight:700;letter-spacing:.01em;
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  box-shadow:0 3px 0 var(--paint-deep), var(--topglint);
+}
+.slab svg{width:21px;height:21px}
+
+/* ---- queue: dense rows, no cards ---- */
+.queue{flex:1;overflow:hidden;padding:0 14px}
+.qrow{
+  display:flex;align-items:center;gap:10px;padding:11px 0;
+  border-bottom:1px solid var(--lip);
+}
+.qrow__mk{
+  width:22px;flex:none;text-align:center;font-size:12px;font-weight:700;color:var(--off);
+}
+.qrow__mk.is-done{color:var(--brass)}
+.qrow__name{flex:1;min-width:0;font-size:14px;font-weight:500;color:var(--dim);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qrow.is-done .qrow__name{color:var(--ink)}
+.qrow__sets{font-size:12px;font-weight:600;color:var(--off)}
+.qfoot{display:flex;flex-wrap:wrap;gap:7px;padding:14px 0}
+.qfoot__btn{
+  padding:9px 13px;border-radius:6px;background:var(--bench);
+  font-size:12.5px;font-weight:600;color:var(--dim);
+  box-shadow:var(--topglint), 0 1px 0 var(--lip);
+}
+.qfoot__btn--end{color:var(--flag)}
+
+/* ---- tally bar, bolted to the bottom ---- */
+.tally{
+  flex:none;display:grid;grid-template-columns:repeat(3,1fr);
+  background:var(--bench);border-top:2px solid var(--lip);box-shadow:var(--topglint);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));
+}
+.tally__cell{display:flex;flex-direction:column;gap:2px;align-items:center}
+.tally__cell + .tally__cell{border-left:1px solid var(--lip)}
+.tally__num{font-size:20px;font-weight:700;letter-spacing:-.02em}
+</style>
+</head>
+<body>
+
+<div class="rail">
+  <span class="rail__name">Pull HBF</span>
+  <span class="rail__sp"></span>
+  <span class="rail__clock">37:15</span>
+  <button class="rail__btn" aria-label="Menü">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+</div>
+
+<div class="block">
+  <div class="block__head">
+    <h1 class="block__name">Seated Row (Machine, Good)</h1>
+    <span class="tag">Jetzt</span>
+  </div>
+
+  <div class="blocks">
+    <span class="blk is-done">66 × 9</span>
+    <span class="blk is-done">66 × 8</span>
+    <span class="blk is-now">Satz 3</span>
+  </div>
+
+  <div class="ctrl">
+    <button class="ctrl__key">−</button>
+    <span class="ctrl__read"><span class="ctrl__num">66,0</span><span class="ctrl__unit">KG</span></span>
+    <button class="ctrl__key">+</button>
+  </div>
+  <div class="ctrl">
+    <button class="ctrl__key">−</button>
+    <span class="ctrl__read"><span class="ctrl__num">8</span><span class="ctrl__unit">WDH.</span></span>
+    <button class="ctrl__key">+</button>
+  </div>
+
+  <button class="slab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+    Satz eintragen
+  </button>
+</div>
+
+<div class="queue">
+  <div class="qrow is-done"><span class="qrow__mk is-done">✓</span><span class="qrow__name">Lat Pulldown (Single Arm, Hauptbahnhof)</span><span class="qrow__sets">3/3</span></div>
+  <div class="qrow"><span class="qrow__mk">3</span><span class="qrow__name">T Bar Row (Standing)</span><span class="qrow__sets">0/3</span></div>
+  <div class="qrow"><span class="qrow__mk">4</span><span class="qrow__name">Reverse Fly (Machine)</span><span class="qrow__sets">0/3</span></div>
+  <div class="qrow"><span class="qrow__mk">5</span><span class="qrow__name">Preacher Curl Bilateral</span><span class="qrow__sets">0/3</span></div>
+  <div class="qrow"><span class="qrow__mk">6</span><span class="qrow__name">Biceps Curl (Rotating)</span><span class="qrow__sets">0/3</span></div>
+  <div class="qrow"><span class="qrow__mk">7</span><span class="qrow__name">Hammer Curl (Dumbbell)</span><span class="qrow__sets">0/3</span></div>
+  <div class="qfoot">
+    <button class="qfoot__btn">Übung hinzufügen</button>
+    <button class="qfoot__btn">Reihenfolge</button>
+    <button class="qfoot__btn qfoot__btn--end">Workout beenden</button>
+  </div>
+</div>
+
+<div class="tally">
+  <span class="tally__cell"><span class="tally__num">12</span><span class="lbl">Sätze</span></span>
+  <span class="tally__cell"><span class="tally__num">4.980</span><span class="lbl">kg gesamt</span></span>
+  <span class="tally__cell"><span class="tally__num">0:47</span><span class="lbl">Pause</span></span>
+</div>
+
+</body>
+</html>
