@@ -707,6 +707,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    No frosted glass. */
 .tabbar {
   position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-bar);
+  transform: translateZ(0);   /* own compositing layer -- see the note below */
   display: grid; grid-template-columns: repeat(3, 1fr);
   background: var(--chassis);
   border-top: 1px solid var(--edge);
@@ -766,6 +767,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    a tab. */
 .resume {
   position: fixed; inset-inline: 0; z-index: var(--z-resume);
+  transform: translateZ(0);   /* own compositing layer -- see the note below */
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
   min-block-size: var(--resume-h);   /* fixed, not content-derived: body.has-resume below reserves exactly this much */
   display: flex; align-items: center; gap: var(--sp-3);
@@ -804,8 +806,23 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 @media (min-width: 900px) {
   /* desktop has room: the strip sits in normal flow directly below the top bar
      (rendered there by _base.html), not fixed, so it never overlaps the bar */
-  .resume { position: static; border-top: 0; border-bottom: 1px solid var(--live); }
+  .resume { position: static; transform: none; border-top: 0; border-bottom: 1px solid var(--live); }
 }
+
+/* Why both bars above carry a null transform: on iOS -- reported on an
+   installed (standalone) PWA -- the tab bar sometimes stopped being fixed and
+   scrolled away with the page, staying broken until a reload. It followed a
+   drag-reorder on the session screen, which is the one gesture that inserts a
+   SECOND position:fixed element (.drag-ghost) onto <body> while pointermove is
+   preventDefault()ed and rAF is calling window.scrollBy -- i.e. WebKit rebuilds
+   its layer tree mid-gesture and folds the bar into the scrolling layer.
+   translateZ(0) pins each bar to its own compositing layer up front so there is
+   nothing to fold it into. Neither Chromium nor WebKit reproduces this
+   headlessly (both keep position:fixed and bottom == innerHeight through a
+   scripted drag), so this is verified on device, not in a test. Harmless
+   otherwise: neither bar has fixed descendants, so becoming a containing block
+   changes nothing, and both already opened their own stacking context via
+   z-index. */
 
 /* Mobile only: when the resume strip is actually rendered above the fixed tab
    bar, the base `body` padding-bottom (which only clears the tab bar itself)
