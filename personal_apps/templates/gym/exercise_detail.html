@@ -86,8 +86,10 @@
 
     {% if available_positions|length > 1 %}
     <div class="pills">
+      {# ?position=all, not a bare URL: a bare URL means "decide for me" and
+         lands on the default slot, so the comparison view needs to say so. #}
       <a class="pill{{ ' is-on' if selected_position is none else '' }}"
-         href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id) }}">Alle</a>
+         href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id, position='all') }}">Alle</a>
       {% for p in available_positions %}
       <a class="pill{{ ' is-on' if selected_position == p else '' }}"
          href="{{ url_for('gym.exercise_detail', exercise_id=exercise.id, position=p) }}">Position {{ p }}</a>

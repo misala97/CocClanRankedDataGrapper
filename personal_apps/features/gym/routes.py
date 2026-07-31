@@ -1432,6 +1432,33 @@ CHART_W = 320.0
 CHART_H = 128.0
 CHART_PAD = 10.0
 
+# A slot needs this many sessions before its numbers count as a track record
+# rather than one good day.
+MIN_SESSIONS_FOR_DEFAULT_POSITION = 2
+
+
+def _default_position(series):
+    """Which slot the exercise page opens on.
+
+    The best-performing one by best e1RM, restricted to slots with real history
+    (see the constant above) so a single lucky session cannot become the default
+    view. Falls back to the slot with the most sessions, then to None, which
+    renders every slot at once.
+    """
+    if not series:
+        return None
+    proven = [entry for entry in series
+              if len(entry['points']) >= MIN_SESSIONS_FOR_DEFAULT_POSITION]
+    if proven:
+        # ties break toward the slot with more sessions, then the earlier slot
+        best = max(proven, key=lambda entry: (
+            max(point['e1rm'] for point in entry['points']),
+            len(entry['points']),
+            -entry['position'],
+        ))
+        return best['position']
+    return max(series, key=lambda entry: (len(entry['points']), -entry['position']))['position']
+
 
 def _chart_geometry(series):
     """Turn exercise_progress()'s series into SVG coordinates.
@@ -1522,8 +1549,30 @@ def _chart_geometry(series):
 @login_required
 def exercise_detail(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
-    position = request.args.get('position', type=int)
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
+
+    # The default view is one slot, not all of them. "Alle" draws every position
+    # at once, which is the comparison view -- useful when you want it, and a
+    # poor thing to land on: the answer to "how is this lift going" is a single
+    # line, and overlapping slots bury it.
+    #
+    # Which slot: the best-performing one, meaning highest best-e1RM -- but only
+    # among slots with at least two sessions. A slot used once is a data point,
+    # not a track record, and defaulting to it would show a flattering line
+    # built from a single lucky day. With nothing qualifying, fall back to the
+    # slot the exercise actually lives in (the most sessions).
+    #
+    # `?position=all` is how the template asks for the comparison view, so the
+    # default stays reachable in one click and the URL stays honest about what
+    # it is showing.
+    raw_position = request.args.get('position')
+    if raw_position == 'all':
+        position = None
+    else:
+        position = _to_int(raw_position)
+        if position is None:
+            position = _default_position(stats.exercise_progress(rows, position=None)['series'])
+
     data = stats.exercise_progress(rows, position=position)
     chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
     return render_template(
