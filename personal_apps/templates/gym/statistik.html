@@ -1,392 +1,286 @@
 {% extends 'gym/_base.html' %}
 
-{# Statistik: all-time analytics over the whole training history.
+{# Statistik (Puls): all-time analytics over the whole training history.
 
-   The division against Heute is by TIME HORIZON, not by metric: Heute is
-   windowed (28-day balance, 8 weeks of tonnage, last 5 workouts, what is
+   The division against Start is by TIME HORIZON, not by metric: Start is
+   windowed (28-day balance, 8 weeks of tonnage, last five workouts, what is
    stalling now), this page has no window at all. Any future figure belongs
-   here if it answers "about everything" and on Heute if it answers "about
-   now".
+   here if it answers "about everything" and on Start if it answers "about now".
 
-   Composed for the desktop width -- it is not linked from the mobile tab bar
-   (see _nav.html). Opening the URL on a phone renders it single-column.
+   It answers before it reports: a sentence built from the totals, then the
+   numbers that make it, then the whole career month by month. Composed for the
+   desktop width -- it is not in the mobile tab bar (see _nav.html), but the URL
+   stays reachable and renders single-column, because hiding data someone asked
+   for is worse than showing it cramped.
 
-   Every zone states its finding in words with the figures beneath, and every
-   finding is gated on `statable`: below its sample threshold the chart still
-   renders and the sentence does not. See analytics.py's threshold block. #}
+   Every zone that cannot answer says so. The silence rule is the point: a
+   question shown as open is information, a question quietly dropped is not. #}
 
 {% block title %}Statistik · Gym Tracker{% endblock %}
 
 {% block content %}
-<div class="gym-wrap statistik">
+<div class="stat-page">
 
-    <header class="statistik__head">
-        <h1>Statistik</h1>
-        {% if totals.first_session %}
-        <p class="label">Seit {{ totals.first_session.strftime('%d.%m.%Y') }} · {{ totals.days_training }} Tage</p>
-        {% endif %}
-    </header>
+  {% if totals.sessions %}
+  <section class="lede">
+    <span class="lede__main">
+      <span class="lede__kick">
+        Seit {{ totals.first_session.strftime('%d.%m.%Y') }} ·
+        {# span_months, not months: `months` is the career strip's list, and
+           shadowing it here turned it into an int for the rest of the page. #}
+        {% set years = totals.days_training // 365 %}{% set span_months = (totals.days_training % 365) // 30 %}
+        {%- if years %}{{ years }} {{ 'Jahr' if years == 1 else 'Jahre' }}{% if span_months %}, {% endif %}{% endif %}
+        {%- if span_months %}{{ span_months }} {{ 'Monat' if span_months == 1 else 'Monate' }}{% endif %}
+        {%- if not years and not span_months %}{{ totals.days_training }} Tage{% endif %}
+      </span>
+      <h1 class="lede__h">
+        Du hast <em>{{ '{:,.0f}'.format(totals.tonnage / 1000).replace(',', '.') }} Tonnen</em> bewegt
+        {%- if longest_gap %} und dabei nie länger als {{ longest_gap }} Tage pausiert.{% else %}.{% endif %}
+      </h1>
+    </span>
+    <span class="lede__aside">
+      {# Tonnage is a number nobody can feel. An elephant is roughly six tonnes,
+         which is the only unit here anyone has a mental picture of. #}
+      ≈ {{ (totals.tonnage / 6000)|round|int }} ausgewachsene Elefanten<br>
+      {% if totals.best_session %}
+      Größtes Workout:
+      <a href="{{ url_for('gym.session_detail', session_id=totals.best_session.session_id) }}">
+        <b>{{ '{:,.0f}'.format(totals.best_session.volume).replace(',', '.') }} kg</b></a>
+      · {{ totals.best_session.started_at.strftime('%d.%m.%Y') }}
+      {% endif %}
+    </span>
+  </section>
 
-    {% if totals.sessions == 0 %}
-    <div class="empty">
-        <span class="label">Noch keine Daten</span>
-        Sobald du dein erstes Workout abgeschlossen hast, entsteht hier deine Auswertung.
+  <div class="totals">
+    <span class="total"><span class="total__v">{{ totals.sessions }}</span><span class="label">Workouts</span></span>
+    <span class="total"><span class="total__v">{{ '{:,}'.format(totals.sets).replace(',', '.') }}</span><span class="label">Sätze</span></span>
+    <span class="total"><span class="total__v">{{ '{:,}'.format(totals.reps).replace(',', '.') }}</span><span class="label">Wiederholungen</span></span>
+    <span class="total"><span class="total__v">{{ '{:,.0f}'.format(totals.tonnage / 1000).replace(',', '.') }}<small>t</small></span><span class="label">Tonnage</span></span>
+    <span class="total">
+      <span class="total__v">{{ ('%.1f'|format(totals.sessions / (totals.days_training / 7)) if totals.days_training >= 7 else '—').replace('.', ',') }}<small>/Wo.</small></span>
+      <span class="label">Schnitt</span>
+    </span>
+  </div>
+
+  {% if months %}
+  <section class="career">
+    <div class="sec__head">
+      <span class="label">Die ganze Laufbahn</span>
+      <span class="sec__sp"></span>
+      <span class="label">Ein Balken je Monat · Höhe = Tonnage</span>
     </div>
-    {% else %}
+    <div class="career__body">
+      {% set peak = (months|map(attribute='volume')|max) or 1 %}
+      <div class="months" role="img"
+           aria-label="Monatliche Tonnage seit {{ month_names[months[0].month - 1] }} {{ months[0].year }}">
+        {% for m in months %}
+        <span class="mo{{ ' is-record' if m.has_record else '' }}{{ ' is-deload' if m.has_deload else '' }}{{ ' is-gap' if m.is_gap else '' }}"
+              style="block-size: {{ (2 if m.is_gap else ((m.volume / peak) * 100)|round(1)) }}%"
+              title="{{ month_names[m.month - 1] }} {{ m.year }}: {{ '{:,.0f}'.format(m.volume).replace(',', '.') }} kg"></span>
+        {% endfor %}
+      </div>
+      <div class="months__axis">
+        <span class="label">{{ month_names[months[0].month - 1][:3] }} {{ months[0].year }}</span>
+        <span class="label">{{ month_names[months[months|length // 2].month - 1][:3] }} {{ months[months|length // 2].year }}</span>
+        <span class="label">{{ month_names[months[-1].month - 1][:3] }} {{ months[-1].year }}</span>
+      </div>
+      <div class="chart__legend">
+        <span class="key"><span class="key__dot key__dot--sq" style="background: var(--done)"></span>Tonnage</span>
+        <span class="key"><span class="key__dot key__dot--sq" style="background: var(--record)"></span>Monat mit Rekord</span>
+        <span class="key"><span class="key__dot key__dot--sq" style="background: var(--edge-hi)"></span>Deload-Monat</span>
+        <span class="key"><span class="key__dot key__dot--sq" style="background: var(--edge)"></span>Pause</span>
+      </div>
+    </div>
+  </section>
+  {% endif %}
 
-    <section class="statistik__zone">
-        <div class="section-head"><h2 class="label">Das Werk</h2></div>
-        <div class="panel werk">
-            <div class="werk__item">
-                <span class="label">Tonnage</span>
-                <span class="num num--lg">{{ (totals.tonnage / 1000)|round(1) }}<span class="werk__unit">t</span></span>
-            </div>
-            <div class="werk__item">
-                <span class="label">Sätze</span>
-                <span class="num num--lg">{{ totals.sets }}</span>
-            </div>
-            <div class="werk__item">
-                <span class="label">Wiederholungen</span>
-                <span class="num num--lg">{{ totals.reps }}</span>
-            </div>
-            <div class="werk__item">
-                <span class="label">Workouts</span>
-                <span class="num num--lg">{{ totals.sessions }}</span>
-            </div>
-            <div class="werk__item">
-                <span class="label">Größtes Workout</span>
-                <span class="num num--lg">{{ totals.best_session.volume|round|int }}<span class="werk__unit">kg</span></span>
-                <span class="label werk__meta">{{ totals.best_session.started_at.strftime('%d.%m.%Y') }}</span>
-            </div>
+  <div class="stat-cols">
+    <div class="stat-col">
+      <section>
+        <div class="sec__head">
+          <span class="label">Fortschritt seit dem ersten Mal</span>
+          <span class="sec__sp"></span>
+          <span class="label">e1RM, erste gegen aktuelle Einheit</span>
         </div>
-    </section>
-
-    <section class="statistik__zone">
-        <div class="section-head"><h2 class="label">Fortschritt</h2></div>
         {% if progression %}
-        <p class="statistik__finding">
-            {% set gaining = progression|selectattr('change_pct', 'gt', 0)|list %}
-            {{ gaining|length }} von {{ progression|length }} Übungen sind seit Beginn stärker geworden.
-            {% if gaining %}Am stärksten: <strong>{{ progression[0].name }}</strong> mit {{ '%+.1f'|format(progression[0].change_pct) }} %.{% endif %}
-        </p>
-        <div class="panel">
-            <div class="statistik__table-wrap">
-                <table class="table prog-table" id="prog-table">
-                    <thead>
-                        <tr>
-                            <th data-sort="text">Übung</th>
-                            <th class="num" data-sort="num">Workouts</th>
-                            <th class="num" data-sort="num">Start e1RM</th>
-                            <th class="num" data-sort="num">Aktuell</th>
-                            <th class="num" data-sort="num">Δ</th>
-                            <th class="num" data-sort="num">Bestes Gewicht</th>
-                            <th>Verlauf</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for entry in progression %}
-                        <tr>
-                            <td>{{ entry.name }}</td>
-                            <td class="num">{{ entry.sessions }}</td>
-                            <td class="num">{{ entry.first_e1rm }}</td>
-                            <td class="num">{{ entry.current_e1rm }}</td>
-                            <td class="num prog-table__delta{{ ' is-up' if entry.change_pct > 0 else '' }}">{{ '%+.1f'|format(entry.change_pct) }} %</td>
-                            <td class="num">{{ entry.best_weight }} kg</td>
-                            <td class="spark-cell">
-                                {# Inline SVG, no chart library: a normalised polyline
-                                   across the session-by-session e1RM values. Uses a
-                                   0-100 viewBox with preserveAspectRatio="none" so the
-                                   drawing needs no knowledge of its rendered size, and
-                                   stroke inherits currentColor so it needs no token
-                                   resolution. #}
-                                {% set lo = entry.points|min %}
-                                {% set hi = entry.points|max %}
-                                {% set span = (hi - lo) if hi > lo else 1 %}
-                                <svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none"
-                                     role="img" aria-label="Verlauf {{ entry.name }}: {{ entry.first_e1rm }} bis {{ entry.current_e1rm }}">
-                                    <polyline points="{% for p in entry.points %}{{ (loop.index0 / ((entry.points|length - 1) or 1) * 100)|round(2) }},{{ (22 - (p - lo) / span * 20)|round(2) }} {% endfor %}" />
-                                </svg>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        {% for entry in progression %}
+        <div class="prog">
+          <a class="prog__name" href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise_id) }}">{{ entry.name }}</a>
+          <span class="prog__spark">
+            <svg viewBox="0 0 74 24" fill="none" aria-hidden="true">
+              <polyline points="{{ entry.spark }}" stroke="{{ 'var(--done)' if entry.is_up else 'var(--stall)' }}"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+            </svg>
+          </span>
+          {# Diverging from a centre line, so a gain and a loss are directions
+             rather than two separate lists. #}
+          <span class="prog__axis">
+            <span class="prog__zero"></span>
+            <span class="prog__bar prog__bar--{{ 'up' if entry.is_up else 'down' }}" style="inline-size: {{ entry.bar_pct }}%"></span>
+          </span>
+          <span class="prog__pct {{ 'is-up' if entry.is_up else 'is-down' }}">
+            {{ ('%+.0f'|format(entry.change_pct)) }} %
+          </span>
+          <span class="prog__meta">{{ ('%.1f'|format(entry.first_e1rm)).replace('.', ',') }} → {{ ('%.1f'|format(entry.current_e1rm)).replace('.', ',') }} kg</span>
         </div>
+        {% endfor %}
         {% else %}
-        <div class="panel"><div class="empty">Noch keine Übung mit zwei Workouts — Fortschritt braucht einen Vergleich.</div></div>
+        <p class="empty">Noch zu wenig Historie, um Fortschritt zu messen.</p>
         {% endif %}
-    </section>
+      </section>
 
-    {% set DAYPART_LABELS = {'morning': 'morgens', 'evening': 'abends', 'other': 'sonst'} %}
-    {% set WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] %}
-
-    <section class="statistik__zone">
-        <div class="section-head"><h2 class="label">Wie du trainierst</h2></div>
-
-        {# Featured: the rep-range finding. It has the largest sample of
-           anything on the page (every set ever) and says the most about the
-           lifter, so it leads. The rest are divided rows in one panel -- a
-           grid of five identical finding-cards is exactly the pattern the
-           design brief bans. #}
-        <div class="panel">
-            {% if rep_range.statable %}
-            <p class="statistik__finding">
-                {{ rep_range.dominant.share }} % deiner {{ rep_range.sample }} Sätze liegen bei
-                {{ rep_range.dominant.label }} Wiederholungen.
-                {% set outside = rep_range.buckets|rejectattr('sets')|map(attribute='label')|list %}
-                {% if outside %}Bereiche ohne einen einzigen Satz: {{ outside|join(', ') }}.{% endif %}
-            </p>
-            {% else %}
-            <p class="statistik__finding statistik__finding--quiet">
-                Noch zu wenig Daten für eine Aussage — {{ rep_range.sample }} von {{ min_sets_for_rep_range }} Sätzen.
-            </p>
-            {% endif %}
-            {% for bucket in rep_range.buckets %}
-            <div class="hbar">
-                <span class="hbar__name">{{ bucket.label }} Wdh.</span>
-                <span class="hbar__track"><span class="hbar__fill" style="width:{{ bucket.share }}%"></span></span>
-                <span class="hbar__val">{{ bucket.sets }}</span>
-            </div>
-            {% endfor %}
-            {# analytics excludes 0-rep sets from the distribution on purpose --
-               a failed attempt is not a rep range -- but it reports how many it
-               dropped so the exclusion stays visible. Silently discarding this
-               count here would put the silent-drop bug straight back, one layer
-               up from where it was fixed. #}
-            {% if rep_range.skipped %}
-            <p class="label finding-bar__note">
-                {{ rep_range.skipped }} {{ 'Satz' if rep_range.skipped == 1 else 'Sätze' }} ohne Wiederholung — nicht gewertet
-            </p>
-            {% endif %}
+      <section style="margin-top: var(--sp-8)">
+        <div class="sec__head">
+          <span class="label">Wohin die Arbeit geht</span>
+          <span class="sec__sp"></span>
+          <span class="label">Anteil an {{ '{:,.0f}'.format(effort.total_volume / 1000).replace(',', '.') }} t</span>
         </div>
-
-        <div class="panel">
-            {# time of day #}
-            <div class="row row--top">
-                <div class="row__main">
-                    {% if daypart.statable %}
-                    {# Named buckets only. `other` is everything outside both
-                       windows, and analytics deliberately refuses to base a
-                       finding on it -- a bucket defined as "the rest" cannot
-                       support a claim about when you train well. Without this
-                       filter a single odd-hour session can become the thing
-                       mornings get compared against. #}
-                    {% set parts = daypart.parts|rejectattr('label', 'equalto', 'other')|selectattr('sessions')|sort(attribute='avg_volume', reverse=true)|list %}
-                    <p class="statistik__finding">
-                        Du bewegst {{ DAYPART_LABELS[parts[0].label] }} mehr Gewicht pro Workout als {{ DAYPART_LABELS[parts[-1].label] }}.
-                    </p>
-                    {% else %}
-                    <p class="statistik__finding statistik__finding--quiet">Tageszeit: noch zu wenig Daten für eine Aussage.</p>
-                    {% endif %}
-                </div>
-                <div class="row__wide">
-                    {% set peak = (daypart.parts|map(attribute='avg_volume')|max) or 1 %}
-                    {% for part in daypart.parts if part.sessions %}
-                    <div class="hbar">
-                        <span class="hbar__name">{{ DAYPART_LABELS[part.label] }}</span>
-                        <span class="hbar__track"><span class="hbar__fill" style="width:{{ (part.avg_volume / peak * 100)|round(1) }}%"></span></span>
-                        <span class="hbar__val">{{ part.avg_volume|round|int }} kg</span>
-                    </div>
-                    {% endfor %}
-                    <p class="label finding-bar__note">{{ daypart.parts|selectattr('sessions')|map(attribute='sessions')|sum }} Workouts</p>
-                </div>
-            </div>
-
-            {# within-session fatigue #}
-            <div class="row row--top">
-                <div class="row__main">
-                    {% if fatigue.statable %}
-                    {# weight_change_pct is None when every qualifying row was
-                       bodyweight -- statable only counts rows, so the two can
-                       disagree, and formatting None here would 500 the page. #}
-                    <p class="statistik__finding">
-                        {% if fatigue.weight_change_pct is not none %}
-                        Im letzten Satz einer Übung bewegst du im Schnitt {{ '%+.1f'|format(fatigue.weight_change_pct) }} % Gewicht
-                        und schaffst {{ fatigue.first_reps }} → {{ fatigue.last_reps }} Wiederholungen.
-                        {% else %}
-                        Im letzten Satz einer Übung schaffst du {{ fatigue.first_reps }} → {{ fatigue.last_reps }} Wiederholungen.
-                        {% endif %}
-                    </p>
-                    {% else %}
-                    <p class="statistik__finding statistik__finding--quiet">Ermüdung: noch zu wenig Daten für eine Aussage.</p>
-                    {% endif %}
-                </div>
-                {# The sample sits in __wide, not __trail, like the other three
-                   charts' notes. __trail is flex: none, so a full sentence in
-                   it cannot shrink -- at 200 % text it measured 345px and
-                   pushed the page 20px sideways. A count is a note, not a
-                   trailing figure. #}
-                <p class="label finding-bar__note row__wide">{{ fatigue.sample }} Übungen ausgewertet</p>
-            </div>
-
-            {# weekday spread #}
-            <div class="row row--top">
-                <div class="row__main">
-                    {% if weekday.statable %}
-                    {% set top = weekday.days|sort(attribute='sessions', reverse=true)|first %}
-                    <p class="statistik__finding">Dein häufigster Trainingstag ist {{ WEEKDAY_LABELS[top.weekday] }} ({{ top.sessions }} Workouts).</p>
-                    {% else %}
-                    <p class="statistik__finding statistik__finding--quiet">Wochentage: noch zu wenig Daten für eine Aussage.</p>
-                    {% endif %}
-                </div>
-                <div class="row__wide">
-                    {% set peak = (weekday.days|map(attribute='sessions')|max) or 1 %}
-                    <div class="vbars">
-                        {% for d in weekday.days %}
-                        <div class="vbar" style="height:{{ (d.sessions / peak * 100)|round(1) }}%"></div>
-                        {% endfor %}
-                    </div>
-                    <div class="vbars__axis">
-                        {% for d in weekday.days %}<span>{{ WEEKDAY_LABELS[d.weekday] }}</span>{% endfor %}
-                    </div>
-                    <p class="label finding-bar__note">{{ weekday.sample }} Workouts</p>
-                </div>
-            </div>
-
-            {# rest days #}
-            <div class="row row--top">
-                <div class="row__main">
-                    {% if rest_gap.statable %}
-                    {% set best = rest_gap.buckets|selectattr('sessions')|sort(attribute='avg_volume', reverse=true)|first %}
-                    <p class="statistik__finding">Nach {{ best.label }} Tagen Pause bewegst du am meisten Gewicht.</p>
-                    {% else %}
-                    <p class="statistik__finding statistik__finding--quiet">Pausenlänge: noch zu wenig Daten für eine Aussage.</p>
-                    {% endif %}
-                </div>
-                <div class="row__wide">
-                    {% set peak = (rest_gap.buckets|map(attribute='avg_volume')|max) or 1 %}
-                    {% for bucket in rest_gap.buckets %}
-                    <div class="hbar">
-                        <span class="hbar__name">{{ bucket.label }} Tage</span>
-                        <span class="hbar__track"><span class="hbar__fill" style="width:{{ (bucket.avg_volume / peak * 100)|round(1) }}%"></span></span>
-                        <span class="hbar__val">{{ bucket.avg_volume|round|int }} kg</span>
-                    </div>
-                    {% endfor %}
-                    <p class="label finding-bar__note">
-                        {{ rest_gap.buckets|selectattr('sessions')|map(attribute='sessions')|sum }} Workouts mit Vorgänger
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="statistik__zone">
-        <div class="section-head"><h2 class="label">Wohin die Arbeit geht</h2></div>
         {% if effort.groups %}
-        <p class="statistik__finding">
-            {{ effort.groups[0].label }} trägt mit {{ effort.groups[0].share }} % den größten Anteil deiner Tonnage.
-        </p>
+        <div class="stack-bar">
+          {% for group in effort.groups[:6] %}
+          <span style="inline-size: {{ group.share|round(1) }}%; background: var(--done); opacity: {{ 1 - loop.index0 * 0.15 }}"></span>
+          {% endfor %}
+        </div>
+        <div class="stack-key">
+          {% for group in effort.groups[:6] %}
+          <span class="key">
+            <span class="key__dot key__dot--sq" style="background: var(--done); opacity: {{ 1 - loop.index0 * 0.15 }}"></span>
+            {{ group.label }} {{ group.share|round|int }} %
+          </span>
+          {% endfor %}
+        </div>
+
+        {% set top = effort.exercises[:5] %}
+        {% set widest = top[0].volume if top else 1 %}
+        {% for item in top %}
+        <div class="prog prog--plain">
+          <span class="prog__name">{{ item.label }}</span>
+          <span class="prog__axis">
+            <span class="prog__bar prog__bar--flat" style="inline-size: {{ (item.volume / widest * 100)|round(1) }}%"></span>
+          </span>
+          <span class="prog__pct">{{ '{:,.0f}'.format(item.volume / 1000).replace(',', '.') }} t</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="empty">Noch keine Sätze protokolliert.</p>
         {% endif %}
-        <div class="statistik__cols">
-            <div class="panel">
-                <div class="section-head"><h3 class="label">Nach Muskelgruppe</h3></div>
-                {# Both columns scale their bars against their own largest
-                   entry, and both label with share of total tonnage -- the
-                   convention .hbar already follows elsewhere in this app
-                   (Heute's muscle bars are peak-relative with an absolute
-                   count beside them). Scaling the two columns differently
-                   while they sit side by side made one bar's length mean
-                   something the other's did not. #}
-                {% set group_shares = effort.groups|map(attribute='share')|list %}
-                {% set group_peak = (group_shares|max) if group_shares else 1 %}
-                {% for group in effort.groups %}
-                <div class="hbar">
-                    <span class="hbar__name">{{ group.label }}</span>
-                    <span class="hbar__track"><span class="hbar__fill" style="width:{{ (group.share / group_peak * 100)|round(1) }}%"></span></span>
-                    <span class="hbar__val">{{ group.share }} %</span>
-                </div>
-                {% else %}
-                <div class="empty">Noch keine Sätze protokolliert.</div>
-                {% endfor %}
-            </div>
-            <div class="panel">
-                <div class="section-head"><h3 class="label">Nach Übung</h3></div>
-                {# |max raises on an empty sequence, and this list is empty on a
-                   fresh database -- materialise first, then guard #}
-                {% set shares = effort.exercises|map(attribute='share')|list %}
-                {% set peak = (shares|max) if shares else 1 %}
-                {% for exercise in effort.exercises %}
-                <div class="hbar">
-                    <span class="hbar__name">{{ exercise.label }}</span>
-                    <span class="hbar__track"><span class="hbar__fill" style="width:{{ (exercise.share / peak * 100)|round(1) }}%"></span></span>
-                    <span class="hbar__val">{{ exercise.share }} %</span>
-                </div>
-                {% else %}
-                <div class="empty">Noch keine Sätze protokolliert.</div>
-                {% endfor %}
-            </div>
+      </section>
+    </div>
+
+    <section class="stat-col">
+      <div class="sec__head"><span class="label">Wie du trainierst</span></div>
+
+      <div class="read">
+        <p class="read__q">In welchem Wiederholungsbereich?</p>
+        {% if rep_range.statable %}
+        <p class="read__a">Meist zwischen <em>{{ rep_range.dominant.label }}</em> Wdh.</p>
+        <div class="read__bars">
+          {% set top_share = rep_range.buckets|map(attribute='share')|max %}
+          {% for bucket in rep_range.buckets %}
+          <span class="rb">
+            <span class="rb__track">
+              <span class="rb__fill{{ ' is-top' if bucket.label == rep_range.dominant else '' }}"
+                    style="block-size: {{ ((bucket.share / top_share) * 100)|round(1) if top_share else 0 }}%"></span>
+            </span>
+            <span class="rb__lbl">{{ bucket.label }}</span>
+          </span>
+          {% endfor %}
         </div>
-    </section>
+        <p class="read__silent">Aus {{ '{:,}'.format(rep_range.sample).replace(',', '.') }} Sätzen.</p>
+        {% else %}
+        <p class="read__silent">Noch nicht genug Sätze — dafür braucht es mindestens {{ min_sets_for_rep_range }}. Die Frage bleibt offen, statt geraten zu werden.</p>
+        {% endif %}
+      </div>
 
-    <section class="statistik__zone">
-        <div class="section-head"><h2 class="label">Rekorde</h2></div>
-        <div class="panel">
-            {% if records %}
-            <p class="statistik__finding">{{ records|length }} persönliche Rekorde seit Beginn.</p>
-            {% for record in records %}
-            <div class="row">
-                <div class="row__main">
-                    <div class="name">{{ record.name }}</div>
-                    <div class="label row__meta">
-                        {{ record.started_at.strftime('%d.%m.%Y') }} ·
-                        {{ 'Gewicht' if record.kind == 'weight' else 'e1RM' }} ·
-                        vorher {{ record.previous }} kg
-                    </div>
-                </div>
-                <span class="row__trail num num--md record-row__value">{{ record.value }} kg</span>
-            </div>
-            {% endfor %}
-            {% else %}
-            <div class="empty">Noch keine Rekorde — dafür braucht eine Übung mindestens zwei Workouts.</div>
-            {% endif %}
+      <div class="read">
+        <p class="read__q">Was passiert innerhalb einer Übung?</p>
+        {% if fatigue.statable %}
+        <p class="read__a">Satz 1 bis letzter Satz: <em>{{ ('%+.1f'|format(fatigue.last_reps - fatigue.first_reps)).replace('.', ',') }} Wdh.</em></p>
+        <p class="read__silent">
+          Bei {{ ('%+.1f'|format(fatigue.weight_change_pct)).replace('.', ',') }} % Gewichtsänderung.
+          Aus {{ '{:,}'.format(fatigue.sample).replace(',', '.') }} Einheiten.
+        </p>
+        {% else %}
+        <p class="read__silent">Noch nicht genug Einheiten mit mehreren Sätzen.</p>
+        {% endif %}
+      </div>
+
+      <div class="read">
+        <p class="read__q">Wann trainierst du?</p>
+        {% if daypart.statable or weekday.statable %}
+        {% set best_day = (weekday.days|sort(attribute='share')|last) if weekday.statable else none %}
+        <p class="read__a">
+          {%- if daypart.statable -%}
+          {% set best_part = daypart.parts|sort(attribute='volume')|last %}{{ daypart_names.get(best_part.label, best_part.label) }}
+          {%- endif -%}
+          {%- if daypart.statable and best_day %}, am liebsten {% endif -%}
+          {%- if best_day %}<em>{{ weekday_names[best_day.weekday] }}s</em>{% endif -%}
+        </p>
+        <p class="read__silent">
+          {%- if best_day %}{{ weekday_names[best_day.weekday] }} ist mit {{ best_day.share|round|int }} % der häufigste Tag. {% endif -%}
+          {%- if weekday.statable %}Aus {{ weekday.sample }} Workouts.{% endif -%}
+        </p>
+        {% else %}
+        <p class="read__silent">Noch nicht genug Workouts, um ein Muster zu behaupten.</p>
+        {% endif %}
+      </div>
+
+      <div class="read">
+        <p class="read__q">Bringt mehr Pause mehr Leistung?</p>
+        {% if rest_gap.statable %}
+        <div class="read__bars">
+          {% set peak_gap = rest_gap.buckets|map(attribute='avg_volume')|max %}
+          {% for bucket in rest_gap.buckets %}
+          <span class="rb">
+            <span class="rb__track">
+              <span class="rb__fill" style="block-size: {{ ((bucket.avg_volume / peak_gap) * 100)|round(1) if peak_gap else 0 }}%"></span>
+            </span>
+            <span class="rb__lbl">{{ bucket.label }} T.</span>
+          </span>
+          {% endfor %}
         </div>
+        <p class="read__silent">Ø Volumen je Abstand in Tagen.</p>
+        {% else %}
+        <p class="read__silent">Noch nicht genug Daten — dafür braucht es mehrere Workouts je Abstand. Die Frage bleibt offen, statt geraten zu werden.</p>
+        {% endif %}
+      </div>
     </section>
+  </div>
 
-    {% endif %}
+  {% if record_years %}
+  <section class="career">
+    <div class="sec__head">
+      <span class="label">Jeder Rekord</span>
+      <span class="sec__sp"></span>
+      <span class="label">{{ records|length }} insgesamt</span>
+    </div>
+    {% for band in record_years %}
+    <details class="year" {{ 'open' if loop.first else '' }}>
+      <summary class="year__head">
+        <svg class="group__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        <span class="label">{{ band.year }}</span>
+        <span class="sec__sp"></span>
+        <span class="label">{{ band.records|length }} {{ 'Rekord' if band.records|length == 1 else 'Rekorde' }}</span>
+      </summary>
+      {% for record in band.records %}
+      {% set kind_label = {'weight': 'Gewicht', 'e1rm': 'e1RM', 'volume': 'Volumen'}.get(record.kind, record.kind) %}
+      <a class="rec" href="{{ url_for('gym.session_detail', session_id=record.session_id) }}">
+        <span class="rec__date">{{ record.started_at.strftime('%d.%m.%Y') }}</span>
+        <span class="rec__name">{{ record.name }}</span>
+        <span class="rec__kind">{{ kind_label }}</span>
+        <span class="rec__val">
+          {{ ('%.1f'|format(record.value)).replace('.', ',') }} kg
+          <small>vorher {{ ('%.1f'|format(record.previous)).replace('.', ',') }}</small>
+        </span>
+      </a>
+      {% endfor %}
+    </details>
+    {% endfor %}
+  </section>
+  {% endif %}
 
+  {% else %}
+  <p class="empty">Noch keine abgeschlossenen Workouts — hier steht die ganze Laufbahn, sobald es eine gibt.</p>
+  {% endif %}
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-// Progressive enhancement: the table is fully readable without this. Sorting
-// is added on top, never required to see the data.
-(function setupProgTableSort() {
-    var table = document.getElementById('prog-table');
-    if (!table) return;
-    var tbody = table.tBodies[0];
-    var headers = Array.prototype.slice.call(table.querySelectorAll('th[data-sort]'));
-
-    function sortBy(index, kind, ascending) {
-        var rows = Array.prototype.slice.call(tbody.rows);
-        rows.sort(function (a, b) {
-            var x = a.cells[index].textContent.trim();
-            var y = b.cells[index].textContent.trim();
-            if (kind === 'num') {
-                // strip units, %, + and the thin spaces the numerals carry
-                var nx = parseFloat(x.replace(/[^0-9.\-]/g, ''));
-                var ny = parseFloat(y.replace(/[^0-9.\-]/g, ''));
-                return ascending ? nx - ny : ny - nx;
-            }
-            return ascending ? x.localeCompare(y, 'de') : y.localeCompare(x, 'de');
-        });
-        rows.forEach(function (row) { tbody.appendChild(row); });
-    }
-
-    headers.forEach(function (th, i) {
-        th.tabIndex = 0;
-        function activate() {
-            var ascending = th.getAttribute('aria-sort') !== 'ascending';
-            headers.forEach(function (other) { other.removeAttribute('aria-sort'); });
-            th.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
-            sortBy(i, th.dataset.sort, ascending);
-        }
-        th.addEventListener('click', activate);
-        th.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
-        });
-    });
-})();
-</script>
 {% endblock %}

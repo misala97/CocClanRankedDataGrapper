@@ -617,3 +617,49 @@ def test_record_timeline_orders_same_day_records_predictably():
     ]
     weight_records = [r for r in analytics.record_timeline(rows) if r['kind'] == 'weight']
     assert [r['name'] for r in weight_records] == ['Zebra', 'Alpha']
+
+
+# ---- monthly_tonnage: the career strip -------------------------------------
+
+def test_monthly_tonnage_emits_every_month_including_empty_ones():
+    """A break has to stay visible as a break. Skipping empty months would
+    compress a gap into a shorter strip and redraw the timeline."""
+    rows = [
+        perf([(100.0, 10)], started_at=dt.datetime(2026, 1, 5), session_id=1),
+        perf([(100.0, 10)], started_at=dt.datetime(2026, 4, 5), session_id=2),
+    ]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 4, 20))
+    assert [(m['year'], m['month']) for m in months] == [
+        (2026, 1), (2026, 2), (2026, 3), (2026, 4)]
+    assert [m['is_gap'] for m in months] == [False, True, True, False]
+    assert months[1]['volume'] == 0
+
+
+def test_monthly_tonnage_runs_to_now_not_to_the_last_session():
+    """The strip is a calendar, so months since you last trained are part of
+    the picture -- that silence is the most interesting thing on it."""
+    rows = [perf([(100.0, 10)], started_at=dt.datetime(2026, 1, 5), session_id=1)]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 3, 2))
+    assert [(m['year'], m['month']) for m in months] == [(2026, 1), (2026, 2), (2026, 3)]
+    assert months[-1]['is_gap'] is True
+
+
+def test_monthly_tonnage_sums_volume_and_counts_deloads():
+    rows = [
+        perf([(100.0, 10)], started_at=dt.datetime(2026, 1, 5), session_id=1),
+        perf([(50.0, 10)], started_at=dt.datetime(2026, 1, 12), session_id=2, is_deload=True),
+    ]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 1, 20))
+    assert months[0]['volume'] == 1500.0     # deloads still count toward tonnage
+    assert months[0]['has_deload'] is True
+
+
+def test_monthly_tonnage_crosses_a_year_boundary():
+    rows = [perf([(100.0, 10)], started_at=dt.datetime(2025, 11, 5), session_id=1)]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 2, 1))
+    assert [(m['year'], m['month']) for m in months] == [
+        (2025, 11), (2025, 12), (2026, 1), (2026, 2)]
+
+
+def test_monthly_tonnage_is_empty_without_rows():
+    assert analytics.monthly_tonnage([], NOW) == []

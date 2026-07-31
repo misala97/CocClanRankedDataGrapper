@@ -36,6 +36,13 @@ DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest 
 # The UI is German regardless of the server's locale, so month names are stated
 # rather than taken from strftime('%B') -- which follows LC_TIME and would give
 # English on this machine and German on the VPS, or vice versa.
+# analytics.py speaks in keys and indexes, not in UI language: dayparts come
+# back as 'morning'/'evening' and weekdays as 0-6. Naming them is presentation,
+# so it happens here rather than in the analysis.
+DAYPART_NAMES = {'morning': 'Vormittags', 'evening': 'Abends'}
+WEEKDAY_NAMES = ('Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
+                 'Freitag', 'Samstag', 'Sonntag')
+
 MONTH_NAMES = (
     'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
     'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
@@ -1239,6 +1246,51 @@ def gym_verlauf():
     return render_template('gym/verlauf.html', history=history, months=months)
 
 
+SPARK_W = 74.0
+SPARK_H = 24.0
+
+
+def _progression_view(ranking, limit=8):
+    """Progression rows with their sparkline drawn and their bar sized.
+
+    Geometry in Python for the same reason the exercise chart's is: Jinja doing
+    coordinate arithmetic is unreadable, and an inline SVG inherits the palette
+    where a canvas cannot.
+
+    The bar is diverging from a centre line, so gains and losses read as
+    directions rather than as two lists. It is scaled against the largest
+    absolute change on the page -- against a fixed 100 % a typical +40 % lift
+    would draw as a stub, and the ranking would look flat when it is not.
+
+    Both ends are kept: the biggest movers AND the biggest losers, because a
+    page that only shows what went up is a highlight reel, not a report.
+    """
+    if not ranking:
+        return []
+    head = ranking[:limit]
+    tail = [entry for entry in ranking[limit:] if entry['change_pct'] < 0]
+    shown = head + [entry for entry in tail if entry not in head]
+
+    widest = max((abs(entry['change_pct']) for entry in shown), default=1.0) or 1.0
+    out = []
+    for entry in shown:
+        points = entry['points']
+        lo, hi = min(points), max(points)
+        span = (hi - lo) or 1.0
+        step = SPARK_W / max(len(points) - 1, 1)
+        spark = ' '.join(
+            '%.1f,%.1f' % (index * step, SPARK_H - 2 - (value - lo) / span * (SPARK_H - 4))
+            for index, value in enumerate(points)
+        )
+        out.append(dict(
+            entry,
+            spark=spark,
+            bar_pct=round(abs(entry['change_pct']) / widest * 50.0, 2),
+            is_up=entry['change_pct'] >= 0,
+        ))
+    return out
+
+
 @gym_bp.route('/gym/statistik')
 @login_required
 def gym_statistik():
@@ -1264,10 +1316,38 @@ def gym_statistik():
     """
     now = dt.datetime.utcnow()
     performed = load_performed()
+
+    # The lede: one sentence built from the numbers, so the page answers before
+    # it reports. The longest break is the only figure here not already in
+    # analytics -- it is cheap from the session dates this page has loaded
+    # anyway, and it is the fact that makes the sentence worth reading.
+    session_dates = sorted({row.started_at for row in performed})
+    longest_gap = max(
+        ((b - a).days for a, b in zip(session_dates, session_dates[1:])),
+        default=0,
+    )
+
+    # Records by year, newest first, current year open. The timeline ran
+    # unbounded before -- 47 rows and growing, about two thirds of the page.
+    # Nothing is dropped to bound it; the older years simply start folded.
+    records = analytics.record_timeline(performed)
+    record_years = []
+    for record in records:
+        year = record['started_at'].year
+        if not record_years or record_years[-1]['year'] != year:
+            record_years.append({'year': year, 'records': []})
+        record_years[-1]['records'].append(record)
+
     return render_template(
         'gym/statistik.html',
+        months=analytics.monthly_tonnage(performed, now),
+        longest_gap=longest_gap,
+        record_years=record_years,
+        month_names=MONTH_NAMES,
+        daypart_names=DAYPART_NAMES,
+        weekday_names=WEEKDAY_NAMES,
         totals=analytics.totals(performed, now),
-        progression=analytics.progression_ranking(performed),
+        progression=_progression_view(analytics.progression_ranking(performed)),
         rep_range=analytics.rep_range_distribution(performed),
         fatigue=analytics.fatigue_curve(performed),
         daypart=analytics.daypart_volume(performed),

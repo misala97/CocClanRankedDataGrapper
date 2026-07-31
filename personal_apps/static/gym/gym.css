@@ -3119,3 +3119,183 @@ body.is-exporting .verlauf__row .pick {
 .dateline { display: flex; align-items: center; gap: var(--sp-2); min-inline-size: 0; }
 .dateline__d { font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink); }
 .row.is-record .vol { color: var(--record-ink); }
+
+/* ============================================================================
+   STATISTIK  ·  the whole training history (Puls)
+   ----------------------------------------------------------------------------
+   Desktop-composed: this is the one page in the app written for a width a
+   phone does not have. It is not in the mobile tab bar, but the URL stays
+   reachable, so the fallback at the bottom of this block turns it into one
+   readable column rather than 360px of horizontal scroll.
+
+   .stat-cols, not .stat-grid: that name is already the debrief's card grid.
+   ============================================================================ */
+
+.stat-page { max-inline-size: var(--wrap-max); margin-inline: auto; padding: var(--sp-6) var(--sp-8) var(--sp-16); }
+
+/* ---- the answer, then the numbers that make it ---- */
+.lede { display: flex; align-items: flex-end; gap: var(--sp-8); }
+.lede__main { flex: 1; min-inline-size: 0; }
+.lede__kick { display: block; font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--live-ink); }
+.lede__h {
+  font-family: var(--font-display); font-size: 2.75rem; font-weight: var(--w-max);
+  letter-spacing: -0.04em; line-height: 1.06; margin-top: 6px;
+  text-wrap: balance; max-inline-size: 22ch;
+}
+.lede__h em { font-style: normal; color: var(--live-ink); }
+.lede__aside {
+  flex: none; text-align: end; font-size: var(--t-sm); color: var(--unlit);
+  line-height: 1.6; padding-bottom: 6px;
+}
+.lede__aside b { color: var(--dim); font-weight: var(--w-bold); }
+
+.totals {
+  display: grid; grid-template-columns: repeat(5, 1fr); margin-top: var(--sp-6);
+  background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-5) 0;
+}
+.total { display: flex; flex-direction: column; align-items: center; gap: 3px; min-inline-size: 0; }
+.total + .total { border-inline-start: 1px solid var(--edge); }
+.total__v {
+  font-family: var(--font-display); font-size: var(--num-md); font-weight: var(--w-max);
+  letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.total__v small {
+  font-family: var(--font-body); font-size: var(--t-sm); font-weight: var(--w-semi);
+  color: var(--dim); letter-spacing: 0;
+}
+
+/* ---- the career strip: one bar per month since the first workout ---- */
+.career { margin-top: var(--sp-8); }
+.career__body { background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-5) var(--sp-5) var(--sp-4); }
+.months { display: flex; align-items: flex-end; gap: 3px; block-size: 132px; }
+.mo { flex: 1; border-radius: 3px 3px 1px 1px; background: var(--done); min-block-size: 2px; }
+.mo.is-record { background: var(--record); }
+/* Hatched, not dimmed: the bar's height is the datum, so fading it would read
+   as "no training that month", which is the opposite of what it means. */
+.mo.is-deload {
+  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--ground) 3px 6px);
+}
+/* A gap is drawn as a stub rather than nothing, so a break is visible as a
+   break instead of as a hole someone might read as missing data. */
+.mo.is-gap { background: var(--edge); }
+.months__axis {
+  display: flex; margin-top: var(--sp-3); border-top: 1px solid var(--edge); padding-top: var(--sp-2);
+}
+.months__axis .label { flex: 1; }
+.months__axis .label:nth-child(2) { text-align: center; }
+.months__axis .label:last-child { text-align: end; }
+.key__dot--sq { border-radius: 2px; }
+
+/* ---- two columns: the long readings left, the short answers right ---- */
+.stat-cols { display: grid; grid-template-columns: 2fr 1fr; gap: var(--sp-8); margin-top: var(--sp-8); }
+.stat-col { min-inline-size: 0; }
+
+/* progression: sparkline, diverging bar, the numbers */
+.prog { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; }
+.prog + .prog { border-top: 1px solid var(--edge); }
+.prog__name {
+  flex: none; inline-size: 13rem; font-size: var(--t-sm); font-weight: var(--w-semi);
+  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.prog__spark { flex: none; inline-size: 74px; block-size: 24px; }
+.prog__spark svg { display: block; inline-size: 100%; block-size: 100%; }
+.prog__axis { flex: 1; position: relative; block-size: 22px; min-inline-size: 0; }
+.prog__zero { position: absolute; inset-block: 0; inset-inline-start: 50%; inline-size: 1px; background: var(--edge-hi); }
+.prog__bar { position: absolute; inset-block-start: 4px; block-size: 14px; border-radius: 3px; }
+.prog__bar--up { inset-inline-start: 50%; background: var(--done); }
+.prog__bar--down { inset-inline-end: 50%; background: var(--stall); }
+.prog__bar--flat { inset-inline-start: 0; background: var(--done); }
+.prog__pct {
+  flex: none; inline-size: 5rem; text-align: end; font-family: var(--font-display);
+  font-size: var(--t-sm); font-weight: var(--w-max); letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; color: var(--dim);
+}
+.prog__pct.is-up { color: var(--done-ink); }
+.prog__pct.is-down { color: var(--stall-ink); }
+.prog__meta { flex: none; inline-size: 8rem; text-align: end; font-size: var(--t-micro); color: var(--unlit); }
+.prog--plain .prog__name { inline-size: 15rem; font-weight: var(--w-med); color: var(--dim); }
+
+/* effort: one stacked bar, then the exercises that fill it */
+.stack-bar { display: flex; block-size: 44px; border-radius: 10px; overflow: hidden; gap: 2px; margin-top: var(--sp-1); }
+.stack-bar span { display: block; }
+.stack-key { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-5); margin-top: var(--sp-3); margin-bottom: var(--sp-4); }
+
+/* behaviour readouts: a question, an answer, and the evidence under it */
+.read + .read { margin-top: var(--sp-5); padding-top: var(--sp-5); border-top: 1px solid var(--edge); }
+.read__q { font-size: var(--t-sm); color: var(--unlit); }
+.read__a {
+  font-family: var(--font-display); font-size: 1.25rem; font-weight: var(--w-max);
+  letter-spacing: -0.025em; margin-top: 4px; line-height: 1.2;
+}
+.read__a em { font-style: normal; color: var(--live-ink); }
+.read__bars { display: flex; gap: 5px; margin-top: var(--sp-3); }
+.rb { flex: 1; min-inline-size: 0; }
+.rb__track { block-size: 36px; border-radius: 6px; background: var(--raised); display: flex; align-items: flex-end; overflow: hidden; }
+.rb__fill { inline-size: 100%; background: var(--done); border-radius: 6px 6px 0 0; }
+.rb__fill.is-top { background: var(--live); }
+.rb__lbl { display: block; text-align: center; margin-top: 5px; font-size: var(--t-micro); color: var(--unlit); }
+.read__silent { font-size: var(--t-meta); color: var(--unlit); margin-top: var(--sp-2); line-height: 1.5; }
+
+/* ---- records: year bands, current year open, the rest folded ---- */
+.year { margin-top: var(--sp-4); }
+.year__head {
+  display: flex; align-items: center; gap: var(--sp-2); min-block-size: var(--tap);
+  padding-bottom: var(--sp-2); border-bottom: 1px solid var(--edge);
+  cursor: pointer; list-style: none;
+}
+.year__head::-webkit-details-marker { display: none; }
+.year[open] .group__chev { transform: rotate(90deg); }
+.rec { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; }
+.rec + .rec { border-top: 1px solid var(--edge); }
+.rec__date { flex: none; inline-size: 5.5rem; font-size: var(--t-meta); color: var(--unlit); font-variant-numeric: tabular-nums; }
+/* name and kind belong together; the gap goes between them and the value, not
+   stranded in the middle of the row */
+.rec__name {
+  flex: 0 1 auto; min-inline-size: 0; font-size: var(--t-sm); font-weight: var(--w-semi);
+  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rec__kind {
+  flex: none; margin-inline-end: auto; font-size: var(--t-micro); font-weight: var(--w-bold);
+  letter-spacing: 0.04em; padding: 3px 8px; border-radius: var(--r-chip);
+  background: var(--raised); color: var(--dim);
+}
+.rec__val {
+  flex: none; inline-size: 8.5rem; text-align: end; font-family: var(--font-display);
+  font-size: var(--t-sm); font-weight: var(--w-max); color: var(--record-ink);
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+}
+.rec__val small {
+  display: block; font-family: var(--font-body); font-weight: var(--w-semi);
+  color: var(--unlit); font-size: var(--t-micro); letter-spacing: 0;
+}
+
+/* ============================================================================
+   Statistik is composed for the width and is not in the mobile tab bar, but
+   its URL stays reachable: the route's own contract is that a phone gets this
+   page single-column rather than a redirect, because hiding data someone asked
+   for is worse than showing it cramped. Cramped, though, not broken -- without
+   this the fixed columns push a page-wide horizontal scroll.
+   ============================================================================ */
+@media (max-width: 899px) {
+  .stat-page { padding: var(--sp-5) var(--sp-4) var(--sp-12); }
+  .lede { flex-direction: column; align-items: flex-start; gap: var(--sp-4); }
+  .lede__h { font-size: 1.75rem; max-inline-size: none; }
+  .lede__aside { text-align: start; padding-bottom: 0; }
+  .totals { grid-template-columns: 1fr 1fr; row-gap: var(--sp-4); }
+  .total + .total { border-inline-start: 0; }
+  .total:nth-child(2n) { border-inline-start: 1px solid var(--edge); }
+  .total:last-child { grid-column: 1 / -1; }
+  .career__body { overflow-x: auto; }
+  .months, .months__axis { min-inline-size: 620px; }
+  .stat-cols { grid-template-columns: 1fr; gap: var(--sp-8); }
+  .prog { flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
+  .prog__name { inline-size: 100%; }
+  .prog__spark { display: none; }
+  .prog__axis { order: 3; flex-basis: 100%; }
+  .prog__meta { inline-size: auto; flex: 1; text-align: start; }
+  .rec { flex-wrap: wrap; }
+  .rec__name { flex: 1; }
+  .rec__kind { margin-inline-end: 0; }
+  .rec__val { inline-size: auto; margin-inline-start: auto; }
+  .stack-bar { block-size: 34px; }
+}

@@ -81,6 +81,62 @@ def totals(rows, now):
     }
 
 
+def monthly_tonnage(rows, now):
+    """Every month since the first workout, in order, with its tonnage.
+
+    The career strip on Statistik. Heute keeps eight weeks and nothing kept the
+    rest, so the one figure an all-time page should obviously hold did not
+    exist anywhere.
+
+    Months with no training are still emitted, with zero volume and
+    `is_gap` set. Skipping them would compress a three-month break into a
+    single bar gap and quietly redraw the timeline as though it never happened
+    -- the point of this strip is that it is a real calendar.
+
+    `has_record` marks a month containing at least one all-time best (weight or
+    e1RM), computed against every row, so the marks agree with what
+    record_timeline() lists. `has_deload` marks a month containing a deload
+    session; deloads still contribute their tonnage, exactly as they do to
+    totals().
+    """
+    if not rows:
+        return []
+
+    volume = defaultdict(float)
+    deload_months = set()
+    session_month = {}
+    for row in rows:
+        key = (row.started_at.year, row.started_at.month)
+        volume[key] += stats.row_volume(row)
+        session_month[row.session_id] = key
+        if row.is_deload:
+            deload_months.add(key)
+
+    record_months = set()
+    for record in record_timeline(rows):
+        record_months.add((record['started_at'].year, record['started_at'].month))
+
+    first = min(row.started_at for row in rows)
+    year, month = first.year, first.month
+    last = (now.year, now.month)
+
+    out = []
+    while (year, month) <= last:
+        key = (year, month)
+        out.append({
+            'year': year,
+            'month': month,
+            'volume': round(volume.get(key, 0.0), 1),
+            'is_gap': key not in volume,
+            'has_deload': key in deload_months,
+            'has_record': key in record_months,
+        })
+        month += 1
+        if month > 12:
+            year, month = year + 1, 1
+    return out
+
+
 def progression_ranking(rows):
     """Fortschritt: every exercise ranked by all-time change in estimated 1RM.
 
