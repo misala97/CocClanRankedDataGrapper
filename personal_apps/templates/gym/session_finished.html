@@ -1,214 +1,222 @@
 {% extends 'gym/_base.html' %}
 
-{# The finished-workout debrief (spec 6.5). Reached through the same
-   /gym/session/<id> URL as session_detail.html -- routes.py's session_detail()
-   branches on session_.finished_at and renders this template once the workout
-   is over, whether that's seconds after tapping "Workout beenden" or weeks
-   later from Verlauf. Six elements, in a fixed order:
-     1. record flare (only with records)
-     2. readouts: Volumen / Sätze / Dauer / Rekorde
-     3. Nach Übung -- one row per exercise, with a verdict chip
-     4. Nächstes Mal -- concrete advice for stalled lifts (only if any)
-     5. template-update prompt (only just_finished + session.template)
-     6. actions: Verlauf, Workout löschen
-   Numbers are plain floats (no locale formatting), matching session_detail.html. #}
+{# The finished workout (Puls). The last thing seen after every session, so it
+   answers "war das ein gutes Workout?" before it shows a single raw number.
+
+   Both outcomes matter equally: the gold block appears only on a day that
+   earned one, and there is deliberately no placeholder in its place. Designing
+   only the record day is how this screen came to feel empty on an ordinary
+   Tuesday, which is what the page it replaces did. #}
 
 {% block title %}{{ session.name or 'Workout' }} · Gym Tracker{% endblock %}
 
 {% block content %}
-<div class="gym-wrap">
+<div class="finished">
 
-    <header class="session-head">
-        <div class="session-head__main">
-            <h1>{{ session.name or 'Workout' }}</h1>
-            <span class="chip chip--done">Beendet</span>
-            {% if session.is_deload %}<span class="chip chip--deload">Deload</span>{% endif %}
-        </div>
-    </header>
-    <p class="label session-finished__date">{{ session.started_at.strftime('%d.%m.%Y') }}</p>
+  <header class="session-top">
+    <a href="{{ url_for('gym.gym_verlauf') }}" class="session-top__back" aria-label="Zurück zum Verlauf">
+      {% with icon='back' %}{% include 'gym/_icon.html' %}{% endwith %}
+    </a>
+    <span class="session-top__name stack">
+      <span>{{ session.name or 'Workout' }}</span>
+      <span class="finished__when">
+        {{ session.started_at.strftime('%d.%m.%Y') }} · {{ ((session.finished_at - session.started_at).total_seconds() // 60)|int }} Minuten
+      </span>
+    </span>
+    {% if session.is_deload %}
+    <span class="session-top__deload">Deload{% if deload_applied %} {{ session.deload_pct or deload_default_pct }} %{% endif %}</span>
+    {% endif %}
+  </header>
 
-    {# The verdict. This screen is the last thing seen after every workout, so
-       it has to answer "war das ein gutes Workout?" before it shows a single
-       raw number -- previously it opened with four figures and closed with a
-       red delete button, which is a receipt, not a debrief. Every branch says
-       something: the zero-record case gets a real substitute rather than
-       falling through to silence, which is what made the screen feel empty on
-       an ordinary day.
+  {# The verdict. Every branch says something: the zero-record case gets a real
+     substitute rather than falling through to silence. The deload branch sits
+     after the empty-session case (an empty session is empty whatever it is
+     labelled) and before every volume branch -- without it a deload that
+     worked exactly as intended reads as a shortfall against its own average. #}
+  <p class="verdict{{ ' verdict--record' if record_count else '' }}">
+    {%- if record_count > 0 -%}
+    {{ record_count }} {{ 'neuer Rekord' if record_count == 1 else 'neue Rekorde' }}.
+    {%- elif total_sets == 0 -%}
+    Kein Satz erfasst — dieses Workout zählt nicht in die Statistik.
+    {%- elif session.is_deload and deload_applied -%}
+    Deload — {{ deload_pct or deload_default_pct }} %. Bewusst leichter.
+    {%- elif session.is_deload -%}
+    Als Deload markiert. Bewusst leichter.
+    {%- elif total_volume_delta_pct is not none and total_volume_delta_pct >= 5 -%}
+    {{ '%+d'|format(total_volume_delta_pct) }} % über deinem Schnitt.
+    {%- elif total_volume_delta_pct is not none and total_volume_delta_pct <= -5 -%}
+    Leichter als sonst — {{ '%+d'|format(total_volume_delta_pct) }} % gegenüber deinem Schnitt.
+    {%- elif total_volume_delta_pct is not none -%}
+    Genau auf deinem Schnitt.
+    {%- else -%}
+    {{ total_sets }} {{ 'Satz' if total_sets == 1 else 'Sätze' }} erledigt.
+    {%- endif -%}
+  </p>
 
-       The deload branch sits after the empty-session case (an empty session is
-       empty whatever it is labelled) and before every volume branch: without
-       it, a deload that worked exactly as intended falls through to "Leichter
-       als sonst -- -35 % gegenueber deinem Schnitt", which frames the point of
-       the session as a shortfall. #}
-    <p class="session-verdict{{ ' session-verdict--record' if record_count else '' }}">
-        {%- if record_count > 0 -%}
-        {{ record_count }} neue{{ '' if record_count == 1 else '' }} {{ 'Rekord' if record_count == 1 else 'Rekorde' }}.
-        {%- elif total_sets == 0 -%}
-        Kein Satz erfasst — dieses Workout zählt nicht in die Statistik.
-        {%- elif session.is_deload and deload_applied -%}
-        Deload — {{ deload_pct or deload_default_pct }} %. Bewusst leichter.
-        {%- elif session.is_deload -%}
-        Als Deload markiert. Bewusst leichter.
-        {%- elif total_volume_delta_pct is not none and total_volume_delta_pct >= 5 -%}
-        {{ '%+d'|format(total_volume_delta_pct) }} % über deinem Schnitt.
-        {%- elif total_volume_delta_pct is not none and total_volume_delta_pct <= -5 -%}
-        Leichter als sonst — {{ '%+d'|format(total_volume_delta_pct) }} % gegenüber deinem Schnitt.
-        {%- elif total_volume_delta_pct is not none -%}
-        Genau auf deinem Schnitt.
-        {%- else -%}
-        {{ total_sets }} {{ 'Satz' if total_sets == 1 else 'Sätze' }} erledigt.
-        {%- endif -%}
+  {% if tick_states %}
+  <div class="ticks" role="img" aria-label="{{ total_sets }} Sätze erledigt{% if record_count %}, davon {{ record_count }} mit Rekord{% endif %}">
+    {% for tick in tick_states %}
+    <span class="tick{{ ' is-record' if tick == 'record' else ' is-on' }}"></span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="grew">
+    <span class="grew__num">{{ '{:,.0f}'.format(total_volume).replace(',', '.') }}</span>
+    <span class="grew__unit">kg bewegt</span>
+    <span class="grew__sp"></span>
+    {% if total_volume_delta_pct is not none and not session.is_deload %}
+    <span class="grew__delta">{{ '%+d'|format(total_volume_delta_pct) }} % ggü. Ø</span>
+    {% elif session.is_deload %}
+    <span class="grew__delta">{% if deload_applied %}{{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Als Deload markiert{% endif %}</span>
+    {% endif %}
+  </div>
+
+  <div class="band">
+    <span class="band__cell"><span class="band__num">{{ total_sets }}</span><span class="label">{{ 'Satz' if total_sets == 1 else 'Sätze' }}</span></span>
+    <span class="band__cell"><span class="band__num">{{ exercises|length }}</span><span class="label">{{ 'Übung' if exercises|length == 1 else 'Übungen' }}</span></span>
+    <span class="band__cell"><span class="band__num{{ ' is-record' if record_count else '' }}">{{ record_count }}</span><span class="label">{{ 'Rekord' if record_count == 1 else 'Rekorde' }}</span></span>
+  </div>
+
+  {# The one moment this design lets itself be loud, and only when it is real. #}
+  {% for record in records %}
+  {% set kind_label = {'weight': 'Gewichts', 'e1rm': 'e1RM', 'volume': 'Volumen'}.get(record.kind, record.kind) %}
+  <section class="record-flare">
+    <div class="record-flare__kind">Neuer {{ kind_label }}-Rekord</div>
+    <div class="record-flare__name">{{ record.name }}</div>
+    <div class="record-flare__row">
+      <span class="record-flare__num">{{ ('%.1f'|format(record.value)).replace('.', ',') }}</span>
+      <span class="record-flare__unit">kg</span>
+    </div>
+    <div class="record-flare__prev">
+      vorher {{ ('%.1f'|format(record.previous)).replace('.', ',') }} kg · {{ record.previous_at.strftime('%d.%m.%Y') }} · Position {{ record.position }}
+    </div>
+  </section>
+  {% endfor %}
+
+  {# Attention is cold and always carries the word. #}
+  {% if advice and not session.is_deload %}
+  <section class="next-time">
+    <div class="next-time__lbl">Nächstes Mal</div>
+    {% for item in advice %}
+    <p class="next-time__body">
+      <b>{{ item.name }}</b> steht seit {{ item.sessions }} Workouts auf
+      {{ ('%.1f'|format(item.stuck_at)).replace('.', ',') }} kg — auf
+      <b>{{ ('%.1f'|format(item.suggested_weight)).replace('.', ',') }} kg</b> gehen, notfalls 2 Wdh. weniger.
     </p>
+    {% endfor %}
+  </section>
+  {% endif %}
 
-    {% if record_count > 0 %}
-    <section class="pr-flares">
-        {% for record in records %}
-        {% set kind_label = {'weight': 'Gewichts', 'e1rm': 'e1RM', 'volume': 'Volumen'}[record.kind] %}
-        <div class="flare">
-            <div class="flare__label">{{ record.name }} · Neuer {{ kind_label }}-Rekord</div>
-            <div class="flare__value">{{ record.value }}<span class="flare__unit">kg</span></div>
-            <div class="label flare__meta">vorher {{ record.previous }} kg · {{ record.previous_at.strftime('%d.%m.%Y') }} · Position {{ record.position }}</div>
-        </div>
-        {% endfor %}
-    </section>
-    {% endif %}
-
-    <div class="stat-grid">
-        <div class="stat">
-            <span class="stat__label">Volumen</span>
-            <span class="stat__value">{{ total_volume }} kg</span>
-            {# No delta on a deload: comparing a deliberately light session
-               against the normal average produces a number that is correct
-               and meaningless. #}
-            {% if total_volume_delta_pct is not none and not session.is_deload %}
-            <span class="stat__delta{{ ' is-up' if total_volume_delta_pct >= 0 else '' }}">{{ '%+d'|format(total_volume_delta_pct) }} % ggü. Ø</span>
-            {% elif session.is_deload and total_sets > 0 %}
-            <span class="stat__delta">{% if deload_applied %}{{ deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Deload{% endif %}</span>
-            {% endif %}
-        </div>
-        <div class="stat">
-            <span class="stat__label">Sätze</span>
-            <span class="stat__value">{{ total_sets }}</span>
-        </div>
-        <div class="stat">
-            <span class="stat__label">Dauer</span>
-            <span class="stat__value">{{ session.finished_at - session.started_at }}</span>
-        </div>
-        <div class="stat">
-            <span class="stat__label">Rekorde</span>
-            <span class="stat__value{{ ' is-record' if record_count else '' }}">{{ record_count }}</span>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="section-head"><h2 class="label">Nach Übung</h2></div>
-        {% if exercises %}
-        {% for entry in exercises %}
-        <div class="row">
-            {# the exercise name is a way back INTO the loop: from the
-               debrief straight to that lift's progression. Previously this
-               screen had exactly one exit and it was "Verlauf". #}
-            <a class="row__main" href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise_id) }}">
-                <div class="name">{{ entry.name }}</div>
-                <div class="label row__meta">Pos. {{ entry.position }} · {{ entry.sets_display }}</div>
-            </a>
-            {% if entry.verdict == 'rekord' %}
-            <span class="chip chip--record row__trail">Rekord</span>
-            {% elif entry.verdict == 'stagniert' %}
-            <span class="chip chip--stall row__trail">{{ entry.sessions_since_pr }} ohne PR</span>
-            {% elif entry.verdict == 'steigend' %}
-            <span class="chip chip--up row__trail">+{{ entry.volume_delta_pct }} % Vol.</span>
-            {% elif entry.verdict == 'neu' %}
-            <span class="chip chip--neu row__trail">Erste Aufzeichnung</span>
-            {% endif %}
-            {% if entry.set_rows %}
-            {# Quiet correction affordance -- fixing a typo'd weight/reps after
-               the fact, not a primary action, so it stays a closed-by-default
-               native disclosure rather than competing with the chip/flare for
-               attention. Each set posts individually to the untouched
-               gym_update_set endpoint. #}
-            <details class="set-correct row__wide">
-                <summary class="set-correct__toggle">{% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}<span>Sätze korrigieren</span></summary>
-                <div class="set-correct__body">
-                    {% for s in entry.set_rows %}
-                    <form method="post" action="{{ url_for('gym.gym_update_set', set_id=s.id) }}" class="set-correct__row">
-                        <span class="label set-correct__idx">{{ loop.index }}</span>
-                        <input type="number" name="weight" step="0.5" min="0" class="input input--num" value="{{ s.weight }}" aria-label="{{ entry.name }}, Satz {{ loop.index }}, Gewicht in kg">
-                        <span class="load__unit">kg</span><span class="load__x">×</span>
-                        <input type="number" name="reps" min="0" class="input input--num" value="{{ s.reps }}" aria-label="{{ entry.name }}, Satz {{ loop.index }}, Wiederholungen">
-                        <button type="submit" class="icon-btn" aria-label="Satz {{ loop.index }} speichern" title="Speichern">{% with icon='save' %}{% include 'gym/_icon.html' %}{% endwith %}</button>
-                    </form>
-                    {% endfor %}
-                </div>
-            </details>
-            {% endif %}
-        </div>
-        {% endfor %}
-        {% else %}
-        <div class="empty">Keine erledigten Sätze in diesem Workout.</div>
+  <section class="sec">
+    <div class="sec__head"><span class="label">Nach Übung</span></div>
+    {% if exercises %}
+    {% for entry in exercises %}
+    <div class="row row--top">
+      <span class="row__lead">{{ entry.position }}</span>
+      <a class="row__main stack" href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise_id) }}">
+        <span class="row__name row__name--wrap">{{ entry.name }}</span>
+        <span class="row__meta">{{ entry.sets_display }}</span>
+      </a>
+      <span class="row__trail">
+        {% if entry.verdict == 'rekord' %}
+        <span class="vtag vtag--record">Rekord</span>
+        {% elif entry.verdict == 'stagniert' %}
+        <span class="vtag vtag--stall">{{ entry.sessions_since_pr }} ohne PR</span>
+        {% elif entry.verdict == 'steigend' %}
+        <span class="vtag vtag--up">+{{ entry.volume_delta_pct }} % Vol.</span>
+        {% elif entry.verdict == 'neu' %}
+        <span class="vtag vtag--neu">Erste Aufzeichnung</span>
         {% endif %}
+      </span>
     </div>
+    {% endfor %}
 
-    {% if advice and not session.is_deload %}
-    <div class="panel">
-        <div class="section-head"><h2 class="label">Nächstes Mal</h2></div>
-        {% for item in advice %}
-        <div class="note-stall">
-            <strong>{{ item.name }}</strong> steht seit {{ item.sessions }} Workouts auf {{ item.stuck_at }} kg — auf <strong>{{ item.suggested_weight }} kg</strong> gehen, notfalls 2 Wdh. weniger.
-        </div>
-        {% endfor %}
-    </div>
+    <button type="button" class="finished__correct sheet-open" data-sheet="sheet-correct">
+      {% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}
+      Sätze korrigieren
+    </button>
+    {% else %}
+    <p class="empty">Keine erledigten Sätze in diesem Workout.</p>
     {% endif %}
+  </section>
 
-    {% if request.args.get('just_finished') and session.template %}
-    <div class="panel">
-        <div class="template-prompt">
-            <span>Vorlage <strong>{{ session.template.name }}</strong> mit dieser Übungsliste &amp; Reihenfolge aktualisieren?</span>
-            <form method="post" action="{{ url_for('gym.gym_update_template', session_id=session.id) }}">
-                <button type="submit" class="btn btn--ghost">Vorlage aktualisieren</button>
-            </form>
-        </div>
-    </div>
-    {% endif %}
+  {% if request.args.get('just_finished') and session.template %}
+  <section class="prompt">
+    Vorlage <b>{{ session.template.name }}</b> mit dieser Übungsliste &amp; Reihenfolge aktualisieren?
+    <form method="post" action="{{ url_for('gym.gym_update_template', session_id=session.id) }}">
+      <button type="submit" class="btn btn--ghost btn--block">Vorlage aktualisieren</button>
+    </form>
+  </section>
+  {% endif %}
 
-    {# Deleting a workout is a rare correction, not the way out of this screen.
-       It used to be the largest, brightest, right-most element here -- the
-       loudest thing on the page you see after every single workout. It is now
-       a quiet text action, visually subordinate to both forward paths, and it
-       keeps its confirm. #}
-    <div class="finished-actions">
-        <a href="{{ url_for('gym.gym_heute') }}" class="btn btn--ghost">Zurück zu Heute</a>
-        <a href="{{ url_for('gym.gym_verlauf') }}" class="btn btn--ghost">Verlauf</a>
-    </div>
-    <div class="finished-destructive">
-        <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=session.id) }}" onsubmit="return confirm('Workout unwiderruflich löschen?')">
-            <button type="submit" class="finished-delete">Workout löschen</button>
-        </form>
-    </div>
+  <div class="outs">
+    <a href="{{ url_for('gym.gym_verlauf') }}" class="btn btn--ghost">Verlauf</a>
+    <a href="{{ url_for('gym.gym_heute') }}" class="btn btn--live">Zu Heute</a>
+  </div>
 
-    {# Retroactively labelling a workout you already did is the flow this
-       feature was built for. It is label-only: every set is already completed,
-       so gym_toggle_deload rewrites nothing. #}
-    <div class="deload-bar{{ ' is-on' if session.is_deload else '' }}">
-        <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
-            <input type="hidden" name="on" value="{{ '0' if session.is_deload else '1' }}">
-            <input type="hidden" name="pct" value="{{ session.deload_pct or deload_default_pct }}">
-            <button type="submit" class="btn btn--ghost btn--sm deload-bar__toggle">
-                {{ 'Deload-Markierung entfernen' if session.is_deload else 'War ein Deload' }}
-            </button>
-        </form>
-        {% if session.is_deload %}
-        <span class="label deload-bar__state">
-            {# No percentage in the else-branch: on a retroactively flagged
-               session deload_pct is always the hidden field's default, because
-               this page offers no depth picker -- so printing it would surface
-               a number the user never chose about weights that never carried
-               it. The verdict line and the stat band above already omit it for
-               the same reason; all three now agree. #}
-            {% if deload_applied %}{{ session.deload_pct or deload_default_pct }} % vom Arbeitsgewicht{% else %}Als Deload markiert{% endif %}
-        </span>
-        {% endif %}
-    </div>
-
+  {# Deleting a workout is a rare correction, not the way out of this screen.
+     It used to be the largest, brightest, right-most element here. #}
+  <div class="quiet-acts">
+    <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
+      <input type="hidden" name="on" value="{{ '0' if session.is_deload else '1' }}">
+      <input type="hidden" name="pct" value="{{ session.deload_pct or deload_default_pct }}">
+      <button type="submit" class="quiet-acts__btn">
+        {{ 'Deload-Markierung entfernen' if session.is_deload else 'War ein Deload' }}
+      </button>
+    </form>
+    <form method="post" action="{{ url_for('gym.gym_delete_session', session_id=session.id) }}"
+          onsubmit="return confirm('Workout unwiderruflich löschen?')">
+      <button type="submit" class="quiet-acts__btn quiet-acts__btn--danger">Workout löschen</button>
+    </form>
+  </div>
 </div>
+
+{# Corrections live in a sheet: a typo is rare, and the editor is a dense grid
+   of number fields that has no business sitting under the debrief every time. #}
+<dialog class="sheet" id="sheet-correct">
+  <div class="sheet__head">
+    <span class="sheet__title">Sätze korrigieren</span>
+    <button type="button" class="sheet__close" data-close>Fertig</button>
+  </div>
+  <div class="sheet__body">
+    {% for entry in exercises %}
+    <div class="sheet__group">
+      <span class="label">{{ entry.name }}</span>
+      {% for s in entry.set_rows %}
+      <form method="post" action="{{ url_for('gym.gym_update_set', set_id=s.id) }}" class="sheet__row">
+        <span class="label">{{ loop.index }}</span>
+        <input type="number" name="weight" step="0.5" min="0" class="input input--num" value="{{ s.weight }}"
+               aria-label="{{ entry.name }}, Satz {{ loop.index }}, Gewicht in kg">
+        <span class="load__unit">kg</span><span class="load__x">×</span>
+        <input type="number" name="reps" min="0" class="input input--num" value="{{ s.reps }}"
+               aria-label="{{ entry.name }}, Satz {{ loop.index }}, Wiederholungen">
+        <button type="submit" class="icon-btn" aria-label="Satz {{ loop.index }} speichern">
+          {% with icon='save' %}{% include 'gym/_icon.html' %}{% endwith %}
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// The sheet opener, same shape as the session screen's. Delegated so it does
+// not care when the markup arrived.
+document.addEventListener('click', function (e) {
+    var opener = e.target.closest && e.target.closest('.sheet-open');
+    if (opener) {
+        var sheet = document.getElementById(opener.dataset.sheet);
+        if (sheet && sheet.showModal) { sheet.showModal(); }
+        return;
+    }
+    if (e.target.closest && e.target.closest('[data-close]')) {
+        var open = e.target.closest('dialog');
+        if (open) { open.close(); }
+    }
+});
+</script>
 {% endblock %}

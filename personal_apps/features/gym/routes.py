@@ -528,6 +528,29 @@ def session_detail(session_id):
         data['deload_applied'] = any(
             s.base_weight is not None for se in session_.exercises for s in se.sets)
         data['deload_default_pct'] = stats.DELOAD_DEFAULT_PCT
+        # The closed tick strip: one tick per logged set, in order, so the
+        # debrief finishes the thing the live screen spent the workout filling.
+        #
+        # A record is an exercise-level fact here (session_report awards one per
+        # exercise), so only a WEIGHT record can honestly be attributed to a
+        # single set -- the one that lifted it, first match only. Volume and
+        # e1RM records belong to the exercise as a whole and are carried by the
+        # flare and the per-exercise tag instead of by a gold tick that would be
+        # pointing at an arbitrary set.
+        records_by_name = {record['name']: record for record in data['records']}
+        tick_states = []
+        for entry in data['exercises']:
+            record = records_by_name.get(entry['name'])
+            claimed = False
+            for set_row in entry.get('set_rows', []):
+                is_record = (
+                    record is not None and record['kind'] == 'weight'
+                    and not claimed and set_row.weight == record['value']
+                )
+                if is_record:
+                    claimed = True
+                tick_states.append('record' if is_record else 'done')
+        data['tick_states'] = tick_states
         return render_template('gym/session_finished.html', session=session_, **data)
 
     # A replaced original is hidden from the active view, so its suggestion
