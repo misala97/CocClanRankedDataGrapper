@@ -273,13 +273,6 @@ svg { display: block; }
   outline-offset: 2px;
   border-radius: var(--r-inset);
 }
-
-.gym-wrap {
-  inline-size: 100%;                     /* see below */
-  max-width: var(--wrap-max);
-  margin-inline: auto;
-  padding: var(--sp-5) var(--sp-4) var(--sp-10);
-}
 /* On mobile, <body> is a column flex container (below) -- and per the flex
    spec, an item with an auto cross-axis margin (margin-inline: auto, here
    for desktop centering) is exempt from the default stretch-to-fill sizing.
@@ -326,7 +319,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   text-transform: uppercase;
   color: var(--dim);
 }
-.label--micro { font-size: var(--t-micro); }
 
 /* Name of a thing (exercise, routine, workout): the display voice, smaller. */
 .name {
@@ -352,21 +344,12 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   letter-spacing: var(--track-num);
   line-height: 1;
 }
-.num--sm { font-size: var(--num-sm); }
-.num--md { font-size: var(--num-md); }
-.num--lg { font-size: var(--num-lg); }
-.num--xl { font-size: var(--num-xl); }
 .num.is-live   { color: var(--live-ink); }
 .num.is-record { color: var(--record-ink); }
-.num.is-unlit  { color: var(--unlit); }
 .num.is-stall  { color:  var(--stall-ink); }
 
 /* The load readout: weight KG x reps, numerals dominant, units quiet. */
 .load { display: inline-flex; align-items: baseline; gap: 0.15em; }
-.load__val { font-family: var(--font-display); font-weight: var(--w-max);
-  font-stretch: var(--wd-display); font-style: normal;
-  font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
-  font-size: var(--num-sm); letter-spacing: var(--track-num); line-height: 1; }
 .load__unit { font-family: var(--font-mono); font-stretch: var(--wd-dense); font-size: var(--t-meta);
   font-weight: var(--w-med); letter-spacing: 0.04em; color: var(--dim);
   text-transform: uppercase; }
@@ -396,12 +379,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 .panel + .panel { margin-top: var(--sp-3); }
 
-.panel__head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--sp-3); margin-bottom: var(--sp-3);
-}
-.panel__tags { display: flex; align-items: center; gap: var(--sp-1); flex: none; }
-
 /* Not yet reached: outline only, transparent fill, dimmed. */
 .panel--unlit {
   background: transparent;
@@ -417,30 +394,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   box-shadow: var(--lift-live), var(--edge-lit);
 }
 
-/* Settled summary row (a completed exercise collapsed). */
-.panel--done .panel__head { margin-bottom: 0; }
-
-/* ============================================================================
-   SET ROW  ·  unlit -> live -> done, with record / stall
-   ============================================================================ */
-
-.set {
-  display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid transparent;
-  border-radius: var(--r-inset);
-  background: var(--raised);
-  transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
-}
-.set + .set { margin-top: var(--sp-2); }
-.set__idx {
-  font-family: var(--font-mono); font-stretch: var(--wd-dense); font-size: var(--t-meta);
-  font-weight: var(--w-semi); color: var(--unlit); text-align: center;
-}
-
 /* the check: an empty <button aria-label="..."> gives a 44x44 tap target; the
    26px box (::before) and the tick (::after) are drawn in CSS, so no
    glyph markup is needed and there is no glyph/box z-order fight */
@@ -450,29 +403,9 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   flex: none;
   justify-self: end;
 }
-.set__check::before {
-  content: ""; position: absolute; inset: 9px;
-  border: 1.5px solid var(--edge-hi);
-  border-radius: var(--r-inset);
-  transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
-}
-.set__check::after {                  /* the tick, revealed when the set is done */
-  content: ""; position: absolute; left: 50%; top: 47%;
-  inline-size: 6px; block-size: 11px;
-  border: solid var(--ground); border-width: 0 2px 2px 0;
-  transform: translate(-50%, -55%) rotate(45deg);
-  /* the tick DRAWS rather than fades: clipped from the far end of the stroke,
-     which -- because the mark is rotated 45deg -- wipes along the stroke
-     itself. This is the most repeated interaction in the app; it is worth
-     180ms to make completing a set feel like completing something. */
-  opacity: 0; clip-path: inset(0 0 100% 0);
-  transition: opacity var(--dur-1) var(--ease),
-              clip-path 180ms var(--ease-out);
-}
 
 /* UNLIT: prefilled, inert */
 .set--unlit { border-color: var(--edge); background: transparent; }
-.set--unlit .load__val { color: var(--unlit); }
 .set--unlit .load__unit { color: var(--unlit); }
 
 /* LIVE: the current set. Blue, halo, full border (no stripe). One at a time. */
@@ -480,22 +413,9 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   border-color: var(--live);
   background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
 }
-.set--live .load__val { color: var(--live-ink); }
-.set--live .set__check::before { border-color: var(--live); box-shadow: var(--glow-live); }
 
 /* DONE: logged and settled. Full-brightness ink, solid tick. Reads as fact. */
 .set--done .load__val { color: var(--ink); }
-.set--done .set__check::before { background: var(--ink); border-color: var(--ink); }
-.set--done .set__check::after { opacity: 1; }
-
-/* RECORD: a set that beat a previous best. Gold. */
-.set--record {
-  border-color: var(--record);
-  background: linear-gradient(var(--wash-record), var(--wash-record)), var(--chassis);
-}
-.set--record .load__val { color: var(--record-ink); }
-.set--record .set__check::before { background: var(--record); border-color: var(--record); box-shadow: var(--glow-record); }
-.set--record .set__check::after { opacity: 1; }
 
 /* Tap feedback for the check button: the live session view re-renders this
    whole row from the server after every toggle (session_detail.html's
@@ -525,7 +445,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   border-color: var(--stall);
   background: linear-gradient(var(--wash-stall), var(--wash-stall)), var(--chassis);
 }
-.set--stall .load__val { color:  var(--stall-ink); }
 
 /* ============================================================================
    CHIP + TAG  ·  the state model, compressed to a badge (colour + a word)
@@ -548,34 +467,12 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 /* filled chips (record / done) carry dark ink text; outline chips (live / stall)
    carry the hue as text, so each state reads by shape as well as colour */
-.chip--live   { color: var(--on-live);   background: var(--live);   box-shadow: var(--glow-live); }
-.chip--record { color: var(--on-record); background: var(--record); box-shadow: var(--glow-record); }
-.chip--done   { border-color: var(--edge-hi); color: var(--ink); background: transparent; }
-.chip--stall  { color: var(--on-stall);  background: var(--stall); }
-.chip--up     { border-color: var(--edge-hi); color: var(--ink); background: transparent; }  /* steigend */
-.chip--neu    { border-color: var(--edge); color: var(--dim); background: transparent; }     /* neu */
-
-/* Deload carries no hue: the app has exactly three semantic colours and a
+.chip--live   { color: var(--on-live);   background: var(--live);   box-shadow: var(--glow-live); }     /* Deload carries no hue: the app has exactly three semantic colours and a
    deliberately light session is none of them. It is a settled fact, so it
    reads as dim ink plus the word -- same treatment as .chip--neu. */
 .chip--deload { border-color: var(--edge); color: var(--dim); background: transparent; }
-
-.deload-bar {
-  display: flex; align-items: center; flex-wrap: wrap;
-  gap: var(--sp-3); margin-block-end: var(--sp-4);
-}
 .deload-bar.is-on {
   padding: var(--sp-3); border-radius: var(--r-panel); background: var(--raised);
-}
-.deload-bar__state { font-variant-numeric: tabular-nums; }
-.deload-bar__picks { display: flex; flex-wrap: wrap; gap: var(--sp-2); flex: 1 1 100%; }
-.deload-bar__pick {
-  min-inline-size: 44px; min-block-size: 44px;
-  padding-inline: var(--sp-3);
-  border: 1px solid var(--edge); border-radius: var(--r-control);
-  background: transparent; color: var(--dim);
-  font: inherit; font-variant-numeric: tabular-nums;
-  cursor: pointer; transition: color 120ms ease-out, border-color 120ms ease-out;
 }
 .deload-bar__pick.is-active { border-color: var(--edge-hi); color: var(--ink); font-weight: var(--w-bold); }
 
@@ -593,7 +490,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   border: 1px solid transparent;
   color: var(--dim);
 }
-.tag--live { background: var(--live); border-color: var(--live); color: var(--on-live); }
 
 /* ============================================================================
    REST BAR  ·  blue, inside the live panel, linear fill
@@ -602,17 +498,6 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .rest {
   display: flex; flex-direction: column; gap: var(--sp-1);
   margin-top: var(--sp-3);
-}
-.rest__top { display: flex; align-items: baseline; justify-content: space-between; }
-.rest__label {
-  font-family: var(--font-mono); font-size: var(--t-micro);
-  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
-}
-.rest__value {
-  font-family: var(--font-display); font-weight: var(--w-max);
-  font-stretch: var(--wd-display); font-style: normal; letter-spacing: var(--track-num);
-  font-variant-numeric: tabular-nums; font-size: var(--num-sm);
-  line-height: 1; color: var(--live-ink);
 }
 .rest__track {
   block-size: 8px; border-radius: var(--r-chip);
@@ -909,21 +794,6 @@ body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
   .resume { position: static; transform: none; border-top: 0; border-bottom: 1px solid var(--live); }
 }
 
-/* Why both bars above carry a null transform: on iOS -- reported on an
-   installed (standalone) PWA -- the tab bar sometimes stopped being fixed and
-   scrolled away with the page, staying broken until a reload. It followed a
-   drag-reorder on the session screen, which is the one gesture that inserts a
-   SECOND position:fixed element (.drag-ghost) onto <body> while pointermove is
-   preventDefault()ed and rAF is calling window.scrollBy -- i.e. WebKit rebuilds
-   its layer tree mid-gesture and folds the bar into the scrolling layer.
-   translateZ(0) pins each bar to its own compositing layer up front so there is
-   nothing to fold it into. Neither Chromium nor WebKit reproduces this
-   headlessly (both keep position:fixed and bottom == innerHeight through a
-   scripted drag), so this is verified on device, not in a test. Harmless
-   otherwise: neither bar has fixed descendants, so becoming a containing block
-   changes nothing, and both already opened their own stacking context via
-   z-index. */
-
 /* Mobile only: when the resume strip is actually rendered above the fixed tab
    bar, the base `body` padding-bottom (which only clears the tab bar itself)
    isn't enough -- the strip sits on top of the last ~52px of scrollable
@@ -980,18 +850,6 @@ body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
   border-radius: 0;
   box-shadow: none;
 }
-.stat__label {
-  font-family: var(--font-mono); font-stretch: var(--wd-dense);
-  font-size: var(--t-label); font-weight: var(--w-bold);
-  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
-}
-.stat__value {
-  font-family: var(--font-display); font-weight: var(--w-max);
-  font-stretch: var(--wd-display); font-style: normal;
-  font-variant-numeric: tabular-nums; font-size: var(--num-lg);
-  line-height: 1; letter-spacing: var(--track-num); color: var(--ink);
-}
-.stat__delta { font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim); }
 .stat__delta.is-up   { color: var(--ink); }
 .stat__delta.is-record { color:  var(--record-ink); }
 .stat__delta.is-stall { color:  var(--stall-ink); }
@@ -1024,12 +882,6 @@ body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
    explanation, not a fourth semantic state. */
 .vbar.vbar--deload {
   background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--ground) 3px 6px);
-}
-
-.deload-note {
-  margin-block-end: var(--sp-3);
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
 }
 /* The lifts behind the count, named rather than left to a bare number --
    inherits --dim from .deload-note, just set on its own line so the roster
@@ -1074,21 +926,6 @@ body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
   border-radius: var(--r-panel);
   box-shadow: var(--glow-record);
   animation: flare-pulse 620ms var(--ease-out) 1 both;
-}
-.flare__label {
-  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
-  letter-spacing: var(--track-label); text-transform: uppercase; color:  var(--record-ink);
-}
-.flare__value {
-  font-family: var(--font-display); font-weight: var(--w-bold);
-  font-variant-numeric: tabular-nums; line-height: 1;
-  /* capped against the flare's own width, not left to scale unbounded: at
-     200 % text a six-figure record ("1636.0 kg") ran past the viewport and
-     took the page's horizontal scroll with it. min() keeps --num-xl at every
-     normal size and only bites when the numeral would not otherwise fit,
-     so the figure stays whole -- which is what WCAG 1.4.4 actually asks. */
-  font-size: min(var(--num-xl), 20cqi);
-  letter-spacing: var(--track-num); color: var(--record-ink);
 }
 @keyframes flare-pulse {
   0%   { transform: scale(0.985); filter: brightness(1.7); }
@@ -1147,8 +984,6 @@ body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
   letter-spacing: var(--track-label); text-transform: uppercase; color:  var(--stall-ink);
 }
 .note-stall strong { color: var(--ink); font-weight: var(--w-semi); }
-
-.divider { block-size: 1px; background: var(--edge); border: 0; margin-block: var(--sp-5); }
 
 .empty {
   padding: var(--sp-8) var(--sp-4);
@@ -1223,7 +1058,6 @@ body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
    on an inline span `text-overflow` is silently ignored and the text runs past
    the viewport instead of truncating. */
 .row__meta--clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row__wide  { flex-basis: 100%; margin: var(--sp-1) 0 0; }
 /* a secondary line inside __main that is prose, not a label: the exercise
    list under a workout's name. Needs the body face explicitly, or it inherits
    the uppercase letterspaced .label treatment and turns into a block the
@@ -1264,9 +1098,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
    script barely changed from the version this replaced.
    ============================================================================ */
 
-/* Everything on this view is tapped one-handed, standing at the gym, so every
-   control clears the 44px touch floor (spec 7) -- including the buttons/inputs
-   the shared tokens otherwise draw at 36/40px for calmer desktop surfaces. */
 /* .btn--sm is 44px app-wide now; only the fields still need the bump here */
 .session-view .input, .session-view .select { min-block-size: 44px; }
 
@@ -1275,25 +1106,10 @@ a.row__main:hover .name { color:  var(--live-ink); }
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: var(--sp-3); margin-bottom: var(--sp-4);
 }
-.session-head__main { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); min-inline-size: 0; }
-.session-head__clock { flex: none; color: var(--live-ink); }
-
-/* push-notification enable row + the reorder lock toggle */
-.notify { display: flex; align-items: center; gap: var(--sp-3); }
-.notify__text { flex: 1; min-inline-size: 0; color: var(--dim); font-size: var(--t-sm); }
-.reorder-row { margin: var(--sp-3) 0; }
 
 /* one exercise = one .panel. margin between them (both live/unlit variants are
    still .panel, so the base `.panel + .panel` rule already spaces them) */
 .exercise-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
-.card-title-area {
-  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
-  flex: 1; min-inline-size: 0;
-  cursor: pointer;                       /* tap toggles collapse (JS) */
-  touch-action: pan-y;                   /* vertical touch here scrolls the page like anywhere else */
-  -webkit-tap-highlight-color: transparent;
-  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-}
 /* Collapsed = the settled summary row -- one quiet line, not a second
    headline. A long name (this app's real data goes well past 30 chars,
    e.g. "Lat Pulldown (Single Arm, Hauptbahnhof)") would otherwise wrap to
@@ -1331,15 +1147,11 @@ a.row__main:hover .name { color:  var(--live-ink); }
   cursor: grab;
   touch-action: none;
 }
-.exercise-card__name { font-size: var(--t-name); line-height: 1.15; overflow-wrap: anywhere; }
-.exercise-card__tools { flex: none; display: flex; align-items: center; gap: var(--sp-1); }
 
 /* per-exercise rest-seconds editor (auto-saves on change) */
 .rest-form { display: inline-flex; align-items: center; gap: var(--sp-1); }
-.rest-form__unit { color: var(--dim); }
 .rest-form__input { inline-size: 4.25rem; min-inline-size: 4ch; max-inline-size: 100%; min-block-size: 44px; padding-inline: var(--sp-2); font-size: var(--t-name); }
 
-/* collapse: the header is the settled summary row; the body is the workspace */
 /* Animatable collapse via the grid-rows technique: display:none can't be
    transitioned, so .exercise-card__body is a 1-row grid whose track animates
    1fr <-> 0fr, and .exercise-card__body-inner (its one grid item -- added in
@@ -1353,19 +1165,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
   grid-template-rows: 1fr;
   margin-top: var(--sp-3);
   transition: grid-template-rows 320ms var(--ease-out), margin-top 320ms var(--ease-out);
-}
-.exercise-card__body-inner {
-  min-height: 0;
-  overflow: hidden;
-  display: flex; flex-direction: column; gap: var(--sp-3);
-  /* overflow:hidden only clips visually -- every input/button in here would
-     otherwise stay in the tab order and the accessibility tree even while
-     the row is animated to zero height (unlike the old display:none, which
-     handled both in one property). Delay visibility until the collapse
-     animation actually finishes so it doesn't cut the motion short; expand
-     restores it immediately since there's no animation to protect there. */
-  visibility: visible;
-  transition: visibility 0s linear 0s;
 }
 .exercise-card.collapsed .exercise-card__body-inner {
   visibility: hidden;
@@ -1389,25 +1188,17 @@ a.row__main:hover .name { color:  var(--live-ink); }
   50%  { box-shadow: var(--glow-live); }
   100% { box-shadow: var(--glow-live), var(--edge-lit); }   /* .panel--live's own resting shadow */
 }
-.exercise-card.just-lit { animation: card-just-lit 480ms var(--ease-out); }
 
 @keyframes card-just-finished {
   0%   { box-shadow: none; }
   45%  { box-shadow: 0 0 16px rgba(236, 239, 242, 0.4); }
   100% { box-shadow: none; }
 }
-.exercise-card.just-finished { animation: card-just-finished 560ms var(--ease-out); }
 
-.pending-hint { color: var(--dim); }
-.sets { display: flex; flex-direction: column; gap: var(--sp-1); }
-
-/* editable live set row: weight/reps wells, the check pushed to the cell end,
-   delete in the trailing grid column */
 /* wraps at large text sizes: two numeric fields, a unit, a multiplier and a
    44px confirm target cannot share one line once the root font doubles, and
    the confirm control is the one thing that must never leave the screen */
 .set__log { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1); min-inline-size: 0; }
-.set__log > * { min-inline-size: 0; }
 /* inline-size is the PREFERRED width; the min/max pair is what lets the field
    give way when the text is scaled up rather than dragging the row off-screen.
    5ch still holds a three-digit weight at any root size, because ch scales
@@ -1417,8 +1208,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
   min-block-size: 44px; padding-inline: var(--sp-2); font-size: var(--t-name);
 }
 .set__log .load__unit, .set__log .load__x { flex: none; }
-.set__log .set__check { margin-inline-start: auto; }
-.set__del { justify-self: end; }
 
 /* Undo window for set deletion (Interaction Design's own "undo beats confirm"
    rule): the row's real children hide instead of the row disappearing, and
@@ -1426,20 +1215,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
    user taps Rückgängig. gym.js owns the timer. */
 .set--pending-delete > *:not(.set__undo) { display: none; }
 @keyframes set-undo-in { from { opacity: 0; } to { opacity: 1; } }
-.set__undo {
-  grid-column: 1 / -1;
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--sp-3);
-  color: var(--dim);
-  font-size: var(--t-sm);
-  animation: set-undo-in 180ms var(--ease-out);
-}
-
-/* finished (read-only) set row: static load readout + a pencil that swaps in
-   an edit form spanning the rest of the row */
-.set__readout { min-inline-size: 0; }
-.set__tools { display: flex; align-items: center; gap: var(--sp-1); justify-self: end; }
-.set__editrow { grid-column: 2 / -1; }
 
 /* form rows that wrap gracefully on a phone */
 .add-set, .add-exercise, .save-template, .replace__form {
@@ -1448,15 +1223,9 @@ a.row__main:hover .name { color:  var(--live-ink); }
 .grow { flex: 1 1 9rem; min-inline-size: 0; }
 .add-set .field { flex: 0 0 auto; }
 .add-set .btn, .add-exercise .btn, .save-template .btn, .replace__form .btn { flex: none; }
-
-/* per-exercise actions: skip / replace / remove */
-.ex-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .replace { flex: 1 1 100%; }
 .replace > summary { display: inline-flex; list-style: none; width: auto; }
 .replace > summary::-webkit-details-marker { display: none; }
-.replace__form { margin-top: var(--sp-2); }
-
-.session-finish { margin: var(--sp-5) 0; }
 
 /* drag reorder */
 .exercise-card.dragging { opacity: 0.4; }
@@ -1564,12 +1333,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
 
 /* record flare(s): one per PR, largest first (server-sorted) */
 .pr-flares { display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-4); }
-.flare__unit {
-  font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
-  letter-spacing: 0.04em; text-transform: uppercase; color:  var(--record-ink);
-  margin-inline-start: 0.3em;
-}
-.flare__meta { margin-top: var(--sp-2); }
 
 /* Volumen / Sätze / Dauer / Rekorde -- 2x2 on phone, 4-across once there's room */
 .stat-grid {
@@ -1580,14 +1343,8 @@ a.row__main:hover .name { color:  var(--live-ink); }
   overflow: hidden;
   box-shadow: var(--edge-lit), var(--edge-drop);
 }
-.stat-grid > .stat { background: var(--chassis); }
 @media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .stat__value.is-record { color: var(--record-ink); }
-
-/* Nach Übung: a divided list inside one panel, not a card per row. Uses the
-   shared .row; the correction disclosure below the summary line is a
-   .row__wide child, so it still counts as part of the same row for the
-   divider instead of cutting it. */
 
 /* correction affordance: closed-by-default native disclosure (no JS, free
    keyboard support via <summary>'s implicit button semantics) revealing one
@@ -1595,33 +1352,14 @@ a.row__main:hover .name { color:  var(--live-ink); }
    smaller and dimmer than the chip beside it -- so it never competes with
    the verdict chip or the record flare above for attention. */
 .set-correct { margin-top: var(--sp-1); }
-.set-correct__toggle {
-  display: inline-flex; align-items: center; gap: var(--sp-1);
-  min-block-size: 44px;
-  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
-  letter-spacing: var(--track-label); text-transform: uppercase;
-  color: var(--dim);
-  cursor: pointer;
-  list-style: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.set-correct__toggle::-webkit-details-marker { display: none; }
-.set-correct__toggle:hover { color: var(--ink); }
-.set-correct[open] > .set-correct__toggle { color: var(--ink); }
-.set-correct__body { display: flex; flex-direction: column; gap: var(--sp-2); padding-bottom: var(--sp-1); }
 /* wraps rather than overflowing: at 200 % text two 5.75rem number fields plus
    the unit, the x and the save button cannot sit on one 390px line, and a
    non-wrapping flex row pushed the whole page sideways (WCAG 1.4.4). */
 .set-correct__row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-.set-correct__idx { inline-size: 1.25rem; flex: none; text-align: center; }
 .set-correct__row .input--num { inline-size: 5.75rem; min-inline-size: 5ch; max-inline-size: 100%; min-block-size: 44px; padding-inline: var(--sp-2); font-size: var(--t-name); }
 
 .note-stall + .note-stall { margin-top: var(--sp-2); }
 .save-error__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
-
-.template-prompt { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
-
-.finished-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); }
 
 /* The verdict line: the one sentence this screen exists to say. Sized between
    a name and a numeral so it reads before any of the figures below it. Gold
@@ -1640,22 +1378,10 @@ a.row__main:hover .name { color:  var(--live-ink); }
   color: var(--ink);
   text-wrap: balance;
 }
-.session-verdict--record { color: var(--record-ink); }
 
 /* destructive action, deliberately demoted: no pill, no fill, no border --
    it should be findable and never the thing your eye lands on */
 .finished-destructive { margin-top: var(--sp-8); }
-.finished-delete {
-  min-block-size: 44px; padding-inline: var(--sp-2);
-  font-family: var(--font-mono); font-stretch: var(--wd-dense);
-  font-size: var(--t-meta); letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--unlit);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  transition: color var(--dur-2) var(--ease);
-}
-.finished-delete:hover { color:  var(--stall-ink); }
 
 /* ============================================================================
    HEUTE  ·  the landing page (heute.html)
@@ -1697,15 +1423,7 @@ a.row__main:hover .name { color:  var(--live-ink); }
     gap: var(--sp-6);
   }
 }
-
-.heute__head     { grid-area: head; }
-.heute__start    { grid-area: start; }
-.heute__routines { grid-area: routines; }
-.heute__recent   { grid-area: recent; }
-.heute__board    { grid-area: board; display: flex; flex-direction: column; gap: var(--sp-3); }
-.heute__board .panel + .panel { margin-top: 0; }   /* .heute__board's own gap already spaces them; avoid doubling up */
-
-/* the bar's dividing line, as its own full-width grid row -- not a border on
+.heute__board .panel + .panel { margin-top: 0; }   /* the bar's dividing line, as its own full-width grid row -- not a border on
    .heute__head/.heute__start individually, which (once the start-form wraps
    to two lines in its narrower column) would end up at two different
    heights instead of reading as one bar's bottom edge. Phone doesn't have
@@ -1720,10 +1438,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
   .heute__start { display: flex; align-items: flex-end; }
   .heute__start form, .heute__start .heute__active-note { inline-size: 100%; }
 }
-
-.heute__title h1 { margin-bottom: var(--sp-1); }
-.heute__window-label { display: none; }
-.heute__consistency { color: var(--dim); font-size: var(--t-sm); }
 @media (min-width: 900px) {
   .heute__window-label { display: block; margin-bottom: var(--sp-1); text-align: right; }
   .heute__consistency-block { text-align: right; }
@@ -1742,8 +1456,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
   }
   .heute__start .btn--ghost:hover { background: var(--live-hi); }
 }
-
-.heute__active-note { display: flex; flex-direction: column; gap: var(--sp-2); }
 
 /* Two tiers. The lead routine keeps its own panel and the page's one primary
    action; every other routine drops to a divided row inside a single shared
@@ -1768,8 +1480,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
 }
 
 .routine--lead .name { font-size: var(--num-sm); }
-
-.routine-rest { padding-block: var(--sp-1); }
 /* the routine list uses the shared .row (--top, so the Starten/edit cluster
    sits level with the title rather than floating beside a two-line block).
    Only the padding is local: these rows sit inside a tighter panel. */
@@ -1793,45 +1503,16 @@ a.row__main:hover .name { color:  var(--live-ink); }
   inline-size: 100%;
   min-inline-size: 0;   /* a wide descendant (the history table) must not set the floor */
 }
-#gym-main:focus { outline: none; }   /* programmatic target, not a focus stop */
-
-
-/* inline icons sit on the text baseline-ish and inherit the control's colour */
+#gym-main:focus { outline: none; }   /* inline icons sit on the text baseline-ish and inherit the control's colour */
 .icon { flex: none; }
 /* reorder lock carries BOTH icons and swaps by class -- JS sets textContent on
    the label span only, which cannot inject markup */
 #reorder-lock-btn .icon-unlock { display: none; }
-#reorder-lock-btn.is-unlocked .icon-lock { display: none; }
-#reorder-lock-btn.is-unlocked .icon-unlock { display: block; }
-.meta-edit__toggle, .set-correct__toggle {
-  display: inline-flex; align-items: center; gap: var(--sp-2);
-}
 
 /* edit affordance: closed by default, anchored under its toggle as a small
    popover rather than pushed inline -- so opening it never reflows the card
    or squeezes the rename input into whatever width a flex item shrinks to. */
 .routine__edit { position: relative; flex: none; }
-.routine__edit-toggle {
-  display: inline-grid; place-items: center;
-  inline-size: 44px; block-size: 44px;
-  color: var(--dim); border-radius: var(--r-control);
-  cursor: pointer; list-style: none;
-  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
-}
-.routine__edit-toggle::-webkit-details-marker { display: none; }
-.routine__edit-toggle:hover { color: var(--ink); background: var(--raised); }
-.routine__edit[open] > .routine__edit-toggle { color: var(--ink); background: var(--raised); }
-.routine__edit-body {
-  position: absolute; z-index: 2; right: 0; top: calc(100% + var(--sp-1));
-  inline-size: max(220px, min(280px, calc(100vw - 3rem)));
-  display: flex; flex-direction: column; gap: var(--sp-2);
-  padding: var(--sp-3);
-  background: var(--raised);
-  border: 1px solid var(--edge-hi);
-  border-radius: var(--r-panel);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-}
-.routine__edit-form { display: flex; gap: var(--sp-2); }
 .routine__edit-form .input { flex: 1; min-inline-size: 0; }
 
 /* Letzte Workouts and Steht still both use the shared .row. They previously
@@ -1854,19 +1535,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
    finished page immediately, with no staggered pop-in).
    ============================================================================ */
 
-/* The section-by-section entrance stagger that used to live here is gone.
-   Two reasons, and the second is the real one:
-
-   1. Product motion doctrine: no orchestrated page-load choreography. You open
-      this page to answer "what am I training", not to watch six panels arrive.
-   2. It replayed on EVERY navigation. Combined with the route transition added
-      further down, that is a double animation on every tab tap -- the page
-      crossfades in, then its contents animate again underneath it. Once real
-      route transitions exist, a per-section entrance is not additive, it is
-      noise.
-
-   The gauge sweeps below are deliberately KEPT: those encode magnitude, so the
-   motion carries information rather than announcing the page. */
 /* gauges: sweep from zero to the value already computed server-side, timed
    to start just after their own panel (--i: 4 / --i: 5 above) begins
    lighting up. transform, not width/height -- the real share/volume value
@@ -1894,32 +1562,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
 
 .uebungen__head { margin-bottom: var(--sp-4); }
 
-.uebungen__controls {
-  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-4);
-  margin-bottom: var(--sp-4);
-}
-.uebungen-sort {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3);
-  flex: 1 1 auto; border: 0;
-}
-.uebungen-sort legend { padding: 0; margin-bottom: var(--sp-1); inline-size: 100%; }
-.uebungen-sort__opt {
-  display: inline-flex; align-items: center; gap: var(--sp-2);
-  min-block-size: 44px;
-  padding-inline: var(--sp-3);
-  border-radius: var(--r-chip);
-  background: var(--raised);
-  font-family: var(--font-mono); font-stretch: var(--wd-dense);
-  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
-  cursor: pointer;
-  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
-}
-/* the sort control offers three options; make it LOOK like three options
-   instead of three loose native radios adrift in a custom pill system */
-.uebungen-sort__opt:hover { color: var(--ink); }
-.uebungen-sort__opt:has(input:checked) { background: var(--edge); color: var(--ink); }
-.uebungen-sort__opt input { accent-color: var(--live); }
-
 /* A real table: one shared header names the columns once instead of every
    row re-labelling itself ("Zuletzt", "e1RM") -- that repetition was the
    actual noise. .uebungen-table is the ONE grid; .uebungen-table__head,
@@ -1943,12 +1585,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
    let them wrap rather than push the grid past the viewport */
 .uebungen-row__weight, .uebungen-row__e1rm { min-inline-size: 0; }
 .uebungen-table__head, .uebungen-list { display: contents; }
-.uebungen-table__head span:not(.uebungen-table__rule) {
-  padding-bottom: var(--sp-2);
-  font-family: var(--font-mono); font-size: var(--t-micro); font-weight: var(--w-semi);
-  letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
-}
-.uebungen-table__head span:nth-child(2), .uebungen-table__head span:nth-child(3) { text-align: right; }
 /* One hairline spanning every column, not four separate borders that stop
    short at each column-gap (four disconnected fragments instead of a
    single line -- the "alignment" that actually read as broken). Same
@@ -1965,27 +1601,12 @@ a.row__main:hover .name { color:  var(--live-ink); }
   padding: var(--sp-2) 0; margin-top: var(--sp-1);
 }
 .uebungen-group-header:first-child { margin-top: 0; }
-.uebungen-group-header__chevron {
-  display: inline-block; flex: none;
-  color: var(--dim); font-size: var(--t-sm);
-  transition: transform var(--dur-2) var(--ease);
-}
 .uebungen-group-header.is-open .uebungen-group-header__chevron { transform: rotate(90deg); }
 
 .uebungen-row { display: contents; }
 .uebungen-row[hidden], .uebungen-group-header[hidden] { display: none; }
 .uebungen-row > * { padding-block: var(--sp-2); }
-.uebungen-row__rule { grid-column: 1 / -1; block-size: 1px; padding: 0; background: var(--edge); }
-
-.uebungen-row__name-cell { min-inline-size: 0; overflow-wrap: anywhere; }
 .uebungen-row__name-cell .chip { margin-inline-start: var(--sp-2); }
-.uebungen-row__meta { margin-top: 2px; }
-.uebungen-row__weight, .uebungen-row__e1rm { text-align: right; white-space: nowrap; }
-.uebungen-row__dash { color: var(--dim); }
-.uebungen-row__delete-cell { display: flex; justify-content: center; }
-.uebungen-row__delete-cell:empty { display: none; }
-
-.uebungen-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
 
 /* ============================================================================
    VERLAUF  ·  workout history + export (verlauf.html)
@@ -1999,9 +1620,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
 
 .verlauf__head { margin-bottom: var(--sp-4); }
 
-.verlauf-export__presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
-.verlauf-export__action { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
-
 /* checkbox has no adjacent label text (aria-label carries the name instead),
    so unlike .uebungen-check / .exercise-detail-check -- which get their
    44px-wide tap target for free from the text beside them -- this one needs
@@ -2012,7 +1630,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
   flex: none;
   cursor: pointer;
 }
-.verlauf__search { margin-bottom: var(--sp-4); }
 .verlauf__count { margin-inline-start: auto; color: var(--unlit); }
 
 /* ============================================================================
@@ -2062,28 +1679,14 @@ a.row__main:hover .name { color:  var(--live-ink); }
   }
 }
 
-/* Every direct child of .exercise-detail MUST get an explicit grid-area.
-   CSS Grid auto-places anything without one into a fresh implicit row after
-   every named area in the template -- silently, with no error -- which is
-   exactly the bug this comment exists to prevent regressing: an unassigned
-   .exercise-detail__head previously auto-placed itself after "meta",
-   rendering the exercise's own name at the BOTTOM of the page. */
 /* min-inline-size: 0 on every one -- same reasoning as .gym-wrap above:
    a grid item's automatic minimum width defaults to its content's, and
    without this, h1's large (--num-md) heading font forces the single
    mobile column -- and everything else riding along in it -- wider than
    the viewport the moment a long exercise name doesn't fit at that size. */
 .exercise-detail__head    { grid-area: head;    min-inline-size: 0; }
-.exercise-detail__verdict { grid-area: verdict; min-inline-size: 0; }
-.exercise-detail__chart   { grid-area: chart;   min-inline-size: 0; }
-.exercise-detail__history { grid-area: history; min-inline-size: 0; }
-.exercise-detail__meta    { grid-area: meta;    min-inline-size: 0; }
-
-.exercise-detail__name-warning { margin-top: var(--sp-3); }
 
 .exercise-detail__verdict .panel { display: flex; flex-direction: column; gap: var(--sp-3); }
-.verdict-last { margin-top: calc(-1 * var(--sp-1)); color: var(--ink); font-size: var(--t-sm); line-height: 1.5; }
-.verdict-last__sets { display: block; margin-top: 2px; }
 
 /* position filter: real navigation links (?position=N / back to unfiltered),
    not a client-side toggle -- isolating one slot is a different view of the
@@ -2092,28 +1695,10 @@ a.row__main:hover .name { color:  var(--live-ink); }
    already use, not a repurposed state hue -- selection isn't one of the
    five states. */
 .exercise-detail__positions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
-.position-pill {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-block-size: 44px; padding: 0 var(--sp-4);
-  font-family: var(--font-mono); font-stretch: var(--wd-dense);
-  font-size: var(--t-meta); font-weight: var(--w-semi);
-  letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--dim);
-  background: var(--raised);
-  border: 1px solid var(--edge);
-  border-radius: var(--r-chip);
-  transition: color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
-}
-.position-pill:hover { color: var(--ink); border-color: var(--edge-hi); }
 .position-pill.is-active { color:  var(--live-ink); border-color: var(--live); background: transparent; box-shadow: var(--glow-live); }
-
-.exercise-detail__chart-wrap { position: relative; block-size: 280px; }
 @media (min-width: 900px) {
   .exercise-detail__chart-wrap { block-size: 420px; }
 }
-
-.exercise-detail__note { margin-bottom: var(--sp-3); color: var(--dim); font-size: var(--t-meta); line-height: 1.5; }
-.exercise-detail__table-wrap { overflow-x: auto; }
 
 @media (max-width: 520px) {
   .table { font-size: var(--t-meta); }
@@ -2129,53 +1714,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
    bounced off a taken name, so the warning and the form to try again land
    together instead of the user having to reopen what they just submitted. */
 .meta-edit { margin-top: var(--sp-1); }
-.meta-edit__toggle {
-  display: inline-flex; align-items: center; gap: var(--sp-1);
-  min-block-size: 44px;
-  font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
-  letter-spacing: var(--track-label); text-transform: uppercase;
-  color: var(--dim);
-  cursor: pointer;
-  list-style: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.meta-edit__toggle::-webkit-details-marker { display: none; }
-.meta-edit__toggle:hover { color: var(--ink); }
-.meta-edit[open] > .meta-edit__toggle { color: var(--ink); }
-.meta-edit__body { margin-top: var(--sp-2); }
-.exercise-detail-check { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: 44px; flex: none; cursor: pointer; }
-
-/* ============================================================================
-   ROUTE TRANSITIONS  ·  REMOVED, and why
-   ----------------------------------------------------------------------------
-   A cross-document view transition (`@view-transition { navigation: auto }`)
-   lived here. It is gone, because it wedged CSS transitions in the INCOMING
-   document: after any same-origin navigation, transitions in the new page
-   never advanced. Measured, reproducibly, on the progress modal:
-
-     with the opt-in   opacity 0, transform stuck at the closed-state
-                       matrix(0.98, 0, 0, 0.98, 0, 16), the transform
-                       transition permanently playState "running",
-                       requestAnimationFrame callbacks never firing
-     without it        opacity 1, transform none, zero pending animations
-
-   The user-visible consequence was that tapping the chart icon opened a fully
-   transparent modal that never faded in -- an invisible dialog trapping focus
-   rules. Narrowed further: removing the `view-transition-name` assignments
-   did NOT help, so it is the navigation opt-in itself, not the named
-   elements. Also worth recording: the transition was never observed firing
-   correctly in the first place (`pagereveal` never reported one, and the
-   engine logged "Transition was skipped").
-
-   A page-entry animation is NOT reinstated in its place. Product motion
-   doctrine is explicit that a task surface should not choreograph its own
-   arrival, and the section-by-section stagger that used to live further down
-   was removed on that ground independently of this.
-
-   If this is revisited: verify with a real cross-document navigation that a
-   CSS transition started AFTER the navigation still completes, before
-   shipping it. That is the check that would have caught this.
-   ============================================================================ */
 
 /* ============================================================================
    DISCLOSURE  .  details/summary open + close
@@ -2204,10 +1742,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
 @keyframes disclosure-pop {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
 }
-.routine__edit[open] > .routine__edit-body {
-  animation: disclosure-pop 180ms var(--ease-out);
-  transform-origin: top right;
-}
 
 /* ============================================================================
    STATISTIK  ·  all-time analytics (statistik.html)
@@ -2219,7 +1753,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
    ============================================================================ */
 
 .statistik__head { margin-bottom: var(--sp-5); }
-.statistik__zone { margin-bottom: var(--sp-6); }
 
 /* the stated finding: the sentence the zone exists to make, above its evidence */
 .statistik__finding {
@@ -2234,8 +1767,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
    which is precisely the confident-but-unfounded impression the rule exists
    to prevent. Dimmed to the same level as any other secondary label. */
 .statistik__finding--quiet { color: var(--dim); }
-/* wide tables scroll in their own box; the page body never does */
-.statistik__table-wrap { overflow-x: auto; }
 
 /* Das Werk: one divided readout band, not five tiles. Same family as
    .stat-grid -- repeated identical cards are banned, and five of them would
@@ -2255,18 +1786,10 @@ a.row__main:hover .name { color:  var(--live-ink); }
   padding: var(--sp-4);
   background: var(--chassis);
 }
-.werk__unit { margin-inline-start: 0.2em; font-size: var(--t-meta); color: var(--dim); }
-.werk__meta { color: var(--unlit); }
-
-.prog-table__delta { color: var(--dim); }
 .prog-table__delta.is-up { color: var(--ink); }
 /* sortable headers are <th>, so the affordance and the keyboard target are
    both explicit -- a bare th has neither */
 .prog-table th[data-sort] { cursor: pointer; user-select: none; }
-.prog-table th[data-sort]:focus-visible { outline: 2px solid var(--live); outline-offset: -2px; }
-.prog-table th[aria-sort] { color: var(--ink); }
-
-.finding-bar__note { margin-top: var(--sp-2); color: var(--unlit); }
 /* the findings panel holds charts inside rows, so its rows need room to
    breathe that a plain list row does not */
 .statistik__zone .row__wide { margin-top: var(--sp-3); }
@@ -2278,10 +1801,6 @@ a.row__main:hover .name { color:  var(--live-ink); }
   grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
   gap: var(--sp-4);
 }
-
-/* the one place gold is right on this page: it already means "record"
-   everywhere else in the app */
-.record-row__value { color:  var(--record-ink); }
 
 /* Sparkline: shape only. The first/current columns already carry the numbers,
    so this exists to show whether the climb was steady or a spike followed by a
@@ -2314,33 +1833,6 @@ tr:hover .spark { color: var(--ink); }
   .flare { animation: none !important; }
   .set__check::after { clip-path: none !important; }
 }
-
-/* ============================================================================
-   TEXT RESIZE  ·  why so many tracks are minmax(0, 1fr)
-   ----------------------------------------------------------------------------
-   WCAG 2.2 SC 1.4.4 (Resize Text, AA) requires that text scale to 200%
-   without loss of content. Browser text zoom scales the root font size, so
-   every rem-based width in this file doubles with it while the viewport does
-   not -- which is correct and intended for spacing, but fatal for any track
-   that is allowed to size itself from its content.
-
-   A `1fr` track carries an implicit `min-content` floor, and a grid item
-   defaults to `min-inline-size: auto`. Together they mean: if any descendant's
-   min-content exceeds the viewport at 200%, the track grows to fit it and
-   every sibling in that track stretches to match. That is exactly what was
-   measured before this pass -- on Heute the header, the title, the h1 and the
-   start section all reported an identical 606.734px width in a 390px viewport.
-   Only one of them was actually too wide; the rest inherited the track.
-
-   `minmax(0, 1fr)` removes the floor, so content wraps (or scrolls inside its
-   own box) instead of widening the page. The numeric fields additionally keep
-   a `ch`-based min-inline-size: `ch` scales with the font, so a three-digit
-   weight still fits at any root size, while `max-inline-size: 100%` lets the
-   field give way rather than drag the row off-screen.
-
-   Verified at `html { font-size: 32px }` (200% of 16px) in a 390px viewport,
-   on every page, plus the 320px reflow case for SC 1.4.10.
-   ============================================================================ */
 
 /* ============================================================================
    SESSION  ·  the live workout (Puls)
@@ -2431,10 +1923,7 @@ tr:hover .spark { color: var(--ink); }
 }
 
 /* ---- set chips ---- */
-/* explicit row/nowrap: the Athletik-era .sets rule earlier in this file also
-   matches, and re-declaring only `display` let its flex-direction survive and
-   stack the chips full-width. Until that block is swept, this has to say so. */
-.sets { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 7px; margin-top: var(--sp-4); }
+.sets { display: flex; gap: 7px; margin-top: var(--sp-4); }
 .set-form { flex: 1; display: flex; }
 .set {
   /* the floor, not 40: a set chip is tapped to un-log a set, mid-workout, with
@@ -2563,7 +2052,6 @@ tr:hover .spark { color: var(--ink); }
   inline-size: 9px; block-size: 9px; border-radius: 50%; background: var(--live);
   display: inline-block;
 }
-.queue__pos { font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--unlit); }
 
 .session-foot { padding: var(--sp-5) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom, 0px)); }
 
