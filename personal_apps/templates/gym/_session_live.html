@@ -1,0 +1,176 @@
+{# The live workout's body: the two rails, the one lifted panel, the queue.
+
+   Split out of session_detail.html because it is exactly what every mutation
+   re-renders. The page's script swaps this fragment wholesale after each
+   action, the same way the previous build swapped #exercise-cards -- the server
+   recomputes which exercise is live on every render, so the fresh markup is
+   authoritative and there is no client-side state to reconcile.
+
+   Everything outside this file (header, menu, sheets, error banner) survives a
+   refresh untouched. #}
+<div id="session-body">
+
+  {# Rail 1: one segment per exercise. The live one is wider and part-filled by
+     its own set progress, so "where am I in the workout" and "where am I in
+     this exercise" are one glance rather than two. #}
+  <div class="rail" role="img" aria-label="Übung {{ live_index }} von {{ visible_exercises|length }}">
+    {% for se in visible_exercises %}
+    {% set se_done = se.sets|selectattr('completed')|list|length %}
+    {% set se_total = se.sets|length %}
+    {% if se.id == live_id %}
+    <span class="rail__seg is-now"><span class="rail__fill" style="inline-size: {{ ((se_done / se_total * 100) if se_total else 0)|round }}%"></span></span>
+    {% elif se_total > 0 and se_done == se_total %}
+    <span class="rail__seg is-done"></span>
+    {% elif se.skipped %}
+    <span class="rail__seg is-skipped"></span>
+    {% else %}
+    <span class="rail__seg"></span>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <div class="rail__cap">
+    <span class="label">Übung {{ live_index }} von {{ visible_exercises|length }}</span>
+    <span class="label">{% if sets_open %}Noch {{ sets_open }} {{ 'Satz' if sets_open == 1 else 'Sätze' }}{% else %}Alles erledigt{% endif %}</span>
+  </div>
+
+  {% if live_se %}
+  {% set live_sets = live_se.sets|list %}
+  {% set next_set = (live_sets|rejectattr('completed')|list|first) %}
+  <section class="live" data-se-id="{{ live_se.id }}">
+    <div class="live__head">
+      <span class="live__kick">Jetzt</span>
+      <button type="button" class="live__more sheet-open" data-sheet="sheet-ex-{{ live_se.id }}" aria-label="{{ live_se.exercise.name }} — Optionen">
+        {% with icon='more' %}{% include 'gym/_icon.html' %}{% endwith %}
+      </button>
+    </div>
+    <h2 class="live__name">{{ live_se.exercise.name }}</h2>
+
+    {# Set chips: outline = offen, filled rose = erledigt, gold = ein Rekord,
+       outlined warm = the one you are about to do. Tapping a done chip posts
+       the same toggle endpoint the old checkbox did, so un-checking a set is
+       still one tap and still re-opens it for editing. #}
+    <div class="sets">
+      {% for s in live_sets %}
+      <form method="post" action="{{ url_for('gym.gym_toggle_set_complete', set_id=s.id) }}" class="set-form">
+        <input type="hidden" name="weight" value="{{ s.weight }}">
+        <input type="hidden" name="reps" value="{{ s.reps }}">
+        <button type="submit"
+                class="set{% if s.completed and s.id in record_set_ids %} is-record{% elif s.completed %} is-done{% elif next_set and s.id == next_set.id %} is-now{% endif %}"
+                aria-label="{% if s.completed %}Satz {{ loop.index }} erledigt, {{ s.weight }} kg mal {{ s.reps }} — antippen zum Zurücksetzen{% else %}Satz {{ loop.index }}, offen{% endif %}">
+          {% if s.completed %}{{ ("%.1f"|format(s.weight)).replace(".", ",") }} × {{ s.reps }}{% else %}Satz {{ loop.index }}{% endif %}
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+
+    {% if next_set %}
+    {# The two numbers. No keyboard ever opens during a workout: the steppers
+       carry the value in a hidden input and the readout is text. The step is
+       2.5 kg, or 1.25 for a unilateral lift, mirroring stats._next_weight's
+       own increments -- the smallest pair of plates on most bars, and one side
+       at a time when only one side moves. #}
+    <form method="post" action="{{ url_for('gym.gym_toggle_set_complete', set_id=next_set.id) }}"
+          class="pair-form" id="live-set-form">
+      <div class="pair">
+        <div class="field-num" data-step="{{ 1.25 if live_se.exercise.is_unilateral else 2.5 }}" data-decimals="1">
+          <span class="field-num__val" data-role="display">{{ ("%.1f"|format(next_set.weight)).replace(".", ",") }}</span>
+          <span class="field-num__lbl">kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %}</span>
+          <input type="hidden" name="weight" value="{{ next_set.weight }}" data-role="value">
+          <span class="field-num__keys">
+            <button type="button" class="field-num__key" data-role="dec" aria-label="Gewicht verringern">−</button>
+            <button type="button" class="field-num__key" data-role="inc" aria-label="Gewicht erhöhen">+</button>
+          </span>
+        </div>
+        <div class="field-num" data-step="1" data-decimals="0">
+          <span class="field-num__val" data-role="display">{{ next_set.reps }}</span>
+          <span class="field-num__lbl">Wdh.</span>
+          <input type="hidden" name="reps" value="{{ next_set.reps }}" data-role="value">
+          <span class="field-num__keys">
+            <button type="button" class="field-num__key" data-role="dec" aria-label="Wiederholungen verringern">−</button>
+            <button type="button" class="field-num__key" data-role="inc" aria-label="Wiederholungen erhöhen">+</button>
+          </span>
+        </div>
+      </div>
+
+      {% if resting %}
+      {# Rest takes the confirm slot: same place, same height, nothing on the
+         screen moves. The countdown sits on --raised rather than on the
+         draining fill, because text straddling a moving colour boundary cannot
+         hold one contrast ratio and this has to read at arm's length. #}
+      <div class="rest" role="timer" aria-label="Pause läuft">
+        <div class="rest__row">
+          <span class="rest__num" id="rest-value">--:--</span>
+          <span class="rest__of">Pause</span>
+          <span class="rest__sp"></span>
+          <button type="submit" class="rest__skip" formaction="{{ url_for('gym.gym_skip_rest', session_id=session.id) }}">Überspringen</button>
+        </div>
+        <span class="rest__track">
+          <span class="rest__fill" id="rest-fill"
+                data-rest-ends="{{ session.rest_ends_at.isoformat() }}"
+                data-rest-total="{{ live_se.rest_seconds or live_se.exercise.default_rest_seconds or 0 }}"></span>
+        </span>
+      </div>
+      {% else %}
+      <button type="submit" class="go">
+        {% with icon='check' %}{% include 'gym/_icon.html' %}{% endwith %}
+        Satz geschafft
+      </button>
+      {% endif %}
+    </form>
+    {% else %}
+    <p class="live__alldone">Alle Sätze erledigt. Weiter zur nächsten Übung — oder über <b>⋯</b> noch einen Satz anhängen.</p>
+    {% endif %}
+
+    {% if live_se.id in stagnation_counts %}
+    <p class="live__stall">
+      <span class="live__stall-lbl">Stagniert</span>
+      {{ stagnation_counts[live_se.id] }} Workouts ohne neuen e1RM-PR — mehr Gewicht oder Wdh. versuchen.
+    </p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# What the session has become. It is the reason the tick strip exists: the
+     number moves every time a set lands. #}
+  <div class="grew">
+    <span class="grew__num">{{ '{:,.0f}'.format(session_volume).replace(',', '.') }}</span>
+    <span class="grew__unit">kg bewegt</span>
+    <span class="grew__sp"></span>
+    <span class="grew__side"><b>{{ sets_done }}</b> {{ 'Satz' if sets_done == 1 else 'Sätze' }} · <b id="session-duration" data-started="{{ session.started_at.isoformat() }}">--:--</b></span>
+  </div>
+
+  <div class="ticks" role="img" aria-label="{{ sets_done }} von {{ sets_total }} Sätzen erledigt">
+    {% for tick in tick_states %}
+    <span class="tick{{ ' is-on' if tick == 'done' else (' is-hot' if tick == 'now' else '') }}"></span>
+    {% endfor %}
+  </div>
+
+  {# The queue. A row is a button: it opens that exercise's own sheet, which is
+     where its sets, its rest time and its skip/replace/remove live. One
+     interaction for every exercise, instead of a menu on every row. #}
+  <div class="queue" id="queue">
+    {% for se in visible_exercises if se.id != live_id %}
+    {% set se_done = se.sets|selectattr('completed')|list|length %}
+    {% set se_total = se.sets|length %}
+    <div class="row row--top queue__row{{ ' is-done' if se_total > 0 and se_done == se_total else '' }}{{ ' is-skipped' if se.skipped else '' }}" data-se-id="{{ se.id }}">
+      <span class="drag-handle" aria-hidden="true">⠿</span>
+      <button type="button" class="row__main stack sheet-open" data-sheet="sheet-ex-{{ se.id }}">
+        <span class="row__name row__name--wrap">{{ se.exercise.name }}</span>
+        <span class="row__meta">
+          {%- if se.skipped -%}Übersprungen
+          {%- elif se_total -%}{{ se_done }}/{{ se_total }} Sätze{% if se.sets %} · {{ ("%.1f"|format(se.sets[0].weight)).replace(".", ",") }} kg{% endif %}
+          {%- else -%}Noch keine Sätze{%- endif -%}
+        </span>
+      </button>
+      <span class="row__trail">
+        {% if se_total > 0 and se_done == se_total %}
+        <span class="queue__mark">{% with icon='check' %}{% include 'gym/_icon.html' %}{% endwith %}</span>
+        {% else %}
+        <span class="queue__pos">{{ se.position }}</span>
+        {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>

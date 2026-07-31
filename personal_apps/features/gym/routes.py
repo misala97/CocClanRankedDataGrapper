@@ -566,10 +566,71 @@ def session_detail(session_id):
                 if s.completed and stats.is_new_best(s.weight, s.reps, prior):
                     record_set_ids.add(s.id)
     exercises = Exercise.query.order_by(Exercise.name).all()
+
+    # The live exercise: the first visible, non-skipped one that is not yet
+    # fully logged, or the last visible one when everything is done.
+    #
+    # This used to be computed in the template. It moved here because three
+    # surfaces now have to agree on the answer -- the session body, the resume
+    # strip's "current exercise", and the rail that marks which segment is
+    # live -- and a rule expressed three times in Jinja is a rule that drifts.
+    live_se = None
+    for se in visible_exercises:
+        done = sum(1 for s in se.sets if s.completed)
+        if not se.skipped and not (se.sets and done == len(se.sets)):
+            live_se = se
+            break
+    if live_se is None and visible_exercises:
+        live_se = visible_exercises[-1]
+
+    # One tick per set in the whole workout, in order, so the strip reads as
+    # the session filling up rather than as a chart. 'now' is the single set
+    # about to be performed -- the same set the steppers are bound to.
+    sets_done = sets_total = 0
+    tick_states = []
+    next_set_id = None
+    if live_se is not None:
+        next_set_id = next((s.id for s in live_se.sets if not s.completed), None)
+    for se in visible_exercises:
+        if se.skipped:
+            continue
+        for s in se.sets:
+            sets_total += 1
+            if s.completed:
+                sets_done += 1
+                tick_states.append('done')
+            elif s.id == next_set_id:
+                tick_states.append('now')
+            else:
+                tick_states.append('open')
+
+    session_volume = sum(
+        stats.set_volume(s.weight, s.reps, se.exercise.is_unilateral)
+        for se in visible_exercises for s in se.sets if s.completed
+    )
+
     return render_template(
         'gym/session_detail.html',
         session=session_,
         visible_exercises=visible_exercises,
+        live_se=live_se,
+        live_id=live_se.id if live_se else None,
+        live_index=(visible_exercises.index(live_se) + 1) if live_se else 0,
+        tick_states=tick_states,
+        sets_done=sets_done,
+        sets_total=sets_total,
+        sets_open=sets_total - sets_done,
+        session_volume=session_volume,
+        # A rest is only "running" if it belongs to the live exercise AND has
+        # not elapsed. The server keeps resting_set_id set until the next set
+        # starts a new rest, so testing the flag alone would leave the confirm
+        # button replaced by a dead countdown after the rest is over.
+        resting=bool(
+            session_.rest_ends_at
+            and session_.rest_ends_at > dt.datetime.utcnow()
+            and live_se is not None
+            and any(s.id == session_.resting_set_id for s in live_se.sets)
+        ),
         suggestions=suggestions,
         stagnation_counts=stagnation_counts,
         record_set_ids=record_set_ids,
@@ -872,6 +933,28 @@ def gym_reorder_session_exercises(session_id):
             position += 1
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_id))
+
+
+@gym_bp.route('/gym/session/<int:session_id>/rest/skip', methods=['POST'])
+@login_required
+def gym_skip_rest(session_id):
+    """End the running rest now.
+
+    New with the Puls session screen, which gives the rest the confirm
+    button's own slot -- once the countdown occupies the control your thumb is
+    on, "I'm ready, go" needs a real action behind it. Before, the only way out
+    of a rest was to wait it out or to confirm the next set through it.
+
+    Clearing the window also cancels the pending push, for the same reason
+    finishing early does: the notifier daemon would otherwise fire a
+    "Pause vorbei" for a rest the lifter already ended themselves.
+    """
+    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_.rest_ends_at = None
+    session_.resting_set_id = None
+    _cancel_pending_push(session_)
+    db.session.commit()
+    return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/finish', methods=['POST'])

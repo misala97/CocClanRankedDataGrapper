@@ -805,7 +805,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    competing with the confirm target for the bottom of the thumb's reach.
    _nav.html applies this rather than omitting the markup, so the bar is still
    in the DOM for the keyboard order it already had. */
-body.is-focus .tabbar { display: none; }
+body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
 .tabbar__tab {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -2328,3 +2328,262 @@ tr:hover .spark { color: var(--ink); }
    Verified at `html { font-size: 32px }` (200% of 16px) in a 390px viewport,
    on every page, plus the 320px reflow case for SC 1.4.10.
    ============================================================================ */
+
+/* ============================================================================
+   SESSION  ·  the live workout (Puls)
+   ----------------------------------------------------------------------------
+   A focus mode. One lifted plane -- the exercise you are on -- and everything
+   else flat on the field. The confirm target lives in the thumb zone and is
+   the only solid --live control on screen; when a rest is running it takes
+   that same slot, so nothing moves.
+
+   The Athletik-era session rules (.exercise-card, .set--live, .deload-bar,
+   .pending-hint, .ex-actions, .add-set) are unused by this screen now. They
+   are swept in a cleanup pass once the remaining pages stop borrowing their
+   neighbours, not here, so this commit stays reviewable.
+   ============================================================================ */
+
+.session-top {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) 0;
+}
+.session-top__back, .session-top__more {
+  inline-size: var(--tap); block-size: var(--tap); flex: none;
+  display: grid; place-items: center; border-radius: var(--r-chip); color: var(--dim);
+}
+.session-top__back { margin-inline-start: calc(var(--sp-2) * -1); }
+.session-top__more { margin-inline-end: calc(var(--sp-2) * -1); }
+.session-top__back svg, .session-top__more svg { inline-size: 20px; block-size: 20px; }
+.session-top__name {
+  flex: 1; min-inline-size: 0;
+  font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-bold);
+  letter-spacing: var(--track-name);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-top__clock {
+  flex: none; font-size: var(--t-body); font-weight: var(--w-semi); color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+/* Deload is a label, never a hue (4.2). It sits in the header so a session you
+   flagged is never something you have to go looking for. */
+.session-top__deload {
+  flex: none; font-size: var(--t-micro); font-weight: var(--w-bold);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: var(--r-chip);
+  background: var(--raised); color: var(--dim);
+}
+
+/* ---- rail: one segment per exercise, the live one part-filled by its sets -- */
+.rail { display: flex; gap: 4px; block-size: 8px; margin: var(--sp-3) var(--sp-4) 0; }
+.rail__seg { flex: 1; border-radius: 4px; background: var(--edge); overflow: hidden; }
+.rail__seg.is-done { background: var(--done); }
+.rail__seg.is-skipped { background: var(--edge-hi); }
+.rail__seg.is-now { flex: 2.4; }
+.rail__fill { display: block; block-size: 100%; background: var(--live); border-radius: 4px; }
+.rail__cap { display: flex; justify-content: space-between; margin: 7px var(--sp-4) 0; }
+
+/* ---- the one lifted plane ---- */
+.live {
+  margin: var(--sp-4) var(--sp-4) 0;
+  padding: var(--sp-4);
+  border-radius: var(--r-panel); background: var(--chassis); box-shadow: var(--lift);
+}
+.live__head { display: flex; align-items: flex-start; gap: var(--sp-2); }
+.live__kick {
+  flex: 1; display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--live-ink);
+}
+.live__kick::before {
+  content: ""; inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--live);
+}
+.live__more {
+  flex: none; inline-size: var(--tap); block-size: var(--tap);
+  margin: calc(var(--sp-2) * -1) calc(var(--sp-2) * -1) 0 0;
+  display: grid; place-items: center; border-radius: var(--r-chip); color: var(--unlit);
+}
+.live__name {
+  font-family: var(--font-display); font-size: var(--t-name); font-weight: var(--w-bold);
+  letter-spacing: var(--track-name); line-height: 1.16; margin-top: 4px;
+  text-wrap: balance;
+}
+.live__alldone { margin-top: var(--sp-4); font-size: var(--t-sm); color: var(--dim); line-height: 1.5; }
+.live__stall {
+  margin-top: var(--sp-4); padding: var(--sp-3);
+  border-radius: var(--r-inset); box-shadow: inset 0 0 0 1px var(--stall-ink);
+  font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
+}
+.live__stall-lbl {
+  display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--stall-ink);
+}
+
+/* ---- set chips ---- */
+/* explicit row/nowrap: the Athletik-era .sets rule earlier in this file also
+   matches, and re-declaring only `display` let its flex-direction survive and
+   stack the chips full-width. Until that block is swept, this has to say so. */
+.sets { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 7px; margin-top: var(--sp-4); }
+.set-form { flex: 1; display: flex; }
+.set {
+  /* the floor, not 40: a set chip is tapped to un-log a set, mid-workout, with
+     sweaty hands -- it is not a decorative badge */
+  inline-size: 100%; min-block-size: var(--tap);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-inset);
+  font-size: var(--t-meta); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+  background: var(--raised); color: var(--unlit);
+  transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+.set.is-done { background: var(--done); color: var(--on-done); }
+.set.is-record { background: var(--record); color: var(--on-record); }
+.set.is-now { background: transparent; box-shadow: inset 0 0 0 2px var(--live); color: var(--live-ink); }
+/* One beat when a set lands, then it settles. Not a flourish: it is the
+   feedback that the tap did something, on a screen read at arm's length. */
+@keyframes set-land { 0% { transform: scale(.94); } 55% { transform: scale(1.03); } 100% { transform: scale(1); } }
+.set.just-landed { animation: set-land var(--dur-3) var(--ease); }
+
+/* ---- the two numbers: no keyboard ever opens ---- */
+.pair { display: flex; gap: var(--sp-3); margin-top: var(--sp-4); }
+.field-num {
+  flex: 1; min-inline-size: 0; background: var(--raised); border-radius: var(--r-control);
+  padding: var(--sp-3) var(--sp-2) var(--sp-2);
+  display: flex; flex-direction: column; align-items: center;
+}
+.field-num__val {
+  font-family: var(--font-display); font-size: var(--num-md); font-weight: var(--w-max);
+  letter-spacing: var(--track-num); line-height: 1; font-variant-numeric: tabular-nums;
+}
+.field-num__lbl { font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit); margin-top: 2px; }
+.field-num__keys { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); inline-size: 100%; }
+.field-num__key {
+  flex: 1; min-block-size: var(--tap); border-radius: var(--r-inset);
+  background: var(--chassis); color: var(--dim);
+  font-size: 22px; font-weight: var(--w-semi);
+  display: grid; place-items: center; box-shadow: 0 1px 0 var(--edge);
+}
+.field-num__key:active { transform: scale(0.96); }
+
+/* ---- confirm, and the rest that takes its slot ---- */
+.go {
+  inline-size: 100%; margin-top: var(--sp-4); min-block-size: var(--tap-primary);
+  border-radius: var(--r-control); background: var(--live); color: var(--on-live);
+  font-size: 1.0625rem; font-weight: var(--w-max); letter-spacing: -0.01em;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  box-shadow: var(--glow-live);
+}
+.go svg { inline-size: 22px; block-size: 22px; stroke-width: 2.2; }
+.go:active { transform: scale(0.985); }
+
+.rest {
+  inline-size: 100%; margin-top: var(--sp-4); min-block-size: var(--tap-primary);
+  border-radius: var(--r-control); background: var(--raised);
+  display: flex; flex-direction: column; justify-content: center; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+}
+.rest__row { display: flex; align-items: baseline; gap: var(--sp-3); }
+.rest__num {
+  font-family: var(--font-display); font-size: var(--num-md); font-weight: var(--w-max);
+  letter-spacing: var(--track-num); line-height: 1; color: var(--live-ink);
+  font-variant-numeric: tabular-nums;
+}
+.rest__of { font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--unlit); }
+.rest__sp { flex: 1; }
+.rest__skip {
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
+  /* a real 44px target without inflating the bar it sits in */
+  min-block-size: var(--tap); display: inline-flex; align-items: center;
+  padding-inline: var(--sp-2); margin: calc(var(--sp-3) * -1) calc(var(--sp-2) * -1);
+}
+.rest__track { block-size: 8px; border-radius: 4px; background: var(--edge); overflow: hidden; }
+.rest__fill { display: block; block-size: 100%; inline-size: 100%; border-radius: 4px; background: var(--live); }
+
+/* ---- what the session has become ---- */
+.grew { margin: var(--sp-5) var(--sp-4) 0; display: flex; align-items: flex-end; gap: var(--sp-3); }
+.grew__num {
+  font-family: var(--font-display); font-size: var(--num-lg); font-weight: var(--w-max);
+  letter-spacing: -0.045em; line-height: 0.88; font-variant-numeric: tabular-nums;
+}
+.grew__unit { font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim); padding-bottom: 2px; }
+.grew__sp { flex: 1; }
+.grew__side { text-align: end; font-size: var(--t-meta); color: var(--unlit); line-height: 1.55; }
+.grew__side b { font-weight: var(--w-bold); color: var(--dim); font-variant-numeric: tabular-nums; }
+
+.ticks { display: flex; gap: 3px; margin: var(--sp-3) var(--sp-4) 0; }
+.tick { flex: 1; block-size: 9px; border-radius: 2px; background: var(--edge); }
+.tick.is-on { background: var(--done); }
+.tick.is-hot { background: var(--live); }
+
+/* ---- the queue ---- */
+.queue { margin: var(--sp-2) var(--sp-4) 0; }
+.queue__row .row__main { text-align: start; }
+.queue__row.is-done .row__name { color: var(--ink); }
+.queue__row.is-skipped .row__name { color: var(--unlit); text-decoration: line-through; }
+.queue__mark { color: var(--done-ink); display: inline-flex; }
+.queue__pos { font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--unlit); }
+
+.session-foot { padding: var(--sp-5) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom, 0px)); }
+
+/* ============================================================================
+   SHEETS  ·  the one disclosure pattern this app uses
+   ----------------------------------------------------------------------------
+   Native <dialog>, so it escapes every ancestor's overflow and stacking
+   context for free, and gets the backdrop, the Esc key and the focus trap from
+   the platform rather than from z-index arithmetic. It sits on the bottom edge
+   because that is where the thumb is.
+   ============================================================================ */
+
+.sheet {
+  inline-size: 100%; max-inline-size: 560px;
+  margin: auto auto 0; padding: 0;
+  border: 0; border-radius: var(--r-panel) var(--r-panel) 0 0;
+  background: var(--chassis); color: var(--ink);
+  box-shadow: var(--lift);
+}
+.sheet::backdrop { background: rgba(0, 0, 0, 0.5); }
+@media (min-width: 640px) {
+  .sheet { margin-block: auto; border-radius: var(--r-panel); }
+}
+.sheet__head {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+}
+.sheet__title {
+  flex: 1; min-inline-size: 0;
+  font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-bold);
+  letter-spacing: var(--track-name);
+}
+.sheet__close {
+  flex: none; min-block-size: var(--tap); padding-inline: var(--sp-2);
+  margin-inline-end: calc(var(--sp-2) * -1);
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
+}
+.sheet__body { padding: 0 var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom, 0px)); }
+/* a sheet's actions are full-width text rows, not a grid of buttons */
+.sheet__act {
+  inline-size: 100%; min-block-size: 52px;
+  display: flex; align-items: center; gap: var(--sp-3);
+  font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink);
+  text-align: start;
+}
+.sheet__act + .sheet__act, .sheet__group + .sheet__group { border-top: 1px solid var(--edge); }
+.sheet__act svg { flex: none; inline-size: 18px; block-size: 18px; color: var(--unlit); }
+.sheet__act--danger { color: var(--live-ink); }
+.sheet__note { font-size: var(--t-meta); color: var(--unlit); line-height: 1.5; padding-block: var(--sp-2); }
+.sheet__group { padding-block: var(--sp-2); }
+.sheet__row { display: flex; align-items: center; gap: var(--sp-3); padding-block: var(--sp-2); }
+.sheet__row label { flex: 1; font-size: var(--t-sm); color: var(--dim); }
+.sheet__picks { display: flex; gap: var(--sp-2); }
+.sheet__pick {
+  flex: 1; min-block-size: var(--tap); border-radius: var(--r-control);
+  font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--dim);
+  box-shadow: inset 0 0 0 1px var(--edge-hi);
+}
+.sheet__pick.is-active { background: var(--live); color: var(--on-live); box-shadow: none; }
+
+/* reorder mode: a visible state, not a lock icon to decode */
+body.is-reordering .queue__row { background: var(--raised); border-radius: var(--r-inset); }
+body.is-reordering .drag-handle { color: var(--live-ink); }
+.drag-handle { display: none; }
+body.is-reordering .drag-handle { display: inline-grid; }
+.queue__row.is-dragging { opacity: 0.4; }
+.drag-ghost { z-index: var(--z-bar); box-shadow: var(--lift); opacity: 0.96; background: var(--chassis); border-radius: var(--r-inset); padding-inline: var(--sp-3); user-select: none; -webkit-user-select: none; }
