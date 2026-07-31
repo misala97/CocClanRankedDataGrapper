@@ -1,272 +1,282 @@
 {% extends 'gym/_base.html' %}
 
-{# Heute (spec 6.1): the landing page, one template with two compositions.
-   Phone = launcher (consistency header, routines, free-workout form, last 5,
-   the board condensed). Desktop = cockpit (a bar with the consistency line +
-   start action, the three-panel board, routines/recent as two columns below).
-   Both come from the SAME five blocks below -- .heute in gym.css redefines
-   grid-template-areas per breakpoint; nothing here is duplicated per width.
+{# The start screen (Puls). Answers "was mache ich heute" before it reports
+   anything: the routine that has gone longest untrained is the one lifted plane
+   and carries the only primary button on the page. Everything below it is
+   reading material and runs at lower saturation (PRODUCT.md 4.6).
 
-   gym_active_session is already injected into every gym template by
-   inject_gym_nav_context() and drives the global resume strip in _nav.html
-   (with its own live clock) -- active_session here is the same session,
-   passed explicitly so this page can swap its start-affordance for a quiet
-   "already running" note instead of duplicating a second clock. #}
+   The tab is called "Start", not "Heute" -- the page is where a workout begins
+   and where training gets checked, which is not a time window. The route,
+   endpoint, URL and this filename keep their old names on purpose: renaming
+   them buys nothing a user can see and touches every url_for in the app.
 
-{% block title %}Heute · Gym Tracker{% endblock %}
+   routine_memory() already sorts longest-ago first (never-performed last), so
+   routines[0] IS the answer and this template does not re-derive it.
+
+   gym_active_session is injected into every gym template by
+   inject_gym_nav_context() and drives the resume strip in _nav.html;
+   active_session here is the same session, passed explicitly so this page can
+   swap its start affordance for a "running" block instead of showing a second
+   clock. #}
+
+{% block title %}Start · Gym Tracker{% endblock %}
 
 {% block content %}
-<div class="gym-wrap">
-<div class="heute">
+<div class="start">
 
-    <header class="heute__head">
-        <div class="heute__title">
-            <h1>Heute</h1>
-            <p class="label">{{ now.strftime('%d.%m.%Y') }}</p>
-        </div>
-        <div class="heute__consistency-block">
-            {# Desktop-only per spec 6.1 ("Full-width bar: Letzte 4 Wochen
-               heading..."); phone's own composition doesn't call for it, so
-               it's a block that genuinely exists at only one breakpoint --
-               hidden in CSS, not omitted from markup (see .heute__window-label
-               in gym.css). Frames the line below: consistency and the board's
-               muscle-group panel both read over the same 28-day window. #}
-            <p class="label heute__window-label">Letzte 4 Wochen</p>
-            <p class="heute__consistency">
-                {% if consistency.days_since_last is not none %}
-                Zuletzt vor {{ consistency.days_since_last }} Tagen · {{ '%.1f'|format(consistency.per_week) }}/Woche
-                {% else %}
-                Noch keine Workouts protokolliert
-                {% endif %}
-            </p>
-        </div>
-    </header>
+  <header class="start__head">
+    <div class="start__row">
+      <h1 class="start__h">Start</h1>
+      <span class="start__sp"></span>
+      <span class="start__date">{{ now.strftime('%d.%m.%Y') }}</span>
+    </div>
+    <p class="start__pulse">
+      {% if consistency.days_since_last is not none %}
+      {% if consistency.days_since_last == 0 %}Zuletzt <b>heute</b>{% elif consistency.days_since_last == 1 %}Zuletzt <b>gestern</b>{% else %}Zuletzt vor <b>{{ consistency.days_since_last }}</b> Tagen{% endif %} ·
+      <b>{{ ('%.1f'|format(consistency.per_week)).replace('.', ',') }}</b> Workouts pro Woche
+      {% else %}
+      Noch keine Workouts protokolliert
+      {% endif %}
+    </p>
+  </header>
 
-    <hr class="heute__divider" aria-hidden="true">
+  {% if active_session %}
+  {# A workout is already running: nothing else on this page competes with
+     getting back into it. #}
+  <section class="sec">
+    <div class="sec__head"><span class="label">Läuft gerade</span></div>
+    <div class="lead">
+      <span class="lead__name">{{ active_session.name or 'Workout' }}</span>
+      <a href="{{ url_for('gym.session_detail', session_id=active_session.id) }}" class="lead__go">
+        {% with icon='skip' %}{% include 'gym/_icon.html' %}{% endwith %}
+        Weiter
+      </a>
+    </div>
+  </section>
+  {% endif %}
 
-    <section class="heute__start">
-        {% if active_session %}
-        <div class="panel heute__active-note">
-            <p class="label">Workout läuft</p>
-            <p class="name">{{ active_session.name or 'Workout' }}</p>
-            <a href="{{ url_for('gym.session_detail', session_id=active_session.id) }}" class="btn btn--live btn--block">Weiter</a>
-        </div>
-        {% else %}
-        {# "ghost" on phone (a secondary path -- routines' own Starten buttons
-           above are the fast path); re-skinned live/amber on desktop, where
-           this is the bar's one deliberate planning action (spec 6.1). Same
-           button, same markup -- see .heute__start .btn--ghost in gym.css. #}
-        <form method="post" action="{{ url_for('gym.gym_start') }}" class="heute-start-form">
-            <div class="field grow">
-                <label class="label" for="heute-start-name">Name (optional)</label>
-                <input type="text" id="heute-start-name" name="name" class="input" placeholder="z. B. Push Day">
-            </div>
-            <div class="field grow">
-                <label class="label" for="heute-start-template">Vorlage</label>
-                <select id="heute-start-template" name="template_id" class="select">
-                    <option value="">— Ohne Vorlage —</option>
-                    {% for t in templates %}
-                    <option value="{{ t.id }}">{{ t.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <button type="submit" class="btn btn--ghost">Workout starten</button>
-        </form>
-        {% endif %}
-    </section>
+  <section class="sec">
+    {% if routines %}
+    {% set lead = routines[0] %}
+    <div class="sec__head"><span class="label">Am längsten her</span></div>
 
-    {# Two tiers, not a stack of identical cards. routine_memory() sorts
-       LONGEST-AGO first -- the routine you are most overdue for is the one you
-       are about to do, so it leads and carries the single primary action on
-       the page; every other routine drops to a divided row inside ONE shared
-       panel. Nothing is hidden -- each row still carries its name, its recency
-       and its full exercise list -- but only one blue slab is ever on screen,
-       which is what keeps the section from reading as a card grid.
-
-       The featured tier needs something to be featured ABOVE. At two routines
-       it degenerates: the "rest" panel holds a single row, so the page shows
-       two panels of near-identical weight whose only difference is the button,
-       and that reads as inconsistency rather than hierarchy. Below three, both
-       routines render as equal rows in one panel instead. #}
-    <section class="heute__routines">
-        <div class="section-head"><h2 class="label">Routinen</h2></div>
-        {% if routines %}
-        {% set featured = routines|length >= 3 %}
-        {% if featured %}
-        {% set lead = routines[0] %}
-        <div class="panel routine routine--lead" style="--i: 0">
-            <div class="panel__head">
-                <div class="routine__title">
-                    <p class="name">{{ lead.template.name }}</p>
-                    <p class="label">{% if lead.days_ago is not none %}vor {{ lead.days_ago }} Tagen{% else %}Noch nie gemacht{% endif %}</p>
-                </div>
-                {# Small edit affordance (spec 6.1): rename + delete, closed by
-                   default, anchored under the toggle rather than pushed into
-                   the flex row so an open popover never reflows the card. #}
-                <details class="routine__edit">
-                    <summary class="routine__edit-toggle" aria-label="{{ lead.template.name }} bearbeiten">{% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}</summary>
-                    <div class="routine__edit-body">
-                        <form method="post" action="{{ url_for('gym.gym_rename_template', template_id=lead.template.id) }}" class="routine__edit-form">
-                            <input type="text" name="name" value="{{ lead.template.name }}" class="input" aria-label="Neuer Name für {{ lead.template.name }}" required>
-                            <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
-                        </form>
-                        <form method="post" action="{{ url_for('gym.gym_delete_template', template_id=lead.template.id) }}" onsubmit="return confirm('Vorlage löschen?')">
-                            <button type="submit" class="btn btn--stall btn--sm btn--block">Löschen</button>
-                        </form>
-                    </div>
-                </details>
-            </div>
-            <p class="routine__exercises">
-                {% if lead.template.exercises %}{{ lead.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
-            </p>
-            <form method="post" action="{{ url_for('gym.gym_start') }}">
-                <input type="hidden" name="template_id" value="{{ lead.template.id }}">
-                <button type="submit" class="btn btn--live btn--block">Starten</button>
+    <div class="lead">
+      <div class="lead__top">
+        <span class="lead__main stack">
+          <span class="lead__due">
+            {#- "vor 0 Tagen" is not German: today is heute, yesterday gestern. -#}
+            {%- if lead.days_ago is none -%}Noch nie gemacht
+            {%- elif lead.days_ago == 0 -%}Heute schon gemacht
+            {%- elif lead.days_ago == 1 -%}Gestern
+            {%- else -%}vor {{ lead.days_ago }} Tagen{%- endif -%}
+          </span>
+          <span class="lead__name">{{ lead.template.name }}</span>
+        </span>
+        <details class="lead__edit">
+          <summary class="lead__edit-toggle" aria-label="{{ lead.template.name }} bearbeiten">
+            {% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}
+          </summary>
+          <div class="lead__edit-body">
+            <form method="post" action="{{ url_for('gym.gym_rename_template', template_id=lead.template.id) }}" class="lead__edit-form">
+              <input type="text" name="name" value="{{ lead.template.name }}" class="input"
+                     aria-label="Neuer Name für {{ lead.template.name }}" required>
+              <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
             </form>
-        </div>
+            <form method="post" action="{{ url_for('gym.gym_delete_template', template_id=lead.template.id) }}"
+                  onsubmit="return confirm('Vorlage löschen?')">
+              <button type="submit" class="btn btn--stall btn--sm btn--block">Löschen</button>
+            </form>
+          </div>
+        </details>
+      </div>
+      <p class="lead__list">
+        {% if lead.template.exercises %}{{ lead.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
+      </p>
+      <form method="post" action="{{ url_for('gym.gym_start') }}">
+        <input type="hidden" name="template_id" value="{{ lead.template.id }}">
+        <button type="submit" class="lead__go">
+          {% with icon='skip' %}{% include 'gym/_icon.html' %}{% endwith %}
+          Starten
+        </button>
+      </form>
+    </div>
 
-        {% endif %}
+    {# The rest are quiet rows, never a second card. #}
+    {% for entry in routines[1:] %}
+    <div class="row">
+      <span class="row__main stack">
+        <span class="row__name row__name--strong">{{ entry.template.name }}</span>
+        <span class="row__meta row__meta--clip">
+          {%- if entry.days_ago is none -%}Noch nie gemacht
+          {%- elif entry.days_ago == 0 -%}Heute
+          {%- elif entry.days_ago == 1 -%}Gestern
+          {%- else -%}vor {{ entry.days_ago }} Tagen{%- endif -%}
+          {%- if entry.template.exercises %} · {{ entry.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% endif -%}
+        </span>
+      </span>
+      <form method="post" action="{{ url_for('gym.gym_start') }}" class="row__trail">
+        <input type="hidden" name="template_id" value="{{ entry.template.id }}">
+        <button type="submit" class="row__go">Starten</button>
+      </form>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="sec__head"><span class="label">Routinen</span></div>
+    <p class="empty">Noch keine Vorlagen. Speichere ein Workout als Vorlage, um es hier zu sehen.</p>
+    {% endif %}
 
-        {% set rest = routines[1:] if featured else routines %}
-        {% if rest %}
-        <div class="panel routine-rest" style="--i: {{ 1 if featured else 0 }}">
-            {% for entry in rest %}
-            <div class="row row--top">
-                <div class="row__main">
-                    <p class="name">{{ entry.template.name }}</p>
-                    <p class="label">{% if entry.days_ago is not none %}vor {{ entry.days_ago }} Tagen{% else %}Noch nie gemacht{% endif %}</p>
-                </div>
-                {# full-width, below the title/action line: an exercise list is
-                   long enough that squeezing it beside the buttons turns it
-                   into a narrow ragged column #}
-                <p class="routine__exercises row__wide">
-                    {% if entry.template.exercises %}{{ entry.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
-                </p>
-                <div class="row__trail">
-                    <form method="post" action="{{ url_for('gym.gym_start') }}">
-                        <input type="hidden" name="template_id" value="{{ entry.template.id }}">
-                        <button type="submit" class="btn btn--ghost btn--sm">Starten</button>
-                    </form>
-                    <details class="routine__edit">
-                        <summary class="routine__edit-toggle" aria-label="{{ entry.template.name }} bearbeiten">{% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}</summary>
-                        <div class="routine__edit-body">
-                            <form method="post" action="{{ url_for('gym.gym_rename_template', template_id=entry.template.id) }}" class="routine__edit-form">
-                                <input type="text" name="name" value="{{ entry.template.name }}" class="input" aria-label="Neuer Name für {{ entry.template.name }}" required>
-                                <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
-                            </form>
-                            <form method="post" action="{{ url_for('gym.gym_delete_template', template_id=entry.template.id) }}" onsubmit="return confirm('Vorlage löschen?')">
-                                <button type="submit" class="btn btn--stall btn--sm btn--block">Löschen</button>
-                            </form>
-                        </div>
-                    </details>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% else %}
-        <div class="empty">
-            <span class="label">Noch keine Vorlagen</span>
-            Speichere ein Workout als Vorlage, um es hier zu sehen.
-        </div>
-        {% endif %}
-    </section>
+    {# Starting without a template is a real path, but the secondary one. #}
+    <button type="button" class="start__free sheet-open" data-sheet="sheet-free">
+      {% with icon='plus' %}{% include 'gym/_icon.html' %}{% endwith %}
+      Freies Workout starten
+    </button>
+  </section>
 
-    <section class="heute__recent">
-        {# label sits outside the panel, same as .heute__routines' own
-           section-head -- both columns share this grid row, so the label
-           has to be in the same place in both or the panels below start at
-           two different heights and the row reads as misaligned. #}
-        <div class="section-head"><h2 class="label">Letzte Workouts</h2></div>
-        <div class="panel">
-            {% if recent_sessions %}
-            {% for s in recent_sessions %}
-            <a href="{{ url_for('gym.session_detail', session_id=s.id) }}" class="row">
-                <div class="row__main">
-                    <div class="name">{{ s.name or 'Workout' }}</div>
-                    <div class="label row__meta">{{ s.started_at.strftime('%d.%m.%Y') }} · {{ s.finished_at - s.started_at }}</div>
-                </div>
-            </a>
-            {% endfor %}
-            {% else %}
-            <div class="empty">Noch keine abgeschlossenen Workouts.</div>
-            {% endif %}
-        </div>
-    </section>
+  {% if stalls or deload_suggestion %}
+  <section class="sec">
+    <div class="sec__head"><span class="label">Steht still</span></div>
+    {# The deload signal is the same data read more narrowly (only the active
+       rotation), so it leads this section rather than owning a panel of its
+       own -- a page of near-identical panels is what the brief bans. #}
+    {% if deload_suggestion %}
+    <p class="stall-note">
+      <b>{{ deload_suggestion.count }} aktive Übungen stehen still</b> — ein Deload könnte fällig sein.
+      <span class="stall-note__lifts">{{ deload_suggestion.stalls|map(attribute='name')|join(' · ') }}</span>
+    </p>
+    {% endif %}
+    {% for item in stalls %}
+    <div class="row row--top">
+      <span class="row__main stack">
+        <span class="row__name row__name--wrap">{{ item.name }}</span>
+        <span class="row__meta">Position {{ item.position }} · {{ ('%.1f'|format(item.stuck_at)).replace('.', ',') }} kg</span>
+      </span>
+      <span class="vtag vtag--stall">{{ item.sessions_since_pr }} ohne PR</span>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
 
-    <section class="heute__board">
-        <div class="panel">
-            <div class="section-head"><h2 class="label">Steht still</h2></div>
-            {# The lead element of this panel rather than a panel of its own:
-               it is the same data read more narrowly (only the active
-               rotation), and a page of near-identical panels is exactly what
-               the brief bans. #}
-            {% if deload_suggestion %}
-            <p class="deload-note">
-                {{ deload_suggestion.count }} aktive Übungen stehen still — ein Deload könnte fällig sein.
-                <span class="deload-note__lifts">{{ deload_suggestion.stalls|map(attribute='name')|join(' · ') }}</span>
-            </p>
-            {% endif %}
-            {% if stalls %}
-            {% for item in stalls %}
-            <div class="row">
-                <div class="row__main">
-                    <div class="name">{{ item.name }}</div>
-                    <div class="label row__meta">Position {{ item.position }} · {{ item.stuck_at }} kg</div>
-                </div>
-                <span class="chip chip--stall row__trail">{{ item.sessions_since_pr }} ohne PR</span>
-            </div>
-            {% endfor %}
-            {% else %}
-            <div class="empty">Keine Übung steht aktuell still.</div>
-            {% endif %}
-        </div>
+  <section class="sec">
+    <div class="sec__head">
+      <span class="label">Sätze pro Muskelgruppe</span>
+      <span class="sec__sp"></span>
+      <span class="label">Letzte 4 Wochen</span>
+    </div>
+    {% if balance %}
+    {% for bucket in balance %}
+    <div class="hbar">
+      <span class="hbar__name">{{ bucket.group }}</span>
+      <span class="hbar__track">
+        <span class="hbar__fill{{ ' is-stall' if bucket.under_trained else '' }}"
+              style="inline-size: {{ (bucket.share * 100)|round(1) }}%"></span>
+      </span>
+      <span class="hbar__val">
+        {{ bucket.sets }}
+        {% if bucket.under_trained %}<small>zu wenig</small>{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="empty">Noch keine Übungen im Katalog.</p>
+    {% endif %}
+  </section>
 
-        <div class="panel">
-            <div class="section-head"><h2 class="label">Sätze pro Muskelgruppe</h2></div>
-            {% if balance %}
-            {% for bucket in balance %}
-            <div class="hbar">
-                <span class="hbar__name">{{ bucket.group }}</span>
-                <span class="hbar__track"><span class="hbar__fill{{ ' is-stall' if bucket.under_trained else '' }}" style="width:{{ (bucket.share * 100)|round(1) }}%"></span></span>
-                <span class="hbar__val">{{ bucket.sets }}</span>
-            </div>
-            {% endfor %}
-            {% else %}
-            <div class="empty">Noch keine Übungen im Katalog.</div>
-            {% endif %}
-        </div>
+  <section class="sec">
+    <div class="sec__head">
+      <span class="label">Tonnage pro Woche</span>
+      <span class="sec__sp"></span>
+      <span class="label">8 Wochen</span>
+    </div>
+    {# is_current is always the last bucket (weekly_tonnage's own contract) --
+       lit warm AND spelled out below, so a short bar from a week that is still
+       running never reads as a decline. has_deload is marked the same way, for
+       the same reason: an unexplained dip reads as a collapse. #}
+    {% set volumes = tonnage|map(attribute='volume')|list %}
+    {% set peak = (volumes|max) if volumes and (volumes|max) > 0 else 1 %}
+    <div class="vbars">
+      {% for week in tonnage %}
+      <span class="vbar{{ ' is-live' if week.is_current else '' }}{{ ' vbar--deload' if week.has_deload else '' }}"
+            style="block-size: {{ ((week.volume / peak) * 100)|round(1) }}%"></span>
+      {% endfor %}
+    </div>
+    <div class="vbars__axis">
+      {% for week in tonnage %}
+      <span>{{ 'Jetzt' if week.is_current else week.week_start.strftime('%d.%m.') }}</span>
+      {% endfor %}
+    </div>
+    {% set deload_weeks = tonnage|selectattr('has_deload')|list %}
+    {% if (tonnage and tonnage[-1].is_current) or deload_weeks %}
+    <p class="start__note">
+      {%- if tonnage and tonnage[-1].is_current -%}
+      {{ '{:,.0f}'.format(tonnage[-1].volume).replace(',', '.') }} kg diese Woche bisher — läuft noch.
+      {%- endif %}
+      {% if deload_weeks %}Schraffiert: Woche mit Deload-Einheit.{% endif %}
+    </p>
+    {% endif %}
+  </section>
 
-        <div class="panel">
-            <div class="section-head"><h2 class="label">Tonnage pro Woche</h2></div>
-            {# is_current is always the last bucket (stats.weekly_tonnage's own
-               contract) -- lit amber AND spelled out below, so a short bar
-               from a week that's still running never reads as a decline.
-               has_deload is marked the same way, for the same reason: an
-               unexplained dip reads as a collapse. #}
-            {% set volumes = tonnage|map(attribute='volume')|list %}
-            {% set peak = (volumes|max) if volumes and (volumes|max) > 0 else 1 %}
-            <div class="vbars">
-                {% for week in tonnage %}
-                <div class="vbar{{ ' is-live' if week.is_current else '' }}{{ ' vbar--deload' if week.has_deload else '' }}"
-                     style="height:{{ ((week.volume / peak) * 100)|round(1) }}%"></div>
-                {% endfor %}
-            </div>
-            <div class="vbars__axis">
-                {% for week in tonnage %}
-                <span>{{ 'Jetzt' if week.is_current else week.week_start.strftime('%d.%m.') }}</span>
-                {% endfor %}
-            </div>
-            {% if tonnage and tonnage[-1].is_current %}
-            <p class="label tonnage__note">{{ tonnage[-1].volume }} kg diese Woche bisher — läuft noch</p>
-            {% endif %}
-            {% set deload_weeks = tonnage|selectattr('has_deload')|list %}
-            {% if deload_weeks %}
-            <p class="label tonnage__note">Schraffiert: Woche mit Deload-Einheit.</p>
-            {% endif %}
-        </div>
-    </section>
-
+  <section class="sec">
+    <div class="sec__head">
+      <span class="label">Letzte Workouts</span>
+      <span class="sec__sp"></span>
+      <a class="sec__more" href="{{ url_for('gym.gym_verlauf') }}">Verlauf ›</a>
+    </div>
+    {% if recent_sessions %}
+    {% for s in recent_sessions %}
+    <a class="row" href="{{ url_for('gym.session_detail', session_id=s.id) }}">
+      <span class="row__main stack">
+        <span class="row__name row__name--strong">{{ s.name or 'Workout' }}</span>
+        <span class="row__meta">
+          {{ s.started_at.strftime('%d.%m.%Y') }} ·
+          {{ ((s.finished_at - s.started_at).total_seconds() // 60)|int }} min
+          {%- if s.is_deload %} · Deload{% endif %}
+        </span>
+      </span>
+    </a>
+    {% endfor %}
+    {% else %}
+    <p class="empty">Noch keine abgeschlossenen Workouts.</p>
+    {% endif %}
+  </section>
 </div>
-</div>
+
+<dialog class="sheet" id="sheet-free">
+  <div class="sheet__head">
+    <span class="sheet__title">Freies Workout</span>
+    <button type="button" class="sheet__close" data-close>Abbrechen</button>
+  </div>
+  <div class="sheet__body">
+    <form method="post" action="{{ url_for('gym.gym_start') }}">
+      <div class="field grow">
+        <label class="label" for="start-name">Name (optional)</label>
+        <input type="text" id="start-name" name="name" class="input" placeholder="z. B. Push Day">
+      </div>
+      <div class="field grow">
+        <label class="label" for="start-template">Vorlage</label>
+        <select id="start-template" name="template_id" class="select">
+          <option value="">— Ohne Vorlage —</option>
+          {% for t in templates %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn--live btn--block">Workout starten</button>
+    </form>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('click', function (e) {
+    var opener = e.target.closest && e.target.closest('.sheet-open');
+    if (opener) {
+        var sheet = document.getElementById(opener.dataset.sheet);
+        if (sheet && sheet.showModal) { sheet.showModal(); }
+        return;
+    }
+    if (e.target.closest && e.target.closest('[data-close]')) {
+        var open = e.target.closest('dialog');
+        if (open) { open.close(); }
+    }
+});
+</script>
 {% endblock %}

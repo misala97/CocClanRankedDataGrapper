@@ -2746,3 +2746,109 @@ body.is-reordering .drag-handle { display: inline-grid; }
   display: flex; align-items: center;
 }
 .quiet-acts__btn--danger { color: var(--live-ink); opacity: 0.75; }
+
+/* ============================================================================
+   START  ·  the landing screen (Puls, heute.html)
+   ----------------------------------------------------------------------------
+   Answers before it reports. The routine that has gone longest untrained is the
+   one lifted plane and carries the only primary button; everything below is
+   reading material at lower saturation (4.6).
+
+   The bar families are NOT redefined here -- .hbar and .vbar already exist,
+   already run on tokens, and already carry is-stall / is-live / vbar--deload.
+   Adding a second set that means the same thing is what 4.5 bans, and the
+   session screen already paid for that lesson once.
+   ============================================================================ */
+
+.start { padding-bottom: var(--sp-8); }
+.start__head { padding: var(--sp-5) var(--sp-4) 0; }
+.start__row { display: flex; align-items: baseline; gap: var(--sp-3); }
+.start__h {
+  font-family: var(--font-display); font-size: 1.75rem; font-weight: var(--w-max);
+  letter-spacing: -0.035em; line-height: 1.1;
+}
+.start__sp { flex: 1; }
+.start__date { font-size: var(--t-meta); color: var(--unlit); font-variant-numeric: tabular-nums; }
+.start__pulse { margin-top: var(--sp-2); font-size: var(--t-sm); color: var(--dim); }
+.start__pulse b { font-weight: var(--w-bold); color: var(--ink); font-variant-numeric: tabular-nums; }
+.start__note { margin-top: var(--sp-3); font-size: var(--t-meta); color: var(--unlit); line-height: 1.5; }
+
+.start__free {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-4); min-block-size: var(--tap);
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
+}
+
+/* ---- the answer: one lifted plane, one primary button ---- */
+.lead {
+  padding: var(--sp-4); border-radius: var(--r-panel);
+  background: var(--chassis); box-shadow: var(--lift);
+}
+.lead__top { display: flex; align-items: flex-start; gap: var(--sp-3); }
+.lead__main { flex: 1; min-inline-size: 0; }
+.lead__due { font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--live-ink); }
+.lead__name {
+  font-family: var(--font-display); font-size: var(--t-name); font-weight: var(--w-bold);
+  letter-spacing: var(--track-name); line-height: 1.16; margin-top: 2px;
+}
+.lead__list { margin-top: var(--sp-3); font-size: var(--t-sm); line-height: 1.5; color: var(--dim); }
+.lead__go {
+  inline-size: 100%; margin-top: var(--sp-4); min-block-size: var(--tap-primary);
+  border-radius: var(--r-control); background: var(--live); color: var(--on-live);
+  font-size: 1.0625rem; font-weight: var(--w-max);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: var(--glow-live);
+}
+.lead__go svg { inline-size: 18px; block-size: 18px; }
+.lead__go:active { transform: scale(0.985); }
+
+/* rename/delete: closed by default, anchored under its own toggle so opening
+   it never reflows the card it sits in */
+.lead__edit { flex: none; position: relative; }
+.lead__edit-toggle {
+  inline-size: var(--tap); block-size: var(--tap);
+  margin: calc(var(--sp-2) * -1) calc(var(--sp-2) * -1) 0 0;
+  display: grid; place-items: center; border-radius: var(--r-chip);
+  color: var(--unlit); cursor: pointer; list-style: none;
+}
+.lead__edit-toggle::-webkit-details-marker { display: none; }
+.lead__edit-body {
+  position: absolute; inset-inline-end: 0; inset-block-start: var(--tap);
+  z-index: var(--z-resume); inline-size: min(17rem, 78vw);
+  padding: var(--sp-3); border-radius: var(--r-panel);
+  background: var(--chassis); box-shadow: var(--lift), inset 0 0 0 1px var(--edge);
+  display: flex; flex-direction: column; gap: var(--sp-2);
+}
+.lead__edit-form { display: flex; gap: var(--sp-2); }
+.lead__edit-form .input { min-inline-size: 0; flex: 1; }
+
+/* ---- the other routines: quiet rows, never a second card ---- */
+.row__go {
+  flex: none; min-block-size: var(--tap); padding-inline: var(--sp-4);
+  border-radius: var(--r-control);
+  font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--live-ink);
+  box-shadow: inset 0 0 0 1px var(--live-ink);
+}
+.row__name--strong { color: var(--ink); font-weight: var(--w-semi); }
+
+/* ---- attention: cold, and it always carries the word ---- */
+.stall-note {
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--r-panel);
+  background: var(--chassis); box-shadow: inset 0 0 0 1px var(--stall-ink);
+  font-size: var(--t-sm); line-height: 1.45; color: var(--dim);
+  margin-bottom: var(--sp-2);
+}
+.stall-note b { color: var(--stall-ink); font-weight: var(--w-bold); }
+.stall-note__lifts { display: block; margin-top: 3px; font-size: var(--t-meta); color: var(--unlit); }
+
+/* "zu wenig" under the count: the word, not just the colour (4.2) */
+.hbar__val small {
+  display: block; font-size: var(--t-micro); font-weight: var(--w-semi);
+  color: var(--stall-ink); letter-spacing: 0;
+}
+
+.sec__sp { flex: 1; }
+.sec__more {
+  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
+  display: inline-flex; align-items: center; min-block-size: var(--tap);
+}

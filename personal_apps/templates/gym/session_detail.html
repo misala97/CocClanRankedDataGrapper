@@ -24,7 +24,7 @@
 <div class="session-view">
 
   <header class="session-top">
-    <a href="{{ url_for('gym.gym_heute') }}" class="session-top__back" aria-label="Zurück zu Heute">
+    <a href="{{ url_for('gym.gym_heute') }}" class="session-top__back" aria-label="Zurück zum Start">
       {% with icon='back' %}{% include 'gym/_icon.html' %}{% endwith %}
     </a>
     <span class="session-top__name">{{ session.name or 'Workout' }}</span>
