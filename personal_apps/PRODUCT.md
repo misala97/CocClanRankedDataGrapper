@@ -268,12 +268,23 @@ designed in rather than argued about:
   earned, because it is the end of the thing that was accumulating.
 
 **Statistik stays desktop-only** and is not in the mobile tab bar; its URL stays
-reachable. It is composed for the width — a real multi-column layout, not the
-phone column stretched. Two known problems to fix while restyling it rather
-than carry forward: the all-time record timeline runs unbounded (47 rows and
-growing, roughly two thirds of the page), so it needs a year filter or a cap;
-and the page opens on a table rather than on an answer, so it should lead with
-what the numbers say before it shows them.
+reachable, and opening it on a phone renders single-column rather than
+redirecting — cramped is better than hidden, but it must not be *broken*, so
+the multi-column layout needs a real fallback rather than horizontal scroll.
+
+Three changes it carries beyond a restyle:
+
+- **It leads with a sentence, not a table.** The page answers what the numbers
+  say before it shows them.
+- **The record timeline is bounded by year bands**, current year open and older
+  years folded with their counts. It ran unbounded at 47 rows and growing,
+  roughly two thirds of the page height, and no row was ever removed to fix it.
+- **A career strip**: one bar per month since the first workout, height =
+  tonnage, with record months, deload months and gaps marked. This is the one
+  figure an all-time page should obviously have and did not — Heute holds eight
+  weeks, and nothing held the whole history. It needs a new
+  `analytics.monthly_tonnage(rows)`; it belongs in `analytics.py` rather than
+  `stats.py` by the time-horizon rule above.
 
 ### 4.7 Anti-references
 
