@@ -1213,7 +1213,12 @@ body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
 
 .row__lead  { flex: none; }
 .row__main  { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
-.row__meta  { margin-top: 2px; }
+/* The row primitive never sized its own two lines: .row__name and .row__meta
+   both inherited body size, so every list rendered its name and its meta at the
+   same 14px and read flat. The Puls screens all rely on name > meta, so the
+   primitive states it once here instead of each page restating it. */
+.row__name  { font-size: var(--t-body); font-weight: var(--w-med); }
+.row__meta  { margin-top: 2px; font-size: var(--t-meta); color: var(--unlit); }
 /* one line, ellipsised. Only works because __meta is a block box (see .stack):
    on an inline span `text-overflow` is silently ignored and the text runs past
    the viewport instead of truncating. */
@@ -2967,10 +2972,25 @@ body.is-exporting .verlauf__row .pick {
 }
 .pick input:focus-visible + .pick__box { outline: 2px solid var(--live); outline-offset: 2px; }
 
-/* .row__sub already carries the right type treatment; this only clips it to
-   one line, because a seven-exercise roster on every row turns the list into
+/* Three lines need three levels, or they fight. The roster is the least
+   important thing in the row -- it says which workout this was, which the name
+   already said -- so it must be the quietest. The shared .row__sub is --dim and
+   .row__meta is --unlit, i.e. brighter than the line above it, which is what
+   made this list read as a wall.
+
+   Also clipped to one line: a seven-exercise roster per row turns a list into
    paragraphs. */
-.verlauf__row .row__sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.verlauf__row .row__meta { color: var(--dim); }
+.verlauf__row .row__sub {
+  /* Size as well as colour. --dim and --unlit sit 9 RGB points apart in the
+     light theme (both have to clear AA against a pale field), so a colour-only
+     ramp is invisible there -- measured rgb(99,70,116) against rgb(108,83,126).
+     Dropping a step in size carries the hierarchy in both themes. */
+  color: var(--unlit); font-size: var(--t-micro); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.verlauf__row { padding-block: var(--sp-1); }
+.verlauf__row .row__trail--stack { gap: var(--sp-2); }
 .vol {
   font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-max);
   letter-spacing: -0.025em; color: var(--ink); font-variant-numeric: tabular-nums;
