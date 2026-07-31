@@ -2871,3 +2871,111 @@ body.is-reordering .drag-handle { display: inline-grid; }
   font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
   display: inline-flex; align-items: center; min-block-size: var(--tap);
 }
+
+/* ============================================================================
+   VERLAUF  ·  every finished workout (Puls)
+   ----------------------------------------------------------------------------
+   Search is permanent because it is what makes a list this long usable. Export
+   is a mode: its checkboxes only exist while it is on, so the default view is
+   the history and nothing else.
+   ============================================================================ */
+
+.verlauf { padding-bottom: var(--sp-8); }
+.verlauf__head {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-4) 0;
+}
+.verlauf__count { font-size: var(--t-sm); color: var(--unlit); font-variant-numeric: tabular-nums; }
+.verlauf__act {
+  min-block-size: var(--tap); display: inline-flex; align-items: center;
+  padding-inline: var(--sp-2); margin-inline-end: calc(var(--sp-2) * -1);
+  font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--live-ink);
+}
+
+.searchbar {
+  margin: var(--sp-4) var(--sp-4) 0;
+  display: flex; align-items: center; gap: var(--sp-3);
+  min-block-size: 52px; padding-inline: var(--sp-4);
+  border-radius: var(--r-control); background: var(--chassis); color: var(--unlit);
+}
+.searchbar svg { inline-size: 19px; block-size: 19px; flex: none; }
+.searchbar__input {
+  flex: 1; min-inline-size: 0; border: 0; background: none;
+  font-size: var(--t-body); color: var(--ink);
+}
+.searchbar__input::placeholder { color: var(--unlit); }
+.searchbar__input:focus { outline: none; }
+.searchbar:focus-within { box-shadow: inset 0 0 0 2px var(--live); }
+
+/* ---- export mode ---- */
+.export {
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  border-radius: var(--r-panel); background: var(--chassis); box-shadow: var(--lift);
+}
+.export__row { display: flex; align-items: center; gap: var(--sp-2); }
+.export__cancel {
+  min-block-size: var(--tap); padding-inline: var(--sp-2);
+  margin-inline-end: calc(var(--sp-2) * -1);
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
+}
+.export__presets { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
+.preset {
+  flex: 1; min-block-size: var(--tap); border-radius: var(--r-control);
+  font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--dim);
+  box-shadow: inset 0 0 0 1px var(--edge-hi);
+}
+.preset.is-active { background: var(--live); color: var(--on-live); box-shadow: none; }
+.export__go {
+  display: flex; align-items: center; justify-content: center;
+  inline-size: 100%; margin-top: var(--sp-3); min-block-size: var(--tap);
+  border-radius: var(--r-control); background: var(--live); color: var(--on-live);
+  font-size: var(--t-body); font-weight: var(--w-bold);
+}
+.export__go.is-disabled { opacity: 0.45; pointer-events: none; }
+
+/* ---- month bands: something for a long scroll to hold on to ---- */
+.month {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  margin: var(--sp-6) var(--sp-4) 0; padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--edge);
+}
+.month[hidden] { display: none; }
+
+.verlauf__row { margin-inline: var(--sp-4); }
+.verlauf__row[hidden] { display: none; }
+
+/* The checkbox only exists in export mode. The visual box is 22px and the
+   target is the full 44 around it -- this is tapped once per row while
+   selecting, so it cannot be the size it looks. */
+.verlauf__row .pick { display: none; }
+body.is-exporting .verlauf__row .pick {
+  display: grid; place-items: center; flex: none;
+  inline-size: var(--tap); block-size: var(--tap);
+  margin-inline-start: calc(var(--sp-3) * -1);
+  cursor: pointer;
+}
+.verlauf__row .pick input { position: absolute; opacity: 0; pointer-events: none; }
+.pick__box {
+  inline-size: 22px; block-size: 22px; border-radius: 7px;
+  box-shadow: inset 0 0 0 2px var(--edge-hi);
+  display: grid; place-items: center; color: transparent;
+}
+.pick__box svg { inline-size: 14px; block-size: 14px; stroke-width: 3; }
+.pick input:checked + .pick__box {
+  background: var(--live); box-shadow: none; color: var(--on-live);
+}
+.pick input:focus-visible + .pick__box { outline: 2px solid var(--live); outline-offset: 2px; }
+
+/* .row__sub already carries the right type treatment; this only clips it to
+   one line, because a seven-exercise roster on every row turns the list into
+   paragraphs. */
+.verlauf__row .row__sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vol {
+  font-family: var(--font-display); font-size: var(--t-body); font-weight: var(--w-max);
+  letter-spacing: -0.025em; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.vol small {
+  font-family: var(--font-body); font-size: var(--t-meta); font-weight: var(--w-semi);
+  color: var(--unlit); margin-inline-start: 2px;
+}

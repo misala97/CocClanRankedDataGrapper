@@ -33,6 +33,14 @@ def gym_service_worker():
 
 DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest time is given
 
+# The UI is German regardless of the server's locale, so month names are stated
+# rather than taken from strftime('%B') -- which follows LC_TIME and would give
+# English on this machine and German on the VPS, or vice versa.
+MONTH_NAMES = (
+    'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+)
+
 # stats.exercise_state()'s return value -> (chip CSS modifier, display label),
 # spec 5.6's table. A state of None means "no chip" and has no entry here --
 # callers must check before indexing.
@@ -1209,7 +1217,26 @@ def gym_verlauf():
         for s in sessions
     ]
 
-    return render_template('gym/verlauf.html', history=history)
+    # Month bands, grouped here rather than in the template: Jinja can detect a
+    # change of month while looping, but it cannot count the rows in a group it
+    # has not reached yet, and faking that with filters over the whole list is
+    # how a template starts doing arithmetic. German month names live here for
+    # the same reason -- strftime('%B') follows the server's locale, which is
+    # not the UI's.
+    months = []
+    for entry in history:
+        started = entry['session'].started_at
+        key = (started.year, started.month)
+        if not months or months[-1]['key'] != key:
+            months.append({
+                'key': key,
+                'label': '%s %d' % (MONTH_NAMES[started.month - 1], started.year),
+                'slug': '%04d-%02d' % key,
+                'entries': [],
+            })
+        months[-1]['entries'].append(entry)
+
+    return render_template('gym/verlauf.html', history=history, months=months)
 
 
 @gym_bp.route('/gym/statistik')
