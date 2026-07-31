@@ -2519,6 +2519,15 @@ tr:hover .spark { color: var(--ink); }
 .queue__row.is-done .row__name { color: var(--ink); }
 .queue__row.is-skipped .row__name { color: var(--unlit); text-decoration: line-through; }
 .queue__mark { color: var(--done-ink); display: inline-flex; }
+/* the row you are on: warm ink, a filled dot, and the word "Jetzt" in its
+   meta -- three carriers, so it survives both greyscale and a glance */
+.queue__row.is-now { background: var(--wash-live); border-radius: var(--r-inset); }
+.queue__row.is-now .row__name { color: var(--ink); font-weight: var(--w-bold); }
+.queue__row.is-now .row__meta { color: var(--live-ink); font-weight: var(--w-semi); }
+.queue__now {
+  inline-size: 9px; block-size: 9px; border-radius: 50%; background: var(--live);
+  display: inline-block;
+}
 .queue__pos { font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--unlit); }
 
 .session-foot { padding: var(--sp-5) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom, 0px)); }
