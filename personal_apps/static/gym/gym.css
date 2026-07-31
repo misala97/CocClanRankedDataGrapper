@@ -2519,6 +2519,28 @@ tr:hover .spark { color: var(--ink); }
 .queue__row.is-done .row__name { color: var(--ink); }
 .queue__row.is-skipped .row__name { color: var(--unlit); text-decoration: line-through; }
 .queue__mark { color: var(--done-ink); display: inline-flex; }
+/* one line per exercise: the marker column and the load column both scan
+   straight down, so the list reads as a table without being one */
+.queue__row { flex-wrap: nowrap; min-block-size: 46px; }
+.queue__lead {
+  inline-size: 22px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--unlit);
+}
+.queue__row .row__main { min-inline-size: 0; text-align: start; }
+.queue__row .row__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.queue__load {
+  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--unlit);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+/* the row you are on: warm ink, a filled dot, and a tinted row -- three
+   carriers, so it survives greyscale and a glance */
+.queue__row.is-now { background: var(--wash-live); border-radius: var(--r-inset); padding-inline: var(--sp-2); }
+.queue__row.is-now .row__name { color: var(--ink); font-weight: var(--w-bold); }
+.queue__row.is-now .queue__load { color: var(--live-ink); font-weight: var(--w-bold); }
+.queue__now {
+  inline-size: 9px; block-size: 9px; border-radius: 50%; background: var(--live);
+  display: inline-block;
+}
 /* the row you are on: warm ink, a filled dot, and the word "Jetzt" in its
    meta -- three carriers, so it survives both greyscale and a glance */
 .queue__row.is-now { background: var(--wash-live); border-radius: var(--r-inset); }

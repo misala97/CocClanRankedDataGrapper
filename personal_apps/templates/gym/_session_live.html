@@ -158,30 +158,33 @@
     {% for se in visible_exercises %}
     {% set se_done = se.sets|selectattr('completed')|list|length %}
     {% set se_total = se.sets|length %}
-    <div class="row row--top queue__row{{ ' is-now' if se.id == live_id else '' }}{{ ' is-done' if se_total > 0 and se_done == se_total else '' }}{{ ' is-skipped' if se.skipped else '' }}" data-se-id="{{ se.id }}">
+    {# One line per exercise. The marker leads, the name takes the middle and
+       truncates, the set summary trails -- so the column of markers and the
+       column of loads both scan straight down. Anything that needs two lines
+       (its sets, its rest time, its actions) is in the row's own sheet. #}
+    <div class="row queue__row{{ ' is-now' if se.id == live_id else '' }}{{ ' is-done' if se_total > 0 and se_done == se_total else '' }}{{ ' is-skipped' if se.skipped else '' }}" data-se-id="{{ se.id }}">
       <span class="drag-handle" aria-hidden="true">⠿</span>
-      <button type="button" class="row__main stack sheet-open" data-sheet="sheet-ex-{{ se.id }}"
-              {% if se.id == live_id %}aria-current="step"{% endif %}>
-        <span class="row__name row__name--wrap">{{ se.exercise.name }}</span>
-        <span class="row__meta">
-          {%- if se.skipped -%}Übersprungen
-          {%- elif se_total -%}
-            {%- if se.id == live_id %}Jetzt · {% endif -%}
-            {{ se_done }}/{{ se_total }} Sätze{% if se.sets %} · {{ ("%.1f"|format(se.sets[0].weight)).replace(".", ",") }} kg{% endif %}
-          {%- else -%}Noch keine Sätze{%- endif -%}
-        </span>
-      </button>
-      <span class="row__trail">
-        {# The marker says which of the three states this row is in, and never
-           by colour alone: a filled dot for the exercise you are on, a tick for
-           a finished one, its slot number for one still ahead. #}
-        {% if se.id == live_id %}
+      {# Never colour alone: a tick for finished, a filled dot for the one you
+         are on, the slot number for one still ahead. #}
+      <span class="row__lead queue__lead">
+        {%- if se.id == live_id -%}
         <span class="queue__now" aria-hidden="true"></span>
-        {% elif se_total > 0 and se_done == se_total %}
+        {%- elif se_total > 0 and se_done == se_total -%}
         <span class="queue__mark">{% with icon='check' %}{% include 'gym/_icon.html' %}{% endwith %}</span>
-        {% else %}
-        <span class="queue__pos">{{ se.position }}</span>
-        {% endif %}
+        {%- else -%}
+        {{ se.position }}
+        {%- endif -%}
+      </span>
+      <button type="button" class="row__main sheet-open" data-sheet="sheet-ex-{{ se.id }}"
+              {% if se.id == live_id %}aria-current="step"{% endif %}>
+        <span class="row__name">{{ se.exercise.name }}</span>
+      </button>
+      <span class="row__trail queue__load">
+        {%- if se.skipped -%}Übersprungen
+        {%- elif se.id == live_id -%}{{ se_done }}/{{ se_total }}
+        {%- elif se_total > 0 and se_done == se_total -%}{{ se_done }}/{{ se_total }}
+        {%- elif se_total -%}{{ se_total }} × {{ ("%.1f"|format(se.sets[0].weight)).replace(".", ",") }}
+        {%- else -%}—{%- endif -%}
       </span>
     </div>
     {% endfor %}
