@@ -2713,6 +2713,12 @@ body.is-reordering .drag-handle { display: inline-grid; }
 .vtag--up     { background: var(--done);   color: var(--on-done); }
 .vtag--neu    { background: var(--raised); color: var(--dim); }
 
+/* the debrief's exercise list: name in ink so it leads, loads tabular so the
+   set columns line up down the list */
+.sec .row__name { color: var(--ink); font-weight: var(--w-semi); }
+.sec .row__meta { font-variant-numeric: tabular-nums; }
+.sec .row__lead { align-self: flex-start; padding-top: 2px; }
+
 .finished__correct {
   display: flex; align-items: center; gap: 6px; margin-top: var(--sp-3);
   min-block-size: var(--tap);

@@ -309,7 +309,17 @@ def deload_signal(report, rows_by_exercise, now, last_deload_at=None,
 
 
 def _sets_display(row):
-    return ', '.join('{:g} kg x {}'.format(weight, reps) for weight, reps in row.sets)
+    """A row's sets as one line: 63,0 x 9 . 63,0 x 8 . 63,0 x 7
+
+    German decimal comma, a real multiplication sign, and a middot between
+    sets. The unit is not repeated per set -- every weight in this app is
+    kilograms, and "63 kg x 9, 63 kg x 8, 63 kg x 7" spends a third of the line
+    saying so three times.
+    """
+    return ' · '.join(
+        '{:.1f}'.format(weight).replace('.', ',') + ' × {}'.format(reps)
+        for weight, reps in row.sets
+    )
 
 
 def _pr_weight(rows):
