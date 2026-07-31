@@ -1455,23 +1455,50 @@ def _chart_geometry(series):
         return None
     lo, hi = min(values), max(values)
     span = (hi - lo) or 1.0
-    # every point of every series shares one x-scale, or two slots with
-    # different session counts would be drawn on different time axes
-    count = max((len(entry['points']) for entry in series), default=1)
-    step = (CHART_W - 2 * CHART_PAD) / max(count - 1, 1)
+
+    # x comes from the DATE, not from the point's index within its own series.
+    # Indexing looked right with one line and was wrong the moment a second
+    # appeared: a slot with two sessions got spread across the same width as a
+    # slot with seven, so the two lines were drawn on different time axes and
+    # crossed each other for no reason. One shared date axis is the only way
+    # two slots can be compared at all, which is the whole point of drawing
+    # them together.
+    stamps = [point['started_at'] for entry in series for point in entry['points']]
+    first, last = min(stamps), max(stamps)
+    days = (last - first).total_seconds() / 86400.0 or 1.0
 
     out = []
     for entry in series:
         points = []
-        for index, point in enumerate(entry['points']):
+        for point in entry['points']:
+            offset = (point['started_at'] - first).total_seconds() / 86400.0
             points.append({
-                'x': round(CHART_PAD + index * step, 2),
+                'x': round(CHART_PAD + offset / days * (CHART_W - 2 * CHART_PAD), 2),
                 'y': round(CHART_H - CHART_PAD - (point['e1rm'] - lo) / span * (CHART_H - 2 * CHART_PAD), 2),
                 'is_deload': point['is_deload'],
                 'e1rm': point['e1rm'],
                 'started_at': point['started_at'],
             })
         out.append({'position': entry['position'], 'points': points})
+
+    # Every series is the same rose, because 4.3 fixes the palette at three
+    # semantic hues and a slot number is not a semantic state. With three slots
+    # overlapping that was unreadable, so they separate by WEIGHT instead: the
+    # slot the exercise actually lives in (most sessions) draws solid, the
+    # occasional ones recede. Each line also carries its slot number at its last
+    # point, so the ordering is stated and not merely implied by opacity.
+    out.sort(key=lambda entry: -len(entry['points']))
+    for rank, entry in enumerate(out):
+        entry['opacity'] = 1.0 if rank == 0 else (0.5 if rank == 1 else 0.3)
+        entry['is_main'] = (rank == 0)
+        last = entry['points'][-1] if entry['points'] else None
+        # The last point is usually AT the right edge, so a label placed to its
+        # right lands outside the viewBox and is clipped. Flip to the left there
+        # and lift it clear of the line either way.
+        near_edge = last is not None and last['x'] > CHART_W - 34
+        entry['label_x'] = round((last['x'] - 8) if near_edge else (last['x'] + 8), 2) if last else 0
+        entry['label_y'] = round(max(last['y'] - 8, 12), 2) if last else 0
+        entry['label_anchor'] = 'end' if near_edge else 'start' 
 
     # The gold dot is the exercise's best, not each slot's own. Marking per
     # series meant a position with a single session was trivially its own best

@@ -3104,10 +3104,14 @@ body.is-exporting .verlauf__row .pick {
 
 .chart {
   margin-top: var(--sp-4); background: var(--chassis);
-  border-radius: var(--r-panel); padding: var(--sp-4) var(--sp-3) var(--sp-3);
+  border-radius: var(--r-panel); padding: var(--sp-5) var(--sp-4) var(--sp-4);
 }
 .chart svg { display: block; inline-size: 100%; block-size: auto; }
-.chart__axis { display: flex; justify-content: space-between; margin-top: var(--sp-2); padding-inline: var(--sp-1); }
+/* three marks: first, middle, last -- the middle one is what makes the shape
+   of the line readable rather than just its endpoints */
+.chart__axis { display: flex; justify-content: space-between; margin-top: var(--sp-3); }
+.chart__axis .label:nth-child(2) { text-align: center; }
+.chart__axis .label:last-child { text-align: end; }
 .chart__legend { display: flex; gap: var(--sp-4); margin-top: var(--sp-3); align-items: center; flex-wrap: wrap; }
 .key { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-micro); color: var(--unlit); }
 .key__dot { inline-size: 9px; block-size: 9px; border-radius: 50%; flex: none; }
