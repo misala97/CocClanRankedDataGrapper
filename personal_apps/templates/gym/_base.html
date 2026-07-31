@@ -24,14 +24,18 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
-    <meta name="theme-color" content="#0b0c10">
-    {# Saira is served from this app, not linked from Google -- see the header
-       of static/gym/saira.css for why. Preloading the two faces the German UI
-       actually uses (latin roman + latin italic) means they start downloading
-       with the stylesheet rather than after it. #}
-    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/saira-latin-roman.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/saira-latin-italic.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="{{ url_for('static', filename='gym/saira.css') }}">
+    {# The browser chrome follows the theme too, or the phone frames a pale plum
+       app in a near-black bar. Both values are --ground for their theme. #}
+    <meta name="theme-color" content="#F3EAF7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#241132" media="(prefers-color-scheme: dark)">
+    {# Figtree is served from this app, not linked from Google -- see the header
+       of static/gym/figtree.css for why. Preloading the latin face (the one the
+       German UI actually hits on nearly every glyph) means it starts
+       downloading with the stylesheet rather than after it. latin-ext is not
+       preloaded: it only carries the long tail, and preloading a file most
+       page views never need costs more than it saves. #}
+    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/figtree-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='gym/figtree.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
     <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
 </head>

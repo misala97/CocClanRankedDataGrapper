@@ -1,126 +1,197 @@
 /* ============================================================================
-   GYM TRACKER  ·  "ATHLETIK" VISUAL SYSTEM
+   GYM TRACKER  ·  "PULS" VISUAL SYSTEM
    ----------------------------------------------------------------------------
-   Sport broadcast, not equipment panel. Numerals lean into the direction of
-   travel; the record is gold because gold already means record; NOW is an
-   electric blue that nothing else in the app is allowed to use. Dark only.
+   The session fills up while you use it. Committed colour -- the page IS the
+   colour, deep aubergine in dark and pale plum in light, never a near-black or
+   an off-white. One hot orange reserved entirely for NOW. Gold for a record.
+   Cold cyan for a lift that has stopped moving. Light and dark are both
+   first-class and follow the phone.
+
+   Supersedes "Athletik" (sport broadcast, electric blue, heavy oblique) and
+   "Readout" (amber instrument panel) -- both built, both rejected in place.
+   PRODUCT.md 4.0 records why, because the reason is the useful part.
 
    Self-contained: no dependency on _head.html, coc_stats, or any other
    personal_apps palette. Every gym template links this file directly.
 
-   FONT (loaded by the template <head>, e.g. _base.html):
-     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?\
-       family=Saira:ital,wdth,wght@0,75..112,400..900;1,75..112,800..900\
-       &display=swap">
-   ONE family, three roles, separated by the variable WIDTH axis rather than by
-   a second typeface:
-     --font-display  Saira 112% width, 900, italic  · names, headings
-     --font-body     Saira 100% width, 400-600      · sentences, controls
-     --font-mono     Saira  80% width, 500-700      · dense tables, labels
-   The name `--font-mono` is kept because templates reference it; its ROLE is
-   unchanged (dense tabular data + small uppercase labels), only the face is.
-   Saira ships true tabular figures -- verified, not assumed: with
-   `font-variant-numeric: tabular-nums`, "111" and "000" both measure 74.4px at
-   40px; without it, 45.1px and 80.5px. The 80%-width cut is what lets the
-   exercise-detail history table hold its columns on a 390px phone.
+   FONT
+     Figtree, vendored -- see static/gym/figtree.css for why it is not linked
+     from Google at runtime. One variable face, weights 300-900, UPRIGHT ONLY.
+     No italic file ships, because the brief bans italic and the previous
+     system's lean is what made it shout.
+     --font-display / --font-body / --font-mono all resolve to the same family:
+     the names are kept because templates reference them, and their ROLES are
+     unchanged (display headings / sentences / dense tabular data). Athletik
+     separated those roles with Saira's width axis; Figtree has no width axis,
+     so --wd-* are all 100 and font-stretch is a deliberate no-op rather than a
+     dangling reference.
 
-   COLOUR  ·  derived in OKLCH, validated as hex (contrast + CVD tested).
-     token        role
-     --ground     page bg, deepest field
-     --chassis    panel surface
-     --raised     inset / nested surface
-     --edge       panel border
-     --edge-hi    lifted border, inert bar fill
-     --ink        primary text; the DONE state
-     --dim        labels, secondary text
-     --unlit      inert text, content not yet reached
-     --live       NOW: current set, running rest, primary action   (electric blue)
-     --live-deep  pressed / bottom edge of a live control
-     --record     RECORD: a previous best beaten                   (gold)
-     --stall      ATTENTION: stagnation, destructive actions       (red)
+   COLOUR  ·  derived in OKLCH, validated as hex, measured by
+   scratchpad/palette_puls.py -- which is runnable and is the source of truth.
 
-   Measured WCAG contrast -- every pairing that actually occurs, not the
-   convenient ones (script: scratchpad/palette.py):
-     ink/ground 18.07   ink/chassis 16.56   ink/raised 14.70
-     dim/ground  8.79   dim/chassis  8.06   dim/raised  7.15
-     unlit/ground 5.08  unlit/chassis 5.39  unlit/raised 4.78
-     live/ground  5.74  live/chassis  5.26  live/raised  4.67
-     record/ground 12.36 record/chassis 11.33 record/raised 10.06
-     stall/ground 6.35  stall/chassis  5.82  stall/raised  5.17
-   Text ON the accent fills: --on-live 5.40, --on-record 10.42, --on-stall 6.01.
-   (--unlit was lifted from #7b8293 to #868d9e: on --raised it measured 4.13,
-    under the 4.5 AA floor for the small inert labels that sit there. A single
-    blue cannot serve both `--live` text on a dark panel AND white-on-blue in a
-    button -- the two requirements are arithmetically incompatible -- so the
-    primary button carries a near-black-navy label instead of white, which is
-    also the harder-hitting of the two.)
+     Every pairing that actually occurs is checked in BOTH themes, because both
+     ship. 25/25 pass WCAG AA in each (light floor 4.79, dark floor 4.57), and
+     the three accent fills stay separable under protanopia and deuteranopia
+     (closest pair 62 of 255 in dark, 109 in light).
 
-   CVD: live / record / stall stay separable under protanopia and deuteranopia
-   (simulated, minimum pair distance 79 of 255). Colour is still never the sole
-   signal -- every state carries a shape or a word as well.
+     Two findings worth carrying forward, both forced by measurement:
+
+     1. ATTENTION is cold, not red. Orange, gold and red are inseparable under
+        deuteranopia; orange, gold and cyan are not. It also reads better: a
+        lift that has stopped moving is not an error, it has gone cold.
+     2. Every accent needs TWO values. A colour bright enough to be a FILL under
+        dark label text is not dark enough to be TEXT on a pale surface -- gold
+        measures 1.9:1 as light-theme text. Hence --live-ink / --done-ink /
+        --record-ink / --stall-ink, which equal their fills in dark and diverge
+        in light. This is the same collision the previous system hit with its
+        blue and solved with --on-live.
+
+   THEME RESOLUTION
+     Light is the base. `prefers-color-scheme: dark` overrides it. An explicit
+     html[data-theme] beats both, so a manual switch can be added later without
+     restructuring anything.
    ============================================================================ */
 
 :root {
-  /* ---- colour: the token contract ---- */
-  --ground:    #0b0c10;
-  --chassis:   #15171d;
-  --raised:    #1f222a;
-  --edge:      #2c303a;
-  --edge-hi:   #454b59;
-  --ink:       #f4f6fa;
-  --dim:       #a8aebc;
-  --unlit:     #868d9e;
-  --live:      #4d86ff;
-  --live-deep: #1f4bad;
-  --live-hi:   #7aa4ff;   /* lightness variant of --live for hover */
-  --record:    #ffc531;
-  --stall:     #ff5a4d;
+  /* ---- colour: the token contract (PRODUCT.md 4.3) ---- */
+  --ground:    #F3EAF7;   /* the committed colour, not a tinted neutral */
+  --chassis:   #FFFFFF;
+  --raised:    #EEE5F3;
+  --edge:      #DACAE3;
+  --edge-hi:   #C2ABCF;
+  --ink:       #291238;
+  --dim:       #634674;
+  --unlit:     #6C537E;
 
-  /* label colours for text sitting ON a saturated fill (all AA against it) */
-  --on-live:   #07132e;
-  --on-record: #2a1d00;
-  --on-stall:  #2b0703;
+  --live:      #C2410C;   /* NOW  -- fill */
+  --live-ink:  #A83409;   /* NOW  -- as text on a surface */
+  --live-deep: #8E2C07;
+  --live-hi:   #D4551D;
+  --on-live:   #FFF4EE;
 
-  /* ---- emitted light: the accent carries a halo, nothing else does ---- */
-  --glow-live:   0 0 24px rgba(77, 134, 255, 0.42);
-  --glow-record: 0 0 24px rgba(255, 197, 49, 0.40);
-  --lift-live:   0 8px 24px -8px rgba(77, 134, 255, 0.75);
-  /* faint state washes for lit surfaces; kept <=13% so text contrast measured
-     against --chassis still holds on the tinted row */
-  --wash-live:   rgba(77, 134, 255, 0.13);
-  --wash-record: rgba(255, 197, 49, 0.12);
-  --wash-stall:  rgba(255, 90, 77, 0.12);
+  --done:      #8B3A62;   /* LOGGED -- fill */
+  --done-ink:  #7A3256;
+  --on-done:   #FFF0F6;
 
-  /* ---- type: one family, three widths ---- */
-  --font-display: "Saira", "Saira Condensed", system-ui, sans-serif;
-  --font-body:    "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono:    "Saira", "Saira Condensed", ui-monospace, monospace;
+  --record:    #F0B429;   /* RECORD -- fill */
+  --record-ink:#6B4400;
+  --on-record: #3A2600;
 
-  --wd-display: 112;   /* font-stretch %, applied by the primitives below */
+  --stall:     #0C7382;   /* ATTENTION -- fill */
+  --stall-ink: #0F6B78;
+  --on-stall:  #ECFBFD;
+
+  /* Elevation, not emitted light: this system lifts surfaces, it does not glow.
+     The two --glow-* names are kept (existing rules reference them) but now
+     carry a soft coloured seat rather than a halo. */
+  --glow-live:   0 10px 26px -14px rgba(194, 65, 12, .75);
+  --glow-record: 0 10px 26px -14px rgba(240, 180, 41, .70);
+  --lift:        0 1px 2px rgba(41, 18, 56, .05), 0 10px 30px -16px rgba(41, 18, 56, .32);
+  --lift-live:   var(--glow-live);
+  --wash-live:   rgba(194, 65, 12, .10);
+  --wash-record: rgba(240, 180, 41, .16);
+  --wash-stall:  rgba(12, 115, 130, .10);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground:    #241132;
+    --chassis:   #371B49;
+    --raised:    #1B0B26;
+    --edge:      #472B5A;
+    --edge-hi:   #634077;
+    --ink:       #F8F1FB;
+    --dim:       #C5ACD2;
+    --unlit:     #9E86AD;
+
+    --live:      #FF7A4D;
+    --live-ink:  #FF7A4D;
+    --live-deep: #D2411A;
+    --live-hi:   #FF9670;
+    --on-live:   #2A0A00;
+
+    --done:      #F1C8DD;
+    --done-ink:  #F1C8DD;
+    --on-done:   #2A1233;
+
+    --record:    #FFC861;
+    --record-ink:#FFC861;
+    --on-record: #2A1D00;
+
+    --stall:     #5FDDEC;
+    --stall-ink: #5FDDEC;
+    --on-stall:  #04262C;
+
+    --glow-live:   0 10px 26px -14px rgba(255, 122, 77, .60);
+    --glow-record: 0 10px 26px -14px rgba(255, 200, 97, .55);
+    --lift:        0 2px 4px rgba(0, 0, 0, .40), 0 14px 34px -18px rgba(0, 0, 0, .85);
+    --wash-live:   rgba(255, 122, 77, .14);
+    --wash-record: rgba(255, 200, 97, .14);
+    --wash-stall:  rgba(95, 221, 236, .14);
+  }
+}
+
+/* An explicit choice wins over the system, in both directions. */
+html[data-theme="light"] {
+  --ground:#F3EAF7; --chassis:#FFFFFF; --raised:#EEE5F3;
+  --edge:#DACAE3; --edge-hi:#C2ABCF;
+  --ink:#291238; --dim:#634674; --unlit:#6C537E;
+  --live:#C2410C; --live-ink:#A83409; --live-deep:#8E2C07; --live-hi:#D4551D; --on-live:#FFF4EE;
+  --done:#8B3A62; --done-ink:#7A3256; --on-done:#FFF0F6;
+  --record:#F0B429; --record-ink:#6B4400; --on-record:#3A2600;
+  --stall:#0C7382; --stall-ink:#0F6B78; --on-stall:#ECFBFD;
+  --glow-live:0 10px 26px -14px rgba(194,65,12,.75);
+  --glow-record:0 10px 26px -14px rgba(240,180,41,.70);
+  --lift:0 1px 2px rgba(41,18,56,.05), 0 10px 30px -16px rgba(41,18,56,.32);
+  --wash-live:rgba(194,65,12,.10); --wash-record:rgba(240,180,41,.16); --wash-stall:rgba(12,115,130,.10);
+}
+html[data-theme="dark"] {
+  --ground:#241132; --chassis:#371B49; --raised:#1B0B26;
+  --edge:#472B5A; --edge-hi:#634077;
+  --ink:#F8F1FB; --dim:#C5ACD2; --unlit:#9E86AD;
+  --live:#FF7A4D; --live-ink:#FF7A4D; --live-deep:#D2411A; --live-hi:#FF9670; --on-live:#2A0A00;
+  --done:#F1C8DD; --done-ink:#F1C8DD; --on-done:#2A1233;
+  --record:#FFC861; --record-ink:#FFC861; --on-record:#2A1D00;
+  --stall:#5FDDEC; --stall-ink:#5FDDEC; --on-stall:#04262C;
+  --glow-live:0 10px 26px -14px rgba(255,122,77,.60);
+  --glow-record:0 10px 26px -14px rgba(255,200,97,.55);
+  --lift:0 2px 4px rgba(0,0,0,.40), 0 14px 34px -18px rgba(0,0,0,.85);
+  --wash-live:rgba(255,122,77,.14); --wash-record:rgba(255,200,97,.14); --wash-stall:rgba(95,221,236,.14);
+}
+
+:root {
+  /* ---- type: one family, three roles, no italic ---- */
+  --font-display: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body:    "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Figtree has no width axis. Kept at 100 so every existing
+     `font-stretch: var(--wd-*)` is a no-op instead of a dangling reference. */
+  --wd-display: 100;
   --wd-body:    100;
-  --wd-dense:    80;
+  --wd-dense:   100;
 
-  /* ---- type: role sizes (fixed rem scale, ~1.2 ratio; numerals leap) ---- */
+  /* ---- type: role sizes (fixed rem scale; numerals leap) ---- */
   --t-micro: 0.6875rem;  /* 11px  tab labels, tiniest meta */
   --t-label: 0.75rem;    /* 12px  uppercase panel labels */
   --t-meta:  0.8125rem;  /* 13px  secondary meta, chip text */
-  --t-sm:    0.9375rem;  /* 15px  dense body, table cells */
-  --t-body:  1rem;       /* 16px  sentences (notes, advice) */
-  --t-name:  1.1875rem;  /* 19px  exercise / panel names */
-  --num-sm:  1.5rem;     /* 24px  set-row load values */
-  --num-md:  1.875rem;   /* 30px  clock, section metrics */
+  --t-sm:    0.875rem;   /* 14px  dense body, table cells */
+  --t-body:  1rem;       /* 16px  sentences */
+  --t-name:  1.375rem;   /* 22px  exercise / panel names */
+  --num-sm:  1.375rem;   /* 22px  set-row load values */
+  --num-md:  2.125rem;   /* 34px  clock, section metrics */
   --num-lg:  2.5rem;     /* 40px  finished-workout readouts */
   --num-xl:  3.25rem;    /* 52px  the record flare value */
 
   --w-body: 400;
   --w-med:  500;
   --w-semi: 600;
-  --w-bold: 800;
-  --w-max:  900;
+  --w-bold: 700;
+  --w-max:  800;
 
-  --track-label: 0.14em;   /* uppercase labels sit too tight by default */
-  --track-name: -0.025em;  /* heavy italic display, closed up */
-  --track-num:  -0.035em;  /* big tabular numerals, closed harder */
+  --track-label: 0.11em;
+  --track-name: -0.025em;
+  --track-num:  -0.04em;
 
   /* ---- space: 4pt base ---- */
   --sp-1: 0.25rem; --sp-2: 0.5rem;  --sp-3: 0.75rem; --sp-4: 1rem;
@@ -128,24 +199,27 @@
   --sp-12: 3rem;   --sp-16: 4rem;
 
   /* ---- geometry: controls are pills, surfaces are generous ---- */
-  --r-inset:   8px;
+  --r-inset:   12px;
   --r-chip:    999px;
-  --r-control: 999px;
-  --r-panel:   16px;
-  --r-field:   10px;    /* inputs stay rectangular-ish so they read as editable */
+  --r-control: 16px;
+  --r-panel:   22px;
+  --r-field:   12px;
 
-  /* elevation, not machined edges: a soft seat plus a hairline top light */
+  /* ---- targets: the floor, and the primary confirm ---- */
+  --tap: 44px;
+  --tap-primary: 64px;
+
   --edge-lit:   inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --edge-drop:  0 2px 10px -4px rgba(0, 0, 0, 0.7);
-  --press-live: var(--lift-live);
+  --edge-drop:  var(--lift);
+  --press-live: var(--glow-live);
   --press-ghost: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
   /* ---- motion: fast and decisive, no bounce, no elastic ---- */
-  --dur-1: 90ms;    /* instant feedback: press */
-  --dur-2: 150ms;   /* state change: hover, check */
-  --dur-3: 220ms;   /* reveal, collapse */
+  --dur-1: 90ms;
+  --dur-2: 150ms;
+  --dur-3: 220ms;
   --ease: cubic-bezier(0.25, 1, 0.5, 1);          /* ease-out-quart */
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);     /* confident settle for the flare */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* ---- z-scale: semantic, never 9999 ---- */
   --z-resume: 80;
@@ -154,7 +228,7 @@
   --z-modal:  210;
 
   /* ---- shell metrics ---- */
-  --wrap-max: 1160px;
+  --wrap-max: 1180px;
   --tabbar-h: 62px;
   --resume-h: 52px;   /* deliberate, not content-derived -- see body.has-resume below */
 }
@@ -223,17 +297,19 @@ svg { display: block; }
    TYPOGRAPHIC PRIMITIVES
    ============================================================================ */
 
-/* The display voice: heavy, italic, slightly extended. The lean is the app's
-   signature -- it appears on names, numerals and the primary action, and
-   nowhere else, so it reads as one gesture rather than a texture. */
+/* The display voice: heavy and tight, upright. Weight and tracking carry the
+   emphasis; the previous system leaned every heading, name, numeral and button
+   at once, which is the single thing most responsible for how loud it read. */
 h1, h2, h3 {
   font-family: var(--font-display);
-  font-stretch: 112%;
-  font-style: italic;
+  font-stretch: var(--wd-display);
+  font-style: normal;
   font-weight: var(--w-max);
   letter-spacing: var(--track-name);
-  line-height: 1.05;
-  text-transform: uppercase;
+  line-height: 1.1;
+  /* No text-transform: 4.4 allows uppercase only on meta labels <=12px, and
+     these hold page titles and exercise names. Uppercasing a seven-item
+     exercise roster was the least readable thing in the previous build. */
 }
 h1 { font-size: var(--num-md); }
 h2 { font-size: var(--t-name); }
@@ -243,7 +319,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    of the display voice, so labels recede instead of competing. */
 .label {
   font-family: var(--font-mono);
-  font-stretch: 80%;
+  font-stretch: var(--wd-dense);
   font-size: var(--t-label);
   font-weight: var(--w-semi);
   letter-spacing: var(--track-label);
@@ -255,8 +331,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 /* Name of a thing (exercise, routine, workout): the display voice, smaller. */
 .name {
   font-family: var(--font-display);
-  font-stretch: 112%;
-  font-style: italic;
+  font-stretch: var(--wd-display);
+  font-style: normal;
   font-size: var(--t-name);
   font-weight: var(--w-bold);
   letter-spacing: var(--track-name);
@@ -264,12 +340,12 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   color: var(--ink);
 }
 
-/* Every numeral in the app: italic, tabular, tight, the largest thing in its
-   container. Size comes from the container or a --num-* modifier. */
+/* Every numeral in the app: tabular, tight, upright, and the largest thing in
+   its container. Size comes from the container or a --num-* modifier. */
 .num {
   font-family: var(--font-display);
-  font-stretch: 112%;
-  font-style: italic;
+  font-stretch: var(--wd-display);
+  font-style: normal;
   font-weight: var(--w-max);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
@@ -288,10 +364,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 /* The load readout: weight KG x reps, numerals dominant, units quiet. */
 .load { display: inline-flex; align-items: baseline; gap: 0.15em; }
 .load__val { font-family: var(--font-display); font-weight: var(--w-max);
-  font-stretch: 112%; font-style: italic;
+  font-stretch: var(--wd-display); font-style: normal;
   font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
   font-size: var(--num-sm); letter-spacing: var(--track-num); line-height: 1; }
-.load__unit { font-family: var(--font-mono); font-stretch: 80%; font-size: var(--t-meta);
+.load__unit { font-family: var(--font-mono); font-stretch: var(--wd-dense); font-size: var(--t-meta);
   font-weight: var(--w-med); letter-spacing: 0.04em; color: var(--dim);
   text-transform: uppercase; }
 .load__x { font-size: var(--t-meta); color: var(--unlit); padding-inline: 0.15em; }
@@ -361,7 +437,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 .set + .set { margin-top: var(--sp-2); }
 .set__idx {
-  font-family: var(--font-mono); font-stretch: 80%; font-size: var(--t-meta);
+  font-family: var(--font-mono); font-stretch: var(--wd-dense); font-size: var(--t-meta);
   font-weight: var(--w-semi); color: var(--unlit); text-align: center;
 }
 
@@ -458,7 +534,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .chip {
   display: inline-flex; align-items: center; gap: 0.35em;
   font-family: var(--font-mono);
-  font-stretch: 80%;
+  font-stretch: var(--wd-dense);
   font-size: var(--t-micro);
   font-weight: var(--w-bold);
   letter-spacing: 0.08em;
@@ -506,7 +582,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 /* tag: quiet metadata (position, set count), never a state */
 .tag {
   font-family: var(--font-mono);
-  font-stretch: 80%;
+  font-stretch: var(--wd-dense);
   font-size: var(--t-micro);
   font-weight: var(--w-semi);
   letter-spacing: 0.08em;
@@ -534,7 +610,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 .rest__value {
   font-family: var(--font-display); font-weight: var(--w-max);
-  font-stretch: 112%; font-style: italic; letter-spacing: var(--track-num);
+  font-stretch: var(--wd-display); font-style: normal; letter-spacing: var(--track-num);
   font-variant-numeric: tabular-nums; font-size: var(--num-sm);
   line-height: 1; color: var(--live); text-shadow: var(--glow-live);
 }
@@ -573,8 +649,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   min-block-size: 44px;
   padding: 0 var(--sp-5);
   font-family: var(--font-display);
-  font-stretch: 112%;
-  font-style: italic;
+  font-stretch: var(--wd-display);
+  font-style: normal;
   font-size: var(--t-name);
   font-weight: var(--w-max);
   letter-spacing: 0.01em;
@@ -669,21 +745,20 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 /* numeric wells use the tabular display face so digits line up as you type */
 .input--num {
   /* A DISPLAY numeral and an EDITABLE one are not the same job. The display
-     cut (112% width, 900, italic, -0.035em) exists to be read at a glance
+     cut (800 weight, -0.04em tracking) exists to be read at a glance
      across a room; inside a 62px field it simply did not fit, and "24.0"
      overflowed its own padding box -- desktop rendered every rest value as
      "15(". Sizing by `ch` made it worse, because the global
      `box-sizing: border-box` counts the new gutters against the same width.
 
-     So these fields step off the display cut: body face, upright, weight 600,
-     normal tracking. They keep tabular figures, so digits still align as you
-     type, and they stay the largest thing in their own row -- but they are
-     sized to be typed into rather than admired. The 900-weight italic still
-     carries every numeral the user only READS (.load__val, .num, .stat__value,
-     the rest clock). */
+     So these fields step off the display cut: weight 600, normal tracking.
+     They keep tabular figures, so digits still align as you type, and they
+     stay the largest thing in their own row -- but they are sized to be typed
+     into rather than admired. The heavy cut still carries every numeral the
+     user only READS (.load__val, .num, .stat__value, the rest clock). */
   font-family: var(--font-body);
   font-weight: var(--w-semi);
-  font-stretch: 100%;
+  font-stretch: var(--wd-body);
   font-style: normal;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
@@ -719,7 +794,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: var(--sp-1);
   min-block-size: var(--tabbar-h);
-  font-family: var(--font-mono); font-stretch: 80%; font-size: var(--t-micro);
+  font-family: var(--font-mono); font-stretch: var(--wd-dense); font-size: var(--t-micro);
   font-weight: var(--w-bold);
   letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--unlit);
@@ -881,13 +956,13 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   box-shadow: none;
 }
 .stat__label {
-  font-family: var(--font-mono); font-stretch: 80%;
+  font-family: var(--font-mono); font-stretch: var(--wd-dense);
   font-size: var(--t-label); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
 .stat__value {
   font-family: var(--font-display); font-weight: var(--w-max);
-  font-stretch: 112%; font-style: italic;
+  font-stretch: var(--wd-display); font-style: normal;
   font-variant-numeric: tabular-nums; font-size: var(--num-lg);
   line-height: 1; letter-spacing: var(--track-num); color: var(--ink);
 }
@@ -1000,12 +1075,12 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    safety net for very long set strings. */
 .table {
   inline-size: 100%; border-collapse: collapse;
-  font-family: var(--font-mono); font-stretch: 80%;
+  font-family: var(--font-mono); font-stretch: var(--wd-dense);
   font-size: var(--t-sm); font-variant-numeric: tabular-nums;
 }
 .table th {
   text-align: left; padding: var(--sp-2);
-  font-family: var(--font-mono); font-stretch: 80%;
+  font-family: var(--font-mono); font-stretch: var(--wd-dense);
   font-size: var(--t-label); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
   border-bottom: 1px solid var(--edge);
@@ -1077,10 +1152,18 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    word, different job -- leave it alone.
    ============================================================================ */
 
+/* Any element holding a stack of lines. Spans are inline by default, so a
+   "label above a name" built from two spans renders as one run, and
+   `text-overflow` on a child silently does nothing -- the text just leaves the
+   viewport. This bit three separate surfaces while the Puls screens were being
+   drawn, which is why it is a utility and not a fix reapplied per component. */
+.stack { display: block; }
+.stack > * { display: block; }
+
 .row {
   display: flex; align-items: center; flex-wrap: wrap;
   gap: var(--sp-2) var(--sp-3);
-  min-block-size: 44px;
+  min-block-size: var(--tap);
 }
 .row + .row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge); }
 /* An author `display` beats the UA sheet's `[hidden] { display: none }`, so a
@@ -1098,6 +1181,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .row__lead  { flex: none; }
 .row__main  { flex: 1 1 14rem; min-inline-size: 0; overflow-wrap: anywhere; }
 .row__meta  { margin-top: 2px; }
+/* one line, ellipsised. Only works because __meta is a block box (see .stack):
+   on an inline span `text-overflow` is silently ignored and the text runs past
+   the viewport instead of truncating. */
+.row__meta--clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row__wide  { flex-basis: 100%; margin: var(--sp-1) 0 0; }
 /* a secondary line inside __main that is prose, not a label: the exercise
    list under a workout's name. Needs the body face explicitly, or it inherits
@@ -1179,7 +1266,7 @@ a.row__main:hover .name { color: var(--live); }
 .exercise-card.collapsed .card-title-area { flex-wrap: nowrap; }
 .exercise-card.collapsed .exercise-card__name {
   font-size: var(--t-sm);
-  font-stretch: 80%;
+  font-stretch: var(--wd-dense);
   letter-spacing: 0;
   flex: 1; min-inline-size: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1505,8 +1592,8 @@ a.row__main:hover .name { color: var(--live); }
 .session-verdict {
   margin-top: var(--sp-3);
   font-family: var(--font-display);
-  font-stretch: 112%;
-  font-style: italic;
+  font-stretch: var(--wd-display);
+  font-style: normal;
   font-weight: var(--w-max);
   font-size: var(--num-sm);
   line-height: 1.15;
@@ -1522,7 +1609,7 @@ a.row__main:hover .name { color: var(--live); }
 .finished-destructive { margin-top: var(--sp-8); }
 .finished-delete {
   min-block-size: 44px; padding-inline: var(--sp-2);
-  font-family: var(--font-mono); font-stretch: 80%;
+  font-family: var(--font-mono); font-stretch: var(--wd-dense);
   font-size: var(--t-meta); letter-spacing: var(--track-label);
   text-transform: uppercase;
   color: var(--unlit);
@@ -1658,7 +1745,7 @@ a.row__main:hover .name { color: var(--live); }
   display: inline-flex; align-items: center; min-block-size: 44px;
   padding-inline: var(--sp-4);
   background: var(--live); color: var(--on-live);
-  font-family: var(--font-mono); font-stretch: 80%; font-size: var(--t-meta);
+  font-family: var(--font-mono); font-stretch: var(--wd-dense); font-size: var(--t-meta);
   font-weight: var(--w-bold); letter-spacing: var(--track-label);
   text-transform: uppercase; border-radius: var(--r-chip);
   transition: inset-block-start var(--dur-2) var(--ease);
@@ -1784,7 +1871,7 @@ a.row__main:hover .name { color: var(--live); }
   padding-inline: var(--sp-3);
   border-radius: var(--r-chip);
   background: var(--raised);
-  font-family: var(--font-mono); font-stretch: 80%;
+  font-family: var(--font-mono); font-stretch: var(--wd-dense);
   font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
   cursor: pointer;
   transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
@@ -1970,7 +2057,7 @@ a.row__main:hover .name { color: var(--live); }
 .position-pill {
   display: inline-flex; align-items: center; justify-content: center;
   min-block-size: 44px; padding: 0 var(--sp-4);
-  font-family: var(--font-mono); font-stretch: 80%;
+  font-family: var(--font-mono); font-stretch: var(--wd-dense);
   font-size: var(--t-meta); font-weight: var(--w-semi);
   letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--dim);
