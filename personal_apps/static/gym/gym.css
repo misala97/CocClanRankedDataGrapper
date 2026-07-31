@@ -1000,22 +1000,30 @@ body.is-focus .tabbar, body.is-focus .nav-footer { display: none; }
 .hbar { display: grid; grid-template-columns: minmax(0, 5rem) minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; }
 .hbar + .hbar { margin-top: var(--sp-2); }
 .hbar__name { font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim); letter-spacing: 0.03em; }
-.hbar__track { block-size: 8px; background: var(--ground); border-radius: var(--r-inset); overflow: hidden; }
-.hbar__fill { display: block; block-size: 100%; background: var(--edge-hi); transition: inline-size var(--dur-3) linear; }
+/* Magnitude is --done, the LOGGED colour: these bars count work already put in.
+   They filled with --edge-hi before, a neutral that says "inert" -- which is
+   what made the charts read as grey furniture next to the rest of the page.
+   The track is --edge so it stays visible on the field, not --ground, which is
+   the field. */
+.hbar__track { block-size: 12px; background: var(--edge); border-radius: 6px; overflow: hidden; }
+.hbar__fill { display: block; block-size: 100%; border-radius: 6px; background: var(--done); transition: inline-size var(--dur-3) linear; }
 .hbar__fill.is-stall { background: var(--stall); }   /* under-trained group */
 .hbar__val { font-family: var(--font-display); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; font-size: var(--t-name); text-align: right; color: var(--dim); }
 
 /* vertical bars (weekly tonnage): the current, partial week is lit blue */
-.vbars { display: flex; align-items: flex-end; gap: var(--sp-1); block-size: 108px; }
-.vbar { flex: 1; min-block-size: 2px; background: var(--edge-hi); border-radius: var(--r-inset) var(--r-inset) 0 0; }
-.vbar.is-live { background: var(--live); box-shadow: var(--glow-live); }
+.vbars { display: flex; align-items: flex-end; gap: 6px; block-size: 108px; }
+/* same reasoning as .hbar__fill: past weeks are logged work, so --done. A 12px
+   radius on a 100px column also rounded the bars into lozenges; 4px reads as a
+   bar. */
+.vbar { flex: 1; min-block-size: 3px; background: var(--done); border-radius: 4px 4px 2px 2px; }
+.vbar.is-live { background: var(--live); }
 /* A deload week's dip is deliberate, so the bar is hatched and spelled out
    below the chart rather than left looking like a collapse. Hatched, not
    dimmed: the bar's height is the datum, so fading it reads as "no training
    that week" -- the opposite of what it means. No hue: this is an
    explanation, not a fourth semantic state. */
 .vbar.vbar--deload {
-  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--chassis) 3px 6px);
+  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--ground) 3px 6px);
 }
 
 .deload-note {
@@ -2791,7 +2799,16 @@ body.is-reordering .drag-handle { display: inline-grid; }
   font-family: var(--font-display); font-size: var(--t-name); font-weight: var(--w-bold);
   letter-spacing: var(--track-name); line-height: 1.16; margin-top: 2px;
 }
-.lead__list { margin-top: var(--sp-3); font-size: var(--t-sm); line-height: 1.5; color: var(--dim); }
+/* The roster is context, not content: it says WHICH routine this is, and two
+   lines is enough to recognise one. Unclamped, a seven-exercise template ran
+   four dense lines and left the card bottom-heavy, with the primary button
+   looking bolted on underneath. */
+.lead__list {
+  margin-top: var(--sp-3);
+  font-size: var(--t-meta); line-height: 1.45; color: var(--unlit);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .lead__go {
   inline-size: 100%; margin-top: var(--sp-4); min-block-size: var(--tap-primary);
   border-radius: var(--r-control); background: var(--live); color: var(--on-live);
@@ -2800,6 +2817,8 @@ body.is-reordering .drag-handle { display: inline-grid; }
   box-shadow: var(--glow-live);
 }
 .lead__go svg { inline-size: 18px; block-size: 18px; }
+/* the quiet rows need air under the lifted card, or they read as part of it */
+.lead + .row { margin-top: var(--sp-5); }
 .lead__go:active { transform: scale(0.985); }
 
 /* rename/delete: closed by default, anchored under its own toggle so opening
