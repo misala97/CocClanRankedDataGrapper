@@ -95,6 +95,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;font-s
   text-transform:uppercase; color:var(--unlit);
 }
 
+/* Any element holding a stack of lines. Spans are inline by default, so a
+   "label above a name" built from two spans renders as one run, and
+   text-overflow on a child silently does nothing. This bit three separate
+   surfaces during the mockups; the utility exists so it stops happening. */
+.stack{display:block}
+.stack > *{display:block}
+
 /* the one list primitive: divided rows in a shared surface, never cards */
 .row{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) 0}
 .row--top{align-items:flex-start}
@@ -108,6 +115,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;font-s
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row__name--wrap{white-space:normal;overflow:visible;overflow-wrap:anywhere}
 .row__meta{display:block;font-size:var(--t-meta);color:var(--unlit);margin-top:1px}
+/* one line, ellipsised -- only works because __meta is block; on an inline
+   span text-overflow silently does nothing and the text runs off-viewport */
+.row__meta--clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row__trail{flex:none;font-size:var(--t-meta);font-weight:var(--w-semi);color:var(--unlit)}
 .row.is-done .row__name{color:var(--ink)}
 .row.is-done .row__lead{color:var(--done-ink)}
