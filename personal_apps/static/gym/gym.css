@@ -2999,3 +2999,119 @@ body.is-exporting .verlauf__row .pick {
   font-family: var(--font-body); font-size: var(--t-meta); font-weight: var(--w-semi);
   color: var(--unlit); margin-inline-start: 2px;
 }
+
+/* ============================================================================
+   ÜBUNGEN  ·  the catalogue (Puls)
+   ----------------------------------------------------------------------------
+   The old composition was a grid table: .uebungen-list and .uebungen-row were
+   `display: contents` so every cell aligned to shared column tracks, which is
+   why it needed a header row to be readable. That header cannot survive 390px,
+   so the rows carry their own labels now and the group becomes a band.
+
+   The class names stay, because the search/sort script selects on them and it
+   is unchanged. Both `display: contents` rules have to be undone explicitly --
+   they are still in this sheet, ahead of these, and a row that is `contents`
+   has no box to style.
+   ============================================================================ */
+
+.uebungen { padding-bottom: var(--sp-8); }
+
+/* three flat sorts of the same rows -- a segmented control, not a fieldset */
+.sorts {
+  display: flex; gap: 4px; margin: var(--sp-3) var(--sp-4) 0;
+  padding: 4px; border-radius: var(--r-control); background: var(--raised);
+}
+.sort {
+  flex: 1; min-block-size: var(--tap); border-radius: 12px;
+  font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--dim);
+}
+.sort.is-on { background: var(--chassis); color: var(--ink); box-shadow: var(--lift); }
+
+/* group bands, the same device Verlauf uses for months -- one list language.
+   A <button> is not block-level, so it needs an explicit width to span the
+   column: 100% would resolve against BODY and overshoot both margins. */
+.group {
+  display: flex; align-items: center; gap: var(--sp-2);
+  inline-size: calc(100% - var(--sp-8));
+  margin: var(--sp-6) var(--sp-4) 0; padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--edge); min-block-size: var(--tap);
+}
+.group__chev {
+  inline-size: 14px; block-size: 14px; flex: none; color: var(--unlit);
+  transition: transform var(--dur-2) var(--ease);
+}
+.group.is-open .group__chev { transform: rotate(90deg); }
+
+/* undo the grid-table shape: these rows are real flex rows now */
+.uebungen-list { display: block; }
+.uebungen-row { display: flex; margin-inline: var(--sp-4); }
+.uebungen-row > * { padding-block: 0; }
+.uebungen-row[hidden], .uebungen-group-header[hidden] { display: none; }
+.uebungen-row .row__main { text-align: start; }
+
+.nameline { display: flex; align-items: center; gap: var(--sp-2); min-inline-size: 0; }
+.nameline__n {
+  font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vol--none { color: var(--unlit); }
+.e1rm { font-size: var(--t-micro); color: var(--unlit); font-variant-numeric: tabular-nums; }
+
+/* ============================================================================
+   ÜBUNGS-DETAIL  ·  the single-exercise instrument (Puls)
+   ============================================================================ */
+
+.exdetail { padding-bottom: var(--sp-8); }
+.exdetail__name {
+  font-family: var(--font-display); font-size: 1.375rem; font-weight: var(--w-bold);
+  letter-spacing: var(--track-name); line-height: 1.14;
+  white-space: normal; overflow-wrap: anywhere;
+}
+.exdetail__sub { font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit); letter-spacing: 0; }
+.exdetail .session-top__name { white-space: normal; overflow: visible; }
+.exdetail__since { margin: var(--sp-4) var(--sp-4) 0; font-size: var(--t-meta); color: var(--unlit); }
+.exdetail__note { margin-top: var(--sp-3); font-size: var(--t-meta); color: var(--unlit); line-height: 1.5; }
+
+/* the two records, one divided band -- not two cards */
+.prs {
+  margin: var(--sp-5) var(--sp-4) 0;
+  display: grid; grid-template-columns: 1fr 1fr;
+  background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-4) 0;
+}
+.pr { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-inline: var(--sp-3); }
+.pr + .pr { border-inline-start: 1px solid var(--edge); }
+.pr__val {
+  font-family: var(--font-display); font-size: var(--num-md); font-weight: var(--w-max);
+  letter-spacing: var(--track-num); line-height: 1; color: var(--record-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pr__val small {
+  font-family: var(--font-body); font-size: var(--t-sm); font-weight: var(--w-semi);
+  color: var(--dim); margin-inline-start: 2px; letter-spacing: 0;
+}
+.pr__sub { font-size: var(--t-micro); color: var(--unlit); text-align: center; margin-top: 3px; }
+
+/* position filter: real links, one scrollable row -- a lift can have run in
+   more slots than fit across a phone */
+.pills { display: flex; gap: var(--sp-2); overflow-x: auto; padding-bottom: var(--sp-1); }
+.pill {
+  flex: none; min-block-size: var(--tap); padding-inline: var(--sp-4);
+  border-radius: var(--r-control); display: inline-flex; align-items: center;
+  font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--dim);
+  box-shadow: inset 0 0 0 1px var(--edge-hi);
+}
+.pill.is-on { background: var(--live); color: var(--on-live); box-shadow: none; }
+
+.chart {
+  margin-top: var(--sp-4); background: var(--chassis);
+  border-radius: var(--r-panel); padding: var(--sp-4) var(--sp-3) var(--sp-3);
+}
+.chart svg { display: block; inline-size: 100%; block-size: auto; }
+.chart__axis { display: flex; justify-content: space-between; margin-top: var(--sp-2); padding-inline: var(--sp-1); }
+.chart__legend { display: flex; gap: var(--sp-4); margin-top: var(--sp-3); align-items: center; flex-wrap: wrap; }
+.key { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-micro); color: var(--unlit); }
+.key__dot { inline-size: 9px; block-size: 9px; border-radius: 50%; flex: none; }
+
+.dateline { display: flex; align-items: center; gap: var(--sp-2); min-inline-size: 0; }
+.dateline__d { font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink); }
+.row.is-record .vol { color: var(--record-ink); }

@@ -1428,6 +1428,69 @@ def gym_uebungen():
     )
 
 
+CHART_W = 320.0
+CHART_H = 128.0
+CHART_PAD = 10.0
+
+
+def _chart_geometry(series):
+    """Turn exercise_progress()'s series into SVG coordinates.
+
+    Computed here rather than in the template because Jinja doing coordinate
+    arithmetic is unreadable, and because this replaces Chart.js: an inline SVG
+    inherits the palette directly, which a canvas cannot -- it can only read
+    resolved rgb(), so a themed canvas silently loses its colours (this project
+    has hit that before).
+
+    One polyline PER POSITION, not one for the whole exercise. The old chart
+    drew a line per slot, and collapsing them would quietly drop a dimension:
+    the same lift in slot 1 and slot 3 is two different stories.
+
+    Deload points stay in the data -- dropping them would leave holes -- but are
+    marked so the template can draw their legs dotted. A solid line through a
+    deliberately light week reads as a collapse that never happened.
+    """
+    values = [point['e1rm'] for entry in series for point in entry['points']]
+    if not values:
+        return None
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1.0
+    # every point of every series shares one x-scale, or two slots with
+    # different session counts would be drawn on different time axes
+    count = max((len(entry['points']) for entry in series), default=1)
+    step = (CHART_W - 2 * CHART_PAD) / max(count - 1, 1)
+
+    out = []
+    for entry in series:
+        points = []
+        for index, point in enumerate(entry['points']):
+            points.append({
+                'x': round(CHART_PAD + index * step, 2),
+                'y': round(CHART_H - CHART_PAD - (point['e1rm'] - lo) / span * (CHART_H - 2 * CHART_PAD), 2),
+                'is_deload': point['is_deload'],
+                'e1rm': point['e1rm'],
+                'started_at': point['started_at'],
+            })
+        out.append({'position': entry['position'], 'points': points})
+
+    # The gold dot is the exercise's best, not each slot's own. Marking per
+    # series meant a position with a single session was trivially its own best
+    # and got a record dot -- two golds on one chart, one of them meaningless.
+    # A deload can never hold it, matching every other record rule here.
+    candidates = [p for entry in out for p in entry['points'] if not p['is_deload']]
+    best = max((p['e1rm'] for p in candidates), default=None)
+    claimed = False
+    for entry in out:
+        for point in entry['points']:
+            point['is_best'] = (
+                best is not None and not claimed
+                and not point['is_deload'] and point['e1rm'] == best
+            )
+            claimed = claimed or point['is_best']
+
+    return {'series': out, 'lo': lo, 'hi': hi, 'width': CHART_W, 'height': CHART_H}
+
+
 @gym_bp.route('/gym/exercises/<int:exercise_id>')
 @login_required
 def exercise_detail(exercise_id):
@@ -1438,7 +1501,12 @@ def exercise_detail(exercise_id):
     chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
     return render_template(
         'gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS,
-        chip_class=chip_class, chip_label=chip_label, **data,
+        chip_class=chip_class, chip_label=chip_label,
+        chart=_chart_geometry(data['series']),
+        # Only offer deletion when nothing depends on it -- same test the
+        # catalogue used before this moved off the list.
+        can_delete=not exercise.session_exercises and not exercise.template_exercises,
+        **data,
     )
 
 
