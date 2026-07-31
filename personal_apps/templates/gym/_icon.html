@@ -39,5 +39,24 @@
 {%- elif icon == 'save' %}
   <path d="M3 3.2h7.4L13 5.8v7h-10z"></path>
   <path d="M5.4 3.2v3.4h5.2V3.2"></path><path d="M5.4 12.8V9.4h5.2v3.4"></path>
+{#- The three nav marks. The tab bar was label-only, which made three
+    equally-weighted words the whole bottom bar; a mark plus a word is faster to
+    hit without reading. Drawn on the same 16px grid and stroke weight as the
+    rest of the set so they do not read as a second family. #}
+{%- elif icon == 'home' %}
+  <path d="M2.4 7.6L8 2.6l5.6 5z"></path>
+  <path d="M3.8 7.2v6.2h8.4V7.2"></path>
+{%- elif icon == 'dumbbell' %}
+  <path d="M2.4 5.6v4.8M4.8 4v8M11.2 4v8M13.6 5.6v4.8"></path>
+  <path d="M4.8 8h6.4"></path>
+{%- elif icon == 'history' %}
+  <circle cx="8" cy="8" r="5.6"></circle>
+  <path d="M8 4.6V8l2.3 1.4"></path>
+{%- elif icon == 'more' %}
+  <circle cx="8" cy="3.4" r="1.15" fill="currentColor" stroke="none"></circle>
+  <circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"></circle>
+  <circle cx="8" cy="12.6" r="1.15" fill="currentColor" stroke="none"></circle>
+{%- elif icon == 'back' %}
+  <path d="M10 3.2L5.2 8l4.8 4.8"></path>
 {%- endif %}
 </svg>

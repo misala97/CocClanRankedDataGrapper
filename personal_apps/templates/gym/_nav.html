@@ -12,10 +12,10 @@
    context automatically by inject_gym_nav_context() in routes.py -- no view
    needs to pass it explicitly. #}
 {% set gym_nav_items = [
-    {'label': 'Heute', 'endpoint': 'gym.gym_heute'},
-    {'label': 'Übungen', 'endpoint': 'gym.gym_uebungen'},
-    {'label': 'Verlauf', 'endpoint': 'gym.gym_verlauf'},
-    {'label': 'Statistik', 'endpoint': 'gym.gym_statistik', 'desktop_only': true},
+    {'label': 'Heute', 'endpoint': 'gym.gym_heute', 'icon': 'home'},
+    {'label': 'Übungen', 'endpoint': 'gym.gym_uebungen', 'icon': 'dumbbell'},
+    {'label': 'Verlauf', 'endpoint': 'gym.gym_verlauf', 'icon': 'history'},
+    {'label': 'Statistik', 'endpoint': 'gym.gym_statistik', 'desktop_only': true, 'icon': 'chart'},
 ] %}
 
 <nav class="topbar" aria-label="Hauptnavigation">
@@ -50,10 +50,45 @@
         <span class="resume__name">{{ gym_active_session.name or 'Workout' }}</span>
         <span class="resume__meta">{{ ns.current.exercise.name if ns.current else 'Wird fortgesetzt' }}</span>
     </span>
+    {# Two clocks, one slot. Leaving the session mid-rest is exactly when the
+       countdown matters most and is exactly when the session screen is not on
+       screen to show it, so the strip carries it -- and falls back to the
+       elapsed time the moment the rest is over. Both are rendered; the script
+       below picks, so a stale server-rendered rest window cannot strand the
+       strip on a countdown that already expired. #}
     <span class="resume__clock" id="resume-elapsed" data-started="{{ gym_active_session.started_at.isoformat() }}">--:--:--</span>
+    {% if gym_active_session.rest_ends_at %}
+    <span class="resume__clock resume__clock--rest" id="resume-rest" hidden
+          data-rest-ends="{{ gym_active_session.rest_ends_at.isoformat() }}">--:--</span>
+    {% endif %}
 </a>
 <script>
-    if (window.GymClock) { window.GymClock.start(document.getElementById('resume-elapsed')); }
+(function () {
+    var elapsed = document.getElementById('resume-elapsed');
+    var rest = document.getElementById('resume-rest');
+    if (!rest) {
+        if (window.GymClock) { window.GymClock.start(elapsed); }
+        return;
+    }
+    // stored UTC, no zone suffix -- same convention the session page's own
+    // rest bar uses (see startRestFillTick in session_detail.html)
+    var endsAt = new Date(rest.dataset.restEnds + 'Z').getTime();
+    var timer = null;
+    function toElapsed() {
+        if (timer) { clearTimeout(timer); timer = null; }
+        rest.hidden = true;
+        elapsed.hidden = false;
+        if (window.GymClock) { window.GymClock.start(elapsed); }
+    }
+    function tick() {
+        var left = Math.round((endsAt - Date.now()) / 1000);
+        if (left <= 0) { toElapsed(); return; }
+        rest.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+        timer = setTimeout(tick, 1000);
+    }
+    if (endsAt > Date.now()) { elapsed.hidden = true; rest.hidden = false; tick(); }
+    else { toElapsed(); }
+})();
 </script>
 {% endif %}
 
@@ -62,7 +97,10 @@
        and Statistik is composed for a width a phone does not have. The route
        stays reachable by URL. #}
     {% for item in gym_nav_items if not item.get('desktop_only') %}
-    <a href="{{ url_for(item.endpoint) }}" class="tabbar__tab{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
+    <a href="{{ url_for(item.endpoint) }}" class="tabbar__tab{{ ' is-active' if request.endpoint == item.endpoint else '' }}">
+        {% with icon=item.icon %}{% include 'gym/_icon.html' %}{% endwith %}
+        <span>{{ item.label }}</span>
+    </a>
     {% endfor %}
 </nav>
 

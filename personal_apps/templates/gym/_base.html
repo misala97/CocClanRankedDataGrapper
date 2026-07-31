@@ -39,7 +39,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
     <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
 </head>
-<body{% if gym_active_session and request.endpoint != 'gym.session_detail' %} class="has-resume"{% endif %}>
+{# `body_class` lets a page opt into a shell mode. Only session_detail.html uses
+   it today, for `is-focus` (no tab bar, one way out). It is the template's call
+   rather than a route check, because the active and the finished workout share
+   one endpoint and only the active one is a focus mode. #}
+<body class="{% block body_class %}{% endblock %}{% if gym_active_session and request.endpoint != 'gym.session_detail' %} has-resume{% endif %}">
 
 {# Skip link: the tab bar / top bar puts several nav links before the content
    on every page, so a keyboard or screen-reader user had to walk the whole

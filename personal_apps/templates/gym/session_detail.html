@@ -14,6 +14,12 @@
 
 {% block title %}{{ session.name or 'Workout' }} · Gym Tracker{% endblock %}
 
+{# Focus mode: no tab bar. During a workout the bottom of the thumb's reach
+   belongs to the confirm target, not to navigation away from the thing you are
+   doing. Only THIS template opts in -- session_finished.html shares the
+   endpoint and is a reading screen, so it keeps the shell. #}
+{% block body_class %}is-focus{% endblock %}
+
 {% block content %}
 
 <div class="gym-wrap session-view">

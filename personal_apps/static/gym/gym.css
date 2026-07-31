@@ -356,10 +356,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .num--md { font-size: var(--num-md); }
 .num--lg { font-size: var(--num-lg); }
 .num--xl { font-size: var(--num-xl); }
-.num.is-live   { color: var(--live);   text-shadow: var(--glow-live); }
-.num.is-record { color: var(--record); text-shadow: var(--glow-record); }
+.num.is-live   { color: var(--live-ink); }
+.num.is-record { color: var(--record-ink); }
 .num.is-unlit  { color: var(--unlit); }
-.num.is-stall  { color: var(--stall); }
+.num.is-stall  { color:  var(--stall-ink); }
 
 /* The load readout: weight KG x reps, numerals dominant, units quiet. */
 .load { display: inline-flex; align-items: baseline; gap: 0.15em; }
@@ -480,7 +480,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   border-color: var(--live);
   background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
 }
-.set--live .load__val { color: var(--live); text-shadow: var(--glow-live); }
+.set--live .load__val { color: var(--live-ink); }
 .set--live .set__check::before { border-color: var(--live); box-shadow: var(--glow-live); }
 
 /* DONE: logged and settled. Full-brightness ink, solid tick. Reads as fact. */
@@ -493,7 +493,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   border-color: var(--record);
   background: linear-gradient(var(--wash-record), var(--wash-record)), var(--chassis);
 }
-.set--record .load__val { color: var(--record); text-shadow: var(--glow-record); }
+.set--record .load__val { color: var(--record-ink); }
 .set--record .set__check::before { background: var(--record); border-color: var(--record); box-shadow: var(--glow-record); }
 .set--record .set__check::after { opacity: 1; }
 
@@ -525,7 +525,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   border-color: var(--stall);
   background: linear-gradient(var(--wash-stall), var(--wash-stall)), var(--chassis);
 }
-.set--stall .load__val { color: var(--stall); }
+.set--stall .load__val { color:  var(--stall-ink); }
 
 /* ============================================================================
    CHIP + TAG  ·  the state model, compressed to a badge (colour + a word)
@@ -612,7 +612,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   font-family: var(--font-display); font-weight: var(--w-max);
   font-stretch: var(--wd-display); font-style: normal; letter-spacing: var(--track-num);
   font-variant-numeric: tabular-nums; font-size: var(--num-sm);
-  line-height: 1; color: var(--live); text-shadow: var(--glow-live);
+  line-height: 1; color: var(--live-ink);
 }
 .rest__track {
   block-size: 8px; border-radius: var(--r-chip);
@@ -646,15 +646,17 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
-  min-block-size: 44px;
+  min-block-size: var(--tap);
   padding: 0 var(--sp-5);
-  font-family: var(--font-display);
-  font-stretch: var(--wd-display);
+  font-family: var(--font-body);
+  font-stretch: var(--wd-body);
   font-style: normal;
-  font-size: var(--t-name);
-  font-weight: var(--w-max);
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
+  font-size: var(--t-body);
+  font-weight: var(--w-bold);
+  /* No uppercase: 4.4 allows it only on meta labels <=12px. A shouted
+     "WORKOUT STARTEN" is the previous system's voice, and a control is read as
+     an instruction, not as a label. Weight and fill carry the emphasis. */
+  letter-spacing: -0.01em;
   border-radius: var(--r-control);
   /* German labels are long ("Freies Workout starten"); at 200% text one of
      them measured 336px inside a 390px viewport. Let the label wrap and the
@@ -670,19 +672,20 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    the same treatment via a class instead. */
 .btn:disabled, .btn.is-disabled { opacity: 0.45; pointer-events: none; }
 
-/* the primary action is LIVE: solid blue pill that sits ON the page rather
-   than in it. Its label is near-black navy, not white -- a single blue cannot
-   satisfy both "readable as text on a dark panel" and "readable under white
-   text" at AA, and the dark label is the harder-hitting of the two. */
+/* the primary action is LIVE: solid orange, sitting ON the page rather than in
+   it. Only ever one of these on screen at a time -- that is the state model's
+   "one live thing" rule applied to controls. */
 .btn--live {
   background: var(--live);
   color: var(--on-live);
-  box-shadow: none;
+  box-shadow: var(--glow-live);
 }
 .btn--live:hover { background: var(--live-hi); }
 .btn--live:active {
   transform: scale(0.985);
-  box-shadow: 0 4px 14px -8px rgba(77, 134, 255, 0.8);
+  /* was a hard-coded blue rgba, which survived the repaint as an invisible
+     leftover of the previous palette -- it now follows the token */
+  box-shadow: var(--glow-live);
 }
 
 /* ghost: a filled neutral pill, not an outline -- so the primary/secondary
@@ -696,14 +699,24 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .btn--ghost:hover { background: var(--edge); }
 .btn--ghost:active { transform: scale(0.985); }
 
-/* destructive: stall outline, fills on press. Never a bare coloured word. */
+/* Destructive and error-recovery. NOT --stall any more, and the rename would
+   be a lie either way, so the class keeps its name and changes its meaning:
+   under Puls, --stall is cold cyan and means "this lift has stopped moving".
+   Painting "Löschen" or "Erneut versuchen" in it would say a template had
+   stagnated, which is nonsense.
+
+   There is no fourth hue to reach for (4.3 fixes the palette at three), so
+   destructive borrows the warm accent as INK on an outline, never as a fill.
+   That keeps the rule that exactly one solid --live control exists per screen:
+   a destructive action is always secondary here, and it always carries a
+   confirm as well as the colour. */
 .btn--stall {
   background: transparent;
-  color: var(--stall);
-  border: 1px solid var(--stall);
+  color: var(--live-ink);
+  border: 1px solid currentColor;
 }
 .btn--stall:active { transform: scale(0.985); }
-.btn--stall:hover { background: var(--wash-stall); }
+.btn--stall:hover { background: var(--wash-live); }
 
 .btn--sm { min-block-size: 44px; padding: 0 var(--sp-4); font-size: var(--t-meta); letter-spacing: 0.03em; }
 .btn--block { display: flex; inline-size: 100%; }
@@ -778,7 +791,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
    SHELL  ·  tab bar (mobile) + top bar (desktop) + resume strip
    ============================================================================ */
 
-/* mobile bottom tab bar: solid chassis, three real routes, active lit blue.
+/* mobile bottom tab bar: solid chassis, three real routes, active lit warm.
    No frosted glass. */
 .tabbar {
   position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-bar);
@@ -786,9 +799,13 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   display: grid; grid-template-columns: repeat(3, 1fr);
   background: var(--chassis);
   border-top: 1px solid var(--edge);
-  box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.5);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+/* The session screen is a focus mode: one workout, one way out, no tab bar
+   competing with the confirm target for the bottom of the thumb's reach.
+   _nav.html applies this rather than omitting the markup, so the bar is still
+   in the DOM for the keyboard order it already had. */
+body.is-focus .tabbar { display: none; }
 .tabbar__tab {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -800,14 +817,18 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   color: var(--unlit);
 }
 .tabbar__tab .icon-btn, .tabbar__tab svg { color: inherit; }
-/* the active tab is lit: a blue indicator rail across its top edge, blue label */
+.tabbar__tab svg { inline-size: 21px; block-size: 21px; }
+/* the active tab is lit: a warm indicator rail across its top edge.
+   --live-ink, not --live: the label is text on --chassis, and in the light
+   theme the fill cut fails AA there (5.18 vs 4.5 is fine, but the ink cut is
+   what the contract says text uses -- see 4.3). */
 .tabbar__tab::before {
   content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
   inline-size: 26px; block-size: 3px;
   border-radius: 0 0 var(--r-chip) var(--r-chip); background: transparent;
 }
-.tabbar__tab.is-active { color: var(--live); }
-.tabbar__tab.is-active::before { background: var(--live); box-shadow: var(--glow-live); }
+.tabbar__tab.is-active { color: var(--live-ink); }
+.tabbar__tab.is-active::before { background: var(--live); }
 
 /* desktop top bar: wordmark, the same three links, logout. Not a sidebar; the
    cockpit needs the vertical space. */
@@ -822,24 +843,27 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
     box-shadow: var(--edge-drop);
   }
   .topbar__brand {
-    font-family: var(--font-display); font-weight: var(--w-bold);
-    font-size: var(--t-name); letter-spacing: var(--track-name); text-transform: uppercase;
+    font-family: var(--font-display); font-weight: var(--w-max);
+    font-size: var(--t-body); letter-spacing: var(--track-name);
   }
   .topbar__nav { display: flex; align-items: center; gap: var(--sp-1); }
   .topbar__link {
     display: inline-flex; align-items: center; min-block-size: 44px;
     padding: var(--sp-2) var(--sp-3); border-radius: var(--r-control);
-    font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
-    letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+    font-family: var(--font-body); font-size: var(--t-sm); font-weight: var(--w-semi);
+    letter-spacing: 0; color: var(--dim);
     transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
   }
   .topbar__link:hover { color: var(--ink); background: var(--raised); }
-  .topbar__link.is-active { color: var(--live); }
+  .topbar__link.is-active { color: var(--live-ink); background: var(--raised); }
 }
 
-/* resume strip: the active workout, always reachable. Blue chassis strip,
-   pinned above the tab bar on mobile / below the top bar on desktop. It is not
-   a tab. */
+/* resume strip: the active workout, always reachable. Pinned above the tab bar
+   on mobile / below the top bar on desktop. It is not a tab.
+
+   It carries the rest countdown too (see _nav.html): leaving the session
+   mid-rest is exactly when the countdown matters and exactly when the session
+   screen is not there to show it. */
 .resume {
   position: fixed; inset-inline: 0; z-index: var(--z-resume);
   transform: translateZ(0);   /* own compositing layer -- see the note below */
@@ -849,11 +873,10 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
   padding: var(--sp-2) var(--sp-4);
   background: linear-gradient(var(--wash-live), var(--wash-live)), var(--chassis);
   border-top: 1px solid var(--live);
-  box-shadow: var(--glow-live);
 }
 .resume__pulse {
   inline-size: 8px; block-size: 8px; border-radius: 50%; flex: none;
-  background: var(--live); box-shadow: var(--glow-live);
+  background: var(--live);
   animation: pulse-breathe 1.8s ease-in-out infinite;
 }
 /* status LED, not decoration: this is the one element on the shell that's
@@ -865,18 +888,20 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 .resume__body { display: flex; flex-direction: column; gap: 1px; min-inline-size: 0; flex: 1; }
 .resume__name {
-  font-family: var(--font-display); font-weight: var(--w-semi);
-  font-size: var(--t-meta); letter-spacing: var(--track-name); text-transform: uppercase;
+  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-size: var(--t-meta); letter-spacing: var(--track-name);
   color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .resume__meta {
-  font-family: var(--font-mono); font-size: var(--t-micro); color: var(--dim);
+  font-family: var(--font-body); font-size: var(--t-micro); color: var(--dim);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;   /* keeps .resume at exactly --resume-h even for a long exercise name */
 }
 .resume__clock {
-  font-family: var(--font-display); font-weight: var(--w-bold);
+  font-family: var(--font-display); font-weight: var(--w-max);
   font-variant-numeric: tabular-nums; font-size: var(--num-sm);
-  color: var(--live); text-shadow: var(--glow-live); flex: none;
+  color: var(--live-ink); flex: none;
+  /* the rest countdown replaces the elapsed clock in place, so it must not
+     change the strip's height -- same size, same slot, only the value differs */
 }
 @media (min-width: 900px) {
   /* desktop has room: the strip sits in normal flow directly below the top bar
@@ -968,8 +993,8 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 .stat__delta { font-family: var(--font-mono); font-size: var(--t-meta); color: var(--dim); }
 .stat__delta.is-up   { color: var(--ink); }
-.stat__delta.is-record { color: var(--record); }
-.stat__delta.is-stall { color: var(--stall); }
+.stat__delta.is-record { color:  var(--record-ink); }
+.stat__delta.is-stall { color:  var(--stall-ink); }
 
 /* horizontal bar (muscle-group balance): fixed label + track + tabular count */
 .hbar { display: grid; grid-template-columns: minmax(0, 5rem) minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; }
@@ -1044,7 +1069,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 }
 .flare__label {
   font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
-  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--record);
+  letter-spacing: var(--track-label); text-transform: uppercase; color:  var(--record-ink);
 }
 .flare__value {
   font-family: var(--font-display); font-weight: var(--w-bold);
@@ -1055,7 +1080,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
      normal size and only bites when the numeral would not otherwise fit,
      so the figure stays whole -- which is what WCAG 1.4.4 actually asks. */
   font-size: min(var(--num-xl), 20cqi);
-  letter-spacing: var(--track-num); color: var(--record); text-shadow: var(--glow-record);
+  letter-spacing: var(--track-num); color: var(--record-ink);
 }
 @keyframes flare-pulse {
   0%   { transform: scale(0.985); filter: brightness(1.7); }
@@ -1089,7 +1114,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .table td { padding: var(--sp-2); border-bottom: 1px solid var(--edge); color: var(--ink); }
 .table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table tr:last-child td { border-bottom: 0; }
-.table tr.is-record td { color: var(--record); background: var(--wash-record); }
+.table tr.is-record td { color:  var(--record-ink); background: var(--wash-record); }
 /* A deload row in the history table is dimmed as well as labelled, so a
    lighter number in the middle of a progression doesn't read as a bad day. */
 .table tr.is-deload td { color: var(--dim); }
@@ -1111,7 +1136,7 @@ h3 { font-size: var(--t-name); font-weight: var(--w-bold); }
 .note-stall__label {
   display: block; margin-bottom: var(--sp-1);
   font-family: var(--font-mono); font-size: var(--t-label); font-weight: var(--w-semi);
-  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--stall);
+  letter-spacing: var(--track-label); text-transform: uppercase; color:  var(--stall-ink);
 }
 .note-stall strong { color: var(--ink); font-weight: var(--w-semi); }
 
@@ -1212,7 +1237,7 @@ a.row, a.row__main {
 a.row:hover, a.row__main:hover { background: var(--raised); }
 a.row:active, a.row__main:active { transform: scale(0.99); }
 /* the name itself lights on hover, so the target reads as the lift, not the row */
-a.row__main:hover .name { color: var(--live); }
+a.row__main:hover .name { color:  var(--live-ink); }
 
 /* ============================================================================
    SESSION DETAIL  ·  the live workout view (session_detail.html)
@@ -1238,7 +1263,7 @@ a.row__main:hover .name { color: var(--live); }
   gap: var(--sp-3); margin-bottom: var(--sp-4);
 }
 .session-head__main { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); min-inline-size: 0; }
-.session-head__clock { flex: none; color: var(--live); text-shadow: var(--glow-live); }
+.session-head__clock { flex: none; color: var(--live-ink); }
 
 /* push-notification enable row + the reorder lock toggle */
 .notify { display: flex; align-items: center; gap: var(--sp-3); }
@@ -1505,7 +1530,7 @@ a.row__main:hover .name { color: var(--live); }
 .pr-card .val {
   font-family: var(--font-display); font-weight: var(--w-bold);
   font-variant-numeric: tabular-nums; font-size: var(--num-sm); line-height: 1;
-  color: var(--record); text-shadow: var(--glow-record);
+  color: var(--record-ink);
 }
 .pr-card .sub { display: block; margin-top: var(--sp-1); font-size: var(--t-meta); color: var(--dim); }
 .modal-position-note { margin-bottom: var(--sp-3); font-size: var(--t-meta); color: var(--dim); }
@@ -1528,7 +1553,7 @@ a.row__main:hover .name { color: var(--live); }
 .pr-flares { display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-4); }
 .flare__unit {
   font-family: var(--font-mono); font-size: var(--t-meta); font-weight: var(--w-med);
-  letter-spacing: 0.04em; text-transform: uppercase; color: var(--record);
+  letter-spacing: 0.04em; text-transform: uppercase; color:  var(--record-ink);
   margin-inline-start: 0.3em;
 }
 .flare__meta { margin-top: var(--sp-2); }
@@ -1544,7 +1569,7 @@ a.row__main:hover .name { color: var(--live); }
 }
 .stat-grid > .stat { background: var(--chassis); }
 @media (min-width: 640px) { .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.stat__value.is-record { color: var(--record); text-shadow: var(--glow-record); }
+.stat__value.is-record { color: var(--record-ink); }
 
 /* Nach Übung: a divided list inside one panel, not a card per row. Uses the
    shared .row; the correction disclosure below the summary line is a
@@ -1602,7 +1627,7 @@ a.row__main:hover .name { color: var(--live); }
   color: var(--ink);
   text-wrap: balance;
 }
-.session-verdict--record { color: var(--record); text-shadow: var(--glow-record); }
+.session-verdict--record { color: var(--record-ink); }
 
 /* destructive action, deliberately demoted: no pill, no fill, no border --
    it should be findable and never the thing your eye lands on */
@@ -1617,7 +1642,7 @@ a.row__main:hover .name { color: var(--live); }
   text-underline-offset: 4px;
   transition: color var(--dur-2) var(--ease);
 }
-.finished-delete:hover { color: var(--stall); }
+.finished-delete:hover { color:  var(--stall-ink); }
 
 /* ============================================================================
    HEUTE  ·  the landing page (heute.html)
@@ -1800,7 +1825,7 @@ a.row__main:hover .name { color: var(--live); }
    had their own classes so the pages "stayed free to diverge" -- they diverged
    into inconsistency instead, which is what pulled them into one component. */
 
-.tonnage__note { margin-top: var(--sp-2); color: var(--live); }
+.tonnage__note { margin-top: var(--sp-2); color:  var(--live-ink); }
 
 /* ============================================================================
    HEUTE BOOT SEQUENCE  ·  page-load only, scoped to this page
@@ -2067,7 +2092,7 @@ a.row__main:hover .name { color: var(--live); }
   transition: color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
 .position-pill:hover { color: var(--ink); border-color: var(--edge-hi); }
-.position-pill.is-active { color: var(--live); border-color: var(--live); background: transparent; box-shadow: var(--glow-live); }
+.position-pill.is-active { color:  var(--live-ink); border-color: var(--live); background: transparent; box-shadow: var(--glow-live); }
 
 .exercise-detail__chart-wrap { position: relative; block-size: 280px; }
 @media (min-width: 900px) {
@@ -2243,7 +2268,7 @@ a.row__main:hover .name { color: var(--live); }
 
 /* the one place gold is right on this page: it already means "record"
    everywhere else in the app */
-.record-row__value { color: var(--record); }
+.record-row__value { color:  var(--record-ink); }
 
 /* Sparkline: shape only. The first/current columns already carry the numbers,
    so this exists to show whether the climb was steady or a spike followed by a
