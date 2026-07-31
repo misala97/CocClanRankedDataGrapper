@@ -92,6 +92,12 @@
         </div>
       </div>
 
+      {# Both controls are rendered whenever a rest is running and the script
+         swaps them when it hits zero -- the same "render both, let the client
+         pick" shape the resume strip uses. Rendering only the countdown left
+         the confirm button gone until a manual reload, because nothing tells
+         the page the rest is over: the server keeps resting_set_id set until
+         the NEXT set starts a rest, and there is no request in between. #}
       {% if resting %}
       {# Rest takes the confirm slot: same place, same height, nothing on the
          screen moves. The countdown sits on --raised rather than on the
@@ -107,15 +113,14 @@
         <span class="rest__track">
           <span class="rest__fill" id="rest-fill"
                 data-rest-ends="{{ session.rest_ends_at.isoformat() }}"
-                data-rest-total="{{ live_se.rest_seconds or live_se.exercise.default_rest_seconds or 0 }}"></span>
+                data-rest-total="{{ rest_total_seconds }}"></span>
         </span>
       </div>
-      {% else %}
-      <button type="submit" class="go">
+      {% endif %}
+      <button type="submit" class="go" id="set-confirm"{% if resting %} hidden{% endif %}>
         {% with icon='check' %}{% include 'gym/_icon.html' %}{% endwith %}
         Satz geschafft
       </button>
-      {% endif %}
     </form>
     {% else %}
     <p class="live__alldone">Alle Sätze erledigt. Weiter zur nächsten Übung — oder über <b>⋯</b> noch einen Satz anhängen.</p>

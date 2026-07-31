@@ -609,6 +609,16 @@ def session_detail(session_id):
         for se in visible_exercises for s in se.sets if s.completed
     )
 
+    resting = bool(session_.rest_ends_at and session_.rest_ends_at > dt.datetime.utcnow())
+    # Whose rest is it? The set that started it, which after the last set of an
+    # exercise is no longer on the exercise that is now live.
+    rest_total_seconds = 0
+    if resting:
+        for se in visible_exercises:
+            if any(s.id == session_.resting_set_id for s in se.sets):
+                rest_total_seconds = se.rest_seconds or se.exercise.default_rest_seconds or 0
+                break
+
     return render_template(
         'gym/session_detail.html',
         session=session_,
@@ -621,16 +631,20 @@ def session_detail(session_id):
         sets_total=sets_total,
         sets_open=sets_total - sets_done,
         session_volume=session_volume,
-        # A rest is only "running" if it belongs to the live exercise AND has
-        # not elapsed. The server keeps resting_set_id set until the next set
-        # starts a new rest, so testing the flag alone would leave the confirm
-        # button replaced by a dead countdown after the rest is over.
-        resting=bool(
-            session_.rest_ends_at
-            and session_.rest_ends_at > dt.datetime.utcnow()
-            and live_se is not None
-            and any(s.id == session_.resting_set_id for s in live_se.sets)
-        ),
+        # A rest is running if it has not elapsed. Deliberately NOT scoped to
+        # the live exercise: finishing an exercise's last set schedules a rest
+        # and advances the live exercise at the same moment, so requiring the
+        # resting set to belong to the live one hid the countdown for exactly
+        # the rest between two exercises -- the longest one you actually take.
+        #
+        # It still has to test the clock, not just the flag: the server keeps
+        # resting_set_id set until the NEXT set starts a rest, so the flag alone
+        # would show a dead countdown where the confirm button belongs.
+        resting=resting,
+        # The bar's total comes from the exercise that OWNS the resting set, not
+        # from whichever one is live now -- otherwise the fill is drawn against
+        # the wrong rest length the moment the rest spans an exercise boundary.
+        rest_total_seconds=rest_total_seconds,
         suggestions=suggestions,
         stagnation_counts=stagnation_counts,
         record_set_ids=record_set_ids,

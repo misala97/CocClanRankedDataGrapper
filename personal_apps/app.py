@@ -106,4 +106,11 @@ def index():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, use_reloader=False, port=5000)
+    # The reloader is on: without it, a Python edit is silently served by the
+    # old process, which produces the worst possible symptom -- the browser
+    # 500s or renders stale markup while the test suite passes, because the
+    # tests import the current module and the server does not.
+    #
+    # Nothing here starts work at import time (the notifier is its own process,
+    # run_gym_notifier.py), so the reloader's double-start is harmless.
+    app.run(host='0.0.0.0', debug=True, use_reloader=True, port=5000)

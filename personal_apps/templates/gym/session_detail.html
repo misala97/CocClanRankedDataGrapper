@@ -333,6 +333,16 @@ function startRestTick() {
     // stored UTC without a zone suffix -- same convention as the resume strip
     var endsAt = new Date(fill.dataset.restEnds + 'Z').getTime();
     var total = parseFloat(fill.dataset.restTotal) || 0;
+    // When the rest ends, hand the slot back to the confirm button. Both are in
+    // the DOM (see _session_live.html); without this the countdown just sat at
+    // 0:00 and "Satz geschafft" stayed gone until a manual reload, because the
+    // server only learns the rest is over on the next request.
+    function restOver() {
+        var block = document.querySelector('.rest');
+        var confirm_ = document.getElementById('set-confirm');
+        if (block) { block.hidden = true; }
+        if (confirm_) { confirm_.hidden = false; }
+    }
     (function tick() {
         var el = document.getElementById('rest-fill');
         var label = document.getElementById('rest-value');
@@ -341,6 +351,7 @@ function startRestTick() {
         if (diff <= 0 || total <= 0) {
             el.style.inlineSize = '0%';
             if (label) { label.textContent = '0:00'; }
+            restOver();
             return;
         }
         el.style.inlineSize = Math.max(0, Math.min(100, (diff / 1000 / total) * 100)) + '%';
