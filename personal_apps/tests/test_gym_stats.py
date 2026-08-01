@@ -866,3 +866,31 @@ def test_weekly_tonnage_marks_an_empty_week_as_no_deload():
     now = dt.datetime(2026, 7, 29, 18, 0)
     weeks = stats.weekly_tonnage([], now)
     assert all(week['has_deload'] is False for week in weeks)
+
+
+def test_resolve_increment_falls_back_to_the_plate_pair():
+    assert stats.resolve_increment(None, False) == 2.5
+
+
+def test_resolve_increment_halves_the_fallback_for_unilateral_work():
+    # One side at a time, so half the smallest pair of plates.
+    assert stats.resolve_increment(None, True) == 1.25
+
+
+def test_resolve_increment_takes_an_explicit_value_literally():
+    # A selectorised stack moves in 9 kg steps; nothing about 2.5 applies.
+    assert stats.resolve_increment(9.0, False) == 9.0
+
+
+def test_resolve_increment_does_not_halve_an_explicit_unilateral_value():
+    # The discriminating case for the whole feature: the live screen labels
+    # this field "kg je Seite", so 2.0 already IS the per-side step. Halving it
+    # would dial 1.0 kg on a pair of dumbbells that only exist in 2 kg jumps.
+    assert stats.resolve_increment(2.0, True) == 2.0
+
+
+def test_resolve_increment_treats_zero_as_unset():
+    # A step of zero would freeze the stepper, so it collapses to the fallback
+    # rather than being honoured.
+    assert stats.resolve_increment(0, False) == 2.5
+    assert stats.resolve_increment(0, True) == 1.25

@@ -87,6 +87,11 @@ DELOAD_SUPPRESSION_DAYS = 21
 
 NO_GROUP_LABEL = 'Ohne Muskelgruppe'
 
+# The smallest pair of plates on most bars, and the step for any exercise that
+# has no increment of its own. Halved for a unilateral lift, which moves one
+# side at a time.
+DEFAULT_INCREMENT = 2.5
+
 
 @dataclass(frozen=True)
 class PerformedExercise:
@@ -454,6 +459,23 @@ def exercise_progress(rows, position=None):
         'last_progression': next(
             (row for row in table if not row['is_deload']), None),
     }
+
+
+def resolve_increment(increment, is_unilateral):
+    """The smallest loadable jump for one exercise.
+
+    An explicit per-exercise value is taken literally: it is already the number
+    that moves when you tap, per side when the lift is unilateral (the live
+    screen labels that field `kg je Seite`). Halving survives only as the
+    fallback, so an exercise with nothing set behaves exactly as the whole app
+    did before increments existed.
+
+    Zero collapses to the fallback along with None -- a step of zero would
+    freeze the stepper, so it is never a value worth honouring.
+    """
+    if increment:
+        return increment
+    return DEFAULT_INCREMENT / 2 if is_unilateral else DEFAULT_INCREMENT
 
 
 def _next_weight(weight, is_unilateral):
