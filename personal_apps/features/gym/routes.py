@@ -67,6 +67,19 @@ def _to_float(value, fallback=None):
         return fallback
 
 
+def _to_increment(value):
+    """A weight increment as typed, or None.
+
+    Comma-tolerant: `type=number` normalises to a dot, but the field degrades
+    to text without JS and a German keyboard produces `2,5`. Blank,
+    unparseable and non-positive all store NULL, which
+    stats.resolve_increment() reads as "use the default" -- so clearing the
+    field is the way to put an exercise back on 2.5 kg.
+    """
+    parsed = _to_float(str(value).replace(',', '.').strip())
+    return parsed if parsed and parsed > 0 else None
+
+
 def _to_int(value, fallback=None):
     try:
         return int(value)
@@ -2102,6 +2115,7 @@ def gym_add_exercise():
         name=name,
         muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
         default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+        weight_increment=_to_increment(request.form.get('weight_increment', '')),
         is_unilateral=request.form.get('is_unilateral') == 'on',
     )
     db.session.add(exercise)
@@ -2126,6 +2140,7 @@ def gym_update_exercise(exercise_id):
             exercise.name = new_name
     exercise.muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''), current=exercise.muscle_group)
     exercise.default_rest_seconds = _to_int(request.form.get('default_rest_seconds', ''))
+    exercise.weight_increment = _to_increment(request.form.get('weight_increment', ''))
     exercise.is_unilateral = request.form.get('is_unilateral') == 'on'
     db.session.commit()
     return redirect(url_for(
