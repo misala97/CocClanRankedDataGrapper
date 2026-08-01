@@ -555,3 +555,33 @@ def test_live_stepper_uses_the_exercises_own_increment(client, scratch_increment
     # one exercise, so a surviving 2.5 would mean the template still branches
     # on is_unilateral instead of reading the resolved value.
     assert 'data-step="2.5"' not in html
+
+
+def test_session_sheet_writes_the_increment_to_the_exercise(client, scratch_increment_exercise):
+    from extensions import db
+    from models import Exercise, SessionExercise
+    _, session_exercise_id, exercise_id = scratch_increment_exercise
+
+    response = client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
+                           data={'weight_increment': '9'})
+    assert response.status_code == 302
+
+    with flask_app.app_context():
+        assert db.session.get(Exercise, exercise_id).weight_increment == 9.0
+        # The session row is untouched: this field is per exercise, forever,
+        # unlike the rest time sitting directly above it in the same sheet.
+        assert db.session.get(SessionExercise, session_exercise_id).rest_seconds is None
+
+
+def test_session_sheet_clears_the_increment_back_to_the_default(client, scratch_increment_exercise):
+    from extensions import db
+    from models import Exercise
+    _, session_exercise_id, exercise_id = scratch_increment_exercise
+
+    client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
+                data={'weight_increment': '9'})
+    client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
+                data={'weight_increment': ''})
+
+    with flask_app.app_context():
+        assert db.session.get(Exercise, exercise_id).weight_increment is None

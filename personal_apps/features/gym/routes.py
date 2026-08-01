@@ -915,6 +915,25 @@ def gym_update_session_exercise_rest(session_exercise_id):
     return redirect(url_for('gym.session_detail', session_id=session_id))
 
 
+@gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/increment', methods=['POST'])
+@login_required
+def gym_update_exercise_increment(session_exercise_id):
+    """Write the EXERCISE's increment from inside a running session.
+
+    Reached from the per-exercise sheet, beside the rest field -- but unlike
+    rest, which is genuinely per session, a loadable step is a property of the
+    equipment and so lands on the Exercise itself and stays. Keyed on the
+    SessionExercise regardless, because that is the id the sheet has and it
+    keeps the redirect back to the workout trivial.
+    """
+    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise.exercise.weight_increment = _to_increment(
+        request.form.get('weight_increment', ''))
+    session_id = session_exercise.session_id
+    db.session.commit()
+    return redirect(url_for('gym.session_detail', session_id=session_id))
+
+
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/sets/add', methods=['POST'])
 @login_required
 def gym_add_set(session_exercise_id):
