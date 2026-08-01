@@ -155,6 +155,7 @@ class Exercise(db.Model):
     previous_name        = db.Column(db.String(150), nullable=True)  # set to the prior name on rename, so anything still referencing the old name (e.g. historical data, or a rename made by mistake) can still resolve to this exercise instead of creating a duplicate
     muscle_group         = db.Column(db.String(100), nullable=True)
     default_rest_seconds = db.Column(db.Integer, nullable=True)
+    weight_increment     = db.Column(db.Float, nullable=True)  # smallest loadable jump on this equipment (dumbbells 2, a stack often 9); NULL means use stats.DEFAULT_INCREMENT
     is_unilateral        = db.Column(db.Boolean, nullable=False, default=False)  # logged weight/reps are per side (e.g. one-arm curls); volume must be doubled
 
     session_exercises  = db.relationship('SessionExercise', back_populates='exercise', lazy=True)
