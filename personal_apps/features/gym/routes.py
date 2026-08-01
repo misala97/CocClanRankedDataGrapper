@@ -765,6 +765,11 @@ def session_detail(session_id):
         visible_exercises=visible_exercises,
         live_se=live_se,
         live_id=live_se.id if live_se else None,
+        # Resolved here, not in Jinja: the template must never re-implement the
+        # fallback, or the two copies drift the moment DEFAULT_INCREMENT moves.
+        live_increment=stats.resolve_increment(
+            live_se.exercise.weight_increment, live_se.exercise.is_unilateral,
+        ) if live_se else stats.DEFAULT_INCREMENT,
         live_index=(visible_exercises.index(live_se) + 1) if live_se else 0,
         tick_states=tick_states,
         sets_done=sets_done,

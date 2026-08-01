@@ -499,3 +499,59 @@ def test_reordering_a_deload_session_keeps_the_deloaded_weights(client):
                     db.session.commit()
             for exercise_id, history_id in zip(exercise_ids or [], history_ids or []):
                 _drop_slot_history(exercise_id, [history_id])
+
+
+@pytest.fixture()
+def scratch_increment_exercise():
+    """A throwaway Exercise inside a throwaway session.
+
+    Its own exercise rather than the catalogue's first one, because these tests
+    write to the exercise itself and must not leave a real lift carrying a
+    made-up increment. Both rows are deleted afterwards.
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise, WorkoutSession
+    with flask_app.app_context():
+        exercise = Exercise(name='pytest scratch increment lift', muscle_group='Brust')
+        db.session.add(exercise)
+        db.session.flush()
+        session_ = WorkoutSession(name='pytest scratch increment',
+                                  started_at=dt.datetime.utcnow())
+        session_.exercises.append(SessionExercise(exercise_id=exercise.id, position=1))
+        db.session.add(session_)
+        db.session.commit()
+        ids = (session_.id, session_.exercises[0].id, exercise.id)
+    yield ids
+    with flask_app.app_context():
+        session_id, _, exercise_id = ids
+        doomed = db.session.get(WorkoutSession, session_id)
+        if doomed is not None:
+            db.session.delete(doomed)
+            db.session.commit()
+        doomed_exercise = db.session.get(Exercise, exercise_id)
+        if doomed_exercise is not None:
+            db.session.delete(doomed_exercise)
+            db.session.commit()
+
+
+def test_live_stepper_falls_back_when_the_exercise_has_no_increment(client, scratch_increment_exercise):
+    session_id, _, _ = scratch_increment_exercise
+    html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
+    assert 'data-step="2.5" data-decimals="1"' in html
+
+
+def test_live_stepper_uses_the_exercises_own_increment(client, scratch_increment_exercise):
+    from extensions import db
+    from models import Exercise
+    session_id, _, exercise_id = scratch_increment_exercise
+
+    with flask_app.app_context():
+        db.session.get(Exercise, exercise_id).weight_increment = 9.0
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
+    assert 'data-step="9.0" data-decimals="1"' in html
+    # The fallback must be gone, not merely joined -- this session has exactly
+    # one exercise, so a surviving 2.5 would mean the template still branches
+    # on is_unilateral instead of reading the resolved value.
+    assert 'data-step="2.5"' not in html
