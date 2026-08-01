@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from models import RaidWeekend, RaidWeekendLog, Player
 from services.helpers import (
-    CLEANUP_THRESHOLD, RAID_DISTRICT_MEDALS, RAID_CAPITAL_PEAK_MEDALS,
+    cleanup_threshold, RAID_DISTRICT_MEDALS, RAID_CAPITAL_PEAK_MEDALS,
     raid_district_medal_value, raid_score_verdict, _raid_level_mult, is_capital_peak,
 )
 
@@ -233,7 +233,7 @@ def raid_weekend_page():
             for hits in district_hits.values():
                 district_done = any(l['percentage_total'] == 100 for l in hits)
                 player_total  = sum(l['percentage'] for l in hits)
-                if len(hits) == 1 and district_done and hits[0]['percentage'] < CLEANUP_THRESHOLD:
+                if len(hits) == 1 and district_done and hits[0]['percentage'] < cleanup_threshold(hits[0]['district_name']):
                     player_cleanup_log_ids.add(hits[0]['log_id'])
                 if district_done and player_total == 100:
                     solo_wipe_count += 1
