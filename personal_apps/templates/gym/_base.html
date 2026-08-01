@@ -1,10 +1,16 @@
 {# Shared shell for every gym page: doctype/meta/PWA tags, the self-hosted
-   Saira webfont (see gym.css's header comment -- ONE variable family carrying
-   all three type roles via its width axis: 112% display / 100% body / 80% dense),
+   Figtree webfont (see static/gym/figtree.css for why it is vendored rather
+   than linked from Google, and gym.css's header for the type roles it carries),
    gym.css, gym.js, the nav include, and the three blocks a page fills in. See
-   personal_apps/PRODUCT.md for the "Athletik" design brief this all serves.
+   personal_apps/PRODUCT.md for the "Puls" design brief this all serves.
 
-   gym.js is loaded here (not deferred) so window.GymClock/GymUtils/GymChart
+   This paragraph described Saira and its width axis until Puls replaced it --
+   the font was deleted, the comment was not, and gym.js kept a matching
+   literal that quietly sent every canvas label to the fallback stack. If the
+   face changes again, the places that name it are here, figtree.css,
+   gym.css's header.
+
+   gym.js is loaded here (not deferred) so window.GymClock/GymUtils
    already exist by the time any inline <script> later in the body runs --
    in particular _nav.html's own inline script for the resume strip's clock.
 
@@ -12,7 +18,12 @@
    the resume strip -- same gym_active_session + endpoint condition, kept in
    sync with the `{% if %}` there. gym.css uses that class to reserve extra
    bottom padding on mobile so the fixed strip never sits on top of page
-   content (see body.has-resume in gym.css). #}
+   content (see body.has-resume in gym.css).
+
+   The endpoint list is duplicated rather than shared because there are exactly
+   two of them and a context variable for it would hide the coupling instead of
+   documenting it. If you change one, change the other -- _nav.html carries the
+   reasoning for why Start is on the list. #}
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -24,18 +35,26 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
-    <meta name="theme-color" content="#0b0c10">
-    {# Saira is served from this app, not linked from Google -- see the header
-       of static/gym/saira.css for why. Preloading the two faces the German UI
-       actually uses (latin roman + latin italic) means they start downloading
-       with the stylesheet rather than after it. #}
-    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/saira-latin-roman.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/saira-latin-italic.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="{{ url_for('static', filename='gym/saira.css') }}">
+    {# The browser chrome follows the theme too, or the phone frames a pale plum
+       app in a near-black bar. Both values are --ground for their theme. #}
+    <meta name="theme-color" content="#F3EAF7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#241132" media="(prefers-color-scheme: dark)">
+    {# Figtree is served from this app, not linked from Google -- see the header
+       of static/gym/figtree.css for why. Preloading the latin face (the one the
+       German UI actually hits on nearly every glyph) means it starts
+       downloading with the stylesheet rather than after it. latin-ext is not
+       preloaded: it only carries the long tail, and preloading a file most
+       page views never need costs more than it saves. #}
+    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/figtree-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='gym/figtree.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
     <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
 </head>
-<body{% if gym_active_session and request.endpoint != 'gym.session_detail' %} class="has-resume"{% endif %}>
+{# `body_class` lets a page opt into a shell mode. Only session_detail.html uses
+   it today, for `is-focus` (no tab bar, one way out). It is the template's call
+   rather than a route check, because the active and the finished workout share
+   one endpoint and only the active one is a focus mode. #}
+<body class="{% block body_class %}{% endblock %}{% if gym_active_session and request.endpoint not in ('gym.session_detail', 'gym.gym_heute') %} has-resume{% endif %}">
 
 {# Skip link: the tab bar / top bar puts several nav links before the content
    on every page, so a keyboard or screen-reader user had to walk the whole

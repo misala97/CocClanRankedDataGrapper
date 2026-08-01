@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D · Puls</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* the surface IS the colour: deep aubergine, not another near-black */
+  --field:#251233; --panel:#33194480; --panel-solid:#361B47; --inset:#1C0C27;
+  --ink:#F8F1FB; --dim:#BFA8CD; --faint:#8B739B;
+  --heat:#FF7A4D; --heat-deep:#D2411A; --on-heat:#2A0A00;
+  --cool:#F0C7DC;
+  --gold:#FFC861;
+}
+html[data-theme="light"]{
+  --field:#F4EDF7; --panel:#FFFFFFB0; --panel-solid:#FFFFFF; --inset:#E7DCEC;
+  --ink:#2A1237; --dim:#6B4E7B; --faint:#9C86A9;
+  --heat:#D8471A; --heat-deep:#A83210; --on-heat:#FFF3EE;
+  --cool:#7A3E5C;
+  --gold:#9A6D07;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:Figtree,system-ui,sans-serif; background:var(--field); color:var(--ink);
+  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+/* ---- header + the rail that fills as you go ---- */
+.top{flex:none;padding:16px 18px 0}
+.top__row{display:flex;align-items:baseline;gap:10px}
+.top__name{font-size:17px;font-weight:700;letter-spacing:-.02em}
+.top__sp{flex:1}
+.top__clock{font-size:14px;font-weight:600;color:var(--dim)}
+
+.rail{display:flex;gap:4px;margin-top:12px;height:8px}
+.seg{flex:1;border-radius:4px;background:var(--inset);overflow:hidden}
+.seg.is-full{background:var(--cool)}
+.seg.is-now{flex:2.4;background:var(--inset);position:relative}
+.seg.is-now::after{content:"";position:absolute;inset:0 33% 0 0;background:var(--heat);border-radius:4px}
+.rail__cap{
+  display:flex;justify-content:space-between;margin-top:7px;
+  font-size:11.5px;font-weight:600;color:var(--faint);
+}
+
+/* ---- the live exercise ---- */
+.live{
+  margin:16px 18px 0;padding:18px 18px 16px;border-radius:22px;
+  background:var(--panel-solid);
+}
+.live__kick{font-size:12px;font-weight:700;color:var(--heat);letter-spacing:.02em}
+.live__name{font-size:22px;font-weight:700;letter-spacing:-.025em;line-height:1.15;margin-top:3px;text-wrap:balance}
+
+.dots{display:flex;gap:7px;margin-top:14px;align-items:center}
+.dot{
+  height:34px;flex:1;border-radius:11px;background:var(--inset);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12.5px;font-weight:700;color:var(--faint);
+}
+.dot.is-full{background:var(--cool);color:var(--field)}
+.dot.is-now{background:transparent;box-shadow:inset 0 0 0 2px var(--heat);color:var(--heat)}
+
+.pair{display:flex;gap:10px;margin-top:14px}
+.cell{
+  flex:1;background:var(--inset);border-radius:16px;padding:11px 12px 10px;
+  display:flex;flex-direction:column;align-items:center;gap:1px;
+}
+.cell__num{font-size:34px;font-weight:800;letter-spacing:-.04em;line-height:1}
+.cell__lbl{font-size:11px;font-weight:600;color:var(--faint)}
+.cell__steps{display:flex;gap:6px;margin-top:8px}
+.cell__step{
+  width:36px;height:32px;border-radius:9px;background:var(--panel-solid);
+  display:grid;place-items:center;font-size:18px;font-weight:600;color:var(--dim);
+}
+
+.go{
+  width:100%;margin-top:14px;height:62px;border-radius:18px;
+  background:var(--heat);color:var(--on-heat);
+  font-size:17px;font-weight:800;letter-spacing:-.01em;
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  box-shadow:0 10px 24px -12px var(--heat-deep);
+}
+.go svg{width:21px;height:21px}
+
+/* ---- what the session has become ---- */
+.grew{margin:16px 18px 0;display:flex;align-items:flex-end;gap:14px}
+.grew__big{font-size:40px;font-weight:800;letter-spacing:-.045em;line-height:.9}
+.grew__unit{font-size:14px;font-weight:600;color:var(--dim);padding-bottom:3px}
+.grew__sp{flex:1}
+.grew__side{text-align:right;font-size:12.5px;font-weight:600;color:var(--faint);line-height:1.5}
+.grew__side b{color:var(--dim);font-weight:700}
+/* one tick per set in the whole workout — the session filling up, literally */
+.ticks{display:flex;gap:3px;margin:11px 18px 0}
+.tick{flex:1;height:9px;border-radius:2px;background:var(--inset)}
+.tick.is-on{background:var(--cool)}
+.tick.is-hot{background:var(--heat)}
+
+.queue{margin:6px 18px calc(12px + env(safe-area-inset-bottom,0px));overflow:hidden}
+.qrow{display:flex;align-items:baseline;gap:10px;padding:9px 0}
+.qrow + .qrow{border-top:1px solid var(--inset)}
+.qrow__i{width:14px;flex:none;font-size:12px;font-weight:700;color:var(--faint)}
+.qrow__n{flex:1;min-width:0;font-size:14px;font-weight:500;color:var(--dim);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qrow__p{font-size:12px;font-weight:600;color:var(--faint)}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top__row">
+    <span class="top__name">Pull HBF</span>
+    <span class="top__sp"></span>
+    <span class="top__clock">37:15</span>
+  </div>
+  <div class="rail">
+    <span class="seg is-full"></span>
+    <span class="seg is-now"></span>
+    <span class="seg"></span><span class="seg"></span><span class="seg"></span>
+    <span class="seg"></span><span class="seg"></span>
+  </div>
+  <div class="rail__cap"><span>Übung 2 von 7</span><span>12 von 21 Sätzen</span></div>
+</div>
+
+<div class="live">
+  <div class="live__kick">Jetzt</div>
+  <h1 class="live__name">Seated Row (Machine, Good)</h1>
+
+  <div class="dots">
+    <span class="dot is-full">66 × 9</span>
+    <span class="dot is-full">66 × 8</span>
+    <span class="dot is-now">Satz 3</span>
+  </div>
+
+  <div class="pair">
+    <div class="cell">
+      <span class="cell__num">66,0</span>
+      <span class="cell__lbl">kg</span>
+      <span class="cell__steps"><button class="cell__step">−</button><button class="cell__step">+</button></span>
+    </div>
+    <div class="cell">
+      <span class="cell__num">8</span>
+      <span class="cell__lbl">Wiederholungen</span>
+      <span class="cell__steps"><button class="cell__step">−</button><button class="cell__step">+</button></span>
+    </div>
+  </div>
+
+  <button class="go">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+    Satz geschafft
+  </button>
+</div>
+
+<div class="grew">
+  <span class="grew__big">4.980</span>
+  <span class="grew__unit">kg bewegt</span>
+  <span class="grew__sp"></span>
+  <span class="grew__side"><b>12</b> Sätze<br><b>37</b> Minuten</span>
+</div>
+<div class="ticks">
+  <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick is-on"></span>
+  <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick is-on"></span>
+  <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick is-on"></span>
+  <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick is-hot"></span>
+  <span class="tick"></span><span class="tick"></span><span class="tick"></span>
+  <span class="tick"></span><span class="tick"></span><span class="tick"></span>
+  <span class="tick"></span><span class="tick"></span><span class="tick"></span>
+</div>
+
+<div class="queue">
+  <div class="qrow"><span class="qrow__i">3</span><span class="qrow__n">T Bar Row (Standing)</span><span class="qrow__p">3 × 45,0</span></div>
+  <div class="qrow"><span class="qrow__i">4</span><span class="qrow__n">Reverse Fly (Machine)</span><span class="qrow__p">3 × 32,5</span></div>
+  <div class="qrow"><span class="qrow__i">5</span><span class="qrow__n">Preacher Curl Bilateral</span><span class="qrow__p">3 × 27,5</span></div>
+  <div class="qrow"><span class="qrow__i">6</span><span class="qrow__n">Biceps Curl (Rotating)</span><span class="qrow__p">3 × 15,0</span></div>
+  <div class="qrow"><span class="qrow__i">7</span><span class="qrow__n">Hammer Curl (Dumbbell)</span><span class="qrow__p">3 × 14,0</span></div>
+</div>
+
+</body>
+</html>

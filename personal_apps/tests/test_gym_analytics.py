@@ -317,6 +317,9 @@ def test_fatigue_curve_averages_across_rows_rather_than_reporting_one():
 
 
 def at(hour, days=0, session_id=1, weight=100.0, reps=10):
+    """`hour` is the STORED hour, i.e. UTC. June is CEST, so local = UTC + 2.
+    The bucketing under test is local, so a test that means "08:00 in the
+    morning" passes 6 here."""
     return perf([(weight, reps)], session_id=session_id,
                 started_at=dt.datetime(2026, 6, 1, hour, 0) + dt.timedelta(days=days))
 
@@ -355,18 +358,43 @@ def test_daypart_volume_averages_over_sessions_not_rows():
 
 
 def test_daypart_boundaries_are_half_open():
-    """08:00 and 19:00 are inside their parts; 14:00 and 23:00 have fallen out
-    of them. Interior hours alone cannot catch a < / <= slip."""
+    """08:00 and 19:00 LOCAL are inside their parts; 14:00 and 23:00 have
+    fallen out of them. Interior hours alone cannot catch a < / <= slip.
+    Stored hours are UTC, so each is two lower than the local hour it means."""
     rows = [
-        at(8, days=0, session_id=1),    # first morning hour
-        at(14, days=1, session_id=2),   # just past morning
-        at(19, days=2, session_id=3),   # first evening hour
-        at(23, days=3, session_id=4),   # just past evening
+        at(6, days=0, session_id=1),    # 08:00 local -- first morning hour
+        at(12, days=1, session_id=2),   # 14:00 local -- just past morning
+        at(17, days=2, session_id=3),   # 19:00 local -- first evening hour
+        at(21, days=3, session_id=4),   # 23:00 local -- just past evening
     ]
     parts = {p['label']: p for p in analytics.daypart_volume(rows)['parts']}
     assert parts['morning']['sessions'] == 1
     assert parts['evening']['sessions'] == 1
     assert parts['other']['sessions'] == 2
+
+
+def test_dayparts_bucket_by_local_clock_not_utc():
+    """The stored hour is UTC; "morgens" and "abends" are wall-clock words.
+    Read off the raw UTC hour, an 08:00 session counted as 06:00 and fell out
+    of the morning bucket, and a 20:00 one fell out of the evening bucket --
+    both landing in "other"."""
+    rows = [
+        at(6, days=0, session_id=1),    # 08:00 local
+        at(18, days=1, session_id=2),   # 20:00 local
+    ]
+    parts = {p['label']: p for p in analytics.daypart_volume(rows)['parts']}
+    assert parts['morning']['sessions'] == 1
+    assert parts['evening']['sessions'] == 1
+    assert parts['other']['sessions'] == 0
+
+
+def test_weekday_distribution_uses_the_local_weekday():
+    """A Monday 00:30 session is stored as Sunday 22:30 UTC."""
+    monday_early = perf([(100.0, 10)], session_id=1,
+                        started_at=dt.datetime(2026, 6, 7, 22, 30))   # Sun 7 Jun UTC
+    days = {d['weekday']: d['sessions'] for d in analytics.weekday_distribution([monday_early])['days']}
+    assert days[0] == 1, 'Monday'
+    assert days[6] == 0, 'Sunday'
 
 
 def test_daypart_volume_needs_both_buckets_to_clear_the_threshold():
@@ -514,10 +542,10 @@ def test_record_timeline_reports_a_beaten_previous_best():
         perf([(100.0, 8)], started_at=day(0), session_id=1),
         perf([(110.0, 8)], started_at=day(7), session_id=2),
     ]
-    weight_records = [r for r in analytics.record_timeline(rows) if r['kind'] == 'weight']
+    weight_records = [r for r in analytics.record_timeline(rows) if r['weight']]
     assert len(weight_records) == 1
-    assert weight_records[0]['value'] == 110.0
-    assert weight_records[0]['previous'] == 100.0
+    assert weight_records[0]['weight']['value'] == 110.0
+    assert weight_records[0]['weight']['previous'] == 100.0
     assert weight_records[0]['started_at'] == day(7)
 
 
@@ -532,7 +560,7 @@ def test_record_timeline_is_newest_first():
         perf([(110.0, 8)], started_at=day(7), session_id=2),
         perf([(120.0, 8)], started_at=day(14), session_id=3),
     ]
-    dates = [r['started_at'] for r in analytics.record_timeline(rows) if r['kind'] == 'weight']
+    dates = [r['started_at'] for r in analytics.record_timeline(rows) if r['weight']]
     assert dates == [day(14), day(7)]
 
 
@@ -544,14 +572,32 @@ def test_record_timeline_excludes_deload_sessions():
     assert analytics.record_timeline(rows) == []
 
 
-def test_record_timeline_reports_weight_and_e1rm_separately():
+def test_record_timeline_reports_an_e1rm_only_record():
     # more reps at the same weight: an e1RM record but not a weight record
     rows = [
         perf([(100.0, 8)], started_at=day(0), session_id=1),
         perf([(100.0, 12)], started_at=day(7), session_id=2),
     ]
-    kinds = {r['kind'] for r in analytics.record_timeline(rows)}
-    assert kinds == {'e1rm'}
+    timeline = analytics.record_timeline(rows)
+    assert len(timeline) == 1
+    assert timeline[0]['weight'] is None
+    assert timeline[0]['e1rm']['previous'] < timeline[0]['e1rm']['value']
+
+
+def test_record_timeline_merges_both_bests_of_one_exercise_day():
+    """A heavier top set almost always drags an e1RM best along with it. That
+    is one lift, not two milestones, so it is one row carrying both figures --
+    otherwise the timeline doubles in length and its own count stops describing
+    what happened."""
+    rows = [
+        perf([(100.0, 8)], started_at=day(0), session_id=1),
+        perf([(120.0, 10)], started_at=day(7), session_id=2),
+    ]
+    timeline = analytics.record_timeline(rows)
+    assert len(timeline) == 1
+    assert timeline[0]['weight']['value'] == 120.0
+    assert timeline[0]['weight']['previous'] == 100.0
+    assert timeline[0]['e1rm'] is not None
 
 
 def test_record_timeline_on_no_history_is_empty():
@@ -615,5 +661,51 @@ def test_record_timeline_orders_same_day_records_predictably():
         perf([(120.0, 8)], started_at=day(7), session_id=2, exercise_id=1, name='Alpha'),
         perf([(120.0, 8)], started_at=day(7), session_id=2, exercise_id=2, name='Zebra'),
     ]
-    weight_records = [r for r in analytics.record_timeline(rows) if r['kind'] == 'weight']
+    weight_records = [r for r in analytics.record_timeline(rows) if r['weight']]
     assert [r['name'] for r in weight_records] == ['Zebra', 'Alpha']
+
+
+# ---- monthly_tonnage: the career strip -------------------------------------
+
+def test_monthly_tonnage_emits_every_month_including_empty_ones():
+    """A break has to stay visible as a break. Skipping empty months would
+    compress a gap into a shorter strip and redraw the timeline."""
+    rows = [
+        perf([(100.0, 10)], started_at=dt.datetime(2026, 1, 5), session_id=1),
+        perf([(100.0, 10)], started_at=dt.datetime(2026, 4, 5), session_id=2),
+    ]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 4, 20))
+    assert [(m['year'], m['month']) for m in months] == [
+        (2026, 1), (2026, 2), (2026, 3), (2026, 4)]
+    assert [m['is_gap'] for m in months] == [False, True, True, False]
+    assert months[1]['volume'] == 0
+
+
+def test_monthly_tonnage_runs_to_now_not_to_the_last_session():
+    """The strip is a calendar, so months since you last trained are part of
+    the picture -- that silence is the most interesting thing on it."""
+    rows = [perf([(100.0, 10)], started_at=dt.datetime(2026, 1, 5), session_id=1)]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 3, 2))
+    assert [(m['year'], m['month']) for m in months] == [(2026, 1), (2026, 2), (2026, 3)]
+    assert months[-1]['is_gap'] is True
+
+
+def test_monthly_tonnage_sums_volume_and_counts_deloads():
+    rows = [
+        perf([(100.0, 10)], started_at=dt.datetime(2026, 1, 5), session_id=1),
+        perf([(50.0, 10)], started_at=dt.datetime(2026, 1, 12), session_id=2, is_deload=True),
+    ]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 1, 20))
+    assert months[0]['volume'] == 1500.0     # deloads still count toward tonnage
+    assert months[0]['has_deload'] is True
+
+
+def test_monthly_tonnage_crosses_a_year_boundary():
+    rows = [perf([(100.0, 10)], started_at=dt.datetime(2025, 11, 5), session_id=1)]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 2, 1))
+    assert [(m['year'], m['month']) for m in months] == [
+        (2025, 11), (2025, 12), (2026, 1), (2026, 2)]
+
+
+def test_monthly_tonnage_is_empty_without_rows():
+    assert analytics.monthly_tonnage([], NOW) == []

@@ -61,177 +61,252 @@ reachable.
 
 ## Positioning
 
-The instrument you read mid-set and plan from between sessions: what is still
-moving, what has stalled, what needs attention — answered at a glance, on a
-phone, in a busy gym.
+The thing you operate mid-set and read between sessions: log the set in front of
+you without thinking about the app, and see the workout add up while you do it.
+Between sessions it answers what is still moving, what has stalled, and what
+needs attention — at a glance, on a phone, in a busy gym.
 
 ---
 
-## Design brief — "Athletik"
+## Design brief — "Puls"
 
 **This section is the brief impeccable designs against — not a design to
 transcribe.**
 
-Supersedes the earlier "Readout" brief (equipment panel: industrial condensed
-numerals, machined chassis, amber/cyan/red). Readout was built and shipped; the
-owner reviewed it in place and rejected it. Note *why*, because it is the useful
-part: Readout was simultaneously the first-order reflex for this category (dark
-+ neon accent + big numerals) and the second-order one (the "not-neon" escape
-into industrial/console). Both at once. Any future direction has to clear both.
+### 4.0 What this replaces, and why the last two failed
 
-Athletik was one of two directions rejected *alone* during the original
-brainstorm — dismissed then as "reads as every other fitness app." The owner
-reconsidered and chose it in a later cycle. That criticism is real and is the
-standing risk on this brief: the lane is crowded, so the execution has to be
-better than the lane, not merely inside it.
+Two full visual systems were built and rejected before this one:
 
-### 4.0 What is locked, and what impeccable decides
+- **Readout** (equipment panel: industrial condensed numerals, machined chassis,
+  amber/cyan/red). Rejected in place. It was simultaneously the first-order
+  reflex for this category — dark + neon accent + big numerals — and the
+  second-order one, the "not-neon" escape into industrial/console.
+- **Athletik** (sport broadcast: heavy oblique numerals, electric blue for NOW,
+  gold for records). Rejected in place. Its own brief flagged the risk on day
+  one — the lane was crowded and the execution had to beat the lane. It didn't.
+  What went wrong is specific and worth keeping: the locked signature was *the
+  lean*, so heavy italic ended up on names, buttons, labels and headings at
+  once. Everything shouted. Exercise names ran four lines deep in italic caps,
+  breaking this brief's own sentence-case rule. Chrome (deload toggle, reorder
+  lock) occupied the top third of the session screen before any content. Set
+  rows nested a card inside a card inside a card.
+
+**The shared root cause: both briefs designed an instrument you consult.** The
+app is used standing up, one-handed, between sets — it is a thing you *operate*,
+and the reward for operating it should be visible. That is what changed.
+
+Puls was chosen from four rendered directions, at 390×844, against real
+mid-workout data. It won on one property none of the others had: the session
+visibly grows while you use it.
 
 | Locked — an owner decision, do not overturn | Open — impeccable's job |
 |---|---|
-| Dark only | The actual palette: every value re-derived and validated |
+| The thesis: the session accumulates in front of you (§4.1) | How that is expressed in colour, weight and rhythm |
+| Committed colour strategy — the surface *is* the colour | The exact values, re-derived and validated |
+| Light **and** dark, following the phone | How each theme is composed; both must pass AA independently |
 | Mobile-first (390×844 primary) | How each breakpoint composes |
-| The thesis: sport broadcast (§4.1) | How that thesis is expressed in colour, weight, and rhythm |
-| The five-state model and its meanings (§4.2) | How each state is rendered |
+| One skin across every screen | Per-screen intensity (§4.6) |
 | Token **names and semantics** (§4.3) — templates reference them | Token **values** |
+| Exercise names: sentence case, body face, never caps, never italic | The full type scale |
 | German UI copy | — |
-| Numerals tabular and dominant in their container (§4.4) | Which family; the full type scale; every size and weight |
 
 If a locked item turns out to be wrong under real execution, say so and raise
 it. Don't silently deviate, and don't silently comply either.
 
 ### 4.1 Thesis
 
-Sport broadcast. Heavy oblique numerals that lean into the direction of travel,
-a single electric accent reserved entirely for NOW, and **gold for a record
-because gold already means record** — the one piece of semantics the app does
-not have to teach.
+**The workout fills up.** Every logged set advances something visible — a tick
+on the session strip, a chip going solid, the kg total counting up. The
+accumulation is the reward, and it is on screen the whole time rather than
+saved for a summary at the end.
 
-The lean is the signature. It appears on names, numerals and the primary
-action, and nowhere else, so it reads as one gesture rather than a texture.
+Colour is committed, not accented: the page is deep aubergine in dark and pale
+plum in light, so the app has an identity before a single accent is placed. A
+hot orange is reserved entirely for NOW.
 
 ### 4.2 The state model — the load-bearing rule
 
-Five states. **Every surface in the app inherits them**: set rows, exercise
-panels, rest bar, tab bar, dashboard tiles, verdict chips, catalogue rows,
-history rows. This is what makes it one app rather than five screens.
+Four states plus a label. **Every surface inherits them**: set chips, exercise
+panels, rest bar, dashboard tiles, verdict chips, catalogue rows, history rows.
+This is what makes it one app rather than eight screens.
 
 | State | Means | Treatment |
 |---|---|---|
-| **Unlit** | Present but not yet done | Outline only, dimmed text, transparent fill |
-| **Live** | Happening now | Electric blue, with lift. **Only ever one thing at a time on screen.** |
-| **Done** | Logged and settled | Full-brightness ink, solid filled tick. Reads as fact, not achievement. |
-| **Rekord** | Beat a previous best | Gold, one sharp flare then settles. Rare by construction. |
-| **Stagniert** | Needs attention | Red **plus the word**. |
+| **Offen** | Present, not yet done | Outline only, dimmed text, transparent fill |
+| **Jetzt** | Happening now | Hot orange fill, with lift. **Only ever one thing at a time on screen.** |
+| **Erledigt** | Logged and settled | Pale rose fill, solid. Reads as fact, not achievement. |
+| **Rekord** | Beat a previous best | Gold, one flare, then settles. Rare by construction. |
+| **Stagniert** | Needs attention | **Cold cyan** plus the word. |
 
-**Every state must carry a shape or a word as well as a colour.**
+**Every state carries a shape or a word as well as a colour.**
 
-**Deload is a label, not a sixth state.** A session can be marked as a
-deliberately light one. It carries **no hue** — the three-hue rule stands — and
-renders as `--dim` ink plus the literal word `Deload`, the same treatment as
-the `neu` chip. It describes a whole session rather than one set's progress,
-and its job is to stop the statistics reading a planned light week as a
-plateau. Do not promote it to a colour.
+Attention is deliberately cold, not red. Two reasons, both load-bearing:
+orange, gold and red are inseparable under deuteranopia while orange, gold and
+cyan are not; and a lift that has stopped moving is not an error, it has gone
+cold. The semantics and the accessibility arithmetic point the same way here.
+
+**Deload is a label, not a state.** It carries **no hue** and renders as `--dim`
+ink plus the literal word `Deload`. It describes a whole session rather than one
+set's progress, and its job is to stop the statistics reading a planned light
+week as a plateau. Do not promote it to a colour.
 
 ### 4.3 Token contract
 
 **The names and their meanings are the contract** — templates reference these
-tokens directly, so the set must exist and a token may never be repurposed.
+tokens directly, so the set must exist and a token may never be repurposed. The
+names carried over unchanged from the previous system on purpose: they were
+always semantic rather than descriptive, so only the values move.
 
 ```
---ground     page background, deepest field
---chassis    panel surface
---raised     inset / nested surface
---edge       panel border
---edge-hi    lifted border, inert bar fill
---ink        primary text; the DONE state
+--ground     page field — the committed colour, not a neutral
+--chassis    panel surface, the one lifted plane
+--raised     inset / nested surface (number cells, steppers)
+--edge       hairline divider
+--edge-hi    lifted border
+--ink        primary text
 --dim        labels, secondary text
 --unlit      inert text, content not yet reached
---live       NOW: current set, running rest, primary action
+--live       NOW: current set, running rest, primary action   (hot orange)
 --live-deep  the pressed / bottom edge of a live control
---record     RECORD: a previous best beaten
---stall      ATTENTION: stagnation, destructive actions
---on-live / --on-record / --on-stall   text sitting ON a saturated fill
+--done       LOGGED: a completed set, a finished exercise     (pale rose)
+--record     RECORD: a previous best beaten                   (gold)
+--stall      ATTENTION: stagnation                            (cold cyan)
+--on-live / --on-done / --on-record / --on-stall   text sitting ON those fills
+--live-ink / --done-ink / --record-ink / --stall-ink
+             the same four roles when the accent is TEXT on a surface
 ```
+
+Two additions, both forced by measurement rather than taste:
+
+`--done` is new. The previous system had no token for "logged" — it reused
+`--ink`, which is why completed work read as plain text rather than as a state.
+
+`*-ink` is new and is the light theme's doing. A colour bright enough to be a
+**fill** under dark label text is not dark enough to be **text** on a pale
+surface. In the dark theme the two coincide (a bright accent reads fine on an
+aubergine field) and `*-ink` simply equals its fill. In the light theme they
+cannot: gold at `#F0B429` is a fine chip but fails as text at 1.9:1, while gold
+dark enough to read as text is a brown. This is the same arithmetic collision
+the previous system hit with its blue and solved with `--on-live`; it is
+recorded here so the next person does not rediscover it.
+
+Measured with `scratchpad/palette_puls.py`, which is the source of truth and is
+runnable: **25/25 pairings pass AA in each theme** (light floor 4.79, dark floor
+4.57), and the three accent fills stay separable under protanopia and
+deuteranopia (closest pair 62 of 255 in dark, 109 in light).
 
 Constraints on the palette, in priority order:
 
-1. `--live`, `--record`, and `--stall` must be **unmistakable from each other**
-   at a glance, in daylight, on a phone, and under deuteranopia and protanopia.
-2. Every text/background pairing that **actually occurs** must meet **WCAG AA** —
+1. **Both themes are first-class.** Base values are light; `prefers-color-scheme:
+   dark` overrides them; an explicit `html[data-theme]` beats both. Every
+   pairing is validated in **both** themes — a value that only passes in one is
+   not done.
+2. `--live`, `--record` and `--stall` must be **unmistakable from each other** at
+   a glance, in daylight, on a phone, and under deuteranopia and protanopia.
+3. Every text/background pairing that **actually occurs** meets **WCAG AA** —
    including text on the accent fills, not only accent-on-panel.
-3. Neutrals are chosen, not defaulted — a deliberate hue bias, not pure grey.
-4. Exactly three semantic hues. No fourth. Nothing decorative gets a colour.
+4. Exactly three semantic hues plus `--done`. Nothing decorative gets a colour.
+5. `--ground` is a committed colour, not a tinted neutral. If it reads as
+   "near-black" or "off-white", it is wrong.
 
-Current values, and the arithmetic behind them, are documented in gym.css's
-header comment; `scratchpad/palette.py` is the script that measured them. One
-finding worth carrying forward: a single blue cannot satisfy both "readable as
-text on a dark panel" and "readable under white text in a button" at AA — the
-two requirements are arithmetically incompatible. Hence `--on-live`.
+Values and the arithmetic behind them are documented in gym.css's header
+comment, measured rather than asserted.
 
 ### 4.4 Type
 
-**Saira**, one variable family carrying all three roles via its **width axis**
-rather than a second typeface: 112% for display and numerals, 100% for body,
-80% for dense tables and small uppercase labels. It ships true tabular figures
-(verified by measurement, not assumption).
+**Figtree**, self-hosted. One family, weights 400–800. Vendored into
+`static/gym/fonts/` and served from this app — never linked from Google at
+runtime, for the same reason the previous face was vendored.
 
 Rules that are not negotiable:
+
+- **No italic anywhere.** The previous system's signature was a lean, and it is
+  the single thing most responsible for how loud that build felt.
 - **Numerals are tabular (`font-variant-numeric: tabular-nums`) and the largest
   thing in their container.**
-- Labels are small, uppercase, letterspaced, narrow, and quiet.
-- **A roster of exercise names is not a label.** Proper nouns get sentence case
-  and the body face. Uppercasing a seven-item exercise list turns it into a
-  block the reader has to decode word by word — this was the single least
-  readable thing in the previous build and it must not come back.
+- **Exercise names are sentence case in the body face.** Never uppercase, never
+  the display weight. A roster of exercise names is not a label. This rule
+  existed in the previous brief and was broken by the build; it is restated
+  here because it is the most-violated rule in this project's history.
+- Uppercase is allowed only on tiny meta labels (≤12px), letterspaced, quiet,
+  and never on anything a user reads as content.
 - Body copy stays modest — this app is read in glances, not paragraphs.
 
 ### 4.5 Surface and motion
 
-- **Panels are borderless at rest.** A panel is legible because it sits on a
-  darker ground, not because a line is drawn around it. A visible border MEANS
-  something (live, stall). This is what stops a page of panels reading as a
-  card grid.
+- **One lifted plane per screen.** The live exercise is the only thing that
+  sits above the field. Everything else is on the field, divided by hairlines.
+  This is what stops a page reading as a card grid.
 - **Repeated identical cards are banned outright.** Where a list has more than
-  one entry, use two tiers: one featured item carrying the primary action, the
-  rest as divided rows in a single shared panel. See `.routine--lead` /
-  `.routine-rest`, and `.stat-grid` (a divided readout band, not four tiles).
-- **Those divided rows are one component: `.row`.** Anatomy is
-  `__lead?` · `__main` (`.name` + `__meta`, optionally `__sub`) · `__wide?` ·
-  `__trail?`, with `--top` and `__trail--stack` as the only modifiers. Every
-  list on Heute, Verlauf and the finished-session debrief uses it. It replaced
-  four hand-rolled families (`.recent-row`, `.ex-report-row`, `.routine-row`,
-  `.verlauf-row`) that had drifted apart after the Athletik rebuild — three of
-  them carried a byte-identical divider rule. **Do not add a fifth.** A new
-  list surface composes `.row`; if it genuinely cannot, that is a signal the
-  component needs a variant, not that the page needs its own classes.
-  The one deliberate exception is `.uebungen-row`, which is `display: contents`
-  inside a grid table so its cells align to shared column tracks — same word,
-  different job.
-- **Controls are pills; boxes are not.** `--r-control` is a pill radius — it is
-  correct on buttons and on 44×44 icon targets, and wrong on anything that
-  holds more than one line of text. Those take `--r-panel`.
-- **Motion is fast and decisive.** Ease-out curves, 90–220 ms. **No bounce, no
-  elastic.** Honour `prefers-reduced-motion`: it disables the flare, the fills,
-  and every transition.
+  one entry, it is divided rows in one shared surface.
+- **Those divided rows stay one component: `.row`.** Anatomy is `__lead?` ·
+  `__main` (`.name` + `__meta`, optionally `__sub`) · `__wide?` · `__trail?`,
+  with `--top` and `__trail--stack` as the only modifiers. Every list on Heute,
+  Verlauf and the finished-session debrief uses it. **Do not add a second
+  family.** A new list surface composes `.row`; if it genuinely cannot, the
+  component needs a variant, not the page its own classes.
+- **The confirm target is ≥64px tall and lives in the thumb zone.** No keyboard
+  ever opens during a workout: weight and reps are ± steppers.
+- **Motion conveys accumulation.** Confirming a set: the chip snaps
+  outline→filled, one tick lights on the session strip, the total counts up.
+  Same gesture everywhere. Records get one gold flare, then settle.
+  Ease-out, 90–220 ms, no bounce, no elastic. `prefers-reduced-motion` replaces
+  every one of these with an instant state change.
 
-### 4.6 Anti-references
+### 4.6 Per-screen intensity
 
-Explicitly not: the amber-on-near-black instrument panel this replaces; lime or
-acid-green on near-black (what *that* replaced); violet-to-teal fitness
-gradients; colour used decoratively; **emoji as icons** (the app now has one
-shared inline-SVG set — `_icon_edit.html`, `_icon_chart.html` — precisely so
-that emoji never come back); the faces that read as an AI default pick (Inter,
-Space Grotesk, Outfit).
+One skin, but not one volume. The chosen direction is warm and loud, and the
+standing risk is that it wears out over a year of daily use. The guard is
+designed in rather than argued about:
+
+- **Session (live)** — full intensity. It is a focus mode: no tab bar, one way
+  back, the live exercise as the only lifted surface, accumulation always
+  visible.
+- **Heute, Verlauf, Übungen, exercise detail** — same palette, lower
+  saturation. These are read, not operated.
+- **Finished-session debrief** — the one place a full-intensity moment is
+  earned, because it is the end of the thing that was accumulating.
+
+**Statistik stays desktop-only** and is not in the mobile tab bar; its URL stays
+reachable, and opening it on a phone renders single-column rather than
+redirecting — cramped is better than hidden, but it must not be *broken*, so
+the multi-column layout needs a real fallback rather than horizontal scroll.
+
+Three changes it carries beyond a restyle:
+
+- **It leads with a sentence, not a table.** The page answers what the numbers
+  say before it shows them.
+- **The record timeline is bounded by year bands**, current year open and older
+  years folded with their counts. It ran unbounded at 47 rows and growing,
+  roughly two thirds of the page height, and no row was ever removed to fix it.
+- **A career strip**: one bar per month since the first workout, height =
+  tonnage, with record months, deload months and gaps marked. This is the one
+  figure an all-time page should obviously have and did not — Heute holds eight
+  weeks, and nothing held the whole history. It needs a new
+  `analytics.monthly_tonnage(rows)`; it belongs in `analytics.py` rather than
+  `stats.py` by the time-horizon rule above.
+
+### 4.7 Anti-references
+
+Explicitly not: the amber-on-near-black instrument panel two systems ago; the
+electric-blue-on-near-black sport broadcast one system ago; lime or acid-green
+on near-black; violet-to-teal fitness gradients; any near-black page background
+at all — the field is a committed colour; italic as a signature; uppercase
+exercise names; colour used decoratively; **emoji as icons** (the app has one
+shared inline-SVG set — `_icon.html` — precisely so that emoji never come
+back); the faces that read as an AI default pick (Inter, Space Grotesk,
+Outfit).
 
 ## Accessibility & Inclusion
 
 - Colour is never the sole carrier of state — every state also carries a shape or
   a word (§4.2).
-- All text meets WCAG AA against its **actual** background — verify amber and cyan
-  against `--chassis` (where they sit on panels), not only against `--ground`.
+- All text meets WCAG AA against its **actual** background, **in both themes** —
+  verify the accents against `--chassis` (where they sit on panels), not only
+  against `--ground`, and verify the on-fill label colours against the fills.
 - Every interactive control is a real `<button>` or `<a>`; nothing clickable is a
   styled `<div>`. Visible keyboard focus on every focusable element.
-- Touch targets at least 44×44 CSS px for anything tapped during a workout.
-- `prefers-reduced-motion` disables the flare, the linear fills, and every
+- Touch targets at least 44×44 CSS px for anything tapped during a workout; the
+  primary confirm target is at least 64px tall.
+- `prefers-reduced-motion` disables the flare, the fills, the count-up, and every
   transition.

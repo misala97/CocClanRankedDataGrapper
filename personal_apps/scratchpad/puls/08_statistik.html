@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Puls · Statistik</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="puls.css">
+<style>
+body{padding-bottom:var(--sp-16)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 var(--sp-8)}
+
+/* desktop top bar, not a tab bar: Statistik only exists at this width */
+.topbar{
+  border-bottom:1px solid var(--edge);background:var(--chassis);
+  margin-bottom:var(--sp-8);
+}
+.topbar__in{max-width:1180px;margin:0 auto;padding:var(--sp-3) var(--sp-8);
+  display:flex;align-items:center;gap:var(--sp-6)}
+.topbar__brand{font-size:var(--t-body);font-weight:var(--w-max);letter-spacing:-.02em}
+.topbar__nav{display:flex;gap:var(--sp-1);flex:1}
+.topbar__link{
+  min-height:var(--tap);display:inline-flex;align-items:center;padding-inline:var(--sp-4);
+  border-radius:var(--r-control);font-size:var(--t-sm);font-weight:var(--w-semi);color:var(--dim);
+}
+.topbar__link.is-active{color:var(--live-ink);background:var(--raised)}
+
+/* ---- zone 1: the answer, then the numbers that make it ---- */
+.lede{display:flex;align-items:flex-end;gap:var(--sp-8)}
+.lede__main{flex:1;min-width:0}
+.lede__kick{font-size:var(--t-sm);font-weight:var(--w-bold);color:var(--live-ink)}
+.lede__h{
+  font-size:2.75rem;font-weight:var(--w-max);letter-spacing:-.04em;line-height:1.06;
+  margin-top:6px;text-wrap:balance;max-width:22ch;
+}
+.lede__h em{font-style:normal;color:var(--live-ink)}
+.lede__aside{
+  flex:none;text-align:right;font-size:var(--t-sm);color:var(--unlit);line-height:1.6;
+  padding-bottom:6px;
+}
+.lede__aside b{color:var(--dim);font-weight:var(--w-bold)}
+
+.totals{
+  display:grid;grid-template-columns:repeat(5,1fr);margin-top:var(--sp-6);
+  background:var(--chassis);border-radius:var(--r-panel);padding:var(--sp-5) 0;
+}
+.total{display:flex;flex-direction:column;align-items:center;gap:3px}
+.total + .total{border-left:1px solid var(--edge)}
+.total__v{font-size:var(--num-md);font-weight:var(--w-max);letter-spacing:-.04em;line-height:1}
+.total__v small{font-size:var(--t-sm);font-weight:var(--w-semi);color:var(--dim);letter-spacing:0}
+
+/* ---- the career strip: one bar per month since the first workout ---- */
+.career{margin-top:var(--sp-8)}
+.career__head{display:flex;align-items:baseline;gap:var(--sp-3);padding-bottom:var(--sp-3)}
+.career__sp{flex:1}
+.career__body{background:var(--chassis);border-radius:var(--r-panel);padding:var(--sp-5) var(--sp-5) var(--sp-4)}
+.months{display:flex;align-items:flex-end;gap:3px;height:132px}
+.mo{flex:1;border-radius:3px 3px 1px 1px;background:var(--done);min-height:2px;position:relative}
+.mo.is-record{background:var(--record)}
+.mo.is-deload{background:repeating-linear-gradient(135deg,var(--done) 0 4px,transparent 4px 8px),var(--edge)}
+.mo.is-gap{background:var(--edge)}
+.months__axis{display:flex;margin-top:var(--sp-3);border-top:1px solid var(--edge);padding-top:var(--sp-2)}
+.months__axis span{flex:1;font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--unlit);font-weight:var(--w-semi)}
+.months__axis span:last-child{text-align:right}
+.legend{display:flex;gap:var(--sp-5);margin-top:var(--sp-3)}
+.key{display:inline-flex;align-items:center;gap:6px;font-size:var(--t-micro);color:var(--unlit)}
+.key__dot{width:9px;height:9px;border-radius:2px}
+
+/* ---- two-column body ---- */
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:var(--sp-8);margin-top:var(--sp-8)}
+.grid--even{grid-template-columns:1fr 1fr}
+.sec__head{display:flex;align-items:baseline;gap:var(--sp-3);padding-bottom:var(--sp-3)}
+.sec__sp{flex:1}
+.sec__note{font-size:var(--t-meta);color:var(--unlit)}
+
+/* progression: a diverging bar, zero in the middle, sparkline on the left */
+.prog{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) 0}
+.prog + .prog{border-top:1px solid var(--edge)}
+.prog__name{flex:none;width:14rem;font-size:var(--t-sm);font-weight:var(--w-semi);color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog__spark{flex:none;width:74px;height:24px}
+.prog__spark svg{display:block;width:100%;height:100%}
+.prog__axis{flex:1;position:relative;height:22px}
+.prog__zero{position:absolute;inset-block:0;left:50%;width:1px;background:var(--edge-hi)}
+.prog__bar{position:absolute;top:4px;height:14px;border-radius:3px}
+.prog__bar--up{left:50%;background:var(--done)}
+.prog__bar--down{right:50%;background:var(--stall)}
+.prog__pct{flex:none;width:5rem;text-align:right;font-size:var(--t-sm);font-weight:var(--w-max);
+  letter-spacing:-.02em}
+.prog__pct.is-up{color:var(--done-ink)}
+.prog__pct.is-down{color:var(--stall-ink)}
+.prog__meta{flex:none;width:7rem;text-align:right;font-size:var(--t-micro);color:var(--unlit)}
+
+/* behaviour readouts, stacked in the narrow column */
+.read + .read{margin-top:var(--sp-5);padding-top:var(--sp-5);border-top:1px solid var(--edge)}
+.read__q{font-size:var(--t-sm);color:var(--unlit)}
+.read__a{font-size:1.25rem;font-weight:var(--w-max);letter-spacing:-.025em;margin-top:4px;line-height:1.2}
+.read__a em{font-style:normal;color:var(--live-ink)}
+.read__bars{display:flex;gap:5px;margin-top:var(--sp-3)}
+.rb{flex:1}
+.rb__track{height:36px;border-radius:6px;background:var(--raised);display:flex;align-items:flex-end;overflow:hidden}
+.rb__fill{width:100%;background:var(--done);border-radius:6px 6px 0 0}
+.rb__fill.is-top{background:var(--live)}
+.rb__lbl{display:block;text-align:center;margin-top:5px;font-size:var(--t-micro);color:var(--unlit)}
+.read__silent{font-size:var(--t-meta);color:var(--unlit);margin-top:var(--sp-2);line-height:1.5}
+
+/* effort: one stacked bar, then the exercises that fill it */
+.stack-bar{display:flex;height:44px;border-radius:10px;overflow:hidden;gap:2px}
+.stack-bar span{display:block}
+.stack-key{display:flex;flex-wrap:wrap;gap:var(--sp-3) var(--sp-5);margin-top:var(--sp-3)}
+
+/* records: year bands, current year open, the rest folded away */
+.year{
+  display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:var(--tap);
+  padding-bottom:var(--sp-2);border-bottom:1px solid var(--edge);margin-top:var(--sp-4);
+}
+.year__chev{width:13px;height:13px;flex:none;color:var(--unlit);transition:transform var(--dur-2) var(--ease)}
+.year.is-open .year__chev{transform:rotate(90deg)}
+.year__sp{flex:1}
+.rec{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) 0}
+.rec + .rec{border-top:1px solid var(--edge)}
+.rec__date{flex:none;width:5.5rem;font-size:var(--t-meta);color:var(--unlit)}
+/* name and kind belong together; the gap goes between them and the value,
+   not stranded in the middle of the row */
+.rec__name{flex:0 1 auto;min-width:0;font-size:var(--t-sm);font-weight:var(--w-semi);color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec__kind{flex:none;margin-inline-end:auto;font-size:var(--t-micro);font-weight:var(--w-bold);letter-spacing:.04em;
+  padding:3px 8px;border-radius:var(--r-chip);background:var(--raised);color:var(--dim)}
+.rec__val{flex:none;width:8.5rem;text-align:right;font-size:var(--t-sm);font-weight:var(--w-max);
+  color:var(--record-ink);letter-spacing:-.02em}
+.rec__val small{font-weight:var(--w-semi);color:var(--unlit);font-size:var(--t-micro);
+  display:block;letter-spacing:0}
+
+/* Statistik is composed for the width and is not in the mobile tab bar, but
+   its URL stays reachable -- the route's own contract is that opening it on a
+   phone renders single-column rather than redirecting, because hiding data the
+   user asked for is worse than showing it cramped. Cramped, though, not broken:
+   without this the fixed columns pushed 360px of horizontal scroll. */
+@media (max-width: 899px){
+  .wrap{padding-inline:var(--sp-4)}
+  .topbar__in{padding-inline:var(--sp-4);gap:var(--sp-3)}
+  .topbar__nav{overflow-x:auto}
+  .lede{flex-direction:column;align-items:flex-start;gap:var(--sp-4)}
+  .lede__h{font-size:1.75rem;max-width:none}
+  .lede__aside{text-align:left;padding-bottom:0}
+  .totals{grid-template-columns:1fr 1fr;row-gap:var(--sp-4)}
+  .total + .total{border-left:0}
+  .total:nth-child(2n){border-left:1px solid var(--edge)}
+  .total:last-child{grid-column:1 / -1}
+  .career__body{overflow-x:auto}
+  .months, .months__axis{min-width:620px}
+  .grid{grid-template-columns:1fr;gap:var(--sp-8)}
+  .prog{flex-wrap:wrap;gap:var(--sp-2) var(--sp-3)}
+  .prog__name{width:100%}
+  .prog__spark{display:none}
+  .prog__axis{order:3;flex-basis:100%}
+  .prog__meta{width:auto;flex:1;text-align:left}
+  .rec{flex-wrap:wrap}
+  .rec__name{flex:1}
+  .rec__kind{margin-inline-end:0}
+  .rec__val{width:auto;margin-inline-start:auto}
+  .stack-bar{height:34px}
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="topbar__in">
+    <span class="topbar__brand">Gym Tracker</span>
+    <span class="topbar__nav">
+      <a class="topbar__link">Heute</a>
+      <a class="topbar__link">Übungen</a>
+      <a class="topbar__link">Verlauf</a>
+      <a class="topbar__link is-active">Statistik</a>
+    </span>
+    <a class="topbar__link">Abmelden</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <section class="lede">
+    <span class="lede__main">
+      <span class="lede__kick">Seit 12.03.2024 · 2 Jahre, 4 Monate</span>
+      <h1 class="lede__h">Du hast <em>1.186 Tonnen</em> bewegt und dabei nie länger als 12 Tage pausiert.</h1>
+    </span>
+    <span class="lede__aside">
+      ≈ 198 ausgewachsene Elefanten<br>
+      Größtes Workout: <b>14.320 kg</b> · 20.07.2026
+    </span>
+  </section>
+
+  <div class="totals">
+    <span class="total"><span class="total__v">214</span><span class="lbl">Workouts</span></span>
+    <span class="total"><span class="total__v">4.812</span><span class="lbl">Sätze</span></span>
+    <span class="total"><span class="total__v">41.203</span><span class="lbl">Wiederholungen</span></span>
+    <span class="total"><span class="total__v">1.186<small>t</small></span><span class="lbl">Tonnage</span></span>
+    <span class="total"><span class="total__v">1,74<small>/Wo.</small></span><span class="lbl">Schnitt</span></span>
+  </div>
+
+  <section class="career">
+    <div class="career__head">
+      <span class="lbl">Die ganze Laufbahn</span>
+      <span class="career__sp"></span>
+      <span class="sec__note">Ein Balken je Monat · Höhe = Tonnage</span>
+    </div>
+    <div class="career__body">
+      <div class="months" role="img" aria-label="Monatliche Tonnage seit März 2024, von etwa 18 t auf 52 t gestiegen, mit zwei Deload-Monaten und einer Pause im Januar 2025">
+        <span class="mo" style="height:28%"></span><span class="mo" style="height:34%"></span>
+        <span class="mo" style="height:31%"></span><span class="mo" style="height:41%"></span>
+        <span class="mo" style="height:46%"></span><span class="mo is-deload" style="height:26%"></span>
+        <span class="mo" style="height:49%"></span><span class="mo" style="height:53%"></span>
+        <span class="mo is-record" style="height:58%"></span><span class="mo" style="height:44%"></span>
+        <span class="mo is-gap" style="height:4%"></span><span class="mo" style="height:38%"></span>
+        <span class="mo" style="height:51%"></span><span class="mo" style="height:57%"></span>
+        <span class="mo is-deload" style="height:33%"></span><span class="mo" style="height:62%"></span>
+        <span class="mo" style="height:66%"></span><span class="mo is-record" style="height:74%"></span>
+        <span class="mo" style="height:69%"></span><span class="mo" style="height:71%"></span>
+        <span class="mo" style="height:78%"></span><span class="mo" style="height:73%"></span>
+        <span class="mo is-record" style="height:86%"></span><span class="mo" style="height:81%"></span>
+        <span class="mo" style="height:88%"></span><span class="mo" style="height:92%"></span>
+        <span class="mo is-record" style="height:100%"></span><span class="mo" style="height:64%"></span>
+      </div>
+      <div class="months__axis"><span>Mrz 2024</span><span>2025</span><span>2026</span><span>Jul 2026</span></div>
+      <div class="legend">
+        <span class="key"><span class="key__dot" style="background:var(--done)"></span>Tonnage</span>
+        <span class="key"><span class="key__dot" style="background:var(--record)"></span>Monat mit Rekord</span>
+        <span class="key"><span class="key__dot" style="background:var(--edge-hi)"></span>Deload-Monat</span>
+        <span class="key"><span class="key__dot" style="background:var(--edge)"></span>Pause</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section>
+      <div class="sec__head">
+        <span class="lbl">Fortschritt seit dem ersten Mal</span>
+        <span class="sec__sp"></span>
+        <span class="sec__note">e1RM, erste gegen aktuelle Einheit · mind. 4 Einheiten</span>
+      </div>
+
+      <div class="prog">
+        <span class="prog__name">Seated Row (Machine, Good)</span>
+        <span class="prog__spark"><svg viewBox="0 0 74 24" fill="none" stroke="var(--done)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,20 14,18 26,14 38,11 50,8 62,5 72,3"/></svg></span>
+        <span class="prog__axis"><span class="prog__zero"></span><span class="prog__bar prog__bar--up" style="width:42%"></span></span>
+        <span class="prog__pct is-up">+84 %</span>
+        <span class="prog__meta">46,6 → 85,8 kg</span>
+      </div>
+      <div class="prog">
+        <span class="prog__name">T Bar Row (Standing)</span>
+        <span class="prog__spark"><svg viewBox="0 0 74 24" fill="none" stroke="var(--done)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,19 14,16 26,17 38,12 50,10 62,7 72,4"/></svg></span>
+        <span class="prog__axis"><span class="prog__zero"></span><span class="prog__bar prog__bar--up" style="width:33%"></span></span>
+        <span class="prog__pct is-up">+66 %</span>
+        <span class="prog__meta">36,2 → 60,2 kg</span>
+      </div>
+      <div class="prog">
+        <span class="prog__name">Lat Pulldown (Single Arm, Hbf)</span>
+        <span class="prog__spark"><svg viewBox="0 0 74 24" fill="none" stroke="var(--done)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,18 14,15 26,13 38,13 50,9 62,8 72,6"/></svg></span>
+        <span class="prog__axis"><span class="prog__zero"></span><span class="prog__bar prog__bar--up" style="width:25%"></span></span>
+        <span class="prog__pct is-up">+49 %</span>
+        <span class="prog__meta">55,0 → 81,9 kg</span>
+      </div>
+      <div class="prog">
+        <span class="prog__name">Preacher Curl Bilateral</span>
+        <span class="prog__spark"><svg viewBox="0 0 74 24" fill="none" stroke="var(--done)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,17 14,16 26,14 38,14 50,12 62,11 72,10"/></svg></span>
+        <span class="prog__axis"><span class="prog__zero"></span><span class="prog__bar prog__bar--up" style="width:11%"></span></span>
+        <span class="prog__pct is-up">+22 %</span>
+        <span class="prog__meta">28,2 → 34,4 kg</span>
+      </div>
+      <div class="prog">
+        <span class="prog__name">Hammer Curl (Dumbbell)</span>
+        <span class="prog__spark"><svg viewBox="0 0 74 24" fill="none" stroke="var(--stall)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,10 14,9 26,11 38,10 50,12 62,11 72,12"/></svg></span>
+        <span class="prog__axis"><span class="prog__zero"></span><span class="prog__bar prog__bar--down" style="width:3%"></span></span>
+        <span class="prog__pct is-down">−6 %</span>
+        <span class="prog__meta">19,0 → 17,9 kg</span>
+      </div>
+      <div class="prog">
+        <span class="prog__name">Reverse Fly (Machine)</span>
+        <span class="prog__spark"><svg viewBox="0 0 74 24" fill="none" stroke="var(--stall)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,8 14,9 26,8 38,11 50,10 62,12 72,13"/></svg></span>
+        <span class="prog__axis"><span class="prog__zero"></span><span class="prog__bar prog__bar--down" style="width:6%"></span></span>
+        <span class="prog__pct is-down">−11 %</span>
+        <span class="prog__meta">48,7 → 43,3 kg</span>
+      </div>
+
+      <div class="sec__head" style="padding-top:var(--sp-8)">
+        <span class="lbl">Wohin die Arbeit geht</span>
+        <span class="sec__sp"></span>
+        <span class="sec__note">Anteil an 1.186 t</span>
+      </div>
+      <div class="stack-bar">
+        <span style="width:31%;background:var(--done)"></span>
+        <span style="width:24%;background:var(--done);opacity:.78"></span>
+        <span style="width:19%;background:var(--done);opacity:.58"></span>
+        <span style="width:14%;background:var(--done);opacity:.4"></span>
+        <span style="width:12%;background:var(--done);opacity:.26"></span>
+      </div>
+      <div class="stack-key">
+        <span class="key"><span class="key__dot" style="background:var(--done)"></span>Rücken 31 %</span>
+        <span class="key"><span class="key__dot" style="background:var(--done);opacity:.78"></span>Beine 24 %</span>
+        <span class="key"><span class="key__dot" style="background:var(--done);opacity:.58"></span>Brust 19 %</span>
+        <span class="key"><span class="key__dot" style="background:var(--done);opacity:.4"></span>Arme 14 %</span>
+        <span class="key"><span class="key__dot" style="background:var(--done);opacity:.26"></span>Schultern 12 %</span>
+      </div>
+
+      <div class="prog" style="margin-top:var(--sp-5);border-top:1px solid var(--edge)">
+        <span class="prog__name">Beinpresse</span>
+        <span class="prog__axis"><span class="prog__bar" style="left:0;width:100%;background:var(--done)"></span></span>
+        <span class="prog__pct">142 t</span>
+      </div>
+      <div class="prog">
+        <span class="prog__name">Seated Row (Machine, Good)</span>
+        <span class="prog__axis"><span class="prog__bar" style="left:0;width:71%;background:var(--done)"></span></span>
+        <span class="prog__pct">101 t</span>
+      </div>
+      <div class="prog">
+        <span class="prog__name">Lat Pulldown (Single Arm, Hbf)</span>
+        <span class="prog__axis"><span class="prog__bar" style="left:0;width:63%;background:var(--done)"></span></span>
+        <span class="prog__pct">89 t</span>
+      </div>
+      <div class="prog">
+        <span class="prog__name">Bench Press (Dumbbell)</span>
+        <span class="prog__axis"><span class="prog__bar" style="left:0;width:54%;background:var(--done)"></span></span>
+        <span class="prog__pct">77 t</span>
+      </div>
+
+    </section>
+
+    <section>
+      <div class="sec__head"><span class="lbl">Wie du trainierst</span></div>
+
+      <div class="read">
+        <p class="read__q">In welchem Wiederholungsbereich?</p>
+        <p class="read__a">Fast alles zwischen <em>6 und 12</em></p>
+        <div class="read__bars">
+          <span class="rb"><span class="rb__track"><span class="rb__fill" style="height:18%"></span></span><span class="rb__lbl">1–5</span></span>
+          <span class="rb"><span class="rb__track"><span class="rb__fill is-top" style="height:88%"></span></span><span class="rb__lbl">6–8</span></span>
+          <span class="rb"><span class="rb__track"><span class="rb__fill" style="height:71%"></span></span><span class="rb__lbl">9–12</span></span>
+          <span class="rb"><span class="rb__track"><span class="rb__fill" style="height:12%"></span></span><span class="rb__lbl">13+</span></span>
+        </div>
+      </div>
+
+      <div class="read">
+        <p class="read__q">Was passiert innerhalb einer Übung?</p>
+        <p class="read__a">Satz 1 bis letzter Satz: <em>−2,1 Wdh.</em></p>
+        <p class="read__silent">Bei praktisch gleichem Gewicht (−0,4 %). Aus 1.240 Einheiten.</p>
+      </div>
+
+      <div class="read">
+        <p class="read__q">Wann trainierst du?</p>
+        <p class="read__a">Abends, und am liebsten <em>montags</em></p>
+        <p class="read__silent">Abende tragen 78 % der Tonnage. Montag ist mit 24 % der häufigste Tag.</p>
+      </div>
+
+      <div class="read">
+        <p class="read__q">Bringt mehr Pause mehr Leistung?</p>
+        <p class="read__silent">Noch nicht genug Daten — dafür braucht es mindestens 5 Workouts je Abstand. Die Frage bleibt offen, statt geraten zu werden.</p>
+      </div>
+    </section>
+  </div>
+
+
+  <section style="margin-top:var(--sp-8)">
+      <div class="sec__head">
+        <span class="lbl">Jeder Rekord</span>
+        <span class="sec__sp"></span>
+        <span class="sec__note">47 insgesamt</span>
+      </div>
+
+      <button class="year is-open" aria-expanded="true">
+        <svg class="year__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        <span class="lbl">2026</span><span class="year__sp"></span><span class="lbl">14 Rekorde</span>
+      </button>
+      <div class="rec">
+        <span class="rec__date">28.07.2026</span>
+        <span class="rec__name">T Bar Row (Standing)</span>
+        <span class="rec__kind">Gewicht</span>
+        <span class="rec__val">47,5 kg<small>vorher 45,0</small></span>
+      </div>
+      <div class="rec">
+        <span class="rec__date">20.07.2026</span>
+        <span class="rec__name">Beinpresse</span>
+        <span class="rec__kind">Volumen</span>
+        <span class="rec__val">3.240 kg<small>vorher 3.010</small></span>
+      </div>
+      <div class="rec">
+        <span class="rec__date">20.07.2026</span>
+        <span class="rec__name">Hip Thrust</span>
+        <span class="rec__kind">e1RM</span>
+        <span class="rec__val">128,4 kg<small>vorher 121,0</small></span>
+      </div>
+      <div class="rec">
+        <span class="rec__date">05.07.2026</span>
+        <span class="rec__name">Seated Row (Machine, Good)</span>
+        <span class="rec__kind">Gewicht</span>
+        <span class="rec__val">66,0 kg<small>vorher 63,0</small></span>
+      </div>
+      <div class="rec">
+        <span class="rec__date">21.06.2026</span>
+        <span class="rec__name">Chest Press (Machine, Lying)</span>
+        <span class="rec__kind">e1RM</span>
+        <span class="rec__val">92,7 kg<small>vorher 88,1</small></span>
+      </div>
+
+      <button class="year" aria-expanded="false">
+        <svg class="year__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        <span class="lbl">2025</span><span class="year__sp"></span><span class="lbl">21 Rekorde</span>
+      </button>
+      <button class="year" aria-expanded="false">
+        <svg class="year__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        <span class="lbl">2024</span><span class="year__sp"></span><span class="lbl">12 Rekorde</span>
+      </button>
+      </section>
+
+</div>
+</body>
+</html>

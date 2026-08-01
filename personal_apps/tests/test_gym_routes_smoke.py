@@ -423,3 +423,79 @@ def test_recent_slot_history_still_wins_over_another_slot():
     finally:
         with flask_app.app_context():
             _drop_slot_history(exercise_id, created)
+
+
+def _deload_reorder_fixture():
+    """Two throwaway exercises, each with recent completed history, plus an
+    unstarted session holding both in slots 1 and 2.
+
+    Returns (exercise_ids, history_session_ids, active_session_id).
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    exercise_ids, history_ids = [], []
+    for label, weight in (('a', 100.0), ('b', 50.0)):
+        exercise = Exercise(name='pytest reorder lift %s' % label, is_unilateral=False)
+        db.session.add(exercise)
+        db.session.flush()
+        exercise_ids.append(exercise.id)
+        started = dt.datetime.utcnow() - dt.timedelta(days=3)
+        history = WorkoutSession(name='pytest reorder history %s' % label, started_at=started,
+                                 finished_at=started + dt.timedelta(hours=1))
+        history_exercise = SessionExercise(exercise_id=exercise.id, position=len(exercise_ids))
+        history_exercise.sets = [SessionSet(position=1, weight=weight, reps=8, completed=True)]
+        history.exercises.append(history_exercise)
+        db.session.add(history)
+        db.session.commit()
+        history_ids.append(history.id)
+
+    active = WorkoutSession(name='pytest reorder active', started_at=dt.datetime.utcnow())
+    for position, (exercise_id, weight) in enumerate(zip(exercise_ids, (100.0, 50.0)), start=1):
+        session_exercise = SessionExercise(exercise_id=exercise_id, position=position)
+        session_exercise.sets = [SessionSet(position=1, weight=weight, reps=8, completed=False)]
+        active.exercises.append(session_exercise)
+    db.session.add(active)
+    db.session.commit()
+    return exercise_ids, history_ids, active.id
+
+
+def test_reordering_a_deload_session_keeps_the_deloaded_weights(client):
+    """Reordering re-seeds an exercise's pending sets from history, which is
+    recorded at full working weight. On a deload session that silently undid
+    the prescription for every exercise that moved."""
+    from extensions import db
+    from models import SessionExercise, WorkoutSession
+    exercise_ids = history_ids = active_id = None
+    try:
+        with flask_app.app_context():
+            exercise_ids, history_ids, active_id = _deload_reorder_fixture()
+
+        client.post('/gym/session/%d/deload' % active_id, data={'on': '1', 'pct': '70'})
+        # 100 * 0.7 = 70.0 ; 50 * 0.7 = 35.0
+        assert set_weights(active_id) == [70.0, 35.0]
+
+        with flask_app.app_context():
+            session_ = db.session.get(WorkoutSession, active_id)
+            swapped = [se.id for se in sorted(session_.exercises, key=lambda se: -se.position)]
+        client.post('/gym/session/%d/exercises/reorder' % active_id,
+                    json={'order': [str(se_id) for se_id in swapped]})
+
+        with flask_app.app_context():
+            session_ = db.session.get(WorkoutSession, active_id)
+            ordered = sorted(session_.exercises, key=lambda se: se.position)
+            weights = [s.weight for se in ordered for s in se.sets]
+            bases = [s.base_weight for se in ordered for s in se.sets]
+        # slot 1 is now the 50 kg lift, slot 2 the 100 kg one -- both still deloaded
+        assert weights == [35.0, 70.0]
+        assert bases == [50.0, 100.0]
+    finally:
+        with flask_app.app_context():
+            if active_id is not None:
+                doomed = db.session.get(WorkoutSession, active_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+            for exercise_id, history_id in zip(exercise_ids or [], history_ids or []):
+                _drop_slot_history(exercise_id, [history_id])

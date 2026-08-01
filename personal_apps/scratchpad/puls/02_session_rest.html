@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Puls · Session</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="puls.css">
+<style>
+body{display:flex;flex-direction:column;overflow:hidden}
+
+/* ---- focus mode header: no tab bar here, one way out ---- */
+.head{flex:none;padding:var(--sp-4) var(--sp-4) 0}
+.head__row{display:flex;align-items:center;gap:var(--sp-3)}
+.head__back{
+  width:var(--tap);height:var(--tap);margin-inline-start:calc(var(--sp-2) * -1);
+  border-radius:var(--r-chip);display:grid;place-items:center;color:var(--dim);
+}
+.head__back svg{width:22px;height:22px}
+.head__name{flex:1;min-width:0;font-size:var(--t-body);font-weight:var(--w-bold);
+  letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head__clock{font-size:var(--t-body);font-weight:var(--w-semi);color:var(--dim)}
+.head__more{width:var(--tap);height:var(--tap);margin-inline-end:calc(var(--sp-2) * -1);
+  border-radius:var(--r-chip);display:grid;place-items:center;color:var(--dim)}
+.head__more svg{width:20px;height:20px}
+
+/* exercise rail: one segment per exercise, the live one twice as wide */
+.rail{display:flex;gap:4px;height:8px;margin-top:var(--sp-3)}
+.rail__seg{flex:1;border-radius:4px;background:var(--edge)}
+.rail__seg.is-done{background:var(--done)}
+.rail__seg.is-now{flex:2.4;background:var(--edge);position:relative;overflow:hidden}
+.rail__seg.is-now::after{content:"";position:absolute;inset:0 33.3% 0 0;
+  background:var(--live);border-radius:4px}
+.rail__cap{display:flex;justify-content:space-between;margin-top:7px}
+
+/* ---- the one lifted plane on the screen ---- */
+.live{
+  flex:none;margin:var(--sp-4) var(--sp-4) 0;padding:var(--sp-5) var(--sp-4) var(--sp-4);
+  border-radius:var(--r-panel);background:var(--chassis);box-shadow:var(--lift);
+}
+.live__kick{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:var(--t-meta);font-weight:var(--w-bold);color:var(--live-ink);
+}
+.live__kick::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--live)}
+.live__name{
+  font-size:var(--t-name);font-weight:var(--w-bold);letter-spacing:-.025em;
+  line-height:1.16;margin-top:5px;text-wrap:balance;
+}
+
+/* set chips: outline = offen, filled rose = erledigt, outlined orange = jetzt */
+.sets{display:flex;gap:7px;margin-top:var(--sp-4)}
+.set{
+  flex:1;min-height:38px;border-radius:var(--r-inset);
+  display:flex;align-items:center;justify-content:center;
+  font-size:var(--t-meta);font-weight:var(--w-bold);
+  background:var(--raised);color:var(--unlit);
+  transition:background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+.set.is-done{background:var(--done);color:var(--on-done)}
+.set.is-now{background:transparent;box-shadow:inset 0 0 0 2px var(--live);color:var(--live-ink)}
+
+/* the two numbers: no keyboard ever opens */
+.pair{display:flex;gap:var(--sp-3);margin-top:var(--sp-4)}
+.field{
+  flex:1;background:var(--raised);border-radius:var(--r-control);
+  padding:var(--sp-3) var(--sp-2) var(--sp-2);
+  display:flex;flex-direction:column;align-items:center;
+}
+.field__num{font-size:var(--num-md);font-weight:var(--w-max);letter-spacing:-.04em;line-height:1}
+.field__lbl{font-size:var(--t-meta);font-weight:var(--w-med);color:var(--unlit);margin-top:2px}
+.field__keys{display:flex;gap:var(--sp-2);margin-top:var(--sp-3);width:100%}
+.field__key{
+  flex:1;min-height:var(--tap);border-radius:var(--r-inset);
+  background:var(--chassis);color:var(--dim);
+  font-size:22px;font-weight:var(--w-semi);display:grid;place-items:center;
+  box-shadow:0 1px 0 var(--edge);
+}
+
+.go{
+  width:100%;margin-top:var(--sp-4);min-height:var(--tap-primary);
+  border-radius:var(--r-control);background:var(--live);color:var(--on-live);
+  font-size:1.0625rem;font-weight:var(--w-max);letter-spacing:-.01em;
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  box-shadow:var(--lift-live);
+}
+.go svg{width:22px;height:22px}
+
+/* ---- rest: the SAME slot as .go, so nothing on the screen moves ----
+   The countdown sits on --raised rather than on the draining fill: text that
+   straddles a moving boundary can't hold one contrast ratio, and this has to
+   stay legible at a glance from three metres away. The drain rail carries the
+   motion instead, which is what the eye reads anyway. */
+.rest{
+  width:100%;margin-top:var(--sp-4);min-height:var(--tap-primary);
+  border-radius:var(--r-control);background:var(--raised);
+  display:flex;flex-direction:column;justify-content:center;gap:var(--sp-2);
+  padding:var(--sp-3) var(--sp-4);position:relative;overflow:hidden;
+}
+.rest__row{display:flex;align-items:baseline;gap:var(--sp-3)}
+.rest__num{
+  font-size:var(--num-md);font-weight:var(--w-max);letter-spacing:-.04em;
+  line-height:1;color:var(--live-ink);
+}
+.rest__of{font-size:var(--t-meta);font-weight:var(--w-semi);color:var(--unlit)}
+.rest__sp{flex:1}
+.rest__skip{
+  font-size:var(--t-sm);font-weight:var(--w-semi);color:var(--dim);
+  /* a real 44px target without inflating the bar it sits in */
+  min-height:var(--tap);display:inline-flex;align-items:center;
+  padding-inline:var(--sp-2);margin:calc(var(--sp-3) * -1) calc(var(--sp-2) * -1);
+}
+.rest__track{height:8px;border-radius:4px;background:var(--edge);overflow:hidden}
+.rest__fill{display:block;height:100%;width:52%;border-radius:4px;background:var(--live)}
+
+/* the set that was just logged gets one beat, then settles into --done */
+@keyframes set-land{
+  0%{transform:scale(.94)}
+  55%{transform:scale(1.03)}
+  100%{transform:scale(1)}
+}
+.set.just-landed{animation:set-land var(--dur-3) var(--ease)}
+
+/* ---- what the session has become ---- */
+.grew{margin:var(--sp-5) var(--sp-4) 0;display:flex;align-items:flex-end;gap:var(--sp-3)}
+.grew__num{font-size:var(--num-lg);font-weight:var(--w-max);letter-spacing:-.045em;line-height:.88}
+.grew__unit{font-size:var(--t-sm);font-weight:var(--w-semi);color:var(--dim);padding-bottom:2px}
+.grew__sp{flex:1}
+.grew__side{text-align:right;font-size:var(--t-meta);color:var(--unlit);line-height:1.55}
+.grew__side b{font-weight:var(--w-bold);color:var(--dim)}
+
+/* one tick per set in the whole workout -- the session filling up, literally */
+.ticks{display:flex;gap:3px;margin:var(--sp-3) var(--sp-4) 0}
+.tick{flex:1;height:9px;border-radius:2px;background:var(--edge)}
+.tick.is-on{background:var(--done)}
+.tick.is-hot{background:var(--live)}
+
+/* the queue is the only scrolling region: the live block and the totals stay
+   put, so nothing you need mid-set can be scrolled off by accident */
+.queue{
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  margin:var(--sp-2) var(--sp-4) 0;
+  -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+          mask-image:linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+}
+.foot{flex:none;padding:var(--sp-3) var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom,0px))}
+.foot__end{
+  width:100%;min-height:var(--tap);border-radius:var(--r-control);
+  font-size:var(--t-sm);font-weight:var(--w-semi);color:var(--dim);
+  box-shadow:inset 0 0 0 1px var(--edge-hi);
+}
+</style>
+</head>
+<body>
+
+<header class="head">
+  <div class="head__row">
+    <button class="head__back" aria-label="Zurück">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <span class="head__name">Pull HBF</span>
+    <span class="head__clock">17:55</span>
+    <button class="head__more" aria-label="Workout-Optionen">
+      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>
+    </button>
+  </div>
+
+  <div class="rail" role="img" aria-label="Übung 2 von 7">
+    <span class="rail__seg is-done"></span>
+    <span class="rail__seg is-now"></span>
+    <span class="rail__seg"></span><span class="rail__seg"></span><span class="rail__seg"></span>
+    <span class="rail__seg"></span><span class="rail__seg"></span>
+  </div>
+  <div class="rail__cap"><span class="lbl">Übung 2 von 7</span><span class="lbl">Noch 16 Sätze</span></div>
+</header>
+
+<section class="live">
+  <span class="live__kick">Jetzt</span>
+  <h1 class="live__name">Seated Row (Machine, Good)</h1>
+
+  <div class="sets">
+    <span class="set is-done">66 × 9</span>
+    <span class="set is-done just-landed">66 × 8</span>
+    <span class="set">Satz 3</span>
+  </div>
+
+  <div class="pair">
+    <div class="field">
+      <span class="field__num">66,0</span>
+      <span class="field__lbl">kg</span>
+      <span class="field__keys"><button class="field__key" aria-label="Gewicht verringern">−</button><button class="field__key" aria-label="Gewicht erhöhen">+</button></span>
+    </div>
+    <div class="field">
+      <span class="field__num">8</span>
+      <span class="field__lbl">Wdh.</span>
+      <span class="field__keys"><button class="field__key" aria-label="Wiederholungen verringern">−</button><button class="field__key" aria-label="Wiederholungen erhöhen">+</button></span>
+    </div>
+  </div>
+
+  <div class="rest" role="timer" aria-label="Pause, noch 47 Sekunden von 90">
+    <div class="rest__row">
+      <span class="rest__num">0:47</span>
+      <span class="rest__of">Pause</span>
+      <span class="rest__sp"></span>
+      <button class="rest__skip">Überspringen</button>
+    </div>
+    <span class="rest__track"><span class="rest__fill"></span></span>
+  </div>
+</section>
+
+<div class="grew">
+  <span class="grew__num">2.634</span>
+  <span class="grew__unit">kg bewegt</span>
+  <span class="grew__sp"></span>
+  <span class="grew__side"><b>5</b> Sätze · <b>18</b> min</span>
+</div>
+
+<div class="ticks" role="img" aria-label="5 von 21 Sätzen erledigt">
+  <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick is-on"></span>
+  <span class="tick is-on"></span><span class="tick is-on"></span><span class="tick "></span>
+  <span class="tick"></span><span class="tick"></span><span class="tick"></span>
+  <span class="tick"></span><span class="tick"></span><span class="tick"></span>
+  <span class="tick"></span><span class="tick"></span><span class="tick"></span>
+  <span class="tick"></span><span class="tick"></span><span class="tick"></span>
+  <span class="tick"></span><span class="tick"></span><span class="tick"></span>
+</div>
+
+<div class="queue">
+  <div class="row is-done"><span class="row__lead">✓</span><span class="row__main stack"><span class="row__name">Lat Pulldown (Single Arm, Hauptbahnhof)</span></span><span class="row__trail">3/3</span></div>
+  <div class="row"><span class="row__lead">3</span><span class="row__main stack"><span class="row__name">T Bar Row (Standing)</span></span><span class="row__trail">3 × 45,0</span></div>
+  <div class="row"><span class="row__lead">4</span><span class="row__main stack"><span class="row__name">Reverse Fly (Machine)</span></span><span class="row__trail">3 × 32,5</span></div>
+  <div class="row"><span class="row__lead">5</span><span class="row__main stack"><span class="row__name">Preacher Curl Bilateral</span></span><span class="row__trail">3 × 27,5</span></div>
+  <div class="row"><span class="row__lead">6</span><span class="row__main stack"><span class="row__name">Biceps Curl (Rotating)</span></span><span class="row__trail">3 × 15,0</span></div>
+  <div class="row"><span class="row__lead">7</span><span class="row__main stack"><span class="row__name">Hammer Curl (Dumbbell)</span></span><span class="row__trail">3 × 14,0</span></div>
+</div>
+
+<div class="foot">
+  <button class="foot__end">Workout beenden</button>
+</div>
+
+</body>
+</html>

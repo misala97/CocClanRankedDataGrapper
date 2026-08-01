@@ -12,23 +12,43 @@
    context automatically by inject_gym_nav_context() in routes.py -- no view
    needs to pass it explicitly. #}
 {% set gym_nav_items = [
-    {'label': 'Heute', 'endpoint': 'gym.gym_heute'},
-    {'label': 'Übungen', 'endpoint': 'gym.gym_uebungen'},
-    {'label': 'Verlauf', 'endpoint': 'gym.gym_verlauf'},
-    {'label': 'Statistik', 'endpoint': 'gym.gym_statistik', 'desktop_only': true},
+    {'label': 'Start', 'endpoint': 'gym.gym_heute', 'icon': 'home'},
+    {'label': 'Übungen', 'endpoint': 'gym.gym_uebungen', 'icon': 'dumbbell'},
+    {'label': 'Verlauf', 'endpoint': 'gym.gym_verlauf', 'icon': 'history'},
+    {'label': 'Statistik', 'endpoint': 'gym.gym_statistik', 'desktop_only': true, 'icon': 'chart'},
 ] %}
 
-<nav class="topbar" aria-label="Hauptnavigation">
+{# Both navs are in every document and CSS picks one by width, so they cannot
+   share a label -- a screen reader offers two identically-named landmarks and
+   neither name says which is which. #}
+<nav class="topbar" aria-label="Hauptnavigation (Desktop)">
     <span class="topbar__brand">Gym Tracker</span>
     <div class="topbar__nav">
         {% for item in gym_nav_items %}
-        <a href="{{ url_for(item.endpoint) }}" class="topbar__link{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
+        {# aria-current, not just a class: .is-active was a colour and a rail,
+           neither of which reaches assistive tech. #}
+        <a href="{{ url_for(item.endpoint) }}" class="topbar__link{{ ' is-active' if request.endpoint == item.endpoint else '' }}"
+           {% if request.endpoint == item.endpoint %}aria-current="page"{% endif %}>{{ item.label }}</a>
         {% endfor %}
         <a href="/logout" class="topbar__link">Abmelden</a>
     </div>
 </nav>
 
-{% if gym_active_session and request.endpoint != 'gym.session_detail' %}
+{# Not on Start, and not on the session itself.
+
+   Start already leads with a full-width "Läuft gerade" card carrying the same
+   workout name and a bigger, clearer "Weiter" — the strip was a second copy of
+   it pinned 700px below. Worse, it cost §4.2's load-bearing rule: Start ran
+   seven --live elements in one viewport (two solid buttons, an outlined pill,
+   a label, plus the strip's border, clock and pulse), and at seven the hot
+   orange stops meaning NOW and becomes the brand colour — which is the exact
+   failure §4.0 records Athletik being rejected for. Four of those seven were
+   the shell's.
+
+   The clock was the strip's only unique contribution there, so it moved into
+   the card (see heute.html). _base.html's has-resume condition mirrors this
+   one exactly; change both or neither. #}
+{% if gym_active_session and request.endpoint not in ('gym.session_detail', 'gym.gym_heute') %}
 {# "Current exercise": the first visible exercise (position order, skipping
    skipped rows and originals a mid-workout replace superseded -- the same
    visibility rule session_detail's route uses) that isn't fully logged yet,
@@ -44,25 +64,95 @@
     {% endif %}
 {% endfor %}
 {% if ns.current is none and visible_exercises %}{% set ns.current = visible_exercises[-1] %}{% endif %}
-<a href="{{ url_for('gym.session_detail', session_id=gym_active_session.id) }}" class="resume" aria-label="Aktives Workout fortsetzen">
+{# No aria-label. It used to read "Aktives Workout fortsetzen", which is a
+   correct sentence and strictly worse than nothing: an aria-label REPLACES the
+   element's content in the accessible name, so the workout's name, the current
+   exercise and the clock were all computed away -- a screen reader got less
+   from this link than a sighted user gets from the same pixels. The purpose
+   still needs to lead, so it is a visually-hidden first child instead, which
+   prepends to the name rather than replacing it. #}
+<a href="{{ url_for('gym.session_detail', session_id=gym_active_session.id) }}" class="resume">
+    <span class="sr-only">Aktives Workout fortsetzen:</span>
     <span class="resume__pulse" aria-hidden="true"></span>
     <span class="resume__body">
         <span class="resume__name">{{ gym_active_session.name or 'Workout' }}</span>
         <span class="resume__meta">{{ ns.current.exercise.name if ns.current else 'Wird fortgesetzt' }}</span>
     </span>
+    {# Two clocks, one slot. Leaving the session mid-rest is exactly when the
+       countdown matters most and is exactly when the session screen is not on
+       screen to show it, so the strip carries it -- and falls back to the
+       elapsed time the moment the rest is over. Both are rendered; the script
+       below picks, so a stale server-rendered rest window cannot strand the
+       strip on a countdown that already expired. #}
     <span class="resume__clock" id="resume-elapsed" data-started="{{ gym_active_session.started_at.isoformat() }}">--:--:--</span>
+    {% if gym_active_session.rest_ends_at %}
+    <span class="resume__clock resume__clock--rest" id="resume-rest" hidden
+          data-rest-ends="{{ gym_active_session.rest_ends_at.isoformat() }}"
+          data-max-rest="900">--:--</span>
+    {% endif %}
 </a>
 <script>
-    if (window.GymClock) { window.GymClock.start(document.getElementById('resume-elapsed')); }
+(function () {
+    var elapsed = document.getElementById('resume-elapsed');
+    var rest = document.getElementById('resume-rest');
+    if (!rest) {
+        if (window.GymClock) { window.GymClock.start(elapsed); }
+        return;
+    }
+    // stored UTC, no zone suffix -- same convention the session page's own
+    // rest bar uses (see startRestFillTick in session_detail.html)
+    var endsAt = new Date(rest.dataset.restEnds + 'Z').getTime();
+    // A rest window is minutes, not hours. The strip printed whatever the
+    // server sent with no upper bound, so a stale rest_ends_at made a garbage
+    // number the loudest element in the frame on every page. Past the ceiling
+    // we treat it as "no rest" and show elapsed, which is always true.
+    var maxRest = (parseInt(rest.dataset.maxRest, 10) || 900) * 1000;
+    var timer = null;
+    function toElapsed() {
+        if (timer) { clearTimeout(timer); timer = null; }
+        rest.hidden = true;
+        elapsed.hidden = false;
+        if (window.GymClock) { window.GymClock.start(elapsed); }
+    }
+    function tick() {
+        var left = Math.round((endsAt - Date.now()) / 1000);
+        if (left <= 0) { toElapsed(); return; }
+        rest.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+        timer = setTimeout(tick, 1000);
+    }
+    function sync() {
+        var left = endsAt - Date.now();
+        if (left > 0 && left <= maxRest) { elapsed.hidden = true; rest.hidden = false; tick(); }
+        else { toElapsed(); }
+    }
+    sync();
+
+    // A backgrounded tab stops firing setTimeout, so coming back to the app --
+    // which is the entire scenario this strip exists for -- left the countdown
+    // frozen at whatever second the phone locked on. Re-sync on wake: either
+    // the rest is still running and the tick resumes from the true remaining
+    // time, or it expired while you were away and this is where you find out.
+    //
+    // This does NOT revalidate the session itself. If the workout was finished
+    // in another tab the strip still points at it; that needs a round trip and
+    // belongs with the auto-finish handling, not here.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') { sync(); }
+    });
+})();
 </script>
 {% endif %}
 
-<nav class="tabbar" aria-label="Hauptnavigation">
+<nav class="tabbar" aria-label="Hauptnavigation (Mobil)">
     {# desktop_only items are skipped here: the bar is a fixed 3-column grid
        and Statistik is composed for a width a phone does not have. The route
        stays reachable by URL. #}
     {% for item in gym_nav_items if not item.get('desktop_only') %}
-    <a href="{{ url_for(item.endpoint) }}" class="tabbar__tab{{ ' is-active' if request.endpoint == item.endpoint else '' }}">{{ item.label }}</a>
+    <a href="{{ url_for(item.endpoint) }}" class="tabbar__tab{{ ' is-active' if request.endpoint == item.endpoint else '' }}"
+       {% if request.endpoint == item.endpoint %}aria-current="page"{% endif %}>
+        {% with icon=item.icon %}{% include 'gym/_icon.html' %}{% endwith %}
+        <span>{{ item.label }}</span>
+    </a>
     {% endfor %}
 </nav>
 
@@ -70,18 +160,24 @@
     <a href="/logout" class="label">Abmelden</a>
 </div>
 <script>
-    // gym.css's mobile `order` puts .nav-footer last visually, but CSS
-    // `order` does not change keyboard tab order in any current browser
-    // (confirmed empirically -- Tab still follows DOM order, landing here
-    // straight after the three tab-bar links). .nav-footer is included
-    // ahead of a page's real content in every template that pulls this
-    // partial in, so once the whole document has actually parsed -- not
-    // just this include -- move it to be the last node in <body> for real,
-    // so focus order matches the visual order above it. Harmless on desktop:
-    // .nav-footer is display:none there and out-of-flow elements never
-    // enter the tab sequence regardless of DOM position.
+    // CSS `order` and `position: fixed` both move things visually without
+    // moving them in the tab sequence -- Tab still follows DOM order. This
+    // partial is included ahead of a page's real content, so everything it
+    // renders was reached BEFORE the page itself: the three tab-bar links sit
+    // pinned to the bottom of the viewport and were stops 3-5 of the document
+    // (WCAG 2.4.3). Once the whole document has parsed, move them to the end
+    // of <body> in the order they actually read: content, then the logout
+    // footer, then the tab bar along the bottom edge.
+    //
+    // .resume is deliberately NOT moved. It is sticky on desktop, and sticky
+    // resolves against DOM position -- appending it here would park it below
+    // every page's content and it would never appear. It stays an early stop,
+    // which is defensible on its own terms: it is a shortcut back into a
+    // running workout, and early is where a shortcut belongs.
     document.addEventListener('DOMContentLoaded', function () {
         var footer = document.querySelector('.nav-footer');
+        var tabbar = document.querySelector('.tabbar');
         if (footer) { document.body.appendChild(footer); }
+        if (tabbar) { document.body.appendChild(tabbar); }
     });
 </script>
