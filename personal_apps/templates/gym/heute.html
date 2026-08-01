@@ -21,14 +21,58 @@
 
 {% block title %}Start · Gym Tracker{% endblock %}
 
+{% from 'gym/_macros.html' import recency, since_pr %}
 {% block content %}
+{#- Two things this page said in more than one voice.
+
+    recency(): the same "Heute / Gestern / vor N Tagen" branch was written twice,
+    with two different vocabularies -- the lead card said "Heute schon gemacht"
+    where the quiet rows said "Heute". One branch, one wording.
+
+    routine_edit(): rename and delete used to exist ONLY on routines[0]. Since
+    routine_memory sorts never-performed routines last by construction, a
+    template created by mistake could never reach position 0 unless it was the
+    only one in the database -- so it could never be renamed or deleted from
+    anywhere in the app. It belongs on every routine. -#}
+{#- A stalled lift is the most actionable line on the page, and it was a
+    dead end: a plain div, while the history rows directly below it use the
+    same .row component AND are links, so the inert ones looked tappable.
+    exercise_id is already in hand from stall_report. -#}
+{% macro stall_row(item) -%}
+<a class="row row--top" href="{{ url_for('gym.exercise_detail', exercise_id=item.exercise_id) }}">
+  <span class="row__main stack">
+    <span class="row__name row__name--wrap">{{ item.name }}</span>
+    <span class="row__meta">Als {{ item.position }}. Übung · {{ ('%.1f'|format(item.stuck_at)).replace('.', ',') }} kg</span>
+  </span>
+  <span class="vtag vtag--stall">{{ since_pr(item.sessions_since_pr) }}</span>
+</a>
+{%- endmacro %}
+
+{% macro routine_edit(template) -%}
+<details class="lead__edit">
+  <summary class="lead__edit-toggle" aria-label="{{ template.name }} bearbeiten">
+    {% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}
+  </summary>
+  <div class="lead__edit-body">
+    <form method="post" action="{{ url_for('gym.gym_rename_template', template_id=template.id) }}" class="lead__edit-form">
+      <input type="text" name="name" value="{{ template.name }}" class="input"
+             aria-label="Neuer Name für {{ template.name }}" required>
+      <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
+    </form>
+    <form method="post" action="{{ url_for('gym.gym_delete_template', template_id=template.id) }}"
+          onsubmit="return confirm('Vorlage löschen?')">
+      <button type="submit" class="btn btn--quiet-danger btn--sm btn--block">Löschen</button>
+    </form>
+  </div>
+</details>
+{%- endmacro %}
 <div class="start">
 
   <header class="start__head">
     <div class="start__row">
       <h1 class="start__h">Start</h1>
       <span class="start__sp"></span>
-      <span class="start__date">{{ now.strftime('%d.%m.%Y') }}</span>
+      <span class="start__date">{{ (now|local).strftime('%d.%m.%Y') }}</span>
     </div>
     <p class="start__pulse">
       {% if consistency.days_since_last is not none %}
@@ -43,10 +87,19 @@
   {% if active_session %}
   {# A workout is already running: nothing else on this page competes with
      getting back into it. #}
-  <section class="sec">
-    <div class="sec__head"><span class="label">Läuft gerade</span></div>
+  <section class="sec" aria-labelledby="sec-laeuft">
+    <div class="sec__head"><h2 class="label" id="sec-laeuft">Läuft gerade</h2></div>
+    {# The clock lives here, not in the resume strip. The strip is suppressed on
+       this page (see _nav.html) because this card already said everything it
+       said, louder -- except the elapsed time, which is the one thing you
+       actually come back for. GymClock drives it, same as the strip did. #}
     <div class="lead">
-      <span class="lead__name">{{ active_session.name or 'Workout' }}</span>
+      <span class="lead__main stack">
+        <span class="lead__name">{{ active_session.name or 'Workout' }}</span>
+        <span class="lead__due">
+          <b id="heute-elapsed" data-started="{{ active_session.started_at.isoformat() }}">--:--:--</b> läuft
+        </span>
+      </span>
       <a href="{{ url_for('gym.session_detail', session_id=active_session.id) }}" class="lead__go">
         {% with icon='skip' %}{% include 'gym/_icon.html' %}{% endwith %}
         Weiter
@@ -55,39 +108,33 @@
   </section>
   {% endif %}
 
-  <section class="sec">
-    {% if routines %}
-    {% set lead = routines[0] %}
-    <div class="sec__head"><span class="label">Am längsten her</span></div>
+  {#- Nothing on this page can start a workout while one is running: gym_start
+      redirects to the live session, so every "Starten" here resolved to
+      "Weiter" -- landing you in a DIFFERENT workout than the one you tapped,
+      with no message, because the app has no flash region. The free-workout
+      sheet was worse: it reads its name and template fields only AFTER that
+      early return, so both were silently discarded.
 
+      The routines stay on screen as reading material; they just stop pretending
+      to be actionable. That settles the other half of it too -- the lead card is
+      a lifted plane, and with "Läuft gerade" above it the page carried two. -#}
+  {% set can_start = not active_session %}
+
+  <section class="sec" aria-labelledby="sec-routinen">
+    {% if routines %}
+    <div class="sec__head">
+      <h2 class="label" id="sec-routinen">{{ 'Am längsten her' if can_start else 'Routinen' }}</h2>
+    </div>
+
+    {% if can_start %}
+    {% set lead = routines[0] %}
     <div class="lead">
       <div class="lead__top">
         <span class="lead__main stack">
-          <span class="lead__due">
-            {#- "vor 0 Tagen" is not German: today is heute, yesterday gestern. -#}
-            {%- if lead.days_ago is none -%}Noch nie gemacht
-            {%- elif lead.days_ago == 0 -%}Heute schon gemacht
-            {%- elif lead.days_ago == 1 -%}Gestern
-            {%- else -%}vor {{ lead.days_ago }} Tagen{%- endif -%}
-          </span>
+          <span class="lead__due">{{ recency(lead.days_ago, lead=True) }}</span>
           <span class="lead__name">{{ lead.template.name }}</span>
         </span>
-        <details class="lead__edit">
-          <summary class="lead__edit-toggle" aria-label="{{ lead.template.name }} bearbeiten">
-            {% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}
-          </summary>
-          <div class="lead__edit-body">
-            <form method="post" action="{{ url_for('gym.gym_rename_template', template_id=lead.template.id) }}" class="lead__edit-form">
-              <input type="text" name="name" value="{{ lead.template.name }}" class="input"
-                     aria-label="Neuer Name für {{ lead.template.name }}" required>
-              <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
-            </form>
-            <form method="post" action="{{ url_for('gym.gym_delete_template', template_id=lead.template.id) }}"
-                  onsubmit="return confirm('Vorlage löschen?')">
-              <button type="submit" class="btn btn--stall btn--sm btn--block">Löschen</button>
-            </form>
-          </div>
-        </details>
+        {{ routine_edit(lead.template) }}
       </div>
       <p class="lead__list">
         {% if lead.template.exercises %}{{ lead.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
@@ -100,65 +147,149 @@
         </button>
       </form>
     </div>
+    {% else %}
+    <p class="start__blocked">Ein Workout läuft schon. Beende es, um ein neues zu starten.</p>
+    {% endif %}
 
     {# The rest are quiet rows, never a second card. #}
-    {% for entry in routines[1:] %}
+    {% for entry in routines[(1 if can_start else 0):] %}
     <div class="row">
       <span class="row__main stack">
         <span class="row__name row__name--strong">{{ entry.template.name }}</span>
         <span class="row__meta row__meta--clip">
-          {%- if entry.days_ago is none -%}Noch nie gemacht
-          {%- elif entry.days_ago == 0 -%}Heute
-          {%- elif entry.days_ago == 1 -%}Gestern
-          {%- else -%}vor {{ entry.days_ago }} Tagen{%- endif -%}
+          {{- recency(entry.days_ago) -}}
           {%- if entry.template.exercises %} · {{ entry.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% endif -%}
         </span>
       </span>
-      <form method="post" action="{{ url_for('gym.gym_start') }}" class="row__trail">
-        <input type="hidden" name="template_id" value="{{ entry.template.id }}">
-        <button type="submit" class="row__go">Starten</button>
-      </form>
+      <span class="row__trail">
+        {{ routine_edit(entry.template) }}
+        {% if can_start %}
+        <form method="post" action="{{ url_for('gym.gym_start') }}">
+          <input type="hidden" name="template_id" value="{{ entry.template.id }}">
+          <button type="submit" class="row__go">Starten</button>
+        </form>
+        {% endif %}
+      </span>
     </div>
     {% endfor %}
     {% else %}
-    <div class="sec__head"><span class="label">Routinen</span></div>
+    <div class="sec__head"><h2 class="label" id="sec-routinen">Routinen</h2></div>
     <p class="empty">Noch keine Vorlagen. Speichere ein Workout als Vorlage, um es hier zu sehen.</p>
     {% endif %}
 
     {# Starting without a template is a real path, but the secondary one. #}
+    {% if can_start %}
     <button type="button" class="start__free sheet-open" data-sheet="sheet-free">
       {% with icon='plus' %}{% include 'gym/_icon.html' %}{% endwith %}
       Freies Workout starten
     </button>
+    {% endif %}
   </section>
 
-  {% if stalls or deload_suggestion %}
-  <section class="sec">
-    <div class="sec__head"><span class="label">Steht still</span></div>
+  {#- The four reading sections, wrapped so desktop can pair them into two
+      columns. Inert on phones: a plain block whose children keep their own
+      gutters. What to do next stays above it at full measure. -#}
+  <div class="start__read">
+  {#- Each column is its own flow, not four sections auto-placed into a grid.
+      Auto-placement locks section 3 to the row height of the tallest section in
+      row 1, which left a 250px hole under "Steht still" whenever the muscle
+      list ran long. Pairing is by kind: what wants attention on the left, what
+      is reference on the right. -#}
+  <div class="start__col">
+
+  {#- `stalls` alone, not `stalls or deload_suggestion`: deload_signal only
+      returns a value when at least DELOAD_STALL_THRESHOLD entries of `stalls`
+      qualify, so the right operand could never be the reason this rendered. -#}
+  {% if stalls %}
+  <section class="sec" aria-labelledby="sec-still">
+    <div class="sec__head">
+      <h2 class="label" id="sec-still">Steht still</h2>
+      <span class="sec__sp"></span>
+      <span class="label">{{ stalls|length }} {{ 'Übung' if stalls|length == 1 else 'Übungen' }}</span>
+    </div>
     {# The deload signal is the same data read more narrowly (only the active
        rotation), so it leads this section rather than owning a panel of its
        own -- a page of near-identical panels is what the brief bans. #}
+    {#- "davon aktiv trainiert": deload_signal counts only lifts trained inside
+        the rolling window, while the roster below is unfiltered. Unscoped, the
+        note said "4 Übungen stehen still" directly above six rows. The lift
+        names are gone from here for the same reason -- the roster already
+        names them, in more detail, two lines lower. -#}
     {% if deload_suggestion %}
     <p class="stall-note">
-      <b>{{ deload_suggestion.count }} aktive Übungen stehen still</b> — ein Deload könnte fällig sein.
-      <span class="stall-note__lifts">{{ deload_suggestion.stalls|map(attribute='name')|join(' · ') }}</span>
+      <b>{{ deload_suggestion.count }} davon aktiv trainiert</b> — ein Deload könnte fällig sein.
     </p>
     {% endif %}
-    {% for item in stalls %}
-    <div class="row row--top">
-      <span class="row__main stack">
-        <span class="row__name row__name--wrap">{{ item.name }}</span>
-        <span class="row__meta">Position {{ item.position }} · {{ ('%.1f'|format(item.stuck_at)).replace('.', ',') }} kg</span>
-      </span>
-      <span class="vtag vtag--stall">{{ item.sessions_since_pr }} ohne PR</span>
-    </div>
-    {% endfor %}
+    {#- Bounded by count. stall_report is unbounded: after a layoff essentially
+        the whole catalogue qualifies, and this is a landing page. Same trade
+        the record timeline on Statistik makes. -#}
+    {% for item in stalls[:5] %}{{ stall_row(item) }}{% endfor %}
+    {% if stalls|length > 5 %}
+    <details class="year">
+      <summary class="year__head">
+        <svg class="group__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        <span class="label">{{ stalls|length - 5 }} weitere</span>
+      </summary>
+      {% for item in stalls[5:] %}{{ stall_row(item) }}{% endfor %}
+    </details>
+    {% endif %}
   </section>
   {% endif %}
 
-  <section class="sec">
+
+  {#- Gated on there being any volume at all. Unguarded -- the only section
+      here without an empty state -- a first run drew eight zero-height stubs
+      under a full date axis and asserted "0 kg diese Woche bisher — läuft
+      noch." about them. -#}
+  <section class="sec" aria-labelledby="sec-tonnage">
     <div class="sec__head">
-      <span class="label">Sätze pro Muskelgruppe</span>
+      <h2 class="label" id="sec-tonnage">Tonnage pro Woche</h2>
+      <span class="sec__sp"></span>
+      <span class="label">8 Wochen</span>
+    </div>
+    {% if tonnage_peak %}
+    {# is_current is always the last bucket (weekly_tonnage's own contract) --
+       lit warm AND spelled out below, so a short bar from a week that is still
+       running never reads as a decline. has_deload is marked the same way, for
+       the same reason: an unexplained dip reads as a collapse. #}
+    {#- Every bar states its value. The chart carried no numbers at all: no
+        scale, no per-bar figure, no accessible text -- so its whole magnitude
+        dimension existed only as relative height, on a page whose sibling
+        chart prints its set counts as text. The peak is named above the bars
+        so the heights have something to be read against. -#}
+    <p class="vbars__peak"><span class="label">Höchste Woche</span> <b>{{ '{:,.0f}'.format(tonnage_peak).replace(',', '.') }}</b> kg</p>
+    <div class="vbars" role="list">
+      {% for week in tonnage %}
+      <span class="vbar{{ ' is-live' if week.is_current else '' }}{{ ' vbar--deload' if week.has_deload else '' }}"
+            role="listitem"
+            aria-label="{{ 'Diese Woche' if week.is_current else 'Woche ab ' ~ week.week_start.strftime('%d.%m.') }}: {{ '{:,.0f}'.format(week.volume).replace(',', '.') }} kg{{ ', mit Deload-Einheit' if week.has_deload else '' }}"
+            style="block-size: {{ ((week.volume / tonnage_peak) * 100)|round(1) }}%"></span>
+      {% endfor %}
+    </div>
+    <div class="vbars__axis" aria-hidden="true">
+      {% for week in tonnage %}
+      <span>{{ 'Jetzt' if week.is_current else week.week_start.strftime('%d.%m.') }}</span>
+      {% endfor %}
+    </div>
+    {#- weekly_tonnage always flags its last bucket is_current, so the old
+        guard's left operand was always true and the `or deload_weeks` half
+        could never be what made this render. It looked like a guard and
+        guarded nothing. -#}
+    {% set deload_weeks = tonnage|selectattr('has_deload')|list %}
+    <p class="start__note">
+      {{ '{:,.0f}'.format(tonnage[-1].volume).replace(',', '.') }} kg diese Woche bisher — läuft noch.
+      {% if deload_weeks %}Schraffiert: Woche mit Deload-Einheit.{% endif %}
+    </p>
+    {% else %}
+    <p class="empty">Noch keine Sätze in den letzten 8 Wochen.</p>
+    {% endif %}
+  </section>
+  </div>
+
+  <div class="start__col">
+  <section class="sec" aria-labelledby="sec-balance">
+    <div class="sec__head">
+      <h2 class="label" id="sec-balance">Sätze pro Muskelgruppe</h2>
       <span class="sec__sp"></span>
       <span class="label">Letzte 4 Wochen</span>
     </div>
@@ -181,56 +312,31 @@
     {% endif %}
   </section>
 
-  <section class="sec">
+  <section class="sec" aria-labelledby="sec-letzte">
     <div class="sec__head">
-      <span class="label">Tonnage pro Woche</span>
-      <span class="sec__sp"></span>
-      <span class="label">8 Wochen</span>
-    </div>
-    {# is_current is always the last bucket (weekly_tonnage's own contract) --
-       lit warm AND spelled out below, so a short bar from a week that is still
-       running never reads as a decline. has_deload is marked the same way, for
-       the same reason: an unexplained dip reads as a collapse. #}
-    {% set volumes = tonnage|map(attribute='volume')|list %}
-    {% set peak = (volumes|max) if volumes and (volumes|max) > 0 else 1 %}
-    <div class="vbars">
-      {% for week in tonnage %}
-      <span class="vbar{{ ' is-live' if week.is_current else '' }}{{ ' vbar--deload' if week.has_deload else '' }}"
-            style="block-size: {{ ((week.volume / peak) * 100)|round(1) }}%"></span>
-      {% endfor %}
-    </div>
-    <div class="vbars__axis">
-      {% for week in tonnage %}
-      <span>{{ 'Jetzt' if week.is_current else week.week_start.strftime('%d.%m.') }}</span>
-      {% endfor %}
-    </div>
-    {% set deload_weeks = tonnage|selectattr('has_deload')|list %}
-    {% if (tonnage and tonnage[-1].is_current) or deload_weeks %}
-    <p class="start__note">
-      {%- if tonnage and tonnage[-1].is_current -%}
-      {{ '{:,.0f}'.format(tonnage[-1].volume).replace(',', '.') }} kg diese Woche bisher — läuft noch.
-      {%- endif %}
-      {% if deload_weeks %}Schraffiert: Woche mit Deload-Einheit.{% endif %}
-    </p>
-    {% endif %}
-  </section>
-
-  <section class="sec">
-    <div class="sec__head">
-      <span class="label">Letzte Workouts</span>
+      <h2 class="label" id="sec-letzte">Letzte Workouts</h2>
       <span class="sec__sp"></span>
       <a class="sec__more" href="{{ url_for('gym.gym_verlauf') }}">Verlauf ›</a>
     </div>
     {% if recent_sessions %}
+    {#- Volume and record count, as Verlauf already shows. This list was
+        strictly poorer than the one a tap away -- name, date, minutes -- so it
+        answered neither "am I still progressing" nor "is total load going up",
+        and routed the reader off the landing page to find out. The route feeds
+        both from data it already holds; no extra query. -#}
     {% for s in recent_sessions %}
-    <a class="row" href="{{ url_for('gym.session_detail', session_id=s.id) }}">
+    <a class="row" href="{{ url_for('gym.session_detail', session_id=s.session.id) }}">
       <span class="row__main stack">
-        <span class="row__name row__name--strong">{{ s.name or 'Workout' }}</span>
+        <span class="row__name row__name--strong">{{ s.session.name or 'Workout' }}</span>
         <span class="row__meta">
-          {{ s.started_at.strftime('%d.%m.%Y') }} ·
-          {{ ((s.finished_at - s.started_at).total_seconds() // 60)|int }} min
-          {%- if s.is_deload %} · Deload{% endif %}
+          {{ (s.session.started_at|local).strftime('%d.%m.%Y') }} ·
+          {{ ((s.session.finished_at - s.session.started_at).total_seconds() // 60)|int }} min
+          {%- if s.session.is_deload %} · Deload{% endif %}
         </span>
+      </span>
+      <span class="row__trail row__trail--stack">
+        <span class="vol">{{ '{:,.0f}'.format(s.volume).replace(',', '.') }}<small>kg</small></span>
+        {% if s.records %}<span class="vtag vtag--record">{{ s.records }} {{ 'Rekord' if s.records == 1 else 'Rekorde' }}</span>{% endif %}
       </span>
     </a>
     {% endfor %}
@@ -238,11 +344,13 @@
     <p class="empty">Noch keine abgeschlossenen Workouts.</p>
     {% endif %}
   </section>
+  </div>
+  </div>
 </div>
 
-<dialog class="sheet" id="sheet-free">
+<dialog class="sheet" id="sheet-free" aria-labelledby="sheet-free-title">
   <div class="sheet__head">
-    <span class="sheet__title">Freies Workout</span>
+    <h2 class="sheet__title" id="sheet-free-title">Freies Workout</h2>
     <button type="button" class="sheet__close" data-close>Abbrechen</button>
   </div>
   <div class="sheet__body">
@@ -266,6 +374,11 @@
 
 {% block scripts %}
 <script>
+// The running workout's elapsed clock. It moved here from the resume strip,
+// which no longer renders on this page -- same GymClock, same data-started
+// convention, so the two never diverge.
+if (window.GymClock) { window.GymClock.start(document.getElementById('heute-elapsed')); }
+
 document.addEventListener('click', function (e) {
     var opener = e.target.closest && e.target.closest('.sheet-open');
     if (opener) {

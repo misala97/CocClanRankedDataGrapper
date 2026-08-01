@@ -22,10 +22,10 @@
 <div class="stat-page">
 
   {% if totals.sessions %}
-  <section class="lede">
+  <section class="lede" aria-labelledby="lede-h">
     <span class="lede__main">
       <span class="lede__kick">
-        Seit {{ totals.first_session.strftime('%d.%m.%Y') }} ·
+        Seit {{ (totals.first_session|local).strftime('%d.%m.%Y') }} ·
         {# span_months, not months: `months` is the career strip's list, and
            shadowing it here turned it into an int for the rest of the page. #}
         {% set years = totals.days_training // 365 %}{% set span_months = (totals.days_training % 365) // 30 %}
@@ -33,7 +33,7 @@
         {%- if span_months %}{{ span_months }} {{ 'Monat' if span_months == 1 else 'Monate' }}{% endif %}
         {%- if not years and not span_months %}{{ totals.days_training }} Tage{% endif %}
       </span>
-      <h1 class="lede__h">
+      <h1 class="lede__h" id="lede-h">
         Du hast <em>{{ '{:,.0f}'.format(totals.tonnage / 1000).replace(',', '.') }} Tonnen</em> bewegt
         {%- if longest_gap %} und dabei nie länger als {{ longest_gap }} Tage pausiert.{% else %}.{% endif %}
       </h1>
@@ -46,7 +46,7 @@
       Größtes Workout:
       <a href="{{ url_for('gym.session_detail', session_id=totals.best_session.session_id) }}">
         <b>{{ '{:,.0f}'.format(totals.best_session.volume).replace(',', '.') }} kg</b></a>
-      · {{ totals.best_session.started_at.strftime('%d.%m.%Y') }}
+      · {{ (totals.best_session.started_at|local).strftime('%d.%m.%Y') }}
       {% endif %}
     </span>
   </section>
@@ -63,32 +63,54 @@
   </div>
 
   {% if months %}
-  <section class="career">
+  {# Section titles are real headings. The page had exactly one h1 and no h2 at
+     all, so 5,249px of content offered a screen reader a single landmark and
+     nothing to jump between. #}
+  <section class="career" aria-labelledby="career-h">
     <div class="sec__head">
-      <span class="label">Die ganze Laufbahn</span>
+      <h2 class="label" id="career-h">Die ganze Laufbahn</h2>
       <span class="sec__sp"></span>
       <span class="label">Ein Balken je Monat · Höhe = Tonnage</span>
     </div>
     <div class="career__body">
       {% set peak = (months|map(attribute='volume')|max) or 1 %}
-      <div class="months" role="img"
+      {# A list, not role="img". role="img" tells assistive tech to ignore every
+         child, so the per-bar title= values were unreachable in principle -- the
+         flagship figure conveyed exactly one fact: that it existed. Each bar now
+         carries its own month, tonnage and marks as text. title= stays for the
+         mouse; it is not the accessible name. #}
+      <div class="months" role="list"
            aria-label="Monatliche Tonnage seit {{ month_names[months[0].month - 1] }} {{ months[0].year }}">
         {% for m in months %}
+        {%- set mo_label = month_names[m.month - 1] ~ ' ' ~ m.year ~ ': '
+            ~ ('{:,.0f}'.format(m.volume).replace(',', '.')) ~ ' kg'
+            ~ (', Rekordmonat' if m.has_record else '')
+            ~ (', Deload' if m.has_deload else '')
+            ~ (', keine Einheit' if m.is_gap else '') -%}
         <span class="mo{{ ' is-record' if m.has_record else '' }}{{ ' is-deload' if m.has_deload else '' }}{{ ' is-gap' if m.is_gap else '' }}"
+              role="listitem" aria-label="{{ mo_label }}"
               style="block-size: {{ (2 if m.is_gap else ((m.volume / peak) * 100)|round(1)) }}%"
-              title="{{ month_names[m.month - 1] }} {{ m.year }}: {{ '{:,.0f}'.format(m.volume).replace(',', '.') }} kg"></span>
+              title="{{ mo_label }}"></span>
         {% endfor %}
       </div>
+      {# Ticks are deduped by index, not by rendered text: at two months the
+         midpoint IS the last month, so first/middle/last printed "Jul 2026"
+         twice side by side. #}
+      {% set tick_ix = [0, months|length // 2, months|length - 1]|unique|list %}
       <div class="months__axis">
-        <span class="label">{{ month_names[months[0].month - 1][:3] }} {{ months[0].year }}</span>
-        <span class="label">{{ month_names[months[months|length // 2].month - 1][:3] }} {{ months[months|length // 2].year }}</span>
-        <span class="label">{{ month_names[months[-1].month - 1][:3] }} {{ months[-1].year }}</span>
+        {% for i in tick_ix %}
+        <span class="label">{{ month_names[months[i].month - 1][:3] }} {{ months[i].year }}</span>
+        {% endfor %}
       </div>
+      {# Each swatch is now drawn the way its mark is drawn -- the deload key
+         was a solid square standing for a hatch, so it matched nothing on the
+         chart, and the record key was a solid gold bar when a record month is
+         a gold tick above an ordinary one. #}
       <div class="chart__legend">
         <span class="key"><span class="key__dot key__dot--sq" style="background: var(--done)"></span>Tonnage</span>
-        <span class="key"><span class="key__dot key__dot--sq" style="background: var(--record)"></span>Monat mit Rekord</span>
-        <span class="key"><span class="key__dot key__dot--sq" style="background: var(--edge-hi)"></span>Deload-Monat</span>
-        <span class="key"><span class="key__dot key__dot--sq" style="background: var(--edge)"></span>Pause</span>
+        <span class="key"><span class="key__dot key__dot--sq key__dot--record"></span>Monat mit Rekord</span>
+        <span class="key"><span class="key__dot key__dot--sq key__dot--deload"></span>Deload-Monat</span>
+        <span class="key"><span class="key__dot key__dot--sq key__dot--gap"></span>Pause</span>
       </div>
     </div>
   </section>
@@ -96,9 +118,9 @@
 
   <div class="stat-cols">
     <div class="stat-col">
-      <section>
+      <section aria-labelledby="prog-h">
         <div class="sec__head">
-          <span class="label">Fortschritt seit dem ersten Mal</span>
+          <h2 class="label" id="prog-h">Fortschritt seit dem ersten Mal</h2>
           <span class="sec__sp"></span>
           <span class="label">e1RM, erste gegen aktuelle Einheit</span>
         </div>
@@ -129,22 +151,34 @@
         {% endif %}
       </section>
 
-      <section style="margin-top: var(--sp-8)">
+      <section style="margin-top: var(--sp-8)" aria-labelledby="effort-h">
         <div class="sec__head">
-          <span class="label">Wohin die Arbeit geht</span>
+          <h2 class="label" id="effort-h">Wohin die Arbeit geht</h2>
           <span class="sec__sp"></span>
-          <span class="label">Anteil an {{ '{:,.0f}'.format(effort.total_volume / 1000).replace(',', '.') }} t</span>
+          {# Not "Anteil an 175 t": that made the third restatement of the same
+             tonnage inside 400px -- the h1 says it, .totals says it, and by the
+             third time the headline number stops reading as a finding. #}
+          <span class="label">Anteil am Gesamtvolumen</span>
         </div>
         {% if effort.groups %}
+        {# Every group, not effort.groups[:6]. Truncating dropped a 7th from the
+           bar AND the key, so the shares silently stopped summing to 100 under a
+           header still claiming "Anteil an N t" -- the page breaking its own
+           rule that an open question is stated, not quietly dropped.
+
+           The ramp floors at 0.7: measured, 0.55 fell to 2.48:1 and 0.40 to
+           1.89:1 against the panel, under the 3:1 a meaningful fill needs. #}
+        {% set steps = effort.groups|length %}
+        {% set fade = 0.3 / steps if steps > 1 else 0 %}
         <div class="stack-bar">
-          {% for group in effort.groups[:6] %}
-          <span style="inline-size: {{ group.share|round(1) }}%; background: var(--done); opacity: {{ 1 - loop.index0 * 0.15 }}"></span>
+          {% for group in effort.groups %}
+          <span style="inline-size: {{ group.share|round(1) }}%; background: var(--done); opacity: {{ (1 - loop.index0 * fade)|round(3) }}"></span>
           {% endfor %}
         </div>
         <div class="stack-key">
-          {% for group in effort.groups[:6] %}
+          {% for group in effort.groups %}
           <span class="key">
-            <span class="key__dot key__dot--sq" style="background: var(--done); opacity: {{ 1 - loop.index0 * 0.15 }}"></span>
+            <span class="key__dot key__dot--sq" style="background: var(--done); opacity: {{ (1 - loop.index0 * fade)|round(3) }}"></span>
             {{ group.label }} {{ group.share|round|int }} %
           </span>
           {% endfor %}
@@ -167,22 +201,29 @@
       </section>
     </div>
 
-    <section class="stat-col">
-      <div class="sec__head"><span class="label">Wie du trainierst</span></div>
+    <section class="stat-col" aria-labelledby="read-h">
+      <div class="sec__head"><h2 class="label" id="read-h">Wie du trainierst</h2></div>
 
       <div class="read">
         <p class="read__q">In welchem Wiederholungsbereich?</p>
         {% if rep_range.statable %}
         <p class="read__a">Meist zwischen <em>{{ rep_range.dominant.label }}</em> Wdh.</p>
-        <div class="read__bars">
+        <div class="read__bars" role="list">
           {% set top_share = rep_range.buckets|map(attribute='share')|max %}
           {% for bucket in rep_range.buckets %}
-          <span class="rb">
+          {# The share exists only as bar height, so it is stated as text too --
+             the label alone ("1-5 / 6-8 / 9-12 / 13+") named the buckets without
+             saying how much sat in any of them. #}
+          <span class="rb" role="listitem"
+                aria-label="{{ bucket.label }} Wdh.: {{ bucket.share|round|int }} Prozent{{ ', am häufigsten' if bucket.label == rep_range.dominant.label else '' }}">
             <span class="rb__track">
-              <span class="rb__fill{{ ' is-top' if bucket.label == rep_range.dominant else '' }}"
+              {# .dominant is the whole bucket dict, not its label -- comparing
+                 a string to it was always false, so this highlight never once
+                 rendered and the four bars were four identical bars. #}
+              <span class="rb__fill{{ ' is-top' if bucket.label == rep_range.dominant.label else '' }}"
                     style="block-size: {{ ((bucket.share / top_share) * 100)|round(1) if top_share else 0 }}%"></span>
             </span>
-            <span class="rb__lbl">{{ bucket.label }}</span>
+            <span class="rb__lbl" aria-hidden="true">{{ bucket.label }}</span>
           </span>
           {% endfor %}
         </div>
@@ -228,14 +269,15 @@
       <div class="read">
         <p class="read__q">Bringt mehr Pause mehr Leistung?</p>
         {% if rest_gap.statable %}
-        <div class="read__bars">
+        <div class="read__bars" role="list">
           {% set peak_gap = rest_gap.buckets|map(attribute='avg_volume')|max %}
           {% for bucket in rest_gap.buckets %}
-          <span class="rb">
+          <span class="rb" role="listitem"
+                aria-label="{{ bucket.label }} Tage Abstand: Ø {{ '{:,.0f}'.format(bucket.avg_volume).replace(',', '.') }} kg">
             <span class="rb__track">
               <span class="rb__fill" style="block-size: {{ ((bucket.avg_volume / peak_gap) * 100)|round(1) if peak_gap else 0 }}%"></span>
             </span>
-            <span class="rb__lbl">{{ bucket.label }} T.</span>
+            <span class="rb__lbl" aria-hidden="true">{{ bucket.label }} T.</span>
           </span>
           {% endfor %}
         </div>
@@ -247,33 +289,52 @@
     </section>
   </div>
 
-  {% if record_years %}
-  <section class="career">
+  {% if recent_records %}
+  {# One row per exercise-day, carrying whichever bests it set -- see
+     analytics.record_timeline. The recent ones are shown flat and everything
+     older folds into year bands, because bounding by CALENDAR did nothing for
+     a history that fits inside one year: it produced a single band, forced
+     open, holding every record there was. #}
+  <section class="career" aria-labelledby="rec-h">
     <div class="sec__head">
-      <span class="label">Jeder Rekord</span>
+      <h2 class="label" id="rec-h">Jeder Rekord</h2>
       <span class="sec__sp"></span>
       <span class="label">{{ records|length }} insgesamt</span>
     </div>
+
+    {% macro record_row(record) %}
+    <a class="rec" href="{{ url_for('gym.session_detail', session_id=record.session_id) }}">
+      <span class="rec__date">{{ (record.started_at|local).strftime('%d.%m.%Y') }}</span>
+      <span class="rec__name">{{ record.name }}</span>
+      <span class="rec__val">
+        {% if record.weight %}
+        {{ ('%.1f'|format(record.weight.value)).replace('.', ',') }} kg
+        <small>vorher {{ ('%.1f'|format(record.weight.previous)).replace('.', ',') }}</small>
+        {% else %}
+        {{ ('%.1f'|format(record.e1rm.value)).replace('.', ',') }} kg e1RM
+        <small>vorher {{ ('%.1f'|format(record.e1rm.previous)).replace('.', ',') }}</small>
+        {% endif %}
+      </span>
+      {% if record.weight and record.e1rm %}
+      <span class="rec__also">auch e1RM {{ ('%.1f'|format(record.e1rm.value)).replace('.', ',') }}</span>
+      {% endif %}
+    </a>
+    {% endmacro %}
+
+    {% for record in recent_records %}{{ record_row(record) }}{% endfor %}
+
     {% for band in record_years %}
-    <details class="year" {{ 'open' if loop.first else '' }}>
+    <details class="year">
       <summary class="year__head">
         <svg class="group__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
         <span class="label">{{ band.year }}</span>
         <span class="sec__sp"></span>
-        <span class="label">{{ band.records|length }} {{ 'Rekord' if band.records|length == 1 else 'Rekorde' }}</span>
+        {# "weitere", not "Rekorde": the recent rows above are usually the same
+           year, so a band labelled "2026 · 31 Rekorde" under twelve more 2026
+           records reads as a contradiction. #}
+        <span class="label">{{ band.records|length }} weitere</span>
       </summary>
-      {% for record in band.records %}
-      {% set kind_label = {'weight': 'Gewicht', 'e1rm': 'e1RM', 'volume': 'Volumen'}.get(record.kind, record.kind) %}
-      <a class="rec" href="{{ url_for('gym.session_detail', session_id=record.session_id) }}">
-        <span class="rec__date">{{ record.started_at.strftime('%d.%m.%Y') }}</span>
-        <span class="rec__name">{{ record.name }}</span>
-        <span class="rec__kind">{{ kind_label }}</span>
-        <span class="rec__val">
-          {{ ('%.1f'|format(record.value)).replace('.', ',') }} kg
-          <small>vorher {{ ('%.1f'|format(record.previous)).replace('.', ',') }}</small>
-        </span>
-      </a>
-      {% endfor %}
+      {% for record in band.records %}{{ record_row(record) }}{% endfor %}
     </details>
     {% endfor %}
   </section>

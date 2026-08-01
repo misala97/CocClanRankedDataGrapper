@@ -382,6 +382,51 @@ def test_consistency_reports_rate_and_gap():
     assert result['days_since_last'] == 2
 
 
+# The recency figures are rendered as CALENDAR words ("heute" / "gestern"), and
+# every fixture above offsets by whole days -- under which elapsed-hours
+# arithmetic and calendar arithmetic agree, so the suite could not see the bug
+# that shipped. These cross a midnight instead.
+#
+# All timestamps here are naive UTC, as stored. NOW is 01:00 UTC = 03:00 CEST,
+# i.e. early morning on 1 August local.
+LATE_NIGHT = dt.datetime(2026, 8, 1, 1, 0)
+
+
+def test_consistency_counts_calendar_days_not_elapsed_hours():
+    # 31 July 18:00 UTC = 20:00 local: yesterday evening, 7 hours ago.
+    yesterday_evening = dt.datetime(2026, 7, 31, 18, 0)
+    result = stats.consistency([yesterday_evening], LATE_NIGHT)
+
+    assert result['days_since_last'] == 1, 'an evening workout read after midnight is gestern, not heute'
+
+
+def test_consistency_says_zero_only_for_the_same_local_date():
+    same_morning = dt.datetime(2026, 8, 1, 0, 30)     # 02:30 local, still 1 Aug
+    assert stats.consistency([same_morning], LATE_NIGHT)['days_since_last'] == 0
+
+
+def test_consistency_uses_local_midnight_not_utc_midnight():
+    # 22:30 UTC on 31 July is already 00:30 on 1 August in CEST, so from
+    # 03:00 local on 1 August it is the SAME calendar day.
+    just_after_local_midnight = dt.datetime(2026, 7, 31, 22, 30)
+    assert stats.consistency([just_after_local_midnight], LATE_NIGHT)['days_since_last'] == 0
+
+
+def test_routine_memory_counts_calendar_days_not_elapsed_hours():
+    templates = [FakeTemplate(1, 'Push')]
+    sessions = [FakeSession(1, dt.datetime(2026, 7, 31, 18, 0))]
+    result = stats.routine_memory(templates, sessions, LATE_NIGHT)
+
+    assert result[0]['days_ago'] == 1
+
+
+def test_week_start_buckets_by_local_week_not_utc_week():
+    # Monday 3 Aug 2026, 00:30 local = Sunday 2 Aug 22:30 UTC. The local week
+    # it belongs to starts Monday 3 August.
+    sunday_night_utc = dt.datetime(2026, 8, 2, 22, 30)
+    assert stats._week_start(sunday_night_utc) == dt.datetime(2026, 8, 3)
+
+
 def test_consistency_with_no_history_does_not_divide_by_zero():
     result = stats.consistency([], NOW)
 

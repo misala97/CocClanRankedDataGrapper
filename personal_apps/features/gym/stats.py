@@ -13,6 +13,34 @@ import datetime as dt
 import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
+from zoneinfo import ZoneInfo
+
+# Timestamps are stored naive-UTC and stay that way -- durations are
+# timezone-independent and every window here is a duration. CALENDAR questions
+# are not: "heute", "gestern" and "which ISO week" are answered in the place the
+# training happened, and UTC answers them wrong for the first two hours of every
+# CEST day. A workout finished at 00:30 local was filed under the previous date,
+# and the first two hours of every Monday landed in the previous week's tonnage
+# bucket. Convert at the calendar boundary only; leave the arithmetic alone.
+LOCAL_TZ = ZoneInfo('Europe/Berlin')
+
+
+def to_local(moment):
+    """Naive UTC -> naive local wall-clock. None passes through."""
+    if moment is None:
+        return None
+    return moment.replace(tzinfo=dt.timezone.utc).astimezone(LOCAL_TZ).replace(tzinfo=None)
+
+
+def calendar_days_between(earlier, later):
+    """Whole CALENDAR days from `earlier` to `later`, both naive UTC.
+
+    Not `(later - earlier).days`, which floors elapsed 24-hour periods: a
+    workout at 18:00 read at 09:00 the next morning is 15 hours old, so that
+    expression returns 0 and the page said "heute" about yesterday. What the
+    reader means by "gestern" is a date boundary, so count date boundaries.
+    """
+    return (to_local(later).date() - to_local(earlier).date()).days
 
 # Sessions in a row without a new estimated-1RM PR before an exercise counts
 # as stagnating. 4 is roughly a month of training a lift once or twice a week
@@ -328,7 +356,7 @@ def _pr_weight(rows):
     for row in _progression_rows(rows):
         for weight, reps in row.sets:
             if best is None or weight > best['weight']:
-                best = {'weight': weight, 'reps': reps,
+                best = {'weight': weight, 'reps': reps, 'session_id': row.session_id,
                         'started_at': row.started_at, 'position': row.position}
     return best
 
@@ -343,6 +371,7 @@ def _pr_e1rm(rows):
             value = epley_1rm(weight, reps)
             if best is None or value > best['e1rm']:
                 best = {'e1rm': round(value, 1), 'weight': weight, 'reps': reps,
+                        'session_id': row.session_id,
                         'started_at': row.started_at, 'position': row.position}
     return best
 
@@ -402,6 +431,14 @@ def exercise_progress(rows, position=None):
 
     return {
         'table': table,
+        # The newest row of the WHOLE exercise, regardless of the position
+        # filter. `table` is the filtered view, so a page reading table[0] for
+        # "Zuletzt" reported the last session *in that slot* as the last time
+        # the lift was done at all.
+        'last_overall': ({
+            'started_at': chronological[-1].started_at,
+            'position': chronological[-1].position,
+        } if chronological else None),
         'series': series,
         'available_positions': available_positions,
         'selected_position': position,
@@ -525,16 +562,19 @@ def session_report(current, history, comparable_session_volumes=()):
         if entry['is_weight_pr']:
             previous_row = max(past, key=best_weight)
             records.append({'kind': 'weight', 'name': row.name, 'position': row.position,
+                            'exercise_id': row.exercise_id,
                             'value': weight, 'previous': best_weight(previous_row),
                             'previous_at': previous_row.started_at})
         elif entry['is_e1rm_pr']:
             previous_row = max(past, key=best_e1rm)
             records.append({'kind': 'e1rm', 'name': row.name, 'position': row.position,
+                            'exercise_id': row.exercise_id,
                             'value': round(e1rm, 1), 'previous': round(best_e1rm(previous_row), 1),
                             'previous_at': previous_row.started_at})
         elif entry['is_volume_pr']:
             previous_row = max(past, key=row_volume)
             records.append({'kind': 'volume', 'name': row.name, 'position': row.position,
+                            'exercise_id': row.exercise_id,
                             'value': round(volume, 1), 'previous': round(row_volume(previous_row), 1),
                             'previous_at': previous_row.started_at})
 
@@ -547,7 +587,22 @@ def session_report(current, history, comparable_session_volumes=()):
                 'suggested_weight': _next_weight(weight, row.is_unilateral),
             })
 
-    records.sort(key=lambda record: -record['value'])
+    # NOT by raw value: `value` is kilograms-lifted for a weight record and
+    # kilograms-of-volume for a volume one, and a session total is two orders of
+    # magnitude larger than anything you actually put on a bar. Sorted that way,
+    # a 1.656 kg volume sum outranked a real 62 -> 72 kg strength PR, so the page
+    # led with a number nobody lifted.
+    #
+    # Kind first, because that is the order these mean something in, then by how
+    # much the record beat the old one -- relative, so a heavy lift's +2 kg does
+    # not automatically outrank a light lift's +5 kg.
+    def _record_rank(record):
+        kind_order = {'weight': 0, 'e1rm': 1, 'volume': 2}
+        previous = record.get('previous') or 0
+        gain = ((record['value'] - previous) / previous) if previous else 1.0
+        return (kind_order.get(record['kind'], 9), -gain)
+
+    records.sort(key=_record_rank)
     advice.sort(key=lambda item: -item['sessions'])
 
     avg_total = ((sum(comparable_session_volumes) / len(comparable_session_volumes))
@@ -675,8 +730,15 @@ def muscle_group_volume(rows, catalogue_groups, now, days=ROLLING_WINDOW_DAYS):
 
 
 def _week_start(moment):
-    """Monday 00:00 of the ISO week `moment` falls in."""
-    monday = moment.date() - dt.timedelta(days=moment.weekday())
+    """Monday 00:00 of the ISO week `moment` falls in, in LOCAL time.
+
+    Local, because a week boundary is a calendar fact. Both the current week
+    and each row go through here, so the buckets stay consistent with each
+    other either way -- but in UTC they were consistent and two hours off the
+    week the training actually belongs to.
+    """
+    local = to_local(moment)
+    monday = local.date() - dt.timedelta(days=local.weekday())
     return dt.datetime(monday.year, monday.month, monday.day)
 
 
@@ -719,7 +781,7 @@ def consistency(finished_started_at, now, days=ROLLING_WINDOW_DAYS):
     return {
         'sessions': len(recent),
         'per_week': len(recent) / (days / 7.0),
-        'days_since_last': (now - latest).days if latest else None,
+        'days_since_last': calendar_days_between(latest, now) if latest else None,
         'window_days': days,
     }
 
@@ -745,7 +807,7 @@ def routine_memory(templates, sessions, now):
         memory.append({
             'template': template,
             'last_done': last,
-            'days_ago': (now - last).days if last else None,
+            'days_ago': calendar_days_between(last, now) if last else None,
         })
     memory.sort(key=lambda entry: (entry['days_ago'] is None,
                                    -(entry['days_ago'] or 0),

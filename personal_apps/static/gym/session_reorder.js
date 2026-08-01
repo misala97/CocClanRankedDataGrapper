@@ -100,24 +100,34 @@
     rafId = requestAnimationFrame(autoScroll);
   }
 
-  function finish() {
-    if (!card) { return; }
-    var was = dragging;
+  /* The one write path, shared by the drag and by the keyboard. It deliberately
+   * does NOT refresh on the keyboard path: a refresh rebuilds #session-body and
+   * destroys the focused handle, which would eject a keyboard user from the row
+   * they are moving after every single press. The order is posted, the server
+   * accepts it, and the next refresh (or the next arrow) shows the settled
+   * truth. */
+  function commit(refresh) {
     var box = container();
-    var order = (was && box)
-      ? Array.prototype.slice.call(box.children).map(function (c) { return c.dataset.seId; })
-      : null;
-    reset();
-    if (!was || !order || !order.length || !window.GymReorder) { return; }
-    fetch(window.GymReorder.url, {
+    if (!box || !window.GymReorder) { return; }
+    var order = Array.prototype.slice.call(box.children).map(function (c) { return c.dataset.seId; });
+    if (!order.length) { return; }
+    return fetch(window.GymReorder.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order: order }),
       credentials: 'same-origin',
     })
       .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.text(); })
-      .then(function (html) { window.GymReorder.refresh(html); })
+      .then(function (html) { if (refresh) { window.GymReorder.refresh(html); } })
       .catch(function (err) { console.error('Reihenfolge nicht gespeichert:', err); });
+  }
+
+  function finish() {
+    if (!card) { return; }
+    var was = dragging;
+    reset();
+    if (!was) { return; }
+    commit(true);
   }
 
   document.addEventListener('pointerdown', function (e) {
@@ -146,4 +156,37 @@
 
   document.addEventListener('pointerup', finish);
   document.addEventListener('pointercancel', function () { reset(); });
+
+  /* ---- keyboard ---------------------------------------------------------
+   * The same move, without a pointer. Focus a handle, ArrowUp / ArrowDown.
+   * Focus is carried across the move by hand because moving the row in the DOM
+   * blurs whatever was inside it, and a reorder that drops you back at the top
+   * of the tab order on every press is not a reorder anyone can finish.
+   *
+   * The announcement is the only feedback a screen reader gets here: the rows
+   * moving is a purely visual event. */
+  function say(text) {
+    var el = document.getElementById('rest-announce');
+    if (el) { el.textContent = text; }
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') { return; }
+    if (!window.GymReorder || !window.GymReorder.unlocked) { return; }
+    var h = e.target.closest && e.target.closest('.drag-handle');
+    if (!h) { return; }
+    var row = h.closest('.queue__row');
+    var box = container();
+    if (!row || !box) { return; }
+    var sibling = e.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
+    if (!sibling) { return; }
+    e.preventDefault();
+    if (e.key === 'ArrowUp') { box.insertBefore(row, sibling); }
+    else { box.insertBefore(sibling, row); }
+    row.querySelector('.drag-handle').focus();
+    var pos = Array.prototype.slice.call(box.children).indexOf(row) + 1;
+    var name = (row.querySelector('.row__name') || {}).textContent || '';
+    say(name.trim() + ', Position ' + pos + ' von ' + box.children.length + '.');
+    commit(false);
+  });
 })();

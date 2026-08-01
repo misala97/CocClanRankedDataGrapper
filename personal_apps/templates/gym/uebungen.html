@@ -4,8 +4,14 @@
 
    The column-header table is gone. It needed a header row to be readable and
    could not hold its columns at 390px; each row carries its own labels now, and
-   the muscle groups became collapsible bands -- the same device Verlauf uses
-   for months, so the two lists speak one language.
+   the muscle groups became collapsible bands.
+
+   Those bands are NOT Verlauf's month band, which this comment used to claim.
+   Verlauf's is sticky and inert over rows that are always visible; this one is
+   a toggle that hides its rows. Identical appearance and opposite behaviour is
+   worse than looking different, so this one now opens by default whenever the
+   catalogue is short enough to read in one go (routes.UEBUNGEN_FOLD_ABOVE) and
+   remembers what you left open.
 
    Sorting moved from a radio fieldset to a segmented control. The three modes
    are unchanged and still client-side re-orderings of the SAME row nodes the
@@ -21,18 +27,31 @@
 
 {% block title %}Übungen · Gym Tracker{% endblock %}
 
+{% from 'gym/_macros.html' import recency, since_pr %}
 {% block content %}
 <div class="uebungen">
 
   <header class="verlauf__head">
-    <h1 class="start__h">Übungen</h1>
-    <span class="verlauf__count">{{ grouped|map(attribute=1)|map('length')|sum }}</span>
+    <h1 class="verlauf__h">Übungen</h1>
+    {# aria-live: search rewrites this, and it used to sit at 17 while four rows
+       showed. #}
+    <span class="verlauf__count" id="uebungen-count" aria-live="polite">{{ grouped|map(attribute=1)|map('length')|sum }}</span>
     <span class="start__sp"></span>
     <button type="button" class="verlauf__act sheet-open" data-sheet="sheet-new-exercise">
       {% with icon='plus' %}{% include 'gym/_icon.html' %}{% endwith %}
       Neue Übung
     </button>
   </header>
+
+  {#- Adding an exercise used to be completely silent in both directions: a
+      duplicate name was a no-op, and a success dropped the new row inside a
+      collapsed band. -#}
+  {% if name_taken %}
+  <section class="next-time">
+    <div class="next-time__lbl">Nicht gespeichert</div>
+    <p class="next-time__body">Eine Übung mit diesem Namen gibt es schon.</p>
+  </section>
+  {% endif %}
 
   {% if grouped %}
   <div class="searchbar">
@@ -46,46 +65,85 @@
     <button type="button" class="sort" data-sort="recent" aria-pressed="false">Zuletzt</button>
   </div>
 
-  <p class="empty" id="uebungen-empty" hidden>Keine Übungen gefunden.</p>
+  <p class="empty" id="uebungen-empty" role="status" hidden>
+    Keine Übung gefunden für <b id="uebungen-empty-q"></b>.
+    <button type="button" class="linklike" id="uebungen-reset">Suche zurücksetzen</button>
+  </p>
 
   <div id="uebungen-list">
     {% for group_name, group_entries in grouped %}
-    <button type="button" class="group uebungen-group-header" aria-expanded="false">
-      <svg class="group__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
-      <span class="label">{{ group_name }}</span>
-      <span class="start__sp"></span>
-      <span class="label">{{ group_entries|length }} {{ 'Übung' if group_entries|length == 1 else 'Übungen' }}</span>
-    </button>
+    {% set slug = loop.index0 %}
+    <section class="group-sec" aria-labelledby="g-{{ slug }}">
+    {#- A group with nothing in it is the strongest signal this page can give a
+        planner, and it used to render as nothing at all: group_exercises_by_muscle
+        only emitted non-empty groups, so "you own no leg exercises" was invisible.
+
+        It is NOT a toggle: there is nothing behind it to reveal, so it renders
+        as a plain heading with its note always showing. A disclosure that opens
+        onto nothing is a worse lie than no disclosure. -#}
+    {% if group_entries %}
+    <h2 class="group__h">
+      <button type="button" class="group uebungen-group-header" id="g-{{ slug }}"
+              data-group="{{ slug }}"
+              aria-expanded="{{ 'true' if open_by_default else 'false' }}">
+        <svg class="group__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        <span class="label">{{ group_name }}</span>
+        <span class="start__sp"></span>
+        <span class="label" data-count="{{ group_entries|length }}">{{ group_entries|length }} {{ 'Übung' if group_entries|length == 1 else 'Übungen' }}</span>
+      </button>
+    </h2>
+    {% else %}
+    <h2 class="group__h">
+      <span class="group group--empty" id="g-{{ slug }}">
+        <span class="label">{{ group_name }}</span>
+        <span class="start__sp"></span>
+        <span class="label">keine Übung</span>
+      </span>
+    </h2>
+    <p class="group__none">Lege hier eine Übung an, um die Gruppe zu trainieren.</p>
+    {% endif %}
 
     {% for entry in group_entries %}
-    <div class="row row--top uebungen-row"
-         data-name="{{ entry.exercise.name|lower }}"
-         data-last-done="{{ entry.last_done.isoformat() if entry.last_done else '' }}"
-         data-since-pr="{{ entry.sessions_since_pr if entry.sessions_since_pr is not none else '' }}"
-         hidden>
-      <a class="row__main stack" href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise.id) }}">
+    {#- The whole row is the link. The two figures used to sit outside it, so
+        link-list navigation announced the name and never the weight. -#}
+    <a class="row row--top uebungen-row{{ ' is-new' if added_id == entry.exercise.id else '' }}"
+       href="{{ url_for('gym.exercise_detail', exercise_id=entry.exercise.id) }}"
+       data-name="{{ (entry.exercise.name ~ ' ' ~ group_name)|lower }}"
+       data-group="{{ slug }}"
+       data-last-done="{{ entry.last_done.isoformat() if entry.last_done else '' }}"
+       data-since-pr="{{ entry.sessions_since_pr if entry.sessions_since_pr is not none else '' }}"
+       hidden>
+      <span class="row__main stack">
         <span class="nameline">
           <span class="nameline__n">{{ entry.exercise.name }}</span>
           {% if entry.chip_label %}<span class="vtag vtag--{{ entry.chip_class }}">{{ entry.chip_label }}</span>{% endif %}
+          {#- No gold badge: 4.2 reserves --record for Rekord and 4.3 forbids
+              repurposing a token. The row's own --raised fill is the marker. -#}
         </span>
         <span class="row__meta">
-          {%- if entry.last_done -%}Zuletzt {{ entry.last_done.strftime('%d.%m.%Y') }}
-          {%- else -%}Noch nie gemacht{%- endif -%}
-          {%- if entry.sessions_since_pr %} · {{ entry.sessions_since_pr }} ohne PR{% endif -%}
+          {{- recency(entry.days_ago) -}}
+          {%- set stall = since_pr(entry.sessions_since_pr) %}{% if stall %} · {{ stall }}{% endif -%}
         </span>
-      </a>
+      </span>
+      {#- Leads with the weight you would put on the bar today. It led with the
+          all-time best, unlabelled -- so a row reading "15,0 kg" could not be
+          told apart from a working weight, and the figure it did show is on the
+          exercise's own page with a label under it. -#}
       <span class="row__trail row__trail--stack">
-        {% if entry.best_weight is not none %}
-        <span class="vol">{{ ('%.1f'|format(entry.best_weight)).replace('.', ',') }}<small>kg</small></span>
+        {% if entry.last_weight is not none %}
+        {#- "je Seite" on unilateral lifts. Without it the catalogue -- the one
+            surface whose job is comparing exercises -- showed "Preacher Curl
+            (Machine, Good) 20,0 kg" above "Preacher Curl Bilateral 40,0 kg",
+            which is the same load read as half. Every other surface marks it. -#}
+        <span class="vol">{{ ('%.1f'|format(entry.last_weight)).replace('.', ',') }}<small>kg{% if entry.exercise.is_unilateral %}/Seite{% endif %}</small></span>
+        <span class="lastline">zuletzt{% if entry.best_weight and entry.best_weight > entry.last_weight %} · best {{ ('%.1f'|format(entry.best_weight)).replace('.', ',') }}{% endif %}</span>
         {% else %}
         <span class="vol vol--none">—</span>
         {% endif %}
-        {% if entry.best_e1rm is not none %}
-        <span class="e1rm">e1RM {{ ('%.1f'|format(entry.best_e1rm)).replace('.', ',') }}</span>
-        {% endif %}
       </span>
-    </div>
+    </a>
     {% endfor %}
+    </section>
     {% endfor %}
   </div>
   {% else %}
@@ -93,9 +151,9 @@
   {% endif %}
 </div>
 
-<dialog class="sheet" id="sheet-new-exercise">
+<dialog class="sheet" id="sheet-new-exercise" aria-labelledby="sheet-new-exercise-title">
   <div class="sheet__head">
-    <span class="sheet__title">Neue Übung</span>
+    <h2 class="sheet__title" id="sheet-new-exercise-title">Neue Übung</h2>
     <button type="button" class="sheet__close" data-close>Abbrechen</button>
   </div>
   <div class="sheet__body">
@@ -113,11 +171,11 @@
       </div>
       <div class="field">
         <label class="label" for="uebungen-add-rest">Standard-Pause (Sek.)</label>
-        <input type="number" id="uebungen-add-rest" name="default_rest_seconds" min="0" class="input input--num" placeholder="90">
+        <input type="number" id="uebungen-add-rest" name="default_rest_seconds" min="0" class="input input--num" placeholder="{{ default_rest_seconds }}">
       </div>
       <label class="sheet__row">
         <input type="checkbox" name="is_unilateral" class="check">
-        <span class="label">Einseitig (pro Seite)</span>
+        <span class="check__text">Einseitig (pro Seite)</span>
       </label>
       <button type="submit" class="btn btn--live btn--block">Hinzufügen</button>
     </form>
@@ -128,39 +186,80 @@
 {% block scripts %}
 <script>
 // Search + sort, entirely client-side over the rows the server already
-// rendered. Sorting never fabricates DOM -- it moves the existing
-// .uebungen-row / .uebungen-group-header nodes, so every per-row detail keeps
+// rendered. Sorting never fabricates DOM -- it moves the existing row nodes
+// between their group <section> and a flat list, so every per-row detail keeps
 // working regardless of order.
 //
-// Groups start collapsed: this page is meant to be scannable as a short list of
-// muscle groups first, not a permanently open wall of every exercise's stats.
-// An active search overrides that and force-opens whichever groups still have a
-// match, so a result is never hidden behind a collapsed header.
+// Groups are addressed by data-group, not by walking siblings: each group is a
+// <section> now, so the header no longer sits next to its own rows.
+//
+// The default open/closed state comes from the server (see UEBUNGEN_FOLD_ABOVE)
+// and is then overridden by whatever you last left open, per tab. Hardcoded
+// shut, this page's default state contained no exercises at all.
 (function () {
     var list = document.getElementById('uebungen-list');
     if (!list) { return; }
 
-    var originalOrder = Array.prototype.slice.call(list.children);   // default grouped order, captured once
+    // Only sections that actually fold. An empty muscle group renders a plain
+    // heading with no toggle -- there is nothing behind it to reveal -- so it
+    // has no .uebungen-group-header and must not be treated as one.
+    var sections = Array.prototype.slice.call(list.querySelectorAll('.group-sec'))
+        .filter(function (sec) { return sec.querySelector('.uebungen-group-header'); });
     var rows = Array.prototype.slice.call(list.querySelectorAll('.uebungen-row'));
     var headers = Array.prototype.slice.call(list.querySelectorAll('.uebungen-group-header'));
     var searchInput = document.getElementById('uebungen-search');
     var emptyNote = document.getElementById('uebungen-empty');
+    var emptyQ = document.getElementById('uebungen-empty-q');
+    var resetBtn = document.getElementById('uebungen-reset');
+    var countEl = document.getElementById('uebungen-count');
     var sortButtons = Array.prototype.slice.call(document.querySelectorAll('.sort'));
+    var STORE = 'gym.uebungen.open';
 
-    function rowsInGroup(header) {
-        var out = [];
-        var sib = header.nextElementSibling;
-        while (sib && !sib.classList.contains('uebungen-group-header')) {
-            if (sib.classList.contains('uebungen-row')) { out.push(sib); }
-            sib = sib.nextElementSibling;
-        }
-        return out;
+    var allSections = Array.prototype.slice.call(list.querySelectorAll('.group-sec'));
+    var byGroup = {};
+    sections.forEach(function (sec) {
+        var header = sec.querySelector('.uebungen-group-header');
+        var slug = header.dataset.group;
+        byGroup[slug] = {
+            section: sec,
+            header: header,
+            rows: rows.filter(function (r) { return r.dataset.group === slug; }),
+        };
+    });
+
+    // Umlauts fold three ways: "rücken", "ruecken" and "rucken" all find
+    // "Rücken". The digraph expansion alone left the bare-vowel spelling out,
+    // which is the one a hurried typist actually produces.
+    function fold(s) {
+        return (s || '').toLowerCase()
+            .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+            .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
+    rows.forEach(function (r) { r.dataset.fold = fold(r.dataset.name); });
+
+    function readOpen() {
+        try { return JSON.parse(sessionStorage.getItem(STORE)) || null; } catch (e) { return null; }
+    }
+    function writeOpen() {
+        try {
+            sessionStorage.setItem(STORE, JSON.stringify(headers
+                .filter(function (h) { return h.getAttribute('aria-expanded') === 'true'; })
+                .map(function (h) { return h.dataset.group; })));
+        } catch (e) { /* private mode */ }
+    }
+
+    var remembered = readOpen();
+    if (remembered) {
+        headers.forEach(function (h) {
+            h.setAttribute('aria-expanded', remembered.indexOf(h.dataset.group) !== -1 ? 'true' : 'false');
+        });
     }
 
     headers.forEach(function (header) {
         header.addEventListener('click', function () {
             var open = header.getAttribute('aria-expanded') === 'true';
             header.setAttribute('aria-expanded', open ? 'false' : 'true');
+            writeOpen();
             render();
         });
     });
@@ -186,42 +285,80 @@
         return on ? on.dataset.sort : 'muscle';
     }
 
+    function matches(row, q) {
+        return !q || row.dataset.fold.indexOf(q) !== -1;
+    }
+
     function render() {
+        // render() re-appends every section, which removes and re-inserts the
+        // node holding the focused button -- so opening a group by keyboard
+        // dropped focus to <body> and you re-tabbed from the skip link.
+        var refocus = document.activeElement;
         var mode = currentSort();
-        var query = (searchInput && searchInput.value.trim().toLowerCase()) || '';
+        var q = fold(searchInput && searchInput.value.trim());
+        var shown = 0;
 
+        list.classList.toggle('is-flat', mode !== 'muscle');
         if (mode === 'muscle') {
-            originalOrder.forEach(function (node) { list.appendChild(node); });
-        } else {
-            rows.slice().sort(mode === 'recent' ? compareRecent : compareStall)
-                .forEach(function (node) { list.appendChild(node); });
-        }
-
-        if (mode !== 'muscle') {
-            headers.forEach(function (header) { header.hidden = true; });
-            rows.forEach(function (row) {
-                row.hidden = !(!query || row.dataset.name.indexOf(query) !== -1);
+            // An empty group's band is a statement about the catalogue, not a
+            // search result: under an active query it is not a match and stands
+            // down with everything else that isn't.
+            allSections.forEach(function (sec) {
+                sec.hidden = q && !sec.querySelector('.uebungen-group-header');
+                list.appendChild(sec);
+            });
+            sections.forEach(function (sec) {
+                var g = byGroup[sec.querySelector('.uebungen-group-header').dataset.group];
+                g.rows.forEach(function (row) { sec.appendChild(row); });
+            });
+            headers.forEach(function (header) {
+                var g = byGroup[header.dataset.group];
+                var hits = g.rows.filter(function (r) { return matches(r, q); });
+                // A query force-opens whatever still has a match, so a result is
+                // never stranded behind a collapsed band.
+                var open = q ? hits.length > 0 : header.getAttribute('aria-expanded') === 'true';
+                g.section.hidden = q ? hits.length === 0 : false;
+                header.classList.toggle('is-open', open);
+                // The count has to follow the filter: server-rendered, a band
+                // read "9 Übungen" while standing over one visible row.
+                var label = header.querySelector('[data-count]');
+                if (label) {
+                    var total = label.dataset.count;
+                    label.textContent = q
+                        ? hits.length + ' von ' + total
+                        : total + (total === '1' ? ' Übung' : ' Übungen');
+                }
+                g.rows.forEach(function (row) {
+                    var hit = matches(row, q);
+                    row.hidden = !(open && hit);
+                    if (hit) { shown += 1; }
+                });
             });
         } else {
-            headers.forEach(function (header) {
-                var groupRows = rowsInGroup(header);
-                var matching = groupRows.filter(function (row) {
-                    return !query || row.dataset.name.indexOf(query) !== -1;
-                });
-                var open = query ? matching.length > 0 : header.getAttribute('aria-expanded') === 'true';
-                header.hidden = query ? matching.length === 0 : false;
-                header.classList.toggle('is-open', open);
-                groupRows.forEach(function (row) {
-                    var matches = !query || row.dataset.name.indexOf(query) !== -1;
-                    row.hidden = !(open && matches);
-                });
+            // Flat: the rows leave their sections, the sections stand down.
+            allSections.forEach(function (sec) { sec.hidden = true; });
+            rows.slice().sort(mode === 'recent' ? compareRecent : compareStall)
+                .forEach(function (row) { list.appendChild(row); });
+            rows.forEach(function (row) {
+                var hit = matches(row, q);
+                row.hidden = !hit;
+                if (hit) { shown += 1; }
             });
         }
 
         // Collapsed groups mean zero rows are VISIBLE by design -- not the same
         // as the search finding nothing, which is the only time this shows.
-        var anyMatch = !query || rows.some(function (row) { return row.dataset.name.indexOf(query) !== -1; });
-        if (emptyNote) { emptyNote.hidden = anyMatch; }
+        var anyMatch = !q || rows.some(function (row) { return matches(row, q); });
+        if (emptyNote) {
+            emptyNote.hidden = anyMatch;
+            if (emptyQ) { emptyQ.textContent = (searchInput && searchInput.value.trim()) || ''; }
+        }
+        if (countEl) {
+            countEl.textContent = q ? shown + ' / ' + rows.length : rows.length;
+        }
+        if (refocus && refocus !== document.activeElement && list.contains(refocus)) {
+            refocus.focus();
+        }
     }
 
     sortButtons.forEach(function (btn) {
@@ -235,8 +372,24 @@
         });
     });
     if (searchInput) { searchInput.addEventListener('input', render); }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            searchInput.value = '';
+            render();
+            searchInput.focus();
+        });
+    }
 
     render();
+
+    // A freshly added exercise is scrolled to rather than left inside whichever
+    // band it happens to belong to.
+    var fresh = list.querySelector('.uebungen-row.is-new');
+    if (fresh) {
+        var g = byGroup[fresh.dataset.group];
+        if (g) { g.header.setAttribute('aria-expanded', 'true'); writeOpen(); render(); }
+        fresh.scrollIntoView({ block: 'center' });
+    }
 })();
 
 document.addEventListener('click', function (e) {

@@ -106,7 +106,10 @@ def monthly_tonnage(rows, now):
     deload_months = set()
     session_month = {}
     for row in rows:
-        key = (row.started_at.year, row.started_at.month)
+        # Local month: a session at 23:30 on the 31st is stored under the next
+        # month in UTC, so it was banded into a month it did not happen in.
+        local = stats.to_local(row.started_at)
+        key = (local.year, local.month)
         volume[key] += stats.row_volume(row)
         session_month[row.session_id] = key
         if row.is_deload:
@@ -114,9 +117,10 @@ def monthly_tonnage(rows, now):
 
     record_months = set()
     for record in record_timeline(rows):
-        record_months.add((record['started_at'].year, record['started_at'].month))
+        record_local = stats.to_local(record['started_at'])
+        record_months.add((record_local.year, record_local.month))
 
-    first = min(row.started_at for row in rows)
+    first = stats.to_local(min(row.started_at for row in rows))
     year, month = first.year, first.month
     last = (now.year, now.month)
 
@@ -280,6 +284,10 @@ def fatigue_curve(rows):
 # The two clusters the training log actually contains. Sessions outside both
 # fall into `other`, which is reported but never carries a finding -- a
 # bucket defined as "everything else" cannot support a claim about behaviour.
+# LOCAL clock hours -- "morgens" and "abends" are wall-clock words. Read off
+# the stored UTC hour they were two hours out in CEST: an 08:00 workout counted
+# as 06:00 and fell out of the morning bucket entirely, and a 20:00 one landed
+# outside 19-23 and was filed as "other". Every consumer below converts first.
 DAYPARTS = (('morning', 8, 14), ('evening', 19, 23))
 WEEKDAYS = tuple(range(7))   # 0 = Monday, matching datetime.weekday()
 GAP_BUCKETS = (('0-1', 0, 1), ('2', 2, 2), ('3', 3, 3), ('4+', 4, None))
@@ -308,8 +316,9 @@ def daypart_volume(rows):
     buckets = {label: [] for label, _, _ in DAYPARTS}
     buckets['other'] = []
     for started_at, volume in sessions:
+        hour = stats.to_local(started_at).hour
         for label, low, high in DAYPARTS:
-            if low <= started_at.hour < high:
+            if low <= hour < high:
                 buckets[label].append(volume)
                 break
         else:
@@ -339,7 +348,9 @@ def weekday_distribution(rows):
     sessions = _session_volumes(rows)
     counts = {index: 0 for index in WEEKDAYS}
     for started_at, _ in sessions:
-        counts[started_at.weekday()] += 1
+        # Local weekday: a Monday 00:30 session is stored as Sunday 22:30 UTC
+        # and was being counted against Sunday.
+        counts[stats.to_local(started_at).weekday()] += 1
 
     total = len(sessions)
     return {
@@ -468,16 +479,31 @@ def record_timeline(rows):
         best_weight = None
         best_e1rm = None
         for session_id, (started_at, weight, e1rm, name) in ordered:
+            # ONE entry per exercise-day, carrying whichever bests it set.
+            #
+            # These used to be two rows. They are not two events: e1RM is Epley
+            # arithmetic over the same set, so it moves whenever weight or reps
+            # move, and a weight PB almost always drags an e1RM PB along with
+            # it -- 43 of 57 rows on a real history were e1RM, and 12 dates
+            # carried both kinds for the same lift. Two rows made one lift look
+            # like two milestones and made the timeline's own count untrue to
+            # what happened. Nothing is dropped: both figures ride on the row.
+            entry = None
             if best_weight is not None and weight > best_weight:
-                timeline.append({'started_at': started_at, 'session_id': session_id,
-                                 'exercise_id': exercise_id, 'name': name,
-                                 'kind': 'weight', 'value': round(weight, 1),
-                                 'previous': round(best_weight, 1)})
+                entry = {'started_at': started_at, 'session_id': session_id,
+                         'exercise_id': exercise_id, 'name': name,
+                         'weight': {'value': round(weight, 1), 'previous': round(best_weight, 1)},
+                         'e1rm': None}
             if best_e1rm is not None and e1rm > best_e1rm:
-                timeline.append({'started_at': started_at, 'session_id': session_id,
-                                 'exercise_id': exercise_id, 'name': name,
-                                 'kind': 'e1rm', 'value': round(e1rm, 1),
-                                 'previous': round(best_e1rm, 1)})
+                gain = {'value': round(e1rm, 1), 'previous': round(best_e1rm, 1)}
+                if entry is None:
+                    entry = {'started_at': started_at, 'session_id': session_id,
+                             'exercise_id': exercise_id, 'name': name,
+                             'weight': None, 'e1rm': gain}
+                else:
+                    entry['e1rm'] = gain
+            if entry is not None:
+                timeline.append(entry)
             best_weight = weight if best_weight is None else max(best_weight, weight)
             best_e1rm = e1rm if best_e1rm is None else max(best_e1rm, e1rm)
 

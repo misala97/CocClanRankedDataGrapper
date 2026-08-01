@@ -27,7 +27,10 @@
     <a href="{{ url_for('gym.gym_heute') }}" class="session-top__back" aria-label="Zurück zum Start">
       {% with icon='back' %}{% include 'gym/_icon.html' %}{% endwith %}
     </a>
-    <span class="session-top__name">{{ session.name or 'Workout' }}</span>
+    {# The page's h1. It was a <span>, which left the whole document starting
+       at h2 (the live exercise's name) -- so heading navigation returned one
+       exercise and nothing about the workout it belongs to. #}
+    <h1 class="session-top__name">{{ session.name or 'Workout' }}</h1>
     {% if session.is_deload %}
     <span class="session-top__deload">Deload{% if deload_applied %} {{ session.deload_pct or deload_default_pct }} %{% endif %}</span>
     {% endif %}
@@ -39,14 +42,31 @@
 
   {# The one shared, visible answer to "did that save?" when a gym-wifi fetch
      drops. Starts hidden; the script below owns it and the retry. #}
-  <div class="note-stall hidden" id="save-error-banner" role="alert">
-    <span class="note-stall__label">Nicht gespeichert</span>
+  <div class="note-save hidden" id="save-error-banner" role="alert">
+    <span class="note-save__label">Nicht gespeichert</span>
     <span id="save-error-message"></span>
     <div class="save-error__actions">
-      <button type="button" class="btn btn--stall btn--sm" id="save-error-retry">Erneut versuchen</button>
+      {# --ghost, not --stall: .btn--stall paints --live-ink, which put a second
+         orange control on screen beside the solid-orange confirm button. The
+         retry is the banner's own primary action and the banner already has
+         all the attention it needs. #}
+      <button type="button" class="btn btn--ghost btn--sm" id="save-error-retry">Erneut versuchen</button>
       <button type="button" class="btn btn--ghost btn--sm" id="save-error-dismiss">Verwerfen</button>
     </div>
   </div>
+
+  {# Reorder is a mode, so it says so and it can be left from where you are.
+     Before this the only exit was re-opening the ⋯ sheet. #}
+  <div class="reorder-bar">
+    <span class="reorder-bar__txt">Reihenfolge ändern — ziehen, oder mit den Pfeiltasten verschieben.</span>
+    <button type="button" class="reorder-bar__done" id="reorder-done">Fertig</button>
+  </div>
+
+  {# The screen's live region lives HERE, outside #session-body, on purpose: a
+     live region has to persist to be announced, and everything inside
+     #session-body is destroyed and rebuilt by every refresh. A freshly
+     inserted region carrying pre-filled text does not reliably announce it. #}
+  <p class="sr-only" id="rest-announce" aria-live="polite"></p>
 
   {% include 'gym/_session_live.html' %}
 
@@ -60,12 +80,36 @@
 
 {# ---------------------------------------------------------------- sheets -- #}
 
-<dialog class="sheet" id="sheet-session">
+<dialog class="sheet" id="sheet-session" aria-labelledby="sheet-session-title">
   <div class="sheet__head">
-    <span class="sheet__title">Workout</span>
+    <h2 class="sheet__title" id="sheet-session-title">Workout</h2>
     <button type="button" class="sheet__close" data-close>Fertig</button>
   </div>
   <div class="sheet__body">
+    {# "Überspringen" used to sit in the panel, and gym_skip_rest's own docstring
+       says why: the countdown had taken the confirm button's slot, so "I'm
+       ready, go" needed an action of its own. It does not any more -- the
+       button is live throughout the rest, and confirming the next set through
+       it reschedules the rest and replaces the pending push. What is left is
+       the narrower case the panel cannot express: ending a rest WITHOUT
+       logging anything, after the last set of an exercise, so the notifier
+       does not fire "Pause vorbei" for a rest you already walked away from.
+       That is a workout-level action on a session-level timer, so it lives
+       here rather than in the thumb zone.
+
+       Rendered always and hidden, never rendered conditionally: the sheets sit
+       OUTSIDE #session-body and so survive every AJAX refresh untouched (see
+       this file's header). A `{% if resting %}` here would be frozen at
+       whatever was true when the page last fully loaded, which for this row is
+       almost always wrong -- rests start and end entirely through refreshes.
+       refreshBody toggles it instead. #}
+    <form method="post" action="{{ url_for('gym.gym_skip_rest', session_id=session.id) }}"
+          id="skip-rest-act"{% if not resting %} hidden{% endif %}>
+      <button type="submit" class="sheet__act">
+        {% with icon='timer' %}{% include 'gym/_icon.html' %}{% endwith %}
+        Pause beenden
+      </button>
+    </form>
     <button type="button" class="sheet__act sheet-open" data-sheet="sheet-deload">
       {% with icon='timer' %}{% include 'gym/_icon.html' %}{% endwith %}
       {{ 'Deload-Markierung ändern' if session.is_deload else 'Als Deload markieren' }}
@@ -92,9 +136,9 @@
   </div>
 </dialog>
 
-<dialog class="sheet" id="sheet-deload">
+<dialog class="sheet" id="sheet-deload" aria-labelledby="sheet-deload-title">
   <div class="sheet__head">
-    <span class="sheet__title">Deload</span>
+    <h2 class="sheet__title" id="sheet-deload-title">Deload</h2>
     <button type="button" class="sheet__close" data-close>Fertig</button>
   </div>
   <div class="sheet__body">
@@ -131,9 +175,9 @@
   </div>
 </dialog>
 
-<dialog class="sheet" id="sheet-add-exercise">
+<dialog class="sheet" id="sheet-add-exercise" aria-labelledby="sheet-add-exercise-title">
   <div class="sheet__head">
-    <span class="sheet__title">Übung hinzufügen</span>
+    <h2 class="sheet__title" id="sheet-add-exercise-title">Übung hinzufügen</h2>
     <button type="button" class="sheet__close" data-close>Abbrechen</button>
   </div>
   <div class="sheet__body">
@@ -161,9 +205,9 @@
   </div>
 </dialog>
 
-<dialog class="sheet" id="sheet-template">
+<dialog class="sheet" id="sheet-template" aria-labelledby="sheet-template-title">
   <div class="sheet__head">
-    <span class="sheet__title">Als Vorlage speichern</span>
+    <h2 class="sheet__title" id="sheet-template-title">Als Vorlage speichern</h2>
     <button type="button" class="sheet__close" data-close>Abbrechen</button>
   </div>
   <div class="sheet__body">
@@ -181,9 +225,9 @@
    do to it. This is what replaced a ⋯ on every row and an expanded panel per
    exercise -- the row itself is the affordance. #}
 {% for se in visible_exercises %}
-<dialog class="sheet" id="sheet-ex-{{ se.id }}">
+<dialog class="sheet" id="sheet-ex-{{ se.id }}" aria-labelledby="sheet-ex-{{ se.id }}-title">
   <div class="sheet__head">
-    <span class="sheet__title">{{ se.exercise.name }}</span>
+    <h2 class="sheet__title" id="sheet-ex-{{ se.id }}-title">{{ se.exercise.name }}</h2>
     <button type="button" class="sheet__close" data-close>Fertig</button>
   </div>
   <div class="sheet__body">
@@ -323,25 +367,80 @@ document.addEventListener('click', function (e) {
     display.textContent = decimals ? next.toFixed(decimals).replace('.', ',') : String(next);
 });
 
+// ---- motion ---------------------------------------------------------------
+// One place that answers "is motion allowed", read at call time rather than
+// once at load: the setting can change while a workout is open, and the CSS
+// half of this (the REDUCED MOTION block in gym.css) already tracks it live.
+const stillPlease = window.matchMedia('(prefers-reduced-motion: reduce)');
+const deGrouped = new Intl.NumberFormat('de-DE');
+
+// ---- the spoken half ------------------------------------------------------
+// Everything this screen reports is drawn. #rest-announce is the one channel
+// that is not, and it lives outside #session-body so it survives the swaps
+// (a live region that is re-created does not reliably announce its content).
+//
+// Batched to the end of the task, because one action produces several things
+// worth saying -- confirming a set lands a chip AND starts a rest -- and two
+// writes to a live region in the same tick means the second silently replaces
+// the first. Joined, it comes out as one sentence, which is also how the user
+// experiences it. Declared here, above every caller: startRestTick() runs at
+// load and would otherwise hit this in its temporal dead zone.
+let sayQueue = [];
+function announce(text) {
+    if (!text) { return; }
+    sayQueue.push(text);
+    if (sayQueue.length > 1) { return; }
+    setTimeout(function () {
+        var el = document.getElementById('rest-announce');
+        if (el) { el.textContent = sayQueue.join(' '); }
+        sayQueue = [];
+    }, 0);
+}
+
 // ---- rest countdown -------------------------------------------------------
 // Re-run after every refresh: a fresh #rest-fill (or none) may now exist.
+//
+// The rest is drawn ON the confirm button, not in place of it -- the band
+// charges rather than drains, so the value written here is elapsed, not
+// remaining. Nothing is hidden and nothing is swapped: the server keeps
+// resting_set_id set until the NEXT set starts a rest and there is no request
+// in between, which is exactly why the old two-control dance existed, and why
+// removing the second control removes the dance.
 let restTimer = null;
+let announcedRest = null;
 function startRestTick() {
     if (restTimer) { clearTimeout(restTimer); restTimer = null; }
-    var fill = document.getElementById('rest-fill');
-    if (!fill) { return; }
+    var charge = document.getElementById('rest-fill');
+    if (!charge) { return; }
     // stored UTC without a zone suffix -- same convention as the resume strip
-    var endsAt = new Date(fill.dataset.restEnds + 'Z').getTime();
-    var total = parseFloat(fill.dataset.restTotal) || 0;
-    // When the rest ends, hand the slot back to the confirm button. Both are in
-    // the DOM (see _session_live.html); without this the countdown just sat at
-    // 0:00 and "Satz geschafft" stayed gone until a manual reload, because the
-    // server only learns the rest is over on the next request.
+    var endsAt = new Date(charge.dataset.restEnds + 'Z').getTime();
+    var total = parseFloat(charge.dataset.restTotal) || 0;
+    // Keyed on the rest's own end time: this function re-runs after every
+    // refresh, and a rest that is merely still running is not news.
+    if (announcedRest !== endsAt) {
+        announcedRest = endsAt;
+        if (endsAt > Date.now()) {
+            announce('Pause läuft, ' + Math.round(total) + ' Sekunden.');
+        }
+    }
+    // Zero is the cue to start the next set, and it lands while the phone is
+    // face down on a bench. The band completes, the ring fires, and the one
+    // announcement a screen reader gets goes out -- 'polite' rather than
+    // 'assertive' because the user is mid-workout, not mid-error.
     function restOver() {
-        var block = document.querySelector('.rest');
-        var confirm_ = document.getElementById('set-confirm');
-        if (block) { block.hidden = true; }
-        if (confirm_) { confirm_.hidden = false; }
+        var btn = document.getElementById('set-confirm');
+        if (btn) {
+            btn.classList.remove('is-resting');
+            btn.classList.add('is-ready');
+            var clock = btn.querySelector('.go__clock');
+            var band = btn.querySelector('.go__band');
+            if (clock) { clock.remove(); }
+            if (band) { band.remove(); }
+        }
+        announce('Pause vorbei.');
+        // no refresh happens here -- the server still thinks a rest is running
+        var act = document.getElementById('skip-rest-act');
+        if (act) { act.hidden = true; }
     }
     (function tick() {
         var el = document.getElementById('rest-fill');
@@ -349,12 +448,19 @@ function startRestTick() {
         if (!el) { return; }
         var diff = endsAt - Date.now();
         if (diff <= 0 || total <= 0) {
-            el.style.inlineSize = '0%';
+            // scaleX, not width: the band is transitioned across the one-second
+            // gap between ticks, so it reads as continuously charging rather
+            // than as a second hand, and it never relayouts the panel. Written
+            // as an inline `transform` rather than by moving --p, because only
+            // a change to the transitioned property itself is guaranteed to
+            // start the transition.
+            el.style.transform = 'scaleX(1)';
             if (label) { label.textContent = '0:00'; }
             restOver();
             return;
         }
-        el.style.inlineSize = Math.max(0, Math.min(100, (diff / 1000 / total) * 100)) + '%';
+        var remaining = Math.max(0, Math.min(1, diff / 1000 / total));
+        el.style.transform = 'scaleX(' + (1 - remaining) + ')';
         if (label) {
             var left = Math.round(diff / 1000);
             label.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
@@ -370,10 +476,19 @@ startRestTick();
 const saveErrorBanner = document.getElementById('save-error-banner');
 const saveErrorMessage = document.getElementById('save-error-message');
 let retrySaveError = null;
+// Unhide FIRST, then write. The other order sets textContent while the banner
+// is still `display: none` and therefore outside the accessibility tree
+// entirely (confirmed: a CDP tree dump finds neither the alert node nor its
+// text while .hidden is applied) -- so the alert had to rely on node insertion
+// firing, which is the pattern that announces intermittently. Rendering the
+// text one frame later means the region is live and empty when the content
+// arrives, which is what role="alert" is specified to react to.
 function showSaveError(message, retryFn) {
     retrySaveError = retryFn;
-    if (saveErrorMessage) { saveErrorMessage.textContent = message; }
     if (saveErrorBanner) { saveErrorBanner.classList.remove('hidden'); }
+    requestAnimationFrame(function () {
+        if (saveErrorMessage) { saveErrorMessage.textContent = message; }
+    });
 }
 function hideSaveError() {
     retrySaveError = null;
@@ -384,6 +499,120 @@ document.getElementById('save-error-retry').addEventListener('click', function (
 });
 document.getElementById('save-error-dismiss').addEventListener('click', hideSaveError);
 
+// Landing a set is one event with four readings -- the chip fills, a tick
+// lights, the rail grows, the total counts up -- so they are staged together
+// here and play as one cascade rather than as four animations that happen to
+// fire in the same frame (PRODUCT.md 4.1, 4.5).
+//
+// They have to be staged rather than transitioned: the swap below destroys
+// every node in #session-body, and a transition needs a node that existed a
+// frame ago. So each of these compares the OUTGOING body against the INCOMING
+// one and hands the fresh node the only thing CSS cannot work out for itself
+// -- what it is arriving from. See the MOTION note in gym.css.
+function stageChanges(old, fresh) {
+    // the chip: filled = logged, gold flare = a record. Keyed on the form's
+    // action (the set's own endpoint) rather than on position, so appending or
+    // deleting a set cannot make an untouched chip claim it just landed.
+    var wasDone = new Set();
+    old.querySelectorAll('.set.is-done, .set.is-record').forEach(function (s) {
+        wasDone.add(s.closest('.set-form').action);
+    });
+    fresh.querySelectorAll('.set.is-done, .set.is-record').forEach(function (s) {
+        if (wasDone.has(s.closest('.set-form').action)) { return; }
+        s.classList.add(s.classList.contains('is-record') ? 'just-flared' : 'just-landed');
+    });
+
+    // the tick strip: ticks are in workout order, not done-first, so this is a
+    // positional diff. Skipped entirely when the count changed -- that means a
+    // set was added or removed, every later tick shifted, and no tick can
+    // honestly claim to have just lit.
+    var oldTicks = old.querySelectorAll('.tick');
+    var freshTicks = fresh.querySelectorAll('.tick');
+    if (oldTicks.length === freshTicks.length) {
+        for (var i = 0; i < freshTicks.length; i++) {
+            if (freshTicks[i].classList.contains('is-on') && !oldTicks[i].classList.contains('is-on')) {
+                freshTicks[i].classList.add('just-lit');
+            }
+        }
+    }
+
+    // the rail: hand the incoming fill the outgoing one's scale factor. A
+    // segment with no fill (not the live exercise last render) counts as 0, so
+    // moving to a new exercise grows its segment from empty rather than
+    // snapping to whatever it already contains.
+    var wasFilled = {};
+    old.querySelectorAll('.rail__seg').forEach(function (seg) {
+        var f = seg.querySelector('.rail__fill');
+        wasFilled[seg.dataset.seId] = f ? (f.style.getPropertyValue('--p').trim() || '0') : '0';
+    });
+    fresh.querySelectorAll('.rail__seg').forEach(function (seg) {
+        var f = seg.querySelector('.rail__fill');
+        if (!f) { return; }
+        var before = wasFilled[seg.dataset.seId] || '0';
+        if (before === f.style.getPropertyValue('--p').trim()) { return; }
+        f.style.setProperty('--p0', before);
+        f.classList.add('just-grew');
+    });
+
+    // moving to the next exercise: the panel re-seats and the queue hands the
+    // wash down one row. Only on an actual change of exercise -- a set landing
+    // inside the current one must not restage the panel around the chip that
+    // is already animating.
+    var oldLive = old.querySelector('.live');
+    var freshLive = fresh.querySelector('.live');
+    if (freshLive && (!oldLive || oldLive.dataset.seId !== freshLive.dataset.seId)) {
+        freshLive.classList.add('just-live');
+    }
+    var oldNow = old.querySelector('.queue__row.is-now');
+    var freshNow = fresh.querySelector('.queue__row.is-now');
+    if (freshNow && (!oldNow || oldNow.dataset.seId !== freshNow.dataset.seId)) {
+        freshNow.classList.add('just-now');
+    }
+
+    // A rest starting needs nothing staged: it is drawn on the confirm button,
+    // which was already there and stays exactly where it was.
+
+    // What to say out loud. The whole cascade above is pixels; without this a
+    // screen-reader user gets no confirmation that the tap did anything at all.
+    var landed = fresh.querySelectorAll('.set.just-landed, .set.just-flared').length;
+    if (!landed) { return null; }
+    var record = fresh.querySelector('.set.just-flared');
+    var vol = fresh.querySelector('.grew__num');
+    return (record ? 'Rekord. ' : '') + 'Satz erledigt'
+         + (vol ? ', ' + vol.textContent.trim() + ' Kilo bewegt' : '') + '.';
+}
+
+// Everything outside #session-body that depends on state inside it. Sheets and
+// the shell survive the swap, so nothing else would ever update them.
+function syncAfterSwap(body) {
+    var act = document.getElementById('skip-rest-act');
+    if (act) { act.hidden = !body.querySelector('#rest-fill'); }
+    // fresh rows render their handles inert; the mode has to re-arm them
+    var on = !!(window.GymReorder && window.GymReorder.unlocked);
+    document.querySelectorAll('.drag-handle').forEach(function (h) { h.tabIndex = on ? 0 : -1; });
+}
+
+
+// The kg total counts up instead of cutting: the accumulation is the reward
+// and it is the one number on the screen that only ever grows (4.1). Tweened
+// rather than transitioned because it is text, and text has no interpolation.
+function countUp(el, from) {
+    var to = parseInt(el.dataset.vol, 10);
+    if (!isFinite(to) || !isFinite(from) || from === to) { return; }
+    if (stillPlease.matches) { return; }   // server value is already rendered
+    var startedAt = null;
+    el.classList.add('is-counting');
+    (function frame(now) {
+        if (startedAt === null) { startedAt = now; }
+        var t = Math.min(1, (now - startedAt) / 320);
+        var eased = 1 - Math.pow(1 - t, 4);            // ease-out-quart, = --ease
+        el.textContent = deGrouped.format(Math.round(from + (to - from) * eased));
+        if (t < 1) { requestAnimationFrame(frame); return; }
+        el.textContent = deGrouped.format(to);
+        el.classList.remove('is-counting');
+    })(performance.now());
+}
+
 // The server recomputes which exercise is live on every render, so the freshly
 // rendered #session-body is authoritative and replaces the old one wholesale.
 function refreshBody(html) {
@@ -392,43 +621,104 @@ function refreshBody(html) {
     var fresh = doc.getElementById('session-body');
     var old = document.getElementById('session-body');
     if (fresh && old) {
-        var wasDone = new Set();
-        old.querySelectorAll('.set.is-done, .set.is-record').forEach(function (s) {
-            wasDone.add(s.closest('.set-form').action);
-        });
-        fresh.querySelectorAll('.set.is-done, .set.is-record').forEach(function (s) {
-            if (!wasDone.has(s.closest('.set-form').action)) { s.classList.add('just-landed'); }
-        });
+        var oldNum = old.querySelector('.grew__num');
+        var wasVolume = oldNum ? parseInt(oldNum.dataset.vol, 10) : NaN;
+        var said = stageChanges(old, fresh);
         old.replaceWith(fresh);
         window.scrollTo(0, scrollY);
+        var freshNum = fresh.querySelector('.grew__num');
+        if (freshNum) { countUp(freshNum, wasVolume); }
+        syncAfterSwap(fresh);
+        announce(said);
     }
     startRestTick();
     startClocks();
 }
 
+// Between the tap and the server's answer there is a gym-wifi round trip and
+// nothing on screen. The press itself is answered locally (.set:active,
+// .go:active), but a save that takes longer than a press needs its own word:
+// after 300ms the body shows a sweep, so a slow save reads as slow rather than
+// as ignored. Inside 300ms it never appears at all -- a flicker on every set
+// would be worse than the silence it replaces.
+let pendingSaves = 0;
+let sweepTimer = null;
+function beginSaving() {
+    pendingSaves += 1;
+    if (sweepTimer) { return; }
+    sweepTimer = setTimeout(function () {
+        var body = document.getElementById('session-body');
+        if (body && pendingSaves > 0) { body.classList.add('is-saving'); }
+    }, 300);
+}
+function endSaving() {
+    pendingSaves = Math.max(0, pendingSaves - 1);
+    if (pendingSaves > 0) { return; }
+    if (sweepTimer) { clearTimeout(sweepTimer); sweepTimer = null; }
+    // on success the node carrying the class was replaced anyway; on failure
+    // the old body is still here and has to be cleared
+    var body = document.getElementById('session-body');
+    if (body) { body.classList.remove('is-saving'); }
+}
+
+// A request that never resolves is the worst of the failure modes: the sweep
+// runs forever and the banner never comes, so the screen says "working" for as
+// long as you look at it. Eight seconds is well past a slow gym-wifi round trip
+// and well short of the point where you would put the phone down.
+const SAVE_TIMEOUT_MS = 8000;
+
 function performMutation(url, options, onError) {
-    return fetch(url, options)
+    beginSaving();
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, SAVE_TIMEOUT_MS);
+    var opts = Object.assign({}, options, { signal: ctrl.signal });
+    return fetch(url, opts)
         .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.text(); })
-        .then(function (html) { hideSaveError(); refreshBody(html); })
+        .then(function (html) { clearTimeout(timer); endSaving(); hideSaveError(); refreshBody(html); })
         .catch(function (err) {
+            clearTimeout(timer);
+            endSaving();
             console.error('Speichern fehlgeschlagen:', err);
             if (onError) { onError(); }
-            showSaveError('Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.',
-                          function () { performMutation(url, options, onError); });
+            showSaveError(err.name === 'AbortError'
+                ? 'Keine Antwort vom Server — deine letzte Änderung wurde nicht gespeichert.'
+                : 'Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.',
+                function () { performMutation(url, options, onError); });
         });
 }
 
 // Forms inside #session-body post in place. Sheet forms navigate normally: they
 // are deliberate, one-off edits, and a full reload after one is the honest
 // signal that the page changed underneath.
+// One write per form at a time. The confirm button is 326x64 in the thumb
+// zone and its answer arrives a round trip later, so a second tap before the
+// first resolves is not an edge case -- it is what a sweaty hand does. The
+// server no longer un-logs on a duplicate (gym_toggle_set_complete states its
+// target), but gym_add_set cannot be made idempotent that way: a second POST
+// there creates a second set. So the lock is the guard for both.
+//
+// Keyed on the form rather than a global flag: two different sets landing in
+// quick succession is legitimate, the same one twice is not. The class is only
+// for feedback; the early return is what actually protects the write.
+const formsInFlight = new WeakSet();
+
 document.addEventListener('submit', function (e) {
     var form = e.target;
     var body = document.getElementById('session-body');
     if (form.dataset.confirm && !confirm(form.dataset.confirm)) { e.preventDefault(); return; }
     if (!body || !body.contains(form)) { return; }
     e.preventDefault();
+    if (formsInFlight.has(form)) { return; }
+    formsInFlight.add(form);
+    form.classList.add('is-busy');
     performMutation(form.action, {
         method: 'POST', body: new FormData(form), credentials: 'same-origin',
+    }).finally(function () {
+        // on success the form was replaced with the rest of #session-body, so
+        // this only matters on the failure path -- where it has to release, or
+        // the retry the banner offers would be locked out too
+        formsInFlight.delete(form);
+        form.classList.remove('is-busy');
     });
 });
 
@@ -487,19 +777,39 @@ if (notifyBtn) {
 // A mode with a visible banner, not a lock icon you have to decode. The drag
 // itself lives in session_reorder.js, which reads this flag.
 window.GymReorder = { unlocked: false, url: '{{ url_for("gym.gym_reorder_session_exercises", session_id=session.id) }}', refresh: refreshBody };
+// The handles are tabindex="-1" outside the mode, because outside the mode
+// they do nothing -- putting four inert marks in the tab order between the
+// queue rows would be worse than leaving them out. Entering the mode makes
+// them real stops and moves focus to the first one, so a keyboard user lands
+// on the thing the mode is for instead of hunting for it.
+function setReorder(on) {
+    window.GymReorder.unlocked = on;
+    document.body.classList.toggle('is-reordering', on);
+    var label = document.getElementById('reorder-label');
+    if (label) { label.textContent = on ? 'Reihenfolge fertig' : 'Reihenfolge ändern'; }
+    document.querySelectorAll('.drag-handle').forEach(function (h) {
+        h.tabIndex = on ? 0 : -1;
+    });
+    announce(on ? 'Reihenfolge ändern. Mit den Pfeiltasten verschieben.' : 'Reihenfolge gespeichert.');
+    if (on) {
+        var first = document.querySelector('.drag-handle');
+        if (first) { first.focus(); }
+    }
+}
+
 const reorderToggle = document.getElementById('reorder-toggle');
 if (reorderToggle) {
     reorderToggle.addEventListener('click', function () {
-        window.GymReorder.unlocked = !window.GymReorder.unlocked;
-        document.body.classList.toggle('is-reordering', window.GymReorder.unlocked);
-        document.getElementById('reorder-label').textContent =
-            window.GymReorder.unlocked ? 'Reihenfolge fertig' : 'Reihenfolge ändern';
-        if (window.GymReorder.unlocked) {
+        var next = !window.GymReorder.unlocked;
+        if (next) {
             var sheet = reorderToggle.closest('dialog');
             if (sheet) { sheet.close(); }
         }
+        setReorder(next);
     });
 }
+const reorderDone = document.getElementById('reorder-done');
+if (reorderDone) { reorderDone.addEventListener('click', function () { setReorder(false); }); }
 </script>
 <script src="{{ url_for('static', filename='gym/session_reorder.js') }}" defer></script>
 {% endblock %}

@@ -3,7 +3,7 @@ import os
 
 from flask import Blueprint, current_app, jsonify, render_template, request, redirect, send_from_directory, url_for
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, load_only
 
 from extensions import db
 from models import (
@@ -105,6 +105,23 @@ def _get_active_session():
         db.session.commit()
         return None
     return session_
+
+
+@gym_bp.app_template_filter('local')
+def _local_filter(moment):
+    """Naive UTC -> naive local, for anything a person reads as a date or time.
+
+    Timestamps are stored naive-UTC and stay that way. Two hours of every CEST
+    day fall on the previous UTC date, so an unconverted `strftime` filed a
+    00:30 workout under yesterday -- next to a "vor 0 Tagen" that had already
+    been corrected to local. Every human-readable render goes through here.
+
+    NOT for durations. The elapsed clock's `data-started` stays UTC on purpose:
+    GymClock appends 'Z' and subtracts from Date.now(), which is a difference
+    between two instants and is the same number in any zone. Localising it
+    would shift the clock by the offset.
+    """
+    return stats.to_local(moment)
 
 
 @gym_bp.context_processor
@@ -399,14 +416,26 @@ def gym_heute():
         .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.template_id.isnot(None))
         .all()
     )
-    recent_sessions = (
+    recent = (
         WorkoutSession.query
         .filter(WorkoutSession.finished_at.isnot(None))
         .order_by(WorkoutSession.started_at.desc())
-        .limit(5)
+        # Over-fetched, because the zero-set filter below runs after this and
+        # would otherwise hand back fewer than RECENT_SESSIONS rows.
+        .limit(RECENT_SESSIONS * 4)
         .all()
     )
-    catalogue_groups = {e.muscle_group or stats.NO_GROUP_LABEL for e in Exercise.query.all()}
+    # The vocabulary is the app's own list, not "whichever groups happen to
+    # own an exercise". Seeded from the catalogue, a group you have never built
+    # an exercise for simply could not appear -- so the section that exists to
+    # say "you have quietly stopped training X" was structurally unable to name
+    # legs at all. Cardio and Sonstiges stay out: they are buckets, not muscle
+    # groups, and would sit at zero forever flagged "zu wenig".
+    catalogue_groups = (
+        {group for group in MUSCLE_GROUPS if group not in NON_MUSCLE_GROUPS}
+        | {row.muscle_group or stats.NO_GROUP_LABEL
+           for row in db.session.query(Exercise.muscle_group).distinct()}
+    )
 
     # The one bulk load this whole page runs on -- every completed set ever
     # logged, across every exercise. Every stats.py call below is fed from
@@ -435,6 +464,27 @@ def gym_heute():
         last_deload_at=last_deload.started_at if last_deload else None,
     )
 
+    # Volume and record count per recent session, both folded out of `performed`
+    # -- the bulk load this page already ran. Verlauf shows these and Start did
+    # not, which made the landing page the poorer of the two lists.
+    volume_by_session = {}
+    for row in performed:
+        volume_by_session[row.session_id] = volume_by_session.get(row.session_id, 0.0) + stats.row_volume(row)
+    records_by_session = stats.session_record_counts(performed)
+    # Only sessions that actually logged something. `consistency` above is fed
+    # from `performed`, which requires at least one COMPLETED set, while this
+    # list filtered on finished_at alone -- so a session where nothing was
+    # ticked off appeared under "Letzte Workouts" while "Zuletzt vor N Tagen"
+    # ignored it, and the two could disagree by days.
+    recent_sessions = [
+        {'session': session_,
+         'volume': volume_by_session[session_.id],
+         'records': records_by_session.get(session_.id, 0)}
+        for session_ in recent if session_.id in volume_by_session
+    ][:RECENT_SESSIONS]
+
+    tonnage = stats.weekly_tonnage(performed, now)
+
     return render_template(
         'gym/heute.html',
         now=now,
@@ -445,9 +495,13 @@ def gym_heute():
         stalls=stalls,
         deload_suggestion=deload_suggestion,
         balance=stats.muscle_group_volume(performed, catalogue_groups, now),
-        tonnage=stats.weekly_tonnage(performed, now),
+        tonnage=tonnage,
+        # The scale the bars are drawn against, named on the page so their
+        # heights mean something. Also the empty-state gate: 0 means there is
+        # nothing to chart, and the section says so instead of drawing eight
+        # stubs and asserting a running week over them.
+        tonnage_peak=max((week['volume'] for week in tonnage), default=0.0),
         templates=templates,
-        vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
     )
 
 
@@ -466,7 +520,12 @@ def gym_start():
         template = db.session.get(WorkoutTemplate, template_id)
         if template:
             if not name:
-                session_.name = f"{template.name} {dt.datetime.utcnow().strftime('%d.%m.%Y')}"
+                # Just the template name. With the date appended, every list
+                # that prints a session rendered the date twice in two adjacent
+                # lines -- "HBF Push 31.07.2026" over "31.07.2026 · 19 min".
+                # The row already carries the date; the name should say which
+                # workout it was.
+                session_.name = template.name
             for i, te in enumerate(template.exercises, start=1):
                 session_exercise = SessionExercise(
                     exercise_id=te.exercise_id, position=i,
@@ -488,15 +547,33 @@ def session_detail(session_id):
     if session_.finished_at:
         # The finished workout is one page now (spec 6.5): build the report
         # and hand off to session_finished.html instead of session_detail.html.
+        #
+        # Eager-loaded first. performed_from_session walks se.sets, se.exercise
+        # and se.replaced_by per row, all lazy -- 21 queries on a 7-exercise
+        # session. The live branch below already avoids touching se.replaced_by
+        # for exactly this reason and says so in its own comment; this branch
+        # was doing it twice.
+        session_ = (
+            WorkoutSession.query
+            .options(
+                joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
+                joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
+                joinedload(WorkoutSession.exercises).joinedload(SessionExercise.replaced_by),
+            )
+            .filter(WorkoutSession.id == session_.id)
+            .one()
+        )
         current = performed_from_session(session_)
         history = [
             row for row in load_performed(exercise_ids=[row.exercise_id for row in current])
             if row.session_id != session_.id
         ]
         comparable = []
+        previous_session = None
         if session_.template_id:
             cohort = (
                 WorkoutSession.query
+                .options(load_only(WorkoutSession.id, WorkoutSession.started_at))
                 .filter(
                     WorkoutSession.id != session_.id,
                     WorkoutSession.finished_at.isnot(None),
@@ -515,7 +592,26 @@ def session_detail(session_id):
                 if row.session_id in cohort_ids:
                     volumes[row.session_id] = volumes.get(row.session_id, 0.0) + stats.row_volume(row)
             comparable = [volume for volume in volumes.values() if volume > 0]
+
+            # The session before this one, of the same routine. The mean is a
+            # judgement -- half of all sessions fall below it by construction --
+            # while "last time" is a fact, and the page had nothing to compare
+            # against except the mean. Every volume needed for this was already
+            # in `volumes`; only the mean survived.
+            earlier = sorted(
+                (other for other in cohort
+                 if other.started_at < session_.started_at and volumes.get(other.id)),
+                key=lambda other: other.started_at,
+            )
+            if earlier:
+                last = earlier[-1]
+                previous_session = {
+                    'id': last.id,
+                    'started_at': last.started_at,
+                    'volume': round(volumes[last.id], 1),
+                }
         data = stats.session_report(current, history, comparable_session_volumes=comparable)
+        data['previous_session'] = previous_session
         # session_report()'s entries carry only plain (weight, reps) tuples --
         # PerformedExercise is deliberately ORM-free (stats.py has zero
         # SQLAlchemy dependency, see its module docstring). The "correct a
@@ -566,7 +662,8 @@ def session_detail(session_id):
                     claimed = True
                 tick_states.append('record' if is_record else 'done')
         data['tick_states'] = tick_states
-        return render_template('gym/session_finished.html', session=session_, **data)
+        return render_template('gym/session_finished.html', session=session_,
+                               weekday_short=WEEKDAY_SHORT, **data)
 
     # A replaced original is hidden from the active view, so its suggestion
     # would never be used -- skip computing it there. Visibility is derived
@@ -887,9 +984,21 @@ def gym_delete_set(set_id):
 @login_required
 def gym_toggle_set_complete(set_id):
     """Single action for a set row: save whatever weight/reps are currently
-    in the form, and toggle done/not-done -- these were two separate buttons
+    in the form, and set done/not-done -- these were two separate buttons
     before, which was redundant since confirming a set's numbers and marking
-    it done are the same real-world action."""
+    it done are the same real-world action.
+
+    The caller states the TARGET state in `completed` (1/0) rather than asking
+    for a flip. A blind toggle is only correct if exactly one request ever
+    arrives, and on this screen that is not true: a double tap on the 326x64
+    confirm button, a retry after a response was lost on gym wifi (the case the
+    error banner exists for), or a second tab all send it twice -- and the
+    second one silently UN-logs the set and cancels its rest. Stating the
+    target makes the write idempotent, so the duplicate is a no-op.
+
+    `completed` is optional and the flip is kept as the fallback, because a
+    stale page or a form posted from anywhere else still has to do something
+    sensible."""
     set_ = db.get_or_404(SessionSet, set_id)
     session_ = set_.session_exercise.session
 
@@ -909,7 +1018,15 @@ def gym_toggle_set_complete(set_id):
     if reps is not None:
         set_.reps = reps
 
-    set_.completed = not set_.completed
+    wanted = request.form.get('completed')
+    was_completed = set_.completed
+    set_.completed = (wanted == '1') if wanted in ('0', '1') else (not set_.completed)
+    if set_.completed and was_completed:
+        # already logged, and the caller asked for logged: a duplicate request.
+        # Persist any weight/reps it carried, but do NOT restart the rest --
+        # that would extend a countdown the lifter is already part-way through.
+        db.session.commit()
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
     if set_.completed:
         # just confirmed done -- this is the moment to start the rest timer
         _schedule_rest(set_)
@@ -950,7 +1067,13 @@ def gym_update_set(set_id):
     if reps is not None:
         set_.reps = reps
     db.session.commit()
-    return redirect(url_for('gym.session_detail', session_id=set_.session_exercise.session_id))
+    # request.args carried through: the debrief's "Vorlage aktualisieren" offer
+    # is gated on ?just_finished, and this redirect dropped it -- so correcting
+    # one mistyped set silently destroyed the offer, permanently, with no other
+    # route to it. gym_session_summary already does exactly this.
+    return redirect(url_for('gym.session_detail',
+                            session_id=set_.session_exercise.session_id,
+                            **request.args.to_dict()))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/exercises/reorder', methods=['POST'])
@@ -1081,7 +1204,10 @@ def gym_toggle_deload(session_id):
                     s.base_weight = None
 
     db.session.commit()
-    return redirect(url_for('gym.session_detail', session_id=session_.id))
+    # Same reason as gym_update_set: marking a finished workout as a deload
+    # dropped ?just_finished and took the template offer with it.
+    return redirect(url_for('gym.session_detail', session_id=session_.id,
+                            **request.args.to_dict()))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/summary')
@@ -1220,6 +1346,21 @@ def gym_verlauf():
             'session': s,
             'volume': round(volume_by_session.get(s.id, 0.0), 1),
             'record_count': records_by_session.get(s.id, 0),
+            # The same exercises the volume beside it was computed from. The
+            # row listed every SessionExercise including ones swapped out
+            # mid-workout, so a session showed 10 names next to a total built
+            # from 7 -- and opening it revealed the 7.
+            'exercises': [se.exercise.name for se in s.exercises
+                          if se.id not in replaced_away_ids],
+            # Searchable date text, so a query like "31.07" or "juli" works.
+            # data-search carried only the name and the exercises, and item 5
+            # stopped appending the date to new session names -- so date search
+            # was degrading to nothing as history accumulated.
+            'search_date': '%s %s %d' % (
+                stats.to_local(s.started_at).strftime('%d.%m.%Y'),
+                MONTH_NAMES[stats.to_local(s.started_at).month - 1],
+                stats.to_local(s.started_at).year,
+            ),
         }
         for s in sessions
     ]
@@ -1230,9 +1371,19 @@ def gym_verlauf():
     # how a template starts doing arithmetic. German month names live here for
     # the same reason -- strftime('%B') follows the server's locale, which is
     # not the UI's.
+    # LOCAL month, not the stored UTC one. Every row renders its date through
+    # the `|local` filter, so an unconverted key put a row dated 01.07. under a
+    # heading reading "Juni" and inflated June's count -- and on 1 January it
+    # misfiles by a year.
+    #
+    # Each band also carries its own totals, and each entry the gap that
+    # precedes it. Both are sums over rows already in hand: the route computed
+    # volume_by_session and records_by_session above and was throwing away
+    # everything but the count, on the only page that sees the whole history.
     months = []
+    previous_started = None
     for entry in history:
-        started = entry['session'].started_at
+        started = stats.to_local(entry['session'].started_at)
         key = (started.year, started.month)
         if not months or months[-1]['key'] != key:
             months.append({
@@ -1240,11 +1391,34 @@ def gym_verlauf():
                 'label': '%s %d' % (MONTH_NAMES[started.month - 1], started.year),
                 'slug': '%04d-%02d' % key,
                 'entries': [],
+                'volume': 0.0,
+                'records': 0,
             })
+        # history is newest-first, so `previous_started` is the session AFTER
+        # this one in time; the gap belongs to the row below the break.
+        entry['gap_days'] = ((previous_started - started).days
+                             if previous_started is not None else None)
+        previous_started = started
         months[-1]['entries'].append(entry)
+        months[-1]['volume'] += entry['volume']
+        months[-1]['records'] += entry['record_count']
 
-    return render_template('gym/verlauf.html', history=history, months=months)
+    for month in months:
+        month['volume'] = round(month['volume'], 1)
 
+    return render_template('gym/verlauf.html', history=history, months=months,
+                           gap_threshold=VERLAUF_GAP_DAYS, weekday_short=WEEKDAY_SHORT)
+
+
+# A break this long or longer gets called out in the history. Below it the
+# date column already tells the story; above it, a layoff was represented by
+# nothing at all -- rows sit at equal spacing one day or six weeks apart, and a
+# month with no sessions simply had no band.
+VERLAUF_GAP_DAYS = 10
+
+# Here for the same reason MONTH_NAMES is: strftime('%a') follows the server's
+# locale, which is not the UI's.
+WEEKDAY_SHORT = ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So')
 
 SPARK_W = 74.0
 SPARK_H = 24.0
@@ -1327,12 +1501,23 @@ def gym_statistik():
         default=0,
     )
 
-    # Records by year, newest first, current year open. The timeline ran
-    # unbounded before -- 47 rows and growing, about two thirds of the page.
-    # Nothing is dropped to bound it; the older years simply start folded.
+    # Records: the most recent RECENT_RECORDS shown flat, everything older
+    # folded into year bands.
+    #
+    # Bounding by CALENDAR was the bug. Grouping by year and opening the first
+    # band assumes a history that spans years -- and for every new account, and
+    # for this one today, it does not: one band, forced open, every record in
+    # it. Measured at 57 records that was 3,648px of a 5,249px page, i.e. worse
+    # than the two-thirds the brief set out to fix. It also flipped overnight:
+    # on 2 January the largest section on the page would collapse to one row.
+    #
+    # Bounding by COUNT is stable in both directions. The fold is still lossless
+    # -- nothing is dropped, and the header still counts every record there is.
+    RECENT_RECORDS = 12
     records = analytics.record_timeline(performed)
+    recent_records = records[:RECENT_RECORDS]
     record_years = []
-    for record in records:
+    for record in records[RECENT_RECORDS:]:
         year = record['started_at'].year
         if not record_years or record_years[-1]['year'] != year:
             record_years.append({'year': year, 'records': []})
@@ -1342,6 +1527,8 @@ def gym_statistik():
         'gym/statistik.html',
         months=analytics.monthly_tonnage(performed, now),
         longest_gap=longest_gap,
+        records=records,
+        recent_records=recent_records,
         record_years=record_years,
         month_names=MONTH_NAMES,
         daypart_names=DAYPART_NAMES,
@@ -1355,7 +1542,6 @@ def gym_statistik():
         rest_gap=analytics.rest_gap_effect(performed),
         min_sets_for_rep_range=analytics.MIN_SETS_FOR_REP_RANGE,
         effort=analytics.effort_distribution(performed),
-        records=analytics.record_timeline(performed),
     )
 
 
@@ -1430,20 +1616,8 @@ def gym_export():
 @gym_bp.route('/gym/uebungen')
 @login_required
 def gym_uebungen():
+    now = dt.datetime.utcnow()
     exercises = Exercise.query.order_by(Exercise.name).all()
-
-    # Delete-eligibility depends on ANY session_exercises/template_exercises
-    # row existing, not just ones with a completed set -- so it can't reuse
-    # rows_by_exercise below. Exercise.session_exercises/.template_exercises
-    # are lazy relationships (models.py) that would issue one query per
-    # exercise if touched per-row here; two bulk id sets instead, each
-    # gathered once regardless of catalogue size.
-    exercise_ids_with_sessions = {
-        row.exercise_id for row in db.session.query(SessionExercise.exercise_id).distinct()
-    }
-    exercise_ids_with_templates = {
-        row.exercise_id for row in db.session.query(TemplateExercise.exercise_id).distinct()
-    }
 
     # The one bulk load this whole page runs on -- every completed set ever
     # logged, across the whole catalogue. Every exercise's state/last-done/
@@ -1476,19 +1650,22 @@ def gym_uebungen():
         best_e1rm = max((stats.best_e1rm(row) for row in progression), default=None)
         state = stats.exercise_state(progression, position=position)
         chip_class, chip_label = EXERCISE_STATE_CHIP.get(state, (None, None))
+        last_done = max((row.started_at for row in rows), default=None)
         entries_by_id[exercise.id] = {
             'exercise': exercise,
-            'state': state,
             'chip_class': chip_class,
             'chip_label': chip_label,
-            'last_done': max((row.started_at for row in rows), default=None),
+            'last_done': last_done,
             'best_weight': max((stats.best_weight(row) for row in progression), default=None),
-            'best_e1rm': round(best_e1rm, 1) if best_e1rm is not None else None,
+            # What you would load TODAY, which is the question a catalogue is
+            # opened with. The row led with the all-time best -- unlabelled, so
+            # "Military Press · 15,0 kg" could not be told apart from a working
+            # weight -- and that figure is already on the exercise's own page
+            # with a label on it.
+            'last_weight': stats.best_weight(progression[-1]) if progression else None,
+            'days_ago': (stats.calendar_days_between(last_done, now)
+                         if last_done is not None else None),
             'sessions_since_pr': stats.sessions_since_pr(progression, position=position) if progression else None,
-            'can_delete': (
-                exercise.id not in exercise_ids_with_sessions
-                and exercise.id not in exercise_ids_with_templates
-            ),
         }
 
     # Default/grouped view (spec 6.2's "nach Muskelgruppe"). The two flat
@@ -1496,21 +1673,60 @@ def gym_uebungen():
     # re-orderings of these SAME rows in uebungen.html's own script, not a
     # second server round trip -- every exercise's data attributes carry
     # what that script needs (see the template).
-    grouped = [
-        (group_name, [entries_by_id[e.id] for e in group_exercises])
-        for group_name, group_exercises in stats.group_exercises_by_muscle(exercises, MUSCLE_GROUPS)
-    ]
+    # Seeded from MUSCLE_GROUPS, so a group with nothing in it still gets a
+    # band. group_exercises_by_muscle emits only non-empty groups, which made
+    # the catalogue structurally unable to say "you have no leg exercises" --
+    # the single strongest signal for the planning question, rendered as
+    # nothing at all. Same fix Start's muscle balance got in item 5, and
+    # Cardio/Sonstiges stay out for the same reason.
+    filled = dict(stats.group_exercises_by_muscle(exercises, MUSCLE_GROUPS))
+    grouped = []
+    for group_name in MUSCLE_GROUPS:
+        if group_name in NON_MUSCLE_GROUPS and group_name not in filled:
+            continue
+        grouped.append((group_name,
+                        [entries_by_id[e.id] for e in filled.get(group_name, [])]))
+    for group_name, group_exercises in filled.items():
+        if group_name not in MUSCLE_GROUPS:      # NO_GROUP_LABEL and legacy values
+            grouped.append((group_name, [entries_by_id[e.id] for e in group_exercises]))
 
     return render_template(
         'gym/uebungen.html',
         grouped=grouped,
         muscle_groups=MUSCLE_GROUPS,
+        open_by_default=len(exercises) <= UEBUNGEN_FOLD_ABOVE,
+        # The sheet's rest placeholder said 90 while this is what a blank field
+        # actually stores.
+        default_rest_seconds=DEFAULT_REST_SECONDS,
+        added_id=_to_int(request.args.get('added')),
+        name_taken=bool(request.args.get('name_taken')),
     )
 
+
+# Buckets in MUSCLE_GROUPS that are not muscle groups, so a section built
+# from the full vocabulary does not carry them at zero forever.
+NON_MUSCLE_GROUPS = ('Cardio', 'Sonstiges')
+
+# How many finished workouts the Start page lists.
+RECENT_SESSIONS = 5
+
+# Above this many exercises the catalogue opens folded; at or below it every
+# group starts open. Hardcoded shut, the page's default state contained no
+# exercises at all -- 0 of 17 visible on a phone AND on a 1280 desktop, with
+# the fastest route to your own list being to press a SORT button, because the
+# two flat sorts ignore the fold. Folding is right for a long catalogue and
+# wrong for a short one, so it follows the length.
+UEBUNGEN_FOLD_ABOVE = 30
 
 CHART_W = 320.0
 CHART_H = 128.0
 CHART_PAD = 10.0
+
+# Smallest y range the chart will draw, in kg. See _chart_geometry.
+CHART_MIN_SPAN = 5.0
+
+# How far apart same-day sessions are nudged on the x axis, in viewBox units.
+SAME_DAY_SPREAD = 16.0
 
 # A slot needs this many sessions before its numbers count as a track record
 # rather than one good day.
@@ -1524,9 +1740,12 @@ def _default_position(series):
     (see the constant above) so a single lucky session cannot become the default
     view. Falls back to the slot with the most sessions, then to None, which
     renders every slot at once.
+
+    Returns (position, reason); the reason is what the page tells the reader,
+    because a slot picked FOR them has to say on what grounds.
     """
     if not series:
-        return None
+        return None, None
     proven = [entry for entry in series
               if len(entry['points']) >= MIN_SESSIONS_FOR_DEFAULT_POSITION]
     if proven:
@@ -1536,11 +1755,12 @@ def _default_position(series):
             len(entry['points']),
             -entry['position'],
         ))
-        return best['position']
-    return max(series, key=lambda entry: (len(entry['points']), -entry['position']))['position']
+        return best['position'], 'strongest'
+    fallback = max(series, key=lambda entry: (len(entry['points']), -entry['position']))
+    return fallback['position'], 'most'
 
 
-def _chart_geometry(series):
+def _chart_geometry(series, pr_e1rm=None):
     """Turn exercise_progress()'s series into SVG coordinates.
 
     Computed here rather than in the template because Jinja doing coordinate
@@ -1560,8 +1780,20 @@ def _chart_geometry(series):
     values = [point['e1rm'] for entry in series for point in entry['points']]
     if not values:
         return None
-    lo, hi = min(values), max(values)
-    span = (hi - lo) or 1.0
+    data_lo, data_hi = min(values), max(values)
+
+    # The axis is padded to a floor, and that is not cosmetic. Auto-fitting to
+    # the data alone means the y range is whatever the data happens to span, so
+    # 0,7 kg of drift over a year gets stretched across the full plot height and
+    # draws as a cliff. Every chart looked equally dramatic and none of them
+    # said how much. Below the floor the range is widened symmetrically around
+    # its own midpoint, so a flat lift renders flat -- and the tick labels below
+    # state the range either way, which is what actually makes the shape legible.
+    lo, hi = data_lo, data_hi
+    if hi - lo < CHART_MIN_SPAN:
+        mid = (hi + lo) / 2.0
+        lo, hi = mid - CHART_MIN_SPAN / 2.0, mid + CHART_MIN_SPAN / 2.0
+    span = hi - lo
 
     # x comes from the DATE, not from the point's index within its own series.
     # Indexing looked right with one line and was wrong the moment a second
@@ -1574,13 +1806,52 @@ def _chart_geometry(series):
     first, last = min(stamps), max(stamps)
     days = (last - first).total_seconds() / 86400.0 or 1.0
 
+    # Sessions on the SAME DAY land on the same x and stack into a vertical
+    # line you cannot read. They are nudged apart by a few units each, keeping
+    # chronological order -- the date still places the group, the offset only
+    # separates its members. Small enough that it cannot be mistaken for elapsed
+    # time: a whole day of sessions occupies less width than two days do.
+    same_day = {}
+    for entry in series:
+        for point in entry['points']:
+            key = point['started_at'].date()
+            same_day.setdefault(key, []).append(point['started_at'])
+    def _base_x(stamp):
+        return CHART_PAD + ((stamp - first).total_seconds() / 86400.0) / days * (CHART_W - 2 * CHART_PAD)
+
+    nudge = {}
+    for stamps in same_day.values():
+        ordered = sorted(set(stamps))
+        if len(ordered) < 2:
+            continue
+        spread = min(SAME_DAY_SPREAD, (CHART_W - 2 * CHART_PAD) / 8)
+        step = spread / (len(ordered) - 1)
+        offsets = [-spread / 2 + index * step for index in range(len(ordered))]
+        # A day sitting on either edge -- and the newest one always does -- gets
+        # the whole group shifted inward rather than each member clamped, which
+        # would silently re-stack the very points this is separating. The shift
+        # is measured from the members' OWN positions: within one day each still
+        # has its own base x, so testing only the first one left the last one
+        # hanging past the edge.
+        placed = [_base_x(stamp) + offset for stamp, offset in zip(ordered, offsets)]
+        shift = 0.0
+        if max(placed) > CHART_W - CHART_PAD:
+            shift = (CHART_W - CHART_PAD) - max(placed)
+        elif min(placed) < CHART_PAD:
+            shift = CHART_PAD - min(placed)
+        for stamp, offset in zip(ordered, offsets):
+            nudge[stamp] = offset + shift
+
     out = []
     for entry in series:
         points = []
         for point in entry['points']:
             offset = (point['started_at'] - first).total_seconds() / 86400.0
             points.append({
-                'x': round(CHART_PAD + offset / days * (CHART_W - 2 * CHART_PAD), 2),
+                'x': round(min(max(
+                    CHART_PAD + offset / days * (CHART_W - 2 * CHART_PAD)
+                    + nudge.get(point['started_at'], 0.0),
+                    0.0), CHART_W), 2),
                 'y': round(CHART_H - CHART_PAD - (point['e1rm'] - lo) / span * (CHART_H - 2 * CHART_PAD), 2),
                 'is_deload': point['is_deload'],
                 'e1rm': point['e1rm'],
@@ -1596,23 +1867,61 @@ def _chart_geometry(series):
     # point, so the ordering is stated and not merely implied by opacity.
     out.sort(key=lambda entry: -len(entry['points']))
     for rank, entry in enumerate(out):
-        entry['opacity'] = 1.0 if rank == 0 else (0.5 if rank == 1 else 0.3)
+        # Floored at 0.65: a line is non-text UI and owes 3:1 against its panel.
+        # Measured on the light scheme, which is the binding one -- --done over
+        # the light chassis is 7.29:1 at full, 3.27:1 at 0.65 and 2.94:1 at 0.6.
+        # The old ramp bottomed out at 0.3 (1.63:1), so the third slot was
+        # decoration rather than data. Stroke width carries the separation that
+        # opacity can no longer afford to.
+        entry['opacity'] = 1.0 if rank == 0 else (0.8 if rank == 1 else 0.65)
+        entry['width'] = 2.5 if rank == 0 else (1.9 if rank == 1 else 1.4)
         entry['is_main'] = (rank == 0)
-        last = entry['points'][-1] if entry['points'] else None
+        # `tip`, not `last`: the date-axis bounds above are named first/last and
+        # rebinding one of them here silently fed a point dict to the date
+        # arithmetic further down.
+        tip = entry['points'][-1] if entry['points'] else None
         # The last point is usually AT the right edge, so a label placed to its
         # right lands outside the viewBox and is clipped. Flip to the left there
         # and lift it clear of the line either way.
-        near_edge = last is not None and last['x'] > CHART_W - 34
-        entry['label_x'] = round((last['x'] - 8) if near_edge else (last['x'] + 8), 2) if last else 0
-        entry['label_y'] = round(max(last['y'] - 8, 12), 2) if last else 0
-        entry['label_anchor'] = 'end' if near_edge else 'start' 
+        near_edge = tip is not None and tip['x'] > CHART_W - 34
+        entry['label_x'] = round((tip['x'] - 8) if near_edge else (tip['x'] + 8), 2) if tip else 0
+        entry['label_y'] = round(max(tip['y'] - 8, 12), 2) if tip else 0
+        entry['label_anchor'] = 'end' if near_edge else 'start'
 
-    # The gold dot is the exercise's best, not each slot's own. Marking per
-    # series meant a position with a single session was trivially its own best
-    # and got a record dot -- two golds on one chart, one of them meaningless.
+    # Slots that ran in the same weeks end at the same date, so their labels are
+    # placed at nearly the same point and land on top of each other -- P5 was
+    # drawn through P2. Push apart any pair that shares a horizontal
+    # neighbourhood, working down the chart and folding upward at the floor.
+    LABEL_GAP, LABEL_NEAR = 13.0, 40.0
+    placed = []
+    for entry in sorted((e for e in out if e['points']), key=lambda e: e['label_y']):
+        for other in placed:
+            if abs(entry['label_x'] - other['label_x']) >= LABEL_NEAR:
+                continue
+            if abs(entry['label_y'] - other['label_y']) < LABEL_GAP:
+                entry['label_y'] = round(other['label_y'] + LABEL_GAP, 2)
+        if entry['label_y'] > CHART_H - 4:
+            entry['label_y'] = round(min(e['label_y'] for e in placed) - LABEL_GAP, 2) if placed else 12.0
+        placed.append(entry)
+
+    # The gold dot is the EXERCISE's best -- the same number the PR band above
+    # the chart prints -- not the best of whatever happens to be plotted.
+    #
+    # Marking per series was the first bug: a position with a single session was
+    # trivially its own best and got a record dot, so one chart carried two
+    # golds and one of them meant nothing. Taking the max of the plotted points
+    # fixed that and introduced the next one: under `?position=N` the plotted
+    # set is one slot, so the slot's ceiling was promoted to "Rekord" and the
+    # chart gold-dotted 85,8 while the band directly above it read 87,4.
+    #
+    # pr_e1rm comes from the UNFILTERED history (stats.exercise_progress), so a
+    # filtered view that contains no record now correctly shows no gold at all.
     # A deload can never hold it, matching every other record rule here.
     candidates = [p for entry in out for p in entry['points'] if not p['is_deload']]
-    best = max((p['e1rm'] for p in candidates), default=None)
+    if pr_e1rm is not None:
+        best = pr_e1rm.get('e1rm') if isinstance(pr_e1rm, dict) else pr_e1rm
+    else:
+        best = max((p['e1rm'] for p in candidates), default=None)
     claimed = False
     for entry in out:
         for point in entry['points']:
@@ -1622,7 +1931,47 @@ def _chart_geometry(series):
             )
             claimed = claimed or point['is_best']
 
-    return {'series': out, 'lo': lo, 'hi': hi, 'width': CHART_W, 'height': CHART_H}
+    # One label per gridline, as a percentage of the viewBox so the HTML gutter
+    # can sit beside the SVG and stay at text size instead of being scaled up
+    # with the drawing.
+    #
+    # The decimal is kept whenever there is one. Rounding the top tick to whole
+    # kg printed 87 directly under a record band reading 87,4 -- two numbers for
+    # the same point, which reads as a discrepancy rather than as rounding.
+    def fmt(value):
+        text = '%.1f' % value
+        return (text[:-2] if text.endswith('.0') else text).replace('.', ',')
+
+    ticks = [{'y_pct': round(y / CHART_H * 100, 3), 'text': fmt(lo + span * frac)}
+             for frac, y in ((1.0, CHART_PAD), (0.5, CHART_H / 2), (0.0, CHART_H - CHART_PAD))]
+
+    # The middle date, not the middle ROW. The template took the median session
+    # out of the table and printed it under the centre of the axis -- which was
+    # right only while x came from the point's index. On a real date axis the
+    # median session sits wherever its date puts it, so a run of three sessions
+    # in one week followed by a month off printed a date under the midpoint that
+    # was nowhere near it.
+    #
+    # Deduped, because an exercise whose whole history is one day -- or one slot
+    # filtered down to a single date -- printed "31.07. 31.07. 31.07." across
+    # the axis. Order is preserved, so three marks stay left/centre/right and a
+    # collapsed range falls back to one.
+    middle = first + (last - first) / 2
+    dates = []
+    for stamp in (first, middle, last):
+        text = stats.to_local(stamp).strftime('%d.%m.')
+        if text not in dates:
+            dates.append(text)
+
+    # What the legend is allowed to claim. A key for a mark that is not on the
+    # chart is noise, and the deload key was on every chart in a database that
+    # contains no deload at all.
+    plotted = [p for entry in out for p in entry['points']]
+
+    return {'series': out, 'lo': data_lo, 'hi': data_hi, 'axis_lo': lo, 'axis_hi': hi,
+            'ticks': ticks, 'dates': dates, 'width': CHART_W, 'height': CHART_H,
+            'has_deload': any(p['is_deload'] for p in plotted),
+            'has_record': any(p['is_best'] for p in plotted)}
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>')
@@ -1646,19 +1995,31 @@ def exercise_detail(exercise_id):
     # default stays reachable in one click and the URL stays honest about what
     # it is showing.
     raw_position = request.args.get('position')
+    default_reason = None
     if raw_position == 'all':
         position = None
     else:
         position = _to_int(raw_position)
         if position is None:
-            position = _default_position(stats.exercise_progress(rows, position=None)['series'])
+            position, default_reason = _default_position(
+                stats.exercise_progress(rows, position=None)['series'])
+
+    # Whether the page CHOSE this slot or was told to. Without it the chart and
+    # the session list were silently filtered on arrival: a pill was lit that
+    # the reader never pressed, and everything below it counted one slot while
+    # reading like the whole exercise.
+    position_is_default = (raw_position is None and position is not None)
+    if not position_is_default:
+        default_reason = None
 
     data = stats.exercise_progress(rows, position=position)
     chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
     return render_template(
         'gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS,
         chip_class=chip_class, chip_label=chip_label,
-        chart=_chart_geometry(data['series']),
+        selected_position_is_default=position_is_default,
+        selected_position_reason=default_reason,
+        chart=_chart_geometry(data['series'], data.get('pr_e1rm')),
         # Only offer deletion when nothing depends on it -- same test the
         # catalogue used before this moved off the list.
         can_delete=not exercise.session_exercises and not exercise.template_exercises,
@@ -1686,13 +2047,13 @@ def gym_exercise_progress_json(exercise_id):
         if not pr:
             return None
         return {'weight': pr['weight'], 'reps': pr['reps'], 'position': pr['position'],
-                'date': pr['started_at'].strftime('%d.%m.%Y')}
+                'date': stats.to_local(pr['started_at']).strftime('%d.%m.%Y')}
 
     def fmt_e1rm_pr(pr):
         if not pr:
             return None
         return {'e1rm': pr['e1rm'], 'weight': pr['weight'], 'reps': pr['reps'], 'position': pr['position'],
-                'date': pr['started_at'].strftime('%d.%m.%Y')}
+                'date': stats.to_local(pr['started_at']).strftime('%d.%m.%Y')}
 
     return jsonify({
         'exercise_id': exercise.id,
@@ -1700,6 +2061,11 @@ def gym_exercise_progress_json(exercise_id):
         'is_unilateral': exercise.is_unilateral,
         'selected_position': progress['selected_position'],
         'series': progress['series'],
+        # The same geometry the exercise page draws from. The modal used to ship
+        # raw series and let Chart.js lay them out on a category axis, which drew
+        # a six-week gap and four same-day sessions at the same width -- so the
+        # two charts in this app disagreed about what the x axis meant.
+        'chart': _chart_geometry(progress['series'], progress.get('pr_e1rm')),
         'pr_weight': fmt_weight_pr(progress['pr_weight']),
         'pr_e1rm': fmt_e1rm_pr(progress['pr_e1rm']),
     })
@@ -1708,16 +2074,26 @@ def gym_exercise_progress_json(exercise_id):
 @gym_bp.route('/gym/exercises/add', methods=['POST'])
 @login_required
 def gym_add_exercise():
+    # The write reports itself. A duplicate name was a silent no-op and a
+    # success landed the new exercise inside a collapsed band, so the only
+    # difference between "saved" and "discarded" was a digit beside the h1.
+    # gym_update_exercise already had the ?name_taken= convention; this is the
+    # same one.
     name = request.form.get('name', '').strip()
-    if name and not Exercise.query.filter_by(name=name).first():
-        db.session.add(Exercise(
-            name=name,
-            muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
-            default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
-            is_unilateral=request.form.get('is_unilateral') == 'on',
-        ))
-        db.session.commit()
-    return redirect(url_for('gym.gym_uebungen'))
+    if not name:
+        return redirect(url_for('gym.gym_uebungen'))
+    if Exercise.query.filter_by(name=name).first():
+        return redirect(url_for('gym.gym_uebungen', name_taken=1))
+
+    exercise = Exercise(
+        name=name,
+        muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
+        default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+        is_unilateral=request.form.get('is_unilateral') == 'on',
+    )
+    db.session.add(exercise)
+    db.session.commit()
+    return redirect(url_for('gym.gym_uebungen', added=exercise.id))
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
