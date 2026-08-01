@@ -240,11 +240,14 @@ def _seeded_sets(session_, exercise_id, position):
         ]
 
     exercise = db.session.get(Exercise, exercise_id)
-    is_unilateral = bool(exercise and exercise.is_unilateral)
+    increment = stats.resolve_increment(
+        exercise.weight_increment if exercise else None,
+        bool(exercise and exercise.is_unilateral),
+    )
     return [
         SessionSet(
             position=j,
-            weight=stats.deload_weight(prev['weight'], pct, is_unilateral),
+            weight=stats.deload_weight(prev['weight'], pct, increment),
             base_weight=prev['weight'],
             reps=prev['reps'],
             completed=False,
@@ -366,6 +369,7 @@ def _to_performed(session_exercise, completed_sets):
         name=exercise.name,
         muscle_group=exercise.muscle_group,
         is_unilateral=exercise.is_unilateral,
+        weight_increment=exercise.weight_increment,
         position=session_exercise.position,
         session_id=session_exercise.session_id,
         started_at=session_exercise.session.started_at,
@@ -1189,7 +1193,10 @@ def gym_toggle_deload(session_id):
     )
     if not has_completed_set:
         for session_exercise in session_.exercises:
-            is_unilateral = session_exercise.exercise.is_unilateral
+            increment = stats.resolve_increment(
+                session_exercise.exercise.weight_increment,
+                session_exercise.exercise.is_unilateral,
+            )
             for s in session_exercise.sets:
                 if on:
                     # Capture the baseline the first time only. Re-applying the
@@ -1199,7 +1206,7 @@ def gym_toggle_deload(session_id):
                     # 32.5 kg instead of 47.5 kg, and a double-tap compounds.
                     if s.base_weight is None:
                         s.base_weight = s.weight
-                    s.weight = stats.deload_weight(s.base_weight, pct, is_unilateral)
+                    s.weight = stats.deload_weight(s.base_weight, pct, increment)
                 elif s.base_weight is not None:
                     s.weight = s.base_weight
                     s.base_weight = None

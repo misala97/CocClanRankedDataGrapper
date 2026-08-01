@@ -7,7 +7,7 @@ from features.gym import stats
 
 def perf(sets, position=1, started_at=None, is_unilateral=False,
          exercise_id=1, name='Bankdruecken', muscle_group='Brust', session_id=1,
-         is_deload=False):
+         is_deload=False, weight_increment=None):
     """Build one PerformedExercise. `sets` is [(weight, reps), ...]."""
     return stats.PerformedExercise(
         exercise_id=exercise_id,
@@ -19,6 +19,7 @@ def perf(sets, position=1, started_at=None, is_unilateral=False,
         started_at=started_at or dt.datetime(2026, 7, 1, 18, 0),
         sets=tuple(sets),
         is_deload=is_deload,
+        weight_increment=weight_increment,
     )
 
 
@@ -594,13 +595,13 @@ def test_session_record_counts_agrees_with_session_report_for_every_session():
 
 def test_deload_weight_takes_the_percentage_and_rounds_down_to_a_plate():
     # 80 * 0.70 = 56.0, which is not loadable in 2.5 kg steps -> 55.0
-    assert stats.deload_weight(80.0, 70, False) == 55.0
+    assert stats.deload_weight(80.0, 70, 2.5) == 55.0
 
 
 def test_deload_weight_rounds_down_not_to_nearest():
     # 100 * 0.70 = 70.0 exactly; 90 * 0.70 = 63.0 -> 62.5, not 65.0
-    assert stats.deload_weight(100.0, 70, False) == 70.0
-    assert stats.deload_weight(90.0, 70, False) == 62.5
+    assert stats.deload_weight(100.0, 70, 2.5) == 70.0
+    assert stats.deload_weight(90.0, 70, 2.5) == 62.5
 
 
 def test_deload_weight_rounds_down_even_when_nearest_would_round_up():
@@ -609,27 +610,61 @@ def test_deload_weight_rounds_down_even_when_nearest_would_round_up():
     # than the 81 kg lift's own prescription implies. Flooring gives 55.0.
     # Every other case in this file has a remainder below 0.5, where floor and
     # round-to-nearest agree, so only this one proves the direction.
-    assert stats.deload_weight(81.0, 70, False) == 55.0
+    assert stats.deload_weight(81.0, 70, 2.5) == 55.0
 
 
 def test_deload_weight_uses_the_half_step_for_unilateral():
     # 20 * 0.70 = 14.0 -> 13.75 in 1.25 kg steps, not 12.5 in 2.5 kg steps
-    assert stats.deload_weight(20.0, 70, True) == 13.75
+    assert stats.deload_weight(20.0, 70, stats.resolve_increment(None, True)) == 13.75
 
 
 def test_deload_weight_leaves_a_bodyweight_set_alone():
-    assert stats.deload_weight(0.0, 70, False) == 0.0
+    assert stats.deload_weight(0.0, 70, 2.5) == 0.0
 
 
 def test_deload_weight_never_floors_a_light_weight_to_zero():
     # 2.5 * 0.70 = 1.75 -> would floor to 0.0; one increment is the minimum.
-    assert stats.deload_weight(2.5, 70, False) == 2.5
-    assert stats.deload_weight(1.25, 70, True) == 1.25
+    assert stats.deload_weight(2.5, 70, 2.5) == 2.5
+    assert stats.deload_weight(1.25, 70, 1.25) == 1.25
 
 
 def test_deload_weight_preserves_the_shape_of_a_ramped_session():
     session = [80.0, 80.0, 75.0]
-    assert [stats.deload_weight(w, 70, False) for w in session] == [55.0, 55.0, 52.5]
+    assert [stats.deload_weight(w, 70, 2.5) for w in session] == [55.0, 55.0, 52.5]
+
+
+def test_deload_weight_floors_onto_a_stack_machines_grid():
+    # A 90 kg stack at 70 % is 63.0, which is exactly seven 9 kg plates. The
+    # old 2.5 grid would have prescribed 62.5 -- a weight the machine cannot
+    # produce at all.
+    assert stats.deload_weight(90.0, 70, 9.0) == 63.0
+    # 100 * 0.70 = 70.0 is not on the 9 kg grid: floor to 63.0, never 72.0.
+    assert stats.deload_weight(100.0, 70, 9.0) == 63.0
+
+
+def test_deload_weight_never_floors_below_one_stack_plate():
+    # 9 * 0.70 = 6.3 -> would floor to 0.0; the lightest real position is 9.
+    assert stats.deload_weight(9.0, 70, 9.0) == 9.0
+
+
+def test_next_weight_adds_the_exercises_own_increment():
+    assert stats._next_weight(81.0, 9.0) == 90.0
+    assert stats._next_weight(80.0, 2.5) == 82.5
+
+
+def test_session_report_suggests_the_exercises_own_increment():
+    # Same stagnation setup as the 82.5 case above, but on a 9 kg stack: the
+    # advice has to name a weight the machine can actually make.
+    history = [perf([(72.0, 8)], weight_increment=9.0, started_at=day(0), session_id=1)]
+    history += [
+        perf([(63.0, 8)], weight_increment=9.0, started_at=day(7 * n), session_id=n + 1)
+        for n in range(1, 4)
+    ]
+    current = [perf([(63.0, 8)], weight_increment=9.0, started_at=day(28), session_id=9)]
+    report = stats.session_report(current, history)
+
+    assert report['advice'][0]['stuck_at'] == 63.0
+    assert report['advice'][0]['suggested_weight'] == 72.0
 
 
 def test_deload_row_does_not_count_as_a_session_without_a_pr():

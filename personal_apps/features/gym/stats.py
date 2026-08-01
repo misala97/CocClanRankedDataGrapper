@@ -124,6 +124,11 @@ class PerformedExercise:
     # what actually happened (tonnage, balance, consistency) keeps them.
     # Defaulted so callers predating the flag keep working.
     is_deload: bool = False
+    # The exercise's own loadable step, as stored -- None when it has none and
+    # the default applies. Carried on the row rather than looked up because
+    # this module never touches the ORM. Defaulted for the same reason
+    # is_deload is.
+    weight_increment: Optional[float] = None
 
 
 def epley_1rm(weight, reps):
@@ -478,27 +483,26 @@ def resolve_increment(increment, is_unilateral):
     return DEFAULT_INCREMENT / 2 if is_unilateral else DEFAULT_INCREMENT
 
 
-def _next_weight(weight, is_unilateral):
-    """The smallest honest jump up. 2.5 kg is the smallest pair of plates on
-    most bars; a unilateral lift moves one side at a time, so half that."""
-    return weight + (1.25 if is_unilateral else 2.5)
+def _next_weight(weight, increment):
+    """The smallest honest jump up: one loadable step on this exercise's own
+    equipment. Callers resolve `increment` through resolve_increment()."""
+    return weight + increment
 
 
-def deload_weight(weight, pct, is_unilateral):
+def deload_weight(weight, pct, increment):
     """`pct` of a working weight, rounded DOWN to a loadable increment.
 
     Down, not to nearest: rounding a deload up makes it heavier than
-    prescribed, which is the one direction that defeats the point. The
-    increments mirror _next_weight() -- 2.5 kg is the smallest pair of plates
-    on most bars, and a unilateral lift moves one side at a time.
+    prescribed, which is the one direction that defeats the point. The grid is
+    anchored at 0, which is what a stack machine actually offers -- 90 kg at
+    70 % on a 9 kg stack lands on 63, a real position.
 
     Applied per set by the caller, never to the top set alone, so any ramping
     or drop-off in the session's shape survives the deload.
     """
     if weight <= 0:
         return weight          # a bodyweight set stays bodyweight
-    step = 1.25 if is_unilateral else 2.5
-    return max(step, math.floor(weight * pct / 100.0 / step) * step)
+    return max(increment, math.floor(weight * pct / 100.0 / increment) * increment)
 
 
 def _verdict(entry, since):
@@ -606,7 +610,8 @@ def session_report(current, history, comparable_session_volumes=()):
                 'name': row.name,
                 'stuck_at': weight,
                 'sessions': since,
-                'suggested_weight': _next_weight(weight, row.is_unilateral),
+                'suggested_weight': _next_weight(
+                    weight, resolve_increment(row.weight_increment, row.is_unilateral)),
             })
 
     # NOT by raw value: `value` is kilograms-lifted for a weight record and
