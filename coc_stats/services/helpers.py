@@ -13,7 +13,8 @@ from models import WarCombo
 load_dotenv(override=True)
 LOCAL_TZ = ZoneInfo(os.getenv("TIMEZONE", "Europe/Berlin"))
 
-CLEANUP_THRESHOLD = 35
+CLEANUP_THRESHOLD      = 35
+CLEANUP_THRESHOLD_PEAK = 25
 SKIP_LEAGUES      = {'Unranked', 'Unknown League', None, ''}
 IMPORT_WINDOW     = timedelta(minutes=2)
 
@@ -52,6 +53,14 @@ def week_cutoff(now_utc, battle_days):
 
 def is_capital_peak(name):
     return bool(name) and 'capital peak' in name.lower()
+
+
+def cleanup_threshold(name):
+    """Below this share of a finished district, a lone hit counts as a finishing tap
+    rather than an attack. The Capital Peak's bar sits lower: it carries far more total
+    HP than a regular district, so the same percentage there is a much bigger real chunk
+    of work and shouldn't be written off as a cleanup."""
+    return CLEANUP_THRESHOLD_PEAK if is_capital_peak(name) else CLEANUP_THRESHOLD
 
 
 def raid_district_medal_value(name, level):
@@ -651,7 +660,7 @@ def _district_stats(logs):
     for hits in district_hits.values():
         district_done = any((l.percentage_total or 0) == 100 for l in hits)
         player_total  = sum(l.percentage or 0 for l in hits)
-        if len(hits) == 1 and district_done and (hits[0].percentage or 0) < CLEANUP_THRESHOLD:
+        if len(hits) == 1 and district_done and (hits[0].percentage or 0) < cleanup_threshold(hits[0].district_name):
             cleanup_ids.add(hits[0].id)
         if district_done and player_total == 100:
             solo_wipe_count += 1
