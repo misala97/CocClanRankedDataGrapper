@@ -867,7 +867,7 @@ git commit -m "feat(gym): add user_id to sessions, templates and push subscripti
 
 **Files:**
 - Create: `features/gym/scope.py`
-- Modify: `features/gym/routes.py` — 9 `db.get_or_404(WorkoutSession, ...)` calls at lines 589, 860, 1168, 1213, 1224, 1262, 1325, 1340, 1354
+- Modify: `features/gym/routes.py` — 9 `db.get_or_404(WorkoutSession, ...)` calls at lines 589, 860, 1168, 1213, 1224, 1262, 1325, 1340, 1354; `_get_active_session` at 108-113; the three owner-less constructions at 561, 1357, 2253
 - Test: `tests/test_gym_ownership.py`
 
 **Interfaces:**
@@ -1000,6 +1000,88 @@ def test_the_owners_session_still_works(two_users):
         with owner_client.session_transaction() as flask_session:
             flask_session['user_id'] = two_users['owner_id']
         assert owner_client.get('/gym/session/{}'.format(two_users['session_id'])).status_code == 200
+
+
+def test_starting_a_workout_stamps_the_owner(two_users):
+    """gym_start builds a WorkoutSession directly, and Task 4 made user_id NOT
+    NULL -- so an unstamped insert now fails outright. This covers ownership
+    and the fact that the route works at all.
+
+    Runs as B, who owns nothing: gym_start redirects instead of creating when
+    _get_active_session() finds an unfinished workout, and A's fixture session
+    is unfinished. That only holds once that helper is scoped, which is why it
+    moves into this task.
+    """
+    from extensions import db
+    from models import WorkoutSession
+    created_id = None
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as client_b:
+        with client_b.session_transaction() as flask_session:
+            flask_session['user_id'] = two_users['intruder_id']
+        response = client_b.post('/gym/start', data={'name': 'pytest ownership start'})
+        assert response.status_code in (302, 303)
+    try:
+        with flask_app.app_context():
+            created = WorkoutSession.query.filter_by(name='pytest ownership start').one()
+            created_id = created.id
+            assert created.user_id == two_users['intruder_id']
+    finally:
+        with flask_app.app_context():
+            if created_id is not None:
+                doomed = db.session.get(WorkoutSession, created_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_saving_a_session_as_a_template_stamps_the_owner(two_users):
+    from extensions import db
+    from models import WorkoutTemplate
+    created_id = None
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as owner_client:
+        with owner_client.session_transaction() as flask_session:
+            flask_session['user_id'] = two_users['owner_id']
+        response = owner_client.post(
+            '/gym/session/{}/save_as_template'.format(two_users['session_id']),
+            data={'template_name': 'pytest ownership saved template'})
+        assert response.status_code in (302, 303)
+    try:
+        with flask_app.app_context():
+            created = WorkoutTemplate.query.filter_by(name='pytest ownership saved template').one()
+            created_id = created.id
+            assert created.user_id == two_users['owner_id']
+    finally:
+        with flask_app.app_context():
+            if created_id is not None:
+                doomed = db.session.get(WorkoutTemplate, created_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_subscribing_to_push_stamps_the_owner(two_users):
+    from extensions import db
+    from models import PushSubscription
+    endpoint = 'https://fcm.googleapis.com/pytest/ownership-subscribe'
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as owner_client:
+        with owner_client.session_transaction() as flask_session:
+            flask_session['user_id'] = two_users['owner_id']
+        response = owner_client.post('/gym/push/subscribe', json={
+            'endpoint': endpoint, 'keys': {'p256dh': 'k', 'auth': 'a'}})
+        assert response.status_code == 200
+    try:
+        with flask_app.app_context():
+            stored = PushSubscription.query.filter_by(endpoint=endpoint).one()
+            assert stored.user_id == two_users['owner_id']
+    finally:
+        with flask_app.app_context():
+            PushSubscription.query.filter_by(endpoint=endpoint).delete()
+            db.session.commit()
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1098,19 +1180,86 @@ def gym_session_summary(session_id):
     owned_session(session_id)   # 404 for a stranger rather than a redirect that then 404s
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 5: Scope the active-session helper and stamp the owner on writes**
+
+Task 4 made `user_id` NOT NULL on the three roots, but three routes construct those rows without it, so they now fail on insert. Nothing in the test suite caught it — none of them had coverage. Fixing them here, together with the helper the first one depends on.
+
+`_get_active_session` at line 108 — replace:
+
+```python
+    session_ = (
+        WorkoutSession.query
+        .filter_by(finished_at=None)
+```
+
+with:
+
+```python
+    session_ = (
+        my_sessions()
+        .filter_by(finished_at=None)
+```
+
+(This moves here from Task 8: `gym_start` returns early when this helper finds an unfinished workout, so until it is scoped, one user's open session blocks the other from starting one at all.)
+
+`gym_start` at line 561:
+
+```python
+    session_ = WorkoutSession(name=name, template_id=template_id or None)
+```
+
+becomes:
+
+```python
+    session_ = WorkoutSession(name=name, template_id=template_id or None,
+                              user_id=current_user_id())
+```
+
+`gym_save_as_template` at line 1357:
+
+```python
+        template = WorkoutTemplate(name=template_name)
+```
+
+becomes:
+
+```python
+        template = WorkoutTemplate(name=template_name, user_id=current_user_id())
+```
+
+`gym_push_subscribe` at line 2253:
+
+```python
+        db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh, auth_key=auth_key))
+```
+
+becomes:
+
+```python
+        db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh,
+                                        auth_key=auth_key, user_id=current_user_id()))
+```
+
+Task 9 revisits this same line to handle the endpoint's global uniqueness; adding the owner now is what stops the route failing in the meantime.
+
+Confirm these are the only three:
+
+Run: `grep -rnE "(WorkoutSession|WorkoutTemplate|PushSubscription)\(" --include=*.py . | grep -v "^./tests/" | grep -v migrations`
+Expected: exactly the three lines above, plus the three `class` definitions in `models.py`.
+
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_gym_ownership.py -v`
-Expected: PASS, 13 passed
+Expected: PASS, 16 passed
 
 Run: `python -m pytest tests/ -v`
 Expected: PASS, no regressions.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add features/gym/scope.py features/gym/routes.py tests/test_gym_ownership.py
-git commit -m "feat(gym): scope every session route to its owner"
+git commit -m "feat(gym): scope every session route to its owner, stamp writes"
 ```
 
 ---
@@ -1346,7 +1495,7 @@ git commit -m "feat(gym): scope template routes, restrict catalogue edits to adm
 This is the task the spec calls the trap: the object is shared or the route takes no id at all, but the data rendered beside it is private.
 
 **Files:**
-- Modify: `features/gym/routes.py` at lines 108-113 (`_get_active_session`), 182-193 (`_last_session_exercise`), 374-382 (`_performed_query`), 453, 459, 464, 501 (`gym_heute`), 601, 619 (session detail), 1402 (`gym_verlauf`), 1668 (`gym_export`), 2080-2130 (exercise detail), 2139-2173 (`progress.json`)
+- Modify: `features/gym/routes.py` at lines 182-193 (`_last_session_exercise`), 374-382 (`_performed_query`), 453, 459, 464, 501 (`gym_heute`), 601, 619 (session detail), 1402 (`gym_verlauf`), 1668 (`gym_export`), 2080-2130 (exercise detail), 2139-2173 (`progress.json`). `_get_active_session` was already scoped in Task 5.
 - Modify: `tests/conftest.py` (add `acting_as`), `tests/test_gym_routes_smoke.py` (three direct-call tests)
 - Test: `tests/test_gym_ownership.py`
 
@@ -1414,23 +1563,9 @@ def test_the_owner_still_sees_their_own_numbers(two_users):
 Run: `python -m pytest tests/test_gym_ownership.py -v -k "leaked or foreign or inherit"`
 Expected: FAIL — several pages contain `123.5`, and `/gym` shows A's active session to B.
 
-- [ ] **Step 3: Scope the three shared helpers**
+- [ ] **Step 3: Scope the two remaining shared helpers**
 
-`_get_active_session` at line 108 — replace:
-
-```python
-    session_ = (
-        WorkoutSession.query
-        .filter_by(finished_at=None)
-```
-
-with:
-
-```python
-    session_ = (
-        my_sessions()
-        .filter_by(finished_at=None)
-```
+`_get_active_session` was scoped in Task 5 — `gym_start` depends on it, and leaving it global meant one user's open session blocked the other from starting one. Verify it already reads `my_sessions()` and leave it alone. The two below are still unscoped.
 
 `_last_session_exercise` at line 182 already joins `WorkoutSession`; add the owner to its filter list (after the `WorkoutSession.is_deload == False,` line):
 
@@ -1446,7 +1581,7 @@ with:
         .filter(WorkoutSession.user_id == current_user_id())
 ```
 
-These three carry most of the app: every suggestion, every statistic and every history list flows through one of them.
+Together with `_get_active_session` from Task 5, these carry most of the app: every suggestion, every statistic and every history list flows through one of them.
 
 - [ ] **Step 4: Give the direct-call tests a request context**
 
