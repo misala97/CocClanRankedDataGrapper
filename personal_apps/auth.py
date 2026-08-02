@@ -48,6 +48,14 @@ def _inject_host_flags():
     return {'is_full_access_host': _on_full_access_host()}
 
 
+@auth_bp.app_context_processor
+def _inject_admin_flag():
+    # Templates gate admin-only controls (catalogue edit/delete, the users
+    # link) on this rather than posting to an @admin_required route and
+    # letting a non-admin hit a bare 403 with their input gone.
+    return {'is_admin': is_admin()}
+
+
 @auth_bp.after_request
 def _no_index(response):
     # Keep the login form out of search/crawler indexes entirely.

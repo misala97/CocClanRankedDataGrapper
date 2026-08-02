@@ -47,8 +47,15 @@ audit surface would grow several-fold for a case nobody has.
 ### 2. The exercise catalog is shared
 
 `gym_exercises` gets no owner column. Both users pick from one global list; only an admin
-renames, edits, or sets `weight_increment`. A non-admin may add a new exercise, which
-becomes global.
+renames or recategorises an exercise through the catalogue's edit form. A non-admin may
+add a new exercise, which becomes global.
+
+The session-sheet's increment field is a deliberate exception to "only an admin": setting
+`weight_increment` from inside a running workout stays open to either user. An increment
+is an objective equipment fact, not curation -- the same reasoning that made the catalogue
+shared in the first place applies to who may correct it. Only the catalogue's edit form
+(rename, muscle group, delete) stays admin-gated, because that is a judgment call about
+the shared list itself, not a fact read off a machine.
 
 Correct here because both users train at the same gym: the equipment is literally the
 same, so `weight_increment` and `is_unilateral` are the same facts for both of them.

@@ -971,6 +971,15 @@ def gym_update_exercise_increment(session_exercise_id):
     equipment and so lands on the Exercise itself and stays. Keyed on the
     SessionExercise regardless, because that is the id the sheet has and it
     keeps the redirect back to the workout trivial.
+
+    Deliberately @login_required only, not @admin_required, even though it
+    writes the shared gym_exercises row: an increment is an objective fact
+    about the equipment ("this machine loads in 9 kg steps"), not a curatorial
+    choice about the catalogue. Both users train at the same gym -- the same
+    reasoning that made the catalogue shared at all -- so either of them
+    recording it correctly helps both. Renaming or recategorising an exercise
+    is a judgment call and stays behind gym_update_exercise's admin gate; a
+    loadable step someone just read off the rack is not.
     """
     session_exercise = owned_session_exercise(session_exercise_id)
     session_exercise.exercise.weight_increment = _to_increment(

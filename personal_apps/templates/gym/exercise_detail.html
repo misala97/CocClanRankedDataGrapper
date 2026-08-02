@@ -265,6 +265,7 @@
     einzelne Einheit.</p>
   {% endif %}
 
+  {% if is_admin %}
   <section class="sec sec--maint" aria-label="Übung verwalten">
     <button type="button" class="finished__correct sheet-open" data-sheet="sheet-edit">
       {% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}
@@ -277,8 +278,10 @@
     </form>
     {% endif %}
   </section>
+  {% endif %}
 </div>
 
+{% if is_admin %}
 <dialog class="sheet" id="sheet-edit" aria-labelledby="sheet-edit-title">
   <div class="sheet__head">
     <h2 class="sheet__title" id="sheet-edit-title">Übung bearbeiten</h2>
@@ -320,6 +323,7 @@
     </form>
   </div>
 </dialog>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
