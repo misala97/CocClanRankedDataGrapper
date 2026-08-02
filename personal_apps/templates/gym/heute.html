@@ -84,6 +84,26 @@
     </p>
   </header>
 
+  {#- Enabling rest-timer notifications lived only in the ⋮ sheet during a live
+      workout -- a menu that does not exist until you are mid-set, which is
+      neither where you look nor when you would think of it. It is per device,
+      not per account, so a second phone (or a partner's) starts without it.
+
+      Rendered hidden and revealed by the script below only when THIS browser
+      has no subscription: invisible on a device that is already set up, shown
+      once on one that is not, and gone for good after the tap. A one-time
+      prompt rather than permanent chrome. The ⋮ entry stays too -- that is
+      where you would look when the timer did not fire. -#}
+  <section class="sec notify-prompt" id="notify-start" hidden>
+    <button type="button" class="notify-prompt__btn" id="notify-start-btn">
+      {% with icon='timer' %}{% include 'gym/_icon.html' %}{% endwith %}
+      <span>
+        <b>Pausen-Benachrichtigung aktivieren</b>
+        <small>Auf diesem Gerät. Installiere die App zuerst über „Zum Home-Bildschirm“.</small>
+      </span>
+    </button>
+  </section>
+
   {% if active_session %}
   {# A workout is already running: nothing else on this page competes with
      getting back into it. #}
@@ -373,6 +393,53 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+// Whether to offer push is a question about this device, so it is answered
+// here rather than server-side: a subscription is a browser endpoint, and
+// asking whether the ACCOUNT has one hid the control on every other device the
+// same person owns.
+(function () {
+    var row = document.getElementById('notify-start');
+    var btn = document.getElementById('notify-start-btn');
+    if (!row || !btn) { return; }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) { return; }
+
+    navigator.serviceWorker.getRegistration('/gym/')
+        .then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; })
+        .then(function (sub) { row.hidden = !!sub; })
+        .catch(function () { row.hidden = false; });
+
+    btn.addEventListener('click', async function () {
+        btn.disabled = true;
+        try {
+            var reg = await navigator.serviceWorker.register('/sw.js', { scope: '/gym/' });
+            if (await Notification.requestPermission() !== 'granted') {
+                btn.disabled = false;
+                return;
+            }
+            var sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: (function (b64) {
+                    var pad = '='.repeat((4 - b64.length % 4) % 4);
+                    var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+                    var out = new Uint8Array(raw.length);
+                    for (var i = 0; i < raw.length; ++i) { out[i] = raw.charCodeAt(i); }
+                    return out;
+                })('{{ vapid_public_key or "" }}'),
+            });
+            await fetch('{{ url_for("gym.gym_push_subscribe") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(sub.toJSON()),
+            });
+            row.hidden = true;
+        } catch (err) {
+            btn.disabled = false;
+            console.error('Push subscribe failed', err);
+        }
+    });
+})();
+</script>
 <script>
 // The running workout's elapsed clock. It moved here from the resume strip,
 // which no longer renders on this page -- same GymClock, same data-started

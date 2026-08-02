@@ -2039,6 +2039,51 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
    --done (plum) is what LOGGED already means here, so it is what "saved"
    means; --live is the hot colour this app already uses for danger
    (.btn--quiet-danger), so it carries the failure. */
+/* One-time push prompt on Start. Quiet by construction: it only ever renders
+   on a device with no subscription, and removes itself after the tap -- so it
+   is a setup step that disappears, not a permanent row. Reads as a suggestion
+   rather than an action the page wants: outlined, not filled, and it does not
+   compete with "Workout starten".
+   Explicit display:none for the hidden case -- .sec may carry a display, and an
+   author display beats the UA sheet's [hidden] on specificity. */
+.notify-prompt[hidden] { display: none; }
+.notify-prompt { margin: var(--sp-3) var(--sp-4) 0; }
+.notify-prompt__btn {
+  /* flex-start, not center: the body wraps to two lines and a centred icon
+     floats between them instead of reading with the line it labels. */
+  display: flex; align-items: flex-start; gap: var(--sp-3);
+  inline-size: 100%; padding: var(--sp-3) var(--sp-4);
+  background: var(--chassis); border: 0; border-radius: var(--r-panel);
+  box-shadow: inset 0 0 0 1px var(--edge-hi);
+  color: var(--ink); font: inherit; text-align: start; cursor: pointer;
+}
+.notify-prompt__btn:hover { box-shadow: inset 0 0 0 1px var(--live); }
+.notify-prompt__btn:disabled { opacity: 0.5; cursor: default; }
+.notify-prompt__btn b { display: block; font-size: var(--t-sm); font-weight: var(--w-semi); }
+.notify-prompt__btn small {
+  display: block; margin-top: 2px;
+  font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
+}
+
+/* Übungen with nothing in it. Reachable only since exercises became per user:
+   before that the catalogue always held someone's lifts, so this state existed
+   in the template and had never once rendered. */
+.uebungen-blank {
+  margin: var(--sp-5) var(--sp-4);
+  padding: var(--sp-5) var(--sp-4);
+  background: var(--chassis); border-radius: var(--r-panel); box-shadow: var(--lift);
+  text-align: center;
+}
+.uebungen-blank__title {
+  margin: 0 0 var(--sp-2); font-family: var(--font-display);
+  font-size: var(--t-lg); font-weight: var(--w-bold); color: var(--ink);
+}
+.uebungen-blank__body {
+  margin: 0 auto var(--sp-4); max-inline-size: 34ch;
+  color: var(--dim); font-size: var(--t-sm); line-height: 1.55;
+}
+.uebungen-blank .btn { inline-size: auto; margin-inline: auto; }
+
 .flashes { margin: var(--sp-3) var(--sp-4) 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .flash {
   margin: 0; padding: var(--sp-3) var(--sp-4);

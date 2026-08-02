@@ -540,6 +540,9 @@ def gym_heute():
         'gym/heute.html',
         now=now,
         active_session=active_session,
+        # Start now offers push activation to a device that has none -- see the
+        # notify-prompt in heute.html for why it moved out of the ⋮ sheet.
+        vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
         consistency=stats.consistency(list(session_started_at.values()), now),
         routines=stats.routine_memory(templates, routine_sessions, now),
         recent_sessions=recent_sessions,
