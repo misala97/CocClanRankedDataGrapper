@@ -273,6 +273,13 @@ class SessionSet(db.Model):
     # baseline survives it. Distinguishing the two would need a dirty flag
     # from the client and is not worth it.
     base_weight         = db.Column(db.Float, nullable=True)
+    # The rep count this set held before a deload rewrote it to
+    # stats.DELOAD_REPS. Every rule above for base_weight applies here
+    # unchanged -- same invariant, same idempotence, same clearing on a
+    # hand-typed value -- because the two are written and read as a pair:
+    # a deload prescribes a weight AND a rep count, and toggling it back off
+    # has to return both.
+    base_reps           = db.Column(db.Integer, nullable=True)
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')
 

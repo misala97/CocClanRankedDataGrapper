@@ -85,6 +85,12 @@ DELOAD_STALL_THRESHOLD = 4
 # deload doesn't nag every single session.
 DELOAD_SUPPRESSION_DAYS = 21
 
+# A deload prescribes a rep count as well as a weight: lighter, and always the
+# same moderate set length rather than whatever the last hard session happened
+# to grind out. Fixed rather than derived -- the point of a deload week is that
+# it does not chase the previous one.
+DELOAD_REPS = 10
+
 NO_GROUP_LABEL = 'Ohne Muskelgruppe'
 
 # The smallest pair of plates on most bars, and the step for any exercise that

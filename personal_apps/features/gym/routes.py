@@ -262,7 +262,8 @@ def _seeded_sets(session_, exercise_id, position):
             position=j,
             weight=stats.deload_weight(prev['weight'], pct, increment),
             base_weight=prev['weight'],
-            reps=prev['reps'],
+            reps=stats.DELOAD_REPS,
+            base_reps=prev['reps'],
             completed=False,
         )
         for j, prev in enumerate(seeded, start=1)
@@ -291,7 +292,7 @@ def _seeded_suggestion(session_, exercise, position):
         return last
     increment = stats.resolve_increment(exercise.weight_increment, exercise.is_unilateral)
     return {'weight': stats.deload_weight(last['weight'], pct, increment),
-            'reps': last['reps']}
+            'reps': stats.DELOAD_REPS}
 
 
 def _template_exercises_from_session(session_):
@@ -1093,6 +1094,10 @@ def gym_toggle_set_complete(set_id):
             set_.base_weight = None
         set_.weight = weight
     if reps is not None:
+        if reps != set_.reps:
+            # Same rule as the weight above: a typed rep count is ground truth
+            # from now on, so a later toggle-off must not overwrite it.
+            set_.base_reps = None
         set_.reps = reps
 
     wanted = request.form.get('completed')
@@ -1142,6 +1147,10 @@ def gym_update_set(set_id):
             set_.base_weight = None
         set_.weight = weight
     if reps is not None:
+        if reps != set_.reps:
+            # Same rule as the weight above: a typed rep count is ground truth
+            # from now on, so a later toggle-off must not overwrite it.
+            set_.base_reps = None
         set_.reps = reps
     db.session.commit()
     # request.args carried through: the debrief's "Vorlage aktualisieren" offer
@@ -1279,9 +1288,20 @@ def gym_toggle_deload(session_id):
                     if s.base_weight is None:
                         s.base_weight = s.weight
                     s.weight = stats.deload_weight(s.base_weight, pct, increment)
-                elif s.base_weight is not None:
-                    s.weight = s.base_weight
-                    s.base_weight = None
+                    # Reps move with the weight, and for the same reason: a
+                    # deload is a prescription, not a scaled-down copy of the
+                    # last hard session. Captured first so switching the
+                    # deload off returns the real set length too.
+                    if s.base_reps is None:
+                        s.base_reps = s.reps
+                    s.reps = stats.DELOAD_REPS
+                elif s.base_weight is not None or s.base_reps is not None:
+                    if s.base_weight is not None:
+                        s.weight = s.base_weight
+                        s.base_weight = None
+                    if s.base_reps is not None:
+                        s.reps = s.base_reps
+                        s.base_reps = None
 
     db.session.commit()
     # Same reason as gym_update_set: marking a finished workout as a deload

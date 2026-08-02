@@ -776,5 +776,68 @@ def test_adding_an_exercise_to_a_deload_session_seeds_scaled_sets(client, scratc
 
     with flask_app.app_context():
         se = SessionExercise.query.filter_by(session_id=live_id).one()
-        # 100 kg at 70 % on the default 2.5 grid.
-        assert [(s.weight, s.base_weight, s.reps) for s in se.sets] == [(70.0, 100.0, 8)]
+        # 100 kg at 70 % on the default 2.5 grid, at the deload rep count.
+        assert [(s.weight, s.base_weight, s.reps) for s in se.sets] == [(70.0, 100.0, 10)]
+
+
+def test_deload_seeds_ten_reps_and_remembers_the_real_ones(client, scratch_deload_session):
+    """A deload prescribes a rep count as well as a weight. History is recorded
+    at working reps, so seeding them raw hands back half the prescription."""
+    from extensions import db
+    from models import SessionExercise
+    live_id, _, exercise_id = scratch_deload_session      # history is 100 kg x 8
+
+    client.post(f'/gym/session/{live_id}/exercises/add', data={'exercise_id': str(exercise_id)})
+
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        assert [(s.weight, s.reps) for s in se.sets] == [(70.0, 10)]
+        assert [(s.base_weight, s.base_reps) for s in se.sets] == [(100.0, 8)]
+
+
+def test_toggling_a_deload_on_rewrites_reps_and_off_restores_them(client, scratch_deload_session):
+    """The template flow: sets already exist at working weight and working reps
+    when the deload is switched on, so the toggle -- not the seeding -- is what
+    has to apply the prescription, and undo it."""
+    from extensions import db
+    from models import SessionExercise, SessionSet, WorkoutSession
+    live_id, _, exercise_id = scratch_deload_session
+    with flask_app.app_context():                 # start it as a plain session
+        live = db.session.get(WorkoutSession, live_id)
+        live.is_deload, live.deload_pct = False, None
+        se = SessionExercise(session_id=live_id, exercise_id=exercise_id, position=1)
+        se.sets = [SessionSet(position=1, weight=100.0, reps=8, completed=False)]
+        db.session.add(se)
+        db.session.commit()
+
+    client.post(f'/gym/session/{live_id}/deload', data={'on': '1', 'pct': '70'})
+    with flask_app.app_context():
+        s = SessionExercise.query.filter_by(session_id=live_id).one().sets[0]
+        assert (s.weight, s.reps) == (70.0, 10)
+        assert (s.base_weight, s.base_reps) == (100.0, 8)
+
+    client.post(f'/gym/session/{live_id}/deload', data={'on': '0'})
+    with flask_app.app_context():
+        s = SessionExercise.query.filter_by(session_id=live_id).one().sets[0]
+        assert (s.weight, s.reps) == (100.0, 8)
+        assert (s.base_weight, s.base_reps) == (None, None)
+
+
+def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session):
+    """Symmetric with the weight rule: a typed rep count is ground truth, so a
+    later toggle-off must not overwrite it."""
+    from extensions import db
+    from models import SessionExercise
+    live_id, _, exercise_id = scratch_deload_session
+    client.post(f'/gym/session/{live_id}/exercises/add', data={'exercise_id': str(exercise_id)})
+
+    with flask_app.app_context():
+        set_id = SessionExercise.query.filter_by(session_id=live_id).one().sets[0].id
+    client.post(f'/gym/set/{set_id}/update', data={'weight': '70.0', 'reps': '6'})
+
+    with flask_app.app_context():
+        from models import SessionSet
+        s = db.session.get(SessionSet, set_id)
+        assert s.reps == 6
+        assert s.base_reps is None          # dropped: the typed 6 is now the truth
+        assert s.base_weight == 100.0       # weight was echoed unchanged, baseline survives
