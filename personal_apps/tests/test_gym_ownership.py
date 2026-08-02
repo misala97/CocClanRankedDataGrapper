@@ -340,10 +340,18 @@ def test_a_non_admin_cannot_edit_the_shared_catalogue(
         intruder_client, two_users, method, url_template, id_key):
     """The catalogue is shared, so there is no owner to check -- but curating
     it is the admin's job. 403 here, not 404: the exercise is legitimately
-    visible to this user, only editing it is refused."""
+    visible to this user, only editing it is refused.
+
+    Also checks the exercise is still there after the rejected write -- a 403
+    on /delete is only half the guarantee if the row went away anyway."""
+    from extensions import db
+    from models import Exercise
     url = url_template.format(two_users[id_key])
     response = intruder_client.open(url, method=method)
     assert response.status_code == 403, f'{method} {url} returned {response.status_code}'
+    with flask_app.app_context():
+        assert db.session.get(Exercise, two_users['exercise_id']) is not None, \
+            f'the shared exercise did not survive the rejected {method} {url}'
 
 
 # The tables hold Flask's route strings with '<int:name>' replaced by '{}', so
@@ -392,13 +400,6 @@ def test_every_id_taking_gym_route_is_covered_by_a_table():
     uncovered = actual - covered
     assert not uncovered, 'gym route(s) with an int id but no ownership table entry: ' + ', '.join(
         f'{method} {url_template}' for method, url_template in sorted(uncovered))
-
-
-def test_the_shared_exercise_survived_the_rejected_writes(two_users):
-    from extensions import db
-    from models import Exercise
-    with flask_app.app_context():
-        assert db.session.get(Exercise, two_users['exercise_id']) is not None
 
 
 def test_starting_from_another_users_template_seeds_nothing_and_stores_no_link(two_users):
@@ -463,6 +464,19 @@ def test_the_list_pages_show_none_of_another_users_numbers(intruder_client, two_
     for marker in ('pytest ownership session', 'pytest ownership finished',
                    'pytest ownership template'):
         assert marker not in body, f'{path} leaked {marker}'
+
+
+def test_the_export_asked_for_a_foreign_session_returns_none_of_it(intruder_client, two_users):
+    """The case LEAKY_PAGES' bare /gym/export cannot exercise: B explicitly
+    requests A's finished session by id, so the owner filter inside
+    gym_export -- not an empty ids param -- is what has to reject it."""
+    url = '/gym/export?ids={}'.format(two_users['finished_session_id'])
+    body = intruder_client.get(url).get_data(as_text=True)
+    for rendering in FOREIGN_WEIGHTS:
+        assert rendering not in body, f'{url} leaked another user\'s weight as {rendering}'
+    for marker in ('pytest ownership session', 'pytest ownership finished',
+                   'pytest ownership template'):
+        assert marker not in body, f'{url} leaked {marker}'
 
 
 def test_the_shared_exercise_page_shows_no_foreign_history(intruder_client, two_users):

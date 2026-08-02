@@ -30,6 +30,8 @@
         <a href="{{ url_for(item.endpoint) }}" class="topbar__link{{ ' is-active' if request.endpoint == item.endpoint else '' }}"
            {% if request.endpoint == item.endpoint %}aria-current="page"{% endif %}>{{ item.label }}</a>
         {% endfor %}
+        <a href="/account" class="topbar__link">Konto</a>
+        {% if is_admin %}<a href="/admin/users" class="topbar__link">Benutzer</a>{% endif %}
         <a href="/logout" class="topbar__link">Abmelden</a>
     </div>
 </nav>
@@ -157,6 +159,8 @@
 </nav>
 
 <div class="nav-footer">
+    <a href="/account" class="label">Konto</a>
+    {% if is_admin %}<a href="/admin/users" class="label">Benutzer</a>{% endif %}
     <a href="/logout" class="label">Abmelden</a>
 </div>
 <script>
