@@ -1318,9 +1318,9 @@ git commit -m "feat(gym): fork exercises when copying templates between users"
 
 ## Deployment
 
-Not a task — run by the author after the branch merges. **The order below is not the obvious one**; read the note under step 4 before starting.
+Not a task — run by the author. `scripts/delete_user.py` is already on `main` by itself (commit `065a232`), *without* the migration, so this is two ordinary deploys rather than checking a file out of a merge commit by hand.
 
-1. Confirm the suite passes: `python -m pytest tests/ -v`
+1. Confirm the suite passes on `dev_personal`: `python -m pytest tests/ -v`
 
 2. Confirm `PERSONAL_ADMIN_USER` and `PERSONAL_ADMIN_PASS` are still set in the VPS `.env`. The earlier `a4c81f2e5b76` migration reads them, and a failed upgrade restarts the web service onto a schema it cannot authenticate against.
 
@@ -1330,42 +1330,34 @@ Not a task — run by the author after the branch merges. **The order below is n
 mysql -u root -p personal_apps -e "SHOW INDEX FROM gym_exercises WHERE Non_unique = 0;"
 ```
 
-Expect a row whose `Key_name` is `name`, on column `name`. The migration runs `drop_constraint('name', type_='unique')`, and that name was only ever verified against the *development* database. If production names it differently, the migration dies at that statement with `user_id` already added, backfilled, set NOT NULL, indexed and foreign-keyed — and because MySQL DDL is not transactional and Alembic stamps the revision only after the whole function returns, a re-run then fails immediately on `Duplicate column name 'user_id'`. Recovery from that is restore-from-backup, on the entire training history. One command removes the only unverified assumption in the whole operation.
+Expect a row whose `Key_name` is `name`, on column `name`. The migration runs `drop_constraint('name', type_='unique')`, and that name was only ever verified against the *development* database. If production names it differently the migration dies at that statement with `user_id` already added, backfilled, set NOT NULL, indexed and foreign-keyed — and because MySQL DDL is not transactional and Alembic stamps the revision only after the whole function returns, the re-run then fails immediately on `Duplicate column name 'user_id'`. Recovery from that is restore-from-backup, on the entire training history. One command removes the only unverified assumption in the whole operation.
 
 4. **Back up the production database.**
 
-5. Merge `dev_personal` to `main` and push — but **do not run the deploy script yet.**
+5. **First deploy.** `main` currently holds the delete script and nothing else new, so the deploy script's `flask db upgrade` finds no new revision and does nothing to the schema. The app keeps running exactly as it is.
 
-6. Fetch the merged code on the VPS and check out *only* the delete script:
-
-```bash
-cd /root/coc-stats && git fetch origin && git checkout origin/main -- personal_apps/scripts/delete_user.py
-```
-
-This is the step whose ordering matters. `delete_user.py` is created on this branch, so it does not exist on the VPS until the merge lands there — but running the deploy script to obtain it would also run `flask db upgrade`, and that migration **aborts** while jglaser's copied templates still reference exercises he does not own. Worse, the deploy script restarts gunicorn, which would then be serving a `models.py` that expects `Exercise.user_id` against a schema without it — every gym page 500s. Fetching one file leaves the running app untouched.
-
-7. Remove the empty second account, dry run first:
+6. Remove the empty second account, dry run first:
 
 ```bash
 /root/coc-stats/venv/bin/python /root/coc-stats/personal_apps/scripts/delete_user.py jglaser
 ```
 
-then the same command with `--commit`. It refuses if he has logged a session; if that happens, stop and reassess rather than forcing it — the whole single-user premise of the migration is wrong at that point.
+then the same command with `--commit`. It reports `0 exercise(s)` here — `gym_exercises` has no owner column yet, and the script checks rather than assuming. It refuses outright if he has logged a session; if that happens, stop and reassess, because the single-user premise the migration depends on is no longer true.
 
-8. Now run the deploy script. It covers `flask db upgrade`, the gunicorn restart, and the notifier restart.
+7. **Second deploy.** Merge `dev_personal` to `main`, push, run the deploy script. Now the migration runs, against a single-user database.
 
-If the migration aborts with *"template/session row(s) reference an exercise belonging to another user"*, step 7 did not happen or did not complete. Nothing has been changed at that point — fix the accounts and re-run.
+If it aborts with *"template/session row(s) reference an exercise belonging to another user"*, step 6 did not happen or did not complete. Nothing has been changed at that point — the guard runs before any DDL — so fix the accounts and re-run.
 
-9. Recreate jglaser at `/admin/users`.
+8. Recreate jglaser at `/admin/users`.
 
-10. Copy the templates, dry run first, then `--commit`:
+9. Copy the templates, dry run first, then `--commit`:
 
 ```bash
 /root/coc-stats/venv/bin/python /root/coc-stats/personal_apps/scripts/copy_templates.py mgemmel jglaser --commit
 ```
 
-Note the dry run previews only the template names — the exercise forking it now also does is not shown until `--commit`.
+The dry run previews only the template names — the exercise forking it now also does is not shown until `--commit`.
 
-11. Create the third account at `/admin/users`. Nothing further — an empty catalogue is the default.
+10. Create the third account at `/admin/users`. Nothing further: an empty catalogue is the default.
 
-12. Verify per user: she sees an empty exercise list and can rename an exercise she creates; jglaser sees his own copies of mgemmel's lifts with increments intact; neither can open the other's exercise detail page.
+11. Verify per user: she sees an empty exercise list, and can rename and delete an exercise she creates; jglaser sees his own copies of mgemmel's lifts with increments intact; neither can open the other's exercise detail page.
