@@ -70,7 +70,6 @@ def two_users():
     Yields a dict of A's object ids plus B's user id. Everything is deleted
     afterwards, in dependency order.
     """
-    from conftest import _admin_id
     from extensions import db
     from models import (AppUser, Exercise, SessionExercise, SessionSet,
                         TemplateExercise, WorkoutSession, WorkoutTemplate)
@@ -85,7 +84,7 @@ def two_users():
         db.session.add_all([owner, intruder])
         db.session.flush()
 
-        exercise = Exercise(name='pytest ownership lift', muscle_group='Brust', user_id=_admin_id())
+        exercise = Exercise(name='pytest ownership lift', muscle_group='Brust', user_id=owner.id)
         db.session.add(exercise)
         db.session.flush()
 
