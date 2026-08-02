@@ -133,13 +133,25 @@
        completed and starts its rest, which is exactly what "Satz geschafft"
        means everywhere else on this screen. #}
     {% set start = suggestions.get(live_se.id) %}
-    {% set pair_weight = next_set.weight if next_set else (start.weight if start else 20.0) %}
-    {% set pair_reps = next_set.reps if next_set else (start.reps if start else 8) %}
-    {% if next_set or not live_sets %}
+    {# Appending after everything is logged starts from the set you just did,
+       not from the session's opening suggestion: the reason you are adding one
+       is that the last one went well enough to want another. #}
+    {% set last_done = live_sets[-1] if live_sets else None %}
+    {% set pair_weight = next_set.weight if next_set else (last_done.weight if last_done else (start.weight if start else 20.0)) %}
+    {% set pair_reps = next_set.reps if next_set else (last_done.reps if last_done else (start.reps if start else 8)) %}
+    {# The steppers and the confirm button render in every state, including
+       "everything is logged". They used to stop at the two states that had a
+       set to point at, and the third sent you to the row's own sheet -- the
+       identical bug this block's comment above records fixing for an exercise
+       with no sets at all, one branch over. gym_add_set already backs the
+       button whenever there is nothing pending, so the state needed the
+       control, not new machinery. #}
     {% if not live_sets %}
     <p class="live__empty">
       Noch keine Sätze. Der erste wird angelegt, sobald du ihn bestätigst{% if start %} — zuletzt {{ ("%.1f"|format(start.weight)).replace(".", ",") }} kg × {{ start.reps }}{% endif %}.
     </p>
+    {% elif not next_set %}
+    <p class="live__alldone">Alle Sätze erledigt. Unten beenden — oder hier noch einen anhängen.</p>
     {% endif %}
     {# The two numbers. No keyboard ever opens during a workout: the steppers
        carry the value in a hidden input and the readout is text. The weight
@@ -216,13 +228,6 @@
         {% endif %}
       </button>
     </form>
-    {% else %}
-    {# Reachable only through the live_se fallback in routes.py, i.e. when every
-       visible exercise is done -- so it must not send you to a next exercise
-       there isn't one of. (The old copy also pointed at "⋯" for a control this
-       screen renders as "⋮".) #}
-    <p class="live__alldone">Alle Sätze erledigt — das Workout ist durch. Unten beenden, oder über <b>⋮</b> noch einen Satz anhängen.</p>
-    {% endif %}
   </section>
   {% else %}
   {# A workout started without a template has no exercises at all, and the only

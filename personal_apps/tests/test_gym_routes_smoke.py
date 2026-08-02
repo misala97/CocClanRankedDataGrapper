@@ -862,3 +862,45 @@ def test_the_add_exercise_sheet_separates_picking_from_creating(client, scratch_
     create = html.split('id="add-new-pane"', 1)[1].split('</dialog>', 1)[0]
     assert 'name="new_exercise_name"' in create
     assert 'name="exercise_id"' not in create, 'the create form still submits an exercise id'
+
+
+def test_a_finished_exercise_can_still_append_a_set_from_the_panel(client, scratch_session):
+    """With every set logged, the panel used to render a paragraph pointing at
+    the row's ⋮ sheet and no control -- the same bug the block's own comment
+    records fixing for an exercise with no sets at all, one branch over.
+
+    gym_add_set already backed the confirm button whenever nothing was pending,
+    so the state was missing the control, not the machinery.
+    """
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        for s in session_.exercises[0].sets:
+            s.completed = True
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
+
+    assert 'id="set-confirm"' in html, 'no confirm button once every set is logged'
+    assert 'sets/add' in html, 'the confirm button does not append a set'
+    assert 'über <b>⋮</b>' not in html, 'still sending the lifter to the sheet'
+
+
+def test_appending_a_set_starts_from_the_last_one_not_the_opening_suggestion(client, scratch_session):
+    """The reason you append is that the last set went well enough to want
+    another, so the steppers open on it rather than on the session's starting
+    suggestion."""
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        sets_ = session_.exercises[0].sets
+        for s in sets_:
+            s.completed = True
+        sets_[-1].weight, sets_[-1].reps = 62.5, 5
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
+    assert 'value="62.5"' in html, 'steppers ignored the set that was actually just done'
+    assert 'value="5"' in html
