@@ -150,3 +150,57 @@ def test_adding_an_exercise_whose_name_another_user_has_creates_your_own(
                 if doomed is not None:
                     db.session.delete(doomed)
                     db.session.commit()
+
+
+def test_adding_a_session_exercise_by_name_does_not_link_to_another_users_exercise(
+        stranger_client, two_lifters):
+    """gym_add_session_exercise is find-or-create, not find-or-refuse like
+    gym_add_exercise above. Unscoped, the find half would have matched the
+    owner's 'pytest owned lift' and attached the stranger's session to that
+    row -- handing her their weight_increment and writing her sets into
+    their history."""
+    import datetime as dt
+
+    from extensions import db
+    from models import Exercise, SessionExercise, WorkoutSession
+
+    session_id = None
+    created_exercise_id = None
+    try:
+        with flask_app.app_context():
+            session_ = WorkoutSession(name='pytest find-or-create session',
+                                      started_at=dt.datetime.utcnow(),
+                                      user_id=two_lifters['stranger_id'])
+            db.session.add(session_)
+            db.session.commit()
+            session_id = session_.id
+
+        response = stranger_client.post(
+            f'/gym/session/{session_id}/exercises/add',
+            data={'new_exercise_name': 'pytest owned lift', 'muscle_group': 'Brust'})
+        assert response.status_code in (302, 303)
+
+        with flask_app.app_context():
+            session_exercise = SessionExercise.query.filter_by(session_id=session_id).first()
+            assert session_exercise is not None, 'the route did not attach an exercise to the session'
+            linked = db.session.get(Exercise, session_exercise.exercise_id)
+            assert linked.user_id == two_lifters['stranger_id'], \
+                'the name lookup matched another user\'s exercise and linked to it'
+            assert linked.id != two_lifters['exercise_id'], \
+                'session exercise points at the owner\'s row instead of her own'
+            created_exercise_id = linked.id
+            assert linked.weight_increment is None, 'inherited their increment'
+    finally:
+        with flask_app.app_context():
+            if session_id is not None:
+                doomed_session = db.session.get(WorkoutSession, session_id)
+                if doomed_session is not None:
+                    doomed_session.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed_session)
+                    db.session.commit()
+            if created_exercise_id is not None:
+                doomed_exercise = db.session.get(Exercise, created_exercise_id)
+                if doomed_exercise is not None:
+                    db.session.delete(doomed_exercise)
+                    db.session.commit()
