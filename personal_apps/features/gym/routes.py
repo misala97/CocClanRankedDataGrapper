@@ -12,6 +12,10 @@ from models import (
 )
 from auth import login_required
 from features.gym import stats
+from features.gym.scope import (
+    current_user_id, my_sessions, my_templates,
+    owned_session, owned_session_exercise, owned_set, owned_template,
+)
 from features.gym.push import is_valid_push_endpoint
 from . import analytics
 
@@ -106,7 +110,7 @@ def _get_active_session():
     STALE_SESSION_TIMEOUT are treated as abandoned and auto-finished here,
     capped at started_at + timeout rather than "now"."""
     session_ = (
-        WorkoutSession.query
+        my_sessions()
         .filter_by(finished_at=None)
         .order_by(WorkoutSession.started_at.desc())
         .first()
@@ -558,7 +562,8 @@ def gym_start():
 
     template_id = request.form.get('template_id', type=int)
     name = request.form.get('name', '').strip() or None
-    session_ = WorkoutSession(name=name, template_id=template_id or None)
+    session_ = WorkoutSession(name=name, template_id=template_id or None,
+                              user_id=current_user_id())
 
     if template_id:
         template = db.session.get(WorkoutTemplate, template_id)
@@ -586,7 +591,7 @@ def gym_start():
 @gym_bp.route('/gym/session/<int:session_id>')
 @login_required
 def session_detail(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
 
     if session_.finished_at:
         # The finished workout is one page now (spec 6.5): build the report
@@ -857,7 +862,7 @@ def session_detail(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/exercises/add', methods=['POST'])
 @login_required
 def gym_add_session_exercise(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
 
     exercise_id = request.form.get('exercise_id', type=int)
     new_name = request.form.get('new_exercise_name', '').strip()
@@ -1165,7 +1170,7 @@ def gym_update_set(set_id):
 @gym_bp.route('/gym/session/<int:session_id>/exercises/reorder', methods=['POST'])
 @login_required
 def gym_reorder_session_exercises(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     data = request.get_json(silent=True) or {}
     order = data.get('order') or []
     session_exercises_by_id = {se.id: se for se in session_.exercises}
@@ -1210,7 +1215,7 @@ def gym_skip_rest(session_id):
     finishing early does: the notifier daemon would otherwise fire a
     "Pause vorbei" for a rest the lifter already ended themselves.
     """
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     session_.rest_ends_at = None
     session_.resting_set_id = None
     _cancel_pending_push(session_)
@@ -1221,7 +1226,7 @@ def gym_skip_rest(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/finish', methods=['POST'])
 @login_required
 def gym_finish_session(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     session_.finished_at = dt.datetime.utcnow()
     session_.rest_ends_at = None
     session_.resting_set_id = None
@@ -1259,7 +1264,7 @@ def gym_toggle_deload(session_id):
     each set independently reflects whatever the user most recently said
     about it, not a single all-or-nothing session state.
     """
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
 
     on = request.form.get('on') == '1'
     pct = _to_int(request.form.get('pct', ''), fallback=stats.DELOAD_DEFAULT_PCT)
@@ -1313,6 +1318,7 @@ def gym_toggle_deload(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/summary')
 @login_required
 def gym_session_summary(session_id):
+    owned_session(session_id)   # 404 for a stranger rather than a redirect that then 404s
     # Kept as a redirect: a finished workout is one page now, and this URL is
     # in browser history and bookmarks.
     return redirect(url_for('gym.session_detail', session_id=session_id,
@@ -1322,7 +1328,7 @@ def gym_session_summary(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_session(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     if session_.finished_at is not None:  # never delete the active workout by accident
         # Null the self-referencing rest-timer FK first -- deleting a session
         # whose resting_set_id still points at one of its own (about to be
@@ -1337,7 +1343,7 @@ def gym_delete_session(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/update_template', methods=['POST'])
 @login_required
 def gym_update_template(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     if session_.template_id:
         template = db.session.get(WorkoutTemplate, session_.template_id)
         if template:
@@ -1351,10 +1357,10 @@ def gym_update_template(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/save_as_template', methods=['POST'])
 @login_required
 def gym_save_as_template(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     template_name = request.form.get('template_name', '').strip()
     if template_name:
-        template = WorkoutTemplate(name=template_name)
+        template = WorkoutTemplate(name=template_name, user_id=current_user_id())
         template.exercises.extend(_template_exercises_from_session(session_))
         db.session.add(template)
         db.session.commit()
@@ -2250,7 +2256,8 @@ def gym_push_subscribe():
         sub.p256dh_key = p256dh
         sub.auth_key = auth_key
     else:
-        db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh, auth_key=auth_key))
+        db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh,
+                                        auth_key=auth_key, user_id=current_user_id()))
     db.session.commit()
     return jsonify({'status': 'ok'})
 
