@@ -91,9 +91,11 @@ four template write routes (`save_as_template`, `update_template`, `rename`, `de
 and a single uniform ownership rule is both simpler to build and simpler to audit — and
 auditing is the actual risk in this change.
 
-The accepted cost is drift: when the author changes the split, the partner's copy stays
-old until re-copied. Weak in practice, because they train together — the partner is
-present for the change and updates his own template from the same session.
+The copy happens exactly once, covering the two templates that exist at the time. After
+that the two template sets are **fully independent and stay that way** — there is no
+re-copy, ever. Each user reorders his own when training alone; when they next train
+together they reconcile by hand in the session. Divergence is expected, manual, and
+explicitly accepted by the author, not a cost to be mitigated later.
 
 The shared catalog makes the copy trivial: `exercise_id` values stay valid across users,
 so it is a plain row duplication with no ID remapping.
@@ -333,7 +335,8 @@ session is invalidated on deploy. Both users log in once more. Expected, not a b
 - **Any cross-user visibility** — shared records, comparisons, leaderboards. Decision 4.
 - **Per-user exercise settings** (rest seconds, increments). Decision 2; revisit only if
   the two stop sharing a gym.
-- **A template-copy UI.** Decision 5; the SQL runs once.
+- **A template-copy or template-sync UI.** Decision 5; the copy runs once and the two
+  template sets are independent from then on.
 - **Partitioning the other four apps.** Decision 1.
 - **Password reset by email.** No mail infrastructure in personal_apps; the admin resets a
   password, and the user changes it at `/account`.
