@@ -307,6 +307,11 @@
         <input type="number" id="meta-rest" name="default_rest_seconds" min="0" class="input input--num"
                value="{{ exercise.default_rest_seconds if exercise.default_rest_seconds is not none else '' }}" placeholder="90">
       </div>
+      <div class="field">
+        <label class="label" for="meta-increment">Schrittweite (kg)</label>
+        <input type="number" id="meta-increment" name="weight_increment" step="0.25" min="0" class="input input--num"
+               value="{{ '%g'|format(exercise.weight_increment) if exercise.weight_increment is not none else '' }}" placeholder="2,5">
+      </div>
       <label class="sheet__row">
         <input type="checkbox" name="is_unilateral" class="check" {{ 'checked' if exercise.is_unilateral else '' }}>
         <span class="label">Einseitig (pro Seite)</span>

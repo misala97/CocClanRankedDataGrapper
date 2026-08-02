@@ -499,3 +499,179 @@ def test_reordering_a_deload_session_keeps_the_deloaded_weights(client):
                     db.session.commit()
             for exercise_id, history_id in zip(exercise_ids or [], history_ids or []):
                 _drop_slot_history(exercise_id, [history_id])
+
+
+@pytest.fixture()
+def scratch_increment_exercise():
+    """A throwaway Exercise inside a throwaway session.
+
+    Its own exercise rather than the catalogue's first one, because these tests
+    write to the exercise itself and must not leave a real lift carrying a
+    made-up increment. Both rows are deleted afterwards.
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise, WorkoutSession
+    with flask_app.app_context():
+        exercise = Exercise(name='pytest scratch increment lift', muscle_group='Brust')
+        db.session.add(exercise)
+        db.session.flush()
+        session_ = WorkoutSession(name='pytest scratch increment',
+                                  started_at=dt.datetime.utcnow())
+        session_.exercises.append(SessionExercise(exercise_id=exercise.id, position=1))
+        db.session.add(session_)
+        db.session.commit()
+        ids = (session_.id, session_.exercises[0].id, exercise.id)
+    yield ids
+    with flask_app.app_context():
+        session_id, _, exercise_id = ids
+        doomed = db.session.get(WorkoutSession, session_id)
+        if doomed is not None:
+            db.session.delete(doomed)
+            db.session.commit()
+        doomed_exercise = db.session.get(Exercise, exercise_id)
+        if doomed_exercise is not None:
+            db.session.delete(doomed_exercise)
+            db.session.commit()
+
+
+def test_live_stepper_falls_back_when_the_exercise_has_no_increment(client, scratch_increment_exercise):
+    session_id, _, _ = scratch_increment_exercise
+    html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
+    assert 'data-step="2.5" data-decimals="1"' in html
+
+
+def test_live_stepper_uses_the_exercises_own_increment(client, scratch_increment_exercise):
+    from extensions import db
+    from models import Exercise
+    session_id, _, exercise_id = scratch_increment_exercise
+
+    with flask_app.app_context():
+        db.session.get(Exercise, exercise_id).weight_increment = 9.0
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
+    assert 'data-step="9.0" data-decimals="1"' in html
+    # The fallback must be gone, not merely joined -- this session has exactly
+    # one exercise, so a surviving 2.5 would mean the template still branches
+    # on is_unilateral instead of reading the resolved value.
+    assert 'data-step="2.5"' not in html
+
+
+def test_session_sheet_writes_the_increment_to_the_exercise(client, scratch_increment_exercise):
+    from extensions import db
+    from models import Exercise, SessionExercise
+    _, session_exercise_id, exercise_id = scratch_increment_exercise
+
+    response = client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
+                           data={'weight_increment': '9'})
+    assert response.status_code == 302
+
+    with flask_app.app_context():
+        assert db.session.get(Exercise, exercise_id).weight_increment == 9.0
+        # The session row is untouched: this field is per exercise, forever,
+        # unlike the rest time sitting directly above it in the same sheet.
+        assert db.session.get(SessionExercise, session_exercise_id).rest_seconds is None
+
+
+def test_session_sheet_clears_the_increment_back_to_the_default(client, scratch_increment_exercise):
+    from extensions import db
+    from models import Exercise
+    _, session_exercise_id, exercise_id = scratch_increment_exercise
+
+    client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
+                data={'weight_increment': '9'})
+    client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
+                data={'weight_increment': ''})
+
+    with flask_app.app_context():
+        assert db.session.get(Exercise, exercise_id).weight_increment is None
+
+
+def test_to_increment_is_comma_tolerant():
+    """A German keyboard produces '2,5', not '2.5' -- the docstring's claim,
+    unverified until now."""
+    from features.gym.routes import _to_increment
+    assert _to_increment('2,5') == 2.5
+
+
+@pytest.mark.parametrize('raw', ['-9', 'abc', '0', ''])
+def test_to_increment_rejects_non_positive_and_unparseable(raw):
+    from features.gym.routes import _to_increment
+    assert _to_increment(raw) is None
+
+
+def test_add_exercise_carries_the_increment_onto_the_new_row(client):
+    """gym_add_exercise is a write surface for weight_increment with no
+    other coverage -- a dropped/typo'd form field here would silently store
+    NULL and nothing would fail."""
+    from extensions import db
+    from models import Exercise
+
+    response = client.post('/gym/exercises/add', data={
+        'name': 'pytest add exercise increment',
+        'muscle_group': 'Brust',
+        'weight_increment': '5',
+    })
+    assert response.status_code in (302, 303)
+
+    exercise_id = None
+    try:
+        with flask_app.app_context():
+            exercise = Exercise.query.filter_by(name='pytest add exercise increment').first()
+            assert exercise is not None
+            exercise_id = exercise.id
+            assert exercise.weight_increment == 5.0
+            assert exercise.muscle_group == 'Brust'
+    finally:
+        if exercise_id is not None:
+            with flask_app.app_context():
+                doomed = db.session.get(Exercise, exercise_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_update_exercise_sets_and_clears_the_increment_without_losing_other_fields(client):
+    """gym_update_exercise writes weight_increment unconditionally, so this
+    also pins that name and muscle_group survive both writes -- the failure
+    mode this finding is about is a silent NULL on an unrelated field, not
+    just on the increment itself."""
+    from extensions import db
+    from models import Exercise
+
+    with flask_app.app_context():
+        exercise = Exercise(name='pytest update exercise increment', muscle_group='Rücken')
+        db.session.add(exercise)
+        db.session.commit()
+        exercise_id = exercise.id
+
+    try:
+        response = client.post(f'/gym/exercises/{exercise_id}/update', data={
+            'name': 'pytest update exercise increment',
+            'muscle_group': 'Rücken',
+            'weight_increment': '5',
+        })
+        assert response.status_code in (302, 303)
+        with flask_app.app_context():
+            exercise = db.session.get(Exercise, exercise_id)
+            assert exercise.weight_increment == 5.0
+            assert exercise.name == 'pytest update exercise increment'
+            assert exercise.muscle_group == 'Rücken'
+
+        response = client.post(f'/gym/exercises/{exercise_id}/update', data={
+            'name': 'pytest update exercise increment',
+            'muscle_group': 'Rücken',
+            'weight_increment': '',
+        })
+        assert response.status_code in (302, 303)
+        with flask_app.app_context():
+            exercise = db.session.get(Exercise, exercise_id)
+            assert exercise.weight_increment is None
+            assert exercise.name == 'pytest update exercise increment'
+            assert exercise.muscle_group == 'Rücken'
+    finally:
+        with flask_app.app_context():
+            doomed = db.session.get(Exercise, exercise_id)
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()

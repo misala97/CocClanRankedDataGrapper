@@ -142,10 +142,10 @@
     </p>
     {% endif %}
     {# The two numbers. No keyboard ever opens during a workout: the steppers
-       carry the value in a hidden input and the readout is text. The step is
-       2.5 kg, or 1.25 for a unilateral lift, mirroring stats._next_weight's
-       own increments -- the smallest pair of plates on most bars, and one side
-       at a time when only one side moves. #}
+       carry the value in a hidden input and the readout is text. The weight
+       step is the exercise's own increment, already resolved by the route
+       (see stats.resolve_increment) -- a bar moves in 2.5 kg, a dumbbell pair
+       often in 2, a selectorised stack in 9. Reps always step by 1. #}
     <form method="post"
           action="{{ url_for('gym.gym_toggle_set_complete', set_id=next_set.id) if next_set else url_for('gym.gym_add_set', session_exercise_id=live_se.id) }}"
           class="pair-form" id="live-set-form">
@@ -156,7 +156,7 @@
          session_detail.html is what protects it. #}
       {% if next_set %}<input type="hidden" name="completed" value="1">{% endif %}
       <div class="pair">
-        <div class="field-num" data-step="{{ 1.25 if live_se.exercise.is_unilateral else 2.5 }}" data-decimals="1">
+        <div class="field-num" data-step="{{ live_increment }}" data-decimals="1">
           <span class="field-num__val" data-role="display">{{ ("%.1f"|format(pair_weight)).replace(".", ",") }}</span>
           <span class="field-num__lbl">kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %}</span>
           <input type="hidden" name="weight" value="{{ pair_weight }}" data-role="value">

@@ -67,6 +67,19 @@ def _to_float(value, fallback=None):
         return fallback
 
 
+def _to_increment(value):
+    """A weight increment as typed, or None.
+
+    Comma-tolerant: `type=number` normalises to a dot, but the field degrades
+    to text without JS and a German keyboard produces `2,5`. Blank,
+    unparseable and non-positive all store NULL, which
+    stats.resolve_increment() reads as "use the default" -- so clearing the
+    field is the way to put an exercise back on 2.5 kg.
+    """
+    parsed = _to_float(str(value).replace(',', '.').strip())
+    return parsed if parsed and parsed > 0 else None
+
+
 def _to_int(value, fallback=None):
     try:
         return int(value)
@@ -240,11 +253,14 @@ def _seeded_sets(session_, exercise_id, position):
         ]
 
     exercise = db.session.get(Exercise, exercise_id)
-    is_unilateral = bool(exercise and exercise.is_unilateral)
+    increment = stats.resolve_increment(
+        exercise.weight_increment if exercise else None,
+        bool(exercise and exercise.is_unilateral),
+    )
     return [
         SessionSet(
             position=j,
-            weight=stats.deload_weight(prev['weight'], pct, is_unilateral),
+            weight=stats.deload_weight(prev['weight'], pct, increment),
             base_weight=prev['weight'],
             reps=prev['reps'],
             completed=False,
@@ -366,6 +382,7 @@ def _to_performed(session_exercise, completed_sets):
         name=exercise.name,
         muscle_group=exercise.muscle_group,
         is_unilateral=exercise.is_unilateral,
+        weight_increment=exercise.weight_increment,
         position=session_exercise.position,
         session_id=session_exercise.session_id,
         started_at=session_exercise.session.started_at,
@@ -761,6 +778,11 @@ def session_detail(session_id):
         visible_exercises=visible_exercises,
         live_se=live_se,
         live_id=live_se.id if live_se else None,
+        # Resolved here, not in Jinja: the template must never re-implement the
+        # fallback, or the two copies drift the moment DEFAULT_INCREMENT moves.
+        live_increment=stats.resolve_increment(
+            live_se.exercise.weight_increment, live_se.exercise.is_unilateral,
+        ) if live_se else stats.resolve_increment(None, False),
         live_index=(visible_exercises.index(live_se) + 1) if live_se else 0,
         tick_states=tick_states,
         sets_done=sets_done,
@@ -888,6 +910,25 @@ def gym_replace_session_exercise(session_exercise_id):
 def gym_update_session_exercise_rest(session_exercise_id):
     session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
     session_exercise.rest_seconds = _to_int(request.form.get('rest_seconds', ''))
+    session_id = session_exercise.session_id
+    db.session.commit()
+    return redirect(url_for('gym.session_detail', session_id=session_id))
+
+
+@gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/increment', methods=['POST'])
+@login_required
+def gym_update_exercise_increment(session_exercise_id):
+    """Write the EXERCISE's increment from inside a running session.
+
+    Reached from the per-exercise sheet, beside the rest field -- but unlike
+    rest, which is genuinely per session, a loadable step is a property of the
+    equipment and so lands on the Exercise itself and stays. Keyed on the
+    SessionExercise regardless, because that is the id the sheet has and it
+    keeps the redirect back to the workout trivial.
+    """
+    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise.exercise.weight_increment = _to_increment(
+        request.form.get('weight_increment', ''))
     session_id = session_exercise.session_id
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_id))
@@ -1189,7 +1230,10 @@ def gym_toggle_deload(session_id):
     )
     if not has_completed_set:
         for session_exercise in session_.exercises:
-            is_unilateral = session_exercise.exercise.is_unilateral
+            increment = stats.resolve_increment(
+                session_exercise.exercise.weight_increment,
+                session_exercise.exercise.is_unilateral,
+            )
             for s in session_exercise.sets:
                 if on:
                     # Capture the baseline the first time only. Re-applying the
@@ -1199,7 +1243,7 @@ def gym_toggle_deload(session_id):
                     # 32.5 kg instead of 47.5 kg, and a double-tap compounds.
                     if s.base_weight is None:
                         s.base_weight = s.weight
-                    s.weight = stats.deload_weight(s.base_weight, pct, is_unilateral)
+                    s.weight = stats.deload_weight(s.base_weight, pct, increment)
                 elif s.base_weight is not None:
                     s.weight = s.base_weight
                     s.base_weight = None
@@ -2090,6 +2134,7 @@ def gym_add_exercise():
         name=name,
         muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
         default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+        weight_increment=_to_increment(request.form.get('weight_increment', '')),
         is_unilateral=request.form.get('is_unilateral') == 'on',
     )
     db.session.add(exercise)
@@ -2114,6 +2159,7 @@ def gym_update_exercise(exercise_id):
             exercise.name = new_name
     exercise.muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''), current=exercise.muscle_group)
     exercise.default_rest_seconds = _to_int(request.form.get('default_rest_seconds', ''))
+    exercise.weight_increment = _to_increment(request.form.get('weight_increment', ''))
     exercise.is_unilateral = request.form.get('is_unilateral') == 'on'
     db.session.commit()
     return redirect(url_for(
