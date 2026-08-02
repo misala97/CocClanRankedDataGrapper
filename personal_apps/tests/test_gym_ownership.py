@@ -1,12 +1,20 @@
 """Ownership of gym data.
 
-The IDOR table test at the bottom of this file is the durable guarantee that
-no gym route leaks another user's data: it loops over every route that takes an
-object id, so a new unscoped route fails the moment it is added.
+Four hand-maintained tables (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES,
+CATALOGUE_ADMIN_ROUTES) drive the parametrized tests below, each exercising one
+route's ownership check. On their own the tables are just literals -- a new
+id-taking route is simply absent from them until someone remembers to add it.
+test_every_id_taking_gym_route_is_covered_by_a_table closes that gap: it derives
+the actual set of id-taking gym routes from the app's own url_map and fails,
+naming the route, the moment one exists in the app but not in any table (or the
+two-route allowlist for the shared catalogue's GET pages, which are covered by
+leak tests instead of a 404 table).
 
 Runs against the real local development database. Every row created here is
 deleted in a finally.
 """
+import re
+
 import pytest
 
 from app import app as flask_app
@@ -336,6 +344,54 @@ def test_a_non_admin_cannot_edit_the_shared_catalogue(
     url = url_template.format(two_users[id_key])
     response = intruder_client.open(url, method=method)
     assert response.status_code == 403, f'{method} {url} returned {response.status_code}'
+
+
+# The tables hold Flask's route strings with '<int:name>' replaced by '{}', so
+# that a route can be filled in with .format(some_id). This is the inverse
+# substitution, applied to url_map's rules to bring them into the same shape.
+_INT_CONVERTER = re.compile(r'<int:[^>]+>')
+
+# The shared catalogue's two GET routes take an id but have no owner to check
+# (Decision 2 in the multi-user design spec) -- they are covered by
+# test_the_shared_exercise_page_shows_no_foreign_history and
+# test_the_progress_json_carries_no_foreign_history instead of a 404 table.
+SHARED_CATALOGUE_GET_ROUTES = {
+    ('GET', '/gym/exercises/{}'),
+    ('GET', '/gym/exercises/{}/progress.json'),
+}
+
+
+def _id_taking_gym_routes():
+    """(method, url_template) for every gym-blueprint route with an int id,
+    read straight from the running app rather than hand-maintained."""
+    routes = set()
+    for rule in flask_app.url_map.iter_rules():
+        if not rule.endpoint.startswith('gym.') or '<int:' not in rule.rule:
+            continue
+        template = _INT_CONVERTER.sub('{}', rule.rule)
+        # HEAD/OPTIONS are Flask's automatic additions to a GET/POST rule, not
+        # routes anyone declared -- the tables never carry them either.
+        for method in rule.methods - {'HEAD', 'OPTIONS'}:
+            routes.add((method, template))
+    return routes
+
+
+def test_every_id_taking_gym_route_is_covered_by_a_table():
+    """Makes this file's central claim true: a new id-taking gym route that
+    lands on no table below must fail here, naming itself, instead of the
+    suite quietly staying green."""
+    covered = {
+        (method, url_template)
+        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, CATALOGUE_ADMIN_ROUTES)
+        for method, url_template, _id_key in table
+    } | SHARED_CATALOGUE_GET_ROUTES
+
+    actual = _id_taking_gym_routes()
+    assert actual, 'route discovery found nothing -- the <int:> normalisation is broken'
+
+    uncovered = actual - covered
+    assert not uncovered, 'gym route(s) with an int id but no ownership table entry: ' + ', '.join(
+        f'{method} {url_template}' for method, url_template in sorted(uncovered))
 
 
 def test_the_shared_exercise_survived_the_rejected_writes(two_users):
