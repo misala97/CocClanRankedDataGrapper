@@ -41,17 +41,28 @@ def test_delete_user_removes_the_account_and_its_templates(throwaway_user):
     from models import AppUser, WorkoutTemplate
     from scripts.delete_user import delete_user
 
-    with flask_app.app_context():
-        db.session.add(WorkoutTemplate(name='pytest deletable template',
-                                       user_id=throwaway_user))
-        db.session.commit()
+    template_id = None
+    try:
+        with flask_app.app_context():
+            template = WorkoutTemplate(name='pytest deletable template',
+                                       user_id=throwaway_user)
+            db.session.add(template)
+            db.session.commit()
+            template_id = template.id
 
-    with flask_app.app_context():
-        delete_user('pytest deletable', commit=True)
+        with flask_app.app_context():
+            delete_user('pytest deletable', commit=True)
 
-    with flask_app.app_context():
-        assert db.session.get(AppUser, throwaway_user) is None
-        assert WorkoutTemplate.query.filter_by(user_id=throwaway_user).count() == 0
+        with flask_app.app_context():
+            assert db.session.get(AppUser, throwaway_user) is None
+            assert WorkoutTemplate.query.filter_by(user_id=throwaway_user).count() == 0
+    finally:
+        with flask_app.app_context():
+            if template_id is not None:
+                doomed = db.session.get(WorkoutTemplate, template_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
 
 
 def test_delete_user_refuses_a_user_with_a_logged_session(throwaway_user):
@@ -59,27 +70,39 @@ def test_delete_user_refuses_a_user_with_a_logged_session(throwaway_user):
     someone's training history because a username was mistyped."""
     import datetime as dt
     from extensions import db
-    from models import AppUser, WorkoutSession
+    from models import AppUser, WorkoutSession, WorkoutTemplate
     from scripts.delete_user import delete_user
 
     session_id = None
+    template_id = None
     try:
         with flask_app.app_context():
             logged = WorkoutSession(name='pytest deletable session',
                                     started_at=dt.datetime.utcnow(),
                                     user_id=throwaway_user)
             db.session.add(logged)
+            template = WorkoutTemplate(name='pytest deletable template',
+                                       user_id=throwaway_user)
+            db.session.add(template)
             db.session.commit()
             session_id = logged.id
+            template_id = template.id
 
         with flask_app.app_context():
-            with pytest.raises(SystemExit):
+            with pytest.raises(SystemExit) as excinfo:
                 delete_user('pytest deletable', commit=True)
+            assert 'refusing' in str(excinfo.value)
             assert db.session.get(AppUser, throwaway_user) is not None
+            assert db.session.get(WorkoutTemplate, template_id) is not None
     finally:
         with flask_app.app_context():
             if session_id is not None:
                 doomed = db.session.get(WorkoutSession, session_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if template_id is not None:
+                doomed = db.session.get(WorkoutTemplate, template_id)
                 if doomed is not None:
                     db.session.delete(doomed)
                     db.session.commit()
