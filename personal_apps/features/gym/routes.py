@@ -13,8 +13,8 @@ from models import (
 from auth import login_required, admin_required
 from features.gym import stats
 from features.gym.scope import (
-    current_user_id, my_sessions, my_templates,
-    owned_session, owned_session_exercise, owned_set, owned_template,
+    current_user_id, my_exercises, my_sessions, my_templates,
+    owned_exercise, owned_session, owned_session_exercise, owned_set, owned_template,
 )
 from features.gym.push import is_valid_push_endpoint
 from . import analytics
@@ -485,7 +485,7 @@ def gym_heute():
     catalogue_groups = (
         {group for group in MUSCLE_GROUPS if group not in NON_MUSCLE_GROUPS}
         | {row.muscle_group or stats.NO_GROUP_LABEL
-           for row in db.session.query(Exercise.muscle_group).distinct()}
+           for row in my_exercises().with_entities(Exercise.muscle_group).distinct()}
     )
 
     # The one bulk load this whole page runs on -- every completed set ever
@@ -755,7 +755,7 @@ def session_detail(session_id):
             for s in se.sets:
                 if s.completed and stats.is_new_best(s.weight, s.reps, prior):
                     record_set_ids.add(s.id)
-    exercises = Exercise.query.order_by(Exercise.name).all()
+    exercises = my_exercises().order_by(Exercise.name).all()
 
     # The live exercise: the first visible, non-skipped one that is not yet
     # fully logged, or the last visible one when everything is done.
@@ -1739,7 +1739,7 @@ def gym_export():
 @login_required
 def gym_uebungen():
     now = dt.datetime.utcnow()
-    exercises = Exercise.query.order_by(Exercise.name).all()
+    exercises = my_exercises().order_by(Exercise.name).all()
 
     # The one bulk load this whole page runs on -- every completed set ever
     # logged, across the whole catalogue. Every exercise's state/last-done/

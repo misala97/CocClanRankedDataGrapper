@@ -59,3 +59,63 @@ def test_two_users_can_hold_an_exercise_with_the_same_name():
                 if doomed_user is not None:
                     db.session.delete(doomed_user)
                     db.session.commit()
+
+
+@pytest.fixture()
+def two_lifters():
+    """An admin-owned exercise and a second account that owns nothing.
+
+    Yields {'owner_id', 'stranger_id', 'exercise_id'}.
+    """
+    from extensions import db
+    from models import AppUser, Exercise
+    from werkzeug.security import generate_password_hash
+
+    ids = {}
+    with flask_app.app_context():
+        stranger = AppUser(username='pytest catalogue stranger',
+                           password_hash=generate_password_hash('irrelevant'),
+                           is_admin=False)
+        db.session.add(stranger)
+        db.session.flush()
+        exercise = Exercise(name='pytest owned lift', muscle_group='Brust',
+                            weight_increment=9.0, user_id=_admin_id())
+        db.session.add(exercise)
+        db.session.commit()
+        ids = {'owner_id': _admin_id(), 'stranger_id': stranger.id,
+               'exercise_id': exercise.id}
+    yield ids
+    with flask_app.app_context():
+        doomed = db.session.get(Exercise, ids['exercise_id'])
+        if doomed is not None:
+            db.session.delete(doomed)
+            db.session.commit()
+        doomed_user = db.session.get(AppUser, ids['stranger_id'])
+        if doomed_user is not None:
+            db.session.delete(doomed_user)
+            db.session.commit()
+
+
+@pytest.fixture()
+def stranger_client(two_lifters):
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as test_client:
+        with test_client.session_transaction() as flask_session:
+            flask_session['user_id'] = two_lifters['stranger_id']
+        yield test_client
+
+
+def test_a_new_accounts_exercise_list_is_empty(stranger_client, two_lifters):
+    """The whole point of the change: she opens the picker and sees nothing of
+    theirs, not thirty lifts she will never do."""
+    body = stranger_client.get('/gym/uebungen').get_data(as_text=True)
+    assert 'pytest owned lift' not in body
+
+
+def test_the_owner_still_sees_their_own_exercise(two_lifters):
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as owner_client:
+        with owner_client.session_transaction() as flask_session:
+            flask_session['user_id'] = two_lifters['owner_id']
+        body = owner_client.get('/gym/uebungen').get_data(as_text=True)
+    assert 'pytest owned lift' in body, 'scoping hid the owner from their own catalogue'
