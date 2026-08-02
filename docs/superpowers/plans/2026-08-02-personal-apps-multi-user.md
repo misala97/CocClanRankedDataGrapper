@@ -2345,8 +2345,8 @@ Not a task — run by the author once the ten tasks are merged. Steps 2 and 5 ha
 
 1. Confirm the full suite passes: `python -m pytest tests/ -v`
 2. **Back up the production database.** First migration here that rewrites ownership of every row.
-3. Merge `dev_personal` to `main`, deploy, then on the VPS: `flask db upgrade`
-4. Restart the web service **and** the notifier daemon. `push.py` changed; a stale daemon keeps the old broadcast behaviour and buzzes the wrong phone.
+3. **Confirm `PERSONAL_ADMIN_USER` and `PERSONAL_ADMIN_PASS` are still set in the VPS `.env`** before upgrading. The `a4c81f2e5b76` migration raises without them, and the deploy would then restart the web service onto a schema with no `app_user` — locking `/login` with no way back in except a shell. One `grep`, and the only precondition here whose failure needs SSH to recover.
+4. Merge `dev_personal` to `main` and run the VPS deploy script. It already covers `flask db upgrade`, the gunicorn restart, and the `systemctl stop`/`start` for `run_gym_notifier.py`. That last one matters: the notifier is a long-lived separate process holding `push.py` in memory, so without the restart it would keep the pre-partition `send_push_to_all` live — fanning out to every subscription row while the code on disk looks correct.
 5. Create the partner's account at `/admin/users`.
 6. Copy the two templates, once, from a Flask shell. `SRC` is the author's user id, `DST` the partner's:
 
