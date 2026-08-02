@@ -4,10 +4,11 @@ The single place that knows how a gym object is tied to a user. Routes call
 these instead of db.get_or_404 -- doing the check inline at 25 call sites is
 how a leak arrives on the twenty-sixth.
 
-Ownership lives on three roots (WorkoutSession, WorkoutTemplate,
-PushSubscription); everything else inherits through its parent foreign key.
-The exercise catalogue is deliberately shared and has no owner, so there is
-no loader for it here -- see the multi-user design spec, decision 2.
+Ownership lives on four roots (WorkoutSession, WorkoutTemplate,
+PushSubscription, Exercise); everything else inherits through its parent foreign key.
+Exercises became per-user on 2026-08-02: a third lifter joined who trains at
+the same gym but uses none of the same exercises, so one global list put
+everyone's lifts in everyone's picker.
 
 Every failure is 404, never 403: a 403 confirms the object exists.
 """
