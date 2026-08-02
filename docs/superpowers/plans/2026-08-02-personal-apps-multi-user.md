@@ -706,7 +706,7 @@ def test_every_pre_existing_row_was_backfilled_to_the_admin():
     are deliberately owned by throwaway users, and this assertion is about what
     the migration did to the data that already existed."""
     import sqlalchemy as sa
-    from models import AppUser, WorkoutSession, WorkoutTemplate
+    from models import AppUser, PushSubscription, WorkoutSession, WorkoutTemplate
     with flask_app.app_context():
         admin = AppUser.query.filter_by(is_admin=True).order_by(AppUser.id).first()
         assert admin is not None
@@ -719,6 +719,15 @@ def test_every_pre_existing_row_was_backfilled_to_the_admin():
                 sa.or_(model.name.is_(None), model.name.notlike('pytest%')),
             ).count()
             assert orphans == 0, f'{model.__name__} has rows not owned by the admin'
+        # The migration backfills all three roots from one table-agnostic loop,
+        # so leaving this one unchecked would let a fault isolated to it pass
+        # silently. PushSubscription has no name column -- its scratch rows are
+        # identified by the endpoint path this suite mints.
+        orphan_subscriptions = PushSubscription.query.filter(
+            PushSubscription.user_id != admin.id,
+            PushSubscription.endpoint.notlike('%/pytest/%'),
+        ).count()
+        assert orphan_subscriptions == 0, 'PushSubscription has rows not owned by the admin'
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
