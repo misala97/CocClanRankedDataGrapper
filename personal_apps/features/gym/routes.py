@@ -1385,6 +1385,18 @@ def gym_save_as_template(session_id):
         template = WorkoutTemplate(name=template_name, user_id=current_user_id())
         template.exercises.extend(_template_exercises_from_session(session_))
         db.session.add(template)
+        # Start reads "last done" off WorkoutSession.template_id, so a routine
+        # saved from a workout you have just finished announced itself as never
+        # performed: the one instance of it that certainly exists was not
+        # pointing at it.
+        #
+        # Only an unlinked session is claimed. Re-pointing one that already
+        # belongs to a routine would quietly remove it from that routine's
+        # history and move its last-done date -- and on the finished page this
+        # prompt is only offered for a freeform session anyway.
+        if session_.template_id is None:
+            db.session.flush()
+            session_.template_id = template.id
         db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 

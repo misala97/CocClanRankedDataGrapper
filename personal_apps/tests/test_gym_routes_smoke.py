@@ -1024,3 +1024,102 @@ def test_every_gym_form_posts_fields_its_own_route_reads():
                                     f'which never reads it')
 
     assert not problems, 'form/route field mismatch:\n  ' + '\n  '.join(problems)
+
+
+def _finished_freeform_session(name):
+    """A finished session with one completed set and no template. Returns
+    (session_id, exercise_id)."""
+    import datetime as dt
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    exercise = Exercise(name=f'{name} lift', user_id=_admin_id())
+    db.session.add(exercise)
+    db.session.flush()
+    started = dt.datetime.utcnow() - dt.timedelta(hours=1)
+    done = WorkoutSession(name=name, started_at=started,
+                          finished_at=dt.datetime.utcnow(), user_id=_admin_id())
+    se = SessionExercise(exercise_id=exercise.id, position=1)
+    se.sets = [SessionSet(position=1, weight=40.0, reps=8, completed=True)]
+    done.exercises.append(se)
+    db.session.add(done)
+    db.session.commit()
+    return done.id, exercise.id
+
+
+def _drop(session_id, exercise_id, template_id=None):
+    from extensions import db
+    from models import Exercise, WorkoutSession, WorkoutTemplate
+    with flask_app.app_context():
+        for model, row_id in ((WorkoutTemplate, template_id), (WorkoutSession, session_id)):
+            if row_id:
+                doomed = db.session.get(model, row_id)
+                if doomed is not None:
+                    if model is WorkoutSession:
+                        doomed.resting_set_id = None
+                        db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+        if exercise_id:
+            doomed = db.session.get(Exercise, exercise_id)
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()
+
+
+def test_saving_a_session_as_a_template_counts_as_having_done_it(client):
+    """Start reads "last done" from WorkoutSession.template_id, and a freeform
+    session has none -- so a routine created from a workout you just finished
+    announced itself as never performed. The session it was built from is the
+    one instance of it that certainly exists."""
+    from extensions import db
+    from models import WorkoutSession, WorkoutTemplate
+
+    sid = ex_id = tpl_id = None
+    try:
+        with flask_app.app_context():
+            sid, ex_id = _finished_freeform_session('pytest neverdone')
+
+        client.post(f'/gym/session/{sid}/save_as_template',
+                    data={'template_name': 'pytest neverdone routine'})
+
+        with flask_app.app_context():
+            tpl = WorkoutTemplate.query.filter_by(name='pytest neverdone routine').one()
+            tpl_id = tpl.id
+            session_ = db.session.get(WorkoutSession, sid)
+            assert session_.template_id == tpl_id, 'the source session was left unlinked'
+
+        html = client.get('/gym').get_data(as_text=True)
+        block = html.split('pytest neverdone routine', 1)[1][:400]
+        assert 'Noch nie' not in block, 'Start still calls the routine never performed'
+    finally:
+        _drop(sid, ex_id, tpl_id)
+
+
+def test_saving_as_a_new_template_does_not_steal_a_session_from_its_routine(client):
+    """Only a session with no routine gets linked. Re-pointing one that already
+    belongs to a template would quietly remove it from that template's history
+    and change when Start thinks that routine was last done."""
+    from extensions import db
+    from models import WorkoutSession, WorkoutTemplate
+
+    sid = ex_id = new_id = old_id = None
+    try:
+        with flask_app.app_context():
+            sid, ex_id = _finished_freeform_session('pytest owned already')
+            original = WorkoutTemplate(name='pytest original routine', user_id=_admin_id())
+            db.session.add(original)
+            db.session.flush()
+            old_id = original.id
+            db.session.get(WorkoutSession, sid).template_id = old_id
+            db.session.commit()
+
+        client.post(f'/gym/session/{sid}/save_as_template',
+                    data={'template_name': 'pytest second routine'})
+
+        with flask_app.app_context():
+            new_id = WorkoutTemplate.query.filter_by(name='pytest second routine').one().id
+            assert db.session.get(WorkoutSession, sid).template_id == old_id, \
+                'the session was moved off the routine it already belonged to'
+    finally:
+        _drop(sid, ex_id, new_id)
+        _drop(None, None, old_id)
