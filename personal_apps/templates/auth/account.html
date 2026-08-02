@@ -1,27 +1,108 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Konto</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <title>Konto – Personal Apps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        /* Same tokens as auth/login.html -- these are siblings and should not
+           look like they came from different apps. */
+        :root {
+            --bg: #0b0d14; --surface: #131722; --surf2: #1a1f2e;
+            --border: #272c3d; --text: #eef0f7; --muted: #8b91a7;
+            --accent: #6d6af6; --acc2: #22d3ee; --red: #fb7185; --green: #34d399;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: var(--bg); color: var(--text);
+            font-family: 'Inter', Arial, sans-serif;
+            padding: 24px; position: relative;
+        }
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse 50% 50% at 20% 20%, rgba(109,106,246,0.14) 0%, transparent 65%),
+                radial-gradient(ellipse 45% 45% at 85% 80%, rgba(34,211,238,0.10) 0%, transparent 65%);
+        }
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 20px; padding: 40px;
+            width: 100%; max-width: 400px; position: relative; z-index: 1;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.45);
+        }
+        h1 { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+        .who { font-size: 13px; color: var(--muted); margin: 0 0 26px; }
+        .who strong { color: var(--text); font-weight: 600; }
+        .form-group { margin-bottom: 18px; }
+        label {
+            display: block; font-size: 12px; font-weight: 600; color: var(--muted);
+            margin-bottom: 7px; letter-spacing: 0.4px; text-transform: uppercase;
+        }
+        input[type="password"] {
+            width: 100%; padding: 11px 14px;
+            background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 10px; color: var(--text); font-size: 14px;
+            font-family: inherit; outline: none; transition: border-color 0.15s;
+        }
+        input:focus { border-color: var(--accent); }
+        .error-msg, .ok-msg {
+            border-radius: 10px; padding: 10px 14px;
+            font-size: 13px; margin-bottom: 18px;
+        }
+        .error-msg {
+            background: rgba(251,113,133,0.08); border: 1px solid rgba(251,113,133,0.25); color: var(--red);
+        }
+        .ok-msg {
+            background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.25); color: var(--green);
+        }
+        .btn {
+            width: 100%; padding: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--acc2));
+            border: none; border-radius: 999px;
+            font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700;
+            letter-spacing: 0.3px; color: #0b0d14; cursor: pointer; transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .back-link {
+            display: block; margin-top: 22px; text-align: center;
+            font-size: 13px; color: var(--muted); text-decoration: none;
+            transition: color 0.15s;
+        }
+        .back-link:hover { color: var(--text); }
+    </style>
 </head>
 <body>
+<div class="card">
     <h1>Konto</h1>
-    <p>Angemeldet als {{ user.username }}.</p>
-    {% if error %}<p role="alert">{{ error }}</p>{% endif %}
-    {% if done %}<p role="status">Passwort geändert.</p>{% endif %}
+    <p class="who">Angemeldet als <strong>{{ user.username }}</strong>.</p>
 
-    <h2>Passwort ändern</h2>
+    {% if error %}
+    <div class="error-msg">⚠ {{ error }}</div>
+    {% endif %}
+    {% if done %}
+    <div class="ok-msg" role="status">✓ Passwort geändert.</div>
+    {% endif %}
+
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="current_password">Aktuelles Passwort</label>
-        <input type="password" id="current_password" name="current_password"
-               autocomplete="current-password" required>
-        <label for="new_password">Neues Passwort</label>
-        <input type="password" id="new_password" name="new_password"
-               autocomplete="new-password" required>
-        <button type="submit">Ändern</button>
+        <div class="form-group">
+            <label for="current_password">Aktuelles Passwort</label>
+            <input type="password" id="current_password" name="current_password"
+                   autocomplete="current-password" required>
+        </div>
+        <div class="form-group">
+            <label for="new_password">Neues Passwort</label>
+            <input type="password" id="new_password" name="new_password"
+                   autocomplete="new-password" required>
+        </div>
+        <button type="submit" class="btn">Ändern</button>
     </form>
-    <p><a href="{{ url_for('index') }}">Zurück</a></p>
+
+    <a class="back-link" href="{{ url_for('index') }}">← Zurück zur Übersicht</a>
+</div>
 </body>
 </html>

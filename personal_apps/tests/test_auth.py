@@ -306,3 +306,137 @@ def test_a_short_password_is_refused(member_client, temp_user):
     with flask_app.app_context():
         stored = db.session.get(AppUser, user_id)
         assert check_password_hash(stored.password_hash, old_password)
+
+
+# --- editing an existing account -------------------------------------------
+# Decision 3 originally said "no edit UI, rare operations go through SQL".
+# The author reversed that: renaming someone and resetting a forgotten password
+# are not rare enough to be worth a shell.
+
+
+def _admin_session():
+    """A logged-in admin client plus its CSRF token, minted by a real GET."""
+    flask_app.config['TESTING'] = True
+    admin_client = flask_app.test_client()
+    with admin_client.session_transaction() as flask_session:
+        flask_session['user_id'] = _admin_id()
+    assert admin_client.get('/admin/users').status_code == 200
+    with admin_client.session_transaction() as flask_session:
+        csrf = flask_session['csrf_token']
+    return admin_client, csrf
+
+
+def test_an_admin_can_rename_a_user(temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, _, password = temp_user
+
+    admin_client, csrf = _admin_session()
+    response = admin_client.post(f'/admin/users/{user_id}/update', data={
+        'username': 'pytest renamed user', 'password': '', 'csrf_token': csrf})
+    assert response.status_code in (302, 303)
+
+    with flask_app.app_context():
+        stored = db.session.get(AppUser, user_id)
+        assert stored.username == 'pytest renamed user'
+        # A blank password field means "leave it alone" -- renaming must not
+        # silently invalidate the password the user already has.
+        assert check_password_hash(stored.password_hash, password)
+
+
+def test_an_admin_can_reset_a_password_without_renaming(temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, username, _ = temp_user
+
+    admin_client, csrf = _admin_session()
+    response = admin_client.post(f'/admin/users/{user_id}/update', data={
+        'username': username, 'password': 'ein neues langes', 'csrf_token': csrf})
+    assert response.status_code in (302, 303)
+
+    with flask_app.app_context():
+        stored = db.session.get(AppUser, user_id)
+        assert stored.username == username
+        assert check_password_hash(stored.password_hash, 'ein neues langes')
+
+
+def test_renaming_to_an_existing_username_is_refused(temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, username, _ = temp_user
+
+    with flask_app.app_context():
+        taken = db.session.get(AppUser, _admin_id()).username
+
+    admin_client, csrf = _admin_session()
+    response = admin_client.post(f'/admin/users/{user_id}/update', data={
+        'username': taken, 'password': '', 'csrf_token': csrf})
+    assert response.status_code == 200
+    assert 'schon vergeben' in response.get_data(as_text=True)
+
+    with flask_app.app_context():
+        assert db.session.get(AppUser, user_id).username == username
+
+
+def test_keeping_your_own_username_is_not_a_collision(temp_user):
+    """The uniqueness check must exclude the row being edited, or resetting a
+    password without renaming would report the user colliding with themselves."""
+    from extensions import db
+    from models import AppUser
+    user_id, username, _ = temp_user
+
+    admin_client, csrf = _admin_session()
+    response = admin_client.post(f'/admin/users/{user_id}/update', data={
+        'username': username, 'password': 'noch ein langes', 'csrf_token': csrf})
+    assert response.status_code in (302, 303)
+    with flask_app.app_context():
+        assert check_password_hash(db.session.get(AppUser, user_id).password_hash,
+                                   'noch ein langes')
+
+
+def test_a_short_replacement_password_is_refused(temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, username, password = temp_user
+
+    admin_client, csrf = _admin_session()
+    response = admin_client.post(f'/admin/users/{user_id}/update', data={
+        'username': username, 'password': 'kurz', 'csrf_token': csrf})
+    assert response.status_code == 200
+
+    with flask_app.app_context():
+        assert check_password_hash(db.session.get(AppUser, user_id).password_hash, password)
+
+
+def test_editing_a_user_without_a_csrf_token_is_refused(temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, username, _ = temp_user
+
+    admin_client, _ = _admin_session()
+    response = admin_client.post(f'/admin/users/{user_id}/update', data={
+        'username': 'pytest forged rename', 'password': ''})
+    assert response.status_code == 400
+
+    with flask_app.app_context():
+        assert db.session.get(AppUser, user_id).username == username
+
+
+def test_a_non_admin_cannot_edit_users(member_client, temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, username, _ = temp_user
+
+    response = member_client.post(f'/admin/users/{user_id}/update', data={
+        'username': 'pytest escalation'}, base_url=FULL_ACCESS_URL)
+    assert response.status_code == 403
+
+    with flask_app.app_context():
+        assert db.session.get(AppUser, user_id).username == username
+
+
+def test_editing_a_user_that_does_not_exist_is_404(temp_user):
+    admin_client, csrf = _admin_session()
+    response = admin_client.post('/admin/users/999999/update', data={
+        'username': 'pytest ghost', 'password': '', 'csrf_token': csrf})
+    assert response.status_code == 404
