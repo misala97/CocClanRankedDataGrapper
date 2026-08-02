@@ -1402,6 +1402,77 @@ def test_the_shared_exercise_survived_the_rejected_writes(two_users):
     from models import Exercise
     with flask_app.app_context():
         assert db.session.get(Exercise, two_users['exercise_id']) is not None
+
+
+def test_starting_from_another_users_template_seeds_nothing_and_stores_no_link(two_users):
+    """The indirect path into a template: gym_start took template_id straight
+    from the form, so a stranger could seed a session from a private template
+    and the row kept the link, which update_template would then follow back."""
+    from extensions import db
+    from models import WorkoutSession
+    created_id = None
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as client_b:
+        with client_b.session_transaction() as flask_session:
+            flask_session['user_id'] = two_users['intruder_id']
+        response = client_b.post('/gym/start', data={
+            'name': 'pytest stolen template start',
+            'template_id': str(two_users['template_id']),
+        })
+        assert response.status_code in (302, 303)
+    try:
+        with flask_app.app_context():
+            created = WorkoutSession.query.filter_by(name='pytest stolen template start').one()
+            created_id = created.id
+            assert created.template_id is None, 'stored a link to a template it does not own'
+            assert created.exercises == [], 'seeded from another user\'s template'
+    finally:
+        with flask_app.app_context():
+            if created_id is not None:
+                doomed = db.session.get(WorkoutSession, created_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_update_template_cannot_overwrite_a_template_it_does_not_own(two_users):
+    """The write half of the same chain. Reaches update_template with a session
+    whose template_id points at A's template -- the state a pre-fix gym_start
+    would have produced, forced directly here so the guard is tested even
+    though that path can no longer create it."""
+    from extensions import db
+    from models import TemplateExercise, WorkoutSession, WorkoutTemplate
+    created_id = None
+    flask_app.config['TESTING'] = True
+    with flask_app.app_context():
+        victim = db.session.get(WorkoutTemplate, two_users['template_id'])
+        before = [(te.exercise_id, te.position) for te in victim.exercises]
+        assert before, 'fixture template should have exercises to lose'
+        theirs = WorkoutSession(name='pytest forged link', user_id=two_users['intruder_id'],
+                                template_id=two_users['template_id'])
+        db.session.add(theirs)
+        db.session.commit()
+        created_id = theirs.id
+    try:
+        with flask_app.test_client() as client_b:
+            with client_b.session_transaction() as flask_session:
+                flask_session['user_id'] = two_users['intruder_id']
+            client_b.post(f'/gym/session/{created_id}/update_template')
+        with flask_app.app_context():
+            victim = db.session.get(WorkoutTemplate, two_users['template_id'])
+            after = [(te.exercise_id, te.position) for te in victim.exercises]
+            assert after == before, 'a stranger overwrote another user\'s template'
+    finally:
+        with flask_app.app_context():
+            if created_id is not None:
+                doomed = db.session.get(WorkoutSession, created_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1437,19 +1508,52 @@ becomes:
         template = my_templates().filter_by(id=session_.template_id).first()
 ```
 
-Line 564, inside `gym_start`, loads the template a session starts from:
+`gym_start` is the cross-user foreign-key guard from the spec, and it needs a small restructure rather than a one-line swap. It currently stores `template_id` straight from the form *before* looking the template up, so an unowned id is persisted on the session row even when the seeding is skipped — the session would claim to have come from a template its owner cannot see, and `gym_update_template` later follows that same `session_.template_id`.
+
+Replace:
 
 ```python
+    template_id = request.form.get('template_id', type=int)
+    name = request.form.get('name', '').strip() or None
+    session_ = WorkoutSession(name=name, template_id=template_id or None,
+                              user_id=current_user_id())
+
+    if template_id:
         template = db.session.get(WorkoutTemplate, template_id)
+        if template:
+```
+
+with:
+
+```python
+    template_id = request.form.get('template_id', type=int)
+    name = request.form.get('name', '').strip() or None
+    # Resolved before the session is built, and scoped to the caller: a
+    # template_id belonging to someone else must not be seeded from *or*
+    # stored, or the row keeps a link that update_template would later follow
+    # back into a template this user cannot see.
+    template = my_templates().filter_by(id=template_id).first() if template_id else None
+    session_ = WorkoutSession(name=name, template_id=template.id if template else None,
+                              user_id=current_user_id())
+
+    if template:
+```
+
+The body under `if template:` (the name fallback and the exercise-seeding loop) is unchanged — only its guard and indentation level change, since the two nested `if`s collapse into one.
+
+`gym_update_template` loads the session's own template:
+
+```python
+        template = db.session.get(WorkoutTemplate, session_.template_id)
 ```
 
 becomes:
 
 ```python
-        template = my_templates().filter_by(id=template_id).first()
+        template = my_templates().filter_by(id=session_.template_id).first()
 ```
 
-This is the cross-user foreign-key guard from the spec: a session can only ever be started from a template the caller owns.
+Its existing `if template:` guard then makes a foreign template a no-op rather than an overwrite. Both halves are needed: the `gym_start` fix stops the link being created, this one stops any link that already exists in the database from being followed.
 
 Verify no unscoped template loads remain:
 
