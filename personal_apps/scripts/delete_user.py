@@ -39,7 +39,13 @@ def delete_user(username, commit):
 
     templates = WorkoutTemplate.query.filter_by(user_id=user.id).all()
     subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
-    exercises = Exercise.query.filter_by(user_id=user.id).all()
+    # gym_exercises only gains user_id in migration c8e5f14a9b32, and this
+    # script has to run once BEFORE that migration -- clearing the way for it
+    # is the reason it exists -- as well as every time after. So it asks
+    # whether the column is there rather than assuming. Pre-migration there is
+    # no per-user catalogue to delete, and the count below correctly reads 0.
+    exercises = (Exercise.query.filter_by(user_id=user.id).all()
+                 if hasattr(Exercise, 'user_id') else [])
 
     lines = [f'{username} (id {user.id})',
              f'  {len(templates)} template(s)',
