@@ -173,3 +173,34 @@ def test_the_finished_page_says_nothing_about_rest_without_stamps(client, scratc
 
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
     assert 'Pause' not in html, 'claimed a rest figure with no timestamps to build it from'
+
+
+def test_statistik_reports_planned_against_actual_rest(client, finished_with_rest):
+    """The fixture plans 150 s and takes 180 and 120, so the medians are
+    2:30 planned against 2:30 actual -- the point is that both are stated."""
+    html = client.get('/gym/statistik').get_data(as_text=True)
+    assert 'Wie lange pausierst du' in html
+    assert 'Du planst' in html
+
+
+def test_statistik_says_nothing_about_rest_without_stamps(client):
+    """With no timestamped session anywhere, the question must not be asked --
+    an unanswerable question on the page reads as a broken feature."""
+    from extensions import db
+    from models import SessionSet
+    with flask_app.app_context():
+        stamped = SessionSet.query.filter(SessionSet.completed_at.isnot(None)).all()
+        saved = [(s.id, s.completed_at) for s in stamped]
+        for s in stamped:
+            s.completed_at = None
+        db.session.commit()
+    try:
+        html = client.get('/gym/statistik').get_data(as_text=True)
+        assert 'Wie lange pausierst du' not in html
+    finally:
+        with flask_app.app_context():
+            for set_id, when in saved:
+                row = db.session.get(SessionSet, set_id)
+                if row is not None:
+                    row.completed_at = when
+            db.session.commit()

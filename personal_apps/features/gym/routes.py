@@ -1689,6 +1689,25 @@ def gym_statistik():
             record_years.append({'year': year, 'records': []})
         record_years[-1]['records'].append(record)
 
+    # Gaps are built PER SESSION and then concatenated, never across the whole
+    # history at once: rest_gaps() measures consecutive pairs, and two different
+    # workouts are not consecutive -- the interval from Monday's last set to
+    # Wednesday's first is not a rest, it is a rest day. The cap would drop it
+    # anyway, but only by accident, and an accident is not a rule.
+    #
+    # Pooled rather than averaged per session, because the question is what a
+    # typical rest of yours looks like: a twenty-set session carries more
+    # evidence about that than a six-set one.
+    habit_gaps = []
+    for session_ in my_sessions().filter(WorkoutSession.finished_at.isnot(None)):
+        habit_gaps.extend(stats.rest_gaps([
+            (s.completed_at, se.rest_seconds if se.rest_seconds is not None
+             else se.exercise.default_rest_seconds)
+            for se in session_.exercises for s in se.sets
+            if s.completed and s.completed_at is not None
+        ]))
+    rest_habit = stats.rest_medians(habit_gaps)
+
     return render_template(
         'gym/statistik.html',
         months=analytics.monthly_tonnage(performed, now),
@@ -1708,6 +1727,7 @@ def gym_statistik():
         rest_gap=analytics.rest_gap_effect(performed),
         min_sets_for_rep_range=analytics.MIN_SETS_FOR_REP_RANGE,
         effort=analytics.effort_distribution(performed),
+        rest_habit=rest_habit,
     )
 
 

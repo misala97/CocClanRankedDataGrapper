@@ -286,6 +286,19 @@
         <p class="read__silent">Noch nicht genug Daten — dafür braucht es mehrere Workouts je Abstand. Die Frage bleibt offen, statt geraten zu werden.</p>
         {% endif %}
       </div>
+
+      <div class="read">
+        {#- Measured against planned. Absent entirely before any session was
+            logged with timestamps -- an unanswerable question on the page reads
+            as a broken feature, not as an empty one. -#}
+        {% if rest_habit %}
+        <p class="read__q">Wie lange pausierst du?</p>
+        <p class="read__a">
+          Du planst <em>{{ '%d:%02d'|format(rest_habit[0] // 60, rest_habit[0] % 60) }}</em>,
+          nimmst dir <em>{{ '%d:%02d'|format(rest_habit[1] // 60, rest_habit[1] % 60) }}</em>.
+        </p>
+        {% endif %}
+      </div>
     </section>
   </div>
 
