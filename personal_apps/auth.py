@@ -3,11 +3,17 @@ import secrets
 from functools import wraps
 
 from flask import Blueprint, render_template, request, session, redirect, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from extensions import db
+from models import AppUser
 
 auth_bp = Blueprint('auth', __name__)
 
-ADMIN_USER = os.getenv("PERSONAL_ADMIN_USER", "")
-ADMIN_PASS = os.getenv("PERSONAL_ADMIN_PASS", "")
+# Precomputed once at import so login() can always run check_password_hash even
+# when the username misses -- otherwise a missing user returns measurably
+# faster than a wrong password and the form becomes a username oracle.
+_DUMMY_PASSWORD_HASH = generate_password_hash(secrets.token_hex(32))
 
 # Hostname that has access to everything (incl. the overview page at "/").
 # Other hostnames (e.g. the public pubquiz-only domain) don't proxy "/" at
@@ -15,8 +21,20 @@ ADMIN_PASS = os.getenv("PERSONAL_ADMIN_PASS", "")
 FULL_ACCESS_HOST = os.getenv("PERSONAL_FULL_ACCESS_HOST", "mgemmel.viewdns.net")
 
 
+def current_user():
+    """The logged-in AppUser, or None.
+
+    Resolves the id every request rather than trusting the cookie's contents:
+    deleting a user must invalidate their live sessions.
+    """
+    user_id = session.get('user_id')
+    if user_id is None:
+        return None
+    return db.session.get(AppUser, user_id)
+
+
 def _is_logged_in():
-    return bool(session.get('logged_in'))
+    return current_user() is not None
 
 
 def _on_full_access_host():
@@ -60,12 +78,11 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        ok = (ADMIN_USER and ADMIN_PASS
-              and secrets.compare_digest(username.encode(), ADMIN_USER.encode())
-              and secrets.compare_digest(password.encode(), ADMIN_PASS.encode()))
-        if ok:
+        user = AppUser.query.filter_by(username=username).first()
+        # Always hash, even on a missing username -- see _DUMMY_PASSWORD_HASH.
+        if check_password_hash(user.password_hash if user else _DUMMY_PASSWORD_HASH, password) and user:
             session.clear()
-            session['logged_in'] = True
+            session['user_id'] = user.id
             return _post_login_redirect()
         error = 'Invalid username or password.'
     return render_template('auth/login.html', error=error)

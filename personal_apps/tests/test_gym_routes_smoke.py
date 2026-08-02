@@ -3,16 +3,7 @@ these are run manually rather than in the pure-stats suite."""
 import pytest
 
 from app import app as flask_app
-
-
-@pytest.fixture()
-def client():
-    flask_app.config['TESTING'] = True
-    with flask_app.test_client() as test_client:
-        with test_client.session_transaction() as flask_session:
-            flask_session['logged_in'] = True
-        yield test_client
-
+from conftest import _admin_id
 
 import datetime as dt
 
