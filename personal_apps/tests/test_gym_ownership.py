@@ -1,14 +1,12 @@
 """Ownership of gym data.
 
 Four hand-maintained tables (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES,
-CATALOGUE_ADMIN_ROUTES) drive the parametrized tests below, each exercising one
+CATALOGUE_ROUTES) drive the parametrized tests below, each exercising one
 route's ownership check. On their own the tables are just literals -- a new
 id-taking route is simply absent from them until someone remembers to add it.
 test_every_id_taking_gym_route_is_covered_by_a_table closes that gap: it derives
 the actual set of id-taking gym routes from the app's own url_map and fails,
-naming the route, the moment one exists in the app but not in any table (or the
-two-route allowlist for the shared catalogue's GET pages, which are covered by
-leak tests instead of a 404 table).
+naming the route, the moment one exists in the app but not in any table.
 
 Runs against the real local development database. Every row created here is
 deleted in a finally.
