@@ -204,3 +204,37 @@ def test_adding_a_session_exercise_by_name_does_not_link_to_another_users_exerci
                 if doomed_exercise is not None:
                     db.session.delete(doomed_exercise)
                     db.session.commit()
+
+
+def test_a_stranger_cannot_add_another_users_exercise_to_their_session(
+        stranger_client, two_lifters):
+    """Both mid-session paths take exercise_id straight from a submitted form.
+    Harmless while one catalogue was shared; an IDOR once exercises are owned."""
+    from extensions import db
+    from models import SessionExercise, WorkoutSession
+
+    session_id = None
+    try:
+        with flask_app.app_context():
+            theirs = WorkoutSession(name='pytest stranger session',
+                                    user_id=two_lifters['stranger_id'])
+            db.session.add(theirs)
+            db.session.commit()
+            session_id = theirs.id
+
+        response = stranger_client.post(f'/gym/session/{session_id}/exercises/add',
+                                        data={'exercise_id': str(two_lifters['exercise_id'])})
+        assert response.status_code == 404, f'returned {response.status_code}'
+
+        with flask_app.app_context():
+            assert SessionExercise.query.filter_by(session_id=session_id).count() == 0, \
+                'the rejected request added the exercise anyway'
+    finally:
+        with flask_app.app_context():
+            if session_id is not None:
+                doomed = db.session.get(WorkoutSession, session_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()

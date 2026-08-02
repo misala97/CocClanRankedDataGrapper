@@ -885,7 +885,10 @@ def gym_add_session_exercise(session_id):
         exercise_id = exercise.id
 
     if exercise_id:
-        exercise = db.session.get(Exercise, exercise_id)
+        # exercise_id arrives from a submitted form, so it is attacker-chosen:
+        # without this check a lifter could graft another user's exercise --
+        # and its history, through _seeded_sets -- into their own session.
+        exercise = owned_exercise(exercise_id)
         next_position = max([se.position for se in session_.exercises], default=0) + 1
         session_exercise = SessionExercise(
             session_id=session_.id, exercise_id=exercise_id, position=next_position,
@@ -932,6 +935,12 @@ def gym_replace_session_exercise(session_exercise_id):
             db.session.add(exercise)
             db.session.flush()
         exercise_id = exercise.id
+
+    if exercise_id:
+        # Attacker-chosen whenever it came from the form rather than from the
+        # branch above that just created it. Re-checking the freshly created
+        # one costs a primary-key lookup and keeps this to a single rule.
+        owned_exercise(exercise_id)
 
     if exercise_id and exercise_id != original.exercise_id and not original.replaced_by:
         db.session.add(SessionExercise(
