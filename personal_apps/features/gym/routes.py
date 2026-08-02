@@ -10,7 +10,7 @@ from models import (
     Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
     PushSubscription, PendingPush, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
 )
-from auth import login_required
+from auth import login_required, admin_required
 from features.gym import stats
 from features.gym.scope import (
     current_user_id, my_sessions, my_templates,
@@ -562,26 +562,29 @@ def gym_start():
 
     template_id = request.form.get('template_id', type=int)
     name = request.form.get('name', '').strip() or None
-    session_ = WorkoutSession(name=name, template_id=template_id or None,
+    # Resolved before the session is built, and scoped to the caller: a
+    # template_id belonging to someone else must not be seeded from *or*
+    # stored, or the row keeps a link that update_template would later follow
+    # back into a template this user cannot see.
+    template = my_templates().filter_by(id=template_id).first() if template_id else None
+    session_ = WorkoutSession(name=name, template_id=template.id if template else None,
                               user_id=current_user_id())
 
-    if template_id:
-        template = db.session.get(WorkoutTemplate, template_id)
-        if template:
-            if not name:
-                # Just the template name. With the date appended, every list
-                # that prints a session rendered the date twice in two adjacent
-                # lines -- "HBF Push 31.07.2026" over "31.07.2026 · 19 min".
-                # The row already carries the date; the name should say which
-                # workout it was.
-                session_.name = template.name
-            for i, te in enumerate(template.exercises, start=1):
-                session_exercise = SessionExercise(
-                    exercise_id=te.exercise_id, position=i,
-                    rest_seconds=te.rest_seconds if te.rest_seconds is not None else te.exercise.default_rest_seconds,
-                )
-                session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
-                session_.exercises.append(session_exercise)
+    if template:
+        if not name:
+            # Just the template name. With the date appended, every list
+            # that prints a session rendered the date twice in two adjacent
+            # lines -- "HBF Push 31.07.2026" over "31.07.2026 · 19 min".
+            # The row already carries the date; the name should say which
+            # workout it was.
+            session_.name = template.name
+        for i, te in enumerate(template.exercises, start=1):
+            session_exercise = SessionExercise(
+                exercise_id=te.exercise_id, position=i,
+                rest_seconds=te.rest_seconds if te.rest_seconds is not None else te.exercise.default_rest_seconds,
+            )
+            session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
+            session_.exercises.append(session_exercise)
 
     db.session.add(session_)
     db.session.commit()
@@ -1345,7 +1348,7 @@ def gym_delete_session(session_id):
 def gym_update_template(session_id):
     session_ = owned_session(session_id)
     if session_.template_id:
-        template = db.session.get(WorkoutTemplate, session_.template_id)
+        template = my_templates().filter_by(id=session_.template_id).first()
         if template:
             template.exercises.clear()
             db.session.flush()
@@ -1373,7 +1376,7 @@ def gym_rename_template(template_id):
     """Heute's small per-routine edit affordance. WorkoutTemplate.name carries
     no unique constraint (unlike Exercise.name), so unlike gym_update_exercise
     there is no collision case to reject -- any non-empty name is accepted."""
-    template = db.get_or_404(WorkoutTemplate, template_id)
+    template = owned_template(template_id)
     new_name = request.form.get('name', '').strip()
     if new_name:
         template.name = new_name
@@ -1384,10 +1387,10 @@ def gym_rename_template(template_id):
 @gym_bp.route('/gym/templates/<int:template_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_template(template_id):
-    template = db.get_or_404(WorkoutTemplate, template_id)
+    template = owned_template(template_id)
     # Null out references instead of cascading -- deleting a template must not
     # delete the workout history of sessions that were started from it.
-    WorkoutSession.query.filter_by(template_id=template.id).update({'template_id': None})
+    my_sessions().filter_by(template_id=template.id).update({'template_id': None}, synchronize_session=False)
     db.session.delete(template)
     db.session.commit()
     return redirect(url_for('gym.gym_heute'))
@@ -2205,6 +2208,7 @@ def gym_add_exercise():
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
 @login_required
+@admin_required
 def gym_update_exercise(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     new_name = request.form.get('name', '').strip()
@@ -2230,6 +2234,7 @@ def gym_update_exercise(exercise_id):
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/delete', methods=['POST'])
 @login_required
+@admin_required
 def gym_delete_exercise(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     if not exercise.session_exercises and not exercise.template_exercises:

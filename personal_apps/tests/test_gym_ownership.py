@@ -280,3 +280,112 @@ def test_a_rejected_write_changed_nothing(intruder_client, two_users):
     with flask_app.app_context():
         stored = db.session.get(SessionSet, two_users['set_id'])
         assert (stored.weight, stored.reps) == (123.5, 7)
+
+
+TEMPLATE_ROUTES = [
+    ('POST', '/gym/templates/{}/rename', 'template_id'),
+    ('POST', '/gym/templates/{}/delete', 'template_id'),
+]
+
+
+@pytest.mark.parametrize('method,url_template,id_key', TEMPLATE_ROUTES)
+def test_a_stranger_gets_404_on_someone_elses_template(
+        intruder_client, two_users, method, url_template, id_key):
+    url = url_template.format(two_users[id_key])
+    response = intruder_client.open(url, method=method)
+    assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
+
+
+CATALOGUE_ADMIN_ROUTES = [
+    ('POST', '/gym/exercises/{}/update', 'exercise_id'),
+    ('POST', '/gym/exercises/{}/delete', 'exercise_id'),
+]
+
+
+@pytest.mark.parametrize('method,url_template,id_key', CATALOGUE_ADMIN_ROUTES)
+def test_a_non_admin_cannot_edit_the_shared_catalogue(
+        intruder_client, two_users, method, url_template, id_key):
+    """The catalogue is shared, so there is no owner to check -- but curating
+    it is the admin's job. 403 here, not 404: the exercise is legitimately
+    visible to this user, only editing it is refused."""
+    url = url_template.format(two_users[id_key])
+    response = intruder_client.open(url, method=method)
+    assert response.status_code == 403, f'{method} {url} returned {response.status_code}'
+
+
+def test_the_shared_exercise_survived_the_rejected_writes(two_users):
+    from extensions import db
+    from models import Exercise
+    with flask_app.app_context():
+        assert db.session.get(Exercise, two_users['exercise_id']) is not None
+
+
+def test_starting_from_another_users_template_seeds_nothing_and_stores_no_link(two_users):
+    """The indirect path into a template: gym_start took template_id straight
+    from the form, so a stranger could seed a session from a private template
+    and the row kept the link, which update_template would then follow back."""
+    from extensions import db
+    from models import WorkoutSession
+    created_id = None
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as client_b:
+        with client_b.session_transaction() as flask_session:
+            flask_session['user_id'] = two_users['intruder_id']
+        response = client_b.post('/gym/start', data={
+            'name': 'pytest stolen template start',
+            'template_id': str(two_users['template_id']),
+        })
+        assert response.status_code in (302, 303)
+    try:
+        with flask_app.app_context():
+            created = WorkoutSession.query.filter_by(name='pytest stolen template start').one()
+            created_id = created.id
+            assert created.template_id is None, 'stored a link to a template it does not own'
+            assert created.exercises == [], 'seeded from another user\'s template'
+    finally:
+        with flask_app.app_context():
+            if created_id is not None:
+                doomed = db.session.get(WorkoutSession, created_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_update_template_cannot_overwrite_a_template_it_does_not_own(two_users):
+    """The write half of the same chain. Reaches update_template with a session
+    whose template_id points at A's template -- the state a pre-fix gym_start
+    would have produced, forced directly here so the guard is tested even
+    though that path can no longer create it."""
+    from extensions import db
+    from models import TemplateExercise, WorkoutSession, WorkoutTemplate
+    created_id = None
+    flask_app.config['TESTING'] = True
+    with flask_app.app_context():
+        victim = db.session.get(WorkoutTemplate, two_users['template_id'])
+        before = [(te.exercise_id, te.position) for te in victim.exercises]
+        assert before, 'fixture template should have exercises to lose'
+        theirs = WorkoutSession(name='pytest forged link', user_id=two_users['intruder_id'],
+                                template_id=two_users['template_id'])
+        db.session.add(theirs)
+        db.session.commit()
+        created_id = theirs.id
+    try:
+        with flask_app.test_client() as client_b:
+            with client_b.session_transaction() as flask_session:
+                flask_session['user_id'] = two_users['intruder_id']
+            client_b.post(f'/gym/session/{created_id}/update_template')
+        with flask_app.app_context():
+            victim = db.session.get(WorkoutTemplate, two_users['template_id'])
+            after = [(te.exercise_id, te.position) for te in victim.exercises]
+            assert after == before, 'a stranger overwrote another user\'s template'
+    finally:
+        with flask_app.app_context():
+            if created_id is not None:
+                doomed = db.session.get(WorkoutSession, created_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
