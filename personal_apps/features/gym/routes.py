@@ -10,7 +10,7 @@ from models import (
     Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
     PushSubscription, PendingPush, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
 )
-from auth import login_required, admin_required
+from auth import login_required
 from features.gym import stats
 from features.gym.scope import (
     current_user_id, my_exercises, my_sessions, my_templates,
@@ -2099,7 +2099,7 @@ def _chart_geometry(series, pr_e1rm=None):
 @gym_bp.route('/gym/exercises/<int:exercise_id>')
 @login_required
 def exercise_detail(exercise_id):
-    exercise = db.get_or_404(Exercise, exercise_id)
+    exercise = owned_exercise(exercise_id)
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
 
     # The default view is one slot, not all of them. "Alle" draws every position
@@ -2158,7 +2158,7 @@ def gym_exercise_progress_json(exercise_id):
     back to all-time data if that exact slot has no history yet -- the
     modal should always show *something* useful rather than an empty state
     just because you haven't done this exercise in this position before."""
-    exercise = db.get_or_404(Exercise, exercise_id)
+    exercise = owned_exercise(exercise_id)
     position = request.args.get('position', type=int)
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
     progress = stats.exercise_progress(rows, position=position)
@@ -2222,9 +2222,8 @@ def gym_add_exercise():
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
 @login_required
-@admin_required
 def gym_update_exercise(exercise_id):
-    exercise = db.get_or_404(Exercise, exercise_id)
+    exercise = owned_exercise(exercise_id)
     new_name = request.form.get('name', '').strip()
     name_taken = False
     if new_name and new_name != exercise.name:
@@ -2248,9 +2247,8 @@ def gym_update_exercise(exercise_id):
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/delete', methods=['POST'])
 @login_required
-@admin_required
 def gym_delete_exercise(exercise_id):
-    exercise = db.get_or_404(Exercise, exercise_id)
+    exercise = owned_exercise(exercise_id)
     if not exercise.session_exercises and not exercise.template_exercises:
         db.session.delete(exercise)
         db.session.commit()
