@@ -782,7 +782,7 @@ def session_detail(session_id):
         # fallback, or the two copies drift the moment DEFAULT_INCREMENT moves.
         live_increment=stats.resolve_increment(
             live_se.exercise.weight_increment, live_se.exercise.is_unilateral,
-        ) if live_se else stats.DEFAULT_INCREMENT,
+        ) if live_se else stats.resolve_increment(None, False),
         live_index=(visible_exercises.index(live_se) + 1) if live_se else 0,
         tick_states=tick_states,
         sets_done=sets_done,

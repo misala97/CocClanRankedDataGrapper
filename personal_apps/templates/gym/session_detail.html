@@ -376,7 +376,10 @@ document.addEventListener('click', function (e) {
     var decimals = parseInt(field.dataset.decimals, 10) || 0;
     var next = (parseFloat(input.value) || 0) + (key.dataset.role === 'inc' ? step : -step);
     if (next < 0) { next = 0; }
-    input.value = next.toFixed(decimals);
+    // toFixed is a display concern. Rounding the stored number here would
+    // turn a 1.25 kg step into an effective 1.3 after only a few taps --
+    // the hidden input keeps full precision, only the readout is rounded.
+    input.value = next;
     display.textContent = decimals ? next.toFixed(decimals).replace('.', ',') : String(next);
 });
 

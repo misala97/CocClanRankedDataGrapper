@@ -585,3 +585,93 @@ def test_session_sheet_clears_the_increment_back_to_the_default(client, scratch_
 
     with flask_app.app_context():
         assert db.session.get(Exercise, exercise_id).weight_increment is None
+
+
+def test_to_increment_is_comma_tolerant():
+    """A German keyboard produces '2,5', not '2.5' -- the docstring's claim,
+    unverified until now."""
+    from features.gym.routes import _to_increment
+    assert _to_increment('2,5') == 2.5
+
+
+@pytest.mark.parametrize('raw', ['-9', 'abc', '0', ''])
+def test_to_increment_rejects_non_positive_and_unparseable(raw):
+    from features.gym.routes import _to_increment
+    assert _to_increment(raw) is None
+
+
+def test_add_exercise_carries_the_increment_onto_the_new_row(client):
+    """gym_add_exercise is a write surface for weight_increment with no
+    other coverage -- a dropped/typo'd form field here would silently store
+    NULL and nothing would fail."""
+    from extensions import db
+    from models import Exercise
+
+    response = client.post('/gym/exercises/add', data={
+        'name': 'pytest add exercise increment',
+        'muscle_group': 'Brust',
+        'weight_increment': '5',
+    })
+    assert response.status_code in (302, 303)
+
+    exercise_id = None
+    try:
+        with flask_app.app_context():
+            exercise = Exercise.query.filter_by(name='pytest add exercise increment').first()
+            assert exercise is not None
+            exercise_id = exercise.id
+            assert exercise.weight_increment == 5.0
+            assert exercise.muscle_group == 'Brust'
+    finally:
+        if exercise_id is not None:
+            with flask_app.app_context():
+                doomed = db.session.get(Exercise, exercise_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_update_exercise_sets_and_clears_the_increment_without_losing_other_fields(client):
+    """gym_update_exercise writes weight_increment unconditionally, so this
+    also pins that name and muscle_group survive both writes -- the failure
+    mode this finding is about is a silent NULL on an unrelated field, not
+    just on the increment itself."""
+    from extensions import db
+    from models import Exercise
+
+    with flask_app.app_context():
+        exercise = Exercise(name='pytest update exercise increment', muscle_group='Rücken')
+        db.session.add(exercise)
+        db.session.commit()
+        exercise_id = exercise.id
+
+    try:
+        response = client.post(f'/gym/exercises/{exercise_id}/update', data={
+            'name': 'pytest update exercise increment',
+            'muscle_group': 'Rücken',
+            'weight_increment': '5',
+        })
+        assert response.status_code in (302, 303)
+        with flask_app.app_context():
+            exercise = db.session.get(Exercise, exercise_id)
+            assert exercise.weight_increment == 5.0
+            assert exercise.name == 'pytest update exercise increment'
+            assert exercise.muscle_group == 'Rücken'
+
+        response = client.post(f'/gym/exercises/{exercise_id}/update', data={
+            'name': 'pytest update exercise increment',
+            'muscle_group': 'Rücken',
+            'weight_increment': '',
+        })
+        assert response.status_code in (302, 303)
+        with flask_app.app_context():
+            exercise = db.session.get(Exercise, exercise_id)
+            assert exercise.weight_increment is None
+            assert exercise.name == 'pytest update exercise increment'
+            assert exercise.muscle_group == 'Rücken'
+    finally:
+        with flask_app.app_context():
+            doomed = db.session.get(Exercise, exercise_id)
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()
