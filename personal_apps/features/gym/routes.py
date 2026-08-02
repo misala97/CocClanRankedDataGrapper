@@ -875,10 +875,20 @@ def gym_add_session_exercise(session_id):
     if exercise_id:
         exercise = db.session.get(Exercise, exercise_id)
         next_position = max([se.position for se in session_.exercises], default=0) + 1
-        db.session.add(SessionExercise(
+        session_exercise = SessionExercise(
             session_id=session_.id, exercise_id=exercise_id, position=next_position,
             rest_seconds=exercise.default_rest_seconds if exercise else None,
-        ))
+        )
+        # Seeded like every other path that puts an exercise into a session
+        # (gym_start from a template, un-skip, reorder). This one used to
+        # create nothing, which left the exercise leaning on the suggestion
+        # alone -- and on a session started without a template that was the
+        # only number on screen, so a deload never reached it. An exercise
+        # with no history still seeds nothing, which is the same empty slot
+        # as before.
+        session_exercise.sets.extend(
+            _seeded_sets(session_, exercise_id, next_position))
+        db.session.add(session_exercise)
         db.session.commit()
 
     return redirect(url_for('gym.session_detail', session_id=session_.id))
