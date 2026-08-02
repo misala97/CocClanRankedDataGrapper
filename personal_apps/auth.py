@@ -2,7 +2,7 @@ import os
 import secrets
 from functools import wraps
 
-from flask import Blueprint, render_template, request, session, redirect, url_for
+from flask import Blueprint, abort, render_template, request, session, redirect, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db
@@ -66,6 +66,28 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if not _is_logged_in():
             return redirect(url_for('auth.login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def is_admin():
+    user = current_user()
+    return bool(user and user.is_admin)
+
+
+def admin_required(f):
+    """403 for a logged-in non-admin, redirect to login for anonymous.
+
+    403 rather than 404 here: unlike a gym object, the existence of /tips is
+    not a secret worth protecting, and a flat "not allowed" is the honest
+    answer to a real user asking for someone else's app.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not _is_logged_in():
+            return redirect(url_for('auth.login'))
+        if not is_admin():
+            abort(403)
         return f(*args, **kwargs)
     return decorated
 
