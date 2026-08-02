@@ -98,6 +98,8 @@ def login():
         return _post_login_redirect()
     error = None
     if request.method == 'POST':
+        if not _valid_csrf(request.form.get('csrf_token')):
+            abort(400)
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         user = AppUser.query.filter_by(username=username).first()
@@ -116,3 +118,80 @@ def logout():
     if request.host.split(':')[0] == FULL_ACCESS_HOST:
         return redirect(url_for('index'))
     return redirect(url_for('pubquiz.pubquiz'))
+
+
+MIN_PASSWORD_LENGTH = 8
+
+
+def _get_csrf_token():
+    """Per-session token, minted on first use.
+
+    personal_apps has no app-wide CSRF protection: adding it means a hidden
+    field in every existing form across four features, which is its own piece
+    of work. These helpers cover the three forms where a forged request would
+    be an account takeover -- login, create-user, change-password.
+    """
+    token = session.get('csrf_token')
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session['csrf_token'] = token
+    return token
+
+
+def _valid_csrf(submitted):
+    expected = session.get('csrf_token')
+    return bool(expected and submitted and secrets.compare_digest(str(submitted), str(expected)))
+
+
+@auth_bp.app_context_processor
+def _inject_csrf_token():
+    return {'csrf_token': _get_csrf_token}
+
+
+@auth_bp.route('/admin/users', methods=['GET', 'POST'])
+@admin_required
+def admin_users():
+    error = None
+    if request.method == 'POST':
+        if not _valid_csrf(request.form.get('csrf_token')):
+            abort(400)
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        if not username:
+            error = 'Benutzername fehlt.'
+        elif len(password) < MIN_PASSWORD_LENGTH:
+            error = f'Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.'
+        elif AppUser.query.filter_by(username=username).first():
+            error = 'Benutzername ist schon vergeben.'
+        else:
+            db.session.add(AppUser(
+                username=username,
+                password_hash=generate_password_hash(password),
+                is_admin=bool(request.form.get('is_admin')),
+            ))
+            db.session.commit()
+            return redirect(url_for('auth.admin_users'))
+    users = AppUser.query.order_by(AppUser.username).all()
+    return render_template('auth/users.html', users=users, error=error)
+
+
+@auth_bp.route('/account', methods=['GET', 'POST'])
+@login_required
+def account():
+    user = current_user()
+    error = None
+    done = False
+    if request.method == 'POST':
+        if not _valid_csrf(request.form.get('csrf_token')):
+            abort(400)
+        current_password = request.form.get('current_password', '')
+        new_password = request.form.get('new_password', '')
+        if not check_password_hash(user.password_hash, current_password):
+            error = 'Aktuelles Passwort stimmt nicht.'
+        elif len(new_password) < MIN_PASSWORD_LENGTH:
+            error = f'Neues Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.'
+        else:
+            user.password_hash = generate_password_hash(new_password)
+            db.session.commit()
+            done = True
+    return render_template('auth/account.html', user=user, error=error, done=done)

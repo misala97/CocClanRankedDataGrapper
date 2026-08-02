@@ -72,7 +72,12 @@ def temp_user():
 
 def test_login_with_the_right_password_sets_user_id(anon_client, temp_user):
     user_id, username, password = temp_user
-    response = anon_client.post('/login', data={'username': username, 'password': password})
+    anon_client.get('/login')  # issues the CSRF token
+    with anon_client.session_transaction() as flask_session:
+        csrf = flask_session['csrf_token']
+    response = anon_client.post('/login', data={
+        'username': username, 'password': password, 'csrf_token': csrf,
+    })
     assert response.status_code in (302, 303)
     with anon_client.session_transaction() as flask_session:
         assert flask_session['user_id'] == user_id
@@ -80,7 +85,12 @@ def test_login_with_the_right_password_sets_user_id(anon_client, temp_user):
 
 def test_login_with_the_wrong_password_sets_nothing(anon_client, temp_user):
     _, username, _ = temp_user
-    anon_client.post('/login', data={'username': username, 'password': 'falsch'})
+    anon_client.get('/login')  # issues the CSRF token
+    with anon_client.session_transaction() as flask_session:
+        csrf = flask_session['csrf_token']
+    anon_client.post('/login', data={
+        'username': username, 'password': 'falsch', 'csrf_token': csrf,
+    })
     with anon_client.session_transaction() as flask_session:
         assert 'user_id' not in flask_session
 
@@ -89,8 +99,18 @@ def test_a_missing_username_and_a_wrong_password_are_indistinguishable(anon_clie
     """Both must render the same error. A different message (or a redirect on
     one and not the other) tells an attacker which usernames exist."""
     _, username, _ = temp_user
-    wrong_password = anon_client.post('/login', data={'username': username, 'password': 'falsch'})
-    no_such_user = anon_client.post('/login', data={'username': 'kein solcher Nutzer', 'password': 'falsch'})
+    # Both POSTs share this client's session, so the CSRF token minted here is
+    # identical -- and identically embedded -- in both rendered responses. It
+    # does not become a variable that could break the byte-for-byte comparison.
+    anon_client.get('/login')  # issues the CSRF token
+    with anon_client.session_transaction() as flask_session:
+        csrf = flask_session['csrf_token']
+    wrong_password = anon_client.post('/login', data={
+        'username': username, 'password': 'falsch', 'csrf_token': csrf,
+    })
+    no_such_user = anon_client.post('/login', data={
+        'username': 'kein solcher Nutzer', 'password': 'falsch', 'csrf_token': csrf,
+    })
     assert wrong_password.status_code == no_such_user.status_code
     assert wrong_password.get_data() == no_such_user.get_data()
 
@@ -170,3 +190,119 @@ def test_the_overview_shows_one_app_to_a_non_admin_and_four_to_an_admin(member_c
         admin_html = admin_client.get('/', base_url=FULL_ACCESS_URL).get_data(as_text=True)
     assert 'Gym Tracker' in admin_html
     assert 'Pub Quiz' in admin_html
+
+
+def test_only_an_admin_reaches_the_user_admin(member_client):
+    assert member_client.get('/admin/users', base_url=FULL_ACCESS_URL).status_code == 403
+
+
+def test_an_admin_can_create_a_user(temp_user):
+    from extensions import db
+    from models import AppUser
+
+    flask_app.config['TESTING'] = True
+    created_id = None
+    try:
+        with flask_app.test_client() as admin_client:
+            with admin_client.session_transaction() as flask_session:
+                flask_session['user_id'] = _admin_id()
+            token = admin_client.get('/admin/users')  # issues the CSRF token
+            assert token.status_code == 200
+            with admin_client.session_transaction() as flask_session:
+                csrf = flask_session['csrf_token']
+            response = admin_client.post('/admin/users', data={
+                'username': 'pytest created user',
+                'password': 'lang genug hier',
+                'csrf_token': csrf,
+            })
+            assert response.status_code in (302, 303)
+        with flask_app.app_context():
+            created = AppUser.query.filter_by(username='pytest created user').first()
+            assert created is not None
+            assert created.is_admin is False
+            created_id = created.id
+    finally:
+        if created_id is not None:
+            with flask_app.app_context():
+                doomed = db.session.get(AppUser, created_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_creating_a_user_without_a_csrf_token_is_refused():
+    from models import AppUser
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as admin_client:
+        with admin_client.session_transaction() as flask_session:
+            flask_session['user_id'] = _admin_id()
+        response = admin_client.post('/admin/users', data={
+            'username': 'pytest csrf victim',
+            'password': 'lang genug hier',
+        })
+    assert response.status_code == 400
+    with flask_app.app_context():
+        assert AppUser.query.filter_by(username='pytest csrf victim').first() is None
+
+
+def test_a_user_can_change_their_own_password(member_client, temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, _, old_password = temp_user
+
+    # member_client's session cookie is host-only (see _client_on_full_access_host):
+    # every call here must state base_url=FULL_ACCESS_URL or it lands on the
+    # default localhost host, which is an anonymous session for this client.
+    member_client.get('/account', base_url=FULL_ACCESS_URL)
+    with member_client.session_transaction(base_url=FULL_ACCESS_URL) as flask_session:
+        csrf = flask_session['csrf_token']
+    response = member_client.post('/account', base_url=FULL_ACCESS_URL, data={
+        'current_password': old_password,
+        'new_password': 'ein noch besseres',
+        'csrf_token': csrf,
+    })
+    # account() (brief Step 4) re-renders account.html with done=True on success
+    # rather than redirecting -- unlike admin_users(), which does redirect. A
+    # 302/303 assertion here could never pass against that verbatim route; the
+    # inline success banner is the actual success signal this route produces.
+    assert response.status_code == 200
+    assert 'Passwort geändert.' in response.get_data(as_text=True)
+    with flask_app.app_context():
+        stored = db.session.get(AppUser, user_id)
+        assert check_password_hash(stored.password_hash, 'ein noch besseres')
+
+
+def test_changing_a_password_requires_the_current_one(member_client, temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, _, old_password = temp_user
+
+    member_client.get('/account', base_url=FULL_ACCESS_URL)
+    with member_client.session_transaction(base_url=FULL_ACCESS_URL) as flask_session:
+        csrf = flask_session['csrf_token']
+    member_client.post('/account', base_url=FULL_ACCESS_URL, data={
+        'current_password': 'falsch',
+        'new_password': 'sollte nicht greifen',
+        'csrf_token': csrf,
+    })
+    with flask_app.app_context():
+        stored = db.session.get(AppUser, user_id)
+        assert check_password_hash(stored.password_hash, old_password)
+
+
+def test_a_short_password_is_refused(member_client, temp_user):
+    from extensions import db
+    from models import AppUser
+    user_id, _, old_password = temp_user
+
+    member_client.get('/account', base_url=FULL_ACCESS_URL)
+    with member_client.session_transaction(base_url=FULL_ACCESS_URL) as flask_session:
+        csrf = flask_session['csrf_token']
+    member_client.post('/account', base_url=FULL_ACCESS_URL, data={
+        'current_password': old_password,
+        'new_password': 'kurz',
+        'csrf_token': csrf,
+    })
+    with flask_app.app_context():
+        stored = db.session.get(AppUser, user_id)
+        assert check_password_hash(stored.password_hash, old_password)

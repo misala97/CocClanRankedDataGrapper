@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Benutzer</title>
+</head>
+<body>
+    <h1>Benutzer</h1>
+    {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+    <ul>
+        {% for user in users %}
+            <li>{{ user.username }}{% if user.is_admin %} (Admin){% endif %}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Neuen Benutzer anlegen</h2>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="username">Benutzername</label>
+        <input type="text" id="username" name="username" autocomplete="off" required>
+        <label for="password">Passwort</label>
+        <input type="password" id="password" name="password" autocomplete="new-password" required>
+        <label for="is_admin">
+            <input type="checkbox" id="is_admin" name="is_admin" value="1"> Admin
+        </label>
+        <button type="submit">Anlegen</button>
+    </form>
+    <p><a href="{{ url_for('index') }}">Zurück</a></p>
+</body>
+</html>
