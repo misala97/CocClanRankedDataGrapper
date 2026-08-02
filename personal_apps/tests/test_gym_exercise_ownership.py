@@ -238,3 +238,67 @@ def test_a_stranger_cannot_add_another_users_exercise_to_their_session(
                     db.session.commit()
                     db.session.delete(doomed)
                     db.session.commit()
+
+
+def test_a_non_admin_can_rename_an_exercise_they_own(stranger_client, two_lifters):
+    """The whole point of ownership: gym_update_exercise checks ownership now,
+    not @admin_required -- a non-admin owner must be able to rename what is
+    hers without needing the admin flag the old gate demanded."""
+    from extensions import db
+    from models import Exercise
+
+    exercise_id = None
+    try:
+        with flask_app.app_context():
+            exercise = Exercise(name='pytest stranger owned lift', muscle_group='Ruecken',
+                                user_id=two_lifters['stranger_id'])
+            db.session.add(exercise)
+            db.session.commit()
+            exercise_id = exercise.id
+
+        response = stranger_client.post(
+            f'/gym/exercises/{exercise_id}/update',
+            data={'name': 'pytest stranger renamed lift'})
+        assert response.status_code in (302, 303), \
+            f'a non-admin owner could not update their own exercise: {response.status_code}'
+
+        with flask_app.app_context():
+            renamed = db.session.get(Exercise, exercise_id)
+            assert renamed.name == 'pytest stranger renamed lift', \
+                'the rename did not take effect for a non-admin owner'
+    finally:
+        with flask_app.app_context():
+            if exercise_id is not None:
+                doomed = db.session.get(Exercise, exercise_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_a_non_admin_owner_sees_the_edit_control_on_their_exercise_page(stranger_client, two_lifters):
+    """Pins the template fix: exercise_detail.html wrapped the manage section
+    and the edit dialog in {% if is_admin %}, so a non-admin owner who could
+    already rename via a direct POST (previous test) still had no button on
+    the page to do it from. Fails again if that gate is re-added."""
+    from extensions import db
+    from models import Exercise
+
+    exercise_id = None
+    try:
+        with flask_app.app_context():
+            exercise = Exercise(name='pytest stranger detail lift', muscle_group='Beine',
+                                user_id=two_lifters['stranger_id'])
+            db.session.add(exercise)
+            db.session.commit()
+            exercise_id = exercise.id
+
+        body = stranger_client.get(f'/gym/exercises/{exercise_id}').get_data(as_text=True)
+        assert 'Name, Muskelgruppe, Standard-Pause bearbeiten' in body, \
+            'a non-admin owner does not see the edit control on their own exercise page'
+    finally:
+        with flask_app.app_context():
+            if exercise_id is not None:
+                doomed = db.session.get(Exercise, exercise_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
