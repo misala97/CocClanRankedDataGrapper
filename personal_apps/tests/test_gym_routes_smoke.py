@@ -904,3 +904,123 @@ def test_appending_a_set_starts_from_the_last_one_not_the_opening_suggestion(cli
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
     assert 'value="62.5"' in html, 'steppers ignored the set that was actually just done'
     assert 'value="5"' in html
+
+
+def test_the_finished_page_can_actually_save_a_freeform_workout_as_a_template():
+    """The finished page's prompt posted name="name" while gym_save_as_template
+    reads template_name, so the route saw an empty string, skipped the `if`,
+    and redirected having created nothing -- silently, since the redirect is
+    the same one a success produces. Broken since the finished pages were
+    merged on 2026-07-23.
+
+    Submits exactly what the rendered form declares rather than a hardcoded
+    field name, so this fails again if either side is renamed on its own.
+    """
+    import datetime as dt
+    import re
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession, WorkoutTemplate
+
+    ex_id = sid = tpl_id = None
+    try:
+        with flask_app.app_context():
+            exercise = Exercise(name='pytest finished tpl lift', user_id=_admin_id())
+            db.session.add(exercise)
+            db.session.flush()
+            ex_id = exercise.id
+            started = dt.datetime.utcnow() - dt.timedelta(hours=1)
+            done = WorkoutSession(name='pytest finished tpl', started_at=started,
+                                  finished_at=dt.datetime.utcnow(), user_id=_admin_id())
+            se = SessionExercise(exercise_id=exercise.id, position=1)
+            se.sets = [SessionSet(position=1, weight=40.0, reps=8, completed=True)]
+            done.exercises.append(se)
+            db.session.add(done)
+            db.session.commit()
+            sid = done.id
+
+        flask_app.config['TESTING'] = True
+        with flask_app.test_client() as client:
+            with client.session_transaction() as flask_session:
+                flask_session['user_id'] = _admin_id()
+            # The prompt is gated on ?just_finished -- it is offered at the one
+            # moment you know what you did, not on every later visit.
+            html = client.get(f'/gym/session/{sid}?just_finished=1').get_data(as_text=True)
+            assert 'als Vorlage speichern' in html, 'the freeform prompt did not render'
+
+            form = html.split('save_as_template', 1)[1].split('</form>', 1)[0]
+            field = re.search(r'<input[^>]*type="text"[^>]*name="([^"]+)"', form)
+            assert field, 'no text input in the save-as-template form'
+
+            response = client.post(f'/gym/session/{sid}/save_as_template',
+                                   data={field.group(1): 'pytest finished tpl name'})
+            assert response.status_code in (302, 303)
+
+        with flask_app.app_context():
+            created = WorkoutTemplate.query.filter_by(name='pytest finished tpl name').first()
+            assert created is not None, \
+                f'the form posts {field.group(1)!r}, which the route ignores'
+            tpl_id = created.id
+            assert [te.exercise_id for te in created.exercises] == [ex_id]
+    finally:
+        with flask_app.app_context():
+            for model, row_id in ((WorkoutTemplate, tpl_id), (WorkoutSession, sid)):
+                if row_id:
+                    doomed = db.session.get(model, row_id)
+                    if doomed is not None:
+                        if model is WorkoutSession:
+                            doomed.resting_set_id = None
+                            db.session.commit()
+                        db.session.delete(doomed)
+                        db.session.commit()
+            if ex_id:
+                doomed = db.session.get(Exercise, ex_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+def test_every_gym_form_posts_fields_its_own_route_reads():
+    """The class of bug behind the finished page's broken save-as-template: the
+    form posted `name` while gym_save_as_template reads `template_name`, so the
+    route saw an empty string, skipped its `if`, and redirected -- the same
+    redirect a success produces. Ten days of a button that looked like it worked.
+
+    Checking that *some* route reads a field is not enough: `name` is read by
+    gym_add_exercise, so a global scan passes while the form is still broken.
+    The pairing is what matters, so this resolves each form's own action to its
+    route function and checks that function's body.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(flask_app.root_path)
+    source = (root / 'features' / 'gym' / 'routes.py').read_text(encoding='utf-8')
+    # Split routes.py into function bodies, so a field is checked against the
+    # route it is actually posted to rather than the whole module.
+    bodies, current = {}, None
+    for line in source.splitlines():
+        match = re.match(r'def (\w+)\(', line)
+        if match:
+            current = match.group(1)
+            bodies[current] = []
+        elif current:
+            bodies[current].append(line)
+    bodies = {name: '\n'.join(lines) for name, lines in bodies.items()}
+
+    form_re = re.compile(
+        r"<form[^>]*action=\"\{\{\s*url_for\('gym\.(\w+)'.*?\}\}\"(.*?)</form>", re.S)
+    control_re = re.compile(r'<(?:input|select|textarea)\b[^>]*\bname="([^"{]+)"')
+
+    problems = []
+    for path in sorted((root / 'templates' / 'gym').glob('*.html')):
+        html = path.read_text(encoding='utf-8')
+        for endpoint, body in form_re.findall(html):
+            route = bodies.get(endpoint)
+            if route is None:
+                problems.append(f'{path.name}: posts to gym.{endpoint}, which does not exist')
+                continue
+            for field in sorted(set(control_re.findall(body))):
+                if f"'{field}'" not in route and f'"{field}"' not in route:
+                    problems.append(f'{path.name}: posts {field!r} to gym.{endpoint}, '
+                                    f'which never reads it')
+
+    assert not problems, 'form/route field mismatch:\n  ' + '\n  '.join(problems)
