@@ -126,13 +126,20 @@
       {% with icon='save' %}{% include 'gym/_icon.html' %}{% endwith %}
       Als Vorlage speichern
     </button>
-    {% if not has_push_subscription %}
-    <button type="button" class="sheet__act" id="notify-enable-btn">
-      {% with icon='timer' %}{% include 'gym/_icon.html' %}{% endwith %}
-      Pausen-Benachrichtigung aktivieren
-    </button>
-    <p class="sheet__note">Installiere die App zuerst über „Zum Home-Bildschirm“.</p>
-    {% endif %}
+    {# Always rendered, and the client decides whether to show it.
+       has_push_subscription asks whether this USER has any subscription, but a
+       subscription is a browser endpoint -- one per device. So enabling push on
+       one phone hid this button on every other device the same person owns, and
+       a second phone could never subscribe at all. Only the browser knows
+       whether THIS device is subscribed, so only the browser can answer it.
+       The server value is still passed as a hint for the copy. #}
+    <div id="notify-row" hidden>
+      <button type="button" class="sheet__act" id="notify-enable-btn">
+        {% with icon='timer' %}{% include 'gym/_icon.html' %}{% endwith %}
+        Pausen-Benachrichtigung auf diesem Gerät aktivieren
+      </button>
+      <p class="sheet__note">Installiere die App zuerst über „Zum Home-Bildschirm“.</p>
+    </div>
   </div>
 </dialog>
 
@@ -822,6 +829,22 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 const notifyBtn = document.getElementById('notify-enable-btn');
+const notifyRow = document.getElementById('notify-row');
+// Whether to offer this is a question about the device, not the account, so it
+// is answered here rather than in the template. Hidden only once this browser
+// is confirmed subscribed -- every other case (never subscribed, a second
+// phone, a reinstalled PWA, push unsupported) still gets the row, because in
+// all of them the person needs either the button or the reason it cannot work.
+if (notifyRow) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        notifyRow.hidden = false;
+    } else {
+        navigator.serviceWorker.getRegistration('/gym/')
+            .then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; })
+            .then(function (sub) { notifyRow.hidden = !!sub; })
+            .catch(function () { notifyRow.hidden = false; });
+    }
+}
 if (notifyBtn) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         notifyBtn.disabled = true;

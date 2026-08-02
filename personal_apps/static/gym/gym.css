@@ -2030,6 +2030,31 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
    is --ink rather than --edge-hi because at 2px --edge-hi measured 2.10:1 in
    light and 1.79:1 in dark against this surface, under 1.4.11's 3:1 for a
    component boundary that is carrying the alarm. */
+/* Flash messages. Deliberately the same chassis-and-inset-ring treatment as
+   .note-save below, so the app has one banner language rather than two: that
+   one reports a failed AJAX write during a workout, these report the result of
+   a POST-redirect anywhere in the gym.
+
+   Colour comes from the app's own semantics, not from imported red/green.
+   --done (plum) is what LOGGED already means here, so it is what "saved"
+   means; --live is the hot colour this app already uses for danger
+   (.btn--quiet-danger), so it carries the failure. */
+.flashes { margin: var(--sp-3) var(--sp-4) 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.flash {
+  margin: 0; padding: var(--sp-3) var(--sp-4);
+  background: var(--chassis); border-radius: var(--r-panel);
+  box-shadow: inset 0 0 0 2px var(--edge-hi), var(--lift);
+  color: var(--ink); font-size: var(--t-sm); line-height: 1.5;
+}
+.flash--success { box-shadow: inset 0 0 0 2px var(--done), var(--lift); }
+.flash--error   { box-shadow: inset 0 0 0 2px var(--live), var(--lift); color: var(--live-ink); }
+
+/* Same arrival as the save banner, and it inherits that block's
+   prefers-reduced-motion handling below. */
+@media (prefers-reduced-motion: no-preference) {
+  .flash { animation: stall-arrive var(--dur-3) var(--ease-out); }
+}
+
 .note-save {
   position: fixed; z-index: var(--z-bar);
   inset-inline: var(--sp-4);

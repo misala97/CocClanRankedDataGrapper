@@ -66,6 +66,24 @@
 {# The app had no <main> landmark on any page -- assistive tech had no way to
    jump past the chrome to the actual page content. #}
 <main id="gym-main" tabindex="-1">
+{# Every gym mutation is a POST followed by a redirect, so until now the only
+   way to tell a save from a silent no-op was to go and look. Two bugs shipped
+   behind that: a form posting a field its route did not read, and a routine
+   saved from a workout that then claimed never to have been done -- both
+   redirected exactly as a success does.
+
+   flash() was already in this app (features/tips), just never used here.
+   role="status" rather than role="alert" for the success case; the error
+   variant carries alert. #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="flashes">
+  {% for category, message in messages %}
+  <p class="flash flash--{{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">{{ message }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
 {% block content %}{% endblock %}
 </main>
 

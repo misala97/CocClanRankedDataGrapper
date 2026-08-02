@@ -1,7 +1,7 @@
 import datetime as dt
 import os
 
-from flask import Blueprint, current_app, jsonify, render_template, request, redirect, send_from_directory, url_for
+from flask import Blueprint, current_app, flash, jsonify, render_template, request, redirect, send_from_directory, url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, load_only
 
@@ -849,7 +849,6 @@ def session_detail(session_id):
         # Scoped to the caller: PushSubscription.endpoint is a global table
         # (one row per browser installation, re-pointed on re-subscribe), so
         # "any row at all" would leak whether some OTHER user has push set up.
-        has_push_subscription=PushSubscription.query.filter_by(user_id=current_user_id()).first() is not None,
         has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
         # Whether the deload percentage was actually applied to the weights.
         # base_weight is non-NULL exactly when a set's weight is deload-scaled,
@@ -1373,6 +1372,7 @@ def gym_update_template(session_id):
             db.session.flush()
             template.exercises.extend(_template_exercises_from_session(session_))
             db.session.commit()
+            flash(f'Routine „{template.name}“ auf diese Übungsliste aktualisiert.', 'success')
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
@@ -1398,6 +1398,9 @@ def gym_save_as_template(session_id):
             db.session.flush()
             session_.template_id = template.id
         db.session.commit()
+        flash(f'Als Routine „{template_name}“ gespeichert.', 'success')
+    else:
+        flash('Kein Name eingegeben — nichts gespeichert.', 'error')
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
@@ -1412,6 +1415,9 @@ def gym_rename_template(template_id):
     if new_name:
         template.name = new_name
         db.session.commit()
+        flash(f'Routine heißt jetzt „{new_name}“.', 'success')
+    else:
+        flash('Kein Name eingegeben — die Routine heißt weiter wie vorher.', 'error')
     return redirect(url_for('gym.gym_heute'))
 
 
@@ -1422,8 +1428,10 @@ def gym_delete_template(template_id):
     # Null out references instead of cascading -- deleting a template must not
     # delete the workout history of sessions that were started from it.
     my_sessions().filter_by(template_id=template.id).update({'template_id': None}, synchronize_session=False)
+    name = template.name
     db.session.delete(template)
     db.session.commit()
+    flash(f'Routine „{name}“ gelöscht. Die Workouts daraus bleiben im Verlauf.', 'success')
     return redirect(url_for('gym.gym_heute'))
 
 
@@ -2222,6 +2230,9 @@ def gym_add_exercise():
     name = request.form.get('name', '').strip()
     if not name:
         return redirect(url_for('gym.gym_uebungen'))
+    # No flash on either branch: the input is `required`, so an empty name does
+    # not reach here through the UI, and ?name_taken already renders a banner on
+    # the page that says this in context. A flash would say it twice.
     if my_exercises().filter_by(name=name).first():
         return redirect(url_for('gym.gym_uebungen', name_taken=1))
 
@@ -2267,9 +2278,16 @@ def gym_update_exercise(exercise_id):
 @login_required
 def gym_delete_exercise(exercise_id):
     exercise = owned_exercise(exercise_id)
-    if not exercise.session_exercises and not exercise.template_exercises:
-        db.session.delete(exercise)
-        db.session.commit()
+    if exercise.session_exercises or exercise.template_exercises:
+        # Silently refusing looked identical to deleting, so the row just
+        # stayed there with no reason given.
+        flash(f'„{exercise.name}“ steckt noch in einem Workout oder einer Routine '
+              f'und wurde nicht gelöscht.', 'error')
+        return redirect(url_for('gym.gym_uebungen'))
+    name = exercise.name
+    db.session.delete(exercise)
+    db.session.commit()
+    flash(f'Übung „{name}“ gelöscht.', 'success')
     return redirect(url_for('gym.gym_uebungen'))
 
 
