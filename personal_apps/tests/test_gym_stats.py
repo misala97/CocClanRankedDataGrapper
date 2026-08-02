@@ -605,12 +605,13 @@ def test_deload_weight_rounds_down_not_to_nearest():
 
 
 def test_deload_weight_rounds_down_even_when_nearest_would_round_up():
-    # The discriminating case: 81 * 0.70 = 56.7, which is 22.68 increments of
-    # 2.5 kg. Rounding to nearest would give 23 increments (57.5 kg) -- heavier
-    # than the 81 kg lift's own prescription implies. Flooring gives 55.0.
-    # Every other case in this file has a remainder below 0.5, where floor and
-    # round-to-nearest agree, so only this one proves the direction.
-    assert stats.deload_weight(81.0, 70, 2.5) == 55.0
+    # The discriminating case for DIRECTION: 81 * 0.70 = 56.7. Stepping down
+    # from 81 in 2.5 kg increments, 10 steps lands on 56.0 and 9 steps on 58.5
+    # -- heavier than the lift's own prescription implies. The result must be
+    # the one at or below 56.7. Every other case in this file has a remainder
+    # below half a step, where the two directions agree, so only this one
+    # proves it.
+    assert stats.deload_weight(81.0, 70, 2.5) == 56.0
 
 
 def test_deload_weight_uses_the_half_step_for_unilateral():
@@ -634,12 +635,25 @@ def test_deload_weight_preserves_the_shape_of_a_ramped_session():
 
 
 def test_deload_weight_floors_onto_a_stack_machines_grid():
-    # A 90 kg stack at 70 % is 63.0, which is exactly seven 9 kg plates. The
-    # old 2.5 grid would have prescribed 62.5 -- a weight the machine cannot
-    # produce at all.
+    # A 90 kg stack at 70 % is 63.0, which is exactly three 9 kg plates down.
+    # The old 2.5 grid would have prescribed 62.5 -- a weight the machine
+    # cannot produce at all.
     assert stats.deload_weight(90.0, 70, 9.0) == 63.0
-    # 100 * 0.70 = 70.0 is not on the 9 kg grid: floor to 63.0, never 72.0.
-    assert stats.deload_weight(100.0, 70, 9.0) == 63.0
+    # 100 * 0.70 = 70.0. Stepping down from 100, four plates lands on 64.0;
+    # three would give 73.0, above the prescription.
+    assert stats.deload_weight(100.0, 70, 9.0) == 64.0
+
+
+def test_deload_weight_stays_on_an_offset_stacks_own_grid():
+    """The real Seated Row: an 8 kg stack sitting on a 5 kg carriage, so its
+    positions are 5, 13, ... 53, 61, 69 -- none of them a multiple of 8.
+
+    Counting increments from zero prescribes 48, which that machine cannot
+    make. The prescription has to be reachable from the weight the lifter is
+    actually on, which is the only position known to exist.
+    """
+    assert stats.deload_weight(69.0, 70, 8.0) == 45.0
+    assert stats.deload_weight(61.0, 70, 8.0) == 37.0
 
 
 def test_deload_weight_never_floors_below_one_stack_plate():
