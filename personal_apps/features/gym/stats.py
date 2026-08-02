@@ -876,3 +876,63 @@ def group_exercises_by_muscle(exercises, muscle_groups):
     if other:
         result.append((NO_GROUP_LABEL, other))
     return result
+
+
+# A gap longer than this is an interruption, not rest -- a phone call between
+# sets should not become part of what your rest looks like. Long enough for a
+# genuinely slow superset, short enough to exclude walking away. Uncapped, one
+# such gap distorts everything downstream.
+REST_GAP_CAP_SECONDS = 600
+
+
+def rest_gaps(entries):
+    """Rest taken between consecutive sets of ONE session.
+
+    `entries` is an iterable of (completed_at, planned_seconds) for that
+    session's completed sets, in any order -- sorted here, because callers hand
+    over whatever order the rows arrived in.
+
+    Returns [(actual_seconds, planned_seconds), ...], one per consecutive pair.
+    The plan comes from the set that ENDED the gap: you finish a set and rest
+    that exercise's time. Gaps over REST_GAP_CAP_SECONDS are dropped entirely.
+
+    Deliberately includes walking to the next machine and setting it up. That
+    time is not lifting, and it is a real part of why a session takes as long
+    as it does.
+    """
+    ordered = sorted((e for e in entries if e[0] is not None), key=lambda e: e[0])
+    gaps = []
+    for (earlier_at, earlier_planned), (later_at, _) in zip(ordered, ordered[1:]):
+        actual = int((later_at - earlier_at).total_seconds())
+        if 0 <= actual <= REST_GAP_CAP_SECONDS:
+            gaps.append((actual, earlier_planned))
+    return gaps
+
+
+def rest_medians(gaps):
+    """(median_planned, median_actual) over pooled gaps, or None.
+
+    Pooled over every gap rather than averaged per session: the question is
+    what a typical rest of yours looks like, and a twenty-set session carries
+    more evidence about that than a six-set one.
+
+    Median rather than mean so one slow day cannot move it -- which also makes
+    the cap above less load-bearing, since an outlier that slips past it shifts
+    a median far less than a mean.
+
+    None when there is nothing to report, so the caller says "noch keine Daten"
+    instead of a confident zero.
+    """
+    actuals = [actual for actual, _ in gaps]
+    planned = [plan for _, plan in gaps if plan is not None]
+    if not actuals or not planned:
+        return None
+    return int(_median(planned)), int(_median(actuals))
+
+
+def _median(values):
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
