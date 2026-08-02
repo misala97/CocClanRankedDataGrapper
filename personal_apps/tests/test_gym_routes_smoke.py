@@ -278,7 +278,7 @@ def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload():
     exercise_id = None
     try:
         with acting_as(_admin_id()):
-            exercise = Exercise(name='pytest seed lift', is_unilateral=False)
+            exercise = Exercise(name='pytest seed lift', is_unilateral=False, user_id=_admin_id())
             db.session.add(exercise)
             db.session.commit()
             exercise_id = exercise.id
@@ -334,7 +334,7 @@ def _seed_slot_history(rows):
     """
     from extensions import db
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
-    exercise = Exercise(name='pytest slot lift', is_unilateral=False)
+    exercise = Exercise(name='pytest slot lift', is_unilateral=False, user_id=_admin_id())
     db.session.add(exercise)
     db.session.flush()
     created = []
@@ -428,7 +428,7 @@ def _deload_reorder_fixture():
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     exercise_ids, history_ids = [], []
     for label, weight in (('a', 100.0), ('b', 50.0)):
-        exercise = Exercise(name='pytest reorder lift %s' % label, is_unilateral=False)
+        exercise = Exercise(name='pytest reorder lift %s' % label, is_unilateral=False, user_id=_admin_id())
         db.session.add(exercise)
         db.session.flush()
         exercise_ids.append(exercise.id)
@@ -507,7 +507,7 @@ def scratch_increment_exercise():
     from extensions import db
     from models import Exercise, SessionExercise, WorkoutSession
     with flask_app.app_context():
-        exercise = Exercise(name='pytest scratch increment lift', muscle_group='Brust')
+        exercise = Exercise(name='pytest scratch increment lift', muscle_group='Brust', user_id=_admin_id())
         db.session.add(exercise)
         db.session.flush()
         session_ = WorkoutSession(name='pytest scratch increment',
@@ -635,7 +635,7 @@ def test_update_exercise_sets_and_clears_the_increment_without_losing_other_fiel
     from models import Exercise
 
     with flask_app.app_context():
-        exercise = Exercise(name='pytest update exercise increment', muscle_group='Rücken')
+        exercise = Exercise(name='pytest update exercise increment', muscle_group='Rücken', user_id=_admin_id())
         db.session.add(exercise)
         db.session.commit()
         exercise_id = exercise.id
@@ -685,7 +685,7 @@ def scratch_deload_session():
     from extensions import db
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     with flask_app.app_context():
-        exercise = Exercise(name='pytest deload suggest lift', muscle_group='Brust')
+        exercise = Exercise(name='pytest deload suggest lift', muscle_group='Brust', user_id=_admin_id())
         db.session.add(exercise)
         db.session.flush()
 

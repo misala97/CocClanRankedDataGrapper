@@ -878,6 +878,7 @@ def gym_add_session_exercise(session_id):
                 name=new_name,
                 muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
                 default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+                user_id=current_user_id(),
             )
             db.session.add(exercise)
             db.session.flush()
@@ -926,6 +927,7 @@ def gym_replace_session_exercise(session_exercise_id):
                 name=new_name,
                 muscle_group=original.exercise.muscle_group,
                 default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+                user_id=current_user_id(),
             )
             db.session.add(exercise)
             db.session.flush()
@@ -2211,6 +2213,7 @@ def gym_add_exercise():
         default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
         weight_increment=_to_increment(request.form.get('weight_increment', '')),
         is_unilateral=request.form.get('is_unilateral') == 'on',
+        user_id=current_user_id(),
     )
     db.session.add(exercise)
     db.session.commit()

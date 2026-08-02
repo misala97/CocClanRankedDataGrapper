@@ -150,8 +150,15 @@ MUSCLE_GROUPS = (
 
 class Exercise(db.Model):
     __tablename__ = 'gym_exercises'
+    # Owned per user since 2026-08-02: a third lifter joined who trains at the
+    # same gym but shares none of the same exercises, so one global list meant
+    # everyone's picker held everyone else's lifts. The cost is that the same
+    # machine can now carry a different weight_increment per user, and nothing
+    # reports the disagreement -- see the per-user-exercises design spec.
+    __table_args__ = (db.UniqueConstraint('user_id', 'name', name='uq_gym_exercises_user_id_name'),)
     id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    name                 = db.Column(db.String(150), nullable=False, unique=True)
+    user_id              = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False, index=True)
+    name                 = db.Column(db.String(150), nullable=False)
     previous_name        = db.Column(db.String(150), nullable=True)  # set to the prior name on rename, so anything still referencing the old name (e.g. historical data, or a rename made by mistake) can still resolve to this exercise instead of creating a duplicate
     muscle_group         = db.Column(db.String(100), nullable=True)
     default_rest_seconds = db.Column(db.Integer, nullable=True)
