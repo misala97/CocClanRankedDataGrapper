@@ -93,6 +93,24 @@ def two_users():
         db.session.add(workout)
         db.session.commit()
 
+        # A second, FINISHED session for the owner. The pages that list or
+        # aggregate history (verlauf/statistik/uebungen) all filter to
+        # finished_at IS NOT NULL, so the unfinished `workout` above -- kept
+        # active on purpose for the active-session tests below -- is invisible
+        # to every one of them. Without a finished sibling, their leak
+        # assertions can never fail no matter how the scoping is written.
+        finished_started = dt.datetime.utcnow() - dt.timedelta(days=3)
+        finished_workout = WorkoutSession(
+            name='pytest ownership finished', user_id=owner.id,
+            started_at=finished_started,
+            finished_at=finished_started + dt.timedelta(minutes=45))
+        finished_session_exercise = SessionExercise(exercise_id=exercise.id, position=1)
+        finished_session_exercise.sets = [
+            SessionSet(position=1, weight=123.5, reps=7, completed=True)]
+        finished_workout.exercises.append(finished_session_exercise)
+        db.session.add(finished_workout)
+        db.session.commit()
+
         created = {
             'owner_id': owner.id,
             'intruder_id': intruder.id,
@@ -101,10 +119,17 @@ def two_users():
             'session_id': workout.id,
             'session_exercise_id': workout.exercises[0].id,
             'set_id': workout.exercises[0].sets[0].id,
+            'finished_session_id': finished_workout.id,
         }
     yield created
 
     with flask_app.app_context():
+        doomed_finished_session = db.session.get(WorkoutSession, created['finished_session_id'])
+        if doomed_finished_session is not None:
+            doomed_finished_session.resting_set_id = None
+            db.session.commit()
+            db.session.delete(doomed_finished_session)
+            db.session.commit()
         doomed_session = db.session.get(WorkoutSession, created['session_id'])
         if doomed_session is not None:
             doomed_session.resting_set_id = None
@@ -379,7 +404,9 @@ def test_the_list_pages_show_none_of_another_users_numbers(intruder_client, two_
     body = intruder_client.get(path).get_data(as_text=True)
     for rendering in FOREIGN_WEIGHTS:
         assert rendering not in body, f'{path} leaked another user\'s weight as {rendering}'
-    assert 'pytest ownership session' not in body, f'{path} leaked another user\'s session name'
+    for marker in ('pytest ownership session', 'pytest ownership finished',
+                   'pytest ownership template'):
+        assert marker not in body, f'{path} leaked {marker}'
 
 
 def test_the_shared_exercise_page_shows_no_foreign_history(intruder_client, two_users):
