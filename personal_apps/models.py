@@ -254,6 +254,14 @@ class SessionSet(db.Model):
     weight              = db.Column(db.Float, nullable=False)
     reps                = db.Column(db.Integer, nullable=False)
     completed           = db.Column(db.Boolean, nullable=False, default=False)  # False for sets pre-filled from a template/history and not yet actually performed this session
+    # When this set actually landed. The rest between two sets is the gap
+    # between their stamps, which is the only way the app can compare the rest
+    # you planned against the rest you took -- rest_ends_at is a display target
+    # for the countdown, not a record that anything happened.
+    #
+    # Cleared whenever the set stops being completed: a stale stamp would make
+    # a re-tick measure however long you spent deciding.
+    completed_at        = db.Column(db.DateTime, nullable=True)
     # The working weight this set held before a deload rewrote it. The
     # invariant this column actually maintains: it is non-NULL exactly when
     # `weight` currently holds a deload-scaled value, and NULL whenever

@@ -1014,6 +1014,7 @@ def gym_add_set(session_exercise_id):
             weight=weight,
             reps=reps,
             completed=True,  # logged live via this form, so it's inherently just-performed
+            completed_at=dt.datetime.utcnow(),
         )
         db.session.add(new_set)
         db.session.flush()
@@ -1132,6 +1133,9 @@ def gym_toggle_set_complete(set_id):
     wanted = request.form.get('completed')
     was_completed = set_.completed
     set_.completed = (wanted == '1') if wanted in ('0', '1') else (not set_.completed)
+    # The stamp follows the flag in both directions. Leaving it behind on an
+    # un-complete would make the next tick measure the wrong interval.
+    set_.completed_at = dt.datetime.utcnow() if set_.completed else None
     if set_.completed and was_completed:
         # already logged, and the caller asked for logged: a duplicate request.
         # Persist any weight/reps it carried, but do NOT restart the rest --
