@@ -119,3 +119,34 @@ def test_the_owner_still_sees_their_own_exercise(two_lifters):
             flask_session['user_id'] = two_lifters['owner_id']
         body = owner_client.get('/gym/uebungen').get_data(as_text=True)
     assert 'pytest owned lift' in body, 'scoping hid the owner from their own catalogue'
+
+
+def test_adding_an_exercise_whose_name_another_user_has_creates_your_own(
+        stranger_client, two_lifters):
+    """Unscoped, the name lookup finds the other user's row and the route
+    redirects with name_taken -- so she could never create her own 'Bankdruecken',
+    and any path that linked instead of created would hand her their increment
+    and put her sets in their history."""
+    from extensions import db
+    from models import Exercise
+
+    response = stranger_client.post('/gym/exercises/add', data={
+        'name': 'pytest owned lift', 'muscle_group': 'Brust'})
+    assert response.status_code in (302, 303)
+
+    created_id = None
+    try:
+        with flask_app.app_context():
+            hers = Exercise.query.filter_by(name='pytest owned lift',
+                                            user_id=two_lifters['stranger_id']).first()
+            assert hers is not None, 'the name lookup matched another user and refused'
+            created_id = hers.id
+            assert hers.id != two_lifters['exercise_id'], 'linked to their row instead of creating'
+            assert hers.weight_increment is None, 'inherited their increment'
+    finally:
+        with flask_app.app_context():
+            if created_id is not None:
+                doomed = db.session.get(Exercise, created_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()

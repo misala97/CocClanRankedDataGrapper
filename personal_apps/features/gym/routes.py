@@ -872,7 +872,7 @@ def gym_add_session_exercise(session_id):
     exercise_id = request.form.get('exercise_id', type=int)
     new_name = request.form.get('new_exercise_name', '').strip()
     if not exercise_id and new_name:
-        exercise = Exercise.query.filter_by(name=new_name).first()
+        exercise = my_exercises().filter_by(name=new_name).first()
         if not exercise:
             exercise = Exercise(
                 name=new_name,
@@ -921,7 +921,7 @@ def gym_replace_session_exercise(session_exercise_id):
     exercise_id = request.form.get('exercise_id', type=int)
     new_name = request.form.get('new_exercise_name', '').strip()
     if not exercise_id and new_name:
-        exercise = Exercise.query.filter_by(name=new_name).first()
+        exercise = my_exercises().filter_by(name=new_name).first()
         if not exercise:
             exercise = Exercise(
                 name=new_name,
@@ -2204,7 +2204,7 @@ def gym_add_exercise():
     name = request.form.get('name', '').strip()
     if not name:
         return redirect(url_for('gym.gym_uebungen'))
-    if Exercise.query.filter_by(name=name).first():
+    if my_exercises().filter_by(name=name).first():
         return redirect(url_for('gym.gym_uebungen', name_taken=1))
 
     exercise = Exercise(
@@ -2227,7 +2227,7 @@ def gym_update_exercise(exercise_id):
     new_name = request.form.get('name', '').strip()
     name_taken = False
     if new_name and new_name != exercise.name:
-        if Exercise.query.filter_by(name=new_name).first():
+        if my_exercises().filter_by(name=new_name).first():
             name_taken = True  # surfaced to the user below instead of silently skipping the rename
         else:
             # Remember the old name so anything still referencing it (e.g.
