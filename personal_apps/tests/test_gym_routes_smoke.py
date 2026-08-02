@@ -3,7 +3,7 @@ these are run manually rather than in the pure-stats suite."""
 import pytest
 
 from app import app as flask_app
-from conftest import _admin_id
+from conftest import _admin_id, acting_as
 
 import datetime as dt
 
@@ -277,7 +277,7 @@ def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload():
     created = []
     exercise_id = None
     try:
-        with flask_app.app_context():
+        with acting_as(_admin_id()):
             exercise = Exercise(name='pytest seed lift', is_unilateral=False)
             db.session.add(exercise)
             db.session.commit()
@@ -384,7 +384,7 @@ def test_stale_slot_history_does_not_beat_a_recent_performance():
     exercise_id = None
     created = []
     try:
-        with flask_app.app_context():
+        with acting_as(_admin_id()):
             exercise_id, created = _seed_slot_history([
                 (200, 1, 40.0),   # stale slot-1 history
                 (3, 2, 70.0),     # current working weight, different slot
@@ -405,7 +405,7 @@ def test_recent_slot_history_still_wins_over_another_slot():
     exercise_id = None
     created = []
     try:
-        with flask_app.app_context():
+        with acting_as(_admin_id()):
             exercise_id, created = _seed_slot_history([
                 (5, 3, 61.0),     # recent, in the slot we will ask for
                 (2, 2, 69.0),     # more recent, but a fresher slot

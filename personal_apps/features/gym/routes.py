@@ -193,6 +193,8 @@ def _last_session_exercise(exercise_id, position=None):
             # would make the following one seed from *that*, and the lifter
             # would silently never return to their real working weight.
             WorkoutSession.is_deload == False,
+            # Suggestions come from your own training, never your partner's.
+            WorkoutSession.user_id == current_user_id(),
         )
     )
     if position is not None:
@@ -383,6 +385,7 @@ def load_performed(exercise_ids=None, since=None, include_active=False, exclude_
             joinedload(SessionExercise.sets),
         )
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+        .filter(WorkoutSession.user_id == current_user_id())
     )
     if not include_active:
         query = query.filter(WorkoutSession.finished_at.isnot(None))
@@ -454,18 +457,18 @@ def gym_heute():
     # N+1 (one query per template, one more per template-exercise) -- exactly
     # the pattern this page exists to avoid (see load_performed() below).
     templates = (
-        WorkoutTemplate.query
+        my_templates()
         .options(joinedload(WorkoutTemplate.exercises).joinedload(TemplateExercise.exercise))
         .order_by(WorkoutTemplate.name)
         .all()
     )
     routine_sessions = (
-        WorkoutSession.query
+        my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.template_id.isnot(None))
         .all()
     )
     recent = (
-        WorkoutSession.query
+        my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None))
         .order_by(WorkoutSession.started_at.desc())
         # Over-fetched, because the zero-set filter below runs after this and
@@ -502,7 +505,7 @@ def gym_heute():
     # here from the report rather than by changing stall_report itself.
     stalls = stats.stall_report(rows_by_exercise)
     last_deload = (
-        WorkoutSession.query
+        my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.is_deload.is_(True))
         .order_by(WorkoutSession.started_at.desc())
         .first()
@@ -606,7 +609,7 @@ def session_detail(session_id):
         # for exactly this reason and says so in its own comment; this branch
         # was doing it twice.
         session_ = (
-            WorkoutSession.query
+            my_sessions()
             .options(
                 joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
                 joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
@@ -624,7 +627,7 @@ def session_detail(session_id):
         previous_session = None
         if session_.template_id:
             cohort = (
-                WorkoutSession.query
+                my_sessions()
                 .options(load_only(WorkoutSession.id, WorkoutSession.started_at))
                 .filter(
                     WorkoutSession.id != session_.id,
@@ -1408,7 +1411,7 @@ def gym_verlauf():
     # below exists to avoid, just on a different relationship than
     # load_performed().
     sessions = (
-        WorkoutSession.query
+        my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None))
         .options(joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise))
         .order_by(WorkoutSession.started_at.desc())
@@ -1674,7 +1677,7 @@ def gym_export():
             session_ids.append(int(raw_id))
 
     sessions = (
-        WorkoutSession.query
+        my_sessions()
         .filter(
             WorkoutSession.finished_at.isnot(None),
             WorkoutSession.id.in_(session_ids),

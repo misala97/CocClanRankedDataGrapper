@@ -353,6 +353,56 @@ def test_starting_from_another_users_template_seeds_nothing_and_stores_no_link(t
                     db.session.commit()
 
 
+LEAKY_PAGES = [
+    '/gym',
+    '/gym/verlauf',
+    '/gym/statistik',
+    '/gym/export',
+    '/gym/uebungen',
+]
+
+
+@pytest.mark.parametrize('path', LEAKY_PAGES)
+def test_the_list_pages_show_none_of_another_users_numbers(intruder_client, two_users, path):
+    """B has no training data at all, so A's distinctive 123.5 kg must not
+    appear anywhere on a page B can open."""
+    body = intruder_client.get(path).get_data(as_text=True)
+    assert '123.5' not in body, f'{path} leaked another user\'s weight'
+    assert 'pytest ownership session' not in body, f'{path} leaked another user\'s session name'
+
+
+def test_the_shared_exercise_page_shows_no_foreign_history(intruder_client, two_users):
+    """The subtle one: the exercise itself is shared and B may open it, but
+    the history rendered around it is A's and must not appear."""
+    url = '/gym/exercises/{}'.format(two_users['exercise_id'])
+    response = intruder_client.get(url)
+    assert response.status_code == 200, 'the shared catalogue must stay readable'
+    assert '123.5' not in response.get_data(as_text=True)
+
+
+def test_the_progress_json_carries_no_foreign_history(intruder_client, two_users):
+    url = '/gym/exercises/{}/progress.json'.format(two_users['exercise_id'])
+    response = intruder_client.get(url)
+    assert response.status_code == 200
+    assert '123.5' not in response.get_data(as_text=True)
+
+
+def test_a_stranger_does_not_inherit_the_active_session(intruder_client, two_users):
+    """A's session is unfinished. _get_active_session must not hand it to B --
+    B would land in someone else's workout on the dashboard."""
+    body = intruder_client.get('/gym').get_data(as_text=True)
+    assert 'pytest ownership session' not in body
+
+
+def test_the_owner_still_sees_their_own_numbers(two_users):
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as owner_client:
+        with owner_client.session_transaction() as flask_session:
+            flask_session['user_id'] = two_users['owner_id']
+        body = owner_client.get('/gym/exercises/{}'.format(two_users['exercise_id'])).get_data(as_text=True)
+    assert '123.5' in body, 'scoping hid the owner from their own history'
+
+
 def test_update_template_cannot_overwrite_a_template_it_does_not_own(two_users):
     """The write half of the same chain. Reaches update_template with a session
     whose template_id points at A's template -- the state a pre-fix gym_start

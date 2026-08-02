@@ -1,8 +1,11 @@
 """Shared fixtures. Every suite here runs against the real local development
 database, so the account these clients log in as is the seeded admin."""
+from contextlib import contextmanager
+
 import pytest
 
 from app import app as flask_app
+from flask import session as flask_session
 
 
 def _admin_id():
@@ -30,3 +33,17 @@ def anon_client():
     flask_app.config['TESTING'] = True
     with flask_app.test_client() as test_client:
         yield test_client
+
+
+@contextmanager
+def acting_as(user_id):
+    """Request context carrying a logged-in session.
+
+    For tests that call route helpers (_last_full_performance and friends)
+    directly rather than through the client: those helpers read flask.session
+    to scope their queries, which a plain app_context cannot provide. A
+    request context pushes an app context too, so db work inside still works.
+    """
+    with flask_app.test_request_context():
+        flask_session['user_id'] = user_id
+        yield
