@@ -837,3 +837,28 @@ def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session
         assert s.reps == 6
         assert s.base_reps is None          # dropped: the typed 6 is now the truth
         assert s.base_weight == 100.0       # weight was echoed unchanged, baseline survives
+
+
+def test_the_add_exercise_sheet_separates_picking_from_creating(client, scratch_session):
+    """The sheet used to carry a "— Neue Übung —" option in the catalogue select
+    plus a permanently visible name field, so both paths were one form and
+    neither was signposted. They are two panes and two forms now.
+
+    Pins the structural guarantee rather than the styling: the pick form must
+    not offer a create option, and the create form must not carry an
+    exercise_id -- that empty-value pair is exactly what made the old sheet
+    ambiguous, and it is what gym_add_session_exercise branches on.
+    """
+    html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
+
+    assert 'id="add-pick-pane"' in html
+    assert 'id="add-new-pane"' in html
+    assert '— Neue Übung —' not in html, 'the fake select option is back'
+
+    pick = html.split('id="add-pick-pane"', 1)[1].split('id="add-new-pane"', 1)[0]
+    assert 'name="exercise_id"' in pick
+    assert 'name="new_exercise_name"' not in pick, 'create fields leaked into the pick pane'
+
+    create = html.split('id="add-new-pane"', 1)[1].split('</dialog>', 1)[0]
+    assert 'name="new_exercise_name"' in create
+    assert 'name="exercise_id"' not in create, 'the create form still submits an exercise id'
