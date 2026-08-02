@@ -837,3 +837,309 @@ def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session
         assert s.reps == 6
         assert s.base_reps is None          # dropped: the typed 6 is now the truth
         assert s.base_weight == 100.0       # weight was echoed unchanged, baseline survives
+
+
+def test_the_add_exercise_sheet_separates_picking_from_creating(client, scratch_session):
+    """The sheet used to carry a "— Neue Übung —" option in the catalogue select
+    plus a permanently visible name field, so both paths were one form and
+    neither was signposted. They are two panes and two forms now.
+
+    Pins the structural guarantee rather than the styling: the pick form must
+    not offer a create option, and the create form must not carry an
+    exercise_id -- that empty-value pair is exactly what made the old sheet
+    ambiguous, and it is what gym_add_session_exercise branches on.
+    """
+    html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
+
+    assert 'id="add-pick-pane"' in html
+    assert 'id="add-new-pane"' in html
+    assert '— Neue Übung —' not in html, 'the fake select option is back'
+
+    pick = html.split('id="add-pick-pane"', 1)[1].split('id="add-new-pane"', 1)[0]
+    assert 'name="exercise_id"' in pick
+    assert 'name="new_exercise_name"' not in pick, 'create fields leaked into the pick pane'
+
+    create = html.split('id="add-new-pane"', 1)[1].split('</dialog>', 1)[0]
+    assert 'name="new_exercise_name"' in create
+    assert 'name="exercise_id"' not in create, 'the create form still submits an exercise id'
+
+
+def test_a_finished_exercise_can_still_append_a_set_from_the_panel(client, scratch_session):
+    """With every set logged, the panel used to render a paragraph pointing at
+    the row's ⋮ sheet and no control -- the same bug the block's own comment
+    records fixing for an exercise with no sets at all, one branch over.
+
+    gym_add_set already backed the confirm button whenever nothing was pending,
+    so the state was missing the control, not the machinery.
+    """
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        for s in session_.exercises[0].sets:
+            s.completed = True
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
+
+    assert 'id="set-confirm"' in html, 'no confirm button once every set is logged'
+    assert 'sets/add' in html, 'the confirm button does not append a set'
+    assert 'über <b>⋮</b>' not in html, 'still sending the lifter to the sheet'
+
+
+def test_appending_a_set_starts_from_the_last_one_not_the_opening_suggestion(client, scratch_session):
+    """The reason you append is that the last set went well enough to want
+    another, so the steppers open on it rather than on the session's starting
+    suggestion."""
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, scratch_session)
+        sets_ = session_.exercises[0].sets
+        for s in sets_:
+            s.completed = True
+        sets_[-1].weight, sets_[-1].reps = 62.5, 5
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
+    assert 'value="62.5"' in html, 'steppers ignored the set that was actually just done'
+    assert 'value="5"' in html
+
+
+def test_the_finished_page_can_actually_save_a_freeform_workout_as_a_template():
+    """The finished page's prompt posted name="name" while gym_save_as_template
+    reads template_name, so the route saw an empty string, skipped the `if`,
+    and redirected having created nothing -- silently, since the redirect is
+    the same one a success produces. Broken since the finished pages were
+    merged on 2026-07-23.
+
+    Submits exactly what the rendered form declares rather than a hardcoded
+    field name, so this fails again if either side is renamed on its own.
+    """
+    import datetime as dt
+    import re
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession, WorkoutTemplate
+
+    ex_id = sid = tpl_id = None
+    try:
+        with flask_app.app_context():
+            exercise = Exercise(name='pytest finished tpl lift', user_id=_admin_id())
+            db.session.add(exercise)
+            db.session.flush()
+            ex_id = exercise.id
+            started = dt.datetime.utcnow() - dt.timedelta(hours=1)
+            done = WorkoutSession(name='pytest finished tpl', started_at=started,
+                                  finished_at=dt.datetime.utcnow(), user_id=_admin_id())
+            se = SessionExercise(exercise_id=exercise.id, position=1)
+            se.sets = [SessionSet(position=1, weight=40.0, reps=8, completed=True)]
+            done.exercises.append(se)
+            db.session.add(done)
+            db.session.commit()
+            sid = done.id
+
+        flask_app.config['TESTING'] = True
+        with flask_app.test_client() as client:
+            with client.session_transaction() as flask_session:
+                flask_session['user_id'] = _admin_id()
+            # The prompt is gated on ?just_finished -- it is offered at the one
+            # moment you know what you did, not on every later visit.
+            html = client.get(f'/gym/session/{sid}?just_finished=1').get_data(as_text=True)
+            assert 'als Vorlage speichern' in html, 'the freeform prompt did not render'
+
+            form = html.split('save_as_template', 1)[1].split('</form>', 1)[0]
+            field = re.search(r'<input[^>]*type="text"[^>]*name="([^"]+)"', form)
+            assert field, 'no text input in the save-as-template form'
+
+            response = client.post(f'/gym/session/{sid}/save_as_template',
+                                   data={field.group(1): 'pytest finished tpl name'})
+            assert response.status_code in (302, 303)
+
+        with flask_app.app_context():
+            created = WorkoutTemplate.query.filter_by(name='pytest finished tpl name').first()
+            assert created is not None, \
+                f'the form posts {field.group(1)!r}, which the route ignores'
+            tpl_id = created.id
+            assert [te.exercise_id for te in created.exercises] == [ex_id]
+    finally:
+        with flask_app.app_context():
+            for model, row_id in ((WorkoutTemplate, tpl_id), (WorkoutSession, sid)):
+                if row_id:
+                    doomed = db.session.get(model, row_id)
+                    if doomed is not None:
+                        if model is WorkoutSession:
+                            doomed.resting_set_id = None
+                            db.session.commit()
+                        db.session.delete(doomed)
+                        db.session.commit()
+            if ex_id:
+                doomed = db.session.get(Exercise, ex_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+def test_every_gym_form_posts_fields_its_own_route_reads():
+    """The class of bug behind the finished page's broken save-as-template: the
+    form posted `name` while gym_save_as_template reads `template_name`, so the
+    route saw an empty string, skipped its `if`, and redirected -- the same
+    redirect a success produces. Ten days of a button that looked like it worked.
+
+    Checking that *some* route reads a field is not enough: `name` is read by
+    gym_add_exercise, so a global scan passes while the form is still broken.
+    The pairing is what matters, so this resolves each form's own action to its
+    route function and checks that function's body.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(flask_app.root_path)
+    source = (root / 'features' / 'gym' / 'routes.py').read_text(encoding='utf-8')
+    # Split routes.py into function bodies, so a field is checked against the
+    # route it is actually posted to rather than the whole module.
+    bodies, current = {}, None
+    for line in source.splitlines():
+        match = re.match(r'def (\w+)\(', line)
+        if match:
+            current = match.group(1)
+            bodies[current] = []
+        elif current:
+            bodies[current].append(line)
+    bodies = {name: '\n'.join(lines) for name, lines in bodies.items()}
+
+    form_re = re.compile(
+        r"<form[^>]*action=\"\{\{\s*url_for\('gym\.(\w+)'.*?\}\}\"(.*?)</form>", re.S)
+    control_re = re.compile(r'<(?:input|select|textarea)\b[^>]*\bname="([^"{]+)"')
+
+    problems = []
+    for path in sorted((root / 'templates' / 'gym').glob('*.html')):
+        html = path.read_text(encoding='utf-8')
+        for endpoint, body in form_re.findall(html):
+            route = bodies.get(endpoint)
+            if route is None:
+                problems.append(f'{path.name}: posts to gym.{endpoint}, which does not exist')
+                continue
+            for field in sorted(set(control_re.findall(body))):
+                if f"'{field}'" not in route and f'"{field}"' not in route:
+                    problems.append(f'{path.name}: posts {field!r} to gym.{endpoint}, '
+                                    f'which never reads it')
+
+    assert not problems, 'form/route field mismatch:\n  ' + '\n  '.join(problems)
+
+
+def _finished_freeform_session(name):
+    """A finished session with one completed set and no template. Returns
+    (session_id, exercise_id)."""
+    import datetime as dt
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    exercise = Exercise(name=f'{name} lift', user_id=_admin_id())
+    db.session.add(exercise)
+    db.session.flush()
+    started = dt.datetime.utcnow() - dt.timedelta(hours=1)
+    done = WorkoutSession(name=name, started_at=started,
+                          finished_at=dt.datetime.utcnow(), user_id=_admin_id())
+    se = SessionExercise(exercise_id=exercise.id, position=1)
+    se.sets = [SessionSet(position=1, weight=40.0, reps=8, completed=True)]
+    done.exercises.append(se)
+    db.session.add(done)
+    db.session.commit()
+    return done.id, exercise.id
+
+
+def _drop(session_id, exercise_id, template_id=None):
+    from extensions import db
+    from models import Exercise, WorkoutSession, WorkoutTemplate
+    with flask_app.app_context():
+        for model, row_id in ((WorkoutTemplate, template_id), (WorkoutSession, session_id)):
+            if row_id:
+                doomed = db.session.get(model, row_id)
+                if doomed is not None:
+                    if model is WorkoutSession:
+                        doomed.resting_set_id = None
+                        db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+        if exercise_id:
+            doomed = db.session.get(Exercise, exercise_id)
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()
+
+
+def test_saving_a_session_as_a_template_counts_as_having_done_it(client):
+    """Start reads "last done" from WorkoutSession.template_id, and a freeform
+    session has none -- so a routine created from a workout you just finished
+    announced itself as never performed. The session it was built from is the
+    one instance of it that certainly exists."""
+    from extensions import db
+    from models import WorkoutSession, WorkoutTemplate
+
+    sid = ex_id = tpl_id = None
+    try:
+        with flask_app.app_context():
+            sid, ex_id = _finished_freeform_session('pytest neverdone')
+
+        client.post(f'/gym/session/{sid}/save_as_template',
+                    data={'template_name': 'pytest neverdone routine'})
+
+        with flask_app.app_context():
+            tpl = WorkoutTemplate.query.filter_by(name='pytest neverdone routine').one()
+            tpl_id = tpl.id
+            session_ = db.session.get(WorkoutSession, sid)
+            assert session_.template_id == tpl_id, 'the source session was left unlinked'
+
+        html = client.get('/gym').get_data(as_text=True)
+        block = html.split('pytest neverdone routine', 1)[1][:400]
+        assert 'Noch nie' not in block, 'Start still calls the routine never performed'
+    finally:
+        _drop(sid, ex_id, tpl_id)
+
+
+def test_saving_as_a_new_template_does_not_steal_a_session_from_its_routine(client):
+    """Only a session with no routine gets linked. Re-pointing one that already
+    belongs to a template would quietly remove it from that template's history
+    and change when Start thinks that routine was last done."""
+    from extensions import db
+    from models import WorkoutSession, WorkoutTemplate
+
+    sid = ex_id = new_id = old_id = None
+    try:
+        with flask_app.app_context():
+            sid, ex_id = _finished_freeform_session('pytest owned already')
+            original = WorkoutTemplate(name='pytest original routine', user_id=_admin_id())
+            db.session.add(original)
+            db.session.flush()
+            old_id = original.id
+            db.session.get(WorkoutSession, sid).template_id = old_id
+            db.session.commit()
+
+        client.post(f'/gym/session/{sid}/save_as_template',
+                    data={'template_name': 'pytest second routine'})
+
+        with flask_app.app_context():
+            new_id = WorkoutTemplate.query.filter_by(name='pytest second routine').one().id
+            assert db.session.get(WorkoutSession, sid).template_id == old_id, \
+                'the session was moved off the routine it already belonged to'
+    finally:
+        _drop(sid, ex_id, new_id)
+        _drop(None, None, old_id)
+
+
+def test_the_queue_offers_adding_an_exercise(client, scratch_session):
+    """Adding an exercise mid-workout lived only in the ⋮ sheet in the top
+    corner. The queue is where you are already reading what the workout
+    contains, so it is where "and one more" belongs.
+
+    Also pins that the action is not a queue__row and carries no data-se-id:
+    session_reorder.js keys both drag and the arrow-key path off that class,
+    and an action is not a position in the sequence.
+    """
+    html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
+
+    queue = html.split('<div class="queue"', 1)[1].split('</div>\n\n</div>', 1)[0]
+    assert 'queue__add' in queue, 'no add-exercise row in the queue'
+
+    row = queue.split('queue__add', 1)[1]
+    assert 'data-sheet="sheet-add-exercise"' in row
+    assert 'data-se-id' not in row, 'the action row looks like a reorderable exercise'
+    assert 'queue__row' not in row, 'the action row would be picked up by the reorder handler'

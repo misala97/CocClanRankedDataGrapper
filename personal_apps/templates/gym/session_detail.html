@@ -126,13 +126,20 @@
       {% with icon='save' %}{% include 'gym/_icon.html' %}{% endwith %}
       Als Vorlage speichern
     </button>
-    {% if not has_push_subscription %}
-    <button type="button" class="sheet__act" id="notify-enable-btn">
-      {% with icon='timer' %}{% include 'gym/_icon.html' %}{% endwith %}
-      Pausen-Benachrichtigung aktivieren
-    </button>
-    <p class="sheet__note">Installiere die App zuerst über „Zum Home-Bildschirm“.</p>
-    {% endif %}
+    {# Always rendered, and the client decides whether to show it.
+       has_push_subscription asks whether this USER has any subscription, but a
+       subscription is a browser endpoint -- one per device. So enabling push on
+       one phone hid this button on every other device the same person owns, and
+       a second phone could never subscribe at all. Only the browser knows
+       whether THIS device is subscribed, so only the browser can answer it.
+       The server value is still passed as a hint for the copy. #}
+    <div id="notify-row" hidden>
+      <button type="button" class="sheet__act" id="notify-enable-btn">
+        {% with icon='timer' %}{% include 'gym/_icon.html' %}{% endwith %}
+        Pausen-Benachrichtigung auf diesem Gerät aktivieren
+      </button>
+      <p class="sheet__note">Installiere die App zuerst über „Zum Home-Bildschirm“.</p>
+    </div>
   </div>
 </dialog>
 
@@ -181,27 +188,49 @@
     <button type="button" class="sheet__close" data-close>Abbrechen</button>
   </div>
   <div class="sheet__body">
-    <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" class="add-exercise" id="add-exercise-form">
-      <div class="field grow">
-        <label class="label" for="exercise-select">Übung</label>
-        <select name="exercise_id" id="exercise-select" class="select">
-          <option value="">— Neue Übung —</option>
-          {% for e in exercises %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="field grow" id="new-exercise-fields">
-        <label class="label" for="new-exercise-name-input">Name der neuen Übung</label>
-        <input type="text" id="new-exercise-name-input" name="new_exercise_name" class="input" placeholder="z.B. Kniebeuge">
-      </div>
-      <div class="field grow" id="new-exercise-muscle-group">
-        <label class="label" for="new-exercise-muscle-select">Muskelgruppe</label>
-        <select id="new-exercise-muscle-select" name="muscle_group" class="select">
-          <option value="">— optional —</option>
-          {% for mg in muscle_groups %}<option value="{{ mg }}">{{ mg }}</option>{% endfor %}
-        </select>
-      </div>
-      <button type="submit" class="btn btn--live btn--block">Hinzufügen</button>
-    </form>
+    {# Two panes, one per path, because they are two different actions.
+       The catalogue select used to carry a "— Neue Übung —" option that
+       doubled as a mode switch, with the name and muscle-group fields sitting
+       permanently beside it -- so picking an existing lift and inventing one
+       looked like the same form, and nothing said which you were doing.
+       Separate forms rather than one: each submits only its own fields, which
+       is exactly the shape gym_add_session_exercise already branches on. #}
+    <div class="sheet__pane" id="add-pick-pane" data-sheet-title="Übung hinzufügen"
+         {% if not exercises %}hidden{% endif %}>
+      <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" class="add-exercise" id="add-exercise-form">
+        <div class="field grow">
+          <label class="label" for="exercise-select">Übung</label>
+          <select name="exercise_id" id="exercise-select" class="select">
+            {% for e in exercises %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn--live btn--block">Hinzufügen</button>
+      </form>
+      <button type="button" class="sheet__switch" data-show-pane="add-new-pane">+ Neue Übung anlegen</button>
+    </div>
+
+    <div class="sheet__pane" id="add-new-pane" data-sheet-title="Neue Übung"
+         {% if exercises %}hidden{% endif %}>
+      {% if exercises %}
+      <button type="button" class="sheet__back" data-show-pane="add-pick-pane">← Vorhandene wählen</button>
+      {% else %}
+      <p class="sheet__hint">Du hast noch keine Übungen. Leg deine erste an — sie bleibt dann in deiner Liste.</p>
+      {% endif %}
+      <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" class="add-exercise">
+        <div class="field grow field--full">
+          <label class="label" for="new-exercise-name-input">Name</label>
+          <input type="text" id="new-exercise-name-input" name="new_exercise_name" class="input" placeholder="z.B. Kniebeuge">
+        </div>
+        <div class="field grow">
+          <label class="label" for="new-exercise-muscle-select">Muskelgruppe</label>
+          <select id="new-exercise-muscle-select" name="muscle_group" class="select">
+            <option value="">— optional —</option>
+            {% for mg in muscle_groups %}<option value="{{ mg }}">{{ mg }}</option>{% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn--live btn--block">Anlegen und hinzufügen</button>
+      </form>
+    </div>
   </div>
 </dialog>
 
@@ -302,22 +331,39 @@
           {% with icon='swap' %}{% include 'gym/_icon.html' %}{% endwith %}
           Übung ersetzen
         </summary>
-        <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}">
-          <div class="field grow">
-            <label class="label" for="replace-select-{{ se.id }}">Ersatzübung</label>
-            <select id="replace-select-{{ se.id }}" name="exercise_id" class="select">
-              <option value="">— Neue Übung —</option>
-              {% for e in exercises if e.muscle_group == se.exercise.muscle_group and e.id != se.exercise_id %}
-              <option value="{{ e.id }}">{{ e.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="field grow">
-            <label class="label" for="replace-name-{{ se.id }}">Name der neuen Übung</label>
-            <input type="text" id="replace-name-{{ se.id }}" name="new_exercise_name" class="input" placeholder="z.B. Kabelzug">
-          </div>
-          <button type="submit" class="btn btn--live btn--sm">Ersetzen</button>
-        </form>
+        {# Same two-pane split as the add sheet -- these were identical twins in
+           the same confusion. Note this select is filtered to the same muscle
+           group, so it can be legitimately empty even for a full catalogue;
+           that is why the pane choice keys off the filtered list, not the
+           catalogue as a whole. #}
+        {% set swaps = exercises | selectattr('muscle_group', 'equalto', se.exercise.muscle_group) | rejectattr('id', 'equalto', se.exercise_id) | list %}
+        <div class="sheet__pane" id="replace-pick-{{ se.id }}" {% if not swaps %}hidden{% endif %}>
+          <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}" class="replace__form">
+            <div class="field grow">
+              <label class="label" for="replace-select-{{ se.id }}">Ersatzübung</label>
+              <select id="replace-select-{{ se.id }}" name="exercise_id" class="select">
+                {% for e in swaps %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <button type="submit" class="btn btn--live btn--sm">Ersetzen</button>
+          </form>
+          <button type="button" class="sheet__switch" data-show-pane="replace-new-{{ se.id }}">+ Neue Übung anlegen</button>
+        </div>
+
+        <div class="sheet__pane" id="replace-new-{{ se.id }}" {% if swaps %}hidden{% endif %}>
+          {% if swaps %}
+          <button type="button" class="sheet__back" data-show-pane="replace-pick-{{ se.id }}">← Vorhandene wählen</button>
+          {% else %}
+          <p class="sheet__hint">Keine andere Übung für {{ se.exercise.muscle_group or 'diese Gruppe' }} in deiner Liste. Leg eine neue an.</p>
+          {% endif %}
+          <form method="post" action="{{ url_for('gym.gym_replace_session_exercise', session_exercise_id=se.id) }}" class="replace__form">
+            <div class="field grow">
+              <label class="label" for="replace-name-{{ se.id }}">Name</label>
+              <input type="text" id="replace-name-{{ se.id }}" name="new_exercise_name" class="input" placeholder="z.B. Kabelzug">
+            </div>
+            <button type="submit" class="btn btn--live btn--sm">Anlegen und ersetzen</button>
+          </form>
+        </div>
       </details>
       <form method="post" action="{{ url_for('gym.gym_delete_session_exercise', session_exercise_id=se.id) }}"
             data-confirm="Übung aus Workout entfernen?">
@@ -342,6 +388,29 @@ function startClocks() {
     window.GymClock.start(document.getElementById('session-duration'));
 }
 startClocks();
+
+// ---- two-pane sheets ------------------------------------------------------
+// "Pick an existing exercise" and "invent a new one" are separate panes in the
+// add and replace sheets. Delegated from the document because the replace
+// sheets are rendered per session-exercise and re-created by refreshBody.
+document.addEventListener('click', function (event) {
+    const trigger = event.target.closest('[data-show-pane]');
+    if (!trigger) { return; }
+    const wanted = document.getElementById(trigger.dataset.showPane);
+    if (!wanted) { return; }
+    const sheet = wanted.closest('.sheet, details');
+    if (!sheet) { return; }
+    sheet.querySelectorAll('.sheet__pane').forEach(function (pane) {
+        pane.hidden = pane !== wanted;
+    });
+    // The heading names the action, so it has to follow the pane. Only the add
+    // sheet carries one; the replace panes live inside a <details> with its own
+    // summary and set no data-sheet-title.
+    const title = sheet.querySelector('.sheet__title');
+    if (title && wanted.dataset.sheetTitle) { title.textContent = wanted.dataset.sheetTitle; }
+    const focusable = wanted.querySelector('input, select');
+    if (focusable) { focusable.focus(); }
+});
 
 // ---- sheets ---------------------------------------------------------------
 // Native <dialog>: the platform supplies the backdrop, Esc, and the focus trap.
@@ -760,6 +829,22 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 const notifyBtn = document.getElementById('notify-enable-btn');
+const notifyRow = document.getElementById('notify-row');
+// Whether to offer this is a question about the device, not the account, so it
+// is answered here rather than in the template. Hidden only once this browser
+// is confirmed subscribed -- every other case (never subscribed, a second
+// phone, a reinstalled PWA, push unsupported) still gets the row, because in
+// all of them the person needs either the button or the reason it cannot work.
+if (notifyRow) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        notifyRow.hidden = false;
+    } else {
+        navigator.serviceWorker.getRegistration('/gym/')
+            .then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; })
+            .then(function (sub) { notifyRow.hidden = !!sub; })
+            .catch(function () { notifyRow.hidden = false; });
+    }
+}
 if (notifyBtn) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         notifyBtn.disabled = true;

@@ -2030,6 +2030,76 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
    is --ink rather than --edge-hi because at 2px --edge-hi measured 2.10:1 in
    light and 1.79:1 in dark against this surface, under 1.4.11's 3:1 for a
    component boundary that is carrying the alarm. */
+/* Flash messages. Deliberately the same chassis-and-inset-ring treatment as
+   .note-save below, so the app has one banner language rather than two: that
+   one reports a failed AJAX write during a workout, these report the result of
+   a POST-redirect anywhere in the gym.
+
+   Colour comes from the app's own semantics, not from imported red/green.
+   --done (plum) is what LOGGED already means here, so it is what "saved"
+   means; --live is the hot colour this app already uses for danger
+   (.btn--quiet-danger), so it carries the failure. */
+/* One-time push prompt on Start. Quiet by construction: it only ever renders
+   on a device with no subscription, and removes itself after the tap -- so it
+   is a setup step that disappears, not a permanent row. Reads as a suggestion
+   rather than an action the page wants: outlined, not filled, and it does not
+   compete with "Workout starten".
+   Explicit display:none for the hidden case -- .sec may carry a display, and an
+   author display beats the UA sheet's [hidden] on specificity. */
+.notify-prompt[hidden] { display: none; }
+.notify-prompt { margin: var(--sp-3) var(--sp-4) 0; }
+.notify-prompt__btn {
+  /* flex-start, not center: the body wraps to two lines and a centred icon
+     floats between them instead of reading with the line it labels. */
+  display: flex; align-items: flex-start; gap: var(--sp-3);
+  inline-size: 100%; padding: var(--sp-3) var(--sp-4);
+  background: var(--chassis); border: 0; border-radius: var(--r-panel);
+  box-shadow: inset 0 0 0 1px var(--edge-hi);
+  color: var(--ink); font: inherit; text-align: start; cursor: pointer;
+}
+.notify-prompt__btn:hover { box-shadow: inset 0 0 0 1px var(--live); }
+.notify-prompt__btn:disabled { opacity: 0.5; cursor: default; }
+.notify-prompt__btn b { display: block; font-size: var(--t-sm); font-weight: var(--w-semi); }
+.notify-prompt__btn small {
+  display: block; margin-top: 2px;
+  font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
+}
+
+/* Übungen with nothing in it. Reachable only since exercises became per user:
+   before that the catalogue always held someone's lifts, so this state existed
+   in the template and had never once rendered. */
+.uebungen-blank {
+  margin: var(--sp-5) var(--sp-4);
+  padding: var(--sp-5) var(--sp-4);
+  background: var(--chassis); border-radius: var(--r-panel); box-shadow: var(--lift);
+  text-align: center;
+}
+.uebungen-blank__title {
+  margin: 0 0 var(--sp-2); font-family: var(--font-display);
+  font-size: var(--t-lg); font-weight: var(--w-bold); color: var(--ink);
+}
+.uebungen-blank__body {
+  margin: 0 auto var(--sp-4); max-inline-size: 34ch;
+  color: var(--dim); font-size: var(--t-sm); line-height: 1.55;
+}
+.uebungen-blank .btn { inline-size: auto; margin-inline: auto; }
+
+.flashes { margin: var(--sp-3) var(--sp-4) 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.flash {
+  margin: 0; padding: var(--sp-3) var(--sp-4);
+  background: var(--chassis); border-radius: var(--r-panel);
+  box-shadow: inset 0 0 0 2px var(--edge-hi), var(--lift);
+  color: var(--ink); font-size: var(--t-sm); line-height: 1.5;
+}
+.flash--success { box-shadow: inset 0 0 0 2px var(--done), var(--lift); }
+.flash--error   { box-shadow: inset 0 0 0 2px var(--live), var(--lift); color: var(--live-ink); }
+
+/* Same arrival as the save banner, and it inherits that block's
+   prefers-reduced-motion handling below. */
+@media (prefers-reduced-motion: no-preference) {
+  .flash { animation: stall-arrive var(--dur-3) var(--ease-out); }
+}
+
 .note-save {
   position: fixed; z-index: var(--z-bar);
   inset-inline: var(--sp-4);
@@ -2235,6 +2305,20 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
 
 /* reorder mode: a visible state, not a lock icon to decode */
 body.is-reordering .queue__row { background: var(--raised); border-radius: var(--r-inset); }
+
+/* The queue's one action row. Reads as an action rather than as an exercise --
+   accent ink, no load in the trail, no position number -- while keeping the
+   row geometry so the list still scans as one column.
+   Explicit display:none for the reorder case: .row is display:flex, and an
+   author display beats the UA sheet's [hidden] on specificity. */
+/* .row__main is a button, so it centres by default; the queue's exercise rows
+   already opt out and the action row has to as well, or the one column of
+   names stops scanning straight down. */
+.queue__add .row__main { text-align: start; }
+.queue__add .row__lead { color: var(--live-ink); display: inline-flex; align-items: center; }
+.queue__add .row__name { color: var(--live-ink); font-weight: var(--w-semi); }
+.queue__add .row__main:hover .row__name { color: var(--live); }
+body.is-reordering .queue__add { display: none; }
 /* --dim, not --live-ink: reorder lights every handle at once, and the NOW hue
    is reserved for the single thing happening right now (4.2). */
 body.is-reordering .drag-handle { color: var(--dim); }
@@ -2304,6 +2388,45 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
    1,24:1 dark, against 1.4.11's 3:1 for a control boundary. A filled ground
    carries it instead of a hairline that has to. */
 .sheet .input, .sheet .field-num { background: var(--raised); }
+
+/* Two-pane sheets: pick an existing thing, or make a new one. Separate panes
+   because they are separate actions -- the add and replace sheets used to put
+   both sets of controls on screen at once with a "— Neue Übung —" option in
+   the select doubling as the mode switch, so neither path was signposted.
+   The explicit [hidden] rule is not belt-and-braces: an author `display` beats
+   the UA sheet's `[hidden] { display: none }` on specificity, and this file has
+   been caught by that often enough to comment it every time. */
+.sheet__pane[hidden] { display: none; }
+
+.sheet__switch {
+  display: flex; align-items: center; justify-content: center;
+  inline-size: 100%; min-block-size: 48px; margin-block-start: var(--sp-2);
+  padding-block-start: var(--sp-4);
+  background: none; border: 0; border-block-start: 1px solid var(--edge);
+  color: var(--live-ink); font: inherit; font-size: var(--t-sm);
+  font-weight: var(--w-semi); cursor: pointer;
+}
+.sheet__switch:hover { color: var(--live); }
+.sheet__switch:active { transform: scale(0.99); }
+
+.sheet__back {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  min-block-size: 44px; padding: 0 var(--sp-1) var(--sp-2) 0;
+  background: none; border: 0;
+  color: var(--dim); font: inherit; font-size: var(--t-meta);
+  font-weight: var(--w-semi); cursor: pointer;
+}
+.sheet__back:hover { color: var(--ink); }
+
+.sheet__hint {
+  margin: 0 0 var(--sp-4); color: var(--dim);
+  font-size: var(--t-sm); line-height: 1.5;
+}
+
+/* .grow is `flex: 1 1 9rem`, so on a 390px sheet the new exercise's name ends
+   up sharing its row with the optional muscle group and each gets ~180px. The
+   name is the thing being typed; it takes the row. */
+.sheet__pane .field--full { flex: 1 1 100%; }
 
 .correct__name {
   margin: 0; font-family: var(--font-body); font-size: var(--t-sm);

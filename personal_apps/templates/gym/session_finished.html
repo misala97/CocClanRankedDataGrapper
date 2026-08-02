@@ -231,7 +231,12 @@
   <section class="prompt">
     Dieses Workout als Vorlage speichern?
     <form method="post" action="{{ url_for('gym.gym_save_as_template', session_id=session.id) }}">
-      <input type="text" name="name" class="input" placeholder="Name der Vorlage" required
+      {#- template_name, not name: that is what gym_save_as_template reads. This
+          said name= from the day the finished pages were merged, so the route
+          saw an empty string, skipped its `if`, and redirected having created
+          nothing -- and the redirect is the same one a success produces, so
+          the screen said the save had worked. -#}
+      <input type="text" name="template_name" class="input" placeholder="Name der Vorlage" required
              aria-label="Name der neuen Vorlage">
       <button type="submit" class="btn btn--ghost btn--block">Als Vorlage speichern</button>
     </form>

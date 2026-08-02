@@ -1,7 +1,7 @@
 import datetime as dt
 import os
 
-from flask import Blueprint, current_app, jsonify, render_template, request, redirect, send_from_directory, url_for
+from flask import Blueprint, current_app, flash, jsonify, render_template, request, redirect, send_from_directory, url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, load_only
 
@@ -540,6 +540,9 @@ def gym_heute():
         'gym/heute.html',
         now=now,
         active_session=active_session,
+        # Start now offers push activation to a device that has none -- see the
+        # notify-prompt in heute.html for why it moved out of the ⋮ sheet.
+        vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
         consistency=stats.consistency(list(session_started_at.values()), now),
         routines=stats.routine_memory(templates, routine_sessions, now),
         recent_sessions=recent_sessions,
@@ -849,7 +852,6 @@ def session_detail(session_id):
         # Scoped to the caller: PushSubscription.endpoint is a global table
         # (one row per browser installation, re-pointed on re-subscribe), so
         # "any row at all" would leak whether some OTHER user has push set up.
-        has_push_subscription=PushSubscription.query.filter_by(user_id=current_user_id()).first() is not None,
         has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
         # Whether the deload percentage was actually applied to the weights.
         # base_weight is non-NULL exactly when a set's weight is deload-scaled,
@@ -1373,6 +1375,7 @@ def gym_update_template(session_id):
             db.session.flush()
             template.exercises.extend(_template_exercises_from_session(session_))
             db.session.commit()
+            flash(f'Routine „{template.name}“ auf diese Übungsliste aktualisiert.', 'success')
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
@@ -1385,7 +1388,22 @@ def gym_save_as_template(session_id):
         template = WorkoutTemplate(name=template_name, user_id=current_user_id())
         template.exercises.extend(_template_exercises_from_session(session_))
         db.session.add(template)
+        # Start reads "last done" off WorkoutSession.template_id, so a routine
+        # saved from a workout you have just finished announced itself as never
+        # performed: the one instance of it that certainly exists was not
+        # pointing at it.
+        #
+        # Only an unlinked session is claimed. Re-pointing one that already
+        # belongs to a routine would quietly remove it from that routine's
+        # history and move its last-done date -- and on the finished page this
+        # prompt is only offered for a freeform session anyway.
+        if session_.template_id is None:
+            db.session.flush()
+            session_.template_id = template.id
         db.session.commit()
+        flash(f'Als Routine „{template_name}“ gespeichert.', 'success')
+    else:
+        flash('Kein Name eingegeben — nichts gespeichert.', 'error')
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
@@ -1400,6 +1418,9 @@ def gym_rename_template(template_id):
     if new_name:
         template.name = new_name
         db.session.commit()
+        flash(f'Routine heißt jetzt „{new_name}“.', 'success')
+    else:
+        flash('Kein Name eingegeben — die Routine heißt weiter wie vorher.', 'error')
     return redirect(url_for('gym.gym_heute'))
 
 
@@ -1410,8 +1431,10 @@ def gym_delete_template(template_id):
     # Null out references instead of cascading -- deleting a template must not
     # delete the workout history of sessions that were started from it.
     my_sessions().filter_by(template_id=template.id).update({'template_id': None}, synchronize_session=False)
+    name = template.name
     db.session.delete(template)
     db.session.commit()
+    flash(f'Routine „{name}“ gelöscht. Die Workouts daraus bleiben im Verlauf.', 'success')
     return redirect(url_for('gym.gym_heute'))
 
 
@@ -2210,6 +2233,9 @@ def gym_add_exercise():
     name = request.form.get('name', '').strip()
     if not name:
         return redirect(url_for('gym.gym_uebungen'))
+    # No flash on either branch: the input is `required`, so an empty name does
+    # not reach here through the UI, and ?name_taken already renders a banner on
+    # the page that says this in context. A flash would say it twice.
     if my_exercises().filter_by(name=name).first():
         return redirect(url_for('gym.gym_uebungen', name_taken=1))
 
@@ -2255,9 +2281,16 @@ def gym_update_exercise(exercise_id):
 @login_required
 def gym_delete_exercise(exercise_id):
     exercise = owned_exercise(exercise_id)
-    if not exercise.session_exercises and not exercise.template_exercises:
-        db.session.delete(exercise)
-        db.session.commit()
+    if exercise.session_exercises or exercise.template_exercises:
+        # Silently refusing looked identical to deleting, so the row just
+        # stayed there with no reason given.
+        flash(f'„{exercise.name}“ steckt noch in einem Workout oder einer Routine '
+              f'und wurde nicht gelöscht.', 'error')
+        return redirect(url_for('gym.gym_uebungen'))
+    name = exercise.name
+    db.session.delete(exercise)
+    db.session.commit()
+    flash(f'Übung „{name}“ gelöscht.', 'success')
     return redirect(url_for('gym.gym_uebungen'))
 
 

@@ -29,13 +29,14 @@
 
 {% from 'gym/_macros.html' import recency, since_pr %}
 {% block content %}
+{% set total_exercises = grouped|map(attribute=1)|map('length')|sum %}
 <div class="uebungen">
 
   <header class="verlauf__head">
     <h1 class="verlauf__h">Übungen</h1>
     {# aria-live: search rewrites this, and it used to sit at 17 while four rows
        showed. #}
-    <span class="verlauf__count" id="uebungen-count" aria-live="polite">{{ grouped|map(attribute=1)|map('length')|sum }}</span>
+    <span class="verlauf__count" id="uebungen-count" aria-live="polite">{{ total_exercises }}</span>
     <span class="start__sp"></span>
     <button type="button" class="verlauf__act sheet-open" data-sheet="sheet-new-exercise">
       {% with icon='plus' %}{% include 'gym/_icon.html' %}{% endwith %}
@@ -53,7 +54,13 @@
   </section>
   {% endif %}
 
-  {% if grouped %}
+  {#- total_exercises, not `grouped`: the groups are seeded from MUSCLE_GROUPS so
+      that a group you own nothing in still gets a band -- which is the point of
+      this page for anyone with a catalogue, and is why `if grouped` was always
+      true and the empty state below had never rendered once. A brand-new
+      account got eleven identical empty bands, a search box over nothing, and
+      three ways to sort it. -#}
+  {% if total_exercises %}
   <div class="searchbar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
     <input type="search" id="uebungen-search" class="searchbar__input" placeholder="Übung suchen…" autocomplete="off" aria-label="Übungen durchsuchen">
@@ -147,7 +154,17 @@
     {% endfor %}
   </div>
   {% else %}
-  <p class="empty">Noch keine Übungen im Katalog.</p>
+  <section class="uebungen-blank">
+    <h2 class="uebungen-blank__title">Noch keine Übungen</h2>
+    <p class="uebungen-blank__body">
+      Übungen gehören dir allein — deine Namen, deine Gewichtsschritte. Leg die
+      erste an, oder füge sie unterwegs im Workout hinzu; sie bleibt dann hier.
+    </p>
+    <button type="button" class="btn btn--live sheet-open" data-sheet="sheet-new-exercise">
+      {% with icon='plus' %}{% include 'gym/_icon.html' %}{% endwith %}
+      Erste Übung anlegen
+    </button>
+  </section>
   {% endif %}
 </div>
 
