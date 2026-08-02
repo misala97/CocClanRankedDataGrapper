@@ -314,20 +314,34 @@ Confirm all three are done:
 Run: `grep -n "Exercise(" features/gym/routes.py`
 Expected: three hits, at approximately 877, 925 and 2208, each followed within a few lines by `user_id=current_user_id(),`.
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [ ] **Step 7: Give the test fixtures an owner too**
+
+Application code is not the only thing that builds an `Exercise`. Seven fixture constructions do as well, and they hit the same NOT NULL wall:
+
+- `tests/test_gym_ownership.py` — 1 site, in the `two_users` fixture
+- `tests/test_gym_routes_smoke.py` — 6 sites
+
+Find every one and add `user_id=_admin_id()`:
+
+Run: `grep -n "Exercise(" tests/test_gym_ownership.py tests/test_gym_routes_smoke.py`
+Expected: 7 hits. Account for every one — these are `Exercise(...)` constructions, not `SessionExercise(...)` or `TemplateExercise(...)`, so read each match rather than trusting the substring.
+
+Both files already import `_admin_id` from `conftest` at module level. This is a mechanical argument addition: **do not change what any of these tests assert.**
+
+- [ ] **Step 8: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_gym_exercise_ownership.py -v`
 Expected: PASS, 3 passed
 
 Run: `python -m pytest tests/ -v`
-Expected: PASS, no regressions. A `NOT NULL constraint failed` here means a construction site was missed in Step 6.
+Expected: PASS, no regressions. A `NOT NULL constraint failed` or an `IntegrityError` on `user_id` here means a construction site was missed — in Step 6 if it is a route, in Step 7 if it is a fixture.
 
-- [ ] **Step 8: Verify the migration is reversible**
+- [ ] **Step 9: Verify the migration is reversible**
 
 Run: `flask db downgrade` then `flask db upgrade`
 Expected: both succeed. (The downgrade guard only fires when two users share an exercise name; at this point in the plan none do.)
 
-- [ ] **Step 9: Prove the precondition guard actually fires**
+- [ ] **Step 10: Prove the precondition guard actually fires**
 
 The guard is the only thing standing between a forgotten `delete_user` and one lifter's templates silently pointing at another's exercises. A guard nobody has seen refuse is not a guard.
 
@@ -376,10 +390,10 @@ Expected: succeeds.
 
 Report all three outcomes. If the upgrade did **not** fail while the probe existed, the guard's query is wrong and the task is not done — report BLOCKED rather than continuing.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
-git add models.py migrations/versions/c8e5f14a9b32_add_user_id_to_gym_exercises.py features/gym/routes.py tests/test_gym_exercise_ownership.py
+git add models.py migrations/versions/c8e5f14a9b32_add_user_id_to_gym_exercises.py features/gym/routes.py tests/
 git commit -m "feat(gym): make the exercise catalogue per-user"
 ```
 
