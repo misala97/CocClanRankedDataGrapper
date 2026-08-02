@@ -490,19 +490,28 @@ def _next_weight(weight, increment):
 
 
 def deload_weight(weight, pct, increment):
-    """`pct` of a working weight, rounded DOWN to a loadable increment.
+    """`pct` of a working weight, taken DOWN to a loadable weight.
 
     Down, not to nearest: rounding a deload up makes it heavier than
-    prescribed, which is the one direction that defeats the point. The grid is
-    anchored at 0, which is what a stack machine actually offers -- 90 kg at
-    70 % on a 9 kg stack lands on 63, a real position.
+    prescribed, which is the one direction that defeats the point.
+
+    The grid is anchored to `weight`, not to zero -- the result is always a
+    whole number of increments below the weight the lifter is already on.
+    Counting from zero assumes the machine has a position at every multiple of
+    the increment, and real equipment does not: a stack sitting on a 5 kg
+    carriage with 8 kg plates offers 5, 13, ... 53, 61, 69, so flooring 69 at
+    70 % gave 48, which that machine cannot make. Stepping down from a
+    position known to exist cannot invent one that does not. Where the grid
+    does include zero -- a bar in 2.5s, dumbbells in 2s -- both rules agree.
 
     Applied per set by the caller, never to the top set alone, so any ramping
     or drop-off in the session's shape survives the deload.
     """
     if weight <= 0:
         return weight          # a bodyweight set stays bodyweight
-    return max(increment, math.floor(weight * pct / 100.0 / increment) * increment)
+    # ceil, so the result lands at or below the prescription rather than above it
+    steps = math.ceil((weight - weight * pct / 100.0) / increment)
+    return max(increment, weight - steps * increment)
 
 
 def _verdict(entry, since):
