@@ -473,18 +473,33 @@ def member_client(temp_user):
         yield test_client
 
 
+# The before_request gate only engages on the full-access hostname -- the
+# public pubquiz domain does not proxy the other apps at all, so their
+# protection lives on that host. The test client defaults to "localhost", where
+# the gate returns early, so these requests must state the host explicitly or
+# they would assert against a surface the gate never touches.
+from app import FULL_ACCESS_HOST
+
+FULL_ACCESS_URL = f'http://{FULL_ACCESS_HOST}'
+
+
 @pytest.mark.parametrize('path', ['/tips', '/quizbank', '/pubquiz/admin'])
 def test_a_non_admin_cannot_reach_the_other_apps(member_client, path):
-    assert member_client.get(path).status_code == 403
+    assert member_client.get(path, base_url=FULL_ACCESS_URL).status_code == 403
 
 
 def test_a_non_admin_can_reach_the_gym(member_client):
-    assert member_client.get('/gym').status_code == 200
+    assert member_client.get('/gym', base_url=FULL_ACCESS_URL).status_code == 200
+
+
+def test_an_admin_still_reaches_the_other_apps(client):
+    """The gate must block the non-admin without locking the author out."""
+    for path in ('/tips', '/quizbank'):
+        assert client.get(path, base_url=FULL_ACCESS_URL).status_code == 200
 
 
 def test_the_overview_shows_one_app_to_a_non_admin_and_four_to_an_admin(member_client):
-    from conftest import _admin_id
-    member_html = member_client.get('/').get_data(as_text=True)
+    member_html = member_client.get('/', base_url=FULL_ACCESS_URL).get_data(as_text=True)
     assert 'Gym Tracker' in member_html
     assert 'Pub Quiz' not in member_html
     assert 'Trinkgeld Tracker' not in member_html
@@ -492,15 +507,15 @@ def test_the_overview_shows_one_app_to_a_non_admin_and_four_to_an_admin(member_c
     with flask_app.test_client() as admin_client:
         with admin_client.session_transaction() as flask_session:
             flask_session['user_id'] = _admin_id()
-        admin_html = admin_client.get('/').get_data(as_text=True)
+        admin_html = admin_client.get('/', base_url=FULL_ACCESS_URL).get_data(as_text=True)
     assert 'Gym Tracker' in admin_html
     assert 'Pub Quiz' in admin_html
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `python -m pytest tests/test_auth.py -v -k "non_admin or overview"`
-Expected: FAIL — `/tips` returns 200 for the non-admin; the overview shows all four apps.
+Run: `python -m pytest tests/test_auth.py -v -k "non_admin or overview or other_apps"`
+Expected: FAIL — `/tips` returns 200 for the non-admin; the overview shows all four apps. `test_an_admin_still_reaches_the_other_apps` should PASS already; it is the control that proves the later failure is the gate working rather than the app breaking.
 
 - [ ] **Step 3: Add `admin_required` to auth.py**
 
@@ -1748,7 +1763,6 @@ def test_only_an_admin_reaches_the_user_admin(member_client):
 
 
 def test_an_admin_can_create_a_user(temp_user):
-    from conftest import _admin_id
     from extensions import db
     from models import AppUser
 
@@ -1783,7 +1797,6 @@ def test_an_admin_can_create_a_user(temp_user):
 
 
 def test_creating_a_user_without_a_csrf_token_is_refused():
-    from conftest import _admin_id
     from models import AppUser
     flask_app.config['TESTING'] = True
     with flask_app.test_client() as admin_client:
