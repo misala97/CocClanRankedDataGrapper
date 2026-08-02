@@ -578,7 +578,7 @@ from flask import Flask, abort, render_template, request, redirect, url_for
 ```
 
 ```python
-from auth import auth_bp, _is_logged_in, login_required, is_admin, current_user
+from auth import auth_bp, _is_logged_in, login_required, is_admin
 ```
 
 - [ ] **Step 5: Filter the overview list**
@@ -1308,6 +1308,7 @@ This is the task the spec calls the trap: the object is shared or the route take
 
 **Files:**
 - Modify: `features/gym/routes.py` at lines 108-113 (`_get_active_session`), 182-193 (`_last_session_exercise`), 374-382 (`_performed_query`), 453, 459, 464, 501 (`gym_heute`), 601, 619 (session detail), 1402 (`gym_verlauf`), 1668 (`gym_export`), 2080-2130 (exercise detail), 2139-2173 (`progress.json`)
+- Modify: `tests/conftest.py` (add `acting_as`), `tests/test_gym_routes_smoke.py` (three direct-call tests)
 - Test: `tests/test_gym_ownership.py`
 
 **Interfaces:**
@@ -1408,7 +1409,51 @@ with:
 
 These three carry most of the app: every suggestion, every statistic and every history list flows through one of them.
 
-- [ ] **Step 4: Scope the remaining list queries**
+- [ ] **Step 4: Give the direct-call tests a request context**
+
+`current_user_id()` reads `flask.session`, which only exists inside a **request** context. Three existing tests call `_last_full_performance` directly from inside a plain `app_context()`, and will now raise `RuntimeError: Working outside of request context`:
+
+- `test_a_new_session_seeds_from_the_last_normal_session_not_the_deload` (call at approximately line 308)
+- `test_stale_slot_history_does_not_beat_a_recent_performance` (approximately line 399)
+- `test_recent_slot_history_still_wins_over_another_slot` (approximately line 420)
+
+Add this helper to `tests/conftest.py`:
+
+```python
+from contextlib import contextmanager
+
+from flask import session as flask_session
+
+
+@contextmanager
+def acting_as(user_id):
+    """Request context carrying a logged-in session.
+
+    For tests that call route helpers (_last_full_performance and friends)
+    directly rather than through the client: those helpers read flask.session
+    to scope their queries, which a plain app_context cannot provide. A
+    request context pushes an app context too, so db work inside still works.
+    """
+    with flask_app.test_request_context():
+        flask_session['user_id'] = user_id
+        yield
+```
+
+In `tests/test_gym_routes_smoke.py`, extend the conftest import:
+
+```python
+from conftest import _admin_id, acting_as
+```
+
+In each of the three tests above, the `with flask_app.app_context():` block that contains the `_last_full_performance(...)` call becomes:
+
+```python
+        with acting_as(_admin_id()):
+```
+
+Only those three blocks change. Every other `with flask_app.app_context():` in the file — the setup and cleanup blocks — stays exactly as it is.
+
+- [ ] **Step 5: Scope the remaining list queries**
 
 Replace each of these `WorkoutSession.query` occurrences with `my_sessions()`: lines 459, 464, 501 (`gym_heute`), 601, 619 (session detail), 1402 (`gym_verlauf`), 1668 (`gym_export`).
 
@@ -1421,18 +1466,18 @@ Expected: no output.
 
 Note `db.session.query(Exercise.muscle_group)` at line 481 and the `Exercise.query` calls at 255, 747, 865, 877, 913, 1720, 2185, 2207 are the **shared catalogue** and stay exactly as they are.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_gym_ownership.py -v`
 Expected: PASS, 38 passed
 
 Run: `python -m pytest tests/ -v`
-Expected: PASS, no regressions.
+Expected: PASS, no regressions. A `RuntimeError: Working outside of request context` here means Step 4 was missed or applied to the wrong block.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add features/gym/routes.py tests/test_gym_ownership.py
+git add features/gym/routes.py tests/
 git commit -m "feat(gym): scope history, suggestion and list queries to the caller"
 ```
 
