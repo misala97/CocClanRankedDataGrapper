@@ -290,8 +290,8 @@ class PushSubscription(db.Model):
     __tablename__ = 'gym_push_subscriptions'
     id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
     # A root with no parent to inherit from -- and the reason this column
-    # exists at all: send_push_to_all used to fan out to every row, which
-    # after this change would buzz the wrong person's phone.
+    # exists at all: push delivery used to fan out to every row, which
+    # without it would buzz the wrong person's phone.
     user_id    = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False, index=True)
     endpoint   = db.Column(db.String(500), nullable=False, unique=True)
     p256dh_key = db.Column(db.String(255), nullable=False)

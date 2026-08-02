@@ -846,11 +846,10 @@ def session_detail(session_id):
         exercises=exercises,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
-        # PushSubscription has no user/device scoping (single-user app, one
-        # flat table keyed by endpoint) -- "any row at all" is the correct
-        # "already set up" signal here, not something narrower the schema
-        # doesn't actually track.
-        has_push_subscription=PushSubscription.query.first() is not None,
+        # Scoped to the caller: PushSubscription.endpoint is a global table
+        # (one row per browser installation, re-pointed on re-subscribe), so
+        # "any row at all" would leak whether some OTHER user has push set up.
+        has_push_subscription=PushSubscription.query.filter_by(user_id=current_user_id()).first() is not None,
         has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
         # Whether the deload percentage was actually applied to the weights.
         # base_weight is non-NULL exactly when a set's weight is deload-scaled,
@@ -2259,10 +2258,17 @@ def gym_push_subscribe():
     if not is_valid_push_endpoint(endpoint):
         return jsonify({'status': 'error', 'message': 'unrecognized push service endpoint'}), 400
 
+    # Looked up by endpoint alone, NOT by (endpoint, user): the column is
+    # globally unique, one row per browser installation. Scoping the lookup to
+    # the caller would return None for a device the other lifter last
+    # subscribed from, and the insert below would then hit the unique
+    # constraint and 500. Re-pointing the row is the correct answer anyway --
+    # the subscription belongs to whoever is logged in on that device now.
     sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
     if sub:
         sub.p256dh_key = p256dh
         sub.auth_key = auth_key
+        sub.user_id = current_user_id()
     else:
         db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh,
                                         auth_key=auth_key, user_id=current_user_id()))
@@ -2276,6 +2282,6 @@ def gym_push_unsubscribe():
     data = request.get_json(silent=True) or {}
     endpoint = data.get('endpoint')
     if endpoint:
-        PushSubscription.query.filter_by(endpoint=endpoint).delete()
+        PushSubscription.query.filter_by(endpoint=endpoint, user_id=current_user_id()).delete()
         db.session.commit()
     return jsonify({'status': 'ok'})

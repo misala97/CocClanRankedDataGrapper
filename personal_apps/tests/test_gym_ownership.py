@@ -482,3 +482,62 @@ def test_update_template_cannot_overwrite_a_template_it_does_not_own(two_users):
                     db.session.commit()
                     db.session.delete(doomed)
                     db.session.commit()
+
+
+def test_a_push_goes_only_to_the_sessions_owner(two_users, monkeypatch):
+    """The failure that would otherwise show up at 22:00 on a Tuesday: one
+    lifter's rest timer buzzing the other's phone."""
+    from extensions import db
+    from features.gym import push
+    from models import PushSubscription
+
+    sent_to = []
+
+    def fake_webpush(subscription_info, **kwargs):
+        sent_to.append(subscription_info['endpoint'])
+
+    monkeypatch.setattr(push, 'webpush', fake_webpush)
+
+    endpoints = {}
+    with flask_app.app_context():
+        for label, user_id in (('owner', two_users['owner_id']),
+                               ('intruder', two_users['intruder_id'])):
+            endpoint = f'https://fcm.googleapis.com/pytest/{label}'
+            db.session.add(PushSubscription(endpoint=endpoint, p256dh_key='k',
+                                            auth_key='a', user_id=user_id))
+            endpoints[label] = endpoint
+        db.session.commit()
+    try:
+        with flask_app.app_context():
+            push.send_push_to_user(two_users['owner_id'],
+                                   {'title': 'Rest complete', 'body': 'Time for your next set.'})
+        assert sent_to == [endpoints['owner']], 'push reached the wrong subscriptions'
+    finally:
+        with flask_app.app_context():
+            for endpoint in endpoints.values():
+                PushSubscription.query.filter_by(endpoint=endpoint).delete()
+            db.session.commit()
+
+
+def test_resubscribing_a_shared_device_repoints_it_instead_of_colliding(intruder_client, two_users):
+    """PushSubscription.endpoint is globally unique -- one row per browser
+    installation. If B subscribes from a device A last used, the row must move
+    to B rather than hitting the unique constraint on insert."""
+    from extensions import db
+    from models import PushSubscription
+    endpoint = 'https://fcm.googleapis.com/pytest/shared-device'
+    with flask_app.app_context():
+        db.session.add(PushSubscription(endpoint=endpoint, p256dh_key='k', auth_key='a',
+                                        user_id=two_users['owner_id']))
+        db.session.commit()
+    try:
+        response = intruder_client.post('/gym/push/subscribe', json={
+            'endpoint': endpoint, 'keys': {'p256dh': 'k2', 'auth': 'a2'}})
+        assert response.status_code == 200
+        with flask_app.app_context():
+            stored = PushSubscription.query.filter_by(endpoint=endpoint).one()
+            assert stored.user_id == two_users['intruder_id']
+    finally:
+        with flask_app.app_context():
+            PushSubscription.query.filter_by(endpoint=endpoint).delete()
+            db.session.commit()
