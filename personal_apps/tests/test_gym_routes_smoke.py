@@ -1123,3 +1123,23 @@ def test_saving_as_a_new_template_does_not_steal_a_session_from_its_routine(clie
     finally:
         _drop(sid, ex_id, new_id)
         _drop(None, None, old_id)
+
+
+def test_the_queue_offers_adding_an_exercise(client, scratch_session):
+    """Adding an exercise mid-workout lived only in the ⋮ sheet in the top
+    corner. The queue is where you are already reading what the workout
+    contains, so it is where "and one more" belongs.
+
+    Also pins that the action is not a queue__row and carries no data-se-id:
+    session_reorder.js keys both drag and the arrow-key path off that class,
+    and an action is not a position in the sequence.
+    """
+    html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
+
+    queue = html.split('<div class="queue"', 1)[1].split('</div>\n\n</div>', 1)[0]
+    assert 'queue__add' in queue, 'no add-exercise row in the queue'
+
+    row = queue.split('queue__add', 1)[1]
+    assert 'data-sheet="sheet-add-exercise"' in row
+    assert 'data-se-id' not in row, 'the action row looks like a reorderable exercise'
+    assert 'queue__row' not in row, 'the action row would be picked up by the reorder handler'

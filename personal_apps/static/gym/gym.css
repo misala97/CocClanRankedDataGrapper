@@ -2235,6 +2235,20 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
 
 /* reorder mode: a visible state, not a lock icon to decode */
 body.is-reordering .queue__row { background: var(--raised); border-radius: var(--r-inset); }
+
+/* The queue's one action row. Reads as an action rather than as an exercise --
+   accent ink, no load in the trail, no position number -- while keeping the
+   row geometry so the list still scans as one column.
+   Explicit display:none for the reorder case: .row is display:flex, and an
+   author display beats the UA sheet's [hidden] on specificity. */
+/* .row__main is a button, so it centres by default; the queue's exercise rows
+   already opt out and the action row has to as well, or the one column of
+   names stops scanning straight down. */
+.queue__add .row__main { text-align: start; }
+.queue__add .row__lead { color: var(--live-ink); display: inline-flex; align-items: center; }
+.queue__add .row__name { color: var(--live-ink); font-weight: var(--w-semi); }
+.queue__add .row__main:hover .row__name { color: var(--live); }
+body.is-reordering .queue__add { display: none; }
 /* --dim, not --live-ink: reorder lights every handle at once, and the NOW hue
    is reserved for the single thing happening right now (4.2). */
 body.is-reordering .drag-handle { color: var(--dim); }

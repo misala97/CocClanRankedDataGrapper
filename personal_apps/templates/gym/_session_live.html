@@ -322,6 +322,25 @@
       </span>
     </div>
     {% endfor %}
+    {# Adding an exercise mid-workout lived only in the ⋮ sheet in the top
+       corner, which is the wrong end of the screen and the wrong place to look:
+       the queue is where you are already reading what the workout contains, so
+       it is where "and one more" belongs. Same reasoning as the confirm button
+       in the panel above.
+
+       Not a .queue__row and carrying no data-se-id: session_reorder.js keys
+       both drag and the arrow-key path off that class, and an action is not a
+       position in the sequence. Hidden while reorder mode is on for the same
+       reason -- during a reorder every row in this list is a thing being
+       moved. #}
+    <div class="row queue__add">
+      <span class="row__lead queue__lead" aria-hidden="true">
+        {% with icon='plus' %}{% include 'gym/_icon.html' %}{% endwith %}
+      </span>
+      <button type="button" class="row__main sheet-open" data-sheet="sheet-add-exercise">
+        <span class="row__name">Übung hinzufügen</span>
+      </button>
+    </div>
   </div>
 
 </div>
