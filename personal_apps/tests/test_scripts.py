@@ -106,3 +106,64 @@ def test_delete_user_refuses_a_user_with_a_logged_session(throwaway_user):
                 if doomed is not None:
                     db.session.delete(doomed)
                     db.session.commit()
+
+
+def test_copy_templates_forks_the_exercises_into_the_destination(throwaway_user):
+    """After the catalogue became per-user, copied template rows cannot point
+    at the source's exercises. Each one is recreated in the destination's own
+    catalogue -- once per distinct exercise, even when two templates share it,
+    and carrying the values that make a suggestion correct."""
+    from extensions import db
+    from models import AppUser, Exercise, TemplateExercise, WorkoutTemplate
+    from scripts.copy_templates import copy_templates
+
+    made = []
+    try:
+        with flask_app.app_context():
+            source_id = _admin_id()
+            shared = Exercise(name='pytest fork lift', muscle_group='Brust',
+                              weight_increment=9.0, is_unilateral=True,
+                              user_id=source_id)
+            db.session.add(shared)
+            db.session.flush()
+            made.append(('exercise', shared.id))
+            # Two templates referencing the SAME exercise -- a plain create
+            # would give the destination two copies of it.
+            for name in ('pytest fork A', 'pytest fork B'):
+                template = WorkoutTemplate(name=name, user_id=source_id)
+                template.exercises.append(
+                    TemplateExercise(exercise_id=shared.id, position=1, rest_seconds=150))
+                db.session.add(template)
+                db.session.flush()
+                made.append(('template', template.id))
+            db.session.commit()
+
+            destination = db.session.get(AppUser, throwaway_user).username
+            copy_templates(db.session.get(AppUser, source_id).username, destination,
+                           commit=True)
+
+        with flask_app.app_context():
+            copies = Exercise.query.filter_by(user_id=throwaway_user,
+                                              name='pytest fork lift').all()
+            assert len(copies) == 1, f'expected one forked exercise, got {len(copies)}'
+            assert copies[0].weight_increment == 9.0
+            assert copies[0].is_unilateral is True
+            assert copies[0].id != made[0][1], 'pointed at the source exercise'
+
+            for template in WorkoutTemplate.query.filter_by(user_id=throwaway_user):
+                for te in template.exercises:
+                    assert te.exercise.user_id == throwaway_user, \
+                        'a copied template row points at another user exercise'
+    finally:
+        with flask_app.app_context():
+            for template in WorkoutTemplate.query.filter_by(user_id=throwaway_user):
+                db.session.delete(template)
+            for exercise in Exercise.query.filter_by(user_id=throwaway_user):
+                db.session.delete(exercise)
+            db.session.commit()
+            for kind, row_id in reversed(made):
+                model = {'exercise': Exercise, 'template': WorkoutTemplate}[kind]
+                doomed = db.session.get(model, row_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+            db.session.commit()
