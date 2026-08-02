@@ -95,6 +95,7 @@
     {% endif %}
 
     <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
             <label for="username">{{ 'Username' if is_full_access_host else 'Benutzername' }}</label>
             <input type="text" id="username" name="username" autocomplete="username" autofocus>

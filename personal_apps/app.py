@@ -2,7 +2,7 @@ import os
 import secrets
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, abort, render_template, request, redirect, url_for
 from flask_migrate import Migrate
 
 from extensions import db
@@ -43,7 +43,7 @@ migrate = Migrate(app, db)
 from models import *
 db.configure_mappers()
 
-from auth import auth_bp, _is_logged_in, login_required
+from auth import auth_bp, _is_logged_in, login_required, is_admin
 from features.pubquiz.routes import pubquiz_bp
 from features.tips.routes import tips_bp
 from features.quizbank.routes import quizbank_bp
@@ -61,14 +61,26 @@ app.register_blueprint(gym_bp)
 FULL_ACCESS_HOST = os.getenv("PERSONAL_FULL_ACCESS_HOST", "mgemmel.viewdns.net")
 
 
+# Blueprints a non-admin may reach. Everything else on the full-access host is
+# the author's: the other three apps hold no per-user data and are not
+# partitioned (see the multi-user design spec, decision 1).
+_MEMBER_BLUEPRINTS = {'gym', 'auth'}
+
+
 @app.before_request
 def _require_login_on_full_access_host():
     if request.host.split(':')[0] != FULL_ACCESS_HOST:
         return
-    if request.endpoint in ('auth.login', 'auth.logout', 'static'):
+    if request.endpoint in ('auth.login', 'auth.logout', 'static', 'gym.gym_service_worker'):
         return
     if not _is_logged_in():
         return redirect(url_for('auth.login'))
+    # `request.blueprint is None` for routes registered on the app itself --
+    # which here is only `/`, and that route filters its own contents by
+    # permission. Blocking it at the gate would 403 the overview page for the
+    # very user it is being filtered for.
+    if not is_admin() and request.blueprint is not None and request.blueprint not in _MEMBER_BLUEPRINTS:
+        abort(403)
 
 
 APPS = [
@@ -102,7 +114,10 @@ APPS = [
 @app.route('/')
 @login_required
 def index():
-    return render_template('overview.html', apps=APPS)
+    # A non-admin's landing page lists the one app they can open, rather than
+    # four tiles of which three would 403.
+    visible = APPS if is_admin() else [a for a in APPS if a['url'] == '/gym']
+    return render_template('overview.html', apps=visible)
 
 
 if __name__ == '__main__':

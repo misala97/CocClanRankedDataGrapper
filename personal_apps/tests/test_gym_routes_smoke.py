@@ -3,16 +3,7 @@ these are run manually rather than in the pure-stats suite."""
 import pytest
 
 from app import app as flask_app
-
-
-@pytest.fixture()
-def client():
-    flask_app.config['TESTING'] = True
-    with flask_app.test_client() as test_client:
-        with test_client.session_transaction() as flask_session:
-            flask_session['logged_in'] = True
-        yield test_client
-
+from conftest import _admin_id, acting_as
 
 import datetime as dt
 
@@ -29,7 +20,8 @@ def scratch_session():
     with flask_app.app_context():
         exercise = Exercise.query.first()
         assert exercise is not None, 'the dev database needs at least one exercise'
-        session_ = WorkoutSession(name='pytest scratch', started_at=dt.datetime.utcnow())
+        session_ = WorkoutSession(name='pytest scratch', started_at=dt.datetime.utcnow(),
+                                  user_id=_admin_id())
         session_exercise = SessionExercise(exercise_id=exercise.id, position=1)
         session_exercise.sets = [
             SessionSet(position=1, weight=80.0, reps=8, completed=False),
@@ -285,7 +277,7 @@ def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload():
     created = []
     exercise_id = None
     try:
-        with flask_app.app_context():
+        with acting_as(_admin_id()):
             exercise = Exercise(name='pytest seed lift', is_unilateral=False)
             db.session.add(exercise)
             db.session.commit()
@@ -296,7 +288,7 @@ def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload():
                 session_ = WorkoutSession(
                     name='pytest seed {}'.format(offset), started_at=started,
                     finished_at=started + dt.timedelta(hours=1), is_deload=deload,
-                    deload_pct=70 if deload else None)
+                    deload_pct=70 if deload else None, user_id=_admin_id())
                 session_exercise = SessionExercise(exercise_id=exercise_id, position=1)
                 session_exercise.sets = [
                     SessionSet(position=1, weight=weight, reps=8, completed=True)]
@@ -349,7 +341,8 @@ def _seed_slot_history(rows):
     for days_ago, position, weight in rows:
         started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
         session_ = WorkoutSession(name='pytest slot %d' % days_ago, started_at=started,
-                                  finished_at=started + dt.timedelta(hours=1))
+                                  finished_at=started + dt.timedelta(hours=1),
+                                  user_id=_admin_id())
         session_exercise = SessionExercise(exercise_id=exercise.id, position=position)
         session_exercise.sets = [SessionSet(position=1, weight=weight, reps=8, completed=True)]
         session_.exercises.append(session_exercise)
@@ -391,7 +384,7 @@ def test_stale_slot_history_does_not_beat_a_recent_performance():
     exercise_id = None
     created = []
     try:
-        with flask_app.app_context():
+        with acting_as(_admin_id()):
             exercise_id, created = _seed_slot_history([
                 (200, 1, 40.0),   # stale slot-1 history
                 (3, 2, 70.0),     # current working weight, different slot
@@ -412,7 +405,7 @@ def test_recent_slot_history_still_wins_over_another_slot():
     exercise_id = None
     created = []
     try:
-        with flask_app.app_context():
+        with acting_as(_admin_id()):
             exercise_id, created = _seed_slot_history([
                 (5, 3, 61.0),     # recent, in the slot we will ask for
                 (2, 2, 69.0),     # more recent, but a fresher slot
@@ -441,7 +434,8 @@ def _deload_reorder_fixture():
         exercise_ids.append(exercise.id)
         started = dt.datetime.utcnow() - dt.timedelta(days=3)
         history = WorkoutSession(name='pytest reorder history %s' % label, started_at=started,
-                                 finished_at=started + dt.timedelta(hours=1))
+                                 finished_at=started + dt.timedelta(hours=1),
+                                 user_id=_admin_id())
         history_exercise = SessionExercise(exercise_id=exercise.id, position=len(exercise_ids))
         history_exercise.sets = [SessionSet(position=1, weight=weight, reps=8, completed=True)]
         history.exercises.append(history_exercise)
@@ -449,7 +443,8 @@ def _deload_reorder_fixture():
         db.session.commit()
         history_ids.append(history.id)
 
-    active = WorkoutSession(name='pytest reorder active', started_at=dt.datetime.utcnow())
+    active = WorkoutSession(name='pytest reorder active', started_at=dt.datetime.utcnow(),
+                            user_id=_admin_id())
     for position, (exercise_id, weight) in enumerate(zip(exercise_ids, (100.0, 50.0)), start=1):
         session_exercise = SessionExercise(exercise_id=exercise_id, position=position)
         session_exercise.sets = [SessionSet(position=1, weight=weight, reps=8, completed=False)]
@@ -516,7 +511,7 @@ def scratch_increment_exercise():
         db.session.add(exercise)
         db.session.flush()
         session_ = WorkoutSession(name='pytest scratch increment',
-                                  started_at=dt.datetime.utcnow())
+                                  started_at=dt.datetime.utcnow(), user_id=_admin_id())
         session_.exercises.append(SessionExercise(exercise_id=exercise.id, position=1))
         db.session.add(session_)
         db.session.commit()
@@ -696,14 +691,15 @@ def scratch_deload_session():
 
         past = WorkoutSession(name='pytest deload history',
                               started_at=dt.datetime.utcnow() - dt.timedelta(days=3),
-                              finished_at=dt.datetime.utcnow() - dt.timedelta(days=3))
+                              finished_at=dt.datetime.utcnow() - dt.timedelta(days=3),
+                              user_id=_admin_id())
         past_se = SessionExercise(exercise_id=exercise.id, position=1)
         past_se.sets = [SessionSet(position=1, weight=100.0, reps=8, completed=True)]
         past.exercises.append(past_se)
 
         live = WorkoutSession(name='pytest deload live',
                               started_at=dt.datetime.utcnow(),
-                              is_deload=True, deload_pct=70)
+                              is_deload=True, deload_pct=70, user_id=_admin_id())
         db.session.add_all([past, live])
         db.session.commit()
         ids = (live.id, past.id, exercise.id)

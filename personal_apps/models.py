@@ -164,8 +164,9 @@ class Exercise(db.Model):
 
 class WorkoutTemplate(db.Model):
     __tablename__ = 'gym_workout_templates'
-    id   = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    name = db.Column(db.String(150), nullable=False)
+    id      = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name    = db.Column(db.String(150), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False, index=True)
 
     exercises = db.relationship(
         'TemplateExercise', back_populates='template', lazy=True,
@@ -192,6 +193,7 @@ class WorkoutSession(db.Model):
     __tablename__ = 'gym_workout_sessions'
     id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name         = db.Column(db.String(150), nullable=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False, index=True)
     template_id  = db.Column(db.Integer, db.ForeignKey('gym_workout_templates.id'), nullable=True)
     started_at   = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
     finished_at  = db.Column(db.DateTime, nullable=True)
@@ -287,6 +289,10 @@ class SessionSet(db.Model):
 class PushSubscription(db.Model):
     __tablename__ = 'gym_push_subscriptions'
     id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # A root with no parent to inherit from -- and the reason this column
+    # exists at all: push delivery used to fan out to every row, which
+    # without it would buzz the wrong person's phone.
+    user_id    = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False, index=True)
     endpoint   = db.Column(db.String(500), nullable=False, unique=True)
     p256dh_key = db.Column(db.String(255), nullable=False)
     auth_key   = db.Column(db.String(255), nullable=False)
@@ -303,3 +309,18 @@ class PendingPush(db.Model):
     fire_at    = db.Column(db.DateTime, nullable=False)
     sent       = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+
+
+class AppUser(db.Model):
+    # personal_apps had exactly one user until 2026-08-02: authentication was a
+    # single credential pair compared against the environment. This table is
+    # what "belongs to someone" now means -- see gym_workout_sessions.user_id.
+    __tablename__ = 'app_user'
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    username      = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    created_at    = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+    # The whole permission model: an admin sees every app, a non-admin sees
+    # Gym only. A per-app permission table is the thing to add if a third
+    # person ever needs a different slice -- not before.
+    is_admin      = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())

@@ -10,8 +10,12 @@ from models import (
     Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
     PushSubscription, PendingPush, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
 )
-from auth import login_required
+from auth import login_required, admin_required
 from features.gym import stats
+from features.gym.scope import (
+    current_user_id, my_sessions, my_templates,
+    owned_session, owned_session_exercise, owned_set, owned_template,
+)
 from features.gym.push import is_valid_push_endpoint
 from . import analytics
 
@@ -106,7 +110,7 @@ def _get_active_session():
     STALE_SESSION_TIMEOUT are treated as abandoned and auto-finished here,
     capped at started_at + timeout rather than "now"."""
     session_ = (
-        WorkoutSession.query
+        my_sessions()
         .filter_by(finished_at=None)
         .order_by(WorkoutSession.started_at.desc())
         .first()
@@ -189,6 +193,8 @@ def _last_session_exercise(exercise_id, position=None):
             # would make the following one seed from *that*, and the lifter
             # would silently never return to their real working weight.
             WorkoutSession.is_deload == False,
+            # Suggestions come from your own training, never your partner's.
+            WorkoutSession.user_id == current_user_id(),
         )
     )
     if position is not None:
@@ -379,6 +385,7 @@ def load_performed(exercise_ids=None, since=None, include_active=False, exclude_
             joinedload(SessionExercise.sets),
         )
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+        .filter(WorkoutSession.user_id == current_user_id())
     )
     if not include_active:
         query = query.filter(WorkoutSession.finished_at.isnot(None))
@@ -450,18 +457,18 @@ def gym_heute():
     # N+1 (one query per template, one more per template-exercise) -- exactly
     # the pattern this page exists to avoid (see load_performed() below).
     templates = (
-        WorkoutTemplate.query
+        my_templates()
         .options(joinedload(WorkoutTemplate.exercises).joinedload(TemplateExercise.exercise))
         .order_by(WorkoutTemplate.name)
         .all()
     )
     routine_sessions = (
-        WorkoutSession.query
+        my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.template_id.isnot(None))
         .all()
     )
     recent = (
-        WorkoutSession.query
+        my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None))
         .order_by(WorkoutSession.started_at.desc())
         # Over-fetched, because the zero-set filter below runs after this and
@@ -498,7 +505,7 @@ def gym_heute():
     # here from the report rather than by changing stall_report itself.
     stalls = stats.stall_report(rows_by_exercise)
     last_deload = (
-        WorkoutSession.query
+        my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None), WorkoutSession.is_deload.is_(True))
         .order_by(WorkoutSession.started_at.desc())
         .first()
@@ -558,25 +565,29 @@ def gym_start():
 
     template_id = request.form.get('template_id', type=int)
     name = request.form.get('name', '').strip() or None
-    session_ = WorkoutSession(name=name, template_id=template_id or None)
+    # Resolved before the session is built, and scoped to the caller: a
+    # template_id belonging to someone else must not be seeded from *or*
+    # stored, or the row keeps a link that update_template would later follow
+    # back into a template this user cannot see.
+    template = my_templates().filter_by(id=template_id).first() if template_id else None
+    session_ = WorkoutSession(name=name, template_id=template.id if template else None,
+                              user_id=current_user_id())
 
-    if template_id:
-        template = db.session.get(WorkoutTemplate, template_id)
-        if template:
-            if not name:
-                # Just the template name. With the date appended, every list
-                # that prints a session rendered the date twice in two adjacent
-                # lines -- "HBF Push 31.07.2026" over "31.07.2026 · 19 min".
-                # The row already carries the date; the name should say which
-                # workout it was.
-                session_.name = template.name
-            for i, te in enumerate(template.exercises, start=1):
-                session_exercise = SessionExercise(
-                    exercise_id=te.exercise_id, position=i,
-                    rest_seconds=te.rest_seconds if te.rest_seconds is not None else te.exercise.default_rest_seconds,
-                )
-                session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
-                session_.exercises.append(session_exercise)
+    if template:
+        if not name:
+            # Just the template name. With the date appended, every list
+            # that prints a session rendered the date twice in two adjacent
+            # lines -- "HBF Push 31.07.2026" over "31.07.2026 · 19 min".
+            # The row already carries the date; the name should say which
+            # workout it was.
+            session_.name = template.name
+        for i, te in enumerate(template.exercises, start=1):
+            session_exercise = SessionExercise(
+                exercise_id=te.exercise_id, position=i,
+                rest_seconds=te.rest_seconds if te.rest_seconds is not None else te.exercise.default_rest_seconds,
+            )
+            session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
+            session_.exercises.append(session_exercise)
 
     db.session.add(session_)
     db.session.commit()
@@ -586,7 +597,7 @@ def gym_start():
 @gym_bp.route('/gym/session/<int:session_id>')
 @login_required
 def session_detail(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
 
     if session_.finished_at:
         # The finished workout is one page now (spec 6.5): build the report
@@ -598,7 +609,7 @@ def session_detail(session_id):
         # for exactly this reason and says so in its own comment; this branch
         # was doing it twice.
         session_ = (
-            WorkoutSession.query
+            my_sessions()
             .options(
                 joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
                 joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
@@ -616,7 +627,7 @@ def session_detail(session_id):
         previous_session = None
         if session_.template_id:
             cohort = (
-                WorkoutSession.query
+                my_sessions()
                 .options(load_only(WorkoutSession.id, WorkoutSession.started_at))
                 .filter(
                     WorkoutSession.id != session_.id,
@@ -835,11 +846,10 @@ def session_detail(session_id):
         exercises=exercises,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
-        # PushSubscription has no user/device scoping (single-user app, one
-        # flat table keyed by endpoint) -- "any row at all" is the correct
-        # "already set up" signal here, not something narrower the schema
-        # doesn't actually track.
-        has_push_subscription=PushSubscription.query.first() is not None,
+        # Scoped to the caller: PushSubscription.endpoint is a global table
+        # (one row per browser installation, re-pointed on re-subscribe), so
+        # "any row at all" would leak whether some OTHER user has push set up.
+        has_push_subscription=PushSubscription.query.filter_by(user_id=current_user_id()).first() is not None,
         has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
         # Whether the deload percentage was actually applied to the weights.
         # base_weight is non-NULL exactly when a set's weight is deload-scaled,
@@ -857,7 +867,7 @@ def session_detail(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/exercises/add', methods=['POST'])
 @login_required
 def gym_add_session_exercise(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
 
     exercise_id = request.form.get('exercise_id', type=int)
     new_name = request.form.get('new_exercise_name', '').strip()
@@ -904,7 +914,7 @@ def gym_replace_session_exercise(session_exercise_id):
     exercise's history/PRs), a new SessionExercise is created for the
     replacement at the same position, and _template_exercises_from_session
     skips substitutes entirely so this never gets written into a template."""
-    original = db.get_or_404(SessionExercise, session_exercise_id)
+    original = owned_session_exercise(session_exercise_id)
     session_id = original.session_id
 
     exercise_id = request.form.get('exercise_id', type=int)
@@ -944,7 +954,7 @@ def gym_replace_session_exercise(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/rest', methods=['POST'])
 @login_required
 def gym_update_session_exercise_rest(session_exercise_id):
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
     session_exercise.rest_seconds = _to_int(request.form.get('rest_seconds', ''))
     session_id = session_exercise.session_id
     db.session.commit()
@@ -961,8 +971,17 @@ def gym_update_exercise_increment(session_exercise_id):
     equipment and so lands on the Exercise itself and stays. Keyed on the
     SessionExercise regardless, because that is the id the sheet has and it
     keeps the redirect back to the workout trivial.
+
+    Deliberately @login_required only, not @admin_required, even though it
+    writes the shared gym_exercises row: an increment is an objective fact
+    about the equipment ("this machine loads in 9 kg steps"), not a curatorial
+    choice about the catalogue. Both users train at the same gym -- the same
+    reasoning that made the catalogue shared at all -- so either of them
+    recording it correctly helps both. Renaming or recategorising an exercise
+    is a judgment call and stays behind gym_update_exercise's admin gate; a
+    loadable step someone just read off the rack is not.
     """
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
     session_exercise.exercise.weight_increment = _to_increment(
         request.form.get('weight_increment', ''))
     session_id = session_exercise.session_id
@@ -973,7 +992,7 @@ def gym_update_exercise_increment(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/sets/add', methods=['POST'])
 @login_required
 def gym_add_set(session_exercise_id):
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
 
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
@@ -997,7 +1016,7 @@ def gym_add_set(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_session_exercise(session_exercise_id):
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
     session_id = session_exercise.session_id
     # If the currently-resting set belongs to this exercise, clear the
     # reference first -- otherwise deleting it (cascades to its sets) would
@@ -1021,7 +1040,7 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
     needed there: it already includes every non-substitute row). Toggling
     back off (undo) re-derives pending sets the same way a fresh template
     start does, but only if nothing is left over from before the skip."""
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
     session_ = session_exercise.session
     if session_.finished_at:
         return redirect(url_for('gym.session_detail', session_id=session_.id))
@@ -1046,7 +1065,7 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
 @gym_bp.route('/gym/set/<int:set_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_set(set_id):
-    set_ = db.get_or_404(SessionSet, set_id)
+    set_ = owned_set(set_id)
     session_ = set_.session_exercise.session
     session_id = session_.id
     if session_.resting_set_id == set_.id:
@@ -1077,7 +1096,7 @@ def gym_toggle_set_complete(set_id):
     `completed` is optional and the flip is kept as the fallback, because a
     stale page or a form posted from anywhere else still has to do something
     sensible."""
-    set_ = db.get_or_404(SessionSet, set_id)
+    set_ = owned_set(set_id)
     session_ = set_.session_exercise.session
 
     weight = _to_float(request.form.get('weight', ''))
@@ -1132,7 +1151,7 @@ def gym_update_set(set_id):
     form is the quiet "Sätze korrigieren" disclosure in
     session_finished.html, one per exercise, shown only for finished
     sessions)."""
-    set_ = db.get_or_404(SessionSet, set_id)
+    set_ = owned_set(set_id)
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
     if weight is not None:
@@ -1165,7 +1184,7 @@ def gym_update_set(set_id):
 @gym_bp.route('/gym/session/<int:session_id>/exercises/reorder', methods=['POST'])
 @login_required
 def gym_reorder_session_exercises(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     data = request.get_json(silent=True) or {}
     order = data.get('order') or []
     session_exercises_by_id = {se.id: se for se in session_.exercises}
@@ -1210,7 +1229,7 @@ def gym_skip_rest(session_id):
     finishing early does: the notifier daemon would otherwise fire a
     "Pause vorbei" for a rest the lifter already ended themselves.
     """
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     session_.rest_ends_at = None
     session_.resting_set_id = None
     _cancel_pending_push(session_)
@@ -1221,7 +1240,7 @@ def gym_skip_rest(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/finish', methods=['POST'])
 @login_required
 def gym_finish_session(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     session_.finished_at = dt.datetime.utcnow()
     session_.rest_ends_at = None
     session_.resting_set_id = None
@@ -1259,7 +1278,7 @@ def gym_toggle_deload(session_id):
     each set independently reflects whatever the user most recently said
     about it, not a single all-or-nothing session state.
     """
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
 
     on = request.form.get('on') == '1'
     pct = _to_int(request.form.get('pct', ''), fallback=stats.DELOAD_DEFAULT_PCT)
@@ -1313,6 +1332,7 @@ def gym_toggle_deload(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/summary')
 @login_required
 def gym_session_summary(session_id):
+    owned_session(session_id)   # 404 for a stranger rather than a redirect that then 404s
     # Kept as a redirect: a finished workout is one page now, and this URL is
     # in browser history and bookmarks.
     return redirect(url_for('gym.session_detail', session_id=session_id,
@@ -1322,7 +1342,7 @@ def gym_session_summary(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_session(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     if session_.finished_at is not None:  # never delete the active workout by accident
         # Null the self-referencing rest-timer FK first -- deleting a session
         # whose resting_set_id still points at one of its own (about to be
@@ -1337,9 +1357,9 @@ def gym_delete_session(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/update_template', methods=['POST'])
 @login_required
 def gym_update_template(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     if session_.template_id:
-        template = db.session.get(WorkoutTemplate, session_.template_id)
+        template = my_templates().filter_by(id=session_.template_id).first()
         if template:
             template.exercises.clear()
             db.session.flush()
@@ -1351,10 +1371,10 @@ def gym_update_template(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/save_as_template', methods=['POST'])
 @login_required
 def gym_save_as_template(session_id):
-    session_ = db.get_or_404(WorkoutSession, session_id)
+    session_ = owned_session(session_id)
     template_name = request.form.get('template_name', '').strip()
     if template_name:
-        template = WorkoutTemplate(name=template_name)
+        template = WorkoutTemplate(name=template_name, user_id=current_user_id())
         template.exercises.extend(_template_exercises_from_session(session_))
         db.session.add(template)
         db.session.commit()
@@ -1367,7 +1387,7 @@ def gym_rename_template(template_id):
     """Heute's small per-routine edit affordance. WorkoutTemplate.name carries
     no unique constraint (unlike Exercise.name), so unlike gym_update_exercise
     there is no collision case to reject -- any non-empty name is accepted."""
-    template = db.get_or_404(WorkoutTemplate, template_id)
+    template = owned_template(template_id)
     new_name = request.form.get('name', '').strip()
     if new_name:
         template.name = new_name
@@ -1378,10 +1398,10 @@ def gym_rename_template(template_id):
 @gym_bp.route('/gym/templates/<int:template_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_template(template_id):
-    template = db.get_or_404(WorkoutTemplate, template_id)
+    template = owned_template(template_id)
     # Null out references instead of cascading -- deleting a template must not
     # delete the workout history of sessions that were started from it.
-    WorkoutSession.query.filter_by(template_id=template.id).update({'template_id': None})
+    my_sessions().filter_by(template_id=template.id).update({'template_id': None}, synchronize_session=False)
     db.session.delete(template)
     db.session.commit()
     return redirect(url_for('gym.gym_heute'))
@@ -1399,7 +1419,7 @@ def gym_verlauf():
     # below exists to avoid, just on a different relationship than
     # load_performed().
     sessions = (
-        WorkoutSession.query
+        my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None))
         .options(joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise))
         .order_by(WorkoutSession.started_at.desc())
@@ -1665,7 +1685,7 @@ def gym_export():
             session_ids.append(int(raw_id))
 
     sessions = (
-        WorkoutSession.query
+        my_sessions()
         .filter(
             WorkoutSession.finished_at.isnot(None),
             WorkoutSession.id.in_(session_ids),
@@ -2199,6 +2219,7 @@ def gym_add_exercise():
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
 @login_required
+@admin_required
 def gym_update_exercise(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     new_name = request.form.get('name', '').strip()
@@ -2224,6 +2245,7 @@ def gym_update_exercise(exercise_id):
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/delete', methods=['POST'])
 @login_required
+@admin_required
 def gym_delete_exercise(exercise_id):
     exercise = db.get_or_404(Exercise, exercise_id)
     if not exercise.session_exercises and not exercise.template_exercises:
@@ -2245,12 +2267,20 @@ def gym_push_subscribe():
     if not is_valid_push_endpoint(endpoint):
         return jsonify({'status': 'error', 'message': 'unrecognized push service endpoint'}), 400
 
+    # Looked up by endpoint alone, NOT by (endpoint, user): the column is
+    # globally unique, one row per browser installation. Scoping the lookup to
+    # the caller would return None for a device the other lifter last
+    # subscribed from, and the insert below would then hit the unique
+    # constraint and 500. Re-pointing the row is the correct answer anyway --
+    # the subscription belongs to whoever is logged in on that device now.
     sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
     if sub:
         sub.p256dh_key = p256dh
         sub.auth_key = auth_key
+        sub.user_id = current_user_id()
     else:
-        db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh, auth_key=auth_key))
+        db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh,
+                                        auth_key=auth_key, user_id=current_user_id()))
     db.session.commit()
     return jsonify({'status': 'ok'})
 
@@ -2261,6 +2291,6 @@ def gym_push_unsubscribe():
     data = request.get_json(silent=True) or {}
     endpoint = data.get('endpoint')
     if endpoint:
-        PushSubscription.query.filter_by(endpoint=endpoint).delete()
+        PushSubscription.query.filter_by(endpoint=endpoint, user_id=current_user_id()).delete()
         db.session.commit()
     return jsonify({'status': 'ok'})

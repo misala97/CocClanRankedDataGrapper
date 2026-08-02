@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Konto</title>
+</head>
+<body>
+    <h1>Konto</h1>
+    <p>Angemeldet als {{ user.username }}.</p>
+    {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+    {% if done %}<p role="status">Passwort geändert.</p>{% endif %}
+
+    <h2>Passwort ändern</h2>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="current_password">Aktuelles Passwort</label>
+        <input type="password" id="current_password" name="current_password"
+               autocomplete="current-password" required>
+        <label for="new_password">Neues Passwort</label>
+        <input type="password" id="new_password" name="new_password"
+               autocomplete="new-password" required>
+        <button type="submit">Ändern</button>
+    </form>
+    <p><a href="{{ url_for('index') }}">Zurück</a></p>
+</body>
+</html>
