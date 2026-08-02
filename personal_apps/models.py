@@ -303,3 +303,18 @@ class PendingPush(db.Model):
     fire_at    = db.Column(db.DateTime, nullable=False)
     sent       = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+
+
+class AppUser(db.Model):
+    # personal_apps had exactly one user until 2026-08-02: authentication was a
+    # single credential pair compared against the environment. This table is
+    # what "belongs to someone" now means -- see gym_workout_sessions.user_id.
+    __tablename__ = 'app_user'
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    username      = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    created_at    = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+    # The whole permission model: an admin sees every app, a non-admin sees
+    # Gym only. A per-app permission table is the thing to add if a third
+    # person ever needs a different slice -- not before.
+    is_admin      = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
