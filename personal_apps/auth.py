@@ -180,7 +180,44 @@ def admin_users():
             db.session.commit()
             return redirect(url_for('auth.admin_users'))
     users = AppUser.query.order_by(AppUser.username).all()
-    return render_template('auth/users.html', users=users, error=error)
+    return render_template('auth/users.html', users=users, error=error, error_user_id=None)
+
+
+@auth_bp.route('/admin/users/<int:user_id>/update', methods=['POST'])
+@admin_required
+def admin_update_user(user_id):
+    if not _valid_csrf(request.form.get('csrf_token')):
+        abort(400)
+    user = db.session.get(AppUser, user_id)
+    if user is None:
+        abort(404)
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+
+    error = None
+    if not username:
+        error = 'Benutzername fehlt.'
+    # Excludes this user, or renaming someone to their own current name would
+    # collide with themselves.
+    elif AppUser.query.filter(AppUser.username == username, AppUser.id != user.id).first():
+        error = 'Benutzername ist schon vergeben.'
+    elif password and len(password) < MIN_PASSWORD_LENGTH:
+        error = f'Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.'
+
+    if error:
+        # Re-render rather than redirect, so the typed values survive and the
+        # message can be shown against the row it belongs to.
+        users = AppUser.query.order_by(AppUser.username).all()
+        return render_template('auth/users.html', users=users,
+                               error=error, error_user_id=user.id)
+
+    user.username = username
+    # An empty password field means "leave it as it is". Renaming someone must
+    # not force you to invent a new password for them at the same time.
+    if password:
+        user.password_hash = generate_password_hash(password)
+    db.session.commit()
+    return redirect(url_for('auth.admin_users'))
 
 
 @auth_bp.route('/account', methods=['GET', 'POST'])
