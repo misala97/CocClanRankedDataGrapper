@@ -1,14 +1,12 @@
 """Ownership of gym data.
 
 Four hand-maintained tables (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES,
-CATALOGUE_ADMIN_ROUTES) drive the parametrized tests below, each exercising one
+CATALOGUE_ROUTES) drive the parametrized tests below, each exercising one
 route's ownership check. On their own the tables are just literals -- a new
 id-taking route is simply absent from them until someone remembers to add it.
 test_every_id_taking_gym_route_is_covered_by_a_table closes that gap: it derives
 the actual set of id-taking gym routes from the app's own url_map and fails,
-naming the route, the moment one exists in the app but not in any table (or the
-two-route allowlist for the shared catalogue's GET pages, which are covered by
-leak tests instead of a 404 table).
+naming the route, the moment one exists in the app but not in any table.
 
 Runs against the real local development database. Every row created here is
 deleted in a finally.
@@ -84,7 +82,7 @@ def two_users():
         db.session.add_all([owner, intruder])
         db.session.flush()
 
-        exercise = Exercise(name='pytest ownership lift', muscle_group='Brust')
+        exercise = Exercise(name='pytest ownership lift', muscle_group='Brust', user_id=owner.id)
         db.session.add(exercise)
         db.session.flush()
 
@@ -329,44 +327,37 @@ def test_a_stranger_gets_404_on_someone_elses_template(
     assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
 
 
-CATALOGUE_ADMIN_ROUTES = [
-    ('POST', '/gym/exercises/{}/update', 'exercise_id'),
-    ('POST', '/gym/exercises/{}/delete', 'exercise_id'),
+# Was CATALOGUE_ADMIN_ROUTES, asserting 403 on a shared row an admin curated.
+# The catalogue is owned per user now, so these are ordinary owned routes and
+# a stranger gets 404 like everywhere else -- including the two GETs, which
+# used to render a shared page with the owner's history filtered out of it.
+CATALOGUE_ROUTES = [
+    ('GET',  '/gym/exercises/{}',               'exercise_id'),
+    ('GET',  '/gym/exercises/{}/progress.json', 'exercise_id'),
+    ('POST', '/gym/exercises/{}/update',        'exercise_id'),
+    ('POST', '/gym/exercises/{}/delete',        'exercise_id'),
 ]
 
 
-@pytest.mark.parametrize('method,url_template,id_key', CATALOGUE_ADMIN_ROUTES)
-def test_a_non_admin_cannot_edit_the_shared_catalogue(
+@pytest.mark.parametrize('method,url_template,id_key', CATALOGUE_ROUTES)
+def test_a_stranger_gets_404_on_someone_elses_exercise(
         intruder_client, two_users, method, url_template, id_key):
-    """The catalogue is shared, so there is no owner to check -- but curating
-    it is the admin's job. 403 here, not 404: the exercise is legitimately
-    visible to this user, only editing it is refused.
-
-    Also checks the exercise is still there after the rejected write -- a 403
-    on /delete is only half the guarantee if the row went away anyway."""
+    """Also checks the exercise survived: a 404 on /delete is only half the
+    guarantee if the row went away anyway."""
     from extensions import db
     from models import Exercise
     url = url_template.format(two_users[id_key])
     response = intruder_client.open(url, method=method)
-    assert response.status_code == 403, f'{method} {url} returned {response.status_code}'
+    assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
     with flask_app.app_context():
         assert db.session.get(Exercise, two_users['exercise_id']) is not None, \
-            f'the shared exercise did not survive the rejected {method} {url}'
+            f'the exercise did not survive the rejected {method} {url}'
 
 
 # The tables hold Flask's route strings with '<int:name>' replaced by '{}', so
 # that a route can be filled in with .format(some_id). This is the inverse
 # substitution, applied to url_map's rules to bring them into the same shape.
 _INT_CONVERTER = re.compile(r'<int:[^>]+>')
-
-# The shared catalogue's two GET routes take an id but have no owner to check
-# (Decision 2 in the multi-user design spec) -- they are covered by
-# test_the_shared_exercise_page_shows_no_foreign_history and
-# test_the_progress_json_carries_no_foreign_history instead of a 404 table.
-SHARED_CATALOGUE_GET_ROUTES = {
-    ('GET', '/gym/exercises/{}'),
-    ('GET', '/gym/exercises/{}/progress.json'),
-}
 
 
 def _id_taking_gym_routes():
@@ -390,9 +381,9 @@ def test_every_id_taking_gym_route_is_covered_by_a_table():
     suite quietly staying green."""
     covered = {
         (method, url_template)
-        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, CATALOGUE_ADMIN_ROUTES)
+        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, CATALOGUE_ROUTES)
         for method, url_template, _id_key in table
-    } | SHARED_CATALOGUE_GET_ROUTES
+    }
 
     actual = _id_taking_gym_routes()
     assert actual, 'route discovery found nothing -- the <int:> normalisation is broken'
@@ -477,26 +468,6 @@ def test_the_export_asked_for_a_foreign_session_returns_none_of_it(intruder_clie
     for marker in ('pytest ownership session', 'pytest ownership finished',
                    'pytest ownership template'):
         assert marker not in body, f'{url} leaked {marker}'
-
-
-def test_the_shared_exercise_page_shows_no_foreign_history(intruder_client, two_users):
-    """The subtle one: the exercise itself is shared and B may open it, but
-    the history rendered around it is A's and must not appear."""
-    url = '/gym/exercises/{}'.format(two_users['exercise_id'])
-    response = intruder_client.get(url)
-    assert response.status_code == 200, 'the shared catalogue must stay readable'
-    body = response.get_data(as_text=True)
-    for rendering in FOREIGN_WEIGHTS:
-        assert rendering not in body, f'exercise detail leaked another user\'s weight as {rendering}'
-
-
-def test_the_progress_json_carries_no_foreign_history(intruder_client, two_users):
-    url = '/gym/exercises/{}/progress.json'.format(two_users['exercise_id'])
-    response = intruder_client.get(url)
-    assert response.status_code == 200
-    body = response.get_data(as_text=True)
-    for rendering in FOREIGN_WEIGHTS:
-        assert rendering not in body, f'progress.json leaked another user\'s weight as {rendering}'
 
 
 def test_a_stranger_does_not_inherit_the_active_session(intruder_client, two_users):

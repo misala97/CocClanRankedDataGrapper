@@ -421,7 +421,9 @@ def effort_distribution(rows):
     there a group at zero IS the finding; here absence is just absence.
 
     Exercises are keyed by name rather than id, which is safe for two reasons
-    worth stating because neither is local: Exercise.name is unique, so two
+    worth stating because neither is local: `rows` is already scoped to one
+    user by load_performed(), and the catalogue's uniqueness constraint is
+    (user_id, name) -- so within that one user's rows a name is unique and two
     exercises can never collapse into one bucket; and _to_performed() resolves
     the name through a live join, so every row carries the CURRENT name and a
     rename moves an exercise's whole history rather than splitting it. If that

@@ -4,17 +4,18 @@ The single place that knows how a gym object is tied to a user. Routes call
 these instead of db.get_or_404 -- doing the check inline at 25 call sites is
 how a leak arrives on the twenty-sixth.
 
-Ownership lives on three roots (WorkoutSession, WorkoutTemplate,
-PushSubscription); everything else inherits through its parent foreign key.
-The exercise catalogue is deliberately shared and has no owner, so there is
-no loader for it here -- see the multi-user design spec, decision 2.
+Ownership lives on four roots (WorkoutSession, WorkoutTemplate,
+PushSubscription, Exercise); everything else inherits through its parent foreign key.
+Exercises became per-user on 2026-08-02: a third lifter joined who trains at
+the same gym but uses none of the same exercises, so one global list put
+everyone's lifts in everyone's picker.
 
 Every failure is 404, never 403: a 403 confirms the object exists.
 """
 from flask import abort, session as flask_session
 
 from extensions import db
-from models import SessionExercise, SessionSet, WorkoutSession, WorkoutTemplate
+from models import Exercise, SessionExercise, SessionSet, WorkoutSession, WorkoutTemplate
 
 
 def current_user_id():
@@ -57,5 +58,22 @@ def owned_session_exercise(session_exercise_id):
 def owned_set(set_id):
     row = db.session.get(SessionSet, set_id)
     if row is None or row.session_exercise.session.user_id != current_user_id():
+        abort(404)
+    return row
+
+
+def my_exercises():
+    """Exercise query filtered to the caller.
+
+    The catalogue was shared until 2026-08-02. It is owned now: a third lifter
+    joined who trains at the same gym but uses none of the same exercises, so
+    one global list put everyone's lifts in everyone's picker.
+    """
+    return Exercise.query.filter(Exercise.user_id == current_user_id())
+
+
+def owned_exercise(exercise_id):
+    row = db.session.get(Exercise, exercise_id)
+    if row is None or row.user_id != current_user_id():
         abort(404)
     return row

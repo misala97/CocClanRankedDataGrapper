@@ -10,11 +10,11 @@ from models import (
     Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
     PushSubscription, PendingPush, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
 )
-from auth import login_required, admin_required
+from auth import login_required
 from features.gym import stats
 from features.gym.scope import (
-    current_user_id, my_sessions, my_templates,
-    owned_session, owned_session_exercise, owned_set, owned_template,
+    current_user_id, my_exercises, my_sessions, my_templates,
+    owned_exercise, owned_session, owned_session_exercise, owned_set, owned_template,
 )
 from features.gym.push import is_valid_push_endpoint
 from . import analytics
@@ -485,7 +485,7 @@ def gym_heute():
     catalogue_groups = (
         {group for group in MUSCLE_GROUPS if group not in NON_MUSCLE_GROUPS}
         | {row.muscle_group or stats.NO_GROUP_LABEL
-           for row in db.session.query(Exercise.muscle_group).distinct()}
+           for row in my_exercises().with_entities(Exercise.muscle_group).distinct()}
     )
 
     # The one bulk load this whole page runs on -- every completed set ever
@@ -755,7 +755,7 @@ def session_detail(session_id):
             for s in se.sets:
                 if s.completed and stats.is_new_best(s.weight, s.reps, prior):
                     record_set_ids.add(s.id)
-    exercises = Exercise.query.order_by(Exercise.name).all()
+    exercises = my_exercises().order_by(Exercise.name).all()
 
     # The live exercise: the first visible, non-skipped one that is not yet
     # fully logged, or the last visible one when everything is done.
@@ -872,19 +872,23 @@ def gym_add_session_exercise(session_id):
     exercise_id = request.form.get('exercise_id', type=int)
     new_name = request.form.get('new_exercise_name', '').strip()
     if not exercise_id and new_name:
-        exercise = Exercise.query.filter_by(name=new_name).first()
+        exercise = my_exercises().filter_by(name=new_name).first()
         if not exercise:
             exercise = Exercise(
                 name=new_name,
                 muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
                 default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+                user_id=current_user_id(),
             )
             db.session.add(exercise)
             db.session.flush()
         exercise_id = exercise.id
 
     if exercise_id:
-        exercise = db.session.get(Exercise, exercise_id)
+        # exercise_id arrives from a submitted form, so it is attacker-chosen:
+        # without this check a lifter could graft another user's exercise --
+        # and its history, through _seeded_sets -- into their own session.
+        exercise = owned_exercise(exercise_id)
         next_position = max([se.position for se in session_.exercises], default=0) + 1
         session_exercise = SessionExercise(
             session_id=session_.id, exercise_id=exercise_id, position=next_position,
@@ -920,16 +924,23 @@ def gym_replace_session_exercise(session_exercise_id):
     exercise_id = request.form.get('exercise_id', type=int)
     new_name = request.form.get('new_exercise_name', '').strip()
     if not exercise_id and new_name:
-        exercise = Exercise.query.filter_by(name=new_name).first()
+        exercise = my_exercises().filter_by(name=new_name).first()
         if not exercise:
             exercise = Exercise(
                 name=new_name,
                 muscle_group=original.exercise.muscle_group,
                 default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
+                user_id=current_user_id(),
             )
             db.session.add(exercise)
             db.session.flush()
         exercise_id = exercise.id
+
+    if exercise_id:
+        # Attacker-chosen whenever it came from the form rather than from the
+        # branch above that just created it. Re-checking the freshly created
+        # one costs a primary-key lookup and keeps this to a single rule.
+        owned_exercise(exercise_id)
 
     if exercise_id and exercise_id != original.exercise_id and not original.replaced_by:
         db.session.add(SessionExercise(
@@ -972,14 +983,11 @@ def gym_update_exercise_increment(session_exercise_id):
     SessionExercise regardless, because that is the id the sheet has and it
     keeps the redirect back to the workout trivial.
 
-    Deliberately @login_required only, not @admin_required, even though it
-    writes the shared gym_exercises row: an increment is an objective fact
-    about the equipment ("this machine loads in 9 kg steps"), not a curatorial
-    choice about the catalogue. Both users train at the same gym -- the same
-    reasoning that made the catalogue shared at all -- so either of them
-    recording it correctly helps both. Renaming or recategorising an exercise
-    is a judgment call and stays behind gym_update_exercise's admin gate; a
-    loadable step someone just read off the rack is not.
+    @login_required only -- there is no separate admin gate to sit behind.
+    owned_session_exercise already guarantees the session, and therefore the
+    exercise it points at, belongs to the caller: the catalogue is per user
+    now, so this is an ordinary write to a row the caller owns, no different
+    from the rename/recategorise in gym_update_exercise.
     """
     session_exercise = owned_session_exercise(session_exercise_id)
     session_exercise.exercise.weight_increment = _to_increment(
@@ -1737,7 +1745,7 @@ def gym_export():
 @login_required
 def gym_uebungen():
     now = dt.datetime.utcnow()
-    exercises = Exercise.query.order_by(Exercise.name).all()
+    exercises = my_exercises().order_by(Exercise.name).all()
 
     # The one bulk load this whole page runs on -- every completed set ever
     # logged, across the whole catalogue. Every exercise's state/last-done/
@@ -2097,7 +2105,7 @@ def _chart_geometry(series, pr_e1rm=None):
 @gym_bp.route('/gym/exercises/<int:exercise_id>')
 @login_required
 def exercise_detail(exercise_id):
-    exercise = db.get_or_404(Exercise, exercise_id)
+    exercise = owned_exercise(exercise_id)
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
 
     # The default view is one slot, not all of them. "Alle" draws every position
@@ -2156,7 +2164,7 @@ def gym_exercise_progress_json(exercise_id):
     back to all-time data if that exact slot has no history yet -- the
     modal should always show *something* useful rather than an empty state
     just because you haven't done this exercise in this position before."""
-    exercise = db.get_or_404(Exercise, exercise_id)
+    exercise = owned_exercise(exercise_id)
     position = request.args.get('position', type=int)
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
     progress = stats.exercise_progress(rows, position=position)
@@ -2202,7 +2210,7 @@ def gym_add_exercise():
     name = request.form.get('name', '').strip()
     if not name:
         return redirect(url_for('gym.gym_uebungen'))
-    if Exercise.query.filter_by(name=name).first():
+    if my_exercises().filter_by(name=name).first():
         return redirect(url_for('gym.gym_uebungen', name_taken=1))
 
     exercise = Exercise(
@@ -2211,6 +2219,7 @@ def gym_add_exercise():
         default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
         weight_increment=_to_increment(request.form.get('weight_increment', '')),
         is_unilateral=request.form.get('is_unilateral') == 'on',
+        user_id=current_user_id(),
     )
     db.session.add(exercise)
     db.session.commit()
@@ -2219,13 +2228,12 @@ def gym_add_exercise():
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
 @login_required
-@admin_required
 def gym_update_exercise(exercise_id):
-    exercise = db.get_or_404(Exercise, exercise_id)
+    exercise = owned_exercise(exercise_id)
     new_name = request.form.get('name', '').strip()
     name_taken = False
     if new_name and new_name != exercise.name:
-        if Exercise.query.filter_by(name=new_name).first():
+        if my_exercises().filter_by(name=new_name).first():
             name_taken = True  # surfaced to the user below instead of silently skipping the rename
         else:
             # Remember the old name so anything still referencing it (e.g.
@@ -2245,9 +2253,8 @@ def gym_update_exercise(exercise_id):
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/delete', methods=['POST'])
 @login_required
-@admin_required
 def gym_delete_exercise(exercise_id):
-    exercise = db.get_or_404(Exercise, exercise_id)
+    exercise = owned_exercise(exercise_id)
     if not exercise.session_exercises and not exercise.template_exercises:
         db.session.delete(exercise)
         db.session.commit()
