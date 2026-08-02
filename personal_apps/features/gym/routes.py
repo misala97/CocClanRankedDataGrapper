@@ -909,7 +909,7 @@ def gym_replace_session_exercise(session_exercise_id):
     exercise's history/PRs), a new SessionExercise is created for the
     replacement at the same position, and _template_exercises_from_session
     skips substitutes entirely so this never gets written into a template."""
-    original = db.get_or_404(SessionExercise, session_exercise_id)
+    original = owned_session_exercise(session_exercise_id)
     session_id = original.session_id
 
     exercise_id = request.form.get('exercise_id', type=int)
@@ -949,7 +949,7 @@ def gym_replace_session_exercise(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/rest', methods=['POST'])
 @login_required
 def gym_update_session_exercise_rest(session_exercise_id):
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
     session_exercise.rest_seconds = _to_int(request.form.get('rest_seconds', ''))
     session_id = session_exercise.session_id
     db.session.commit()
@@ -967,7 +967,7 @@ def gym_update_exercise_increment(session_exercise_id):
     SessionExercise regardless, because that is the id the sheet has and it
     keeps the redirect back to the workout trivial.
     """
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
     session_exercise.exercise.weight_increment = _to_increment(
         request.form.get('weight_increment', ''))
     session_id = session_exercise.session_id
@@ -978,7 +978,7 @@ def gym_update_exercise_increment(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/sets/add', methods=['POST'])
 @login_required
 def gym_add_set(session_exercise_id):
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
 
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
@@ -1002,7 +1002,7 @@ def gym_add_set(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_session_exercise(session_exercise_id):
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
     session_id = session_exercise.session_id
     # If the currently-resting set belongs to this exercise, clear the
     # reference first -- otherwise deleting it (cascades to its sets) would
@@ -1026,7 +1026,7 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
     needed there: it already includes every non-substitute row). Toggling
     back off (undo) re-derives pending sets the same way a fresh template
     start does, but only if nothing is left over from before the skip."""
-    session_exercise = db.get_or_404(SessionExercise, session_exercise_id)
+    session_exercise = owned_session_exercise(session_exercise_id)
     session_ = session_exercise.session
     if session_.finished_at:
         return redirect(url_for('gym.session_detail', session_id=session_.id))
@@ -1051,7 +1051,7 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
 @gym_bp.route('/gym/set/<int:set_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_set(set_id):
-    set_ = db.get_or_404(SessionSet, set_id)
+    set_ = owned_set(set_id)
     session_ = set_.session_exercise.session
     session_id = session_.id
     if session_.resting_set_id == set_.id:
@@ -1082,7 +1082,7 @@ def gym_toggle_set_complete(set_id):
     `completed` is optional and the flip is kept as the fallback, because a
     stale page or a form posted from anywhere else still has to do something
     sensible."""
-    set_ = db.get_or_404(SessionSet, set_id)
+    set_ = owned_set(set_id)
     session_ = set_.session_exercise.session
 
     weight = _to_float(request.form.get('weight', ''))
@@ -1137,7 +1137,7 @@ def gym_update_set(set_id):
     form is the quiet "Sätze korrigieren" disclosure in
     session_finished.html, one per exercise, shown only for finished
     sessions)."""
-    set_ = db.get_or_404(SessionSet, set_id)
+    set_ = owned_set(set_id)
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
     if weight is not None:

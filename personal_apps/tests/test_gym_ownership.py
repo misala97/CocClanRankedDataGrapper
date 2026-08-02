@@ -248,3 +248,35 @@ def test_subscribing_to_push_stamps_the_owner(two_users):
         with flask_app.app_context():
             PushSubscription.query.filter_by(endpoint=endpoint).delete()
             db.session.commit()
+
+
+DESCENDANT_ROUTES = [
+    ('POST', '/gym/session-exercise/{}/replace',   'session_exercise_id'),
+    ('POST', '/gym/session-exercise/{}/rest',      'session_exercise_id'),
+    ('POST', '/gym/session-exercise/{}/increment', 'session_exercise_id'),
+    ('POST', '/gym/session-exercise/{}/sets/add',  'session_exercise_id'),
+    ('POST', '/gym/session-exercise/{}/delete',    'session_exercise_id'),
+    ('POST', '/gym/session-exercise/{}/skip',      'session_exercise_id'),
+    ('POST', '/gym/set/{}/delete',                 'set_id'),
+    ('POST', '/gym/set/{}/toggle_complete',        'set_id'),
+    ('POST', '/gym/set/{}/update',                 'set_id'),
+]
+
+
+@pytest.mark.parametrize('method,url_template,id_key', DESCENDANT_ROUTES)
+def test_a_stranger_gets_404_on_someone_elses_session_exercise_or_set(
+        intruder_client, two_users, method, url_template, id_key):
+    url = url_template.format(two_users[id_key])
+    response = intruder_client.open(url, method=method)
+    assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
+
+
+def test_a_rejected_write_changed_nothing(intruder_client, two_users):
+    """A 404 is only half the guarantee -- the write must not have landed."""
+    from extensions import db
+    from models import SessionSet
+    intruder_client.post('/gym/set/{}/update'.format(two_users['set_id']),
+                         data={'weight': '999', 'reps': '1'})
+    with flask_app.app_context():
+        stored = db.session.get(SessionSet, two_users['set_id'])
+        assert (stored.weight, stored.reps) == (123.5, 7)
