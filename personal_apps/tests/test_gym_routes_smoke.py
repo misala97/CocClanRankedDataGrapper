@@ -675,3 +675,67 @@ def test_update_exercise_sets_and_clears_the_increment_without_losing_other_fiel
             if doomed is not None:
                 db.session.delete(doomed)
                 db.session.commit()
+
+
+@pytest.fixture()
+def scratch_deload_session():
+    """A deload session with no exercises yet, plus recent history to suggest from.
+
+    Self-contained rather than leaning on whatever the dev database holds: a
+    throwaway exercise, one finished non-deload session that logged it at
+    100 kg (so _last_session_exercise has something CURRENT to match), and an
+    empty active session flagged as a 70 % deload.
+    """
+    import datetime as dt
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    with flask_app.app_context():
+        exercise = Exercise(name='pytest deload suggest lift', muscle_group='Brust')
+        db.session.add(exercise)
+        db.session.flush()
+
+        past = WorkoutSession(name='pytest deload history',
+                              started_at=dt.datetime.utcnow() - dt.timedelta(days=3),
+                              finished_at=dt.datetime.utcnow() - dt.timedelta(days=3))
+        past_se = SessionExercise(exercise_id=exercise.id, position=1)
+        past_se.sets = [SessionSet(position=1, weight=100.0, reps=8, completed=True)]
+        past.exercises.append(past_se)
+
+        live = WorkoutSession(name='pytest deload live',
+                              started_at=dt.datetime.utcnow(),
+                              is_deload=True, deload_pct=70)
+        db.session.add_all([past, live])
+        db.session.commit()
+        ids = (live.id, past.id, exercise.id)
+    yield ids
+    with flask_app.app_context():
+        live_id, past_id, exercise_id = ids
+        for sid in (live_id, past_id):
+            doomed = db.session.get(WorkoutSession, sid)
+            if doomed is not None:
+                doomed.resting_set_id = None
+                db.session.commit()
+                db.session.delete(doomed)
+                db.session.commit()
+        doomed_exercise = db.session.get(Exercise, exercise_id)
+        if doomed_exercise is not None:
+            db.session.delete(doomed_exercise)
+            db.session.commit()
+
+
+def test_deload_scales_the_suggestion_for_an_exercise_added_mid_session(client, scratch_deload_session):
+    """A session started without a template has no sets for gym_toggle_deload to
+    scale, and gym_add_session_exercise creates none either -- so the steppers
+    fall back to the raw suggestion, which offered the full working weight and
+    silently handed back the deload the lifter had just asked for.
+    """
+    live_id, _, exercise_id = scratch_deload_session
+
+    response = client.post(f'/gym/session/{live_id}/exercises/add',
+                           data={'exercise_id': str(exercise_id)})
+    assert response.status_code in (302, 303)
+
+    html = client.get(f'/gym/session/{live_id}').get_data(as_text=True)
+    # 100 kg at 70 % on the default 2.5 grid is exactly 70.0.
+    assert 'name="weight" value="70.0"' in html
+    assert 'name="weight" value="100.0"' not in html

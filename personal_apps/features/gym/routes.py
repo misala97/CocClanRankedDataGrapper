@@ -269,6 +269,31 @@ def _seeded_sets(session_, exercise_id, position):
     ]
 
 
+def _seeded_suggestion(session_, exercise, position):
+    """The single weight/reps pair the steppers pre-fill with, deload-aware.
+
+    The scalar sibling of _seeded_sets, and it honours the deload for exactly
+    the same reason: history is recorded at full working weight, so offering
+    it untouched during a deload hands the lifter straight back the
+    prescription they just asked for.
+
+    _seeded_sets alone was not enough because it only runs where sets are
+    created -- starting from a template, un-skipping, reordering. An exercise
+    added mid-session gets no sets at all, and a session started WITHOUT a
+    template has none for gym_toggle_deload to scale either, so on that path
+    the suggestion is the only number the lifter ever sees.
+    """
+    last = _last_performance(exercise.id, position=position)
+    if not last:
+        return None
+    pct = session_.deload_pct if session_.is_deload else None
+    if not pct:
+        return last
+    increment = stats.resolve_increment(exercise.weight_increment, exercise.is_unilateral)
+    return {'weight': stats.deload_weight(last['weight'], pct, increment),
+            'reps': last['reps']}
+
+
 def _template_exercises_from_session(session_):
     """Build ordered, deduped TemplateExercise rows from a session's current
     exercises, carrying over each exercise's configured rest time so it's
@@ -689,7 +714,7 @@ def session_detail(session_id):
     # se.replaced_by, which would lazy-load a separate query per row.
     replaced_original_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
     visible_exercises = [se for se in session_.exercises if se.id not in replaced_original_ids]
-    suggestions = {se.id: _last_performance(se.exercise_id, position=se.position) for se in visible_exercises}
+    suggestions = {se.id: _seeded_suggestion(session_, se.exercise, se.position) for se in visible_exercises}
     history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
     by_exercise = {}
     for row in history:
