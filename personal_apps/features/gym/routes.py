@@ -720,8 +720,19 @@ def session_detail(session_id):
                     claimed = True
                 tick_states.append('record' if is_record else 'done')
         data['tick_states'] = tick_states
+        # Rest measured rather than planned: the gap between consecutive sets, which
+        # exists only for sessions logged since completed_at was added. None means
+        # "no timestamps", which the template must render as silence, not as zero.
+        rest_entries = [
+            (s.completed_at, se.rest_seconds if se.rest_seconds is not None
+             else se.exercise.default_rest_seconds)
+            for se in session_.exercises for s in se.sets
+            if s.completed and s.completed_at is not None
+        ]
+        rest_gaps = stats.rest_gaps(rest_entries)
+        rest_taken_seconds = sum(actual for actual, _ in rest_gaps) or None
         return render_template('gym/session_finished.html', session=session_,
-                               weekday_short=WEEKDAY_SHORT, **data)
+                               weekday_short=WEEKDAY_SHORT, rest_taken_seconds=rest_taken_seconds, **data)
 
     # A replaced original is hidden from the active view, so its suggestion
     # would never be used -- skip computing it there. Visibility is derived

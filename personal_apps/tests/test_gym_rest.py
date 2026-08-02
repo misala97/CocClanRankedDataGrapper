@@ -104,3 +104,72 @@ def test_a_set_appended_mid_workout_is_stamped(client, scratch_live_set):
         assert appended, 'no completed set was appended'
         assert all(s.completed_at is not None for s in appended), \
             'an appended set was left unstamped'
+
+
+@pytest.fixture()
+def finished_with_rest():
+    """A finished session whose three sets landed 3 and 2 minutes apart.
+
+    Yields (session_id, exercise_id).
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    ids = None
+    with flask_app.app_context():
+        exercise = Exercise(name='pytest rest readout lift', user_id=_admin_id())
+        db.session.add(exercise)
+        db.session.flush()
+        started = dt.datetime.utcnow() - dt.timedelta(hours=1)
+        session_ = WorkoutSession(name='pytest rest readout', started_at=started,
+                                  finished_at=started + dt.timedelta(minutes=52),
+                                  user_id=_admin_id())
+        se = SessionExercise(exercise_id=exercise.id, position=1, rest_seconds=150)
+        se.sets = [
+            SessionSet(position=1, weight=40.0, reps=8, completed=True,
+                       completed_at=started + dt.timedelta(minutes=5)),
+            SessionSet(position=2, weight=40.0, reps=8, completed=True,
+                       completed_at=started + dt.timedelta(minutes=8)),
+            SessionSet(position=3, weight=40.0, reps=8, completed=True,
+                       completed_at=started + dt.timedelta(minutes=10)),
+        ]
+        session_.exercises.append(se)
+        db.session.add(session_)
+        db.session.commit()
+        ids = (session_.id, exercise.id)
+    yield ids
+    with flask_app.app_context():
+        doomed = db.session.get(WorkoutSession, ids[0])
+        if doomed is not None:
+            doomed.resting_set_id = None
+            db.session.commit()
+            db.session.delete(doomed)
+            db.session.commit()
+        doomed_exercise = db.session.get(Exercise, ids[1])
+        if doomed_exercise is not None:
+            db.session.delete(doomed_exercise)
+            db.session.commit()
+
+
+def test_the_finished_page_reports_the_rest_it_measured(client, finished_with_rest):
+    """3 minutes then 2 gives 5 minutes of counted rest."""
+    session_id, _ = finished_with_rest
+    html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
+    assert 'davon 5 Minuten Pause' in html
+
+
+def test_the_finished_page_says_nothing_about_rest_without_stamps(client, scratch_live_set):
+    """Every set that predates the column has completed_at NULL. The page must
+    not answer a question it has no data for."""
+    from extensions import db
+    from models import WorkoutSession
+    session_id, _, set_id, _ = scratch_live_set
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, session_id)
+        session_.finished_at = dt.datetime.utcnow()
+        for se in session_.exercises:
+            for s in se.sets:
+                s.completed, s.completed_at = True, None
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
+    assert 'Pause' not in html, 'claimed a rest figure with no timestamps to build it from'

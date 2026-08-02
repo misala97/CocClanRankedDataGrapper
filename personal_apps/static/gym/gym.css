@@ -2444,6 +2444,9 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
   font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit);
   letter-spacing: 0;
 }
+/* Sits with the duration it qualifies, quieter than it: the session length is
+   the fact, the rest is the explanation. */
+.finished__rest { color: var(--dim); font-size: var(--t-meta); }
 /* the header's name block is two stacked lines here, not one truncated line */
 .finished .session-top__name { white-space: normal; overflow: visible; }
 

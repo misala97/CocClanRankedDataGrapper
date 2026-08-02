@@ -29,6 +29,11 @@
         {{ weekday_short[(session.started_at|local).weekday()] }} · {{ (session.started_at|local).strftime('%d.%m.%Y') }} ·
         {{ ('unter 1 Minute' if minutes < 1 else (minutes|string) ~ (' Minute' if minutes == 1 else ' Minuten')) }}
       </span>
+      {#- Measured, not planned. Absent for every session logged before
+          completed_at existed, and silent rather than zero in that case. -#}
+      {% if rest_taken_seconds %}
+      <span class="finished__rest">davon {{ (rest_taken_seconds // 60)|int }} Minuten Pause</span>
+      {% endif %}
     </span>
     {% if session.is_deload %}
     <span class="session-top__deload">Deload{% if deload_applied %} {{ session.deload_pct or deload_default_pct }} %{% endif %}</span>
