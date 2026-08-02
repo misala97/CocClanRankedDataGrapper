@@ -256,7 +256,7 @@
             {# Only shown once logged in: a public link here is the crawl path that
                got /login flagged as a phishing page by Google Safe Browsing.
                Quizmasters reach the admin area via bookmark. #}
-            {% if session.logged_in %}
+            {% if session.user_id %}
             <a href="/pubquiz/admin" class="admin-link">Admin</a>
             {% endif %}
         </div>
@@ -444,7 +444,7 @@
     <div class="empty-state">
         <div class="icon">🍺</div>
         <p>Noch keine Pub Quiz Abende eingetragen.</p>
-        {% if session.logged_in %}
+        {% if session.user_id %}
         <p style="margin-top:8px;font-size:14px"><a href="/pubquiz/admin" style="color:var(--accent)">Im Admin-Bereich anlegen →</a></p>
         {% endif %}
     </div>
