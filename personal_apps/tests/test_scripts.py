@@ -36,19 +36,35 @@ def test_delete_user_dry_run_writes_nothing(throwaway_user):
         assert db.session.get(AppUser, throwaway_user) is not None
 
 
-def test_delete_user_removes_the_account_and_its_templates(throwaway_user):
+def test_delete_user_removes_the_account_its_templates_and_its_exercises(throwaway_user):
+    """Exercises became the fourth root a user owns, and gym_exercises.user_id
+    is NOT NULL with a foreign key and no cascade -- deleting the user while
+    they still own one used to fail with an unhandled IntegrityError. The
+    exercise here is also used by the template, which pins the fix's order:
+    templates (and their TemplateExercise rows, ORM-cascaded with them) must
+    go before the exercise they reference, or the exercise delete hits the
+    same class of foreign-key violation, this time against
+    gym_template_exercises."""
     from extensions import db
-    from models import AppUser, WorkoutTemplate
+    from models import AppUser, Exercise, TemplateExercise, WorkoutTemplate
     from scripts.delete_user import delete_user
 
     template_id = None
+    exercise_id = None
     try:
         with flask_app.app_context():
+            exercise = Exercise(name='pytest deletable exercise', muscle_group='Brust',
+                                user_id=throwaway_user)
+            db.session.add(exercise)
+            db.session.flush()
             template = WorkoutTemplate(name='pytest deletable template',
                                        user_id=throwaway_user)
+            template.exercises.append(
+                TemplateExercise(exercise_id=exercise.id, position=1))
             db.session.add(template)
             db.session.commit()
             template_id = template.id
+            exercise_id = exercise.id
 
         with flask_app.app_context():
             delete_user('pytest deletable', commit=True)
@@ -56,10 +72,16 @@ def test_delete_user_removes_the_account_and_its_templates(throwaway_user):
         with flask_app.app_context():
             assert db.session.get(AppUser, throwaway_user) is None
             assert WorkoutTemplate.query.filter_by(user_id=throwaway_user).count() == 0
+            assert db.session.get(Exercise, exercise_id) is None
     finally:
         with flask_app.app_context():
             if template_id is not None:
                 doomed = db.session.get(WorkoutTemplate, template_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if exercise_id is not None:
+                doomed = db.session.get(Exercise, exercise_id)
                 if doomed is not None:
                     db.session.delete(doomed)
                     db.session.commit()

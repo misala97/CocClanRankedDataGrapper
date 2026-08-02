@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app  # noqa: E402  (needs the path insert above)
 from extensions import db  # noqa: E402
-from models import AppUser, PushSubscription, WorkoutSession, WorkoutTemplate  # noqa: E402
+from models import AppUser, Exercise, PushSubscription, WorkoutSession, WorkoutTemplate  # noqa: E402
 
 
 def delete_user(username, commit):
@@ -39,21 +39,30 @@ def delete_user(username, commit):
 
     templates = WorkoutTemplate.query.filter_by(user_id=user.id).all()
     subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
+    exercises = Exercise.query.filter_by(user_id=user.id).all()
 
     lines = [f'{username} (id {user.id})',
              f'  {len(templates)} template(s)',
              f'  {len(subscriptions)} push subscription(s)',
+             f'  {len(exercises)} exercise(s)',
              '  0 sessions']
     for line in lines:
         print(line)
 
     if commit:
-        # Templates first: their exercise rows cascade, and the user row cannot
-        # go while anything still references it.
+        # Templates first: their TemplateExercise rows cascade with them, and
+        # those rows are what reference the exercises below. Deleting an
+        # exercise while a template still points at it would hit the same
+        # class of foreign-key violation this ordering exists to avoid.
+        # Exercises next, since the catalogue became per-user: the user row
+        # cannot go while anything -- template, subscription, or now
+        # exercise -- still references it.
         for template in templates:
             db.session.delete(template)
         for subscription in subscriptions:
             db.session.delete(subscription)
+        for exercise in exercises:
+            db.session.delete(exercise)
         db.session.flush()
         db.session.delete(user)
         db.session.commit()
