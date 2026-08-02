@@ -739,3 +739,42 @@ def test_deload_scales_the_suggestion_for_an_exercise_added_mid_session(client, 
     # 100 kg at 70 % on the default 2.5 grid is exactly 70.0.
     assert 'name="weight" value="70.0"' in html
     assert 'name="weight" value="100.0"' not in html
+
+
+def test_adding_an_exercise_mid_session_seeds_its_sets_from_history(client, scratch_deload_session):
+    """Adding an exercise mid-session was the only one of four seeding paths
+    that created no sets at all -- template start, un-skip and reorder all
+    call _seeded_sets. It now mirrors what was last done in that slot.
+    """
+    from extensions import db
+    from models import SessionExercise, WorkoutSession
+    live_id, _, exercise_id = scratch_deload_session
+    with flask_app.app_context():                  # plain session, no deload
+        live = db.session.get(WorkoutSession, live_id)
+        live.is_deload, live.deload_pct = False, None
+        db.session.commit()
+
+    client.post(f'/gym/session/{live_id}/exercises/add', data={'exercise_id': str(exercise_id)})
+
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        assert [(s.weight, s.reps, s.completed) for s in se.sets] == [(100.0, 8, False)]
+        # Seeded sets are proposals, not history: nothing is logged until the
+        # lifter confirms it, and base_weight stays clear on a normal session.
+        assert se.sets[0].base_weight is None
+
+
+def test_adding_an_exercise_to_a_deload_session_seeds_scaled_sets(client, scratch_deload_session):
+    """The same path during a deload: the seeded sets carry the prescription,
+    and base_weight remembers the working weight so switching the deload off
+    restores them like any other."""
+    from extensions import db
+    from models import SessionExercise
+    live_id, _, exercise_id = scratch_deload_session
+
+    client.post(f'/gym/session/{live_id}/exercises/add', data={'exercise_id': str(exercise_id)})
+
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        # 100 kg at 70 % on the default 2.5 grid.
+        assert [(s.weight, s.base_weight, s.reps) for s in se.sets] == [(70.0, 100.0, 8)]
