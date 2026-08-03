@@ -690,14 +690,22 @@ function stageChanges(old, fresh) {
          + (vol ? ', ' + vol.textContent.trim() + ' Kilo bewegt' : '') + '.';
 }
 
+// fresh rows render their handles inert; the mode has to re-arm them. Split out
+// of syncAfterSwap so the follower's poll swap below can reuse just this part
+// -- that swap only ever touches #queue and must never run syncAfterSwap's
+// other line, which reads #rest-fill and would misjudge the panel from
+// queue-only markup.
+function rearmDragHandles() {
+    var on = !!(window.GymReorder && window.GymReorder.unlocked);
+    document.querySelectorAll('.drag-handle').forEach(function (h) { h.tabIndex = on ? 0 : -1; });
+}
+
 // Everything outside #session-body that depends on state inside it. Sheets and
 // the shell survive the swap, so nothing else would ever update them.
 function syncAfterSwap(body) {
     var act = document.getElementById('skip-rest-act');
     if (act) { act.hidden = !body.querySelector('#rest-fill'); }
-    // fresh rows render their handles inert; the mode has to re-arm them
-    var on = !!(window.GymReorder && window.GymReorder.unlocked);
-    document.querySelectorAll('.drag-handle').forEach(function (h) { h.tabIndex = on ? 0 : -1; });
+    rearmDragHandles();
 }
 
 
@@ -913,9 +921,7 @@ function setReorder(on) {
     document.body.classList.toggle('is-reordering', on);
     var label = document.getElementById('reorder-label');
     if (label) { label.textContent = on ? 'Reihenfolge fertig' : 'Reihenfolge ändern'; }
-    document.querySelectorAll('.drag-handle').forEach(function (h) {
-        h.tabIndex = on ? 0 : -1;
-    });
+    rearmDragHandles();
     announce(on ? 'Reihenfolge ändern. Mit den Pfeiltasten verschieben.' : 'Reihenfolge gespeichert.');
     if (on) {
         var first = document.querySelector('.drag-handle');
@@ -954,7 +960,6 @@ if (reorderDone) { reorderDone.addEventListener('click', function () { setReorde
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data || data.version === known) { return; }
-        known = data.version;
         var open = document.querySelector('[data-se-id].is-now');
         var openId = open ? open.dataset.seId : null;
         return fetch('/gym/session/' + sessionId + '/queue.html',
@@ -972,6 +977,17 @@ if (reorderDone) { reorderDone.addEventListener('click', function () { setReorde
             // there and this branch would never fire.
             var stillThere = html.indexOf('data-se-id="' + openId + '"') !== -1;
             host.outerHTML = html;
+            // This swap renders fresh drag-handles inert (tabindex="-1"), same
+            // as any queue refresh -- but this path can't route through
+            // syncAfterSwap (see rearmDragHandles above), so an unlocked
+            // follower would otherwise silently lose keyboard access to the
+            // handles until they toggled reorder mode off and back on.
+            rearmDragHandles();
+            // Bumped only now that the swap above actually landed. Bumping it
+            // as soon as sync.json responds would tell the client it is
+            // caught up even if THIS fetch then failed, and the queue would
+            // stay stale until the version happened to change again.
+            known = data.version;
             // The panel is showing an exercise that no longer exists. There is
             // no honest way to keep it on screen, so start over -- this is the
             // one case a reload is right.
