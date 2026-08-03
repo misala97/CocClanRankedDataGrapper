@@ -1693,3 +1693,402 @@ def test_a_solo_session_reports_that_it_is_not_shared(leader_with_partner):
         f"/gym/session/{leader_with_partner['session']}/sync.json"
     ).get_data(as_text=True))
     assert body['shared'] is False
+
+
+# --- Final whole-branch review fixes ---------------------------------------
+
+
+# --- Fix 1 / test gap 1: substitute propagation had zero coverage ----------
+
+
+def test_a_leader_side_replace_propagates_with_the_substitute_translated(linked_pair):
+    """Test gap 1a: substitute propagation is one of four behaviours the spec
+    requires to propagate, and had no coverage anywhere before this."""
+    from extensions import db
+    from features.gym import sharing
+    from models import Exercise, SessionExercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        incline = Exercise(name='pytest shared incline', user_id=linked_pair['leader_user'])
+        db.session.add(incline)
+        db.session.flush()
+        substitute = SessionExercise(session_id=leader_session.id, exercise_id=incline.id,
+                                     position=leader_row.position, replaces_id=leader_row.id)
+        db.session.add(substitute)
+        db.session.commit()
+        substitute_id = substitute.id
+
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        by_mirror = {se.mirrors_id: se for se in follower_session.exercises}
+        follower_original = by_mirror[leader_row.id]
+        follower_substitute = by_mirror[substitute_id]
+        assert follower_substitute.exercise.name == 'pytest shared incline'
+        assert follower_substitute.replaces_id == follower_original.id, (
+            "the substitute must point at the FOLLOWER's counterpart of the original, "
+            "not at the leader's row id")
+
+
+def test_both_partners_swapping_the_same_exercise_does_not_500(linked_pair):
+    """Fix 1 / test gap 1b (CRITICAL, teeth-proofed): SessionExercise.replaces_id
+    carries a TABLE-WIDE unique constraint, not one scoped to a session. The
+    follower swaps their mirrored row first -- a self-made substitute with
+    mirrors_id IS NULL, invisible to reconciliation's `mirrored` map -- then
+    the leader swaps theirs too and propagates. Before the fix, reconciliation
+    assigned the leader's substitute's follower-side replaces_id without
+    checking whether the follower's own substitute already claimed that same
+    slot, colliding on the unique index: an unhandled IntegrityError on
+    db.session.commit() below, 500ing every subsequent structural action by
+    the LEADER even though their own change had already committed.
+
+    Teeth-proof: with the `if wanted is not None: claimed_by_other = ...`
+    guard in sharing.py's substitute pass commented out, this test fails with
+    sqlalchemy.exc.IntegrityError on the commit below. Restored, it passes.
+    """
+    from extensions import db
+    from features.gym import sharing
+    from models import Exercise, SessionExercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        follower_original = follower_session.exercises[0]
+        follower_sub_exercise = Exercise(name='pytest shared follower swap',
+                                         user_id=linked_pair['follower_user'])
+        db.session.add(follower_sub_exercise)
+        db.session.flush()
+        follower_substitute = SessionExercise(
+            session_id=follower_session.id, exercise_id=follower_sub_exercise.id,
+            position=follower_original.position, replaces_id=follower_original.id)
+        db.session.add(follower_substitute)
+        db.session.commit()
+        follower_original_id = follower_original.id
+        follower_substitute_id = follower_substitute.id
+
+        leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        leader_sub_exercise = Exercise(name='pytest shared leader swap',
+                                       user_id=linked_pair['leader_user'])
+        db.session.add(leader_sub_exercise)
+        db.session.flush()
+        leader_substitute = SessionExercise(
+            session_id=leader_session.id, exercise_id=leader_sub_exercise.id,
+            position=leader_row.position, replaces_id=leader_row.id)
+        db.session.add(leader_substitute)
+        db.session.commit()
+        leader_substitute_id = leader_substitute.id
+
+        # This is the line that raised IntegrityError pre-fix -- reconciliation
+        # itself, called and committed directly, exactly as propagate_structure
+        # does inside the leader's request (bypassing Fix 2's try/except, which
+        # would otherwise mask the very collision this test exists to prove).
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        refreshed_follower_substitute = db.session.get(SessionExercise, follower_substitute_id)
+        assert refreshed_follower_substitute.replaces_id == follower_original_id, (
+            "the follower's own swap must keep winning for their own session")
+        leader_mirror = next(se for se in follower_session.exercises
+                             if se.mirrors_id == leader_substitute_id)
+        assert leader_mirror.replaces_id is None, (
+            "colliding with the follower's own substitute must leave this row "
+            "unlinked rather than erroring or overwriting their swap")
+
+
+# --- Test gap 2: only the leader-finishes direction was tested for ---------
+# --- end_links_for -----------------------------------------------------
+
+
+def test_the_follower_finishing_ends_the_link_and_leaves_the_leader_live(joined_pair):
+    """Sibling of test_the_leader_finishing_ends_the_link_and_leaves_the_follower_live:
+    gym_finish_session calls sharing.end_links_for(session_) regardless of
+    which side of the link the finishing session is on, but only the
+    leader-finishes direction had a test before this."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    _client_for(joined_pair['partner']).post(
+        f"/gym/session/{joined_pair['follower_session']}/finish")
+
+    with flask_app.app_context():
+        assert db.session.get(SharedSession, joined_pair['shared']).ended_at is not None
+        leader_session = db.session.get(WorkoutSession, joined_pair['session'])
+        assert leader_session.finished_at is None, "the leader's workout was ended too"
+
+
+# --- Test gap 3: negative tests for the rest of what must never propagate --
+
+
+def test_rest_seconds_does_not_propagate(linked_pair):
+    """Among the seven things the spec says must never propagate, set count
+    and weight/reps already had negative tests; rest_seconds did not.
+    Reconciliation already does the right thing -- a newly mirrored row seeds
+    rest_seconds from the FOLLOWER's own exercise default, never from the
+    leader's per-session override -- so this pins existing correct behaviour."""
+    from extensions import db
+    from features.gym import sharing
+    from models import Exercise, SessionExercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        leader_curl = Exercise(name='pytest shared curl', user_id=linked_pair['leader_user'],
+                               default_rest_seconds=200)
+        follower_curl = Exercise(name='pytest shared curl', user_id=linked_pair['follower_user'],
+                                 default_rest_seconds=45)
+        db.session.add_all([leader_curl, follower_curl])
+        db.session.flush()
+
+        leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
+        leader_session.exercises.append(
+            SessionExercise(exercise_id=leader_curl.id, position=2, rest_seconds=999))
+        db.session.commit()
+
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        new_row = next(se for se in follower_session.exercises if se.position == 2)
+        assert new_row.exercise_id == follower_curl.id, (
+            'the exact name-match should reuse the existing follower exercise')
+        assert new_row.rest_seconds == 45, (
+            "a newly mirrored row must seed rest_seconds from the FOLLOWER's own default")
+        assert new_row.rest_seconds != 999, (
+            "the leader's per-session rest override propagated to the follower")
+
+
+def test_is_deload_and_deload_pct_do_not_propagate(linked_pair):
+    """A deliberately light session is a decision about your own body, not
+    something a training partner opts you into."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
+        leader_session.is_deload = True
+        leader_session.deload_pct = 60
+        db.session.commit()
+
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        follower_after = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert follower_after.is_deload is False, 'a deload flag propagated to the follower'
+        assert follower_after.deload_pct is None, 'a deload percentage propagated to the follower'
+
+
+def test_the_session_name_does_not_propagate(linked_pair):
+    """The name is copied once, at accept time, from whichever structure
+    existed then -- never synced afterwards. From accept onward the session
+    reads as theirs."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
+        leader_session.name = 'pytest shared renamed leader workout'
+        db.session.commit()
+        follower_before_name = db.session.get(
+            WorkoutSession, linked_pair['follower_session']).name
+
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        follower_after = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert follower_after.name == follower_before_name
+        assert follower_after.name != 'pytest shared renamed leader workout'
+
+
+# --- Fix 2: propagate_structure isolates a follower-side failure -----------
+
+
+def test_propagate_structure_survives_a_follower_side_integrity_error(joined_pair, monkeypatch):
+    """Any constraint violation originating in the FOLLOWER's data must
+    degrade to 'the partner is out of sync until the next change', never a
+    crash in the LEADER's request -- whose own change already committed
+    durably before propagate_structure was ever called. Forces the failure
+    directly (reconcile_follower is patched to raise) rather than relying on
+    a specific collision, since Fix 1 already closes the concrete one this
+    guard was written for."""
+    from extensions import db
+    from features.gym import sharing
+    from models import WorkoutSession
+    from sqlalchemy.exc import IntegrityError
+
+    def boom(shared):
+        raise IntegrityError('statement', {}, Exception('pytest forced collision'))
+
+    monkeypatch.setattr(sharing, 'reconcile_follower', boom)
+
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, joined_pair['session'])
+        sharing.propagate_structure(session_)  # must not raise
+        db.session.rollback()  # nothing pending; matches the module's own rollback
+
+
+# --- Fix 3: an exercise referenced only by a spent link's map ---------------
+
+
+def test_deleting_an_exercise_referenced_only_by_a_shared_map_row_does_not_500(linked_pair):
+    """Reproduces the map-with-no-SessionExercise state directly: a
+    SharedSessionExercise row whose follower_exercise_id names an exercise no
+    SessionExercise ever pointed to (e.g. the leader removed their side of the
+    match between /confirm and /accept). gym_delete_exercise's in-use check
+    only looks at session_exercises/template_exercises, so before the
+    ondelete='CASCADE' migration this hit an unhandled IntegrityError instead
+    of the route's existing friendly refusal."""
+    from extensions import db
+    from models import Exercise, SharedSessionExercise
+
+    with flask_app.app_context():
+        # A leader exercise NOT already mapped by the linked_pair fixture --
+        # uq_gym_shared_session_exercises_link_leader is (shared_session_id,
+        # leader_exercise_id), and the fixture already maps leader_exercise.
+        vanished = Exercise(name='pytest shared vanished lift', user_id=linked_pair['leader_user'])
+        orphan = Exercise(name='pytest shared orphaned lift', user_id=linked_pair['follower_user'])
+        db.session.add_all([vanished, orphan])
+        db.session.flush()
+        db.session.add(SharedSessionExercise(
+            shared_session_id=linked_pair['shared'],
+            leader_exercise_id=vanished.id,
+            follower_exercise_id=orphan.id))
+        db.session.commit()
+        orphan_id = orphan.id
+        # Not referenced by any SessionExercise or TemplateExercise -- only by
+        # the map row just added.
+        assert orphan.session_exercises == []
+        assert orphan.template_exercises == []
+
+    response = _client_for(linked_pair['follower_user']).post(
+        f'/gym/exercises/{orphan_id}/delete')
+    assert response.status_code == 302, 'the delete must not 500'
+
+    with flask_app.app_context():
+        assert db.session.get(Exercise, orphan_id) is None, (
+            'the exercise was not actually deleted')
+        assert SharedSessionExercise.query.filter_by(follower_exercise_id=orphan_id).count() == 0, (
+            "the spent map row must cascade away with the exercise it named")
+
+
+# --- Fix 5: re-inviting after a link ended (or while still pending) --------
+
+
+def test_reinviting_after_the_link_ended_gives_an_honest_message(joined_pair):
+    """After the follower finishes first, ended_at is stamped and the leader's
+    partner_status empties, but uq_gym_shared_sessions_leader_session_follower
+    means a genuine retry can never work -- re-inviting must say so rather
+    than flash success while creating nothing and sending no push."""
+    from extensions import db
+    from models import SharedSession
+
+    _client_for(joined_pair['partner']).post(
+        f"/gym/session/{joined_pair['follower_session']}/finish")
+
+    response = _client_for(joined_pair['leader']).post(
+        f"/gym/session/{joined_pair['session']}/invite",
+        data={'partner_id': joined_pair['partner']}, follow_redirects=True)
+    html = response.get_data(as_text=True)
+    assert 'wurde eingeladen' not in html, (
+        'a re-invite after the link ended must not claim success')
+    assert 'bereits beendet' in html
+
+    with flask_app.app_context():
+        assert SharedSession.query.filter_by(
+            leader_session_id=joined_pair['session']).count() == 1, (
+            'no second invite row should have been created')
+
+
+def test_reinviting_a_still_pending_invite_gives_an_honest_message(leader_with_partner):
+    """The other non-None branch: an invite that exists but is neither
+    accepted nor ended yet."""
+    from extensions import db
+    from models import SharedSession
+
+    leader_client = _client_for(leader_with_partner['leader'])
+    leader_client.post(f"/gym/session/{leader_with_partner['session']}/invite",
+                       data={'partner_id': leader_with_partner['partner']})
+
+    response = leader_client.post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']}, follow_redirects=True)
+    html = response.get_data(as_text=True)
+    assert 'ist bereits eingeladen' in html
+
+    with flask_app.app_context():
+        assert SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).count() == 1
+
+
+# --- Fix 7: is_unilateral must travel with the exercise's name -------------
+
+
+def test_follower_exercise_for_copies_is_unilateral(linked_pair):
+    from extensions import db
+    from features.gym import sharing
+    from models import Exercise, SharedSession
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, linked_pair['shared'])
+        one_arm_row = Exercise(name='pytest shared one arm row',
+                               user_id=linked_pair['leader_user'], is_unilateral=True)
+        db.session.add(one_arm_row)
+        db.session.flush()
+
+        resolved_id = sharing.follower_exercise_for(shared, one_arm_row.id)
+        db.session.commit()
+
+        created = db.session.get(Exercise, resolved_id)
+        assert created.is_unilateral is True, (
+            'unilaterality is a property of the movement and must travel with the name, '
+            'unlike weight_increment')
+
+
+def test_accepting_with_new_copies_is_unilateral(leader_with_partner):
+    from extensions import db
+    from models import Exercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        bench = db.session.get(Exercise, leader_with_partner['exercise'])
+        bench.is_unilateral = True
+        db.session.commit()
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": 'new'})
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
+        assert follower_session.exercises[0].exercise.is_unilateral is True, (
+            "a follower joining a workout with a unilateral lift must not silently "
+            "get a bilateral copy")
+
+
+# --- Fix 6b: only the follower half of a live link should poll -------------
+
+
+def test_the_leader_side_is_not_marked_shared_for_polling(joined_pair):
+    """session_is_shared gates the polling script in session_detail.html. The
+    leader's structure_version is never bumped by anything (only
+    reconcile_follower bumps it, and only on the follower's session), so a
+    leader polling sync.json every 5s would be pure waste."""
+    html = _client_for(joined_pair['leader']).get(
+        f"/gym/session/{joined_pair['session']}").get_data(as_text=True)
+    assert 'data-shared="0"' in html, "the leader's own session must not be marked shared"
+
+
+def test_the_follower_side_is_marked_shared_for_polling(joined_pair):
+    html = _client_for(joined_pair['partner']).get(
+        f"/gym/session/{joined_pair['follower_session']}").get_data(as_text=True)
+    assert 'data-shared="1"' in html, "the follower's session must be marked shared"
