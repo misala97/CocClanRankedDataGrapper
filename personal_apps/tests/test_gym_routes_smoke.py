@@ -1328,3 +1328,93 @@ def test_the_lead_routine_ignores_a_stall_it_does_not_contain():
                 if doomed is not None:
                     db.session.delete(doomed)
                     db.session.commit()
+
+
+def test_the_lead_routine_briefing_is_silent_when_nothing_stalls():
+    """The design spec's Testing section requires this outright: the briefing
+    renders nothing when the lead routine has no stalling exercise. The two
+    sibling tests above only ever cover a stall inside vs. outside the lead
+    routine -- neither one ever exercises the "nothing stalls anywhere" case,
+    so the spec's own explicit requirement had no test proving it.
+
+    Runs as a fresh, throwaway user for the same reason as the two tests
+    above: admin's real, currently-active WorkoutSession would make gym_heute()
+    render the "continue your workout" card instead of the lead-routine card.
+
+    Two sessions is below stats.STAGNATION_THRESHOLD (4), so
+    sessions_since_pr can never reach the threshold that marks a stall --
+    there simply isn't enough history yet for anything to count as stuck.
+    """
+    import datetime as dt
+    from extensions import db
+    from models import (AppUser, Exercise, SessionExercise, SessionSet, TemplateExercise,
+                        WorkoutSession, WorkoutTemplate)
+    from werkzeug.security import generate_password_hash
+
+    made = {'sessions': [], 'exercise': None, 'template': None, 'user': None}
+    try:
+        with flask_app.app_context():
+            user = AppUser(username='pytest no-stall user',
+                           password_hash=generate_password_hash('x'), is_admin=False)
+            db.session.add(user)
+            db.session.flush()
+            made['user'] = user.id
+
+            exercise = Exercise(name='pytest no-stall lift', muscle_group='Brust',
+                                user_id=user.id)
+            db.session.add(exercise)
+            db.session.flush()
+            made['exercise'] = exercise.id
+
+            template = WorkoutTemplate(name='pytest no-stall routine', user_id=user.id)
+            template.exercises.append(TemplateExercise(exercise_id=exercise.id, position=1))
+            db.session.add(template)
+            db.session.flush()
+            made['template'] = template.id
+
+            # Two sessions, well under STAGNATION_THRESHOLD (4) -- nowhere near
+            # enough history for anything to read as stuck.
+            for days_ago in (12, 6):
+                started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+                session_ = WorkoutSession(name='pytest no-stall session',
+                                          started_at=started,
+                                          finished_at=started + dt.timedelta(hours=1),
+                                          user_id=user.id, template_id=template.id)
+                se = SessionExercise(exercise_id=exercise.id, position=1)
+                se.sets = [SessionSet(position=1, weight=40.0, reps=8, completed=True)]
+                session_.exercises.append(se)
+                db.session.add(session_)
+                db.session.commit()
+                made['sessions'].append(session_.id)
+
+        flask_app.config['TESTING'] = True
+        with flask_app.test_client() as test_client:
+            with test_client.session_transaction() as flask_session:
+                flask_session['user_id'] = made['user']
+            html = test_client.get('/gym').get_data(as_text=True)
+        assert 'pytest no-stall routine' in html, 'the lead routine card itself did not render'
+        assert 'lead__watch' not in html, 'a briefing line rendered though nothing stalls'
+    finally:
+        with flask_app.app_context():
+            for session_id in made['sessions']:
+                doomed = db.session.get(WorkoutSession, session_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if made['template']:
+                doomed = db.session.get(WorkoutTemplate, made['template'])
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if made['exercise']:
+                doomed = db.session.get(Exercise, made['exercise'])
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if made['user']:
+                doomed = db.session.get(AppUser, made['user'])
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()

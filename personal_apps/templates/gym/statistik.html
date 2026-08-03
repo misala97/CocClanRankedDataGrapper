@@ -287,18 +287,22 @@
         {% endif %}
       </div>
 
+      {#- Measured against planned. Absent entirely before any session was
+          logged with timestamps -- an unanswerable question on the page reads
+          as a broken feature, not as an empty one. The whole block, including
+          its wrapping div, is gated: `.read + .read` paints a rule and a gap
+          from the div's mere presence, so a div with nothing inside it still
+          looked like a broken section on the day this shipped, for every
+          session finished before completed_at existed. -#}
+      {% if rest_habit %}
       <div class="read">
-        {#- Measured against planned. Absent entirely before any session was
-            logged with timestamps -- an unanswerable question on the page reads
-            as a broken feature, not as an empty one. -#}
-        {% if rest_habit %}
         <p class="read__q">Wie lange pausierst du?</p>
         <p class="read__a">
           Du planst <em>{{ '%d:%02d'|format(rest_habit[0] // 60, rest_habit[0] % 60) }}</em>,
           nimmst dir <em>{{ '%d:%02d'|format(rest_habit[1] // 60, rest_habit[1] % 60) }}</em>.
         </p>
-        {% endif %}
       </div>
+      {% endif %}
     </section>
   </div>
 

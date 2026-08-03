@@ -30,9 +30,14 @@
         {{ ('unter 1 Minute' if minutes < 1 else (minutes|string) ~ (' Minute' if minutes == 1 else ' Minuten')) }}
       </span>
       {#- Measured, not planned. Absent for every session logged before
-          completed_at existed, and silent rather than zero in that case. -#}
+          completed_at existed, and silent rather than zero in that case.
+          Mirrors the duration line above: floor-to-minutes alone prints the
+          literal "0 Minuten Pause" for any real rest under 60 seconds, and
+          "1 Minuten" (wrong plural) between 60-119 -- both forbidden by the
+          spec, which wants "unter 1 Minute" and singular "Minute" instead. -#}
       {% if rest_taken_seconds %}
-      <span class="finished__rest">davon {{ (rest_taken_seconds // 60)|int }} Minuten Pause</span>
+      {% set rest_minutes = (rest_taken_seconds // 60)|int %}
+      <span class="finished__rest">davon {{ ('unter 1 Minute' if rest_minutes < 1 else (rest_minutes|string) ~ (' Minute' if rest_minutes == 1 else ' Minuten')) }} Pause</span>
       {% endif %}
     </span>
     {% if session.is_deload %}
