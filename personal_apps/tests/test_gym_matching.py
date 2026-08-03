@@ -74,3 +74,17 @@ def test_an_empty_catalogue_proposes_nothing_and_does_not_crash():
     from features.gym import matching
     proposals = matching.propose_matches(['Bankdrücken'], [])
     assert proposals == [{'name': 'Bankdrücken', 'exact_id': None, 'candidates': []}]
+
+
+def test_each_leader_name_is_ranked_against_itself():
+    """A whole routine is matched in one call, so every name must rank against
+    its OWN best candidate. The ranking closure captures the name being
+    processed; if that capture were ever deferred past the loop, every
+    proposal would silently rank against the LAST name instead -- and the
+    result would still look plausible, which is what makes it worth pinning."""
+    from features.gym import matching
+    proposals = matching.propose_matches(
+        ['Bankdrücken', 'Kniebeuge'],
+        [(1, 'KH Bankdrücken'), (2, 'Kniebeugen'), (3, 'Rudern')])
+    assert proposals[0]['candidates'][0] == (1, 'KH Bankdrücken')
+    assert proposals[1]['candidates'][0] == (2, 'Kniebeugen')
