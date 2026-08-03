@@ -123,6 +123,13 @@ def _get_active_session():
         session_.rest_ends_at = None
         session_.resting_set_id = None
         _cancel_pending_push(session_)
+        # This is a second, differently-spelled site that stamps finished_at
+        # (started_at + timeout, not utcnow()) -- the brief's suggested grep
+        # for the literal string "finished_at = dt.datetime.utcnow()" does not
+        # match it, but going stale ends the workout exactly as explicitly
+        # finishing it does, so the same rule applies: whoever finishes first
+        # ends the sharing, the other trains on alone.
+        sharing.end_links_for(session_)
         db.session.commit()
         return None
     return session_
@@ -964,6 +971,7 @@ def gym_add_session_exercise(session_id):
             _seeded_sets(session_, exercise_id, next_position))
         db.session.add(session_exercise)
         db.session.commit()
+        sharing.propagate_structure(session_)
 
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
@@ -1017,6 +1025,7 @@ def gym_replace_session_exercise(session_exercise_id):
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
+    sharing.propagate_structure(original.session)
 
     return redirect(url_for('gym.session_detail', session_id=session_id))
 
@@ -1086,6 +1095,7 @@ def gym_add_set(session_exercise_id):
 def gym_delete_session_exercise(session_exercise_id):
     session_exercise = owned_session_exercise(session_exercise_id)
     session_id = session_exercise.session_id
+    session_ = session_exercise.session
     # If the currently-resting set belongs to this exercise, clear the
     # reference first -- otherwise deleting it (cascades to its sets) would
     # violate the WorkoutSession.resting_set_id foreign key.
@@ -1093,8 +1103,17 @@ def gym_delete_session_exercise(session_exercise_id):
         session_exercise.session.resting_set_id = None
         session_exercise.session.rest_ends_at = None
         _cancel_pending_push(session_exercise.session)
+    # BEFORE the delete, not after: mirrors_id carries a database-level
+    # ON DELETE SET NULL, so the moment this row is gone the database has
+    # already erased the only marker saying which follower row mirrored it.
+    # Reconciliation would have nothing left to key on, and a heuristic
+    # recovery -- matching on exercise_id, say -- cannot tell an orphaned
+    # mirror from a row the partner added on their own initiative, so it
+    # would eventually delete their own work and the sets they logged on it.
+    sharing.remove_mirrors_of(session_exercise)
     db.session.delete(session_exercise)
     db.session.commit()
+    sharing.propagate_structure(session_)
     return redirect(url_for('gym.session_detail', session_id=session_id))
 
 
@@ -1127,6 +1146,7 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
         )
 
     db.session.commit()
+    sharing.propagate_structure(session_)
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
@@ -1283,6 +1303,7 @@ def gym_reorder_session_exercises(session_id):
                 se.sets.extend(_seeded_sets(session_, se.exercise_id, position))
             position += 1
     db.session.commit()
+    sharing.propagate_structure(session_)
     return redirect(url_for('gym.session_detail', session_id=session_id))
 
 
@@ -1319,6 +1340,9 @@ def gym_finish_session(session_id):
     # cancel its still-pending push -- otherwise the notifier daemon fires it
     # later for a workout that's already over.
     _cancel_pending_push(session_)
+    # Whoever finishes first ends the sharing. The other trains on alone --
+    # a workout must never be cut short by someone else's.
+    sharing.end_links_for(session_)
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
 
@@ -1634,6 +1658,26 @@ def gym_delete_session(session_id):
         # cascade-deleted) sets would otherwise violate the FK constraint.
         session_.resting_set_id = None
         db.session.commit()
+        # Plain FKs with no ondelete point at this session from both halves of
+        # any link it took part in. Deleting the workout without clearing them
+        # is a constraint violation -- and the link is spent anyway, since a
+        # session can only be deleted once it has finished.
+        #
+        # SharedSessionExercise.shared_session_id is itself a plain FK, with
+        # no ondelete and no ORM-level cascade -- SharedSession carries no
+        # relationship to it at all. A bulk delete() bypasses ORM cascades in
+        # any case, so the exercise-map rows have to be cleared explicitly
+        # first, or deleting the link row 500s on exactly the same kind of
+        # constraint this comment is already warning about, one table deeper.
+        doomed_link_ids = [row.id for row in SharedSession.query.filter(
+            db.or_(SharedSession.leader_session_id == session_.id,
+                   SharedSession.follower_session_id == session_.id)).all()]
+        if doomed_link_ids:
+            SharedSessionExercise.query.filter(
+                SharedSessionExercise.shared_session_id.in_(doomed_link_ids)).delete(
+                synchronize_session=False)
+            SharedSession.query.filter(SharedSession.id.in_(doomed_link_ids)).delete(
+                synchronize_session=False)
         db.session.delete(session_)
         db.session.commit()
     return redirect(url_for('gym.gym_verlauf'))

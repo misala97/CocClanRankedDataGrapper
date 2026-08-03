@@ -1429,3 +1429,198 @@ def test_accepting_with_new_reuses_an_owned_exercise_of_the_same_name(leader_wit
         follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
         assert follower_session.exercises[0].exercise_id == own_bench_id, (
             'the existing owned exercise was not reused')
+
+
+# --- Wiring propagation into the routes (Task 6) ---
+
+
+@pytest.fixture()
+def joined_pair(leader_with_partner):
+    """leader_with_partner, but the invite has been accepted through the real
+    routes -- so the follower's session and exercise map are whatever the app
+    actually builds."""
+    from extensions import db
+    from models import SharedSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+    _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": 'new'})
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        return dict(leader_with_partner, shared=shared_id,
+                    follower_session=shared.follower_session_id)
+
+
+def test_adding_an_exercise_propagates_through_the_route(joined_pair):
+    from extensions import db
+    from models import WorkoutSession
+
+    _client_for(joined_pair['leader']).post(
+        f"/gym/session/{joined_pair['session']}/exercises/add",
+        data={'new_exercise_name': 'pytest invite fly'})
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        assert 'pytest invite fly' in [se.exercise.name for se in follower_session.exercises]
+
+
+def test_reordering_propagates_through_the_route(joined_pair):
+    from extensions import db
+    from models import WorkoutSession
+
+    leader_client = _client_for(joined_pair['leader'])
+    leader_client.post(f"/gym/session/{joined_pair['session']}/exercises/add",
+                       data={'new_exercise_name': 'pytest invite fly'})
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, joined_pair['session'])
+        order = [se.id for se in sorted(leader_session.exercises,
+                                        key=lambda se: se.position)][::-1]
+
+    leader_client.post(f"/gym/session/{joined_pair['session']}/exercises/reorder",
+                       json={'order': order})
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        ordered = sorted(follower_session.exercises, key=lambda se: se.position)
+        assert [se.exercise.name for se in ordered] == [
+            'pytest invite fly', 'pytest invite bench']
+
+
+def test_deleting_an_exercise_propagates_through_the_route(joined_pair):
+    from extensions import db
+    from models import WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, joined_pair['session'])
+        row_id = leader_session.exercises[0].id
+
+    _client_for(joined_pair['leader']).post(f'/gym/session-exercise/{row_id}/delete')
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        assert list(follower_session.exercises) == []
+
+
+def test_skipping_propagates_through_the_route(joined_pair):
+    from extensions import db
+    from models import WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, joined_pair['session'])
+        row_id = leader_session.exercises[0].id
+
+    _client_for(joined_pair['leader']).post(f'/gym/session-exercise/{row_id}/skip')
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        assert all(se.skipped for se in follower_session.exercises)
+
+
+def test_logging_a_set_does_not_bump_the_followers_version(joined_pair):
+    """Only structure travels. If logging bumped the version, the partner's
+    page would re-render every time the leader ticked a set."""
+    from extensions import db
+    from models import SessionSet, WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, joined_pair['session'])
+        row = leader_session.exercises[0]
+        row.sets.append(SessionSet(position=1, weight=60.0, reps=8, completed=False))
+        db.session.commit()
+        set_id = row.sets[0].id
+        before = db.session.get(
+            WorkoutSession, joined_pair['follower_session']).structure_version
+
+    _client_for(joined_pair['leader']).post(f'/gym/set/{set_id}/toggle_complete')
+
+    with flask_app.app_context():
+        after = db.session.get(
+            WorkoutSession, joined_pair['follower_session']).structure_version
+        assert after == before
+
+
+def test_the_leader_finishing_ends_the_link_and_leaves_the_follower_live(joined_pair):
+    """A workout must never be cut short by someone else's."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    _client_for(joined_pair['leader']).post(
+        f"/gym/session/{joined_pair['session']}/finish")
+
+    with flask_app.app_context():
+        assert db.session.get(SharedSession, joined_pair['shared']).ended_at is not None
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        assert follower_session.finished_at is None, 'the follower\'s workout was ended too'
+
+
+def test_nothing_propagates_after_the_link_ended(joined_pair):
+    from extensions import db
+    from models import WorkoutSession
+
+    leader_client = _client_for(joined_pair['leader'])
+    leader_client.post(f"/gym/session/{joined_pair['session']}/finish")
+    leader_client.post(f"/gym/session/{joined_pair['session']}/exercises/add",
+                       data={'new_exercise_name': 'pytest invite ghost'})
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        assert 'pytest invite ghost' not in [
+            se.exercise.name for se in follower_session.exercises]
+
+
+def test_deleting_a_finished_shared_session_clears_the_link_too(joined_pair):
+    """Step 4b: SharedSession.leader_session_id/follower_session_id are plain
+    FKs with no ondelete. Deleting a finished workout that was ever shared
+    must clear both halves of any link it took part in first, or the FK
+    constraint 500s."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    leader_client = _client_for(joined_pair['leader'])
+    leader_client.post(f"/gym/session/{joined_pair['session']}/finish")
+
+    response = leader_client.post(f"/gym/session/{joined_pair['session']}/delete")
+    assert response.status_code == 302, 'deleting a shared, finished session must not 500'
+
+    with flask_app.app_context():
+        assert db.session.get(WorkoutSession, joined_pair['session']) is None, (
+            'the session was not deleted')
+        assert db.session.get(SharedSession, joined_pair['shared']) is None, (
+            'the link naming the deleted session survived it')
+
+
+def test_a_stale_leader_session_auto_finishing_also_ends_the_link(joined_pair):
+    """A second, differently-spelled site that stamps finished_at:
+    _get_active_session() auto-finishes a session left open past
+    STALE_SESSION_TIMEOUT, computing `started_at + STALE_SESSION_TIMEOUT`
+    rather than `dt.datetime.utcnow()` -- so the brief's suggested
+    `grep "finished_at = dt.datetime.utcnow()"` does not find it. Going
+    stale ends the workout exactly as explicitly finishing it does, so it
+    must end the link the same way, or a link tied to a session that quietly
+    went stale is left dangling forever (accepted, never ended)."""
+    from extensions import db
+    from models import STALE_SESSION_TIMEOUT, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, joined_pair['session'])
+        leader_session.started_at = (
+            dt.datetime.utcnow() - STALE_SESSION_TIMEOUT - dt.timedelta(minutes=1))
+        db.session.commit()
+
+    # Any page load for the leader runs _get_active_session() via the nav
+    # bar's context processor.
+    _client_for(joined_pair['leader']).get('/gym')
+
+    with flask_app.app_context():
+        assert db.session.get(SharedSession, joined_pair['shared']).ended_at is not None, (
+            'a session going stale did not end its link')
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        assert follower_session.finished_at is None, (
+            'the follower\'s workout was ended too')
