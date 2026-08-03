@@ -1392,7 +1392,8 @@ def test_the_lead_routine_briefing_is_silent_when_nothing_stalls():
             with test_client.session_transaction() as flask_session:
                 flask_session['user_id'] = made['user']
             html = test_client.get('/gym').get_data(as_text=True)
-        assert 'pytest no-stall routine' in html, 'the lead routine card itself did not render'
+        assert 'pytest no-stall routine' in html and 'lead__go' in html, \
+            'the lead routine card itself did not render'
         assert 'lead__watch' not in html, 'a briefing line rendered though nothing stalls'
     finally:
         with flask_app.app_context():

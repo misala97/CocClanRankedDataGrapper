@@ -185,9 +185,9 @@ def test_statistik_reports_planned_against_actual_rest(client, finished_with_res
 
 @pytest.fixture()
 def two_close_sessions():
-    """Two separately finished sessions whose sets straddle a 30-second gap:
-    the last set of session 1 lands 30 seconds before the first set of
-    session 2.
+    """A fresh, throwaway user with two separately finished sessions whose
+    sets straddle a 30-second gap: the last set of session 1 lands 30 seconds
+    before the first set of session 2.
 
     That 30 s is well inside REST_GAP_CAP_SECONDS (600), so it would NOT be
     dropped by the cap if the two sessions' entries were ever pooled into one
@@ -197,20 +197,34 @@ def two_close_sessions():
     sessions only ever produce their own internal gaps: 180 s in session 1,
     240 s in session 2. Neither of those is 30.
 
-    Yields (session_id_1, session_id_2, exercise_id).
+    Runs as a fresh, throwaway user rather than the shared `client` fixture's
+    admin: gym_statistik pools rest gaps across EVERY finished session the
+    caller owns, so admin's real, ongoing training history in the local dev
+    database would mix into the pooled median and make the exact 210 s figure
+    this test relies on unpredictable. A brand-new user has no other sessions
+    to compete with the two built here.
+
+    Yields (session_id_1, session_id_2, exercise_id, user_id).
     """
     from extensions import db
-    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    from models import AppUser, Exercise, SessionExercise, SessionSet, WorkoutSession
+    from werkzeug.security import generate_password_hash
     ids = None
     with flask_app.app_context():
-        exercise = Exercise(name='pytest cross-session lift', user_id=_admin_id())
+        user = AppUser(username='pytest cross-session user',
+                       password_hash=generate_password_hash('x'), is_admin=False)
+        db.session.add(user)
+        db.session.flush()
+        user_id = user.id
+
+        exercise = Exercise(name='pytest cross-session lift', user_id=user_id)
         db.session.add(exercise)
         db.session.flush()
 
         base = dt.datetime.utcnow() - dt.timedelta(hours=2)
         session_1 = WorkoutSession(name='pytest cross-session one', started_at=base,
                                    finished_at=base + dt.timedelta(minutes=10),
-                                   user_id=_admin_id())
+                                   user_id=user_id)
         se1 = SessionExercise(exercise_id=exercise.id, position=1, rest_seconds=150)
         se1.sets = [
             SessionSet(position=1, weight=40.0, reps=8, completed=True,
@@ -228,7 +242,7 @@ def two_close_sessions():
         session_2 = WorkoutSession(name='pytest cross-session two',
                                    started_at=session_2_first,
                                    finished_at=session_2_first + dt.timedelta(minutes=10),
-                                   user_id=_admin_id())
+                                   user_id=user_id)
         se2 = SessionExercise(exercise_id=exercise.id, position=1, rest_seconds=150)
         se2.sets = [
             SessionSet(position=1, weight=40.0, reps=8, completed=True,
@@ -240,7 +254,7 @@ def two_close_sessions():
         db.session.add(session_2)
         db.session.commit()
 
-        ids = (session_1.id, session_2.id, exercise.id)
+        ids = (session_1.id, session_2.id, exercise.id, user_id)
     yield ids
     with flask_app.app_context():
         for session_id in ids[:2]:
@@ -254,6 +268,10 @@ def two_close_sessions():
         if doomed_exercise is not None:
             db.session.delete(doomed_exercise)
             db.session.commit()
+        doomed_user = db.session.get(AppUser, ids[3])
+        if doomed_user is not None:
+            db.session.delete(doomed_user)
+            db.session.commit()
 
 
 def test_rest_gaps_are_built_per_session_not_flattened_across_history(two_close_sessions):
@@ -264,13 +282,28 @@ def test_rest_gaps_are_built_per_session_not_flattened_across_history(two_close_
     regression here -- the former only ever sees one session's entries, and
     the latter only asserts that two German substrings are present, never an
     actual number.
+
+    Goes through the real /gym/statistik route (as the fresh user the
+    fixture built, via that user's own test_client login) rather than only
+    reconstructing the grouping by hand and asserting the reconstruction is
+    self-consistent -- a prior version of this test called
+    stats.rest_gaps(_session_rest_entries(...)) directly and never touched
+    gym_statistik at all, so it would keep passing even if the route were
+    rewritten to flatten every session's entries into one rest_gaps() call.
+    The two computations are pinned first (below) to prove they genuinely
+    diverge for this fixture, then the rendered page is asserted against the
+    CORRECT one: with the two sessions' own internal gaps of 180 s and 240 s,
+    the pooled actual-rest median is 210 s, i.e. "3:30". Flattened, the
+    spurious 30 s cross-session gap joins the pool and pulls the median down
+    to 180 s, i.e. "3:00" -- a different, wrong string this assertion would
+    not find.
     """
     from extensions import db
     from features.gym import stats
     from features.gym.routes import _session_rest_entries
     from models import WorkoutSession
 
-    session_id_1, session_id_2, _ = two_close_sessions
+    session_id_1, session_id_2, _, user_id = two_close_sessions
 
     with flask_app.app_context():
         session_1 = db.session.get(WorkoutSession, session_id_1)
@@ -295,6 +328,20 @@ def test_rest_gaps_are_built_per_session_not_flattened_across_history(two_close_
         'a gap spanning two different sessions leaked into the per-session grouping'
     assert sorted(grouped_actuals) == [180, 240], \
         'per-session grouping should yield exactly the two sessions own internal gaps'
+
+    # Now the actual proof: hit the real route as the fresh user and check
+    # the rendered figure, not a hand-reconstruction of it.
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as test_client:
+        with test_client.session_transaction() as flask_session:
+            flask_session['user_id'] = user_id
+        html = test_client.get('/gym/statistik').get_data(as_text=True)
+
+    assert '3:30' in html, \
+        ('gym_statistik did not render the correct per-session pooled actual-rest '
+         'median (210 s -> "3:30"); if it instead flattened both sessions into one '
+         'rest_gaps() call, the spurious cross-session gap would pull the pooled '
+         'median to 180 s -> "3:00" instead')
 
 
 def test_statistik_says_nothing_about_rest_without_stamps(client):
