@@ -877,6 +877,16 @@ def leader_with_partner():
             for row in Exercise.query.filter_by(user_id=user_id).all():
                 db.session.delete(row)
             db.session.commit()
+        # Only present when a test (e.g. the template-link test) mutated the
+        # yielded dict to add one; every session pointing at it is already
+        # gone by now, and this must run before the AppUser it belongs to.
+        if made.get('template'):
+            from models import WorkoutTemplate
+            doomed = db.session.get(WorkoutTemplate, made['template'])
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()
+        for user_id in (made['leader'], made['partner']):
             doomed = db.session.get(AppUser, user_id)
             if doomed is not None:
                 db.session.delete(doomed)
@@ -1026,9 +1036,27 @@ def test_accepting_creates_the_followers_session_with_the_same_structure(leader_
 def test_the_followers_session_carries_no_template_link(leader_with_partner):
     """The routine belongs to the leader's catalogue. Pointing at it would be a
     cross-user reference, and would tell routine_memory() the follower has done
-    a routine they have never owned."""
+    a routine they have never owned.
+
+    The leader's own session is given a real template_id here (the fixture
+    leaves it NULL) so that copying it would actually be observable -- against
+    a NULL leader template_id, this test could not tell the correct code
+    (explicit template_id=None) apart from a regression that copies
+    leader_session.template_id, since both leave the follower's template_id
+    NULL either way.
+    """
     from extensions import db
-    from models import SharedSession, WorkoutSession
+    from models import SharedSession, WorkoutSession, WorkoutTemplate
+
+    with flask_app.app_context():
+        template = WorkoutTemplate(name='pytest invite template',
+                                   user_id=leader_with_partner['leader'])
+        db.session.add(template)
+        db.session.flush()
+        leader_with_partner['template'] = template.id
+        db.session.get(
+            WorkoutSession, leader_with_partner['session']).template_id = template.id
+        db.session.commit()
 
     _client_for(leader_with_partner['leader']).post(
         f"/gym/session/{leader_with_partner['session']}/invite",
@@ -1149,6 +1177,75 @@ def test_an_invite_to_a_finished_workout_is_refused(leader_with_partner):
     assert 'Das Workout ist schon vorbei.' in html
 
 
+def test_a_partner_with_a_live_workout_is_refused_on_post_accept(leader_with_partner):
+    """gym_shared_accept re-checks _invite_refusal itself rather than trusting
+    that /confirm's GET already turned the follower away -- a refusal guarding
+    only the GET would be trivially bypassable by posting straight to
+    /accept. Sibling of test_a_partner_with_a_live_workout_is_refused, which
+    only ever exercises the GET."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+
+    own_session_id = None
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+        own = WorkoutSession(name='pytest invite own workout',
+                             started_at=dt.datetime.utcnow(),
+                             user_id=leader_with_partner['partner'])
+        db.session.add(own)
+        db.session.commit()
+        own_session_id = own.id
+
+    _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": 'new'})
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        assert shared.accepted_at is None
+        assert shared.follower_session_id is None
+        assert db.session.get(WorkoutSession, own_session_id) is not None, (
+            'the partner\'s own workout was disturbed')
+        assert WorkoutSession.query.filter_by(
+            user_id=leader_with_partner['partner']).count() == 1, (
+            'a follower session was created despite the accept-time refusal')
+
+
+def test_an_invite_to_a_finished_workout_is_refused_on_post_accept(leader_with_partner):
+    """Sibling of test_an_invite_to_a_finished_workout_is_refused, which only
+    ever exercises the GET -- the POST guard needs its own regression
+    protection."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+        db.session.get(WorkoutSession,
+                       leader_with_partner['session']).finished_at = dt.datetime.utcnow()
+        db.session.commit()
+
+    _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": 'new'})
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        assert shared.accepted_at is None
+        assert shared.follower_session_id is None
+        assert WorkoutSession.query.filter_by(
+            user_id=leader_with_partner['partner']).count() == 0, (
+            'a follower session was created despite the accept-time refusal')
+
+
 def test_only_the_recipient_can_open_or_accept_an_invite(leader_with_partner):
     from extensions import db
     from models import SharedSession
@@ -1196,3 +1293,139 @@ def test_an_exact_name_is_reused_rather_than_duplicated_on_accept(leader_with_pa
     with flask_app.app_context():
         assert Exercise.query.filter_by(user_id=leader_with_partner['partner'],
                                         name='pytest invite bench').count() == 1
+
+
+# --- The accept form's two security guards (review of 625cade) ---
+
+
+def test_accept_rejects_a_match_value_naming_an_exercise_owned_by_a_third_party(leader_with_partner):
+    """The value branch calls owned_exercise(...), so a follower cannot map a
+    slot onto an exercise they do not own and log against its history."""
+    from extensions import db
+    from models import AppUser, Exercise, SharedSession
+    from werkzeug.security import generate_password_hash
+
+    third_party_id = None
+    third_exercise_id = None
+    try:
+        with flask_app.app_context():
+            third_party = AppUser(username='pytest invite third party',
+                                  password_hash=generate_password_hash('c'), is_admin=False)
+            db.session.add(third_party)
+            db.session.flush()
+            third_party_id = third_party.id
+            third_exercise = Exercise(name='pytest invite third lift', user_id=third_party.id)
+            db.session.add(third_exercise)
+            db.session.commit()
+            third_exercise_id = third_exercise.id
+
+        _client_for(leader_with_partner['leader']).post(
+            f"/gym/session/{leader_with_partner['session']}/invite",
+            data={'partner_id': leader_with_partner['partner']})
+        with flask_app.app_context():
+            shared_id = SharedSession.query.filter_by(
+                leader_session_id=leader_with_partner['session']).first().id
+
+        response = _client_for(leader_with_partner['partner']).post(
+            f'/gym/shared/{shared_id}/accept',
+            data={f"match_{leader_with_partner['exercise']}": str(third_exercise_id)})
+        assert response.status_code == 404
+
+        with flask_app.app_context():
+            shared = db.session.get(SharedSession, shared_id)
+            assert shared.accepted_at is None
+            assert shared.follower_session_id is None
+    finally:
+        with flask_app.app_context():
+            if third_exercise_id:
+                doomed = db.session.get(Exercise, third_exercise_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if third_party_id:
+                doomed = db.session.get(AppUser, third_party_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_accept_skips_a_match_key_naming_an_exercise_the_leader_does_not_own(leader_with_partner):
+    """The key branch: any leader_exercise_id whose exercise turns out not to
+    really belong to the leader is skipped (`leader_exercise.user_id !=
+    shared.leader_user_id` -> continue) rather than treated as a legitimate
+    slot to fill. Posted alongside one legitimate key so the forged one's
+    absence is what distinguishes pass from fail, not the whole request
+    failing."""
+    from extensions import db
+    from models import Exercise, SharedSession, SharedSessionExercise
+
+    with flask_app.app_context():
+        forged = Exercise(name='pytest invite forged lift',
+                          user_id=leader_with_partner['partner'])
+        db.session.add(forged)
+        db.session.commit()
+        forged_id = forged.id
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": 'new',
+              f"match_{forged_id}": 'new'})
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        assert shared.accepted_at is not None, 'the legitimate half of the post must still go through'
+        mapped_leader_ids = {row.leader_exercise_id for row in
+                             SharedSessionExercise.query.filter_by(shared_session_id=shared_id).all()}
+        assert leader_with_partner['exercise'] in mapped_leader_ids, (
+            'the legitimate match was not created')
+        assert forged_id not in mapped_leader_ids, (
+            'a match key naming an exercise the leader does not own produced a row')
+
+
+# --- Fix 5: "Neu anlegen" must not 500 on a name the follower already owns ---
+
+
+def test_accepting_with_new_reuses_an_owned_exercise_of_the_same_name(leader_with_partner):
+    """A follower who overrides an auto-selected exact match back to 'Neu
+    anlegen' for a name they already own must reuse the existing row, not hit
+    uq_gym_exercises_user_id_name as an unhandled IntegrityError 500 -- same
+    find-or-create pattern gym_replace_session_exercise's new_name branch
+    already uses."""
+    from extensions import db
+    from models import Exercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        own_bench = Exercise(name='pytest invite bench',
+                             user_id=leader_with_partner['partner'])
+        db.session.add(own_bench)
+        db.session.commit()
+        own_bench_id = own_bench.id
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    response = _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": 'new'})
+    assert response.status_code == 302, (
+        'accepting with "Neu anlegen" on an already-owned name must not 500')
+
+    with flask_app.app_context():
+        assert Exercise.query.filter_by(user_id=leader_with_partner['partner'],
+                                        name='pytest invite bench').count() == 1, (
+            'the duplicate-name guard left the follower with two exercises')
+        shared = db.session.get(SharedSession, shared_id)
+        follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
+        assert follower_session.exercises[0].exercise_id == own_bench_id, (
+            'the existing owned exercise was not reused')

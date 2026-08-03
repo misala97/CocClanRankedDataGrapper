@@ -1387,8 +1387,12 @@ def _invite_for_recipient(shared_id):
 def _invite_refusal(shared):
     """Why this invite cannot be taken up, or None.
 
-    Each state gets its own sentence. A generic failure here reads as the app
-    being broken, when in fact all three are ordinary.
+    Two states get their own sentence here. A generic failure would read as
+    the app being broken, when in fact both are ordinary. The third state --
+    an invite that is already accepted, already ended, or was never addressed
+    to this caller -- never reaches this function: _invite_for_recipient 404s
+    on it first, with no sentence, since a sentence would confirm to someone
+    who may not be the invite's recipient that it exists at all.
     """
     leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
     if leader_session is None or leader_session.finished_at is not None:
@@ -1482,14 +1486,20 @@ def gym_shared_accept(shared_id):
         if leader_exercise is None or leader_exercise.user_id != shared.leader_user_id:
             continue
         if value == 'new':
-            chosen = Exercise(
-                name=leader_exercise.name,
-                muscle_group=leader_exercise.muscle_group,
-                default_rest_seconds=leader_exercise.default_rest_seconds,
-                user_id=current_user_id(),
-            )
-            db.session.add(chosen)
-            db.session.flush()
+            # Reuse an owned exercise of that name if one exists, same as
+            # gym_replace_session_exercise's new_name branch -- without this,
+            # overriding an auto-selected exact match back to "Neu anlegen"
+            # for a name already owned hits uq_gym_exercises_user_id_name.
+            chosen = my_exercises().filter_by(name=leader_exercise.name).first()
+            if chosen is None:
+                chosen = Exercise(
+                    name=leader_exercise.name,
+                    muscle_group=leader_exercise.muscle_group,
+                    default_rest_seconds=leader_exercise.default_rest_seconds,
+                    user_id=current_user_id(),
+                )
+                db.session.add(chosen)
+                db.session.flush()
             chosen_id = chosen.id
         else:
             # Attacker-chosen: without owned_exercise a lifter could map their
