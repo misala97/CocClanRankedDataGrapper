@@ -638,6 +638,44 @@ def gym_start():
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
+def _live_context(session_):
+    """Exactly the Jinja names templates/gym/_session_queue.html reads that it
+    does not define itself: the ordered, visible exercise list and which one
+    is live.
+
+    session_detail computes both anyway for its own purposes (suggestions,
+    the tick strip, the rest lookup...), so this is a straight extraction --
+    not a new computation -- moved here so gym_session_queue (the polling
+    endpoint) renders from the identical rule instead of a second copy that
+    could drift from the page's own.
+    """
+    # A replaced original is hidden from the active view, so its suggestion
+    # would never be used -- skip computing it there. Visibility is derived
+    # from replaces_id (already loaded on every row) rather than by touching
+    # se.replaced_by, which would lazy-load a separate query per row.
+    replaced_original_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
+    visible_exercises = [se for se in session_.exercises if se.id not in replaced_original_ids]
+
+    # The live exercise: the first visible, non-skipped one that is not yet
+    # fully logged, or the last visible one when everything is done.
+    #
+    # This used to be computed in the template. It moved here because three
+    # surfaces now have to agree on the answer -- the session body, the resume
+    # strip's "current exercise", and the rail that marks which segment is
+    # live -- and a rule expressed three times in Jinja is a rule that drifts.
+    live_se = None
+    for se in visible_exercises:
+        done = sum(1 for s in se.sets if s.completed)
+        if not se.skipped and not (se.sets and done == len(se.sets)):
+            live_se = se
+            break
+    if live_se is None and visible_exercises:
+        live_se = visible_exercises[-1]
+
+    return {'visible_exercises': visible_exercises,
+            'live_id': live_se.id if live_se else None}
+
+
 @gym_bp.route('/gym/session/<int:session_id>')
 @login_required
 def session_detail(session_id):
@@ -769,12 +807,11 @@ def session_detail(session_id):
         return render_template('gym/session_finished.html', session=session_,
                                weekday_short=WEEKDAY_SHORT, rest_taken_seconds=rest_taken_seconds, **data)
 
-    # A replaced original is hidden from the active view, so its suggestion
-    # would never be used -- skip computing it there. Visibility is derived
-    # from replaces_id (already loaded on every row) rather than by touching
-    # se.replaced_by, which would lazy-load a separate query per row.
-    replaced_original_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
-    visible_exercises = [se for se in session_.exercises if se.id not in replaced_original_ids]
+    # visible_exercises and which one is live: see _live_context's own
+    # docstring for why this is a call rather than the computation itself.
+    live_ctx = _live_context(session_)
+    visible_exercises = live_ctx['visible_exercises']
+    live_se = next((se for se in visible_exercises if se.id == live_ctx['live_id']), None)
     suggestions = {se.id: _seeded_suggestion(session_, se.exercise, se.position) for se in visible_exercises}
     history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
     by_exercise = {}
@@ -805,22 +842,6 @@ def session_detail(session_id):
                 if s.completed and stats.is_new_best(s.weight, s.reps, prior):
                     record_set_ids.add(s.id)
     exercises = my_exercises().order_by(Exercise.name).all()
-
-    # The live exercise: the first visible, non-skipped one that is not yet
-    # fully logged, or the last visible one when everything is done.
-    #
-    # This used to be computed in the template. It moved here because three
-    # surfaces now have to agree on the answer -- the session body, the resume
-    # strip's "current exercise", and the rail that marks which segment is
-    # live -- and a rule expressed three times in Jinja is a rule that drifts.
-    live_se = None
-    for se in visible_exercises:
-        done = sum(1 for s in se.sets if s.completed)
-        if not se.skipped and not (se.sets and done == len(se.sets)):
-            live_se = se
-            break
-    if live_se is None and visible_exercises:
-        live_se = visible_exercises[-1]
 
     # One tick per set in the whole workout, in order, so the strip reads as
     # the session filling up rather than as a chart. 'now' is the single set
@@ -873,13 +894,20 @@ def session_detail(session_id):
          'accepted': link.accepted_at is not None}
         for link in shared_out
     ]
+    # Whether THIS session is on either side of a live link -- gates the
+    # polling script in session_detail.html. A solo session must never poll:
+    # there is nothing for the leader to change on the follower's behalf.
+    session_is_shared = SharedSession.query.filter(
+        SharedSession.ended_at.is_(None),
+        SharedSession.accepted_at.isnot(None),
+        db.or_(SharedSession.leader_session_id == session_.id,
+               SharedSession.follower_session_id == session_.id)).first() is not None
 
     return render_template(
         'gym/session_detail.html',
         session=session_,
-        visible_exercises=visible_exercises,
         live_se=live_se,
-        live_id=live_se.id if live_se else None,
+        **live_ctx,
         # Resolved here, not in Jinja: the template must never re-implement the
         # fallback, or the two copies drift the moment DEFAULT_INCREMENT moves.
         live_increment=stats.resolve_increment(
@@ -927,6 +955,7 @@ def session_detail(session_id):
         deload_default_pct=stats.DELOAD_DEFAULT_PCT,
         partners=partners,
         partner_status=partner_status,
+        session_is_shared=session_is_shared,
     )
 
 
@@ -1345,6 +1374,36 @@ def gym_finish_session(session_id):
     sharing.end_links_for(session_)
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
+
+
+@gym_bp.route('/gym/session/<int:session_id>/sync.json')
+@login_required
+def gym_session_sync(session_id):
+    """What the follower's page polls.
+
+    Reads the caller's OWN session. Propagation is a write, so by the time this
+    is asked the change is already in their rows -- there is no cross-user read
+    on this path at all.
+    """
+    session_ = owned_session(session_id)
+    shared = SharedSession.query.filter(
+        SharedSession.ended_at.is_(None),
+        SharedSession.accepted_at.isnot(None),
+        db.or_(SharedSession.leader_session_id == session_.id,
+               SharedSession.follower_session_id == session_.id)).first()
+    return jsonify({'version': session_.structure_version or 0,
+                    'shared': shared is not None})
+
+
+@gym_bp.route('/gym/session/<int:session_id>/queue.html')
+@login_required
+def gym_session_queue(session_id):
+    """The queue alone, for the polling swap.
+
+    Rendered from the same partial the page uses, so the two cannot drift.
+    """
+    session_ = owned_session(session_id)
+    return render_template('gym/_session_queue.html', **_live_context(session_))
 
 
 def _username(user_id):

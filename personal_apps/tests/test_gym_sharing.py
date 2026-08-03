@@ -1624,3 +1624,72 @@ def test_a_stale_leader_session_auto_finishing_also_ends_the_link(joined_pair):
         follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
         assert follower_session.finished_at is None, (
             'the follower\'s workout was ended too')
+
+
+# --- The follower's page keeps up (Task 7) ---
+
+
+def test_the_sync_endpoint_reports_the_structure_version(joined_pair):
+    import json
+    response = _client_for(joined_pair['partner']).get(
+        f"/gym/session/{joined_pair['follower_session']}/sync.json")
+    assert response.status_code == 200
+    body = json.loads(response.get_data(as_text=True))
+    assert 'version' in body and isinstance(body['version'], int)
+    assert body['shared'] is True
+
+
+def test_the_sync_version_rises_when_the_leader_changes_structure(joined_pair):
+    import json
+    partner_client = _client_for(joined_pair['partner'])
+    before = json.loads(partner_client.get(
+        f"/gym/session/{joined_pair['follower_session']}/sync.json"
+    ).get_data(as_text=True))['version']
+
+    _client_for(joined_pair['leader']).post(
+        f"/gym/session/{joined_pair['session']}/exercises/add",
+        data={'new_exercise_name': 'pytest invite raise'})
+
+    after = json.loads(partner_client.get(
+        f"/gym/session/{joined_pair['follower_session']}/sync.json"
+    ).get_data(as_text=True))['version']
+    assert after > before
+
+
+def test_a_stranger_cannot_poll_someone_elses_session(joined_pair):
+    assert _client_for(joined_pair['leader']).get(
+        f"/gym/session/{joined_pair['follower_session']}/sync.json").status_code == 404
+    assert _client_for(joined_pair['leader']).get(
+        f"/gym/session/{joined_pair['follower_session']}/queue.html").status_code == 404
+
+
+def test_the_queue_endpoint_renders_only_the_queue(joined_pair):
+    html = _client_for(joined_pair['partner']).get(
+        f"/gym/session/{joined_pair['follower_session']}/queue.html"
+    ).get_data(as_text=True)
+    assert 'queue' in html
+    assert 'pytest invite bench' in html
+    assert '<html' not in html.lower(), 'the queue endpoint returned a whole page'
+
+
+def test_the_leader_cannot_read_the_followers_workout(joined_pair):
+    """Structure travels; performance does not. Sharing must not have opened a
+    door to the partner's numbers on any route that serves them."""
+    leader_client = _client_for(joined_pair['leader'])
+    follower_session = joined_pair['follower_session']
+    for url in (f'/gym/session/{follower_session}',
+                f'/gym/session/{follower_session}/sync.json',
+                f'/gym/session/{follower_session}/queue.html',
+                f'/gym/export?ids={follower_session}'):
+        response = leader_client.get(url)
+        assert response.status_code == 404 or (
+            'pytest invite bench' not in response.get_data(as_text=True)), (
+            f'{url} served the partner\'s workout to the leader')
+
+
+def test_a_solo_session_reports_that_it_is_not_shared(leader_with_partner):
+    import json
+    body = json.loads(_client_for(leader_with_partner['leader']).get(
+        f"/gym/session/{leader_with_partner['session']}/sync.json"
+    ).get_data(as_text=True))
+    assert body['shared'] is False
