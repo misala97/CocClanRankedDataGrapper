@@ -225,6 +225,10 @@ Exactly two cross-user accesses exist:
   created.
 - **Invite status** — the leader reads `accepted_at` on the link, never the
   follower's session.
+- **The workout's name**, on the invite card and in the push body — the
+  invitee is told what they are being asked to join. Corrected from "exactly
+  two" after the final review counted a third; it goes only to the invitee and
+  carries nothing about performance.
 
 **The cross-user write goes through one chokepoint.** A single function
 performs every propagation and refuses unless all of the following hold: the
