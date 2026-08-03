@@ -559,6 +559,7 @@ The one function in the app that writes into another user's session. Everything 
   - `active_links_led_by(session_id) -> list[SharedSession]`
   - `follower_exercise_for(shared, leader_exercise_id) -> int | None` (None only when the leader's exercise row has vanished)
   - `reconcile_follower(shared) -> bool` — True when it changed anything.
+  - `remove_mirrors_of(session_exercise) -> None` — deletes the follower rows mirroring this one. Must be called BEFORE the leader's row is deleted; see Task 6.
   - `propagate_structure(session_) -> None` — what routes call.
   - `end_links_for(session_) -> None`
 
@@ -2221,7 +2222,20 @@ In `features/gym/routes.py`, add `sharing.propagate_structure(...)` immediately 
 
 1. `gym_add_session_exercise` — after `db.session.commit()` inside the `if exercise_id:` block, add `sharing.propagate_structure(session_)`.
 2. `gym_replace_session_exercise` — before its final `return redirect(...)`, add `sharing.propagate_structure(session_exercise.session)`.
-3. `gym_delete_session_exercise` — capture the session before deleting (`session_ = session_exercise.session` at the top of the function, alongside the existing `session_id = session_exercise.session_id`), then after `db.session.commit()` add `sharing.propagate_structure(session_)`.
+3. `gym_delete_session_exercise` — **two calls, and the order matters.** Capture the session at the top of the function (`session_ = session_exercise.session`, alongside the existing `session_id = session_exercise.session_id`). Then, **before `db.session.delete(session_exercise)`**, add:
+
+```python
+    # BEFORE the delete, not after: mirrors_id carries a database-level
+    # ON DELETE SET NULL, so the moment this row is gone the database has
+    # already erased the only marker saying which follower row mirrored it.
+    # Reconciliation would have nothing left to key on, and a heuristic
+    # recovery -- matching on exercise_id, say -- cannot tell an orphaned
+    # mirror from a row the partner added on their own initiative, so it
+    # would eventually delete their own work and the sets they logged on it.
+    sharing.remove_mirrors_of(session_exercise)
+```
+
+and after the existing `db.session.commit()` add `sharing.propagate_structure(session_)` as the other four routes do.
 4. `gym_toggle_skip_session_exercise` — before its final `return redirect(...)`, add `sharing.propagate_structure(session_)`.
 5. `gym_reorder_session_exercises` — after `db.session.commit()`, add `sharing.propagate_structure(session_)`.
 
