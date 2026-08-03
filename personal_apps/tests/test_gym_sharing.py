@@ -532,3 +532,297 @@ def test_reconciling_an_unchanged_structure_does_not_bump_the_version(linked_pai
 
         assert db.session.get(
             WorkoutSession, linked_pair['follower_session']).structure_version == settled
+
+
+# --- Hardening pass (security review before Task 6 wires this into routes) ---
+
+
+def test_remove_mirrors_of_refuses_once_the_follower_has_finished(linked_pair):
+    """Fix 1's concrete failure: the follower finishes their workout while
+    the leader's delete request is in flight, before finished_at is stamped.
+    Without this guard the leader's delete would remove an exercise -- and
+    its logged sets -- from a workout the follower already completed."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SessionExercise, SessionSet, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        follower_row = follower_session.exercises[0]
+        follower_row.sets.append(SessionSet(position=1, weight=60.0, reps=5, completed=True))
+        follower_session.finished_at = dt.datetime.utcnow()
+        db.session.commit()
+        follower_row_id = follower_row.id
+        set_id = follower_row.sets[0].id
+
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        sharing.remove_mirrors_of(leader_row)
+        db.session.commit()
+
+        assert db.session.get(SessionExercise, follower_row_id) is not None, (
+            'remove_mirrors_of deleted a row from a workout the follower already finished')
+        assert db.session.get(SessionSet, set_id) is not None, (
+            'remove_mirrors_of deleted a set logged in a workout the follower already finished')
+
+
+def test_remove_mirrors_of_refuses_when_the_link_disagrees_with_the_leader(linked_pair):
+    """Sibling of reconcile_follower's ownership guard tests, for
+    remove_mirrors_of: a corrupted or forged link must not become a way to
+    delete rows out of an arbitrary session."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SessionExercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, linked_pair['shared'])
+        shared.leader_user_id = linked_pair['follower_user']
+        db.session.commit()
+
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        sharing.remove_mirrors_of(leader_row)
+        db.session.commit()
+
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert len(list(follower_session.exercises)) == 1, (
+            'remove_mirrors_of deleted a row despite the link disagreeing with the leader')
+
+
+def test_remove_mirrors_of_refuses_when_the_link_disagrees_with_the_follower(linked_pair):
+    """Other half of the ownership guard: a forged link must not name a
+    third party's session as the delete target."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SessionExercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, linked_pair['shared'])
+        shared.follower_user_id = linked_pair['leader_user']
+        db.session.commit()
+
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        sharing.remove_mirrors_of(leader_row)
+        db.session.commit()
+
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert len(list(follower_session.exercises)) == 1, (
+            'remove_mirrors_of deleted a row despite the link disagreeing with the follower')
+
+
+def test_remove_mirrors_of_raises_if_called_after_the_delete(linked_pair):
+    """Fix 2: the ordering contract is 'before db.session.delete() is called
+    at all', not merely 'before the commit'. Calling this after the delete
+    would otherwise silently match zero rows once wired into a route -- this
+    makes the misuse loud instead."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SessionExercise
+
+    with flask_app.app_context():
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        db.session.delete(leader_row)
+        with pytest.raises(RuntimeError):
+            sharing.remove_mirrors_of(leader_row)
+        db.session.rollback()
+
+
+def test_remove_mirrors_of_cancels_the_followers_pending_push(linked_pair):
+    """Fix 3: routes._cancel_pending_push's contract is that resting_set_id/
+    rest_ends_at is never cleared without also cancelling the session's
+    unsent pending push -- otherwise the notifier daemon buzzes the
+    follower's phone for a rest timer on an exercise deleted out from under
+    them."""
+    from extensions import db
+    from features.gym import sharing
+    from models import PendingPush, SessionExercise, SessionSet, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        follower_row = follower_session.exercises[0]
+        follower_row.sets.append(SessionSet(position=1, weight=40.0, reps=8, completed=True))
+        db.session.commit()
+        resting_set_id = follower_row.sets[0].id
+        follower_session.resting_set_id = resting_set_id
+        follower_session.rest_ends_at = dt.datetime.utcnow() + dt.timedelta(seconds=90)
+        db.session.add(PendingPush(session_id=follower_session.id,
+                                   fire_at=dt.datetime.utcnow() + dt.timedelta(seconds=90),
+                                   sent=False))
+        db.session.commit()
+
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        sharing.remove_mirrors_of(leader_row)
+        db.session.commit()
+
+        assert PendingPush.query.filter_by(
+            session_id=linked_pair['follower_session'], sent=False).count() == 0, (
+            'a pending push survived the exercise it was scheduled for being removed')
+
+
+def test_reconciles_own_removal_pass_also_clears_the_resting_set_id(linked_pair):
+    """Fix 5's second half: reconcile_follower's own removal loop -- the one
+    that cleans up a leader row that vanished 'some other way' than the
+    normal remove_mirrors_of-then-delete route -- must apply the same
+    resting_set_id/rest_ends_at/PendingPush cleanup remove_mirrors_of does.
+
+    Reproducing that loop honestly is the hard part: in normal operation
+    mirrors_id is already NULLed by the database's ON DELETE SET NULL the
+    instant the leader row is deleted and flushed, so the row simply drops
+    out of `mirrored` and this loop never sees it -- which is exactly why
+    remove_mirrors_of exists. The one way the loop *can* still find a
+    mirrors_id pointing at a genuinely-gone row is the same race the module's
+    docstrings warn about: something reads (and caches) the follower's
+    exercises before the leader row is deleted, then deletes and flushes
+    without committing in between. flush() alone does not expire
+    already-loaded attributes, so the follower row's in-memory mirrors_id
+    stays stale even though the database has already nulled it -- while
+    db.session.get() on the leader row correctly reports it gone. That is
+    reproduced here deliberately, not accidentally.
+    """
+    from extensions import db
+    from features.gym import sharing
+    from models import PendingPush, SessionExercise, SessionSet, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        follower_row = follower_session.exercises[0]
+        follower_row.sets.append(SessionSet(position=1, weight=45.0, reps=8, completed=True))
+        db.session.commit()
+        resting_set_id = follower_row.sets[0].id
+        follower_session.resting_set_id = resting_set_id
+        db.session.add(PendingPush(session_id=follower_session.id,
+                                   fire_at=dt.datetime.utcnow(), sent=False))
+        db.session.commit()
+
+        # Force-load the follower's exercises (mirrors_id intact) before the
+        # leader row is deleted.
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        list(follower_session.exercises)
+
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        db.session.delete(leader_row)
+        db.session.flush()
+
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        refreshed = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert refreshed.resting_set_id is None, (
+            'reconcile_follower\'s own removal pass left a dangling resting_set_id')
+        assert PendingPush.query.filter_by(
+            session_id=linked_pair['follower_session'], sent=False).count() == 0, (
+            'reconcile_follower\'s own removal pass left an orphaned pending push')
+
+
+def test_remove_mirrors_of_clears_the_followers_resting_set_id(linked_pair):
+    """Fix 5: gym_workout_sessions.resting_set_id -> gym_session_sets.id has
+    no ondelete, so it's RESTRICT -- a regression here is a 500 mid-workout
+    for the follower, not a warning."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SessionExercise, SessionSet, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        follower_row = follower_session.exercises[0]
+        follower_row.sets.append(SessionSet(position=1, weight=50.0, reps=5, completed=False))
+        db.session.commit()
+        resting_set_id = follower_row.sets[0].id
+        follower_session.resting_set_id = resting_set_id
+        db.session.commit()
+
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        sharing.remove_mirrors_of(leader_row)
+        db.session.commit()
+
+        refreshed = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert refreshed.resting_set_id is None, (
+            'the resting set pointer survived the row that held it being deleted')
+
+
+def test_reconciling_one_link_leaves_a_second_links_mirror_alone(linked_pair):
+    """Fix 4: follower_session_id carries no uniqueness constraint, so the
+    same follower session could be the follower half of two active links at
+    once. Reconciling one must not treat the other's mirror row as orphaned
+    just because its mirrors_id isn't among the first link's own leader
+    rows -- that would cascade-delete a row (and any logged sets) that a
+    totally unrelated leader still owns."""
+    from extensions import db
+    from features.gym import sharing
+    from models import (AppUser, Exercise, SessionExercise, SharedSession,
+                        WorkoutSession)
+    from werkzeug.security import generate_password_hash
+
+    made = {}
+    with flask_app.app_context():
+        second_leader = AppUser(username='pytest sharing second leader',
+                                password_hash=generate_password_hash('c'), is_admin=False)
+        db.session.add(second_leader)
+        db.session.flush()
+        made['second_leader'] = second_leader.id
+
+        second_leader_exercise = Exercise(name='pytest shared second leader row',
+                                          user_id=second_leader.id)
+        db.session.add(second_leader_exercise)
+        db.session.flush()
+        made['second_leader_exercise'] = second_leader_exercise.id
+
+        second_leader_session = WorkoutSession(name='pytest second leader session',
+                                               started_at=dt.datetime.utcnow(),
+                                               user_id=second_leader.id)
+        second_leader_row = SessionExercise(exercise_id=second_leader_exercise.id, position=1)
+        second_leader_session.exercises.append(second_leader_row)
+        db.session.add(second_leader_session)
+        db.session.flush()
+        made['second_leader_session'] = second_leader_session.id
+        made['second_leader_row'] = second_leader_row.id
+
+        second_shared = SharedSession(
+            leader_session_id=second_leader_session.id,
+            follower_session_id=linked_pair['follower_session'],
+            leader_user_id=second_leader.id,
+            follower_user_id=linked_pair['follower_user'],
+            accepted_at=dt.datetime.utcnow())
+        db.session.add(second_shared)
+        db.session.flush()
+        made['second_shared'] = second_shared.id
+
+        second_mirror = SessionExercise(
+            session_id=linked_pair['follower_session'],
+            exercise_id=linked_pair['follower_exercise'],
+            position=2, mirrors_id=second_leader_row.id)
+        db.session.add(second_mirror)
+        db.session.commit()
+        made['second_mirror'] = second_mirror.id
+
+    try:
+        with flask_app.app_context():
+            sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+            db.session.commit()
+
+            survivor = db.session.get(SessionExercise, made['second_mirror'])
+            assert survivor is not None, (
+                "reconciling one link deleted a different link's mirror row")
+            assert survivor.mirrors_id == made['second_leader_row']
+    finally:
+        with flask_app.app_context():
+            doomed = db.session.get(SharedSession, made['second_shared'])
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()
+            doomed = db.session.get(SessionExercise, made['second_mirror'])
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()
+            doomed = db.session.get(WorkoutSession, made['second_leader_session'])
+            if doomed is not None:
+                doomed.resting_set_id = None
+                db.session.commit()
+                db.session.delete(doomed)
+                db.session.commit()
+            doomed = db.session.get(Exercise, made['second_leader_exercise'])
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()
+            doomed = db.session.get(AppUser, made['second_leader'])
+            if doomed is not None:
+                db.session.delete(doomed)
+            db.session.commit()

@@ -19,7 +19,7 @@ this is the one place a cross-user write can happen.
 import datetime as dt
 
 from extensions import db
-from models import (Exercise, SessionExercise, SharedSession,
+from models import (Exercise, PendingPush, SessionExercise, SharedSession,
                     SharedSessionExercise, WorkoutSession)
 
 from .matching import normalise
@@ -50,9 +50,11 @@ def follower_exercise_for(shared, leader_exercise_id):
     across users (creates an Exercise owned by the follower, plus a mapping
     row) on its own, so it must not do that for a link that was never
     accepted or has since ended, even though its one caller today already
-    checks this before calling in.
+    checks this before calling in. `shared is None` is checked first for the
+    same reason -- reconcile_follower checks it before calling in, but this
+    function must not borrow that invariant either.
     """
-    if shared.accepted_at is None or shared.ended_at is not None:
+    if shared is None or shared.accepted_at is None or shared.ended_at is not None:
         return None
 
     mapped = (SharedSessionExercise.query
@@ -93,40 +95,83 @@ def follower_exercise_for(shared, leader_exercise_id):
 
 
 def remove_mirrors_of(session_exercise):
-    """Delete every follower row mirroring this one -- BEFORE it is deleted.
+    """Delete the follower row mirroring this one -- BEFORE it is deleted.
 
-    Must run before the leader's own delete commits. mirrors_id carries a
-    database-level ON DELETE SET NULL, so the moment the leader's row is gone
-    the database has already erased the only marker saying which follower row
-    corresponded to it. Reconciliation would then have nothing to key on, and
-    any heuristic recovery -- matching on exercise_id, say -- cannot tell an
-    orphaned mirror from a row the follower added on their own initiative, so
-    it would eventually delete the follower's own work along with their sets.
+    Must run before db.session.delete(session_exercise) is called AT ALL --
+    not merely before the commit. Flask-SQLAlchemy autoflushes before the
+    SessionExercise.query below runs, so calling this after
+    db.session.delete(session_exercise) but before commit still flushes the
+    pending DELETE first: MySQL applies mirrors_id's database-level
+    ON DELETE SET NULL, and the query below then matches zero rows -- a
+    silent no-op that leaves the follower with a phantom exercise. Row
+    identity is the whole point: this deletes exactly the row whose
+    mirrors_id IS this row's id, and nothing else. Any heuristic recovery
+    after the fact -- matching on exercise_id, say -- cannot tell an orphaned
+    mirror from a row the follower added on their own initiative, so it would
+    eventually delete the follower's own work along with their sets.
 
-    Row identity is the whole point: this deletes exactly the rows whose
-    mirrors_id IS this row's id, and nothing else.
+    One follower row mirrors one leader row, always, per link -- mirrors_id
+    carries no uniqueness constraint at the database level, but nothing in
+    this module ever creates a second follower row for the same leader row,
+    and reconcile_follower's `mirrored` map (keyed on mirrors_id) depends on
+    that being true, silently collapsing a second row rather than erroring.
+    This queries with .first() rather than .all() to match that invariant
+    instead of contradicting it.
+
+    Guards its own link state rather than trusting the caller, exactly like
+    reconcile_follower does: this deletes cascading to logged SessionSet
+    rows, which is more destructive than reconciliation, not less, so it
+    must refuse for at least the same reasons reconciliation does -- a
+    corrupted or forged link naming the wrong sessions, or a follower who
+    finished their workout while this delete was in flight.
     """
+    if session_exercise.id is None or session_exercise in db.session.deleted:
+        raise RuntimeError(
+            'remove_mirrors_of must run BEFORE db.session.delete(session_exercise): '
+            'mirrors_id carries ON DELETE SET NULL, so once the delete is flushed the '
+            'link to the follower row is already gone and this would silently match nothing.')
+
     for shared in active_links_led_by(session_exercise.session_id):
         if shared.follower_session_id is None:
             continue
-        mirrors = SessionExercise.query.filter_by(
+        leader = db.session.get(WorkoutSession, shared.leader_session_id)
+        follower = db.session.get(WorkoutSession, shared.follower_session_id)
+        if leader is None or follower is None:
+            continue
+        # Same guards as reconcile_follower, applied locally rather than
+        # inherited from the caller. Concrete failure this prevents: the
+        # follower finishes their workout while the leader's delete request
+        # is in flight, before finished_at is stamped -- without this check,
+        # the leader's delete would remove an exercise, and its logged sets,
+        # from a workout the follower has already completed.
+        if leader.user_id != shared.leader_user_id:
+            continue
+        if follower.user_id != shared.follower_user_id:
+            continue
+        if follower.finished_at is not None:
+            continue
+
+        row = SessionExercise.query.filter_by(
             session_id=shared.follower_session_id,
             mirrors_id=session_exercise.id,
-        ).all()
-        if not mirrors:
+        ).first()
+        if row is None:
             continue
-        follower = db.session.get(WorkoutSession, shared.follower_session_id)
-        for row in mirrors:
-            # Deleting an exercise cascades to its sets, so clear the
-            # session's pointer at a resting set first or the foreign key
-            # blocks it -- the same guard the removal pass in
-            # reconcile_follower applies.
-            if follower is not None and follower.resting_set_id in [s.id for s in row.sets]:
-                follower.resting_set_id = None
-                follower.rest_ends_at = None
-            db.session.delete(row)
-        if follower is not None:
-            follower.structure_version = (follower.structure_version or 0) + 1
+        # Deleting an exercise cascades to its sets, so clear the session's
+        # pointer at a resting set first or the foreign key blocks it -- and
+        # cancel any pending push for this session at the same time, exactly
+        # as routes._cancel_pending_push's contract requires whenever
+        # resting_set_id/rest_ends_at is cleared: an orphaned PendingPush row
+        # has no way to tell the notifier daemon the set it was scheduled for
+        # is gone, and the daemon fires it regardless. sharing.py cannot
+        # import from routes (circular once routes calls into this module),
+        # so this is inlined rather than shared.
+        if follower.resting_set_id in [s.id for s in row.sets]:
+            follower.resting_set_id = None
+            follower.rest_ends_at = None
+            PendingPush.query.filter_by(session_id=follower.id, sent=False).delete()
+        db.session.delete(row)
+        follower.structure_version = (follower.structure_version or 0) + 1
 
 
 def reconcile_follower(shared):
@@ -143,16 +188,16 @@ def reconcile_follower(shared):
     that replaced it.
 
     Removing a leader row is NOT handled here -- see remove_mirrors_of(),
-    which must run BEFORE the leader's delete commits. mirrors_id carries a
-    database-level ON DELETE SET NULL, so by the time reconciliation could
-    look for a leader row that's gone, the follower's mirrors_id pointing at
-    it would already be NULL and the two rows unrecoverably unlinked. The
-    removal loop below only cleans up a leader row that vanished from the
-    live set some other way, and that clean-up is the one sanctioned
-    exception to "reconciliation never deletes a SessionSet": deleting a
-    SessionExercise whose leader row is gone cascades to its sets, and it
-    must -- an exercise the leader genuinely removed cannot keep its sets on
-    the follower's side either.
+    which must run BEFORE db.session.delete() is called on the leader's row
+    at all, not merely before the commit. mirrors_id carries a database-level
+    ON DELETE SET NULL, so by the time reconciliation could look for a leader
+    row that's gone, the follower's mirrors_id pointing at it would already
+    be NULL and the two rows unrecoverably unlinked. The removal loop below
+    only cleans up a leader row that vanished from the live set some other
+    way, and that clean-up is the one sanctioned exception to "reconciliation
+    never deletes a SessionSet": deleting a SessionExercise whose leader row
+    is gone cascades to its sets, and it must -- an exercise the leader
+    genuinely removed cannot keep its sets on the follower's side either.
 
     NOTHING here seeds sets. This runs inside the LEADER's request, where
     current_user_id() is the leader, so any history lookup would pre-fill the
@@ -182,6 +227,10 @@ def reconcile_follower(shared):
     if follower.finished_at is not None:
         return False
 
+    # Keyed on mirrors_id, which silently collapses a second row sharing the
+    # same mirrors_id rather than erroring -- fine only because one follower
+    # row mirrors one leader row, always (remove_mirrors_of enforces the same
+    # invariant with .first() rather than .all(), so the two agree).
     mirrored = {se.mirrors_id: se for se in follower.exercises
                 if se.mirrors_id is not None}
     changed = False
@@ -218,11 +267,27 @@ def reconcile_follower(shared):
     for leader_row_id, row in list(mirrored.items()):
         if leader_row_id in live_leader_ids:
             continue
+        # A mirrors_id absent from THIS link's live_leader_ids is not enough
+        # on its own: follower_session_id carries no uniqueness constraint,
+        # so this follower session could be the follower half of a second,
+        # unrelated link, and that link's mirror rows show up in `mirrored`
+        # too -- keyed on a mirrors_id that was never one of this leader's
+        # rows to begin with. Only delete when the leader row is genuinely
+        # gone: db.session.get() returns None. If it returns a row instead,
+        # that row is alive under a different session (it can't be this
+        # link's leader session, or leader_row_id would already be in
+        # live_leader_ids above) -- i.e. it belongs to another link, and this
+        # one must leave it alone.
+        leader_row = db.session.get(SessionExercise, leader_row_id)
+        if leader_row is not None and leader_row.session_id != shared.leader_session_id:
+            continue
         # Deleting an exercise cascades to its sets, so clear the session's
-        # pointer at a resting set first or the foreign key blocks it.
+        # pointer at a resting set first or the foreign key blocks it -- and
+        # cancel any pending push for the same reason remove_mirrors_of does.
         if follower.resting_set_id in [s.id for s in row.sets]:
             follower.resting_set_id = None
             follower.rest_ends_at = None
+            PendingPush.query.filter_by(session_id=follower.id, sent=False).delete()
         db.session.delete(row)
         del mirrored[leader_row_id]
         changed = True
