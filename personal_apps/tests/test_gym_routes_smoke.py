@@ -1143,3 +1143,131 @@ def test_the_queue_offers_adding_an_exercise(client, scratch_session):
     assert 'data-sheet="sheet-add-exercise"' in row
     assert 'data-se-id' not in row, 'the action row looks like a reorderable exercise'
     assert 'queue__row' not in row, 'the action row would be picked up by the reorder handler'
+
+
+def test_the_lead_routine_names_a_stall_inside_it(client):
+    """Heute lists every stalling exercise further down the page. The card you
+    are about to tap says only which exercises are in it -- so this names the
+    one to watch in THIS routine, and stays quiet about the rest."""
+    import datetime as dt
+    from extensions import db
+    from models import (Exercise, SessionExercise, SessionSet, TemplateExercise,
+                        WorkoutSession, WorkoutTemplate)
+
+    made = {'sessions': [], 'exercise': None, 'template': None}
+    try:
+        with flask_app.app_context():
+            exercise = Exercise(name='pytest briefing lift', muscle_group='Brust',
+                                user_id=_admin_id())
+            db.session.add(exercise)
+            db.session.flush()
+            made['exercise'] = exercise.id
+
+            template = WorkoutTemplate(name='pytest briefing routine', user_id=_admin_id())
+            template.exercises.append(TemplateExercise(exercise_id=exercise.id, position=1))
+            db.session.add(template)
+            db.session.flush()
+            made['template'] = template.id
+
+            # Five sessions at an unchanged weight is a stall by
+            # stats.STAGNATION_THRESHOLD (4).
+            for days_ago in (30, 24, 18, 12, 6):
+                started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+                session_ = WorkoutSession(name='pytest briefing session',
+                                          started_at=started,
+                                          finished_at=started + dt.timedelta(hours=1),
+                                          user_id=_admin_id(), template_id=template.id)
+                se = SessionExercise(exercise_id=exercise.id, position=1)
+                se.sets = [SessionSet(position=1, weight=40.0, reps=8, completed=True)]
+                session_.exercises.append(se)
+                db.session.add(session_)
+                db.session.commit()
+                made['sessions'].append(session_.id)
+
+        html = client.get('/gym').get_data(as_text=True)
+        assert 'pytest briefing lift' in html, 'the stalling lift was not named on Heute'
+        assert 'lead__watch' in html, 'no briefing line on the lead card'
+    finally:
+        with flask_app.app_context():
+            for session_id in made['sessions']:
+                doomed = db.session.get(WorkoutSession, session_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if made['template']:
+                doomed = db.session.get(WorkoutTemplate, made['template'])
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if made['exercise']:
+                doomed = db.session.get(Exercise, made['exercise'])
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+
+
+def test_the_lead_routine_ignores_a_stall_it_does_not_contain(client):
+    """An exercise stalling elsewhere in the catalogue must not appear on a card
+    whose routine does not contain it -- otherwise the line is just the stalls
+    section repeated, and its claim to be about THIS routine is false."""
+    import datetime as dt
+    from extensions import db
+    from models import (Exercise, SessionExercise, SessionSet, TemplateExercise,
+                        WorkoutSession, WorkoutTemplate)
+
+    made = {'sessions': [], 'in_routine': None, 'outsider': None, 'template': None}
+    try:
+        with flask_app.app_context():
+            in_routine = Exercise(name='pytest inroutine lift', user_id=_admin_id())
+            outsider = Exercise(name='pytest outsider lift', user_id=_admin_id())
+            db.session.add_all([in_routine, outsider])
+            db.session.flush()
+            made['in_routine'], made['outsider'] = in_routine.id, outsider.id
+
+            # The routine contains ONLY the first exercise.
+            template = WorkoutTemplate(name='pytest exclusion routine', user_id=_admin_id())
+            template.exercises.append(TemplateExercise(exercise_id=in_routine.id, position=1))
+            db.session.add(template)
+            db.session.flush()
+            made['template'] = template.id
+
+            # Both lifts stall: five sessions at an unchanged weight.
+            for days_ago in (30, 24, 18, 12, 6):
+                started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+                session_ = WorkoutSession(name='pytest exclusion session',
+                                          started_at=started,
+                                          finished_at=started + dt.timedelta(hours=1),
+                                          user_id=_admin_id(), template_id=template.id)
+                for position, exercise_id in enumerate((in_routine.id, outsider.id), start=1):
+                    se = SessionExercise(exercise_id=exercise_id, position=position)
+                    se.sets = [SessionSet(position=1, weight=40.0, reps=8, completed=True)]
+                    session_.exercises.append(se)
+                db.session.add(session_)
+                db.session.commit()
+                made['sessions'].append(session_.id)
+
+        html = client.get('/gym').get_data(as_text=True)
+        watch = html.split('lead__watch', 1)[1].split('</p>', 1)[0] if 'lead__watch' in html else ''
+        assert 'pytest outsider lift' not in watch,             'the briefing named a stall the routine does not contain'
+    finally:
+        with flask_app.app_context():
+            for session_id in made['sessions']:
+                doomed = db.session.get(WorkoutSession, session_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+            if made['template']:
+                doomed = db.session.get(WorkoutTemplate, made['template'])
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
+            for key in ('in_routine', 'outsider'):
+                if made[key]:
+                    doomed = db.session.get(Exercise, made[key])
+                    if doomed is not None:
+                        db.session.delete(doomed)
+                        db.session.commit()

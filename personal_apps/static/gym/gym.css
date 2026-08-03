@@ -2724,6 +2724,13 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   overflow: hidden;
 }
+/* --stall is the teal this app already uses for ATTENTION and that the "Steht
+   still" section below uses for exactly this concept, so the two read as one
+   vocabulary rather than two competing warnings. */
+.lead__watch {
+  margin: var(--sp-2) 0 0;
+  color: var(--stall-ink); font-size: var(--t-meta); line-height: 1.45;
+}
 .lead__go {
   inline-size: 100%; margin-top: var(--sp-4); min-block-size: var(--tap-primary);
   border-radius: var(--r-control); background: var(--live); color: var(--on-live);

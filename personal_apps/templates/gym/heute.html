@@ -159,6 +159,21 @@
       <p class="lead__list">
         {% if lead.template.exercises %}{{ lead.template.exercises|map(attribute='exercise.name')|join(' · ') }}{% else %}Keine Übungen{% endif %}
       </p>
+      {#- The stalls section further down covers every exercise you own,
+          including ones this routine does not contain. This is the one to watch
+          in the routine you are about to tap, and it is silent when there is
+          none -- which is what makes it worth reading when it appears.
+          stall_report returns worst-first, so the first survivor is the one. -#}
+      {% set routine_ids = lead.template.exercises|map(attribute='exercise_id')|list %}
+      {% set watch = stalls|selectattr('exercise_id', 'in', routine_ids)|list %}
+      {% if watch %}
+      <p class="lead__watch">
+        {{ watch[0].name }} steht seit {{ watch[0].sessions_since_pr }}
+        {{ 'Session' if watch[0].sessions_since_pr == 1 else 'Sessions' }}
+        bei {{ ('%.1f'|format(watch[0].stuck_at)).replace('.', ',') }} kg.{%
+        if watch|length > 1 %} · {{ watch|length - 1 }} weitere{% endif %}
+      </p>
+      {% endif %}
       <form method="post" action="{{ url_for('gym.gym_start') }}">
         <input type="hidden" name="template_id" value="{{ lead.template.id }}">
         <button type="submit" class="lead__go">
