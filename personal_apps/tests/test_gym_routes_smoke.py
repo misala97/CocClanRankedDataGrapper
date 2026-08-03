@@ -1261,8 +1261,13 @@ def test_the_lead_routine_ignores_a_stall_it_does_not_contain():
             db.session.flush()
             made['user'] = user.id
 
+            # Named to sort alphabetically BEFORE the in-routine exercise, so
+            # the stall_report tie-break (-sessions_since_pr, name) would put
+            # it at watch[0] if the routine-membership filter in heute.html
+            # were ever removed -- making its absence below a real check on
+            # the filter, not just on stall_report's sort order.
             in_routine = Exercise(name='pytest inroutine lift', user_id=user.id)
-            outsider = Exercise(name='pytest outsider lift', user_id=user.id)
+            outsider = Exercise(name='pytest aaa outsider lift', user_id=user.id)
             db.session.add_all([in_routine, outsider])
             db.session.flush()
             made['in_routine'], made['outsider'] = in_routine.id, outsider.id
@@ -1295,7 +1300,9 @@ def test_the_lead_routine_ignores_a_stall_it_does_not_contain():
                 flask_session['user_id'] = made['user']
             html = test_client.get('/gym').get_data(as_text=True)
         watch = html.split('lead__watch', 1)[1].split('</p>', 1)[0] if 'lead__watch' in html else ''
-        assert 'pytest outsider lift' not in watch,             'the briefing named a stall the routine does not contain'
+        assert 'pytest aaa outsider lift' not in watch,             'the briefing named a stall the routine does not contain'
+        assert 'pytest inroutine lift' in watch,             'the briefing did not name the stall the routine DOES contain'
+        assert 'weitere' not in watch,             'the briefing counted more stalls than the one exercise this routine has'
     finally:
         with flask_app.app_context():
             for session_id in made['sessions']:
