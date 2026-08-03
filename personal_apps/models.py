@@ -216,6 +216,10 @@ class WorkoutSession(db.Model):
     # retroactively rewrite what past sessions claim to have been, and it makes
     # deload depth a measurable variable. NULL on every non-deload session.
     deload_pct   = db.Column(db.SmallInteger, nullable=True)
+    # Bumped whenever a shared workout's reconciliation actually changes this
+    # session's structure. The follower's page polls it; an unchanged version
+    # means the poll costs a few bytes and no re-render.
+    structure_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
 
     template = db.relationship('WorkoutTemplate', back_populates='sessions_started_from')
     exercises = db.relationship(
@@ -234,12 +238,22 @@ class SessionExercise(db.Model):
     rest_seconds = db.Column(db.Integer, nullable=True)  # rest time for this exercise in this workout; seeded from Exercise.default_rest_seconds, editable per session
     replaces_id  = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True, unique=True)  # set when this row is a mid-workout substitute for another exercise in the same slot; unique so at most one substitute can ever point at a given original
     skipped      = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())  # True when this exercise is intentionally not being done this session; the row (and any already-completed sets) is kept as-is so a later "save/update as template" still includes it
+    # The leader's SessionExercise this row mirrors, when this session is the
+    # follower half of a shared workout. Reconciliation keys on this rather
+    # than exercise_id: the two catalogues use different ids for the same
+    # lift, and one exercise can legitimately appear twice in a session (an
+    # original plus the substitute that replaced it). NULL on every ordinary
+    # session, which is almost all of them.
+    mirrors_id   = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True)
 
     session  = db.relationship('WorkoutSession', back_populates='exercises')
     exercise = db.relationship('Exercise', back_populates='session_exercises')
     # self-referential: `replaces` points at the original exercise this substitutes for;
-    # `replaced_by` (backref) points the other way, so the original can tell it's been superseded
-    replaces = db.relationship('SessionExercise', remote_side=[id], backref=db.backref('replaced_by', uselist=False))
+    # `replaced_by` (backref) points the other way, so the original can tell it's been superseded.
+    # foreign_keys pinned to replaces_id: mirrors_id is a second self-referential FK on this
+    # table, so the join condition is no longer unambiguous without it.
+    replaces = db.relationship('SessionExercise', remote_side=[id], foreign_keys=[replaces_id],
+                               backref=db.backref('replaced_by', uselist=False))
     sets = db.relationship(
         'SessionSet', back_populates='session_exercise', lazy=True,
         cascade="all, delete-orphan", order_by='SessionSet.position',
@@ -299,6 +313,62 @@ class SessionSet(db.Model):
     base_reps           = db.Column(db.Integer, nullable=True)
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')
+
+
+class SharedSession(db.Model):
+    """One live workout carried across to a training partner.
+
+    Two people training together share structure -- which exercises, in what
+    order -- and nothing else. Weight and reps are the one thing that cannot
+    transfer between two bodies, so each side owns an ordinary WorkoutSession
+    and this row only links them.
+
+    State is derived from the timestamps rather than a status column:
+    pending (accepted_at IS NULL), active (accepted, ended_at IS NULL), ended.
+    """
+    __tablename__ = 'gym_shared_sessions'
+    id                  = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    leader_session_id   = db.Column(db.Integer, db.ForeignKey('gym_workout_sessions.id'), nullable=False, index=True)
+    # NULL until the invite is accepted: the follower's session does not exist
+    # before then, because it is seeded from the leader's structure at accept
+    # time rather than at invite time.
+    follower_session_id = db.Column(db.Integer, db.ForeignKey('gym_workout_sessions.id'), nullable=True)
+    leader_user_id      = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False)
+    follower_user_id    = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False, index=True)
+    created_at          = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+    accepted_at         = db.Column(db.DateTime, nullable=True)
+    # Stamped when EITHER session finishes, whichever comes first. Propagation
+    # stops from that moment; the follower trains on alone.
+    ended_at            = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        # Inviting the same person twice to the same workout re-surfaces the
+        # existing invite instead of creating a second one.
+        db.UniqueConstraint('leader_session_id', 'follower_user_id',
+                            name='uq_gym_shared_sessions_leader_session_follower'),
+    )
+
+    exercise_map = db.relationship('SharedSessionExercise', lazy=True,
+                                   cascade="all, delete-orphan")
+
+
+class SharedSessionExercise(db.Model):
+    """One exercise, named twice.
+
+    Exercises became per-user on 2026-08-02, so "Bankdruecken" in two
+    catalogues is two rows with two ids. A structural change expressed in the
+    leader's ids means nothing against the follower's data without this.
+    """
+    __tablename__ = 'gym_shared_session_exercises'
+    id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    shared_session_id    = db.Column(db.Integer, db.ForeignKey('gym_shared_sessions.id'), nullable=False, index=True)
+    leader_exercise_id   = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
+    follower_exercise_id = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('shared_session_id', 'leader_exercise_id',
+                            name='uq_gym_shared_session_exercises_link_leader'),
+    )
 
 
 class PushSubscription(db.Model):
