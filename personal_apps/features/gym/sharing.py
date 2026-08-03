@@ -45,7 +45,16 @@ def follower_exercise_for(shared, leader_exercise_id):
     because it runs inside the LEADER's request and needs the follower's
     catalogue. That is the deliberate cross-user reach, and it is confined to
     this function.
+
+    Guards its own link state rather than trusting the caller: this writes
+    across users (creates an Exercise owned by the follower, plus a mapping
+    row) on its own, so it must not do that for a link that was never
+    accepted or has since ended, even though its one caller today already
+    checks this before calling in.
     """
+    if shared.accepted_at is None or shared.ended_at is not None:
+        return None
+
     mapped = (SharedSessionExercise.query
               .filter_by(shared_session_id=shared.id,
                          leader_exercise_id=leader_exercise_id)
@@ -83,6 +92,43 @@ def follower_exercise_for(shared, leader_exercise_id):
     return match.id
 
 
+def remove_mirrors_of(session_exercise):
+    """Delete every follower row mirroring this one -- BEFORE it is deleted.
+
+    Must run before the leader's own delete commits. mirrors_id carries a
+    database-level ON DELETE SET NULL, so the moment the leader's row is gone
+    the database has already erased the only marker saying which follower row
+    corresponded to it. Reconciliation would then have nothing to key on, and
+    any heuristic recovery -- matching on exercise_id, say -- cannot tell an
+    orphaned mirror from a row the follower added on their own initiative, so
+    it would eventually delete the follower's own work along with their sets.
+
+    Row identity is the whole point: this deletes exactly the rows whose
+    mirrors_id IS this row's id, and nothing else.
+    """
+    for shared in active_links_led_by(session_exercise.session_id):
+        if shared.follower_session_id is None:
+            continue
+        mirrors = SessionExercise.query.filter_by(
+            session_id=shared.follower_session_id,
+            mirrors_id=session_exercise.id,
+        ).all()
+        if not mirrors:
+            continue
+        follower = db.session.get(WorkoutSession, shared.follower_session_id)
+        for row in mirrors:
+            # Deleting an exercise cascades to its sets, so clear the
+            # session's pointer at a resting set first or the foreign key
+            # blocks it -- the same guard the removal pass in
+            # reconcile_follower applies.
+            if follower is not None and follower.resting_set_id in [s.id for s in row.sets]:
+                follower.resting_set_id = None
+                follower.rest_ends_at = None
+            db.session.delete(row)
+        if follower is not None:
+            follower.structure_version = (follower.structure_version or 0) + 1
+
+
 def reconcile_follower(shared):
     """Make the follower's structure mirror the leader's. Returns True if
     anything changed.
@@ -95,6 +141,18 @@ def reconcile_follower(shared):
     two catalogues use different ids for the same lift, and one exercise can
     legitimately appear twice in a session -- an original plus the substitute
     that replaced it.
+
+    Removing a leader row is NOT handled here -- see remove_mirrors_of(),
+    which must run BEFORE the leader's delete commits. mirrors_id carries a
+    database-level ON DELETE SET NULL, so by the time reconciliation could
+    look for a leader row that's gone, the follower's mirrors_id pointing at
+    it would already be NULL and the two rows unrecoverably unlinked. The
+    removal loop below only cleans up a leader row that vanished from the
+    live set some other way, and that clean-up is the one sanctioned
+    exception to "reconciliation never deletes a SessionSet": deleting a
+    SessionExercise whose leader row is gone cascades to its sets, and it
+    must -- an exercise the leader genuinely removed cannot keep its sets on
+    the follower's side either.
 
     NOTHING here seeds sets. This runs inside the LEADER's request, where
     current_user_id() is the leader, so any history lookup would pre-fill the
@@ -167,35 +225,6 @@ def reconcile_follower(shared):
             follower.rest_ends_at = None
         db.session.delete(row)
         del mirrored[leader_row_id]
-        changed = True
-
-    # mirrors_id carries a real ON DELETE SET NULL foreign key (see the
-    # e4a91c7d20f8 migration). Deleting the leader's row -- which the
-    # leader's own route commits BEFORE calling propagate_structure(), per
-    # the propagate-after-commit design -- nulls this column at the database
-    # level in that same commit, often before reconciliation ever runs. The
-    # loop above, keyed on a live mirrors_id, can never see that row again:
-    # by the time it reads follower.exercises, the link is already gone.
-    #
-    # Such an orphan is otherwise indistinguishable from an exercise the
-    # follower added to their own session on their own initiative (out of
-    # scope for this link, and must never be swept up here). The one thing
-    # that tells them apart is this link's own exercise map: only an
-    # exercise THIS link is known to have introduced is a candidate, and
-    # only if the leader is not currently asking for it.
-    linked_exercise_ids = {mapping.follower_exercise_id for mapping in shared.exercise_map}
-    wanted_exercise_ids = {row.exercise_id for row in mirrored.values()}
-    for row in list(follower.exercises):
-        if row.mirrors_id is not None:
-            continue
-        if row.exercise_id not in linked_exercise_ids:
-            continue
-        if row.exercise_id in wanted_exercise_ids:
-            continue
-        if follower.resting_set_id in [s.id for s in row.sets]:
-            follower.resting_set_id = None
-            follower.rest_ends_at = None
-        db.session.delete(row)
         changed = True
 
     # Substitutes second, once every row exists and has an id: a leader row

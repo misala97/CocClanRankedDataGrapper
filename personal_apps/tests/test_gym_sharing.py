@@ -190,6 +190,10 @@ def test_an_added_exercise_appears_on_the_followers_side(linked_pair):
 
 
 def test_a_removed_exercise_disappears_from_the_followers_side(linked_pair):
+    """Mirrors what the real delete route does: remove_mirrors_of() runs
+    BEFORE the leader's row is deleted, while mirrors_id still resolves --
+    the FK's ON DELETE SET NULL means that pointer is gone the instant the
+    delete commits."""
     from extensions import db
     from features.gym import sharing
     from models import SessionExercise, SharedSession, WorkoutSession
@@ -197,6 +201,7 @@ def test_a_removed_exercise_disappears_from_the_followers_side(linked_pair):
     with flask_app.app_context():
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
         for se in list(leader_session.exercises):
+            sharing.remove_mirrors_of(se)
             db.session.delete(se)
         db.session.commit()
 
@@ -205,6 +210,41 @@ def test_a_removed_exercise_disappears_from_the_followers_side(linked_pair):
 
         follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
         assert list(follower_session.exercises) == []
+
+
+def test_a_row_the_follower_added_themselves_survives(linked_pair):
+    """The follower's session is otherwise fully theirs. Reconciliation must
+    never reach a row they created, nor the sets they logged on it -- which a
+    sweep keyed on exercise_id rather than row identity would do the moment
+    the leader stopped doing that exercise."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SessionExercise, SessionSet, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        own_row = SessionExercise(session_id=follower_session.id,
+                                  exercise_id=linked_pair['follower_exercise'],
+                                  position=2, mirrors_id=None)
+        db.session.add(own_row)
+        db.session.commit()
+        own_row.sets.append(SessionSet(position=1, weight=40.0, reps=8, completed=True))
+        db.session.commit()
+        own_row_id = own_row.id
+        own_set_id = own_row.sets[0].id
+
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        sharing.remove_mirrors_of(leader_row)
+        db.session.delete(leader_row)
+        db.session.commit()
+
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        assert db.session.get(SessionExercise, own_row_id) is not None, (
+            'reconciliation deleted a row the follower added themselves')
+        assert db.session.get(SessionSet, own_set_id) is not None, (
+            'reconciliation deleted a set the follower logged themselves')
 
 
 def test_reorder_carries_across_translated(linked_pair):
@@ -250,6 +290,7 @@ def test_skipping_carries_across(linked_pair):
         db.session.commit()
 
         follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert len(list(follower_session.exercises)) == 1
         assert all(se.skipped for se in follower_session.exercises)
 
 
@@ -364,6 +405,35 @@ def test_reconciliation_refuses_when_the_link_disagrees_with_the_session_owner(l
     with flask_app.app_context():
         shared = db.session.get(SharedSession, linked_pair['shared'])
         shared.leader_user_id = linked_pair['follower_user']
+        leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
+        squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
+        db.session.add(squat)
+        db.session.flush()
+        leader_session.exercises.append(SessionExercise(exercise_id=squat.id, position=2))
+        db.session.commit()
+
+        assert sharing.reconcile_follower(
+            db.session.get(SharedSession, linked_pair['shared'])) is False
+        db.session.commit()
+
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert len(list(follower_session.exercises)) == 1
+
+
+def test_reconciliation_refuses_when_the_link_disagrees_with_the_follower(linked_pair):
+    """Sibling of the leader-side disagreement test above, but for the other
+    half of the guard: `follower.user_id == shared.follower_user_id`. This
+    stops a forged or corrupted link from naming a third party's session as
+    the write target. The leader-side test only corrupts leader_user_id, so
+    it never exercises this half; leaving it uncovered leaves the guard's
+    other branch untested."""
+    from extensions import db
+    from features.gym import sharing
+    from models import Exercise, SessionExercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, linked_pair['shared'])
+        shared.follower_user_id = linked_pair['leader_user']
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
         squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
         db.session.add(squat)
