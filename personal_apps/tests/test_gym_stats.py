@@ -943,3 +943,68 @@ def test_resolve_increment_treats_zero_as_unset():
     # rather than being honoured.
     assert stats.resolve_increment(0, False) == 2.5
     assert stats.resolve_increment(0, True) == 1.25
+
+
+# --- rest timing -----------------------------------------------------------
+
+
+def _at(minute, second=0):
+    import datetime as dt
+    return dt.datetime(2026, 8, 3, 18, minute, second)
+
+
+def test_rest_gaps_measures_the_interval_between_consecutive_sets():
+    from features.gym import stats
+    gaps = stats.rest_gaps([(_at(0), 150), (_at(3), 150), (_at(5), 150)])
+    assert [actual for actual, _ in gaps] == [180, 120]
+
+
+def test_rest_gaps_sorts_by_when_the_set_landed():
+    """Callers hand over whatever order the rows came back in."""
+    from features.gym import stats
+    gaps = stats.rest_gaps([(_at(5), 150), (_at(0), 150), (_at(3), 150)])
+    assert [actual for actual, _ in gaps] == [180, 120]
+
+
+def test_rest_gaps_takes_the_planned_time_from_the_set_that_ended_the_gap():
+    """You finish a set of Bankdrücken and rest Bankdrücken's time -- so the
+    earlier set of each pair supplies the plan, not the one you are about to do."""
+    from features.gym import stats
+    gaps = stats.rest_gaps([(_at(0), 150), (_at(3), 90)])
+    assert gaps == [(180, 150)]
+
+
+def test_rest_gaps_drops_an_interruption():
+    """A phone call between sets is not rest. Over the cap it is not counted at
+    all, rather than counted and averaged away."""
+    from features.gym import stats
+    gaps = stats.rest_gaps([(_at(0), 150), (_at(3), 150), (_at(30), 150)])
+    assert [actual for actual, _ in gaps] == [180]
+
+
+def test_rest_gaps_of_a_single_set_is_empty():
+    """The first completed set of a session has nothing before it."""
+    from features.gym import stats
+    assert stats.rest_gaps([(_at(0), 150)]) == []
+    assert stats.rest_gaps([]) == []
+
+
+def test_rest_medians_reports_planned_against_actual():
+    from features.gym import stats
+    gaps = [(180, 150), (200, 150), (240, 150)]
+    assert stats.rest_medians(gaps) == (150, 200)
+
+
+def test_rest_medians_is_none_without_data():
+    """Nothing is retroactive, so this is the normal state on the day it ships
+    -- the caller must be able to say "noch keine Daten" rather than "0"."""
+    from features.gym import stats
+    assert stats.rest_medians([]) is None
+    assert stats.rest_medians([(180, None), (200, None)]) is None
+
+
+def test_rest_medians_ignores_gaps_with_no_planned_time():
+    """An exercise with no rest configured contributes an actual but cannot
+    contribute a plan, and must not drag the planned median toward zero."""
+    from features.gym import stats
+    assert stats.rest_medians([(180, 150), (200, None), (220, 150)]) == (150, 200)

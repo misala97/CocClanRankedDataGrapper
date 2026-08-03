@@ -2444,6 +2444,9 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
   font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit);
   letter-spacing: 0;
 }
+/* Sits with the duration it qualifies, quieter than it: the session length is
+   the fact, the rest is the explanation. */
+.finished__rest { color: var(--dim); font-size: var(--t-meta); }
 /* the header's name block is two stacked lines here, not one truncated line */
 .finished .session-top__name { white-space: normal; overflow: visible; }
 
@@ -2720,6 +2723,13 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
   font-size: var(--t-meta); line-height: 1.45; color: var(--unlit);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   overflow: hidden;
+}
+/* --stall is the teal this app already uses for ATTENTION and that the "Steht
+   still" section below uses for exactly this concept, so the two read as one
+   vocabulary rather than two competing warnings. */
+.lead__watch {
+  margin: var(--sp-2) 0 0;
+  color: var(--stall-ink); font-size: var(--t-meta); line-height: 1.45;
 }
 .lead__go {
   inline-size: 100%; margin-top: var(--sp-4); min-block-size: var(--tap-primary);

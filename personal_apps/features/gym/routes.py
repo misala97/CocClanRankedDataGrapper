@@ -426,6 +426,24 @@ def _to_performed(session_exercise, completed_sets):
     )
 
 
+def _session_rest_entries(session_):
+    """(completed_at, planned_seconds) for every completed set in a session,
+    in the shape stats.rest_gaps() expects. Planned time falls back to the
+    exercise's default when the session didn't override it.
+
+    Shared by session_detail's finished branch and gym_statistik's habit
+    figure -- the planned-rest fallback chain is a business rule, and having
+    it written out twice meant either copy could drift from the other with
+    nothing to catch it.
+    """
+    return [
+        (s.completed_at, se.rest_seconds if se.rest_seconds is not None
+         else se.exercise.default_rest_seconds)
+        for se in session_.exercises for s in se.sets
+        if s.completed and s.completed_at is not None
+    ]
+
+
 def performed_from_session(session_):
     """This session's exercises as performed.
 
@@ -720,8 +738,13 @@ def session_detail(session_id):
                     claimed = True
                 tick_states.append('record' if is_record else 'done')
         data['tick_states'] = tick_states
+        # Rest measured rather than planned: the gap between consecutive sets, which
+        # exists only for sessions logged since completed_at was added. None means
+        # "no timestamps", which the template must render as silence, not as zero.
+        rest_gaps = stats.rest_gaps(_session_rest_entries(session_))
+        rest_taken_seconds = sum(actual for actual, _ in rest_gaps) or None
         return render_template('gym/session_finished.html', session=session_,
-                               weekday_short=WEEKDAY_SHORT, **data)
+                               weekday_short=WEEKDAY_SHORT, rest_taken_seconds=rest_taken_seconds, **data)
 
     # A replaced original is hidden from the active view, so its suggestion
     # would never be used -- skip computing it there. Visibility is derived
@@ -1014,6 +1037,7 @@ def gym_add_set(session_exercise_id):
             weight=weight,
             reps=reps,
             completed=True,  # logged live via this form, so it's inherently just-performed
+            completed_at=dt.datetime.utcnow(),
         )
         db.session.add(new_set)
         db.session.flush()
@@ -1132,6 +1156,9 @@ def gym_toggle_set_complete(set_id):
     wanted = request.form.get('completed')
     was_completed = set_.completed
     set_.completed = (wanted == '1') if wanted in ('0', '1') else (not set_.completed)
+    # The stamp follows the flag in both directions. Leaving it behind on an
+    # un-complete would make the next tick measure the wrong interval.
+    set_.completed_at = dt.datetime.utcnow() if set_.completed else None
     if set_.completed and was_completed:
         # already logged, and the caller asked for logged: a duplicate request.
         # Persist any weight/reps it carried, but do NOT restart the rest --
@@ -1674,6 +1701,31 @@ def gym_statistik():
             record_years.append({'year': year, 'records': []})
         record_years[-1]['records'].append(record)
 
+    # Gaps are built PER SESSION and then concatenated, never across the whole
+    # history at once: rest_gaps() measures consecutive pairs, and two different
+    # workouts are not consecutive -- the interval from Monday's last set to
+    # Wednesday's first is not a rest, it is a rest day. The cap would drop it
+    # anyway, but only by accident, and an accident is not a rule.
+    #
+    # Pooled rather than averaged per session, because the question is what a
+    # typical rest of yours looks like: a twenty-set session carries more
+    # evidence about that than a six-set one.
+    # Eager-loaded for the same reason session_detail's finished branch is
+    # (see the comment there): this walks se.sets and se.exercise per row,
+    # lazily, for every finished session in the whole history -- 1 + S query
+    # became 1 + S + 2*S*E, thousands of queries at real-world scale.
+    habit_gaps = []
+    for session_ in (
+        my_sessions()
+        .filter(WorkoutSession.finished_at.isnot(None))
+        .options(
+            joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
+            joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
+        )
+    ):
+        habit_gaps.extend(stats.rest_gaps(_session_rest_entries(session_)))
+    rest_habit = stats.rest_medians(habit_gaps)
+
     return render_template(
         'gym/statistik.html',
         months=analytics.monthly_tonnage(performed, now),
@@ -1693,6 +1745,7 @@ def gym_statistik():
         rest_gap=analytics.rest_gap_effect(performed),
         min_sets_for_rep_range=analytics.MIN_SETS_FOR_REP_RANGE,
         effort=analytics.effort_distribution(performed),
+        rest_habit=rest_habit,
     )
 
 
