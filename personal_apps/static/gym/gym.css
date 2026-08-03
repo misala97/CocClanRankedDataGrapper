@@ -2743,6 +2743,23 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
 .lead + .row { margin-top: var(--sp-5); }
 .lead__go:active { transform: scale(0.985); }
 
+/* An invite expires: the workout it belongs to is already running. Carries the
+   same weight as the lead card because it is the same kind of decision --
+   block-stacked wording above a full-width Mitmachen button, exactly like the
+   "Läuft gerade" card's .lead/.lead__go pairing above. A flex row here (as
+   originally written) fought .lead__go's own inline-size:100%/margin-top,
+   which assume a block-stacked parent, not a row -- the text column
+   collapsed to min-content and the button overlapped it. */
+.invite-card {
+  padding: var(--sp-3); border-radius: var(--r-panel); background: var(--chassis);
+  box-shadow: inset 0 0 0 1px var(--stall-ink);
+}
+.invite-card__who  { font-weight: 600; }
+.invite-card__what { color: var(--dim); font-size: var(--t-meta); }
+
+/* Quiet: whether your partner accepted is context, not an event. */
+.shared-status { margin: var(--sp-2) 0 0; color: var(--dim); font-size: var(--t-meta); }
+
 /* rename/delete: closed by default, anchored under its own toggle so opening
    it never reflows the card it sits in */
 .lead__edit { flex: none; position: relative; }

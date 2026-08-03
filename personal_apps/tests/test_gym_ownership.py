@@ -179,6 +179,7 @@ SESSION_ROUTES = [
     ('POST', '/gym/session/{}/delete',             'session_id'),
     ('POST', '/gym/session/{}/update_template',    'session_id'),
     ('POST', '/gym/session/{}/save_as_template',   'session_id'),
+    ('POST', '/gym/session/{}/invite',             'session_id'),
 ]
 
 
@@ -354,6 +355,25 @@ def test_a_stranger_gets_404_on_someone_elses_exercise(
             f'the exercise did not survive the rejected {method} {url}'
 
 
+# gym_shared_confirm (Task 4) is a deliberate stub -- abort(404) unconditionally
+# -- until Task 5 gives it real ownership logic (only the invited follower may
+# confirm their own invite). There is no shared_id in two_users yet and no
+# ownership rule to test against one; session_id stands in only because the
+# route needs *an* int and the stub ignores it regardless. Task 5 must replace
+# this row with a genuine shared_id and a real stranger-vs-invitee test.
+SHARED_ROUTES = [
+    ('GET', '/gym/shared/{}/confirm', 'session_id'),
+]
+
+
+@pytest.mark.parametrize('method,url_template,id_key', SHARED_ROUTES)
+def test_a_stranger_gets_404_on_the_shared_confirm_stub(
+        intruder_client, two_users, method, url_template, id_key):
+    url = url_template.format(two_users[id_key])
+    response = intruder_client.open(url, method=method)
+    assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
+
+
 # The tables hold Flask's route strings with '<int:name>' replaced by '{}', so
 # that a route can be filled in with .format(some_id). This is the inverse
 # substitution, applied to url_map's rules to bring them into the same shape.
@@ -381,7 +401,7 @@ def test_every_id_taking_gym_route_is_covered_by_a_table():
     suite quietly staying green."""
     covered = {
         (method, url_template)
-        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, CATALOGUE_ROUTES)
+        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, CATALOGUE_ROUTES, SHARED_ROUTES)
         for method, url_template, _id_key in table
     }
 

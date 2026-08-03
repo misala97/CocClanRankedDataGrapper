@@ -140,6 +140,26 @@
       </button>
       <p class="sheet__note">Installiere die App zuerst über „Zum Home-Bildschirm“.</p>
     </div>
+    {#- Three people use this app, so the picker IS the feature. The leader's
+        session is never blocked on an answer: it started already, and the
+        partner's is seeded from whatever the structure looks like when they
+        say yes. -#}
+    {% if partners %}
+    <form method="post" action="{{ url_for('gym.gym_invite_partner', session_id=session.id) }}" class="field">
+      <label class="label" for="invite-partner">Trainingspartner einladen</label>
+      <select class="select" id="invite-partner" name="partner_id">
+        {% for partner in partners %}
+        <option value="{{ partner.id }}">{{ partner.username }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn--ghost">Einladen</button>
+    </form>
+    {% endif %}
+    {% for status in partner_status %}
+    <p class="shared-status">
+      {{ status.username }} {{ 'ist dabei' if status.accepted else 'wurde eingeladen' }}
+    </p>
+    {% endfor %}
   </div>
 </dialog>
 

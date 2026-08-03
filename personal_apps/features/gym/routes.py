@@ -1,14 +1,14 @@
 import datetime as dt
 import os
 
-from flask import Blueprint, current_app, flash, jsonify, render_template, request, redirect, send_from_directory, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, render_template, request, redirect, send_from_directory, url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, load_only
 
 from extensions import db
 from models import (
-    Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
-    PushSubscription, PendingPush, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
+    AppUser, Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
+    PushSubscription, PendingPush, SharedSession, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
 )
 from auth import login_required
 from features.gym import stats
@@ -18,6 +18,7 @@ from features.gym.scope import (
 )
 from features.gym.push import is_valid_push_endpoint
 from . import analytics
+from . import push
 
 gym_bp = Blueprint('gym', __name__)
 
@@ -554,6 +555,18 @@ def gym_heute():
 
     tonnage = stats.weekly_tonnage(performed, now)
 
+    # Addressed to one person: an invite is only ever visible to its recipient.
+    pending_invites = [
+        {'shared_id': link.id,
+         'leader_name': _username(link.leader_user_id),
+         'session_name': (db.session.get(WorkoutSession, link.leader_session_id).name
+                          or 'Workout')}
+        for link in SharedSession.query.filter(
+            SharedSession.follower_user_id == current_user_id(),
+            SharedSession.accepted_at.is_(None),
+            SharedSession.ended_at.is_(None)).all()
+    ]
+
     return render_template(
         'gym/heute.html',
         now=now,
@@ -574,6 +587,7 @@ def gym_heute():
         # stubs and asserting a running week over them.
         tonnage_peak=max((week['volume'] for week in tonnage), default=0.0),
         templates=templates,
+        pending_invites=pending_invites,
     )
 
 
@@ -835,6 +849,22 @@ def session_detail(session_id):
                 rest_total_seconds = se.rest_seconds or se.exercise.default_rest_seconds or 0
                 break
 
+    # Everyone else with an account. Three people use this app; a picker is
+    # the whole feature, and a friends list would be ceremony.
+    partners = (AppUser.query
+                .filter(AppUser.id != current_user_id())
+                .order_by(AppUser.username)
+                .all())
+    shared_out = (SharedSession.query
+                  .filter(SharedSession.leader_session_id == session_.id,
+                          SharedSession.ended_at.is_(None))
+                  .all())
+    partner_status = [
+        {'username': _username(link.follower_user_id),
+         'accepted': link.accepted_at is not None}
+        for link in shared_out
+    ]
+
     return render_template(
         'gym/session_detail.html',
         session=session_,
@@ -886,6 +916,8 @@ def session_detail(session_id):
             s.base_weight is not None for se in session_.exercises for s in se.sets),
         deload_pcts=stats.DELOAD_QUICK_PCTS,
         deload_default_pct=stats.DELOAD_DEFAULT_PCT,
+        partners=partners,
+        partner_status=partner_status,
     )
 
 
@@ -1287,6 +1319,61 @@ def gym_finish_session(session_id):
     _cancel_pending_push(session_)
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
+
+
+def _username(user_id):
+    row = db.session.get(AppUser, user_id)
+    return row.username if row is not None else 'Jemand'
+
+
+@gym_bp.route('/gym/session/<int:session_id>/invite', methods=['POST'])
+@login_required
+def gym_invite_partner(session_id):
+    """Ask someone to train this workout with you.
+
+    The invite is pending until they accept; your session started already and
+    is never blocked on them. Their session does not exist yet on purpose --
+    it is seeded from your structure when they accept, so anything you add
+    while they walk to the gym is included.
+    """
+    session_ = owned_session(session_id)
+    partner_id = request.form.get('partner_id', type=int)
+
+    if not partner_id or partner_id == current_user_id():
+        flash('Kein Trainingspartner ausgewählt.', 'error')
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
+    if session_.finished_at is not None:
+        flash('Das Workout ist schon vorbei.', 'error')
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
+
+    partner = db.session.get(AppUser, partner_id)
+    if partner is None:
+        flash('Kein Trainingspartner ausgewählt.', 'error')
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
+
+    existing = SharedSession.query.filter_by(
+        leader_session_id=session_.id, follower_user_id=partner_id).first()
+    if existing is None:
+        db.session.add(SharedSession(
+            leader_session_id=session_.id,
+            leader_user_id=current_user_id(),
+            follower_user_id=partner_id,
+        ))
+        db.session.commit()
+        push.send_push_to_user(partner_id, {
+            'title': f'{_username(current_user_id())} trainiert',
+            'body': f'{session_.name or "Workout"} — mitmachen?',
+        })
+    flash(f'{partner.username} wurde eingeladen.', 'success')
+    return redirect(url_for('gym.session_detail', session_id=session_.id))
+
+
+@gym_bp.route('/gym/shared/<int:shared_id>/confirm')
+@login_required
+def gym_shared_confirm(shared_id):
+    # Filled in by Task 5. The card on Heute links here, so the endpoint has to
+    # resolve before that page can render at all.
+    abort(404)
 
 
 @gym_bp.route('/gym/session/<int:session_id>/deload', methods=['POST'])

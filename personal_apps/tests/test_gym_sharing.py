@@ -826,3 +826,167 @@ def test_reconciling_one_link_leaves_a_second_links_mirror_alone(linked_pair):
             if doomed is not None:
                 db.session.delete(doomed)
             db.session.commit()
+
+
+# --- The invite (Task 4) ---
+
+
+@pytest.fixture()
+def leader_with_partner():
+    """A fresh leader with a live session, and a fresh partner to invite."""
+    from extensions import db
+    from models import AppUser, Exercise, SessionExercise, WorkoutSession
+    from werkzeug.security import generate_password_hash
+
+    made = {}
+    with flask_app.app_context():
+        leader = AppUser(username='pytest invite leader',
+                         password_hash=generate_password_hash('a'), is_admin=False)
+        partner = AppUser(username='pytest invite partner',
+                          password_hash=generate_password_hash('b'), is_admin=False)
+        db.session.add_all([leader, partner])
+        db.session.flush()
+
+        bench = Exercise(name='pytest invite bench', user_id=leader.id)
+        db.session.add(bench)
+        db.session.flush()
+
+        session_ = WorkoutSession(name='pytest invite workout',
+                                  started_at=dt.datetime.utcnow(), user_id=leader.id)
+        session_.exercises.append(SessionExercise(exercise_id=bench.id, position=1))
+        db.session.add(session_)
+        db.session.commit()
+
+        made = {'leader': leader.id, 'partner': partner.id,
+                'session': session_.id, 'exercise': bench.id}
+    yield made
+
+    with flask_app.app_context():
+        from models import SharedSession
+        for shared in SharedSession.query.filter(
+                db.or_(SharedSession.leader_user_id == made['leader'],
+                       SharedSession.follower_user_id == made['partner'])).all():
+            db.session.delete(shared)
+        db.session.commit()
+        for user_id in (made['leader'], made['partner']):
+            for row in WorkoutSession.query.filter_by(user_id=user_id).all():
+                row.resting_set_id = None
+                db.session.commit()
+                db.session.delete(row)
+            db.session.commit()
+            for row in Exercise.query.filter_by(user_id=user_id).all():
+                db.session.delete(row)
+            db.session.commit()
+            doomed = db.session.get(AppUser, user_id)
+            if doomed is not None:
+                db.session.delete(doomed)
+        db.session.commit()
+
+
+def _client_for(user_id):
+    flask_app.config['TESTING'] = True
+    test_client = flask_app.test_client()
+    with test_client.session_transaction() as flask_session:
+        flask_session['user_id'] = user_id
+    return test_client
+
+
+def test_inviting_a_partner_creates_a_pending_link(leader_with_partner):
+    from extensions import db
+    from models import SharedSession
+
+    client = _client_for(leader_with_partner['leader'])
+    client.post(f"/gym/session/{leader_with_partner['session']}/invite",
+                data={'partner_id': leader_with_partner['partner']})
+
+    with flask_app.app_context():
+        shared = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first()
+        assert shared is not None, 'no invite was created'
+        assert shared.follower_user_id == leader_with_partner['partner']
+        assert shared.accepted_at is None
+        assert shared.follower_session_id is None
+
+
+def test_inviting_twice_does_not_create_a_second_invite(leader_with_partner):
+    from extensions import db
+    from models import SharedSession
+
+    client = _client_for(leader_with_partner['leader'])
+    for _ in range(2):
+        client.post(f"/gym/session/{leader_with_partner['session']}/invite",
+                    data={'partner_id': leader_with_partner['partner']})
+
+    with flask_app.app_context():
+        assert SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).count() == 1
+
+
+def test_a_stranger_cannot_invite_into_someone_elses_session(leader_with_partner):
+    """Ownership failures are 404 throughout the gym: a 403 would confirm the
+    session exists."""
+    from extensions import db
+    from models import SharedSession
+
+    client = _client_for(leader_with_partner['partner'])
+    response = client.post(f"/gym/session/{leader_with_partner['session']}/invite",
+                           data={'partner_id': leader_with_partner['partner']})
+    assert response.status_code == 404
+
+    with flask_app.app_context():
+        assert SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).count() == 0
+
+
+def test_you_cannot_invite_yourself(leader_with_partner):
+    from extensions import db
+    from models import SharedSession
+
+    client = _client_for(leader_with_partner['leader'])
+    client.post(f"/gym/session/{leader_with_partner['session']}/invite",
+                data={'partner_id': leader_with_partner['leader']})
+
+    with flask_app.app_context():
+        assert SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).count() == 0
+
+
+def test_the_partner_sees_the_invite_on_their_start_page(leader_with_partner):
+    client = _client_for(leader_with_partner['leader'])
+    client.post(f"/gym/session/{leader_with_partner['session']}/invite",
+                data={'partner_id': leader_with_partner['partner']})
+
+    partner_client = _client_for(leader_with_partner['partner'])
+    html = partner_client.get('/gym').get_data(as_text=True)
+    assert 'pytest invite leader' in html, 'the invite is not on the partner\'s Start page'
+    assert 'invite-card' in html
+
+
+def test_a_third_party_does_not_see_the_invite(leader_with_partner):
+    """The invite is addressed to one person."""
+    from extensions import db
+    from models import AppUser
+    from werkzeug.security import generate_password_hash
+
+    client = _client_for(leader_with_partner['leader'])
+    client.post(f"/gym/session/{leader_with_partner['session']}/invite",
+                data={'partner_id': leader_with_partner['partner']})
+
+    outsider_id = None
+    try:
+        with flask_app.app_context():
+            outsider = AppUser(username='pytest invite outsider',
+                               password_hash=generate_password_hash('c'), is_admin=False)
+            db.session.add(outsider)
+            db.session.commit()
+            outsider_id = outsider.id
+
+        html = _client_for(outsider_id).get('/gym').get_data(as_text=True)
+        assert 'invite-card' not in html
+    finally:
+        with flask_app.app_context():
+            if outsider_id:
+                doomed = db.session.get(AppUser, outsider_id)
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()

@@ -140,6 +140,22 @@
       a lifted plane, and with "Läuft gerade" above it the page carried two. -#}
   {% set can_start = not active_session %}
 
+  {#- Someone is training right now and asked for you. Above the routines
+      because it expires: the workout it belongs to is already running. -#}
+  {% for invite in pending_invites %}
+  <section class="sec">
+    <div class="invite-card">
+      <span class="invite-card__main stack">
+        <span class="invite-card__who">{{ invite.leader_name }} trainiert</span>
+        <span class="invite-card__what">{{ invite.session_name }}</span>
+      </span>
+      <a href="{{ url_for('gym.gym_shared_confirm', shared_id=invite.shared_id) }}" class="lead__go">
+        Mitmachen
+      </a>
+    </div>
+  </section>
+  {% endfor %}
+
   <section class="sec" aria-labelledby="sec-routinen">
     {% if routines %}
     <div class="sec__head">
