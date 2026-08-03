@@ -2253,6 +2253,25 @@ In `features/gym/routes.py`, inside `gym_finish_session`, immediately before its
 
 Search `features/gym/routes.py` for every other assignment of `finished_at` on a session (`grep -n "finished_at = dt.datetime.utcnow()" features/gym/routes.py`) and add the same call before each one's commit. Report how many sites you found and changed.
 
+- [ ] **Step 4b: Let a shared workout be deleted from history**
+
+`SharedSession.leader_session_id` and `follower_session_id` are plain foreign keys with no `ondelete` and no ORM relationship from `WorkoutSession`, while `gym_delete_session` hard-deletes finished sessions. Deleting a finished workout that was ever shared therefore violates the constraint and 500s.
+
+In `gym_delete_session`, before the session is deleted, add:
+
+```python
+    # Plain FKs with no ondelete point at this session from both halves of any
+    # link it took part in. Deleting the workout without clearing them is a
+    # constraint violation -- and the link is spent anyway, since a session can
+    # only be deleted once it has finished.
+    SharedSession.query.filter(
+        db.or_(SharedSession.leader_session_id == session_.id,
+               SharedSession.follower_session_id == session_.id)).delete(
+        synchronize_session=False)
+```
+
+Adjust `session_` to whatever that route already calls its session variable. Add a test that deletes a finished session which led an accepted link and asserts both the session and the link are gone, with no exception.
+
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_gym_sharing.py -v`
