@@ -990,3 +990,209 @@ def test_a_third_party_does_not_see_the_invite(leader_with_partner):
                 if doomed is not None:
                     db.session.delete(doomed)
                     db.session.commit()
+
+
+# --- The confirm screen: accept and decline (Task 5) ---
+
+
+def test_accepting_creates_the_followers_session_with_the_same_structure(leader_with_partner):
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    partner_client = _client_for(leader_with_partner['partner'])
+    partner_client.post(f'/gym/shared/{shared_id}/accept',
+                        data={f"match_{leader_with_partner['exercise']}": 'new'})
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        assert shared.accepted_at is not None
+        assert shared.follower_session_id is not None
+        follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
+        assert follower_session.user_id == leader_with_partner['partner']
+        assert [se.exercise.name for se in follower_session.exercises] == [
+            'pytest invite bench']
+        assert follower_session.exercises[0].exercise.user_id == (
+            leader_with_partner['partner']), 'the follower was linked to the leader\'s row'
+
+
+def test_the_followers_session_carries_no_template_link(leader_with_partner):
+    """The routine belongs to the leader's catalogue. Pointing at it would be a
+    cross-user reference, and would tell routine_memory() the follower has done
+    a routine they have never owned."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": 'new'})
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        assert db.session.get(
+            WorkoutSession, shared.follower_session_id).template_id is None
+
+
+def test_accepting_seeds_from_the_leaders_current_structure(leader_with_partner):
+    """Not from the routine as it stood at invite time -- exercises added while
+    the partner was still walking to the gym are included."""
+    from extensions import db
+    from models import Exercise, SessionExercise, SharedSession, WorkoutSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+        session_ = db.session.get(WorkoutSession, leader_with_partner['session'])
+        late = Exercise(name='pytest invite late lift',
+                        user_id=leader_with_partner['leader'])
+        db.session.add(late)
+        db.session.flush()
+        session_.exercises.append(SessionExercise(exercise_id=late.id, position=2))
+        db.session.commit()
+        late_id = late.id
+
+    _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": 'new',
+              f'match_{late_id}': 'new'})
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
+        assert 'pytest invite late lift' in [
+            se.exercise.name for se in follower_session.exercises]
+
+
+def test_declining_removes_the_invite(leader_with_partner):
+    from extensions import db
+    from models import SharedSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    _client_for(leader_with_partner['partner']).post(f'/gym/shared/{shared_id}/decline')
+
+    with flask_app.app_context():
+        assert db.session.get(SharedSession, shared_id) is None
+
+
+def test_a_partner_with_a_live_workout_is_refused(leader_with_partner):
+    """One active session per person. Joining would mean abandoning theirs,
+    which is not a decision to make on their behalf."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+
+    own_session_id = None
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+        own = WorkoutSession(name='pytest invite own workout',
+                             started_at=dt.datetime.utcnow(),
+                             user_id=leader_with_partner['partner'])
+        db.session.add(own)
+        db.session.commit()
+        own_session_id = own.id
+
+    html = _client_for(leader_with_partner['partner']).get(
+        f'/gym/shared/{shared_id}/confirm').get_data(as_text=True)
+    assert 'Du hast bereits ein laufendes Workout.' in html
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        assert shared.accepted_at is None
+        assert db.session.get(WorkoutSession, own_session_id) is not None, (
+            'the partner\'s own workout was disturbed')
+
+
+def test_an_invite_to_a_finished_workout_is_refused(leader_with_partner):
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+        db.session.get(WorkoutSession,
+                       leader_with_partner['session']).finished_at = dt.datetime.utcnow()
+        db.session.commit()
+
+    html = _client_for(leader_with_partner['partner']).get(
+        f'/gym/shared/{shared_id}/confirm').get_data(as_text=True)
+    assert 'Das Workout ist schon vorbei.' in html
+
+
+def test_only_the_recipient_can_open_or_accept_an_invite(leader_with_partner):
+    from extensions import db
+    from models import SharedSession
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    leader_client = _client_for(leader_with_partner['leader'])
+    assert leader_client.get(f'/gym/shared/{shared_id}/confirm').status_code == 404
+    assert leader_client.post(f'/gym/shared/{shared_id}/accept',
+                              data={}).status_code == 404
+
+    with flask_app.app_context():
+        assert db.session.get(SharedSession, shared_id).accepted_at is None
+
+
+def test_an_exact_name_is_reused_rather_than_duplicated_on_accept(leader_with_partner):
+    """The partner already owns 'pytest invite bench'. Accepting must link to
+    it, not leave them with two."""
+    from extensions import db
+    from models import Exercise, SharedSession
+
+    with flask_app.app_context():
+        own_bench = Exercise(name='pytest invite bench',
+                             user_id=leader_with_partner['partner'])
+        db.session.add(own_bench)
+        db.session.commit()
+        own_bench_id = own_bench.id
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    _client_for(leader_with_partner['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{leader_with_partner['exercise']}": str(own_bench_id)})
+
+    with flask_app.app_context():
+        assert Exercise.query.filter_by(user_id=leader_with_partner['partner'],
+                                        name='pytest invite bench').count() == 1

@@ -355,22 +355,78 @@ def test_a_stranger_gets_404_on_someone_elses_exercise(
             f'the exercise did not survive the rejected {method} {url}'
 
 
-# gym_shared_confirm (Task 4) is a deliberate stub -- abort(404) unconditionally
-# -- until Task 5 gives it real ownership logic (only the invited follower may
-# confirm their own invite). There is no shared_id in two_users yet and no
-# ownership rule to test against one; session_id stands in only because the
-# route needs *an* int and the stub ignores it regardless. Task 5 must replace
-# this row with a genuine shared_id and a real stranger-vs-invitee test.
+@pytest.fixture()
+def shared_invite(two_users):
+    """A real pending invite from the owner's live session to a third,
+    uninvolved recipient -- so neither the owner (the invite's LEADER) nor the
+    intruder (an ordinary stranger) is its recipient, and the real ownership
+    check the confirm/accept/decline routes now apply must refuse both.
+
+    Replaces Task 4's stub-era placeholder (there was no real shared_id and no
+    ownership rule to test against one; session_id stood in only because the
+    stub ignored whatever int it was given) now that Task 5 gives the route
+    genuine invite-resolution logic.
+    """
+    from extensions import db
+    from models import AppUser, SharedSession
+    from werkzeug.security import generate_password_hash
+
+    created = {}
+    with flask_app.app_context():
+        recipient = AppUser(username='pytest ownership recipient',
+                            password_hash=generate_password_hash('c'), is_admin=False)
+        db.session.add(recipient)
+        db.session.flush()
+        created['recipient_id'] = recipient.id
+
+        shared = SharedSession(leader_session_id=two_users['session_id'],
+                               leader_user_id=two_users['owner_id'],
+                               follower_user_id=recipient.id)
+        db.session.add(shared)
+        db.session.commit()
+        created['shared_id'] = shared.id
+    yield created
+
+    with flask_app.app_context():
+        doomed = db.session.get(SharedSession, created['shared_id'])
+        if doomed is not None:
+            db.session.delete(doomed)
+            db.session.commit()
+        doomed_user = db.session.get(AppUser, created['recipient_id'])
+        if doomed_user is not None:
+            db.session.delete(doomed_user)
+            db.session.commit()
+
+
 SHARED_ROUTES = [
-    ('GET', '/gym/shared/{}/confirm', 'session_id'),
+    ('GET',  '/gym/shared/{}/confirm', 'shared_id'),
+    ('POST', '/gym/shared/{}/accept',  'shared_id'),
+    ('POST', '/gym/shared/{}/decline', 'shared_id'),
 ]
 
 
 @pytest.mark.parametrize('method,url_template,id_key', SHARED_ROUTES)
-def test_a_stranger_gets_404_on_the_shared_confirm_stub(
-        intruder_client, two_users, method, url_template, id_key):
-    url = url_template.format(two_users[id_key])
+def test_a_stranger_gets_404_on_someone_elses_shared_invite(
+        intruder_client, shared_invite, method, url_template, id_key):
+    """B is an ordinary stranger to this invite: not its leader, not its
+    recipient."""
+    url = url_template.format(shared_invite[id_key])
     response = intruder_client.open(url, method=method)
+    assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
+
+
+@pytest.mark.parametrize('method,url_template,id_key', SHARED_ROUTES)
+def test_the_leader_gets_404_on_their_own_invite(
+        two_users, shared_invite, method, url_template, id_key):
+    """The leader sent the invite but is not its recipient -- a 403 here would
+    confirm the invite exists, so like every other ownership failure in the
+    gym this is 404 too."""
+    url = url_template.format(shared_invite[id_key])
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as leader_client:
+        with leader_client.session_transaction() as flask_session:
+            flask_session['user_id'] = two_users['owner_id']
+        response = leader_client.open(url, method=method)
     assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
 
 

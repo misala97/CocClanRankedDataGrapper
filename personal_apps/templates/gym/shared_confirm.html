@@ -1,0 +1,54 @@
+{% extends 'gym/_base.html' %}
+
+{# The confirm screen (Task 5): matches the leader's exercises against your own
+   catalogue, once, before the workout starts. Deviation from the brief: the
+   brief's markup used .field__label / .field__input / .btn--go, none of which
+   exist anywhere in gym.css or any other gym template -- every other sheet
+   form in the app (uebungen.html's "Neue Übung", session_detail.html's invite
+   and add-exercise sheets) pairs `.field` > `label.label` + `select.select`,
+   and uses `.btn.btn--live` for the primary submit and `.btn.btn--ghost` for
+   the secondary one. Reusing those shared primitives instead of inventing a
+   parallel, unstyled set keeps this page consistent with the rest of Puls and
+   needs no gym.css changes at all. #}
+
+{% block title %}Mit {{ leader_name }} trainieren · Gym Tracker{% endblock %}
+
+{% block content %}
+<section class="sec" aria-labelledby="sec-confirm">
+  <div class="sec__head">
+    <h2 class="label" id="sec-confirm">Mit {{ leader_name }} trainieren</h2>
+  </div>
+
+  {% if refusal %}
+  <p class="empty">{{ refusal }}</p>
+  <a class="btn btn--ghost" href="{{ url_for('gym.gym_heute') }}">Zurück</a>
+  {% else %}
+  {#- Exact matches are already resolved and say so. Only the genuinely
+      ambiguous ones carry a decision, because asking seven times per shared
+      workout would make the common path the annoying one. -#}
+  <form method="post" action="{{ url_for('gym.gym_shared_accept', shared_id=shared.id) }}">
+    {% for proposal in proposals %}
+    <div class="field grow">
+      <label class="label" for="match-{{ proposal.leader_exercise_id }}">
+        {{ proposal.name }}
+      </label>
+      <select class="select" id="match-{{ proposal.leader_exercise_id }}"
+              name="match_{{ proposal.leader_exercise_id }}">
+        <option value="new" {{ 'selected' if not proposal.exact_id else '' }}>Neu anlegen</option>
+        {% for candidate_id, candidate_name in proposal.candidates %}
+        <option value="{{ candidate_id }}" {{ 'selected' if candidate_id == proposal.exact_id else '' }}>
+          {{ candidate_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn--live btn--block">Mitmachen</button>
+  </form>
+
+  <form method="post" action="{{ url_for('gym.gym_shared_decline', shared_id=shared.id) }}">
+    <button type="submit" class="btn btn--ghost">Ablehnen</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
