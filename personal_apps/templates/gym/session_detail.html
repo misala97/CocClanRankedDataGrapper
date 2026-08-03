@@ -953,13 +953,25 @@ if (reorderDone) { reorderDone.addEventListener('click', function () { setReorde
   if (!root || root.dataset.shared !== '1') { return; }
   var sessionId = root.dataset.sessionId;
   var known = parseInt(root.dataset.structureVersion || '0', 10);
+  var intervalId = null;
 
   function poll() {
     if (document.hidden) { return; }
     fetch('/gym/session/' + sessionId + '/sync.json', {credentials: 'same-origin'})
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (!data || data.version === known) { return; }
+        if (!data) { return; }
+        // Checked BEFORE the version-unchanged early return below, not
+        // folded into it: ending a link only stamps SharedSession.ended_at,
+        // it never touches structure_version, so the version can easily
+        // stay unchanged forever at the exact moment sharing ends. Gating
+        // on version first would mean the follower's page polls every 5s
+        // forever after the leader finishes.
+        if (data.shared === false) {
+          if (intervalId !== null) { clearInterval(intervalId); }
+          return;
+        }
+        if (data.version === known) { return; }
         var open = document.querySelector('[data-se-id].is-now');
         var openId = open ? open.dataset.seId : null;
         return fetch('/gym/session/' + sessionId + '/queue.html',
@@ -976,6 +988,18 @@ if (reorderDone) { reorderDone.addEventListener('click', function () { setReorde
             // document-wide query would still "find" a since-deleted exercise
             // there and this branch would never fire.
             var stillThere = html.indexOf('data-se-id="' + openId + '"') !== -1;
+            // Every id the fresh queue markup names. A row's sheet
+            // (#sheet-ex-<id>) is rendered by the full page load only, never
+            // by this partial -- so a newly propagated row can have a queue
+            // entry with no matching <dialog> at all. Its tap handler would
+            // then look up an element that doesn't exist and silently do
+            // nothing, which reads as the app being frozen.
+            var freshIds = [];
+            var idPattern = /data-se-id="(\d+)"/g;
+            var match;
+            while ((match = idPattern.exec(html)) !== null) {
+              freshIds.push(match[1]);
+            }
             host.outerHTML = html;
             // This swap renders fresh drag-handles inert (tabindex="-1"), same
             // as any queue refresh -- but this path can't route through
@@ -993,13 +1017,24 @@ if (reorderDone) { reorderDone.addEventListener('click', function () { setReorde
             // one case a reload is right.
             if (openId && !stillThere) {
               window.location.reload();
+              return;
+            }
+            // A row with no sheet is a dead tap, and there is no honest way
+            // to synthesize the missing <dialog> from here without
+            // duplicating the sheet's own template -- reload instead, same
+            // shape as the vanished-open-exercise case above.
+            var missingSheet = freshIds.some(function (id) {
+              return !document.getElementById('sheet-ex-' + id);
+            });
+            if (missingSheet) {
+              window.location.reload();
             }
           });
       })
       .catch(function () { /* a dropped poll is not worth telling anyone about */ });
   }
 
-  setInterval(poll, 5000);
+  intervalId = setInterval(poll, 5000);
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) { poll(); }
   });

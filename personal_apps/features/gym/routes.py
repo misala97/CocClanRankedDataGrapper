@@ -894,14 +894,18 @@ def session_detail(session_id):
          'accepted': link.accepted_at is not None}
         for link in shared_out
     ]
-    # Whether THIS session is on either side of a live link -- gates the
-    # polling script in session_detail.html. A solo session must never poll:
-    # there is nothing for the leader to change on the follower's behalf.
+    # Whether THIS session is the FOLLOWER half of a live link -- gates the
+    # polling script in session_detail.html. Only the follower's structure
+    # ever changes out from under them, so only the follower needs to poll.
+    # Deliberately NOT db.or_(leader_session_id == ..., follower_session_id
+    # == ...): the leader's own structure_version is never bumped by
+    # anything (only reconcile_follower bumps it, and only on the FOLLOWER's
+    # session), so a leader polling sync.json would burn a request every 5s
+    # forever for a version that can never change.
     session_is_shared = SharedSession.query.filter(
         SharedSession.ended_at.is_(None),
         SharedSession.accepted_at.isnot(None),
-        db.or_(SharedSession.leader_session_id == session_.id,
-               SharedSession.follower_session_id == session_.id)).first() is not None
+        SharedSession.follower_session_id == session_.id).first() is not None
 
     return render_template(
         'gym/session_detail.html',
@@ -1436,6 +1440,14 @@ def gym_invite_partner(session_id):
         flash('Kein Trainingspartner ausgewählt.', 'error')
         return redirect(url_for('gym.session_detail', session_id=session_.id))
 
+    # NOT filtered on ended_at: uq_gym_shared_sessions_leader_session_follower
+    # is on (leader_session_id, follower_user_id) alone, so a row surviving
+    # here after ending is exactly why a genuinely fresh invite is
+    # impossible for this (session, partner) pair -- the insert below would
+    # collide with it regardless of end state. The three branches below have
+    # to tell those apart, or a picker re-submission after the partner
+    # already finished flashes success while creating nothing and sending no
+    # push, with no way to ever retry.
     existing = SharedSession.query.filter_by(
         leader_session_id=session_.id, follower_user_id=partner_id).first()
     if existing is None:
@@ -1449,7 +1461,12 @@ def gym_invite_partner(session_id):
             'title': f'{_username(current_user_id())} trainiert',
             'body': f'{session_.name or "Workout"} — mitmachen?',
         })
-    flash(f'{partner.username} wurde eingeladen.', 'success')
+        flash(f'{partner.username} wurde eingeladen.', 'success')
+    elif existing.ended_at is not None:
+        flash(f'Das gemeinsame Training mit {partner.username} ist bereits beendet '
+              f'und kann für dieses Workout nicht neu gestartet werden.', 'error')
+    else:
+        flash(f'{partner.username} ist bereits eingeladen.', 'error')
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
@@ -1579,6 +1596,10 @@ def gym_shared_accept(shared_id):
                     name=leader_exercise.name,
                     muscle_group=leader_exercise.muscle_group,
                     default_rest_seconds=leader_exercise.default_rest_seconds,
+                    # A property of the movement, not the person -- see
+                    # sharing.follower_exercise_for's identical copy for why
+                    # this travels while weight_increment does not.
+                    is_unilateral=leader_exercise.is_unilateral,
                     user_id=current_user_id(),
                 )
                 db.session.add(chosen)

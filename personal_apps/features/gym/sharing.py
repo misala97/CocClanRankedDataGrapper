@@ -18,6 +18,9 @@ this is the one place a cross-user write can happen.
 """
 import datetime as dt
 
+from flask import current_app
+from sqlalchemy.exc import IntegrityError
+
 from extensions import db
 from models import (Exercise, PendingPush, SessionExercise, SharedSession,
                     SharedSessionExercise, WorkoutSession)
@@ -80,6 +83,12 @@ def follower_exercise_for(shared, leader_exercise_id):
             name=leader_exercise.name,
             muscle_group=leader_exercise.muscle_group,
             default_rest_seconds=leader_exercise.default_rest_seconds,
+            # Unilaterality is a property of the MOVEMENT (a one-arm row is
+            # one-arm for anyone doing it), so it travels with the name --
+            # unlike weight_increment, which is genuinely per-person equipment
+            # and correctly stays behind. Dropping this left every volume
+            # figure for the follower's copy at half its real value.
+            is_unilateral=leader_exercise.is_unilateral,
             user_id=shared.follower_user_id,
         )
         db.session.add(match)
@@ -302,6 +311,28 @@ def reconcile_follower(shared):
             continue
         original = mirrored.get(leader_row.replaces_id) if leader_row.replaces_id else None
         wanted = original.id if original is not None else None
+        # SessionExercise.replaces_id carries a TABLE-WIDE unique constraint
+        # (models.py), not one scoped to a session -- so `wanted` may already
+        # be claimed by a row this function structurally cannot see: the
+        # follower's OWN mid-workout substitute for the same original, which
+        # has mirrors_id IS NULL and therefore never enters `mirrored` above.
+        # Concrete case this guards: both partners swap the same occupied
+        # machine. The follower replaces theirs first (their new row claims
+        # replaces_id = their original's id); the leader then replaces
+        # theirs too and propagates. Assigning `wanted` here regardless would
+        # collide on the unique index at commit time -- an unhandled
+        # IntegrityError 500 on every subsequent structural action by the
+        # LEADER, from a write that is entirely about the follower's row.
+        # The follower's own swap wins for their own session (consistent
+        # with "the follower's session is otherwise fully theirs"): leave
+        # this row unlinked instead of overwriting/colliding with it.
+        if wanted is not None:
+            claimed_by_other = SessionExercise.query.filter(
+                SessionExercise.replaces_id == wanted,
+                SessionExercise.id != row.id,
+            ).first()
+            if claimed_by_other is not None:
+                wanted = None
         if row.replaces_id != wanted:
             row.replaces_id = wanted
             changed = True
@@ -316,10 +347,26 @@ def propagate_structure(session_):
 
     Called by the leader's structural routes after they commit their own
     change. Safe to call on any session: one that leads no link does nothing.
+
+    Guarded end to end: this runs entirely inside the LEADER's request, after
+    the leader's own change already committed durably. A constraint violation
+    originating in the FOLLOWER's data (Fix 1's replaces_id collision before
+    it was closed off, or a race on uq_gym_shared_session_exercises_link_leader
+    / uq_gym_exercises_user_id_name) must never turn into a 500 on someone
+    else's request over a write the leader has no way to see or retry. The
+    worst case here is the partner falling out of sync until the next
+    structural change reconciles cleanly -- never a crash.
     """
-    for shared in active_links_led_by(session_.id):
-        reconcile_follower(shared)
-    db.session.commit()
+    try:
+        for shared in active_links_led_by(session_.id):
+            reconcile_follower(shared)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        current_app.logger.exception(
+            'propagate_structure: reconciliation failed for session %s, '
+            'partner(s) left out of sync until the next structural change',
+            session_.id)
 
 
 def end_links_for(session_):

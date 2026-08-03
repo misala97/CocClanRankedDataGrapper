@@ -362,8 +362,15 @@ class SharedSessionExercise(db.Model):
     __tablename__ = 'gym_shared_session_exercises'
     id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
     shared_session_id    = db.Column(db.Integer, db.ForeignKey('gym_shared_sessions.id'), nullable=False, index=True)
-    leader_exercise_id   = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
-    follower_exercise_id = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
+    # CASCADE on both: a spent link's map row is not a reason to keep a
+    # catalogue entry alive. An exercise can end up referenced ONLY by this
+    # map -- e.g. the follower confirms "new" for an exercise the leader
+    # removed in the meantime, so a catalogue entry and a mapping row are
+    # created but no SessionExercise ever is -- and gym_delete_exercise only
+    # checks session_exercises/template_exercises, so without CASCADE that
+    # exercise could never be deleted without an unhandled IntegrityError.
+    leader_exercise_id   = db.Column(db.Integer, db.ForeignKey('gym_exercises.id', ondelete='CASCADE'), nullable=False)
+    follower_exercise_id = db.Column(db.Integer, db.ForeignKey('gym_exercises.id', ondelete='CASCADE'), nullable=False)
 
     __table_args__ = (
         db.UniqueConstraint('shared_session_id', 'leader_exercise_id',
