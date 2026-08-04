@@ -269,7 +269,7 @@ def db_ranked_week_get_all_done() -> List[RankedWeek]:
     # over server-side, not for the local calendar day to change (unlike start_day/end_day,
     # which are local-calendar Mondays for display purposes).
     now_utc = dt.datetime.now(dt.timezone.utc)
-    cutoff_date = now_utc.date() if now_utc.hour >= 6 else now_utc.date() - dt.timedelta(days=1)
+    cutoff_date = now_utc.date() if now_utc.hour >= 7 else now_utc.date() - dt.timedelta(days=1)
     return RankedWeek.query.filter(
         RankedWeek.is_done == False,
         RankedWeek.end_day <= cutoff_date,

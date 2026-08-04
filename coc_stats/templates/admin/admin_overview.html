@@ -11,6 +11,7 @@
         .ov-band { margin-top: 30px; }
         .ov-band:first-child { margin-top: 24px; }
         .ov-band-label {
+            font-size: 10.5px;
             font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700;
             letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted);
             margin-bottom: 13px; display: flex; align-items: center; gap: 12px;
@@ -123,6 +124,13 @@
         .ov-run:disabled { cursor: default; }
         .ov-run-ico { display: flex; }
         .ov-run-ico svg { width: 12px; height: 12px; }
+        /* Armed: the click that actually fires the task. */
+        .ov-run[data-state="arm"]  { color: var(--yellow); border-color: var(--yellow); background: color-mix(in oklch, var(--yellow) 16%, transparent); }
+        .ov-run[aria-disabled="true"] { cursor: default; opacity: .85; }
+        @media (pointer: coarse) {
+            .ov-run { min-height: 44px; }
+            .ov-pulse-link { min-height: 44px; }
+        }
         .ov-run[data-state="run"]  { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 45%, transparent); }
         .ov-run[data-state="done"] { color: var(--green);  border-color: color-mix(in oklch, var(--green) 45%, transparent); }
         .ov-run[data-state="err"]  { color: var(--red);    border-color: color-mix(in oklch, var(--red) 45%, transparent); }
@@ -149,14 +157,14 @@
 {% include '_page_header.html' %}
 {% include 'admin/_admin_tabs.html' %}
 
-<div class="container">
+<div class="container" id="main" role="main">
 
     {# ── BAND 1 · Needs Attention ── #}
     {% set _new  = newbie_check_count or 0 %}
     {% set _pend = pending_approvals or 0 %}
     {% set _bonus = (cwl_bonus.count if cwl_bonus else 0) or 0 %}
     <section class="ov-band">
-        <div class="ov-band-label">Needs Attention</div>
+        <h2 class="ov-band-label">Needs Attention</h2>
         {% if _new or _pend or _bonus %}
         <div class="ov-alerts">
             {% if _new %}
@@ -203,7 +211,7 @@
     {% set _good = nav_task_status | selectattr('status', 'equalto', 'good') | list | length %}
     {% set _off  = nav_task_status | rejectattr('status', 'equalto', 'good') | list %}
     <section class="ov-band">
-        <div class="ov-band-label">System Pulse</div>
+        <h2 class="ov-band-label">System Pulse</h2>
         <div class="ov-pulse {{ nav_health.level if nav_health and nav_health.level in ['warn', 'bad'] else '' }}">
             <div class="ov-pulse-lead">
                 <span class="ov-dot {{ (nav_health.level if nav_health else 'none') or 'none' }}"></span>
@@ -227,7 +235,7 @@
 
     {# ── BAND 3 · Go To ── #}
     <section class="ov-band">
-        <div class="ov-band-label">Go To</div>
+        <h2 class="ov-band-label">Go To</h2>
         <div class="ov-jump">
             <a class="ov-card" href="/admin/monitor">
                 <div class="ov-card-top">
@@ -290,7 +298,7 @@
 
     {# ── BAND 4 · Run a Task ── #}
     <section class="ov-band">
-        <div class="ov-band-label">Run a Task</div>
+        <h2 class="ov-band-label">Run a Task</h2>
         <div class="ov-runs">
             {% for key, name in [
                 ('task_update_battle_logs',  'Battle Logs'),
@@ -300,27 +308,68 @@
                 ('task_update_clan_war',     'Clan War'),
                 ('task_update_cwl',          'CWL'),
             ] %}
-            <button class="ov-run" type="button" data-task="{{ key }}" onclick="triggerTask(this)">
-                <span class="ov-run-ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5z"/></svg></span>
+            <button class="ov-run" type="button" data-task="{{ key }}" data-name="{{ name }}"
+                    aria-label="{{ name }} jetzt ausführen" onclick="triggerTask(this)">
+                <span class="ov-run-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5.5v13l11-6.5z"/></svg></span>
                 <span class="ov-run-label">{{ name }}</span>
             </button>
             {% endfor %}
         </div>
     </section>
 
+    {#- Outcome is announced, not just painted onto a button that has by then
+        been disabled and lost focus. -#}
+    <div class="sr-only" id="ovStatus" role="status" aria-live="polite"></div>
+
 </div>
 
 <div class="page-footer">Admin · super-admin only</div>
 
 <script>
+// Click-to-arm, ported from admin_monitor.html. This POSTs straight into a live
+// production task; a single click on a 36px target was enough to fire it, and
+// the two neighbouring buttons sit 8px apart at 390px.
+let _armed = null, _armTimer;
+function _disarm() {
+    if (!_armed) return;
+    const b = _armed;
+    _armed = null;
+    clearTimeout(_armTimer);
+    b.dataset.state = '';
+    b.querySelector('.ov-run-label').textContent = b.dataset.name;
+    b.setAttribute('aria-label', b.dataset.name + ' jetzt ausführen');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') _disarm(); });
+document.addEventListener('click', e => { if (!e.target.closest('.ov-run')) _disarm(); });
+
+function _say(msg) {
+    const s = document.getElementById('ovStatus');
+    if (s) { s.textContent = ''; setTimeout(() => { s.textContent = msg; }, 30); }
+}
+
 function triggerTask(btn) {
-    if (btn.disabled) return;
+    if (btn.getAttribute('aria-disabled') === 'true') return;
     const task  = btn.dataset.task;
     const label = btn.querySelector('.ov-run-label');
-    const orig  = label.textContent;
-    btn.disabled = true;
+    const orig  = btn.dataset.name;
+
+    if (_armed !== btn) {
+        _disarm();
+        _armed = btn;
+        btn.dataset.state = 'arm';
+        label.textContent = 'Wirklich?';
+        btn.setAttribute('aria-label', orig + ' ausführen — zum Bestätigen erneut klicken');
+        _armTimer = setTimeout(_disarm, 5000);
+        return;
+    }
+    _disarm();
+
+    // aria-disabled, not disabled: `disabled` moves focus to <body> mid-action,
+    // so a keyboard user loses their place the instant they commit.
+    btn.setAttribute('aria-disabled', 'true');
     btn.dataset.state = 'run';
     label.textContent = 'Running…';
+    _say(orig + ' läuft…');
 
     fetch('/admin/trigger-task', {
         method: 'POST',
@@ -332,19 +381,23 @@ function triggerTask(btn) {
         if (status === 409 || data.busy) {
             btn.dataset.state = 'run';
             label.textContent = 'Already running';
+            _say(orig + ' läuft bereits — kurz warten, dann erneut.');
         } else if (ok) {
             btn.dataset.state = 'done';
             label.textContent = 'Done';
+            _say(orig + ' ist durchgelaufen.');
         } else {
             btn.dataset.state = 'err';
             label.textContent = 'Failed';
+            _say(orig + ' fehlgeschlagen: ' + (data.error || 'Unbekannter Fehler'));
         }
-        setTimeout(() => { btn.disabled = false; btn.dataset.state = ''; label.textContent = orig; }, 2600);
+        setTimeout(() => { btn.removeAttribute('aria-disabled'); btn.dataset.state = ''; label.textContent = orig; }, 2600);
     })
-    .catch(() => {
+    .catch(err => {
         btn.dataset.state = 'err';
         label.textContent = 'Failed';
-        setTimeout(() => { btn.disabled = false; btn.dataset.state = ''; label.textContent = orig; }, 2600);
+        _say(orig + ' fehlgeschlagen: ' + err.message);
+        setTimeout(() => { btn.removeAttribute('aria-disabled'); btn.dataset.state = ''; label.textContent = orig; }, 2600);
     });
 }
 </script>

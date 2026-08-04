@@ -3,6 +3,8 @@
 {% set page_title = 'Ranked Week Performance – CoC Analytics' %}
 {% set chartjs = true %}
 {% set is_current_week = (selected_week_id and current_week_id and (selected_week_id|string == current_week_id|string)) %}
+{% set float_tooltip = true %}
+{% set render_stars = true %}
 {% include '_head.html' %}
         /* ── RANKED WEEK OVERVIEW ──────────────────────────────────────────────
            Extends the sitewide "Night Ops Scope" system (_head.html tokens). Ranked

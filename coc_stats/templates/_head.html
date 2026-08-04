@@ -7,8 +7,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Big+Shoulders+Display:wght@700;800&family=JetBrains+Mono:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
     {% if chartjs %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endif %}
     {% if chartjs_adapter %}<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>{% endif %}
-    <script src="/static/js/float_tooltip.js"></script>
-    <script src="/static/js/render_stars.js"></script>
+    {# Gated like chartjs above: both were render-blocking on every page and
+       unused on most of them. Pages opt in with {% set float_tooltip = true %}. #}
+    {% if float_tooltip %}<script src="/static/js/float_tooltip.js"></script>{% endif %}
+    {% if render_stars %}<script src="/static/js/render_stars.js"></script>{% endif %}
     <script>
         window.VERDICT_LABELS = {'badge-godlike':'Godlike','badge-dominant':'Dominant','badge-wow':'Very Good','badge-good':'Good','badge-warning':'Bad','badge-suck':'Disaster','badge-useless':'Useless','badge-inactive':'Inactive'};
         window.VERDICT_COLORS = {'badge-godlike':'oklch(0.62 0.170 290)','badge-dominant':'oklch(0.62 0.190 330)','badge-wow':'oklch(0.72 0.150 165)','badge-good':'oklch(0.68 0.140 230)','badge-warning':'oklch(0.68 0.170 55)','badge-suck':'oklch(0.60 0.200 25)','badge-useless':'oklch(0.66 0.014 330)','badge-inactive':'oklch(0.34 0.014 330)'};
@@ -157,9 +159,11 @@
 
         /* ── STICKY CONTROLS TOOLBAR (the only part that pins on scroll) ── */
         .page-toolbar {
-            position: sticky; top: var(--nav-h, 63px); z-index: 30;
+            position: sticky; top: calc(var(--nav-h, 63px) + var(--tabs-h, 0px)); z-index: 30;
             background: var(--bg); margin-top: 20px; padding-bottom: 14px;
-            border-bottom: 1px solid color-mix(in oklch, var(--accent) 10%, transparent);
+            /* Was a 10%-accent hairline measuring ~1.05:1 — a pinned bar with no
+               visible edge against the content scrolling under it. */
+            border-bottom: 1px solid var(--bord2);
         }
         .page-toolbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
 
@@ -188,8 +192,16 @@
             background: var(--surf2); color: var(--text);
             cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
             appearance: none; -webkit-appearance: none;
+            padding-right: 32px;
+            background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                              linear-gradient(135deg, currentColor 50%, transparent 50%);
+            background-position: calc(100% - 17px) 52%, calc(100% - 12px) 52%;
+            background-size: 5px 5px, 5px 5px;
+            background-repeat: no-repeat;
         }
-        .selector:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent); }
+        /* Keep the sitewide focus ring: `outline: none` here beat :focus-visible
+           on every page and left a 1px border swap as the only focus signal. */
+        .selector:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent); }
         .action-btn {
             padding: 7px 14px; background: transparent; color: var(--accent);
             border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent); border-radius: 6px;
@@ -201,6 +213,13 @@
 
         /* ── ACCESSIBILITY: sitewide keyboard focus ring ── */
         :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        /* Visually hidden, still announced. Lives here because three pages had
+           each grown their own private copy under a different name. */
+        .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
         @media (prefers-reduced-motion: reduce) {
             .selector, .action-btn { transition: none; }
         }
