@@ -1,176 +1,356 @@
 <!DOCTYPE html>
 <html lang="en">
 {% set page_title = 'Task Monitor – CoC Analytics' %}
-{% set chartjs = true %}
-{% set chartjs_adapter = true %}
 {% include '_head.html' %}
 
-        html { scroll-behavior: smooth; }
+        /* ═══ ADMIN MONITOR — system band over task depth ═══
+           The scheduler runs six independent tasks, so when three of them fail
+           inside the same half hour it is not three problems. Zone 1 is built to
+           make that visible: every task on ONE time axis, and failures rolled up
+           by cause ACROSS tasks rather than counted per task. Zone 2 is the
+           register — every task exactly once, no repeats. Zone 3 unfolds inside
+           its own row.
 
-        /* ── NAV: see _nav.html ── */
+           Liveness deliberately does not lead: _nav_task_status() already reports
+           per-task staleness on every page of the site, so restating it here
+           spent the most valuable slot on the least new information.
 
-        /* ── CONTAINER ── */
-        .container { padding-bottom: 80px; }
+           The lanes are hand-drawn SVG, so this page no longer loads Chart.js. */
+        :root { --ease: cubic-bezier(.22,1,.36,1); }
+        .container { padding-bottom: 72px; }
 
-        /* ── COLLAPSIBLE SECTION ── */
-        .collapse-card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 12px; margin-bottom: 20px; overflow: hidden;
-        }
-        .collapse-header {
-            width: 100%; display: flex; align-items: center; gap: 14px;
-            padding: 18px 22px; background: none; border: none; color: var(--text);
-            cursor: pointer; text-align: left; transition: background 0.15s;
-        }
-        .collapse-header:hover { background: var(--surf2); }
-        .collapse-header-icon { font-size: 20px; line-height: 1; }
-        .collapse-header-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; flex: 1;
-        }
-        .collapse-header-meta { font-size: 12px; color: var(--muted); }
-        .collapse-chevron {
-            font-size: 11px; color: var(--muted);
-            transition: transform 0.2s; display: inline-block;
-        }
-        .collapse-chevron.open { transform: rotate(180deg); }
-        .collapse-body { padding: 0 22px 22px; border-top: 1px solid var(--border); }
-        .collapse-body.hidden { display: none; }
-
-        /* ── STATUS GRID ── */
-        .status-grid {
-            display: grid; grid-template-columns: repeat(5, 1fr);
-            gap: 14px; margin: 20px 0 24px;
-        }
-        .status-card {
-            background: var(--surf2); border: 1px solid var(--border);
-            border-left: 3px solid var(--border); border-radius: 10px; padding: 18px 16px;
-            transition: box-shadow 0.2s;
-        }
-        .status-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-        .status-card.up      { border-left-color: var(--green); }
-        .status-card.warning { border-left-color: var(--yellow); }
-        .status-card.down    { border-left-color: var(--red); }
-        .status-card.unknown { border-left-color: var(--muted); }
-
-        .status-card-top {
-            display: flex; justify-content: space-between; align-items: flex-start;
-            margin-bottom: 12px;
-        }
-        .status-fn-icon { font-size: 22px; line-height: 1; }
-        .status-badge {
-            padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
-            font-family: 'Rajdhani', sans-serif; letter-spacing: 0.4px; text-transform: uppercase;
-        }
-        .badge-up      { background: rgba(63,185,80,0.15);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
-        .badge-warning { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
-        .badge-down    { background: rgba(248,81,73,0.15);  color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
-        .badge-unknown { background: rgba(139,148,158,0.1); color: var(--muted);  border: 1px solid rgba(139,148,158,0.2); }
-        .badge-error   { background: rgba(248,81,73,0.15);  color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
-        .badge-skipped { background: rgba(139,148,158,0.1); color: var(--muted);  border: 1px solid rgba(139,148,158,0.2); }
-        .badge-success { background: rgba(63,185,80,0.15);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
-
-        .status-fn-name {
-            font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700;
-            margin-bottom: 6px;
-        }
-        .status-last-run {
-            font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700;
-            margin-bottom: 4px; line-height: 1;
-        }
-        .status-meta { font-size: 11px; color: var(--muted); line-height: 1.7; }
-        .status-meta .gap-warn { color: var(--red); }
-        .status-summary {
-            font-size: 10px; color: var(--muted); margin-top: 6px;
-            font-family: monospace; word-break: break-all; line-height: 1.5;
-        }
-        .status-error {
-            font-size: 10px; color: var(--red); margin-top: 4px;
-            font-family: monospace; word-break: break-all; line-height: 1.5;
+        .mon-hidden {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
         }
 
-        /* ── CHART CARD ── */
-        .chart-card {
-            background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 10px; padding: 20px; margin-bottom: 20px;
+        .mon-sec { display: flex; align-items: baseline; gap: 12px; margin: 30px 0 12px; }
+        .mon-sec:first-of-type { margin-top: 20px; }
+        .mon-sec h2 {
+            font-family: 'Big Shoulders Display', sans-serif;
+            font-weight: 800; font-size: 26px; line-height: 1;
+            letter-spacing: .4px; text-transform: uppercase;
         }
-        .chart-card-header {
-            display: flex; align-items: center; flex-wrap: wrap;
-            gap: 16px; margin-bottom: 16px;
-        }
-        .chart-card-header h3 {
-            font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700;
-        }
-        .chart-legend {
-            display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto;
-        }
-        .legend-item {
-            display: flex; align-items: center; gap: 6px;
-            font-size: 12px; color: var(--muted);
-        }
-        .legend-dot {
-            width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+        .mon-sec .hint { color: var(--muted); font-size: 12.5px; }
+        .mon-sec .rule { flex: 1; height: 1px; background: var(--bord2); }
+
+        .mon-icn {
+            width: 17px; height: 17px; flex: none; stroke: currentColor; fill: none;
+            stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
         }
 
-        /* ── FUNCTION GRID ── */
-        .fn-grid {
-            display: grid; grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-        }
-        .fn-card {
-            background: var(--surf2); border: 1px solid var(--border);
-            border-radius: 10px; padding: 18px;
-        }
-        .fn-card-header {
-            display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px;
-        }
-        .fn-card-icon { font-size: 20px; line-height: 1; padding-top: 2px; }
-        .fn-card-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
-            margin-bottom: 3px;
-        }
-        .fn-card-meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
-        .fn-card-last {
-            font-size: 11px; color: var(--muted); margin-top: 4px;
-            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-        }
-        .fn-card-summary { font-family: monospace; font-size: 10px; color: var(--muted); }
-        .fn-card-error { font-family: monospace; font-size: 10px; color: var(--red); margin-top: 3px; }
-        .fn-chart-wrap { position: relative; height: 100px; margin-bottom: 12px; }
+        /* Each task keeps the site's colour for its game mode where one exists. */
+        [data-task]                { --tc: var(--muted); }
+        [data-task="clan_war"]     { --tc: var(--orange); }
+        [data-task="cwl"]          { --tc: var(--purple); }
+        [data-task="raid_weekend"] { --tc: var(--red); }
+        [data-task="ranked_weeks"] { --tc: var(--blue); }
+        [data-task="battle_logs"]  { --tc: var(--green); }
+        [data-task="clan_members"] { --tc: var(--muted); }
 
-        /* ── GAPS ── */
-        .gap-section { margin-top: 10px; }
-        .gap-title {
-            font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
-            letter-spacing: 1px; text-transform: uppercase; color: var(--red);
-            margin-bottom: 6px;
+        /* ── ZONE 1 · SYSTEMLAGE ── */
+        .sys { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+        .sys-top { display: grid; grid-template-columns: 1fr 300px; border-bottom: 1px solid var(--bord2); }
+        .sys-say { padding: 16px 22px; min-width: 0; }
+        .sys-say .k {
+            font-size: 10.5px; font-weight: 700; letter-spacing: 1.1px;
+            text-transform: uppercase; color: var(--muted);
         }
-        .gap-item {
-            font-size: 11px; color: var(--muted); padding: 6px 10px;
-            background: rgba(248,81,73,0.06); border: 1px solid rgba(248,81,73,0.15);
-            border-radius: 6px; margin-bottom: 4px; line-height: 1.5;
+        .sys-say h3 {
+            margin-top: 5px;
+            font-family: 'Big Shoulders Display', sans-serif;
+            font-weight: 800; font-size: 29px; line-height: 1.05; letter-spacing: .3px;
+            text-transform: uppercase; text-wrap: balance;
         }
-        .gap-item strong { color: var(--red); }
+        .sys-say h3 .up { color: var(--red); }
+        .sys-say h3 .ok { color: var(--green); }
+        .sys-say p { color: var(--muted); font-size: 12.5px; margin-top: 6px; max-width: 60ch; }
 
-        /* ── NO DATA ── */
-        .no-data {
-            text-align: center; padding: 60px 20px;
-            font-size: 15px; color: var(--muted);
+        .sys-figs { display: grid; grid-template-columns: 1fr 1fr; border-left: 1px solid var(--bord2); }
+        .sys-figs .f { padding: 12px 16px; border-left: 1px solid var(--bord2); border-bottom: 1px solid var(--bord2); }
+        .sys-figs .f:nth-child(2n+1) { border-left: 0; }
+        .sys-figs .f:nth-last-child(-n+2) { border-bottom: 0; }
+        .sys-figs .f b {
+            display: block; font-family: 'JetBrains Mono', monospace;
+            font-size: 20px; font-weight: 700; line-height: 1.25;
         }
-        .no-data .icon { font-size: 48px; margin-bottom: 16px; }
-
-        /* ── FOOTER ── */
-        .page-footer {
-            text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
-            margin-top: 4px; border-top: 1px solid var(--bord2);
-            font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;
+        .sys-figs .f.bad b { color: var(--red); }
+        .sys-figs .f.ok  b { color: var(--green); }
+        .sys-figs .f span {
+            font-size: 10px; font-weight: 700; letter-spacing: 1px;
+            text-transform: uppercase; color: var(--muted);
         }
 
-        /* ── RESPONSIVE ── */
-        @media (max-width: 1200px) { .status-grid { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 900px)  { .status-grid { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 720px)  {
-            .fn-grid, .status-grid { grid-template-columns: 1fr; }
-            .nav-inner { padding: 0 16px; }
+        /* ── Laufspuren: the correlation instrument ── */
+        .lanes { padding: 16px 22px; }
+        .lanes-hd { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .lanes-hd h4 { font-size: 12.5px; font-weight: 700; }
+        .lanes-hd .hint { font-size: 11.5px; color: var(--muted); }
+
+        .lane-grid {
+            position: relative;
+            display: grid; grid-template-columns: 118px 1fr;
+            row-gap: 3px; column-gap: 12px; align-items: center;
+        }
+        .lane-lbl { display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; min-width: 0; }
+        .lane-lbl svg { width: 14px; height: 14px; color: var(--tc); flex: none; }
+        .lane-lbl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lane-track { height: 17px; background: var(--bg); border-radius: 2px; }
+        .lane-track svg { width: 100%; height: 100%; display: block; }
+
+        .lane-axis { grid-column: 2; display: flex; justify-content: space-between; margin-top: 5px; }
+        .lane-axis span { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--muted); }
+
+        /* One highlight column per correlated window, drawn across every lane —
+           the reason this arrangement was chosen over a per-task one. */
+        .corr-layer { position: absolute; inset: 0 0 22px 130px; pointer-events: none; }
+        .corr {
+            position: absolute; top: 0; bottom: 0; min-width: 2px;
+            background: color-mix(in oklch, var(--red) 13%, transparent);
+            border-left:  1px solid color-mix(in oklch, var(--red) 60%, transparent);
+            border-right: 1px solid color-mix(in oklch, var(--red) 60%, transparent);
+        }
+
+        .lane-legend {
+            display: flex; gap: 16px; flex-wrap: wrap;
+            margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--bord2);
+        }
+        .lane-legend i {
+            display: inline-flex; align-items: center; gap: 6px; font-style: normal;
+            font-size: 10.5px; font-weight: 700; letter-spacing: .6px;
+            text-transform: uppercase; color: var(--muted);
+        }
+        .lane-legend .sw { width: 10px; height: 10px; border-radius: 2px; }
+
+        /* ── Ursachen: one row per cause, counted across tasks ── */
+        .causes { border-top: 1px solid var(--bord2); }
+        .causes-hd { padding: 12px 22px 0; }
+        .causes-hd h4 { font-size: 12.5px; font-weight: 700; }
+        .causes-hd p { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+        .cause-row {
+            display: grid; grid-template-columns: 56px 1fr auto; align-items: center;
+            gap: 16px; padding: 12px 22px; border-top: 1px solid var(--bord2);
+        }
+        .cause-row:first-of-type { margin-top: 12px; }
+        .cause-n { font-family: 'JetBrains Mono', monospace; font-size: 21px; font-weight: 700; color: var(--red); line-height: 1; }
+        .cause-n.solo { color: var(--blue); }
+        .cause-m { min-width: 0; }
+        .cause-m b { display: block; font-size: 13px; font-weight: 700; }
+        .cause-m code {
+            display: block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+            color: var(--muted); overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; margin-top: 2px;
+        }
+        .cause-hit { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+        .cause-hit .t {
+            display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px;
+            font-weight: 700; padding: 3px 8px; border-radius: 20px;
+            background: var(--surf2); border: 1px solid var(--bord2);
+        }
+        .cause-hit .t svg { width: 11px; height: 11px; color: var(--tc); }
+        .cause-when {
+            font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            color: var(--muted); white-space: nowrap; text-align: right; margin-top: 4px;
+        }
+
+        .sys-clear { padding: 24px 22px; text-align: center; border-top: 1px solid var(--bord2); }
+        .sys-clear b {
+            font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+            font-size: 22px; letter-spacing: .3px; text-transform: uppercase; color: var(--green);
+        }
+        .sys-clear p { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+
+        /* ── ZONE 2 · TASK REGISTER ── */
+        .reg { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+        .reg-head, .reg-row {
+            display: grid; gap: 16px; align-items: center;
+            grid-template-columns: 1fr 106px 118px 92px 84px 96px auto;
+        }
+        .reg-head { padding: 8px 22px; border-bottom: 1px solid var(--border); background: var(--bg); }
+        .reg-head span {
+            font-size: 10.5px; font-weight: 700; letter-spacing: 1.1px;
+            text-transform: uppercase; color: var(--muted);
+        }
+        .reg-head .r, .reg-row .r { text-align: right; }
+        .reg-task { border-bottom: 1px solid var(--bord2); }
+        .reg-task:last-child { border-bottom: 0; }
+        .reg-row { padding: 12px 22px; cursor: pointer; transition: background .15s var(--ease); }
+        .reg-row:hover { background: var(--surf2); }
+        .reg-task:has(.reg-toggle:focus-visible) .reg-row { background: var(--surf2); }
+
+        .reg-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .reg-name > svg { color: var(--tc); width: 18px; height: 18px; }
+        .reg-name b { display: block; font-size: 13.5px; font-weight: 700; }
+        .reg-name em { font-style: normal; display: block; font-size: 11.5px; color: var(--muted); }
+        .reg-fig { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
+        .reg-fig small {
+            display: block; font-family: 'Manrope', sans-serif; font-size: 10px;
+            font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted);
+        }
+        .reg-fig.bad { color: var(--red); }
+        .reg-fig.dim { color: var(--muted); }
+        .reg-end { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+
+        .mon-btn {
+            font: inherit; font-weight: 700; font-size: 12px; color: var(--accent);
+            background: none; border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
+            border-radius: 6px; padding: 7px 12px; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+            transition: background .15s, border-color .15s, box-shadow .15s, transform .1s, color .15s;
+        }
+        .mon-btn:hover:not(:disabled) {
+            background: color-mix(in oklch, var(--accent) 14%, transparent); border-color: var(--accent);
+            box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 12%, transparent);
+        }
+        .mon-btn:active:not(:disabled) { transform: scale(.975); }
+        .mon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .mon-btn:disabled { cursor: default; opacity: .85; }
+        .mon-btn svg { width: 13px; height: 13px; }
+        .mon-btn.quiet { color: var(--muted); border-color: var(--bord2); }
+        .mon-btn.quiet:hover:not(:disabled) { color: var(--text); background: var(--surf2); border-color: var(--border); box-shadow: none; }
+        .mon-btn.ok   { color: var(--green);  border-color: color-mix(in oklch, var(--green) 45%, transparent); }
+        .mon-btn.warn { color: var(--yellow); border-color: color-mix(in oklch, var(--yellow) 45%, transparent); }
+        .mon-btn.err  { color: var(--red);    border-color: color-mix(in oklch, var(--red) 45%, transparent); }
+
+        .reg-toggle {
+            display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+            background: none; border: 1px solid transparent; border-radius: 6px;
+            color: var(--muted); cursor: pointer;
+        }
+        .reg-toggle:hover { color: var(--text); border-color: var(--bord2); }
+        .reg-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .reg-chev { transition: transform .2s var(--ease); }
+        .reg-toggle[aria-expanded="true"] .reg-chev { transform: rotate(180deg); }
+
+        .mon-pill {
+            display: inline-flex; align-items: center; gap: 5px; border-radius: 20px;
+            padding: 3px 10px; font-size: 11px; font-weight: 700; letter-spacing: .6px;
+            text-transform: uppercase; border: 1px solid; white-space: nowrap;
+        }
+        .mon-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+        .mon-pill.up      { color: var(--green);  background: color-mix(in oklch, var(--green) 12%, transparent);  border-color: color-mix(in oklch, var(--green) 32%, transparent); }
+        .mon-pill.warn    { color: var(--yellow); background: color-mix(in oklch, var(--yellow) 12%, transparent); border-color: color-mix(in oklch, var(--yellow) 32%, transparent); }
+        .mon-pill.down    { color: var(--red);    background: color-mix(in oklch, var(--red) 13%, transparent);    border-color: color-mix(in oklch, var(--red) 36%, transparent); }
+        .mon-pill.unknown { color: var(--muted);  background: color-mix(in oklch, var(--muted) 10%, transparent);  border-color: color-mix(in oklch, var(--muted) 26%, transparent); }
+
+        /* ── ZONE 3 · per-task depth, inside its own row ── */
+        .reg-body { display: none; padding: 0 22px 16px 52px; }
+        .reg-body.open { display: block; }
+        .det { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+        .det-box { border: 1px solid var(--bord2); border-radius: 8px; overflow: hidden; }
+        .det-box h5 {
+            padding: 8px 12px; font-size: 10.5px; font-weight: 700; letter-spacing: 1.1px;
+            text-transform: uppercase; color: var(--muted);
+            border-bottom: 1px solid var(--bord2); background: var(--bg);
+        }
+        .det-line {
+            display: flex; align-items: baseline; gap: 8px; padding: 8px 12px;
+            border-bottom: 1px solid var(--bord2); font-size: 12px;
+        }
+        .det-line:last-child { border-bottom: 0; }
+        .det-line .n { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--red); min-width: 30px; }
+        .det-line .n.q { color: var(--yellow); }
+        .det-line .m { flex: 1; min-width: 0; }
+        .det-line .m code {
+            display: block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+            color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .det-line .w { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+        .det-empty { padding: 12px; font-size: 12px; color: var(--muted); }
+        .det-sum {
+            padding: 8px 12px; font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; color: var(--muted); word-break: break-word;
+        }
+
+        /* Run Now feedback stays in-surface; the old page used native alert(). */
+        .mon-toast {
+            position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(8px);
+            z-index: 60; max-width: min(520px, calc(100vw - 32px));
+            padding: 11px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+            background: var(--surf2); border: 1px solid var(--border); color: var(--text);
+            box-shadow: 0 8px 24px rgba(0,0,0,.5);
+            opacity: 0; pointer-events: none;
+            transition: opacity .2s var(--ease), transform .2s var(--ease);
+        }
+        .mon-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .mon-toast.err  { border-color: color-mix(in oklch, var(--red) 45%, transparent); }
+        .mon-toast.warn { border-color: color-mix(in oklch, var(--yellow) 45%, transparent); }
+
+        .mon-empty {
+            border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+            padding: 44px 22px; text-align: center; margin-top: 20px;
+        }
+        .mon-empty b {
+            display: block; font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
+            font-size: 25px; letter-spacing: .3px; text-transform: uppercase;
+        }
+        .mon-empty p { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+
+        @media (max-width: 1180px) {
+            .sys-top { grid-template-columns: 1fr; }
+            .sys-figs { grid-template-columns: repeat(4, 1fr); border-left: 0; border-top: 1px solid var(--bord2); }
+            .sys-figs .f { border-bottom: 0; }
+            .sys-figs .f:nth-child(2n+1) { border-left: 1px solid var(--bord2); }
+            .sys-figs .f:first-child { border-left: 0; }
+        }
+        /* Declared BEFORE the media query on purpose: same specificity, so a
+           later `display: none` would beat the `display: flex` inside it and
+           silently swallow every figure on mobile. */
+        .reg-mobile { display: none; }
+
+        /* Dense register → divided rows, never a card per task (see DESIGN.md). */
+        @media (max-width: 1080px) {
+            .reg-head { display: none; }
+            .reg-row {
+                grid-template-columns: 1fr auto auto;
+                grid-template-areas: "name pill end" "figs figs figs";
+                row-gap: 12px;
+            }
+            .reg-name { grid-area: name; }
+            .reg-row > .mon-pill { grid-area: pill; }
+            .reg-end { grid-area: end; }
+            .reg-row > .reg-fig { display: none; }
+            .reg-mobile { grid-area: figs; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+            .reg-body { padding-left: 22px; }
+        }
+
+        @media (max-width: 780px) {
+            .sys-figs { grid-template-columns: repeat(2, 1fr); }
+            .sys-figs .f { border-bottom: 1px solid var(--bord2); }
+            .sys-figs .f:nth-last-child(-n+2) { border-bottom: 0; }
+            .sys-say { padding: 16px; }
+            .lanes { padding: 16px; }
+            .lane-grid { grid-template-columns: 92px 1fr; column-gap: 8px; }
+            .lane-lbl { font-size: 10.5px; }
+            .corr-layer { inset: 0 0 20px 100px; }
+            /* Eight date ticks collide at 390px. */
+            .lane-axis span:nth-child(even) { display: none; }
+            .cause-row { grid-template-columns: 44px 1fr; padding: 12px 16px; }
+            .cause-side { grid-column: 1 / -1; }
+            .cause-hit { justify-content: flex-start; }
+            .cause-when { text-align: left; }
+            .causes-hd { padding: 12px 16px 0; }
+            .reg-row { padding: 12px 16px; }
+            .reg-body { padding: 0 16px 16px; }
+            /* Phone: the name shares its line with the state pill only. Sharing
+               it with the buttons too squeezed every task name onto two lines. */
+            .reg-row {
+                grid-template-columns: 1fr auto;
+                grid-template-areas: "name pill" "figs end";
+            }
+            .reg-end { align-self: start; }
+            .reg-mobile { gap: 10px 14px; align-content: start; }
+        }
+
+        /* Touch: the row itself is a large target, but the two real buttons in
+           it were 32px. An earlier audit on /war flagged exactly this. */
+        @media (pointer: coarse) {
+            .reg-toggle { width: 44px; height: 44px; }
+            .mon-btn { padding: 11px 14px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .reg-chev, .mon-btn, .reg-row, .mon-toast { transition-duration: .01ms; }
         }
     </style>
 </head>
@@ -178,414 +358,422 @@
 
 {% include '_nav.html' %}
 
+{% set s = page.summary %}
+{% set lead = page.lead_incident %}
+
 {% set page_header_title = 'Task <span>Monitor</span>' %}
-{% set page_header_desc = 'Background task health, timing, and gap detection.' %}
-{% set page_controls %}
-<label>Period</label>
-<select class="selector" onchange="window.location='?days='+this.value">
-  <option value="1"  {% if selected_days == 1  %}selected{% endif %}>24 hours</option>
-  <option value="7"  {% if selected_days == 7  %}selected{% endif %}>7 days</option>
-  <option value="14" {% if selected_days == 14 %}selected{% endif %}>14 days</option>
-  <option value="30" {% if selected_days == 30 %}selected{% endif %}>30 days</option>
+{% set page_header_desc = 'Erst die gemeinsame Lage, dann der einzelne Task — damit ein Ausfall, der mehrere Tasks zugleich trifft, auch als einer erkennbar bleibt.' %}
+{% set page_primary_control %}
+<label for="monPeriod">Zeitraum</label>
+<select class="selector" id="monPeriod" onchange="window.location='?days='+this.value">
+  {% for d in period_options %}
+  <option value="{{ d }}" {% if selected_days == d %}selected{% endif %}>{% if d == 1 %}24 Stunden{% else %}{{ d }} Tage{% endif %}</option>
+  {% endfor %}
 </select>
 {% endset %}
 {% include '_page_header.html' %}
 {% include 'admin/_admin_tabs.html' %}
 
+{% macro task_icon(short) -%}
+<svg class="mon-icn" viewBox="0 0 18 18" aria-hidden="true">
+{%- if short == 'clan_war' -%}
+<path d="M14.5 3.5 5 13l-1.5 3.5L7 15l9.5-9.5z"/><path d="m3.5 3.5 9.5 9.5 1.5 3.5L11 15 1.5 5.5z"/>
+{%- elif short == 'cwl' -%}
+<circle cx="9" cy="7" r="4.5"/><path d="M6 11 4 17l5-2.5L14 17l-2-6"/>
+{%- elif short == 'raid_weekend' -%}
+<path d="M2.5 15.5v-8l2-1.5 2 1.5v-2l2.5-2 2.5 2v2l2-1.5 2 1.5v8z"/><path d="M7.5 15.5v-3h3v3"/>
+{%- elif short == 'ranked_weeks' -%}
+<path d="M2.5 15.5h13"/><rect x="4" y="9" width="3" height="5"/><rect x="8.5" y="5.5" width="3" height="8.5"/><rect x="13" y="11" width="3" height="3"/>
+{%- elif short == 'battle_logs' -%}
+<path d="M4.5 2.5h9v13h-9z"/><path d="M7 6h4M7 9h4M7 12h2.5"/>
+{%- elif short == 'clan_members' -%}
+<circle cx="7" cy="6.5" r="2.75"/><path d="M2.5 15.5c0-2.5 2-4.25 4.5-4.25s4.5 1.75 4.5 4.25"/><path d="M12.5 4.5a2.75 2.75 0 0 1 0 5.25M13.5 11.5c1.5.55 2.5 2 2.5 4"/>
+{%- else -%}
+<circle cx="9" cy="9" r="6.75"/><path d="M9 5v4l2.5 2"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{% set health_label = {'up': 'Läuft', 'warn': 'Verzögert', 'down': 'Still', 'unknown': 'Unbekannt'} %}
+
+{%- macro secs(v) -%}
+{%- if v is none -%}—
+{%- elif v < 1 -%}{{ (v * 1000) | round | int }} ms
+{%- elif v < 10 -%}{{ ('%.2f' % v) | replace('.', ',') }} s
+{%- elif v < 60 -%}{{ ('%.1f' % v) | replace('.', ',') }} s
+{%- else -%}{{ ('%.1f' % (v / 60)) | replace('.', ',') }} min
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro mins(v) -%}
+{%- if not v -%}—
+{%- elif v < 60 -%}{{ v | round | int }} min
+{%- elif v < 1440 -%}{{ ('%.1f' % (v / 60)) | replace('.', ',') }} h
+{%- else -%}{{ ('%.1f' % (v / 1440)) | replace('.', ',') }} d
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro ago(v) -%}
+{%- if v is none -%}—
+{%- elif v < 1 -%}gerade eben
+{%- elif v < 60 -%}vor {{ v | round | int }} min
+{%- elif v < 1440 -%}vor {{ ('%.1f' % (v / 60)) | replace('.', ',') }} h
+{%- else -%}vor {{ (v / 1440) | round | int }} d
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro cadence(v) -%}
+{%- if not v -%}—{%- else -%}alle {{ v | round | int }} min{%- endif -%}
+{%- endmacro -%}
+
+{%- macro thou(n) -%}{{ '{:,}'.format(n).replace(',', '.') }}{%- endmacro -%}
+
 <div class="container">
 
-    {% set known_functions = [
-        ['task_update_battle_logs',  '⚔️',  'Battle Logs'],
-        ['task_update_ranked_weeks', '📊',  'Ranked Weeks'],
-        ['task_update_clan_members', '👥',  'Clan Members'],
-        ['task_update_raid_weekend', '🏰',  'Raid Weekend'],
-        ['task_update_clan_war',     '⚔️',  'Clan War'],
-        ['task_update_cwl',          '🏅',  'CWL'],
-    ] %}
+{% if not page.tasks %}
+    <div class="mon-empty">
+        <b>Keine Läufe in diesem Zeitraum</b>
+        <p>Für die letzten {{ selected_days }} Tage hat kein Hintergrund-Task etwas protokolliert.
+           Ein längerer Zeitraum zeigt womöglich die letzte Aktivität.</p>
+    </div>
+{% else %}
 
-    {% set op_count = namespace(n=0) %}
-    {% for fn_key, icon, name in known_functions %}
-        {% set s = function_stats.get(fn_key, {}).get('status', 'unknown') %}
-        {% if s == 'up' %}{% set op_count.n = op_count.n + 1 %}{% endif %}
-    {% endfor %}
+    <!-- ══ ZONE 1 · SYSTEMLAGE ══ -->
+    <div class="mon-sec">
+        <h2>Systemlage</h2>
+        <span class="hint">Was traf mehrere Tasks gleichzeitig?</span>
+        <span class="rule"></span>
+    </div>
 
-    <!-- ── UPTIME TRACKER SECTION ── -->
-    <div class="collapse-card" id="card-uptime">
-        <div class="collapse-header">
-            <span class="collapse-header-icon">📡</span>
-            <span class="collapse-header-title">Task Uptime Monitor</span>
-            <span class="collapse-header-meta">
-                {{ op_count.n }}/{{ known_functions|length }} operational
-                &middot; last {{ selected_days }}d
-            </span>
+    <section class="sys">
+        <div class="sys-top">
+            <div class="sys-say">
+                <div class="k">Befund über {{ selected_days }} {{ 'Tag' if selected_days == 1 else 'Tage' }}</div>
+                {% if lead %}
+                <h3>Ein <span class="up">Fremdsystem-Ausfall</span> erklärt
+                    {{ s.explained_by_shared }} der {{ s.total_errors }} Fehlläufe</h3>
+                <p>Am {{ lead.start.strftime('%d.%m.') }} um {{ lead.start.strftime('%H:%M') }} UTC fielen
+                   {{ lead.tasks | length }} Tasks gleichzeitig aus — nicht {{ lead.tasks | length }} Probleme,
+                   sondern eine gemeinsame Ursache über {{ mins(lead.minutes) }}.
+                   Der Scheduler selbst lief durch.</p>
+                {% else %}
+                <h3>Keine <span class="ok">übergreifende Störung</span></h3>
+                <p>{% if s.total_errors %}Kein Fehlerbild traf mehr als einen Task zugleich.
+                   Verbleibende Auffälligkeiten sind Einzelfälle und stehen unten beim jeweiligen Task.
+                   {%- else %}Alle {{ s.task_count }} Tasks liefen im Zeitraum fehlerfrei.{% endif %}</p>
+                {% endif %}
+            </div>
+            <div class="sys-figs">
+                <div class="f {{ 'ok' if s.healthy == s.task_count else '' }}">
+                    <b>{{ s.healthy }}/{{ s.task_count }}</b><span>im Takt</span>
+                </div>
+                <div class="f"><b>{{ thou(s.total_runs) }}</b><span>Läufe</span></div>
+                <div class="f {{ 'bad' if s.total_errors else '' }}">
+                    <b>{{ s.total_errors }}</b><span>{{ 'Fehllauf' if s.total_errors == 1 else 'Fehlläufe' }}</span>
+                </div>
+                <div class="f {{ 'bad' if s.longest_gap > 60 else '' }}">
+                    <b>{{ mins(s.longest_gap) }}</b><span>längste Lücke</span>
+                </div>
+            </div>
         </div>
 
-        <div class="collapse-body" id="body-uptime">
-
-            <!-- Status Cards -->
-            <div class="status-grid">
-                {% for fn_key, icon, name in known_functions %}
-                {% set stats = function_stats.get(fn_key, {}) %}
-                {% set status = stats.get('status', 'unknown') %}
-                <div class="status-card {{ status }}">
-                    <div class="status-card-top">
-                        <span class="status-fn-icon">{{ icon }}</span>
-                        <span class="status-badge badge-{{ status }}">
-                            {%- if status == 'up' %}Operational
-                            {%- elif status == 'warning' %}Delayed
-                            {%- elif status == 'down' %}Down
-                            {%- else %}No Data{%- endif %}
-                        </span>
-                    </div>
-                    <div class="status-fn-name">{{ name }}</div>
-                    <div class="status-last-run">
-                        {% if stats.last_run %}
-                        <span class="time-ago" data-time="{{ stats.last_run }}">{{ stats.last_run }}</span>
-                        {% else %}—{% endif %}
-                    </div>
-                    <div class="status-meta">
-                        {% if stats.count %}
-                        {{ stats.count }} run{{ 's' if stats.count != 1 else '' }}
-                        {% if stats.error_count %}&middot; <span style="color:var(--red)">{{ stats.error_count }} err</span>{% endif %}
-                        {% if stats.skipped_count %}&middot; {{ stats.skipped_count }} skip{% endif %}
-                        &middot; avg {{ stats.avg_duration }}s
-                        {% if stats.median_gap %}&middot; ~every {{ stats.median_gap | round(0) | int }}min{% endif %}
-                        {% if stats.gap_events %}
-                        <br><span class="gap-warn">⚠ {{ stats.gap_events | length }} gap{{ 's' if stats.gap_events | length != 1 else '' }}</span>
-                        {% endif %}
-                        {% else %}
-                        No runs in period
-                        {% endif %}
-                    </div>
-                    {% if stats.last_summary %}
-                    <div class="status-summary">{{ stats.last_summary }}</div>
-                    {% endif %}
-                    {% if stats.last_status == 'error' and stats.last_error %}
-                    <div class="status-error">{{ stats.last_error }}</div>
-                    {% endif %}
-                    <button class="task-run-btn" data-task="{{ fn_key }}" onclick="triggerTask(this)" style="margin-top:10px;width:100%;padding:5px 0;border-radius:6px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:.4px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--muted);transition:all .15s;">
-                        ▶ Run Now
-                    </button>
-                </div>
+        <div class="lanes">
+            <div class="lanes-hd">
+                <h4>Laufspuren</h4>
+                <span class="hint">alle {{ s.task_count }} Tasks auf einer Zeitachse — eine senkrechte Linie über mehrere Spuren heißt: gemeinsame Ursache</span>
+            </div>
+            <div class="lane-grid" id="laneGrid">
+                {% for t in page.tasks %}
+                <div class="lane-lbl" data-task="{{ t.short }}">{{ task_icon(t.short) }}<span>{{ t.label }}</span></div>
+                <div class="lane-track" data-task="{{ t.short }}" data-lane="{{ t.key }}" role="img"
+                     aria-label="{{ t.label }}: {{ thou(t.runs) }} Läufe, {{ t.errors }} Fehlläufe, {{ t.gaps | length }} Unterbrechungen"></div>
                 {% endfor %}
+                <div class="lane-axis" id="laneAxis"></div>
             </div>
-
-            {% if function_stats %}
-
-            <!-- Timeline Chart -->
-            <div class="chart-card">
-                <div class="chart-card-header">
-                    <h3>Activity Timeline – last {{ selected_days }} day{{ 's' if selected_days != 1 else '' }}</h3>
-                    <div class="chart-legend">
-                        <span class="legend-item"><span class="legend-dot" style="background:#3fb950"></span>Fast (&lt;30s)</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:#f0a500"></span>Medium (30–120s)</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:#f85149"></span>Slow / Error</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:#8b949e55"></span>Skipped</span>
-                    </div>
-                </div>
-                <div style="position:relative; height:200px;">
-                    <canvas id="timelineChart"></canvas>
-                </div>
+            <div class="lane-legend">
+                <i><span class="sw" style="background:color-mix(in oklch,var(--muted) 50%,transparent)"></span>Lauf</i>
+                <i><span class="sw" style="background:color-mix(in oklch,var(--muted) 22%,transparent)"></span>übersprungen</i>
+                <i><span class="sw" style="background:var(--red)"></span>Fehllauf</i>
+                <i><span class="sw" style="background:color-mix(in oklch,var(--red) 20%,transparent);border:1px solid color-mix(in oklch,var(--red) 45%,transparent)"></span>kein Lauf</i>
             </div>
+        </div>
 
-            <!-- Per-Function Detail Cards -->
-            {% set fn_lookup = {
-                'task_update_battle_logs':  ['⚔️',  'Battle Logs'],
-                'task_update_ranked_weeks': ['📊',  'Ranked Weeks'],
-                'task_update_clan_members': ['👥',  'Clan Members'],
-                'task_update_raid_weekend': ['🏰',  'Raid Weekend'],
-                'task_update_clan_war':     ['⚔️',  'Clan War'],
-                'task_update_cwl':          ['🏅',  'CWL'],
-            } %}
-            <div class="fn-grid">
-                {% for fn, runs in by_function.items() %}
-                {% set fn_info = fn_lookup.get(fn, ['⚙️', fn]) %}
-                {% set stats = function_stats.get(fn, {}) %}
-                <div class="fn-card">
-                    <div class="fn-card-header">
-                        <span class="fn-card-icon">{{ fn_info[0] }}</span>
-                        <div style="flex:1">
-                            <div class="fn-card-title">{{ fn_info[1] }}</div>
-                            <div class="fn-card-meta">
-                                {{ stats.count }} runs
-                                {% if stats.error_count %}&middot; <span style="color:var(--red)">{{ stats.error_count }} errors</span>{% endif %}
-                                {% if stats.skipped_count %}&middot; {{ stats.skipped_count }} skipped{% endif %}
-                                &middot; avg {{ stats.avg_duration }}s &middot; max {{ stats.max_duration }}s
-                                {% if stats.median_gap %}&middot; ~every {{ stats.median_gap | round(0) | int }}min{% endif %}
-                            </div>
-                            <div class="fn-card-last">
-                                {% if stats.last_status %}
-                                <span class="status-badge badge-{{ stats.last_status }}" style="font-size:10px;padding:2px 7px;">{{ stats.last_status }}</span>
-                                {% endif %}
-                                {% if stats.last_summary %}
-                                <span class="fn-card-summary">{{ stats.last_summary }}</span>
-                                {% endif %}
-                            </div>
-                            {% if stats.last_status == 'error' and stats.last_error %}
-                            <div class="fn-card-error">{{ stats.last_error }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="fn-chart-wrap">
-                        <canvas id="durChart_{{ loop.index }}" data-fn="{{ fn }}"></canvas>
-                    </div>
-                    {% if stats.gap_events %}
-                    <div class="gap-section">
-                        <div class="gap-title">⚠ Detected Gaps</div>
-                        {% for gap in stats.gap_events %}
-                        <div class="gap-item">
-                            <strong>{{ gap.duration_min }} min downtime</strong> —
-                            {{ gap.start.replace('T', ' ').replace('Z', '') }} → {{ gap.end.replace('T', ' ').replace('Z', '') }}
-                        </div>
+        <div class="causes">
+            {% if page.causes %}
+            <div class="causes-hd">
+                <h4>Ursachen</h4>
+                <p>Gleiche Meldung über alle Tasks zusammengefasst —
+                   {{ s.total_errors }} {{ 'Fehllauf geht' if s.total_errors == 1 else 'Fehlläufe gehen' }}
+                   auf {{ s.cause_count }} {{ 'Ursache' if s.cause_count == 1 else 'Ursachen' }} zurück.</p>
+            </div>
+            {% for c in page.causes %}
+            <div class="cause-row">
+                <span class="cause-n {{ 'solo' if c.tasks | length == 1 else '' }}">{{ c.count }}×</span>
+                <div class="cause-m">
+                    <b>{{ c.label }}</b>
+                    <code>{{ c.message }}</code>
+                </div>
+                <div class="cause-side">
+                    <div class="cause-hit">
+                        {% for key in c.tasks %}
+                        <span class="t" data-task="{{ key | replace('task_update_', '') }}">{{ task_icon(key | replace('task_update_', '')) }}{{ c.task_labels[loop.index0] }}</span>
                         {% endfor %}
                     </div>
-                    {% endif %}
+                    <div class="cause-when">ab {{ c.first.strftime('%d.%m. %H:%M') }}</div>
                 </div>
-                {% endfor %}
             </div>
-
+            {% endfor %}
             {% else %}
-            <div class="no-data">
-                <div class="icon">📭</div>
-                <div>No uptime data for the last {{ selected_days }} day{{ 's' if selected_days != 1 else '' }}.</div>
-                <div style="margin-top:8px; font-size:13px;">Background tasks haven't logged any runs in this period.</div>
+            <div class="sys-clear">
+                <b>Keine Fehlläufe</b>
+                <p>Alle {{ s.task_count }} Tasks liefen im Zeitraum fehlerfrei.</p>
             </div>
             {% endif %}
+        </div>
+    </section>
 
-        </div><!-- /collapse-body -->
-    </div><!-- /collapse-card uptime -->
+    <!-- ══ ZONE 2 · TASK REGISTER (ZONE 3 unfolds inside each row) ══ -->
+    <div class="mon-sec">
+        <h2>Tasks</h2>
+        <span class="hint">Zustand, Takt und Laufzeit je Task</span>
+        <span class="rule"></span>
+    </div>
 
+    <section class="reg">
+        <div class="reg-head">
+            <span>Task</span><span>Zustand</span><span>Takt</span>
+            <span class="r">Läufe</span><span class="r">Fehler</span><span class="r">Ø Dauer</span><span></span>
+        </div>
+
+        {% for t in page.tasks %}
+        <div class="reg-task" data-task="{{ t.short }}">
+            <div class="reg-row">
+                <div class="reg-name">{{ task_icon(t.short) }}<span><b>{{ t.label }}</b><em>{{ t.purpose }}</em></span></div>
+
+                <span class="mon-pill {{ t.health }}"><span class="dot"></span>{{ health_label[t.health] }}</span>
+
+                <div class="reg-fig">{{ cadence(t.cadence) }}<small>zuletzt {{ ago(t.minutes_since) }}</small></div>
+                <div class="reg-fig r">{{ thou(t.runs) }}<small>{% if t.skipped %}{{ t.skipped }} übersprungen{% else %}alle aktiv{% endif %}</small></div>
+                <div class="reg-fig r {{ 'bad' if t.errors else 'dim' }}">{{ t.errors if t.errors else '—' }}<small>{{ 'Fehler' if t.errors else 'sauber' }}</small></div>
+                <div class="reg-fig r">{{ secs(t.avg_duration) }}<small>max {{ secs(t.max_duration) }}</small></div>
+
+                <div class="reg-end">
+                    <button type="button" class="mon-btn quiet js-run" data-task="{{ t.key }}" data-label="Jetzt">
+                        <svg class="mon-icn" viewBox="0 0 18 18" aria-hidden="true"><path d="M4.5 2.5 15 9l-10.5 6.5z"/></svg>
+                        <span class="js-run-label">Jetzt</span>
+                    </button>
+                    <button type="button" class="reg-toggle" aria-expanded="false" aria-controls="det-{{ t.short }}">
+                        <svg class="mon-icn reg-chev" viewBox="0 0 18 18" aria-hidden="true"><path d="m5 7 4 4 4-4"/></svg>
+                        <span class="mon-hidden">Details zu {{ t.label }}</span>
+                    </button>
+                </div>
+
+                <div class="reg-mobile">
+                    <span class="reg-fig">{{ cadence(t.cadence) }}<small>zuletzt {{ ago(t.minutes_since) }}</small></span>
+                    <span class="reg-fig">{{ thou(t.runs) }}<small>Läufe</small></span>
+                    <span class="reg-fig {{ 'bad' if t.errors else 'dim' }}">{{ t.errors if t.errors else '—' }}<small>{{ 'Fehler' if t.errors else 'sauber' }}</small></span>
+                    <span class="reg-fig">{{ secs(t.avg_duration) }}<small>Ø Dauer</small></span>
+                </div>
+            </div>
+
+            <div class="reg-body" id="det-{{ t.short }}">
+                <div class="det">
+                    <div class="det-box">
+                        <h5>Fehler nach Ursache</h5>
+                        {% for g in t.error_groups %}
+                        <div class="det-line">
+                            <span class="n">{{ g.count }}×</span>
+                            <span class="m">{{ g.label }}<code>{{ g.message }}</code></span>
+                            <span class="w">{{ g.first.strftime('%d.%m. %H:%M') }}</span>
+                        </div>
+                        {% else %}
+                        <div class="det-empty">Kein Fehllauf im Zeitraum.</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="det-box">
+                        <h5>Stillstand · Takt</h5>
+                        {% for g in t.gaps %}
+                        <div class="det-line">
+                            <span class="n q">{{ mins(g.minutes) }}</span>
+                            <span class="m">kein Lauf<code>{{ g.start.strftime('%d.%m. %H:%M') }} → {{ g.end.strftime('%d.%m. %H:%M') }}</code></span>
+                        </div>
+                        {% else %}
+                        <div class="det-empty">Keine Unterbrechung über dem Schwellwert.</div>
+                        {% endfor %}
+                        <div class="det-line">
+                            <span class="m">Erwarteter Takt</span>
+                            <span class="w">{{ cadence(t.cadence) }}</span>
+                        </div>
+                        <div class="det-line">
+                            <span class="m">Letzter Lauf</span>
+                            <span class="w">{{ t.last_time.strftime('%d.%m. %H:%M') if t.last_time else '—' }} · {{ ago(t.minutes_since) }}</span>
+                        </div>
+                    </div>
+
+                    <div class="det-box">
+                        <h5>Letzte Meldung</h5>
+                        <div class="det-sum">{{ t.last_summary or '— keine Zusammenfassung —' }}</div>
+                        <div class="det-line">
+                            <span class="m">Übersprungen</span>
+                            <span class="w">{{ t.skipped }}{{ ' (planmäßig)' if t.skipped else '' }}</span>
+                        </div>
+                        <div class="det-line">
+                            <span class="m">Spitzenlaufzeit</span>
+                            <span class="w">{{ secs(t.max_duration) }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+{% endif %}
 </div>
 
-<div class="page-footer">{{ op_count.n }}/{{ known_functions|length }} tasks operational · last {{ selected_days }}d</div>
+<div class="mon-toast" id="monToast" role="status" aria-live="polite"></div>
+
+{% if page.tasks %}
+<script id="laneData" type="application/json">
+{
+ "t0": "{{ page.window_start.strftime('%Y-%m-%dT%H:%M:%S') }}",
+ "t1": "{{ page.generated.strftime('%Y-%m-%dT%H:%M:%S') }}",
+ "lanes": [
+ {%- for t in page.tasks -%}
+ {"key": "{{ t.key }}",
+  "runs": [{% for p in t.series %}["{{ p.t.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ p.s }}"]{{ "," if not loop.last else "" }}{% endfor %}],
+  "gaps": [{% for g in t.gaps %}["{{ g.start.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ g.end.strftime('%Y-%m-%dT%H:%M:%S') }}"]{{ "," if not loop.last else "" }}{% endfor %}],
+  "errs": [{% for e in page.incidents if e.kind != 'silence' and t.key in e.tasks %}["{{ e.start.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ e.end.strftime('%Y-%m-%dT%H:%M:%S') }}"]{{ "," if not loop.last else "" }}{% endfor %}]
+ }{{ "," if not loop.last else "" }}
+ {%- endfor -%}
+ ],
+ "shared": [{% for e in page.incidents if e.kind == 'upstream' %}["{{ e.start.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ e.end.strftime('%Y-%m-%dT%H:%M:%S') }}"]{{ "," if not loop.last else "" }}{% endfor %}]
+}
+</script>
+{% endif %}
 
 <script>
-const byFunction    = {{ by_function    | tojson | safe }};
-const functionStats = {{ function_stats | tojson | safe }};
+(function () {
+    const holder = document.getElementById('laneData');
 
-// ── Task Trigger ─────────────────────────────────────────────────────────────
-function triggerTask(btn) {
-    const task = btn.dataset.task;
-    btn.disabled = true;
-    btn.textContent = '⏳ Running…';
-    btn.style.color = 'var(--accent)';
-    btn.style.borderColor = 'rgba(240,165,0,.4)';
+    if (holder) {
+        const D = s => new Date(s + 'Z').getTime();
+        const data = JSON.parse(holder.textContent);
+        const T0 = D(data.t0), T1 = D(data.t1), SPAN = Math.max(1, T1 - T0);
+        const W = 1000, H = 17;
+        const px = t => ((D(t) - T0) / SPAN) * W;
 
-    fetch('/admin/trigger-task', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task }),
-    })
-    .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
-    .then(({ ok, status, data }) => {
-        if (status === 409 || data.busy) {
-            btn.textContent = '⚠ Already Running';
-            btn.style.color = 'var(--yellow)';
-            btn.style.borderColor = 'rgba(240,165,0,.4)';
-            alert('This task is currently already running (either scheduled or triggered manually). Please wait for it to finish before running it again.');
-        } else if (ok) {
-            btn.textContent = '✓ Done';
-            btn.style.color = 'var(--green)';
-            btn.style.borderColor = 'rgba(63,185,80,.4)';
-        } else {
-            btn.textContent = '✗ Error';
-            btn.style.color = 'var(--red)';
-            btn.style.borderColor = 'rgba(248,81,73,.4)';
-            alert('Task failed:\n' + (data.error || 'Unknown error'));
+        // Coverage marks, silence voids and failure windows, all on one axis.
+        data.lanes.forEach(lane => {
+            const el = document.querySelector('.lane-track[data-lane="' + lane.key + '"]');
+            if (!el) return;
+            const cover = lane.runs.map(r =>
+                '<rect x="' + px(r[0]).toFixed(1) + '" y="4" width="2.6" height="' + (H - 8) +
+                '" fill="color-mix(in oklch, var(--tc) ' + (r[1] === 'skipped' ? 22 : 52) + '%, transparent)"/>').join('');
+            const voids = lane.gaps.map(g =>
+                '<rect x="' + px(g[0]).toFixed(1) + '" y="0" width="' + Math.max(2, px(g[1]) - px(g[0])).toFixed(1) +
+                '" height="' + H + '" fill="color-mix(in oklch, var(--red) 20%, transparent)"' +
+                ' stroke="color-mix(in oklch, var(--red) 45%, transparent)" stroke-width="1"/>').join('');
+            const errs = lane.errs.map(e =>
+                '<rect x="' + (px(e[0]) - 1.4).toFixed(1) + '" y="0" width="' + Math.max(2.8, px(e[1]) - px(e[0])).toFixed(1) +
+                '" height="' + H + '" fill="var(--red)"/>').join('');
+            el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">' +
+                cover + voids + errs + '</svg>';
+        });
+
+        const axis = document.getElementById('laneAxis');
+        if (axis) {
+            const parts = [];
+            for (let i = 0; i <= 7; i++) {
+                const d = new Date(T0 + SPAN * (i / 7));
+                parts.push('<span>' + String(d.getUTCDate()).padStart(2, '0') + '.' +
+                                      String(d.getUTCMonth() + 1).padStart(2, '0') + '.</span>');
+            }
+            axis.innerHTML = parts.join('');
         }
-        setTimeout(() => {
-            btn.disabled = false;
-            btn.textContent = '▶ Run Now';
-            btn.style.color = 'var(--muted)';
-            btn.style.borderColor = 'var(--border)';
-        }, 3000);
-    })
-    .catch(() => {
-        btn.textContent = '✗ Error';
-        btn.style.color = 'var(--red)';
-        btn.style.borderColor = 'rgba(248,81,73,.4)';
-        setTimeout(() => {
-            btn.disabled = false;
-            btn.textContent = '▶ Run Now';
-            btn.style.color = 'var(--muted)';
-            btn.style.borderColor = 'var(--border)';
-        }, 3000);
-    });
-}
 
-const FN_NAMES = {
-    'task_update_battle_logs':  'Battle Logs',
-    'task_update_ranked_weeks': 'Ranked Weeks',
-    'task_update_clan_members': 'Clan Members',
-    'task_update_raid_weekend': 'Raid Weekend',
-    'task_update_clan_war':     'Clan War',
-    'task_update_cwl':          'CWL',
-};
-const FN_COLORS = {
-    'task_update_battle_logs':  '#58a6ff',
-    'task_update_ranked_weeks': '#3fb950',
-    'task_update_clan_members': '#f0a500',
-    'task_update_raid_weekend': '#f85149',
-    'task_update_clan_war':     '#bc8cff',
-    'task_update_cwl':          '#39d353',
-};
+        const grid = document.getElementById('laneGrid');
+        if (grid && data.shared.length) {
+            grid.insertAdjacentHTML('beforeend', '<div class="corr-layer">' + data.shared.map(w => {
+                const l = px(w[0]) / W * 100;
+                const width = Math.max(0.5, (px(w[1]) - px(w[0])) / W * 100);
+                return '<div class="corr" style="left:' + l.toFixed(2) + '%;width:' + width.toFixed(2) + '%"></div>';
+            }).join('') + '</div>');
+        }
+    }
 
-Chart.defaults.color = '#8b949e';
-Chart.defaults.borderColor = '#30363d';
-Chart.defaults.font.family = "'DM Sans', sans-serif";
-
-function runColor(r) {
-    if (r.status === 'error')   return '#f85149cc';
-    if (r.status === 'skipped') return '#8b949e44';
-    if (r.duration < 30)  return '#3fb950cc';
-    if (r.duration < 120) return '#f0a500cc';
-    return '#f85149cc';
-}
-
-function timeAgo(isoStr) {
-    if (!isoStr) return '—';
-    const d = new Date(isoStr);
-    const mins = Math.floor((Date.now() - d.getTime()) / 60000);
-    if (mins < 1)  return 'just now';
-    if (mins < 60) return mins + 'm ago';
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24)  return hrs + 'h ' + (mins % 60) + 'm ago';
-    return Math.floor(hrs / 24) + 'd ago';
-}
-
-document.querySelectorAll('.time-ago').forEach(el => {
-    const t = el.dataset.time;
-    if (t) el.textContent = timeAgo(t);
-});
-
-// ── TIMELINE CHART ─────────────────────────────────────────
-const fnList   = Object.keys(byFunction);
-const tlCanvas = document.getElementById('timelineChart');
-if (fnList.length && tlCanvas) {
-    const datasets = fnList.map((fn, idx) => ({
-        label: FN_NAMES[fn] || fn,
-        data: byFunction[fn].map(r => ({
-            x: new Date(r.time).getTime(),
-            y: idx,
-            duration: r.duration,
-            status: r.status,
-            summary: r.summary,
-        })),
-        backgroundColor: byFunction[fn].map(r => runColor(r)),
-        pointRadius: 6,
-        pointHoverRadius: 9,
-        showLine: false,
+    // ── Disclosures. The row is a div carrying its own buttons, so the
+    //    disclosure is a real button rather than a nested one. ──
+    function toggle(btn) {
+        if (!btn) return;
+        const open = btn.getAttribute('aria-expanded') !== 'true';
+        btn.setAttribute('aria-expanded', String(open));
+        const body = document.getElementById(btn.getAttribute('aria-controls'));
+        if (body) body.classList.toggle('open', open);
+    }
+    document.querySelectorAll('.reg-toggle').forEach(b => b.addEventListener('click', () => toggle(b)));
+    document.querySelectorAll('.reg-row').forEach(row => row.addEventListener('click', ev => {
+        if (ev.target.closest('button')) return;
+        toggle(row.querySelector('.reg-toggle'));
     }));
 
-    new Chart(tlCanvas, {
-        type: 'scatter',
-        data: { datasets },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    type: 'time',
-                    time: { displayFormats: { hour: 'dd.MM HH:mm', day: 'dd.MM' } },
-                    grid: { color: '#21262d' },
-                    ticks: { color: '#8b949e', maxTicksLimit: 10 },
-                },
-                y: {
-                    min: -0.5,
-                    max: fnList.length - 0.5,
-                    ticks: {
-                        stepSize: 1,
-                        callback: val => FN_NAMES[fnList[val]] || fnList[val] || '',
-                        color: '#8b949e',
-                    },
-                    grid: { color: '#21262d' },
+    // ── Run Now ──
+    const toast = document.getElementById('monToast');
+    let toastTimer;
+    function say(msg, tone) {
+        toast.textContent = msg;
+        toast.className = 'mon-toast show' + (tone ? ' ' + tone : '');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 6000);
+    }
+
+    document.querySelectorAll('.js-run').forEach(btn => {
+        const out = btn.querySelector('.js-run-label');
+        const rest = btn.dataset.label;
+        btn.addEventListener('click', () => {
+            const name = btn.closest('.reg-task').querySelector('.reg-name b').textContent.trim();
+            btn.disabled = true;
+            btn.className = 'mon-btn js-run';
+            out.textContent = 'Läuft…';
+
+            fetch('/admin/trigger-task', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task: btn.dataset.task }),
+            })
+            .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
+            .then(({ ok, status, data }) => {
+                if (status === 409 || data.busy) {
+                    btn.className = 'mon-btn warn js-run';
+                    out.textContent = 'Läuft schon';
+                    say(name + ' läuft gerade bereits — planmäßig oder manuell gestartet. Kurz warten, dann erneut.', 'warn');
+                } else if (ok) {
+                    btn.className = 'mon-btn ok js-run';
+                    out.textContent = 'Fertig';
+                    say(name + ' ist durchgelaufen. Die Zahlen aktualisieren sich beim Neuladen.');
+                } else {
+                    btn.className = 'mon-btn err js-run';
+                    out.textContent = 'Fehler';
+                    say(name + ' fehlgeschlagen: ' + (data.error || 'Unbekannter Fehler'), 'err');
                 }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#1c2330',
-                    borderColor: '#30363d',
-                    borderWidth: 1,
-                    callbacks: {
-                        title: items => new Date(items[0].raw.x).toLocaleString(),
-                        label: item => {
-                            const r   = item.raw;
-                            const fn  = fnList[Math.round(r.y)];
-                            const name = FN_NAMES[fn] || fn;
-                            const parts = [name + ' · ' + r.status + ' · ' + r.duration + 's'];
-                            if (r.summary) parts.push(r.summary);
-                            return parts;
-                        }
-                    }
-                }
-            }
-        }
+            })
+            .catch(err => {
+                btn.className = 'mon-btn err js-run';
+                out.textContent = 'Fehler';
+                say(name + ' fehlgeschlagen: ' + err.message, 'err');
+            })
+            .finally(() => {
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.className = 'mon-btn quiet js-run';
+                    out.textContent = rest;
+                }, 4000);
+            });
+        });
     });
-}
-
-// ── PER-FUNCTION DURATION CHARTS ──────────────────────────
-document.querySelectorAll('[id^="durChart_"]').forEach(canvas => {
-    const fn   = canvas.dataset.fn;
-    const runs = byFunction[fn];
-    if (!runs || !runs.length) return;
-
-    const last60 = runs.slice(-60);
-    const color  = FN_COLORS[fn] || '#58a6ff';
-
-    new Chart(canvas, {
-        type: 'line',
-        data: {
-            labels: last60.map(r => new Date(r.time).getTime()),
-            datasets: [{
-                label: 'Duration (s)',
-                data: last60.map(r => r.duration),
-                borderColor: color,
-                backgroundColor: color + '18',
-                fill: true,
-                tension: 0.3,
-                pointRadius: last60.map(r => r.status === 'error' ? 5 : 2),
-                pointBackgroundColor: last60.map(r => runColor(r)),
-                pointHoverRadius: 6,
-                borderWidth: 2,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { type: 'time', display: false },
-                y: {
-                    min: 0,
-                    grid: { color: '#21262d' },
-                    ticks: {
-                        color: '#8b949e',
-                        callback: v => v + 's',
-                        maxTicksLimit: 4,
-                    },
-                }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#1c2330',
-                    borderColor: '#30363d',
-                    borderWidth: 1,
-                    callbacks: {
-                        title: items => new Date(items[0].parsed.x).toLocaleString(),
-                        label: item => {
-                            const r = last60[item.dataIndex];
-                            const parts = [r.status + ' · ' + item.raw + 's'];
-                            if (r.summary) parts.push(r.summary);
-                            if (r.error_message) parts.push('Error: ' + r.error_message);
-                            return parts;
-                        }
-                    }
-                }
-            }
-        }
-    });
-});
+})();
 </script>
+
 </body>
 </html>
