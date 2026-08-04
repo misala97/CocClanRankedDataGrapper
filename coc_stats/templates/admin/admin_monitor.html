@@ -84,17 +84,26 @@
         /* ── Laufspuren: the correlation instrument ── */
         .lanes { padding: 16px 22px; }
         .lanes-hd { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-        .lanes-hd h4 { font-size: 12.5px; font-weight: 700; }
+        .lanes-hd h3 { font-size: 12.5px; font-weight: 700; }
         .lanes-hd .hint { font-size: 11.5px; color: var(--muted); }
 
         .lane-grid {
-            position: relative;
+            position: relative; padding-top: 18px;
             display: grid; grid-template-columns: 118px 1fr;
             row-gap: 3px; column-gap: 12px; align-items: center;
         }
         .lane-lbl { display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; min-width: 0; }
         .lane-lbl svg { width: 14px; height: 14px; color: var(--tc); flex: none; }
         .lane-lbl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* One vocabulary for the whole strip. The legend below reads from these
+           same tokens, so it cannot drift from what the lanes actually paint. */
+        :root {
+            --lane-run:       color-mix(in oklch, var(--muted) 62%, transparent);
+            --lane-skip:      color-mix(in oklch, var(--muted) 40%, transparent);
+            --lane-err:       var(--red);
+            --lane-void:      color-mix(in oklch, var(--red) 16%, transparent);
+            --lane-void-line: color-mix(in oklch, var(--red) 55%, transparent);
+        }
         .lane-track { height: 17px; background: var(--bg); border-radius: 2px; }
         .lane-track svg { width: 100%; height: 100%; display: block; }
 
@@ -103,12 +112,13 @@
 
         /* One highlight column per correlated window, drawn across every lane —
            the reason this arrangement was chosen over a per-task one. */
-        .corr-layer { position: absolute; inset: 0 0 22px 130px; pointer-events: none; }
+        .corr-layer { position: absolute; inset: 18px 0 22px 130px; pointer-events: none; }
         .corr {
-            position: absolute; top: 0; bottom: 0; min-width: 2px;
-            background: color-mix(in oklch, var(--red) 13%, transparent);
-            border-left:  1px solid color-mix(in oklch, var(--red) 60%, transparent);
-            border-right: 1px solid color-mix(in oklch, var(--red) 60%, transparent);
+            position: absolute; top: 0; bottom: 0;
+            /* The tie-line: faint, full height, so the vertical alignment across
+               lanes still reads even where a lane was not implicated. */
+            border-left:  1px solid color-mix(in oklch, var(--red) 30%, transparent);
+            border-right: 1px solid color-mix(in oklch, var(--red) 30%, transparent);
             /* The one signature moment: the column draws down through the lanes
                so the eye lands on the vertical alignment — the single fact this
                whole arrangement exists to show. Plays once, never on a loop.
@@ -117,6 +127,20 @@
                simply there. Visibility is never gated on it. */
             transform-origin: top;
             animation: corrDraw 420ms cubic-bezier(.22, 1, .36, 1) both;
+        }
+        /* Only the lanes that actually failed in this window get the mark. */
+        .corr-seg { position: absolute; left: 0; right: 0; }
+        .corr-seg.is-hit {
+            background: color-mix(in oklch, var(--red) 34%, transparent);
+            box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--red) 70%, transparent);
+        }
+        .corr-cap {
+            position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+            margin-bottom: 3px; white-space: nowrap;
+            font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 700;
+            color: var(--red); background: var(--surface);
+            border: 1px solid color-mix(in oklch, var(--red) 40%, transparent);
+            border-radius: 4px; padding: 1px 5px;
         }
         @keyframes corrDraw {
             from { transform: scaleY(0); opacity: 0; }
@@ -132,12 +156,19 @@
             font-size: 10.5px; font-weight: 700; letter-spacing: .6px;
             text-transform: uppercase; color: var(--muted);
         }
-        .lane-legend .sw { width: 10px; height: 10px; border-radius: 2px; }
+        /* Swatches mirror the marks exactly, including their shape: the skipped
+           swatch is the same short baseline tick the lane draws, not a paler
+           square, because that difference is what carries the meaning. */
+        .lane-legend .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+        .lane-legend .sw-run  { background: var(--lane-run); }
+        .lane-legend .sw-skip { background: var(--lane-skip); height: 3px; align-self: flex-end; margin-bottom: 2px; }
+        .lane-legend .sw-err  { background: var(--lane-err); width: 3px; }
+        .lane-legend .sw-void { background: var(--lane-void); border: 1px dashed var(--lane-void-line); }
 
         /* ── Ursachen: one row per cause, counted across tasks ── */
         .causes { border-top: 1px solid var(--bord2); }
         .causes-hd { padding: 12px 22px 0; }
-        .causes-hd h4 { font-size: 12.5px; font-weight: 700; }
+        .causes-hd h3 { font-size: 12.5px; font-weight: 700; }
         .causes-hd p { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
         .cause-row {
             display: grid; grid-template-columns: 56px 1fr auto; align-items: center;
@@ -196,7 +227,7 @@
         .reg-name em { font-style: normal; display: block; font-size: 11.5px; color: var(--muted); }
         .reg-fig { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
         .reg-fig small {
-            display: block; font-family: 'Manrope', sans-serif; font-size: 10px;
+            display: block; white-space: nowrap; font-family: 'Manrope', sans-serif; font-size: 10px;
             font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted);
         }
         .reg-fig.bad { color: var(--red); }
@@ -223,6 +254,13 @@
         .mon-btn.ok   { color: var(--green);  border-color: color-mix(in oklch, var(--green) 45%, transparent); }
         .mon-btn.warn { color: var(--yellow); border-color: color-mix(in oklch, var(--yellow) 45%, transparent); }
         .mon-btn.err  { color: var(--red);    border-color: color-mix(in oklch, var(--red) 45%, transparent); }
+        /* Armed: the click that actually fires the task. Deliberately the loudest
+           thing in the row, because it is the only destructive control on a page
+           that is otherwise entirely read-only. */
+        .mon-btn.is-armed {
+            color: var(--yellow); border-color: var(--yellow);
+            background: color-mix(in oklch, var(--yellow) 16%, transparent);
+        }
 
         .reg-toggle {
             display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
@@ -242,7 +280,10 @@
         .mon-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
         .mon-pill.up      { color: var(--green);  background: color-mix(in oklch, var(--green) 12%, transparent);  border-color: color-mix(in oklch, var(--green) 32%, transparent); }
         .mon-pill.warn    { color: var(--yellow); background: color-mix(in oklch, var(--yellow) 12%, transparent); border-color: color-mix(in oklch, var(--yellow) 32%, transparent); }
-        .mon-pill.down    { color: var(--red);    background: color-mix(in oklch, var(--red) 13%, transparent);    border-color: color-mix(in oklch, var(--red) 36%, transparent); }
+        /* Lightened from --red: at 11px/700 over its own 13% tint the base token
+           measured 4.47:1, three hundredths under AA. This clears it. */
+        .mon-pill.down    { color: oklch(0.68 0.185 25); background: color-mix(in oklch, var(--red) 13%, transparent); border-color: color-mix(in oklch, var(--red) 36%, transparent); }
+        .mon-pill.absent  { color: oklch(0.68 0.185 25); background: color-mix(in oklch, var(--red) 13%, transparent); border-color: color-mix(in oklch, var(--red) 55%, transparent); border-style: dashed; }
         .mon-pill.unknown { color: var(--muted);  background: color-mix(in oklch, var(--muted) 10%, transparent);  border-color: color-mix(in oklch, var(--muted) 26%, transparent); }
 
         /* ── ZONE 3 · per-task depth, inside its own row ──
@@ -261,7 +302,7 @@
             gap: 16px; padding: 0 22px 16px 52px;
         }
         .det-box { border: 1px solid var(--bord2); border-radius: 8px; overflow: hidden; }
-        .det-box h5 {
+        .det-box .det-h {
             padding: 8px 12px; font-size: 10.5px; font-weight: 700; letter-spacing: 1.1px;
             text-transform: uppercase; color: var(--muted);
             border-bottom: 1px solid var(--bord2); background: var(--bg);
@@ -280,6 +321,48 @@
         }
         .det-line .w { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
         .det-empty { padding: 12px; font-size: 12px; color: var(--muted); }
+
+        /* ── Full error message, at both altitudes ── */
+        .msg {
+            display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+            background: none; border: 0; padding: 0; cursor: pointer; min-width: 0;
+        }
+        .msg .msg-label {
+            display: block; font-size: 13px; font-weight: 700;
+            text-decoration: underline; text-decoration-style: dotted;
+            text-underline-offset: 3px; text-decoration-color: var(--muted);
+        }
+        .msg:hover .msg-label { text-decoration-color: var(--accent); }
+        .msg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+        .msg code {
+            display: block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+            color: var(--muted); overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; margin-top: 2px;
+        }
+        .det-line .msg .msg-label { font-size: 12px; }
+
+        /* Native popover so the full text escapes the panel's own overflow clip,
+           and so it opens on touch and keyboard — `title` is mouse-only. */
+        .msg-pop {
+            max-width: min(640px, calc(100vw - 32px)); padding: 0;
+            background: var(--surf2); color: var(--text);
+            border: 1px solid var(--border); border-radius: 10px;
+            box-shadow: 0 16px 44px rgba(0,0,0,.6);
+        }
+        .msg-pop::backdrop { background: rgba(0,0,0,.35); }
+        .msg-pop-hd {
+            padding: 12px 16px; font-size: 13px; font-weight: 700;
+            border-bottom: 1px solid var(--bord2);
+        }
+        .msg-pop pre {
+            margin: 0; padding: 14px 16px; max-height: 40vh; overflow: auto;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6;
+            color: var(--text); white-space: pre-wrap; word-break: break-word;
+        }
+        .msg-pop-ft {
+            display: flex; gap: 8px; justify-content: flex-end;
+            padding: 12px 16px; border-top: 1px solid var(--bord2);
+        }
         .det-sum {
             padding: 8px 12px; font-family: 'JetBrains Mono', monospace;
             font-size: 11px; color: var(--muted); word-break: break-word;
@@ -288,14 +371,23 @@
         /* Run Now feedback stays in-surface; the old page used native alert(). */
         .mon-toast {
             position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(8px);
-            z-index: 60; max-width: min(520px, calc(100vw - 32px));
-            padding: 11px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+            z-index: 60; width: max-content; max-width: min(520px, calc(100vw - 32px));
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 11px 12px 11px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
             background: var(--surf2); border: 1px solid var(--border); color: var(--text);
             box-shadow: 0 8px 24px rgba(0,0,0,.5);
             opacity: 0; pointer-events: none;
             transition: opacity .2s var(--ease), transform .2s var(--ease);
         }
-        .mon-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .mon-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+        .mon-toast-text { flex: 1; min-width: 0; }
+        .mon-toast-close {
+            flex: none; display: grid; place-items: center; width: 24px; height: 24px;
+            padding: 0; background: none; border: 0; border-radius: 4px;
+            color: var(--muted); cursor: pointer;
+        }
+        .mon-toast-close:hover { color: var(--text); background: var(--surface); }
+        .mon-toast-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
         .mon-toast.err  { border-color: color-mix(in oklch, var(--red) 45%, transparent); }
         .mon-toast.warn { border-color: color-mix(in oklch, var(--yellow) 45%, transparent); }
 
@@ -322,7 +414,7 @@
         .reg-mobile { display: none; }
 
         /* Dense register → divided rows, never a card per task (see DESIGN.md). */
-        @media (max-width: 1080px) {
+        @media (max-width: 940px) {
             .reg-head { display: none; }
             .reg-row {
                 grid-template-columns: 1fr auto auto;
@@ -343,11 +435,11 @@
             .sys-figs .f:nth-last-child(-n+2) { border-bottom: 0; }
             .sys-say { padding: 16px; }
             .lanes { padding: 16px; }
-            .lane-grid { grid-template-columns: 92px 1fr; column-gap: 8px; }
+            .lane-grid { grid-template-columns: 104px 1fr; column-gap: 8px; }
             .lane-lbl { font-size: 10.5px; }
-            .corr-layer { inset: 0 0 20px 100px; }
+            .corr-layer { inset: 18px 0 20px 112px; }
             /* Eight date ticks collide at 390px. */
-            .lane-axis span:nth-child(even) { display: none; }
+            .lane-axis span:nth-child(even):not(:last-child) { display: none; }
             .cause-row { grid-template-columns: 44px 1fr; padding: 12px 16px; }
             .cause-side { grid-column: 1 / -1; }
             .cause-hit { justify-content: flex-start; }
@@ -369,7 +461,9 @@
            it were 32px. An earlier audit on /war flagged exactly this. */
         @media (pointer: coarse) {
             .reg-toggle { width: 44px; height: 44px; }
-            .mon-btn { padding: 11px 14px; }
+            .mon-btn { padding: 13px 14px; }
+            /* The message trigger is a real button, so it owes a real target. */
+            .msg { min-height: 44px; display: flex; flex-direction: column; justify-content: center; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -382,22 +476,6 @@
 <body>
 
 {% include '_nav.html' %}
-
-{% set s = page.summary %}
-{% set lead = page.lead_incident %}
-
-{% set page_header_title = 'Task <span>Monitor</span>' %}
-{% set page_header_desc = 'Erst die gemeinsame Lage, dann der einzelne Task — damit ein Ausfall, der mehrere Tasks zugleich trifft, auch als einer erkennbar bleibt.' %}
-{% set page_primary_control %}
-<label for="monPeriod">Zeitraum</label>
-<select class="selector" id="monPeriod" onchange="window.location='?days='+this.value">
-  {% for d in period_options %}
-  <option value="{{ d }}" {% if selected_days == d %}selected{% endif %}>{% if d == 1 %}24 Stunden{% else %}{{ d }} Tage{% endif %}</option>
-  {% endfor %}
-</select>
-{% endset %}
-{% include '_page_header.html' %}
-{% include 'admin/_admin_tabs.html' %}
 
 {% macro task_icon(short) -%}
 <svg class="mon-icn" viewBox="0 0 18 18" aria-hidden="true">
@@ -419,7 +497,10 @@
 </svg>
 {%- endmacro %}
 
-{% set health_label = {'up': 'Läuft', 'warn': 'Verzögert', 'down': 'Still', 'unknown': 'Unbekannt'} %}
+{#- 'absent' is its own state, not a flavour of 'down': the task produced no run
+    at all in the window, which is a different thing from having fallen behind. -#}
+{% set health_label = {'up': 'Läuft', 'warn': 'Verzögert', 'down': 'Still',
+                       'absent': 'Kein Lauf', 'unknown': 'Unbekannt'} %}
 
 {%- macro secs(v) -%}
 {%- if v is none -%}—
@@ -453,43 +534,121 @@
 
 {%- macro thou(n) -%}{{ '{:,}'.format(n).replace(',', '.') }}{%- endmacro -%}
 
-<div class="container">
+{#- One name per period, used by the selector, the Befund line and the empty
+    state alike. They used to disagree: the selector said "24 Stunden" while the
+    prose rendered "für die letzten 1 Tage". -#}
+{%- macro period_label(d) -%}
+{%- if d == 1 -%}24 Stunden{%- else -%}{{ d }} Tage{%- endif -%}
+{%- endmacro -%}
 
-{% if not page.tasks %}
+{#- The raw API message, readable in full.
+
+    Investigating an incident is this page's first job, and the answer to "why"
+    is this string — but it was rendered into an ellipsised one-liner with no
+    title, no expand and no copy, showing at most 37% of it and getting worse as
+    the window widened. A native popover is used rather than `title` because
+    `title` is mouse-only and this sits inside an overflow-clipped panel. -#}
+{%- macro message_block(uid, label, message) -%}
+<button type="button" class="msg" popovertarget="msg-{{ uid }}"
+        aria-label="Volle Fehlermeldung anzeigen: {{ label }}">
+    <span class="msg-label">{{ label }}</span>
+    <code>{{ message }}</code>
+</button>
+<div id="msg-{{ uid }}" popover class="msg-pop">
+    <div class="msg-pop-hd">{{ label }}</div>
+    <pre class="scroller">{{ message }}</pre>
+    <div class="msg-pop-ft">
+        <button type="button" class="mon-btn quiet js-copy" data-copy="{{ message }}">Kopieren</button>
+        <button type="button" class="mon-btn quiet" popovertarget="msg-{{ uid }}" popovertargetaction="hide">Schließen</button>
+    </div>
+</div>
+{%- endmacro -%}
+
+{% set s = page.summary %}
+{% set v = page.verdict %}
+{% set lead = page.lead_incident %}
+
+{% set page_header_title = 'Task <span>Monitor</span>' %}
+{% set page_header_desc = 'Erst die gemeinsame Lage, dann der einzelne Task — damit ein Ausfall, der mehrere Tasks zugleich trifft, auch als einer erkennbar bleibt.' %}
+{% set page_primary_control %}
+<label for="monPeriod">Zeitraum</label>
+<select class="selector" id="monPeriod" onchange="window.location='?days='+this.value">
+  {% for d in period_options %}
+  <option value="{{ d }}" {% if selected_days == d %}selected{% endif %}>{{ period_label(d) }}</option>
+  {% endfor %}
+</select>
+{% endset %}
+{% include '_page_header.html' %}
+{% include 'admin/_admin_tabs.html' %}
+
+<main class="container">
+
+{#- The register renders in EVERY state, including the empty one. It used to be
+    replaced wholesale by a dead-end card, which took the six "Jetzt" buttons
+    with it — so the one situation where you most need to kick a task by hand
+    was the only one where you couldn't. -#}
+{% if not s.total_runs %}
     <div class="mon-empty">
-        <b>Keine Läufe in diesem Zeitraum</b>
-        <p>Für die letzten {{ selected_days }} Tage hat kein Hintergrund-Task etwas protokolliert.
-           Ein längerer Zeitraum zeigt womöglich die letzte Aktivität.</p>
+        <b>Keine Läufe in {{ period_label(selected_days) }}</b>
+        <p>Kein Hintergrund-Task hat in diesem Zeitraum etwas protokolliert.
+           Ein längerer Zeitraum zeigt womöglich die letzte Aktivität — oder du
+           startest unten einen Task von Hand.</p>
     </div>
 {% else %}
 
     <!-- ══ ZONE 1 · SYSTEMLAGE ══ -->
     <div class="mon-sec">
-        <h2>Systemlage</h2>
+        <h2 id="sec-sys">Systemlage</h2>
         <span class="hint">Was traf mehrere Tasks gleichzeitig?</span>
         <span class="rule"></span>
     </div>
 
-    <section class="sys">
+    <section class="sys" aria-labelledby="sec-sys">
         <div class="sys-top">
             <div class="sys-say">
-                <div class="k">Befund über {{ selected_days }} {{ 'Tag' if selected_days == 1 else 'Tage' }}</div>
-                {% if lead %}
-                <h3>Ein <span class="up">Fremdsystem-Ausfall</span> erklärt
-                    {{ s.explained_by_shared }} der {{ s.total_errors }} Fehlläufe</h3>
+                <div class="k">Befund über {{ period_label(selected_days) }}</div>
+
+                {#- The lead finding is decided in monitor_stats.build_verdict, not
+                    here, and silence outranks failure correlation: a task that is
+                    not running is worse news than one that ran and failed. This
+                    page previously led with correlation unconditionally, so a
+                    window in which five of six tasks had stopped rendered a green
+                    all-clear. -#}
+                {% if v.kind == 'silence' %}
+                <h3>{{ v.count }} von {{ v.of }} Tasks
+                    <span class="up">{{ 'läuft nicht' if v.count == 1 else 'laufen nicht' }}</span></h3>
+                <p>{{ v.stalled | join(', ') }} {{ 'hat' if v.count == 1 else 'haben' }} im Zeitraum
+                   {% if v.absent %}nichts protokolliert{% else %}den erwarteten Takt verlassen{% endif %}.
+                   {% if v.absent and v.absent | length < v.count %}Davon ohne einen einzigen Lauf:
+                   {{ v.absent | join(', ') }}.{% endif %}
+                   {% if s.total_errors %}Fehlläufe stehen unten bei den Ursachen — sie sind hier
+                   nicht das dringendere Problem.{% else %}Fehlläufe gab es keine; die Tasks
+                   wurden schlicht nicht ausgeführt.{% endif %}</p>
+
+                {% elif v.kind == 'upstream' %}
+                <h3>{{ 'Ein' if v.count == 1 else v.count }} <span class="up">{{ 'Fremdsystem-Ausfall' if v.count == 1 else 'Fremdsystem-Ausfälle' }}</span>
+                    {{ 'erklärt' if v.count == 1 else 'erklären' }} {{ v.failures }} der {{ v.of }} Fehlläufe</h3>
                 <p>Am {{ lead.start.strftime('%d.%m.') }} um {{ lead.start.strftime('%H:%M') }} UTC fielen
                    {{ lead.tasks | length }} Tasks gleichzeitig aus — nicht {{ lead.tasks | length }} Probleme,
                    sondern eine gemeinsame Ursache über {{ mins(lead.minutes) }}.
                    Der Scheduler selbst lief durch.</p>
-                {% else %}
+
+                {% elif v.kind == 'isolated' %}
                 <h3>Keine <span class="ok">übergreifende Störung</span></h3>
-                <p>{% if s.total_errors %}Kein Fehlerbild traf mehr als einen Task zugleich.
-                   Verbleibende Auffälligkeiten sind Einzelfälle und stehen unten beim jeweiligen Task.
-                   {%- else %}Alle {{ s.task_count }} Tasks liefen im Zeitraum fehlerfrei.{% endif %}</p>
+                <p>Kein Fehlerbild traf mehr als einen Task zugleich. Die
+                   {{ v.of }} {{ 'Auffälligkeit ist ein Einzelfall' if v.of == 1 else 'Auffälligkeiten sind Einzelfälle' }}
+                   und {{ 'steht' if v.of == 1 else 'stehen' }} unten beim jeweiligen Task.</p>
+
+                {% else %}
+                <h3>Alle Tasks <span class="ok">im Takt</span></h3>
+                <p>{{ v.of }} Hintergrund-Tasks liefen im Zeitraum durchgehend und fehlerfrei.</p>
                 {% endif %}
             </div>
             <div class="sys-figs">
-                <div class="f {{ 'ok' if s.healthy == s.task_count else '' }}">
+                {#- "im Takt" is the figure that answers "is anything alive". It was
+                    rendered neutral regardless of value, so total system death read
+                    as quietly as a healthy day. -#}
+                <div class="f {{ 'ok' if s.healthy == s.task_count else 'bad' }}">
                     <b>{{ s.healthy }}/{{ s.task_count }}</b><span>im Takt</span>
                 </div>
                 <div class="f"><b>{{ thou(s.total_runs) }}</b><span>Läufe</span></div>
@@ -497,14 +656,14 @@
                     <b>{{ s.total_errors }}</b><span>{{ 'Fehllauf' if s.total_errors == 1 else 'Fehlläufe' }}</span>
                 </div>
                 <div class="f {{ 'bad' if s.longest_gap > 60 else '' }}">
-                    <b>{{ mins(s.longest_gap) }}</b><span>längste Lücke</span>
+                    <b>{{ mins(s.longest_gap) }}</b><span>längste Stille</span>
                 </div>
             </div>
         </div>
 
         <div class="lanes">
             <div class="lanes-hd">
-                <h4>Laufspuren</h4>
+                <h3>Laufspuren</h3>
                 <span class="hint">alle {{ s.task_count }} Tasks auf einer Zeitachse — eine senkrechte Linie über mehrere Spuren heißt: gemeinsame Ursache</span>
             </div>
             <div class="lane-grid" id="laneGrid">
@@ -516,17 +675,17 @@
                 <div class="lane-axis" id="laneAxis"></div>
             </div>
             <div class="lane-legend">
-                <i><span class="sw" style="background:color-mix(in oklch,var(--muted) 50%,transparent)"></span>Lauf</i>
-                <i><span class="sw" style="background:color-mix(in oklch,var(--muted) 22%,transparent)"></span>übersprungen</i>
-                <i><span class="sw" style="background:var(--red)"></span>Fehllauf</i>
-                <i><span class="sw" style="background:color-mix(in oklch,var(--red) 20%,transparent);border:1px solid color-mix(in oklch,var(--red) 45%,transparent)"></span>kein Lauf</i>
+                <i><span class="sw sw-run"></span>Lauf</i>
+                <i><span class="sw sw-skip"></span>übersprungen (planmäßig)</i>
+                <i><span class="sw sw-err"></span>Fehllauf</i>
+                <i><span class="sw sw-void"></span>kein Lauf</i>
             </div>
         </div>
 
         <div class="causes">
             {% if page.causes %}
             <div class="causes-hd">
-                <h4>Ursachen</h4>
+                <h3>Ursachen</h3>
                 <p>Gleiche Meldung über alle Tasks zusammengefasst —
                    {{ s.total_errors }} {{ 'Fehllauf geht' if s.total_errors == 1 else 'Fehlläufe gehen' }}
                    auf {{ s.cause_count }} {{ 'Ursache' if s.cause_count == 1 else 'Ursachen' }} zurück.</p>
@@ -535,8 +694,7 @@
             <div class="cause-row">
                 <span class="cause-n {{ 'solo' if c.tasks | length == 1 else '' }}">{{ c.count }}×</span>
                 <div class="cause-m">
-                    <b>{{ c.label }}</b>
-                    <code>{{ c.message }}</code>
+                    {{ message_block('c' ~ loop.index, c.label, c.message) }}
                 </div>
                 <div class="cause-side">
                     <div class="cause-hit">
@@ -551,20 +709,22 @@
             {% else %}
             <div class="sys-clear">
                 <b>Keine Fehlläufe</b>
-                <p>Alle {{ s.task_count }} Tasks liefen im Zeitraum fehlerfrei.</p>
+                <p>Kein Task hat im Zeitraum einen Fehlschlag protokolliert.</p>
             </div>
             {% endif %}
         </div>
     </section>
 
+{% endif %}
+
     <!-- ══ ZONE 2 · TASK REGISTER (ZONE 3 unfolds inside each row) ══ -->
     <div class="mon-sec">
-        <h2>Tasks</h2>
+        <h2 id="sec-tasks">Tasks</h2>
         <span class="hint">Zustand, Takt und Laufzeit je Task</span>
         <span class="rule"></span>
     </div>
 
-    <section class="reg">
+    <section class="reg" aria-labelledby="sec-tasks">
         <div class="reg-head">
             <span>Task</span><span>Zustand</span><span>Takt</span>
             <span class="r">Läufe</span><span class="r">Fehler</span><span class="r">Ø Dauer</span><span></span>
@@ -582,14 +742,20 @@
                 <div class="reg-fig r {{ 'bad' if t.errors else 'dim' }}">{{ t.errors if t.errors else '—' }}<small>{{ 'Fehler' if t.errors else 'sauber' }}</small></div>
                 <div class="reg-fig r">{{ secs(t.avg_duration) }}<small>max {{ secs(t.max_duration) }}</small></div>
 
+                {#- Disclosure BEFORE the trigger, in DOM and on screen alike. The
+                    run button used to come first, so the first thing the keyboard
+                    put under a user's finger in every row was a live production
+                    task — six times, all named just "Jetzt". -#}
                 <div class="reg-end">
-                    <button type="button" class="mon-btn quiet js-run" data-task="{{ t.key }}" data-label="Jetzt">
-                        <svg class="mon-icn" viewBox="0 0 18 18" aria-hidden="true"><path d="M4.5 2.5 15 9l-10.5 6.5z"/></svg>
-                        <span class="js-run-label">Jetzt</span>
-                    </button>
                     <button type="button" class="reg-toggle" aria-expanded="false" aria-controls="det-{{ t.short }}">
                         <svg class="mon-icn reg-chev" viewBox="0 0 18 18" aria-hidden="true"><path d="m5 7 4 4 4-4"/></svg>
                         <span class="mon-hidden">Details zu {{ t.label }}</span>
+                    </button>
+                    <button type="button" class="mon-btn quiet js-run"
+                            data-task="{{ t.key }}" data-name="{{ t.label }}" data-label="Jetzt"
+                            aria-label="{{ t.label }} jetzt ausführen">
+                        <svg class="mon-icn" viewBox="0 0 18 18" aria-hidden="true"><path d="M4.5 2.5 15 9l-10.5 6.5z"/></svg>
+                        <span class="js-run-label">Jetzt</span>
                     </button>
                 </div>
 
@@ -605,11 +771,11 @@
               <div class="reg-body-in">
                 <div class="det">
                     <div class="det-box">
-                        <h5>Fehler nach Ursache</h5>
+                        <h3 class="det-h">Fehler nach Ursache — {{ t.label }}</h3>
                         {% for g in t.error_groups %}
                         <div class="det-line">
                             <span class="n">{{ g.count }}×</span>
-                            <span class="m">{{ g.label }}<code>{{ g.message }}</code></span>
+                            <span class="m">{{ message_block(t.short ~ '-' ~ loop.index, g.label, g.message) }}</span>
                             <span class="w">{{ g.first.strftime('%d.%m. %H:%M') }}</span>
                         </div>
                         {% else %}
@@ -618,7 +784,7 @@
                     </div>
 
                     <div class="det-box">
-                        <h5>Stillstand · Takt</h5>
+                        <h3 class="det-h">Stillstand und Takt — {{ t.label }}</h3>
                         {% for g in t.gaps %}
                         <div class="det-line">
                             <span class="n q">{{ mins(g.minutes) }}</span>
@@ -638,7 +804,7 @@
                     </div>
 
                     <div class="det-box">
-                        <h5>Letzte Meldung</h5>
+                        <h3 class="det-h">Letzte Meldung — {{ t.label }}</h3>
                         <div class="det-sum">{{ t.last_summary or '— keine Zusammenfassung —' }}</div>
                         <div class="det-line">
                             <span class="m">Übersprungen</span>
@@ -655,11 +821,16 @@
         </div>
         {% endfor %}
     </section>
+</main>
 
-{% endif %}
+{#- assertive, not polite: this reports the outcome of an action the user just
+    took on live production data, and a polite region can be dropped silently. -#}
+<div class="mon-toast" id="monToast" role="status" aria-live="assertive">
+    <span class="mon-toast-text"></span>
+    <button type="button" class="mon-toast-close" aria-label="Meldung schließen">
+        <svg class="mon-icn" viewBox="0 0 18 18" aria-hidden="true"><path d="m5 5 8 8M13 5l-8 8"/></svg>
+    </button>
 </div>
-
-<div class="mon-toast" id="monToast" role="status" aria-live="polite"></div>
 
 {% if page.tasks %}
 <script id="laneData" type="application/json">
@@ -675,7 +846,7 @@
  }{{ "," if not loop.last else "" }}
  {%- endfor -%}
  ],
- "shared": [{% for e in page.incidents if e.kind == 'upstream' %}["{{ e.start.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ e.end.strftime('%Y-%m-%dT%H:%M:%S') }}"]{{ "," if not loop.last else "" }}{% endfor %}]
+ "shared": [{% for e in page.incidents if e.kind == 'upstream' %}{"a":"{{ e.start.strftime('%Y-%m-%dT%H:%M:%S') }}","b":"{{ e.end.strftime('%Y-%m-%dT%H:%M:%S') }}","min":{{ e.minutes }},"tasks":[{% for k in e.tasks %}"{{ k }}"{{ "," if not loop.last else "" }}{% endfor %}]}{{ "," if not loop.last else "" }}{% endfor %}]
 }
 </script>
 {% endif %}
@@ -692,21 +863,35 @@
         const px = t => ((D(t) - T0) / SPAN) * W;
 
         // Coverage marks, silence voids and failure windows, all on one axis.
+        // Colour inside a lane means STATE, never which task the lane belongs to.
+        // It used to mean both: raid_weekend's mode hue is --red, the same red as
+        // a failure mark, so on that one lane a successful run and a failed run
+        // differed only by alpha — and the legend, which paints "Lauf" in grey,
+        // described an encoding that matched exactly one of six lanes.
+        // Task identity now lives solely on the label icon, where it can't collide,
+        // and `skipped` is distinguished by SHAPE (a short baseline tick) rather
+        // than by a lighter tint of the same mark.
         data.lanes.forEach(lane => {
             const el = document.querySelector('.lane-track[data-lane="' + lane.key + '"]');
             if (!el) return;
-            const cover = lane.runs.map(r =>
-                '<rect x="' + px(r[0]).toFixed(1) + '" y="4" width="2.6" height="' + (H - 8) +
-                '" fill="color-mix(in oklch, var(--tc) ' + (r[1] === 'skipped' ? 22 : 52) + '%, transparent)"/>').join('');
+            const runs = [], skips = [];
+            lane.runs.forEach(r => {
+                const x = px(r[0]).toFixed(1);
+                if (r[1] === 'skipped') {
+                    skips.push('<rect x="' + x + '" y="' + (H - 4) + '" width="2.6" height="3" fill="var(--lane-skip)"/>');
+                } else {
+                    runs.push('<rect x="' + x + '" y="4" width="2.6" height="' + (H - 8) + '" fill="var(--lane-run)"/>');
+                }
+            });
             const voids = lane.gaps.map(g =>
-                '<rect x="' + px(g[0]).toFixed(1) + '" y="0" width="' + Math.max(2, px(g[1]) - px(g[0])).toFixed(1) +
-                '" height="' + H + '" fill="color-mix(in oklch, var(--red) 20%, transparent)"' +
-                ' stroke="color-mix(in oklch, var(--red) 45%, transparent)" stroke-width="1"/>').join('');
+                '<rect x="' + px(g[0]).toFixed(1) + '" y="0.5" width="' + Math.max(2, px(g[1]) - px(g[0])).toFixed(1) +
+                '" height="' + (H - 1) + '" fill="var(--lane-void)" stroke="var(--lane-void-line)"' +
+                ' stroke-width="1" stroke-dasharray="2 2"/>').join('');
             const errs = lane.errs.map(e =>
                 '<rect x="' + (px(e[0]) - 1.4).toFixed(1) + '" y="0" width="' + Math.max(2.8, px(e[1]) - px(e[0])).toFixed(1) +
-                '" height="' + H + '" fill="var(--red)"/>').join('');
+                '" height="' + H + '" fill="var(--lane-err)"/>').join('');
             el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">' +
-                cover + voids + errs + '</svg>';
+                runs.join('') + skips.join('') + voids + errs + '</svg>';
         });
 
         const axis = document.getElementById('laneAxis');
@@ -720,13 +905,57 @@
             axis.innerHTML = parts.join('');
         }
 
+        // Correlated windows. Drawn per lane rather than as one full-height bar:
+        // a 58-minute outage on a 30-day axis is under half a percent of the
+        // width, so it collapsed to a 5px sliver whose fill measured 1.12:1 —
+        // invisible — and it spanned the innocent lanes with exactly the same
+        // emphasis as the implicated ones. Now the implicated segments carry the
+        // mark and the rest only carry a faint tie-line, so the vertical
+        // alignment still reads while the claim stays truthful.
         const grid = document.getElementById('laneGrid');
         if (grid && data.shared.length) {
-            grid.insertAdjacentHTML('beforeend', '<div class="corr-layer">' + data.shared.map(w => {
-                const l = px(w[0]) / W * 100;
-                const width = Math.max(0.5, (px(w[1]) - px(w[0])) / W * 100);
-                return '<div class="corr" style="left:' + l.toFixed(2) + '%;width:' + width.toFixed(2) + '%"></div>';
-            }).join('') + '</div>');
+            const tracks = [...grid.querySelectorAll('.lane-track')];
+            const layer = document.createElement('div');
+            layer.className = 'corr-layer';
+            const gridTop = grid.getBoundingClientRect().top;
+            const layerW = grid.querySelector('.lane-track').getBoundingClientRect().width;
+            // Two outages hours apart sit within a few pixels of each other on a
+            // 30-day axis, so their captions collided into an unreadable overlap.
+            // Caption the biggest ones first and skip any that would land on top
+            // of one already placed; the column itself still marks every window.
+            let placed = [];
+
+            [...data.shared].sort((a, b) => b.tasks.length - a.tasks.length || b.min - a.min).forEach(w => {
+                const left = px(w.a) / W * 100;
+                const rawW = (px(w.b) - px(w.a)) / W * 100;
+                const col = document.createElement('div');
+                col.className = 'corr';
+                col.style.left = left.toFixed(2) + '%';
+                // Floor the width so a short outage stays visible at all.
+                col.style.width = 'max(7px, ' + rawW.toFixed(2) + '%)';
+
+                tracks.forEach(tr => {
+                    const seg = document.createElement('div');
+                    seg.className = 'corr-seg' + (w.tasks.indexOf(tr.dataset.lane) >= 0 ? ' is-hit' : '');
+                    const r = tr.getBoundingClientRect();
+                    seg.style.top = (r.top - gridTop) + 'px';
+                    seg.style.height = r.height + 'px';
+                    col.appendChild(seg);
+                });
+
+                const centre = (left / 100) * layerW;
+                if (!placed.some(x => Math.abs(x - centre) < 100)) {
+                    placed.push(centre);
+                    const cap = document.createElement('span');
+                    cap.className = 'corr-cap';
+                    cap.textContent = w.tasks.length + ' Tasks · ' +
+                        (w.min < 60 ? w.min + ' min'
+                                    : (w.min / 60).toFixed(1).replace('.', ',') + ' h');
+                    col.appendChild(cap);
+                }
+                layer.appendChild(col);
+            });
+            grid.appendChild(layer);
         }
     }
 
@@ -746,20 +975,67 @@
     }));
 
     // ── Run Now ──
+    // Copy the raw message out of a popover.
+    document.querySelectorAll('.js-copy').forEach(b => {
+        b.addEventListener('click', () => {
+            navigator.clipboard.writeText(b.dataset.copy).then(() => {
+                const was = b.textContent;
+                b.textContent = 'Kopiert';
+                setTimeout(() => { b.textContent = was; }, 1800);
+            });
+        });
+    });
+
     const toast = document.getElementById('monToast');
+    const toastText = toast.querySelector('.mon-toast-text');
+    const toastClose = toast.querySelector('.mon-toast-close');
     let toastTimer;
+    function hideToast() { toast.classList.remove('show'); clearTimeout(toastTimer); }
+    toastClose.addEventListener('click', hideToast);
+
+    // Failures do NOT auto-dismiss: the error toast is the only place the full
+    // failure text appears at the moment it happens, and a six-second window to
+    // read it meant the answer disappeared while you were still reading it.
     function say(msg, tone) {
-        toast.textContent = msg;
+        toastText.textContent = msg;
         toast.className = 'mon-toast show' + (tone ? ' ' + tone : '');
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => toast.classList.remove('show'), 6000);
+        if (tone !== 'err') toastTimer = setTimeout(hideToast, 6000);
     }
+
+    // Click-to-arm, matching admin_users.html. This POSTs straight into a live
+    // production task, so a single stray click (or a keyboard user landing on the
+    // button and pressing space) must not be enough to fire it.
+    let armed = null, armTimer;
+    function disarm() {
+        if (!armed) return;
+        const b = armed;
+        armed = null;
+        clearTimeout(armTimer);
+        b.classList.remove('is-armed');
+        b.querySelector('.js-run-label').textContent = b.dataset.label;
+        b.setAttribute('aria-label', b.dataset.name + ' jetzt ausführen');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') disarm(); });
+    document.addEventListener('click', e => { if (!e.target.closest('.js-run')) disarm(); });
 
     document.querySelectorAll('.js-run').forEach(btn => {
         const out = btn.querySelector('.js-run-label');
         const rest = btn.dataset.label;
+        const name = btn.dataset.name;
+
         btn.addEventListener('click', () => {
-            const name = btn.closest('.reg-task').querySelector('.reg-name b').textContent.trim();
+            if (armed !== btn) {
+                disarm();
+                armed = btn;
+                btn.classList.add('is-armed');
+                out.textContent = 'Wirklich?';
+                btn.setAttribute('aria-label', name + ' jetzt ausführen — zum Bestätigen erneut klicken');
+                armTimer = setTimeout(disarm, 5000);
+                return;
+            }
+            disarm();
+
             btn.disabled = true;
             btn.className = 'mon-btn js-run';
             out.textContent = 'Läuft…';

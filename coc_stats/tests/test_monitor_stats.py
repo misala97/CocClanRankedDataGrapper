@@ -338,12 +338,17 @@ def test_downsample_handles_an_empty_series():
 
 # ── build_monitor_page ────────────────────────────────────────────────────────
 
+WEEK_END = 60 * 24 * 3          # fixture runs span T0 → T0+3d
+WEEK_NOW = T0 + dt.timedelta(minutes=WEEK_END + 2)
+
+
 def _realistic_week():
-    """A week shaped like production: six healthy tasks, one 35-minute upstream
-    outage hitting three of them, one unrelated single-task error days later."""
+    """A week shaped like production: six tasks still running right up to `now`,
+    one 35-minute upstream outage hitting three of them, one unrelated
+    single-task error days later."""
     rows = []
     for key, _, _ in TASKS:
-        rows += cadence_rows(key, 60, 5, start=-60 * 5)
+        rows += cadence_rows(key, WEEK_END // 5 + 1, 5)
     for i in range(0, 35, 3):
         rows.append(row('task_update_raid_weekend', i, status='error', error=MAINT))
     for i in range(1, 35, 4):
@@ -351,21 +356,47 @@ def _realistic_week():
     for i in range(2, 35, 7):
         rows.append(row('task_update_clan_members', i, status='error', error=UNKNOWN))
     rows.append(row('task_update_cwl', 60 * 24 * 2, status='error', error=SEASON))
-    return rows
+    return sorted(rows, key=lambda r: r.time)
 
 
 def test_page_reports_all_six_tasks_in_registry_order():
-    page = build_monitor_page(_realistic_week(), T0 + dt.timedelta(days=3))
+    page = build_monitor_page(_realistic_week(), WEEK_NOW)
     assert [t['key'] for t in page['tasks']] == [k for k, _, _ in TASKS]
 
 
 def test_page_attributes_the_bulk_of_failures_to_the_shared_outage():
-    page = build_monitor_page(_realistic_week(), T0 + dt.timedelta(days=3))
+    page = build_monitor_page(_realistic_week(), WEEK_NOW)
     s = page['summary']
+    assert page['verdict']['kind'] == 'upstream'
     assert page['lead_incident'] is not None
     assert page['lead_incident']['kind'] == 'upstream'
     assert len(page['lead_incident']['tasks']) == 3
     assert s['explained_by_shared'] == s['total_errors'] - 1
+
+
+def test_lead_incident_and_its_figure_describe_the_same_event():
+    """They used to diverge: the sentence took the most RECENT shared outage
+    while the number counted the LARGEST, so with two outages the headline
+    described one event and quantified another."""
+    rows = []
+    for key, _, _ in TASKS:
+        rows += cadence_rows(key, 600, 5)
+    # Small outage first, large outage later, so recency and size disagree.
+    for i in range(0, 10, 3):
+        rows.append(row('task_update_clan_war', 100 + i, status='error', error=MAINT))
+        rows.append(row('task_update_cwl', 100 + i, status='error', error=MAINT))
+    for i in range(0, 40, 2):
+        rows.append(row('task_update_raid_weekend', 2000 + i, status='error', error=UNKNOWN))
+        rows.append(row('task_update_clan_members', 2000 + i, status='error', error=UNKNOWN))
+
+    page = build_monitor_page(sorted(rows, key=lambda r: r.time),
+                              T0 + dt.timedelta(minutes=3002))
+    lead = page['lead_incident']
+    shared = [e for e in page['incidents'] if e['kind'] == 'upstream']
+    assert len(shared) == 2
+    assert lead['failures'] == max(e['failures'] for e in shared)
+    # The headline figure covers every shared outage, not just the lead one.
+    assert page['summary']['explained_by_shared'] == sum(e['failures'] for e in shared)
 
 
 def test_page_is_quiet_when_nothing_went_wrong():
@@ -376,15 +407,58 @@ def test_page_is_quiet_when_nothing_went_wrong():
     assert page['incidents'] == []
     assert page['causes'] == []
     assert page['lead_incident'] is None
+    assert page['verdict']['kind'] == 'clear'
     assert page['summary']['total_errors'] == 0
     assert page['summary']['healthy'] == len(TASKS)
 
 
+# ── absence: the defect that let a dead scheduler render a green all-clear ────
+
+def test_a_task_with_no_runs_still_occupies_its_row():
+    """The registry is fixed. Dropping a silent task shortened the list and made
+    its absence invisible on the one page whose job is to notice it."""
+    rows = cadence_rows('task_update_battle_logs', 40, 5)
+    page = build_monitor_page(rows, T0 + dt.timedelta(minutes=200))
+
+    assert len(page['tasks']) == len(TASKS)
+    absent = [t for t in page['tasks'] if t['key'] != 'task_update_battle_logs']
+    assert all(t['health'] == 'absent' for t in absent)
+    assert all(t['runs'] == 0 for t in absent)
+    assert page['summary']['absent'] == len(TASKS) - 1
+
+
+def test_a_window_where_tasks_vanished_does_not_read_as_all_clear():
+    """The exact regression: one task logging, five gone, zero errors. The old
+    build reported 'alle Tasks liefen fehlerfrei' in green."""
+    rows = cadence_rows('task_update_battle_logs', 40, 5)
+    page = build_monitor_page(rows, T0 + dt.timedelta(minutes=200))
+
+    assert page['verdict']['kind'] == 'silence'
+    assert page['verdict']['count'] == len(TASKS) - 1
+    assert page['summary']['healthy'] < page['summary']['task_count']
+
+
+def test_silence_outranks_failure_correlation_in_the_verdict():
+    """A task that is not running matters more than one that ran and failed."""
+    rows = cadence_rows('task_update_clan_war', 40, 5)
+    for i in range(0, 20, 3):
+        rows.append(row('task_update_clan_war', i, status='error', error=MAINT))
+        rows.append(row('task_update_cwl', i, status='error', error=MAINT))
+    page = build_monitor_page(sorted(rows, key=lambda r: r.time),
+                              T0 + dt.timedelta(minutes=200))
+
+    shared = [e for e in page['incidents'] if e['kind'] == 'upstream']
+    assert shared, 'fixture must contain a genuine cross-task outage'
+    assert page['verdict']['kind'] == 'silence'
+
+
 def test_page_survives_an_empty_window():
     page = build_monitor_page([], T0)
-    assert page['tasks'] == []
+    assert len(page['tasks']) == len(TASKS)
+    assert all(t['health'] == 'absent' for t in page['tasks'])
     assert page['incidents'] == []
     assert page['summary']['total_runs'] == 0
+    assert page['verdict']['kind'] == 'silence'
 
 
 def test_unknown_task_names_still_appear():
@@ -393,3 +467,52 @@ def test_unknown_task_names_still_appear():
     rows = cadence_rows('task_update_battle_logs', 5, 5) + cadence_rows('task_update_future', 5, 5)
     page = build_monitor_page(rows, T0 + dt.timedelta(minutes=30))
     assert 'task_update_future' in [t['key'] for t in page['tasks']]
+
+
+# ── silence measurement ──────────────────────────────────────────────────────
+
+def test_a_task_that_simply_stopped_produces_an_ongoing_gap():
+    """Measuring only run-to-run intervals missed the most important silence
+    there is: the one that hasn't ended. The lane just went blank."""
+    rows = cadence_rows('t', 20, 5)
+    runs = runs_of(rows, 't')
+    gaps = find_gaps(runs, cadence=5.0, now=T0 + dt.timedelta(minutes=95 + 200))
+    assert len(gaps) == 1
+    assert gaps[0]['ongoing'] is True
+    assert gaps[0]['minutes'] == 200.0
+
+
+def test_no_trailing_gap_while_the_task_is_still_on_cadence():
+    rows = cadence_rows('t', 20, 5)
+    gaps = find_gaps(runs_of(rows, 't'), cadence=5.0,
+                     now=T0 + dt.timedelta(minutes=95 + 4))
+    assert gaps == []
+
+
+def test_longest_gap_ignores_error_bursts():
+    """`longest_gap` is rendered as 'längste Lücke'. Ranging over every incident
+    let it report the duration of a failure storm instead."""
+    rows = []
+    for key, _, _ in TASKS:
+        rows += cadence_rows(key, 200, 5)
+    for i in range(0, 300, 5):
+        rows.append(row('task_update_cwl', i, status='error', error=MAINT))
+        rows.append(row('task_update_clan_war', i, status='error', error=MAINT))
+
+    page = build_monitor_page(sorted(rows, key=lambda r: r.time),
+                              T0 + dt.timedelta(minutes=997))
+    burst = max(e['minutes'] for e in page['incidents'] if e['kind'] != 'silence')
+    assert burst >= 295
+    silences = [e['minutes'] for e in page['incidents'] if e['kind'] == 'silence']
+    assert page['summary']['longest_gap'] == (max(silences) if silences else 0)
+    assert page['summary']['longest_gap'] < burst
+
+
+def test_sparse_data_escalates_to_down_rather_than_delayed():
+    """One run leaves no interval, so cadence is unknowable. Without an absolute
+    escalation a task last seen eleven days ago reported 'delayed' forever."""
+    rows = [row('t', 0)]
+    runs = runs_of(rows, 't')
+    assert task_stats('t', runs, T0 + dt.timedelta(minutes=30))['health'] == 'up'
+    assert task_stats('t', runs, T0 + dt.timedelta(hours=5))['health'] == 'warn'
+    assert task_stats('t', runs, T0 + dt.timedelta(days=11))['health'] == 'down'

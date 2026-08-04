@@ -35,6 +35,7 @@ DOWN_FACTOR      = 2.5   # silence beyond cadence × this reads as "down"
 WARN_FACTOR      = 1.5   # …and beyond cadence × this as "delayed"
 GAP_FACTOR       = 2.5   # a run-to-run interval beyond cadence × this is a gap
 NO_CADENCE_WARN  = 120   # minutes of silence that warn when cadence is unknowable
+NO_CADENCE_DOWN  = 1440  # …and beyond a day of it, call the task down, not delayed
 
 CLUSTER_GAP_MIN  = 20    # failures within this many minutes belong to one incident
 LANE_POINTS      = 240   # downsample target per task for the shared lane strip
@@ -104,8 +105,14 @@ def infer_cadence(runs):
     return round(sorted(gaps)[len(gaps) // 2], 1)
 
 
-def find_gaps(runs, cadence):
-    """Run-to-run intervals far enough beyond the cadence to count as silence."""
+def find_gaps(runs, cadence, now=None):
+    """Intervals far enough beyond the cadence to count as silence.
+
+    `now` matters: measuring only run-to-run intervals misses the most important
+    silence there is — the one that hasn't ended. A task that simply stopped
+    produced no gap at all, so its lane went blank with nothing marking it, and
+    blank is also what "outside the window" looks like.
+    """
     if not cadence:
         return []
     active = [r for r in runs if r['status'] != 'skipped']
@@ -117,6 +124,16 @@ def find_gaps(runs, cadence):
                 'start':   active[i - 1]['time'],
                 'end':     active[i]['time'],
                 'minutes': round(minutes, 1),
+                'ongoing': False,
+            })
+    if now is not None and active:
+        trailing = (now - active[-1]['time']).total_seconds() / 60
+        if trailing > cadence * GAP_FACTOR:
+            out.append({
+                'start':   active[-1]['time'],
+                'end':     now,
+                'minutes': round(trailing, 1),
+                'ongoing': True,
             })
     return out
 
@@ -170,7 +187,7 @@ def task_stats(key, runs, now):
     cadence = infer_cadence(runs)
 
     last = runs[-1] if runs else None
-    minutes_since, health = None, 'unknown'
+    minutes_since, health = None, 'absent'
     if last:
         minutes_since = round((now - last['time']).total_seconds() / 60, 1)
         # A recent skip still proves the task is alive — raid_weekend skips on
@@ -182,8 +199,16 @@ def task_stats(key, runs, now):
                 health = 'warn'
             else:
                 health = 'up'
+        # A single run in the window leaves no interval to measure, so cadence is
+        # unknowable. Escalating on absolute age matters here: without it a task
+        # last seen eleven days ago reported "delayed", never "down" — the rule
+        # inverted exactly where the data was thinnest.
+        elif minutes_since < NO_CADENCE_WARN:
+            health = 'up'
+        elif minutes_since < NO_CADENCE_DOWN:
+            health = 'warn'
         else:
-            health = 'up' if minutes_since < NO_CADENCE_WARN else 'warn'
+            health = 'down'
 
     return dict(
         meta,
@@ -198,7 +223,7 @@ def task_stats(key, runs, now):
         last_time=last['time'] if last else None,
         last_status=last['status'] if last else None,
         last_summary=last['summary'] if last else '',
-        gaps=find_gaps(runs, cadence),
+        gaps=find_gaps(runs, cadence, now),
         error_groups=group_errors(runs),
         series=downsample(runs),
     )
@@ -246,6 +271,7 @@ def correlate_incidents(by_task, tasks):
             'start':     c['start'],
             'end':       c['end'],
             'minutes':   round((c['end'] - c['start']).total_seconds() / 60),
+            'ongoing':   False,
             'tasks':     hit,
             'task_labels': [label_of.get(k, k) for k in hit],
             'failures':  len(c['items']),
@@ -259,6 +285,7 @@ def correlate_incidents(by_task, tasks):
                 'start':     g['start'],
                 'end':       g['end'],
                 'minutes':   round(g['minutes']),
+                'ongoing':   g.get('ongoing', False),
                 'tasks':     [t['key']],
                 'task_labels': [t['label']],
                 'failures':  0,
@@ -289,11 +316,44 @@ def rollup_causes(incidents):
     return rows
 
 
+def build_verdict(tasks, shared, total_errors):
+    """The page's lead finding, decided here rather than in the template.
+
+    Order matters and is the whole point: a task that is not running outranks a
+    task that ran and failed. An earlier version led with failure correlation
+    unconditionally, so a window in which five of six tasks had stopped entirely
+    rendered a green all-clear — the page was right about the rare question and
+    silent on the urgent one.
+    """
+    stalled = [t for t in tasks if t['health'] in ('down', 'absent')]
+    if stalled:
+        return {
+            'kind':    'silence',
+            'stalled': [t['label'] for t in stalled],
+            'count':   len(stalled),
+            'of':      len(tasks),
+            'absent':  [t['label'] for t in tasks if t['health'] == 'absent'],
+        }
+    if shared:
+        return {
+            'kind':     'upstream',
+            'count':    len(shared),
+            'lead':     max(shared, key=lambda e: e['failures']),
+            'failures': sum(e['failures'] for e in shared),
+            'of':       total_errors,
+        }
+    if total_errors:
+        return {'kind': 'isolated', 'of': total_errors}
+    return {'kind': 'clear', 'of': len(tasks)}
+
+
 def build_monitor_page(rows, now, days=DEFAULT_DAYS):
-    """The whole page payload: tasks, incidents, causes, summary."""
+    """The whole page payload: tasks, incidents, causes, summary, verdict."""
     by_task = normalize_runs(rows)
-    tasks = [task_stats(k, by_task.get(k, []), now)
-             for k, _, _ in TASKS if by_task.get(k)]
+    # Every registry task, every time — a task with no runs at all is the most
+    # important thing this page can report, so it must occupy its row rather
+    # than shorten the list and leave the absence invisible.
+    tasks = [task_stats(k, by_task.get(k, []), now) for k, _, _ in TASKS]
     # Anything logging under a name the registry doesn't know still shows up,
     # rather than silently vanishing from the one page meant to notice it.
     for key in sorted(set(by_task) - {k for k, _, _ in TASKS}):
@@ -304,7 +364,11 @@ def build_monitor_page(rows, now, days=DEFAULT_DAYS):
     shared = [e for e in incidents if e['kind'] == 'upstream']
 
     total_errors = sum(t['errors'] for t in tasks)
-    longest = max((e['minutes'] for e in incidents), default=0)
+    # Only silence counts toward "longest gap". Ranging over every incident let a
+    # figure labelled "längste Lücke" report the duration of an error storm.
+    longest = max((e['minutes'] for e in incidents if e['kind'] == 'silence'),
+                  default=0)
+    verdict = build_verdict(tasks, shared, total_errors)
 
     return {
         'days':      days,
@@ -315,15 +379,21 @@ def build_monitor_page(rows, now, days=DEFAULT_DAYS):
         'tasks':     tasks,
         'incidents': incidents,
         'causes':    causes,
-        'lead_incident': shared[0] if shared else None,
+        'verdict':   verdict,
+        # Lead and figure now come from the same selection. They used to differ:
+        # the sentence described the most recent shared outage while the number
+        # counted the largest, so with two outages they named different events.
+        'lead_incident': verdict.get('lead'),
         'summary': {
             'task_count':    len(tasks),
             'healthy':       sum(1 for t in tasks if t['health'] == 'up'),
+            'stalled':       sum(1 for t in tasks if t['health'] in ('down', 'absent')),
+            'absent':        sum(1 for t in tasks if t['health'] == 'absent'),
             'total_runs':    sum(t['runs'] for t in tasks),
             'total_errors':  total_errors,
             'total_skipped': sum(t['skipped'] for t in tasks),
             'cause_count':   len(causes),
             'longest_gap':   longest,
-            'explained_by_shared': max((e['failures'] for e in shared), default=0),
+            'explained_by_shared': sum(e['failures'] for e in shared),
         },
     }
