@@ -201,6 +201,13 @@
 
         /* ── ACCESSIBILITY: sitewide keyboard focus ring ── */
         :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        /* Visually hidden, still announced. Lives here because three pages had
+           each grown their own private copy under a different name. */
+        .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
         @media (prefers-reduced-motion: reduce) {
             .selector, .action-btn { transition: none; }
         }

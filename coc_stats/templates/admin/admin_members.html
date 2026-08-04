@@ -452,7 +452,12 @@ function saveComment(btn) {
         input.dataset.orig = input.value;
         btn.classList.remove('dirty');
         btn.innerHTML = _CHECK; btn.classList.add('saved');
-        syncRowAttr(btn, 'note', input.value.trim() ? 1 : 0);
+        // `input`, not `btn`: only the input carries data-tag, so passing the
+        // button threw a TypeError on every note save. The note itself had
+        // already been written, so the failure was invisible — but it killed
+        // recount(), left the row's data-note stale for the filter, and never
+        // registered the timeout that resets the button, so the green ✓ stuck.
+        syncRowAttr(input, 'note', input.value.trim() ? 1 : 0);
         recount();
         setTimeout(() => { btn.textContent = 'Save'; btn.classList.remove('saved'); }, 1800);
     });

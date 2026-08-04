@@ -914,10 +914,33 @@
         // alignment still reads while the claim stays truthful.
         const grid = document.getElementById('laneGrid');
         if (grid && data.shared.length) {
+            drawCorrelations();
+            // Segment offsets are measured in pixels, so they are only correct
+            // for the width they were measured at. Without this the overlay
+            // silently drifts off its lanes on any resize or orientation change.
+            let rafId;
+            new ResizeObserver(() => {
+                cancelAnimationFrame(rafId);
+                rafId = requestAnimationFrame(drawCorrelations);
+            }).observe(grid);
+        }
+
+        function drawCorrelations() {
+            const grid = document.getElementById('laneGrid');
+            const prev = grid.querySelector('.corr-layer');
+            if (prev) prev.remove();
+
             const tracks = [...grid.querySelectorAll('.lane-track')];
             const layer = document.createElement('div');
             layer.className = 'corr-layer';
-            const gridTop = grid.getBoundingClientRect().top;
+            // Attach BEFORE measuring, and measure against the layer itself.
+            // Measuring against the grid double-counted the layer's own top
+            // inset, pushing every segment down by exactly one lane pitch minus
+            // the gap — so each highlight marked the task below the one that
+            // actually failed. The origin must be the element the segments are
+            // positioned in, not the one that happens to contain it.
+            grid.appendChild(layer);
+            const layerTop = layer.getBoundingClientRect().top;
             const layerW = grid.querySelector('.lane-track').getBoundingClientRect().width;
             // Two outages hours apart sit within a few pixels of each other on a
             // 30-day axis, so their captions collided into an unreadable overlap.
@@ -938,7 +961,7 @@
                     const seg = document.createElement('div');
                     seg.className = 'corr-seg' + (w.tasks.indexOf(tr.dataset.lane) >= 0 ? ' is-hit' : '');
                     const r = tr.getBoundingClientRect();
-                    seg.style.top = (r.top - gridTop) + 'px';
+                    seg.style.top = (r.top - layerTop) + 'px';
                     seg.style.height = r.height + 'px';
                     col.appendChild(seg);
                 });
@@ -955,7 +978,6 @@
                 }
                 layer.appendChild(col);
             });
-            grid.appendChild(layer);
         }
     }
 

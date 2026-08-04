@@ -54,6 +54,7 @@
     /* User chip + dropdown */
     .nav-user-wrap { position: relative; flex-shrink: 0; }
     .nav-user {
+        font: inherit; text-align: left; appearance: none;
         display: flex; align-items: center; gap: 7px;
         padding: 3px 8px 3px 6px; border-radius: 20px;
         background: var(--surf2); border: 1px solid var(--border);
@@ -247,14 +248,15 @@
         <div class="nav-right">
             {% if current_user %}
             <div class="nav-user-wrap" id="navUserWrap">
-                <div class="nav-user" id="navUserBtn">
+                <button type="button" class="nav-user" id="navUserBtn"
+                        aria-expanded="false" aria-haspopup="menu" aria-controls="navDropdown">
                     <div class="nav-avatar">{{ current_user.username[0] | upper }}</div>
                     <span class="nav-uname">{{ current_user.username }}</span>
                     <svg class="nav-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="4 6 8 10 12 6"/>
                     </svg>
-                </div>
-                <div class="nav-dropdown" id="navDropdown">
+                </button>
+                <div class="nav-dropdown" id="navDropdown" role="menu">
                     {% if current_user.linked_player %}
                     <a href="/profile" class="nav-dd-item">
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -274,14 +276,15 @@
             </div>
             {% elif is_env_admin %}
             <div class="nav-user-wrap" id="navUserWrap">
-                <div class="nav-user" id="navUserBtn">
+                <button type="button" class="nav-user" id="navUserBtn"
+                        aria-expanded="false" aria-haspopup="menu" aria-controls="navDropdown">
                     <div class="nav-avatar">A</div>
                     <span class="nav-uname">Admin</span>
                     <svg class="nav-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="4 6 8 10 12 6"/>
                     </svg>
-                </div>
-                <div class="nav-dropdown" id="navDropdown">
+                </button>
+                <div class="nav-dropdown" id="navDropdown" role="menu">
                     <a href="/logout" class="nav-dd-item nav-dd-signout">
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/><polyline points="11 11 14 8 11 5"/><line x1="14" y1="8" x2="6" y2="8"/>
@@ -313,17 +316,34 @@
 
 <script>
 (function () {
+    // The chip used to be a <div> with a click handler and no tabindex, so the
+    // dropdown behind it — which holds Sign out, and the linked-profile link —
+    // was unreachable by keyboard on every page of the site. It is a real
+    // <button> now; this mirrors the burger's behaviour directly below,
+    // including returning focus to the trigger on Escape.
     var wrap = document.getElementById('navUserWrap');
-    if (wrap) {
-        var btn = document.getElementById('navUserBtn');
-        btn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            wrap.classList.toggle('open');
-        });
-        document.addEventListener('click', function () {
-            wrap.classList.remove('open');
-        });
+    if (!wrap) return;
+    var btn = document.getElementById('navUserBtn');
+
+    function close(refocus) {
+        wrap.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+        if (refocus) btn.focus();
     }
+    btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = wrap.classList.toggle('open');
+        btn.setAttribute('aria-expanded', String(open));
+    });
+    document.addEventListener('click', function () { close(false); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && wrap.classList.contains('open')) close(true);
+    });
+    // Tabbing past the last item should dismiss it rather than leave an open
+    // menu floating behind the rest of the page.
+    wrap.addEventListener('focusout', function (e) {
+        if (!wrap.contains(e.relatedTarget)) close(false);
+    });
 })();
 
 (function () {
