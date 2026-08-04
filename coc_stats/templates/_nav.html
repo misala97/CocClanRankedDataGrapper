@@ -1,5 +1,10 @@
 <style>
-    nav {
+    /* Scoped to THIS nav on purpose. As a bare `nav` element selector it also
+       claimed `<nav class="admin-tabs">` and `<nav class="auth-toggle">`,
+       sticking them to top:0 at the same z-index — and since the tabs come
+       later in the document they won, covering every link in the bar above on
+       all six admin pages once the page was scrolled. */
+    .site-nav {
         position: sticky; top: 0; z-index: 100;
         background: oklch(0.10 0.004 330 / 0.94);
         backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -172,7 +177,7 @@
 {% set _bad_tasks = [] %}
 {% for t in nav_task_status %}{% if t.status in ('warn', 'bad') %}{% set _ = _bad_tasks.append(t) %}{% endif %}{% endfor %}
 
-<nav>
+<nav class="site-nav" aria-label="Hauptnavigation">
     <div class="nav-inner">
         <a href="/" class="nav-logo">
             <span class="nav-crest">
