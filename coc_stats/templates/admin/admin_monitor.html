@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 {% set page_title = 'Task Monitor – CoC Analytics' %}
 {% include '_head.html' %}
 
@@ -572,7 +572,7 @@
 {% set page_header_desc = 'Erst die gemeinsame Lage, dann der einzelne Task — damit ein Ausfall, der mehrere Tasks zugleich trifft, auch als einer erkennbar bleibt.' %}
 {% set page_primary_control %}
 <label for="monPeriod">Zeitraum</label>
-<select class="selector" id="monPeriod" onchange="window.location='?days='+this.value">
+<select class="selector" id="monPeriod">
   {% for d in period_options %}
   <option value="{{ d }}" {% if selected_days == d %}selected{% endif %}>{{ period_label(d) }}</option>
   {% endfor %}
@@ -581,7 +581,7 @@
 {% include '_page_header.html' %}
 {% include 'admin/_admin_tabs.html' %}
 
-<main class="container">
+<main id="main" class="container">
 
 {#- The register renders in EVERY state, including the empty one. It used to be
     replaced wholesale by a dead-end card, which took the six "Jetzt" buttons
@@ -853,6 +853,24 @@
 
 <script>
 (function () {
+    // Commit-on-blur/Enter, not on every `change`. As an inline onchange this
+    // navigated on each arrow keypress, so reaching "24 Stunden" from "30 Tage"
+    // cost three full page loads and the list could never be browsed.
+    const period = document.getElementById('monPeriod');
+    if (period) {
+        const go = () => {
+            if (period.value !== String(period.dataset.current || '')) {
+                window.location = '?days=' + period.value;
+            }
+        };
+        period.dataset.current = period.value;
+        period.addEventListener('blur', go);
+        period.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+        period.addEventListener('change', e => { if (!e.isTrusted) go(); });
+        period.addEventListener('click', () => { period.dataset.pointer = '1'; });
+        period.addEventListener('change', () => { if (period.dataset.pointer) { delete period.dataset.pointer; go(); } });
+    }
+
     const holder = document.getElementById('laneData');
 
     if (holder) {
@@ -988,8 +1006,13 @@
         const open = btn.getAttribute('aria-expanded') !== 'true';
         btn.setAttribute('aria-expanded', String(open));
         const body = document.getElementById(btn.getAttribute('aria-controls'));
-        if (body) body.classList.toggle('open', open);
+        if (!body) return;
+        body.classList.toggle('open', open);
+        // A zero-height grid row still leaves its contents focusable and in the
+        // heading outline; `inert` is what actually takes them out of both.
+        body.inert = !open;
     }
+    document.querySelectorAll('.reg-body:not(.open)').forEach(b => { b.inert = true; });
     document.querySelectorAll('.reg-toggle').forEach(b => b.addEventListener('click', () => toggle(b)));
     document.querySelectorAll('.reg-row').forEach(row => row.addEventListener('click', ev => {
         if (ev.target.closest('button')) return;

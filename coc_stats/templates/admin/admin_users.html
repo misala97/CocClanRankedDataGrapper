@@ -132,7 +132,7 @@
         .slot-admin { color: var(--yellow); border-color: color-mix(in oklch, var(--yellow) 40%, transparent); background: color-mix(in oklch, var(--yellow) 12%, transparent); }
         .slot-admin::before { background: var(--yellow); box-shadow: 0 0 5px color-mix(in oklch, var(--yellow) 55%, transparent); }
         /* inherited: held because super admin grants it, not because it was set */
-        .slot-inherit { color: var(--yellow); border: 1px dashed color-mix(in oklch, var(--yellow) 42%, transparent); background: transparent; }
+        .slot-inherit { font-style: italic; color: var(--yellow); border: 1px dashed color-mix(in oklch, var(--yellow) 42%, transparent); background: transparent; }
         .slot-inherit::before { background: color-mix(in oklch, var(--yellow) 62%, transparent); }
 
         .lnk { font-size: 12.5px; min-width: 0; }
@@ -173,6 +173,7 @@
            these focusable while invisible. */
         .js-off-only[hidden] { display: none; }
 
+        .aed-elev-plain { border-color: var(--bord2) !important; background: transparent !important; }
         .aed-elev { margin-top: 20px; padding: 13px 15px; border: 1px solid color-mix(in oklch, var(--yellow) 30%, transparent); border-radius: 9px; background: color-mix(in oklch, var(--yellow) 4%, transparent); display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
         .aed-elev-txt { font-size: 12.5px; color: var(--muted); max-width: 62ch; }
         .aed-elev-txt b { color: var(--text); font-weight: 700; }
@@ -287,13 +288,13 @@
     {'value': pending | length,  'label': 'Awaiting decision'},
 ] %}
 {% set page_controls %}
-<input type="search" class="selector" id="userSearch" placeholder="Search account or linked player…" oninput="filterReg()" style="min-width:260px;">
+<input type="search" class="selector" id="userSearch" aria-label="Search accounts or linked players" placeholder="Search account or linked player…" oninput="filterReg()" style="min-width:260px;">
 {% endset %}
 {% include '_page_header.html' %}
 
 {% include 'admin/_admin_tabs.html' %}
 
-<div class="container">
+<div class="container" id="main" role="main">
 
     <!-- ══ NEEDS ATTENTION ══ -->
     <section class="usec" id="attnSection" aria-labelledby="attnTitle" data-entrance>
@@ -466,7 +467,7 @@
                             {% endif %}
                         </div>
 
-                        <div class="au-datecell"><span class="au-date">{{ u.created_at | local_dt('%d.%m.%y') }}</span></div>
+                        <div class="au-datecell"><span class="au-date"><span class="sr-only">Registered </span>{{ u.created_at | local_dt('%d.%m.%y') }}</span></div>
 
                         <div class="disccell">
                             <button class="disc" aria-expanded="false" aria-controls="ed-{{ u.id }}"
@@ -524,7 +525,7 @@
                             </div>
                         </div>
 
-                        <div class="aed-elev">
+                        <div class="aed-elev{{ '' if u.is_super_admin else ' aed-elev-plain' }}">
                             <div class="aed-elev-txt">
                                 {% if u.is_super_admin %}
                                     <b>Super admin.</b> Full access to every admin page and every permission, regardless of the grants above.
@@ -540,7 +541,8 @@
                                       data-confirm="{{ 'Remove super admin' if u.is_super_admin else 'Make super admin' }}"
                                       data-ok="Super admin updated"
                                       {% if last_super %}data-extra="This is the last super admin account."{% endif %}>
-                                    <button type="submit" class="ubtn ubtn-elev">{{ 'Remove super admin' if u.is_super_admin else 'Make super admin' }}</button>
+                                    <button type="submit" class="ubtn ubtn-elev" data-focus="super-{{ u.id }}"
+                                            aria-label="{{ 'Remove super admin from' if u.is_super_admin else 'Make super admin:' }} {{ u.username }}">{{ 'Remove super admin' if u.is_super_admin else 'Make super admin' }}</button>
                                 </form>
                             {% endif %}
                         </div>
@@ -551,11 +553,11 @@
                             {% else %}
                                 <form class="uact" method="POST" action="/admin/users/{{ u.id }}/reject"
                                       data-confirm="Revoke access" data-ok="Access revoked">
-                                    <button type="submit" class="ubtn ubtn-elev">Revoke access</button>
+                                    <button type="submit" class="ubtn ubtn-elev" aria-label="Revoke access for {{ u.username }}" data-focus="revoke-{{ u.id }}">Revoke access</button>
                                 </form>
                                 <form class="uact" method="POST" action="/admin/users/{{ u.id }}/delete"
                                       data-confirm="Delete permanently" data-ok="Account deleted">
-                                    <button type="submit" class="ubtn ubtn-danger">Delete account</button>
+                                    <button type="submit" class="ubtn ubtn-danger" aria-label="Delete account {{ u.username }}" data-focus="del-{{ u.id }}">Delete account</button>
                                 </form>
                             {% endif %}
                         </div>

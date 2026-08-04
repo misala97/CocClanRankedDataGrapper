@@ -7,14 +7,29 @@
 -#}
 <style>
     .admin-tabs {
+        position: sticky; top: var(--nav-h, 63px); z-index: 40;
         max-width: 1400px; margin: 18px auto 0; padding: 0 32px;
+        background: var(--bg);
     }
     .admin-tabs-rail {
         display: flex; align-items: stretch; gap: 2px;
         border-bottom: 1px solid var(--border);
-        overflow-x: auto; scrollbar-width: none;
+        overflow-x: auto;
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in oklch, var(--muted) 38%, transparent) transparent;
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+        mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
     }
-    .admin-tabs-rail::-webkit-scrollbar { display: none; }
+    /* No overflow, no fade — otherwise the last tab looks clipped when it isn't. */
+    @media (min-width: 900px) {
+        .admin-tabs-rail { -webkit-mask-image: none; mask-image: none; }
+    }
+    .admin-tabs-rail::-webkit-scrollbar { height: 8px; }
+    .admin-tabs-rail::-webkit-scrollbar-track { background: transparent; }
+    .admin-tabs-rail::-webkit-scrollbar-thumb {
+        background: color-mix(in oklch, var(--muted) 38%, transparent);
+        border-radius: 6px; border: 2px solid transparent; background-clip: padding-box;
+    }
     .atab {
         display: inline-flex; align-items: center; gap: 8px;
         padding: 11px 16px 12px; position: relative;
@@ -37,13 +52,14 @@
         color: var(--accent);
         border: 1px solid color-mix(in oklch, var(--accent) 32%, transparent);
     }
-    .atab-badge.urgent {
+    .atab-badge.urgent { color: oklch(0.98 0 0);
         background: color-mix(in oklch, var(--red) 15%, transparent);
         color: var(--red);
         border-color: color-mix(in oklch, var(--red) 32%, transparent);
     }
     @media (max-width: 900px) { .admin-tabs { padding: 0 20px; } }
-    @media (max-width: 480px) { .admin-tabs { padding: 0 12px; } .atab { padding: 10px 12px 11px; font-size: 13px; } }
+    @media (max-width: 480px) { .admin-tabs { padding: 0 12px; } .atab { padding: 12px 12px 13px; font-size: 13px; } }
+    @media (pointer: coarse) { .atab { min-height: 44px; } }
     @media (prefers-reduced-motion: reduce) { .atab { transition: none; } }
 </style>
 {% set _ap = request.path %}
@@ -61,3 +77,16 @@
         <a href="/admin/insights" class="atab {% if _ap.startswith('/admin/insights') %}active{% endif %}"{% if _ap.startswith('/admin/insights') %} aria-current="page"{% endif %}>Insights</a>
     </div>
 </nav>
+
+<script>
+(function () {
+    // .page-toolbar sticks at --nav-h + --tabs-h; without this the toolbar pinned
+    // at the nav height and covered the tab strip after ~250px of scroll.
+    var el = document.querySelector('.admin-tabs');
+    if (!el || !window.ResizeObserver) return;
+    var root = document.documentElement;
+    function sync() { root.style.setProperty('--tabs-h', el.offsetHeight + 'px'); }
+    sync();
+    new ResizeObserver(sync).observe(el);
+})();
+</script>

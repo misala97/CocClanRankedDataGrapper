@@ -47,16 +47,36 @@ typography:
     fontWeight: 700
     lineHeight: 1
     letterSpacing: "1.2px"
+  verdict:
+    fontFamily: "'Rajdhani', sans-serif"
+    fontSize: "11px"
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: "0.4px"
+  micro:
+    fontFamily: "'Manrope', sans-serif"
+    fontSize: "11px"
+    fontWeight: 700
+    lineHeight: 1.4
+  caption:
+    fontFamily: "'Manrope', sans-serif"
+    fontSize: "12.5px"
+    fontWeight: 600
+    lineHeight: 1.5
   data:
     fontFamily: "'JetBrains Mono', monospace"
     fontSize: "16px"
     fontWeight: 700
     lineHeight: 1
 rounded:
+  xs: "4px"
   sm: "6px"
+  smd: "7px"
   md: "8px"
   lg: "10px"
+  xl: "12px"
   pill: "20px"
+  hair: "2px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -145,7 +165,11 @@ The palette is built on one true-neutral-leaning-cool background with two signal
 
 **Display Font:** Big Shoulders Display (with `sans-serif` fallback)
 **Body Font:** Manrope (with `sans-serif` fallback)
-**Label/Mono Font:** JetBrains Mono (with `monospace` fallback); Rajdhani for the sitewide judgment-badge vocabulary specifically
+**Label/Mono Font:** JetBrains Mono (with `monospace` fallback); Rajdhani for the sitewide
+**verdict-pill vocabulary** — judgment badges, check chips, clearance slots and status pills.
+Anything that renders a *state as a pill* uses it; running prose and controls do not.
+(Widened from "judgment badges specifically" after an audit found the pill vocabulary had
+already grown past that line on three pages, correctly and consistently.)
 
 **Character:** A condensed, uppercase display face for anything that needs to shout briefly (page titles, section headers) paired with a warm, humanist sans for everything read at length — the contrast is structural (condensed display vs. open body), not just a weight change.
 

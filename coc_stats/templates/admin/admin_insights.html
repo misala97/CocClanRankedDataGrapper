@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 {% set page_title = 'Insights – CoC Analytics' %}
+{% set float_tooltip = true %}
 {% include '_head.html' %}
 
         /* ═══ ADMIN INSIGHTS — clan-analytics home ═══
@@ -103,7 +104,7 @@
             .imod-run { transition: none; } .imod-run:active { transform: none; }
             .sc-fig, .sc-quad, .sc-grid, .sc-rows { animation: none; }
         }
-        @media (max-width: 860px) {
+        @media (max-width: 1040px) {
             .sc-grid { display: none; }
             .sc-rows { display: block; }
         }
@@ -127,20 +128,20 @@
 
 {% include 'admin/_admin_tabs.html' %}
 
-<div class="container">
+<div class="container" id="main" role="main">
 
-    <section class="imod" id="corrMod">
+    <section class="imod" id="corrMod" aria-labelledby="corrTitle">
         <div class="imod-head">
             <div class="imod-id">
-                <span class="imod-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"/><circle cx="9" cy="10.5" r="1.5"/><circle cx="13.5" cy="13.5" r="1.5"/><circle cx="18.5" cy="7" r="1.5"/><path d="m10.2 9.6 2.4 2.4M15 12.4 17.6 8.1"/></svg></span>
+                <span class="imod-ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"/><circle cx="9" cy="10.5" r="1.5"/><circle cx="13.5" cy="13.5" r="1.5"/><circle cx="18.5" cy="7" r="1.5"/><path d="m10.2 9.6 2.4 2.4M15 12.4 17.6 8.1"/></svg></span>
                 <div>
-                    <div class="imod-title">Ranked × Raid Skill</div>
+                    <h2 class="imod-title" id="corrTitle">Ranked × Raid Skill</h2>
                     <div class="imod-sub">Does ladder skill predict raid-weekend performance? Each member's ranked score plotted against their raid score, with the clan-wide correlation.</div>
                 </div>
             </div>
             <div style="display:flex;align-items:center;gap:12px;">
                 <button class="imod-run" id="corrRun" onclick="runCorr()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5z"/></svg> Run analysis</button>
-                <span class="imod-loading" id="corrLoading" style="display:none;">Analysing…</span>
+                <span class="imod-loading" id="corrLoading" role="status" aria-live="polite" style="display:none;">Analysing…</span>
             </div>
         </div>
         <div class="imod-body">
@@ -157,7 +158,8 @@
                     </div>
                     <div>
                         <div class="sc-block-label">Per-player breakdown</div>
-                        <div class="sc-table-scroll table-scroll" id="corrTableWrap"></div>
+                        <div class="sc-table-scroll table-scroll" id="corrTableWrap" tabindex="0" role="region"
+                             aria-label="Per-player breakdown, scrollable"></div>
                     </div>
                 </div>
                 <div class="sc-rows" id="corrRows"></div>
@@ -178,9 +180,14 @@ function escapeHTML(s) {
         ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// OKLCH, tuned for the gunmetal surface — every entry clears AA on --surface
+// and --surf2. These were hex literals, which no theme change would follow and
+// which the CSS-only detector could never see.
 const TH_COLORS = {
-    8:'#a0a0a0',9:'#8ba7c4',10:'#7ac47a',11:'#e8c84a',12:'#e87a4a',
-    13:'#d44ad4',14:'#4ad4d4',15:'#4a7ad4',16:'#e84a4a',17:'#e8a44a',18:'#63b950',
+    8:  'oklch(0.74 0.075 250)', 9:  'oklch(0.76 0.090 200)', 10: 'oklch(0.78 0.105 160)',
+    11: 'oklch(0.80 0.120 130)', 12: 'oklch(0.82 0.135 100)', 13: 'oklch(0.74 0.150 330)',
+    14: 'oklch(0.78 0.140 70)',  15: 'oklch(0.72 0.120 250)', 16: 'oklch(0.68 0.180 25)',
+    17: 'oklch(0.70 0.160 300)', 18: 'oklch(0.80 0.150 85)',
 };
 
 function runCorr() {
@@ -205,7 +212,15 @@ function renderCorr(data) {
     const { players, pearson_r, n_correlated } = data;
     const r = pearson_r;
     const rLabel = r === null ? 'N/A' : (r > 0 ? '+' : '') + r.toFixed(2);
-    const rColor = r === null ? 'var(--muted)' : Math.abs(r) >= 0.5 ? 'var(--green)' : Math.abs(r) >= 0.25 ? 'var(--yellow)' : 'var(--muted)';
+    // One band table drives colour AND label, and the sign is respected. The
+    // old rule took Math.abs(r), so a STRONG NEGATIVE correlation rendered IFF
+    // Green — the hue DESIGN.md reserves for "positive / all clear" — while the
+    // caption beside it read "Strong negative link".
+    const rColor = r === null   ? 'var(--muted)'
+                 : r <= -0.35   ? 'var(--red)'
+                 : r >=  0.6    ? 'var(--green)'
+                 : r >=  0.35   ? 'var(--yellow)'
+                 : 'var(--muted)';
     const rDesc = r === null ? 'Not enough data'
         : Math.abs(r) >= 0.6 ? (r > 0 ? 'Strong positive link' : 'Strong negative link')
         : Math.abs(r) >= 0.35 ? (r > 0 ? 'Moderate positive link' : 'Moderate negative link')
@@ -259,7 +274,7 @@ function buildScatter(pts, r) {
         `<line x1="${ml}" y1="${py(v)}" x2="${ml + iw}" y2="${py(v)}" stroke="var(--bord2)" stroke-width="1"/><text x="${ml - 8}" y="${py(v) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`).join('');
 
     const dots = pts.map((p, i) => {
-        const col = TH_COLORS[p.th] || '#8b949e';
+        const col = TH_COLORS[p.th] || 'var(--muted)';
         return `<circle cx="${px(p.ranked_score)}" cy="${py(p.raid_score)}" r="7" fill="${col}" fill-opacity=".85" stroke="${col}" stroke-width="1.5" data-idx="${i}" class="sc-dot" style="cursor:pointer;"/>`;
     }).join('');
     // Label greedily in ranked order: place a name only if its box clears every label
@@ -312,7 +327,7 @@ function _combined(p) { return (p.ranked_score ?? -1) + (p.raid_score ?? -1); }
 function buildTable(players) {
     const sorted = [...players].sort((a, b) => _combined(b) - _combined(a));
     const rows = sorted.map(p => {
-        const col = TH_COLORS[p.th] || '#8b949e';
+        const col = TH_COLORS[p.th] || 'var(--muted)';
         const wr = p.ranked_score !== null ? p.ranked_score : '<span class="nd">no data</span>';
         const rd = p.raid_score !== null ? p.raid_score : '<span class="nd">no data</span>';
         const hasB = p.ranked_score !== null && p.raid_score !== null;
@@ -339,7 +354,7 @@ function buildTable(players) {
 function buildRows(players) {
     const sorted = [...players].sort((a, b) => _combined(b) - _combined(a));
     document.getElementById('corrRows').innerHTML = sorted.map(p => {
-        const col = TH_COLORS[p.th] || '#8b949e';
+        const col = TH_COLORS[p.th] || 'var(--muted)';
         const hasB = p.ranked_score !== null && p.raid_score !== null;
         const diff = hasB ? (p.ranked_score - p.raid_score).toFixed(1) : null;
         const rk = p.ranked_score !== null ? p.ranked_score : '—';

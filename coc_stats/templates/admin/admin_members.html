@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 {% set page_title = 'Members – CoC Analytics' %}
+{% set float_tooltip = true %}
 {% include '_head.html' %}
 
         /* ═══ ADMIN MEMBERS — vet joiners + maintain the roster ═══
@@ -115,8 +116,8 @@
         .mchip:hover { color: var(--text); }
         .mchip .c { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; background: color-mix(in oklch, var(--muted) 16%, transparent); color: var(--text); }
         .mchip.on { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 45%, transparent); background: color-mix(in oklch, var(--accent) 8%, transparent); }
-        .mchip.on .c { background: color-mix(in oklch, var(--accent) 20%, transparent); color: var(--accent); }
-        .mchip .c.near-all { opacity: .45; }  /* a filter matching ~everyone isn't useful wayfinding */
+        .mchip.on .c { color: var(--text); background: color-mix(in oklch, var(--accent) 20%, transparent); color: var(--accent); }
+        .mchip .c.near-all { opacity: .68; }  /* a filter matching ~everyone isn't useful wayfinding */
 
         /* ── EDITOR — table ── */
         .mtable-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
@@ -158,7 +159,7 @@
 
         .cmt { display: flex; align-items: center; gap: 8px; }
         .cmt-in { flex: 1; min-width: 0; padding: 6px 11px; background: var(--surf2); border: 1px solid var(--bord2); border-radius: 7px; color: var(--text); font-family: 'Manrope', sans-serif; font-size: 12.5px; transition: border-color .15s; }
-        .cmt-in:focus { outline: none; border-color: var(--accent); }
+        .cmt-in:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
         .cmt-in::placeholder { color: var(--muted); opacity: .55; }
         .cmt-save { padding: 6px 12px; border-radius: 7px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .3px; cursor: pointer; background: transparent; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; transition: color .15s, border-color .15s; }
         .cmt-save:hover { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, transparent); }
@@ -225,13 +226,13 @@
 {% set page_header_desc = 'Vet recent joiners, and keep the roster’s group-chat, war-preference and notes current.' %}
 {% set page_header_meta = [{'value': players | length, 'label': 'Active members'}] %}
 {% set page_controls %}
-<input type="search" class="selector" id="memberSearch" placeholder="Search name or tag…" oninput="filterRoster()" style="min-width:260px;">
+<input type="search" class="selector" id="memberSearch" aria-label="Search members by name or tag" placeholder="Search name or tag…" oninput="filterRoster()" style="min-width:260px;">
 {% endset %}
 {% include '_page_header.html' %}
 
 {% include 'admin/_admin_tabs.html' %}
 
-<div class="container">
+<div class="container" id="main" role="main">
 
     <!-- ══ NEW MEMBER CHECK ══ -->
     <section class="msec" id="vetSection">
@@ -239,8 +240,8 @@
             <div class="msec-id">
                 <span class="msec-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M3 21c0-4.2 2.7-6.5 6-6.5"/><path d="M18 8v6M15 11h6"/></svg></span>
                 <div>
-                    <div class="msec-title">New Member Check</div>
-                    <div class="msec-sub" id="vetSub">Evaluate recent joiners against clan standards</div>
+                    <h2 class="msec-title">New Member Check</h2>
+                    <div class="msec-sub" id="vetSub" aria-live="polite">Evaluate recent joiners against clan standards</div>
                 </div>
             </div>
             <div style="display:flex;align-items:center;gap:12px;">
@@ -260,7 +261,7 @@
             <div class="msec-id">
                 <span class="msec-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="10" cy="8" r="3.2"/><path d="M17 13c2.2.4 3.8 2 3.8 4.2"/><circle cx="17.5" cy="7.5" r="2.6"/></svg></span>
                 <div>
-                    <div class="msec-title">Member Roster</div>
+                    <h2 class="msec-title">Member Roster</h2>
                     <div class="msec-sub"><span class="n">{{ players | length }}</span> active member{{ 's' if players | length != 1 }}</div>
                 </div>
             </div>
@@ -268,11 +269,11 @@
         <div class="msec-body">
 
             <div class="mfilters" id="mfilters">
-                <button class="mchip on" data-filter="all" onclick="setFilter(this)">All <span class="c" id="cnt-all">0</span></button>
-                <button class="mchip" data-filter="nochat" onclick="setFilter(this)">Not in chat <span class="c" id="cnt-nochat">0</span></button>
-                <button class="mchip" data-filter="override" onclick="setFilter(this)">War override <span class="c" id="cnt-override">0</span></button>
-                <button class="mchip" data-filter="note" onclick="setFilter(this)">Has note <span class="c" id="cnt-note">0</span></button>
-                <button class="mchip" data-filter="unvetted" onclick="setFilter(this)">Unvetted <span class="c" id="cnt-unvetted">0</span></button>
+                <button aria-pressed="true" class="mchip on" data-filter="all" onclick="setFilter(this)">All <span class="c" id="cnt-all">0</span></button>
+                <button aria-pressed="false" class="mchip" data-filter="nochat" onclick="setFilter(this)">Not in chat <span class="c" id="cnt-nochat">0</span></button>
+                <button aria-pressed="false" class="mchip" data-filter="override" onclick="setFilter(this)">War override <span class="c" id="cnt-override">0</span></button>
+                <button aria-pressed="false" class="mchip" data-filter="note" onclick="setFilter(this)">Has note <span class="c" id="cnt-note">0</span></button>
+                <button aria-pressed="false" class="mchip" data-filter="unvetted" onclick="setFilter(this)">Unvetted <span class="c" id="cnt-unvetted">0</span></button>
                 <select id="mSort" class="selector" onchange="sortRoster()" style="margin-left:auto;" aria-label="Sort roster">
                     <option value="name-asc">Name A–Z</option>
                     <option value="name-desc">Name Z–A</option>
@@ -306,7 +307,7 @@
                             <button class="gc {{ 'gc-yes' if p.in_group_chat else 'gc-no' }}" data-tag="{{ p.tag }}"
                                     data-state="{{ 'true' if p.in_group_chat else 'false' }}"
                                     aria-pressed="{{ 'true' if p.in_group_chat else 'false' }}"
-                                    aria-label="Group chat for {{ p.name or p.tag }}" onclick="toggleGC(this)">
+                                    aria-label="In chat — group chat for {{ p.name or p.tag }}" onclick="toggleGC(this)">
                                 {{ 'In chat' if p.in_group_chat else 'Not in chat' }}
                             </button>
                         </td>
@@ -317,7 +318,7 @@
                                 </div>
                                 <div class="wp-col"><span class="wp-lbl">Override</span>
                                     <button class="wp-pill wp-cust wp-{{ wpc or 'none' }}" data-tag="{{ p.tag }}" data-state="{{ wpc }}"
-                                            aria-label="Custom war preference override for {{ p.name or p.tag }}" onclick="cycleWarPref(this)">{{ 'In' if wpc == 'in' else ('Out' if wpc == 'out' else '—') }}</button>
+                                            data-player="{{ p.name or p.tag }}" aria-label="War preference override for {{ p.name or p.tag }}: {{ 'In' if wpc == 'in' else ('Out' if wpc == 'out' else 'not set') }}" onclick="cycleWarPref(this)">{{ 'In' if wpc == 'in' else ('Out' if wpc == 'out' else '—') }}</button>
                                 </div>
                             </div>
                         </td>
@@ -348,10 +349,10 @@
                     <div class="mr-ctrls">
                         <button class="gc {{ 'gc-yes' if p.in_group_chat else 'gc-no' }}" data-tag="{{ p.tag }}"
                                 data-state="{{ 'true' if p.in_group_chat else 'false' }}" aria-pressed="{{ 'true' if p.in_group_chat else 'false' }}"
-                                aria-label="Group chat for {{ p.name or p.tag }}" onclick="toggleGC(this)">{{ 'In chat' if p.in_group_chat else 'Not in chat' }}</button>
+                                aria-label="In chat — group chat for {{ p.name or p.tag }}" onclick="toggleGC(this)">{{ 'In chat' if p.in_group_chat else 'Not in chat' }}</button>
                         <div class="wp">
                             <div class="wp-col"><span class="wp-lbl">In-game</span><span class="wp-pill wp-api wp-{{ wpi or 'none' }}">{{ 'In' if wpi == 'in' else ('Out' if wpi == 'out' else '—') }}</span></div>
-                            <div class="wp-col"><span class="wp-lbl">Override</span><button class="wp-pill wp-cust wp-{{ wpc or 'none' }}" data-tag="{{ p.tag }}" data-state="{{ wpc }}" aria-label="Custom war preference override for {{ p.name or p.tag }}" onclick="cycleWarPref(this)">{{ 'In' if wpc == 'in' else ('Out' if wpc == 'out' else '—') }}</button></div>
+                            <div class="wp-col"><span class="wp-lbl">Override</span><button class="wp-pill wp-cust wp-{{ wpc or 'none' }}" data-tag="{{ p.tag }}" data-state="{{ wpc }}" data-player="{{ p.name or p.tag }}" aria-label="War preference override for {{ p.name or p.tag }}: {{ 'In' if wpc == 'in' else ('Out' if wpc == 'out' else 'not set') }}" onclick="cycleWarPref(this)">{{ 'In' if wpc == 'in' else ('Out' if wpc == 'out' else '—') }}</button></div>
                         </div>
                         <div class="cmt">
                             <input class="cmt-in" type="text" data-tag="{{ p.tag }}" value="{{ p.admin_comment or '' }}" placeholder="Add a note…" maxlength="300" aria-label="Admin note for {{ p.name or p.tag }}">
@@ -362,7 +363,7 @@
                 {% endfor %}
             </div>
 
-            <div id="rosterEmpty" style="display:none;color:var(--muted);font-size:13px;padding:20px 4px;text-align:center;"></div>
+            <div id="rosterEmpty" role="status" aria-live="polite" style="display:none;color:var(--muted);font-size:13px;padding:20px 4px;text-align:center;"></div>
         </div>
     </section>
 
@@ -428,9 +429,14 @@ function toggleGC(btn) {
 // ── war preference custom override (single-click cycle; optimistic + revert) ──
 function _applyWP(btn, v) {
     const label = { '': '—', in: 'In', out: 'Out' };
+    const spoken = { '': 'not set', in: 'In', out: 'Out' };
     btn.dataset.state = v;
     btn.className = 'wp-pill wp-cust wp-' + (v || 'none');
     btn.textContent = label[v];
+    // The value has to live in the NAME. Without it a screen-reader user cycling
+    // this control hears an identical string on every press.
+    const who = btn.dataset.player || '';
+    btn.setAttribute('aria-label', `War preference override${who ? ' for ' + who : ''}: ${spoken[v]}`);
     syncRowAttr(btn, 'override', v ? 1 : 0);
 }
 function cycleWarPref(btn) {
@@ -481,7 +487,9 @@ function setFilter(chip) {
     else _filters.has(f) ? _filters.delete(f) : _filters.add(f);
     document.querySelectorAll('.mchip').forEach(c => {
         const cf = c.dataset.filter;
-        c.classList.toggle('on', cf === 'all' ? _filters.size === 0 : _filters.has(cf));
+        const on = cf === 'all' ? _filters.size === 0 : _filters.has(cf);
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-pressed', String(on));
     });
     filterRoster();
 }
