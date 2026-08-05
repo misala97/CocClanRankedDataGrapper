@@ -9,15 +9,19 @@ directly, and our clan appears there as 'the opponent' in rivals' wars because
 the CWL tables hold the whole group — so is_opponent answers a different
 question than clan_tag (44.8% against 67.9% for the same statistic). Meanwhile
 clan_war_member has no clan_tag column at all and must take one from the war.
-Two sources, two different mistakes available; both closed here, once.
+Two sources, two different mistakes available; both closed here, once. A
+third: clan_war.clan_tag was added after the table already had rows, so the
+earliest war still reads NULL, and war_fact takes a resolved fallback for it.
 """
 
 
-def war_fact(attack, attacker, defender, war):
+def war_fact(attack, attacker, defender, war, clan_tag_fallback=None):
     """One clan_war_attack row plus its two member rows -> a fact dict.
 
     `war` supplies clan identity: clan_war_member has no clan_tag, so the
-    attacker's side decides which of the war's two tags applies.
+    attacker's side decides which of the war's two tags applies. clan_tag_fallback
+    covers the one war row where war.clan_tag itself is NULL; it is never
+    looked up here, only applied.
     """
     return {
         'src':          'war',
@@ -28,7 +32,7 @@ def war_fact(attack, attacker, defender, war):
         'defender_th':  defender.town_hall_level,
         'stars':        attack.stars or 0,
         'destruction':  attack.destruction_pct or 0.0,
-        'clan_tag':     war.opponent_tag if attacker.is_opponent else war.clan_tag,
+        'clan_tag':     war.opponent_tag if attacker.is_opponent else (war.clan_tag or clan_tag_fallback),
         'attack_order': attack.attack_order,
     }
 
@@ -52,6 +56,22 @@ def cwl_fact(attack, attacker, defender, war):
     }
 
 
+def resolve_clan_tag():
+    """The clan_tag off the most recently ended war that has one.
+
+    clan_war holds exactly one clan's wars (see module docstring), so any row
+    with a non-NULL clan_tag names it — used to backfill the one row where the
+    column itself is NULL. Requires an app context.
+    """
+    from models import ClanWar
+
+    war = (ClanWar.query
+           .filter(ClanWar.clan_tag.isnot(None))
+           .order_by(ClanWar.end_time.desc())
+           .first())
+    return war.clan_tag if war else None
+
+
 def load_attack_facts():
     """Every war and CWL attack as a fact dict. Requires an app context.
 
@@ -62,6 +82,7 @@ def load_attack_facts():
                         CWLAttack, CWLMember, CWLWar)
 
     facts = []
+    clan_tag_fallback = resolve_clan_tag()
 
     wars = {w.id: w for w in ClanWar.query.all()}
     wmem = {(m.clan_war_id, m.player_tag): m for m in ClanWarMember.query.all()}
@@ -70,7 +91,7 @@ def load_attack_facts():
         att = wmem.get((a.clan_war_id, a.attacker_tag))
         dfn = wmem.get((a.clan_war_id, a.defender_tag))
         if war and att and dfn:
-            facts.append(war_fact(a, att, dfn, war))
+            facts.append(war_fact(a, att, dfn, war, clan_tag_fallback))
 
     cwars = {w.id: w for w in CWLWar.query.all()}
     cmem = {(m.war_id, m.player_tag): m for m in CWLMember.query.all()}

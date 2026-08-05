@@ -74,3 +74,38 @@ def test_null_stars_and_destruction_become_zero():
                     destruction_pct=None, attack_order=None),
                  member('#A', 14), member('#D', 14, 1), war())
     assert f['stars'] == 0 and f['destruction'] == 0.0
+
+
+def test_war_fact_uses_the_fallback_when_the_war_row_has_no_clan_tag():
+    """The one war row predating the clan_tag column reads NULL from the DB;
+    the fallback is the only thing standing between that row and a vanished fact."""
+    f = war_fact(attack(), member('#A', 14, is_opponent=0),
+                 member('#D', 15, is_opponent=1), war(clan=None, opp='#THEM'),
+                 clan_tag_fallback='#US')
+    assert f['clan_tag'] == '#US'
+
+
+def test_opponent_side_of_a_null_clan_tag_war_ignores_the_fallback():
+    """The opponent branch reads war.opponent_tag, never clan_tag_fallback —
+    a NULL our-side tag must not leak into how the opponent is identified."""
+    f = war_fact(attack(), member('#A', 14, is_opponent=1),
+                 member('#D', 15, is_opponent=0), war(clan=None, opp='#THEM'),
+                 clan_tag_fallback='#US')
+    assert f['clan_tag'] == '#THEM'
+
+
+def test_a_real_clan_tag_wins_over_the_fallback():
+    """The fallback only fires when war.clan_tag is falsy; a populated row
+    is trusted over the guess."""
+    f = war_fact(attack(), member('#A', 14, is_opponent=0),
+                 member('#D', 15, is_opponent=1), war(clan='#REAL', opp='#THEM'),
+                 clan_tag_fallback='#US')
+    assert f['clan_tag'] == '#REAL'
+
+
+def test_null_clan_tag_with_no_fallback_stays_none():
+    """war_fact stays total: no fallback supplied means the fact carries
+    None rather than raising."""
+    f = war_fact(attack(), member('#A', 14, is_opponent=0),
+                 member('#D', 15, is_opponent=1), war(clan=None, opp='#THEM'))
+    assert f['clan_tag'] is None
