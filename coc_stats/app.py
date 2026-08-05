@@ -86,7 +86,16 @@ from features.auth.routes import _current_user, _is_super_admin, _is_env_admin, 
 import datetime as _dt
 
 def _nav_task_status():
+    """Per-task freshness for the sitewide status strip.
+
+    Reads the same recorded interval the Monitor does. It used to apply its own
+    fixed thresholds (<15 min good, <60 warn) against the last run of any
+    status, so a correctly-idle clan_war sat amber for most of every hour on
+    every page of the site — and this strip is what tells you whether to open
+    the admin pages at all. A signal that cries wolf hourly stops being read.
+    """
     try:
+        from features.admin import monitor_stats
         known = [
             ('task_update_ranked_weeks', 'Ranked'),
             ('task_update_battle_logs',  'Battles'),
@@ -96,20 +105,32 @@ def _nav_task_status():
             ('task_update_clan_members', 'Members'),
         ]
         now = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+        rows = UptimeTracker.query.filter(
+            UptimeTracker.time >= now - _dt.timedelta(days=2)
+        ).all()
+        by_task = monitor_stats.normalize_runs(rows)
+
+        # Dormant counts as healthy here: three of the six tasks are idle for
+        # most of any week, and a strip that names them stops meaning
+        # "look at this".
+        LEVEL = {'up': 'good', 'idle': 'good', 'warn': 'warn',
+                 'down': 'bad', 'absent': 'none'}
+
         result = []
         for fn, label in known:
-            last = UptimeTracker.query.filter_by(function=fn)\
-                       .order_by(UptimeTracker.time.desc()).first()
-            if last and last.time:
-                mins = round((now - last.time).total_seconds() / 60)
-                status = 'good' if mins < 15 else ('warn' if mins < 60 else 'bad')
-                time_str = f'{mins}m ago' if mins < 60 else f'{mins // 60}h ago'
-            else:
-                status, time_str, mins = 'none', 'No data', None
-            result.append({'label': label, 'status': status, 'time_str': time_str, 'mins': mins})
+            st = monitor_stats.task_stats(fn, by_task.get(fn, []), now)
+            mins = st['minutes_since']
+            mins = round(mins) if mins is not None else None
+            result.append({
+                'label': label,
+                'status': LEVEL.get(st['health'], 'none'),
+                'time_str': _fmt_age(mins) if mins is not None else 'No data',
+                'mins': mins,
+            })
         return result
     except Exception:
         return []
+
 
 def _fmt_age(mins):
     if mins is None:
