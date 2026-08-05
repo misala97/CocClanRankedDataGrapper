@@ -81,9 +81,14 @@ def build_curve(facts):
             centre_extra += carried
             centre_keys  += carried_keys
 
-        centre = raw.get((src, 0), []) + centre_extra
-        stats  = _bucket(centre, merged=bool(centre_keys))
-        for k in [0] + centre_keys:
+        centre_own   = raw.get((src, 0), [])
+        centre       = centre_own + centre_extra
+        # Parallel to the arm loop above: a diff contributes a key only when it
+        # has attacks of its own, so `merged` counts contributing diffs rather
+        # than labels that happened to pass through.
+        contributors = ([0] if centre_own else []) + centre_keys
+        stats        = _bucket(centre, merged=len(contributors) > 1)
+        for k in contributors:
             curve[(src, k)] = stats
 
         # A diff nobody ever attacked at reports no expectation, full stop -

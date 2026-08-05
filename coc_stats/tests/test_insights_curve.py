@@ -132,3 +132,44 @@ def test_a_multi_diff_cascade_still_merges_into_centre():
     assert c[('war', 0)]['merged'] is True
     assert c[('war', 1)] == c[('war', 0)] == c[('war', -1)]
     assert c[('war', 0)]['n'] == 20
+
+
+def test_a_thin_arm_into_an_empty_centre_is_not_merged():
+    """Diff 0 has no attacks of its own, so a lone thin +1 cascading through
+    it pools with nothing. It must report merged=False, mirroring the same
+    fix already applied to the arm loop: a label only counts as merged when
+    it actually pooled with another diff's attacks."""
+    c = build_curve(facts('war', 1, 3, 1))
+    assert c[('war', 1)]['merged'] is False
+    assert c[('war', 1)]['n'] == 3
+
+
+def test_two_thin_arms_into_an_empty_centre_both_merge():
+    """Diff 0 is empty but +1 and -1 both carry thin, real evidence: two
+    diffs genuinely pooled together, so both report merged=True with
+    identical stats."""
+    f = facts('war', 1, 3, 1) + facts('war', -1, 2, 0)
+    c = build_curve(f)
+    assert c[('war', 1)]['merged'] is True
+    assert c[('war', 1)] == c[('war', -1)]
+    assert c[('war', 1)]['n'] == 5
+
+
+def test_an_empty_centre_with_a_thin_arm_still_reports_no_expectation():
+    """Diff 0 itself never had attacks: even though a neighbouring diff folds
+    through it, diff 0's own bucket stays n=0/None rather than borrowing the
+    pooled stats that ended up on the neighbour."""
+    c = build_curve(facts('war', 1, 3, 1))
+    assert c[('war', 0)]['n'] == 0
+    assert c[('war', 0)]['mean_stars'] is None
+
+
+def test_a_populated_centre_absorbs_thin_arms_on_both_sides():
+    """Diff 0 has its own attacks and both +1/-1 are thin: all three keys
+    pool together and report identical merged stats covering every
+    contributor."""
+    f = facts('war', 0, 10, 2) + facts('war', 1, 5, 3) + facts('war', -1, 4, 0)
+    c = build_curve(f)
+    assert c[('war', 0)]['merged'] is True
+    assert c[('war', 0)] == c[('war', 1)] == c[('war', -1)]
+    assert c[('war', 0)]['n'] == 19
