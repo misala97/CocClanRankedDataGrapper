@@ -31,6 +31,16 @@ TASKS = [
 TASK_META = {k: {'key': k, 'short': k.replace('task_update_', ''),
                  'label': lbl, 'purpose': p} for k, lbl, p in TASKS}
 
+# Why a dormant task is dormant follows from WHICH task it is, not from the last
+# summary string. Deriving it from the summary leaked raw internals:
+# raid_weekend's 'ended' path writes status=success with 'logs_added=0' while
+# already on the hourly schedule, so the row rendered "alle 60 min · logs_added=0".
+IDLE_REASON = {
+    'task_update_clan_war':     'kein Krieg aktiv',
+    'task_update_cwl':          'keine CWL aktiv',
+    'task_update_raid_weekend': 'kein Raid aktiv',
+}
+
 # ── Tunable thresholds ────────────────────────────────────────────────────────
 DOWN_FACTOR      = 2.5   # silence beyond cadence × this reads as "down"
 WARN_FACTOR      = 1.5   # …and beyond cadence × this as "delayed"
@@ -260,7 +270,7 @@ def task_stats(key, runs, now):
         cadence=cadence,
         cadence_assumed=cadence_assumed,
         mode=mode,
-        idle_reason=(last['summary'] or None) if last and mode == 'idle' else None,
+        idle_reason=IDLE_REASON.get(key) if mode == 'idle' else None,
         idle_windows=idle_windows(runs, key),
         minutes_since=minutes_since,
         health=health,

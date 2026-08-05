@@ -512,10 +512,6 @@
     at all in the window, which is a different thing from having fallen behind. -#}
 {% set health_label = {'up': 'Läuft', 'idle': 'Ruht', 'warn': 'Verzögert',
                        'down': 'Still', 'absent': 'Kein Lauf', 'unknown': 'Unbekannt'} %}
-{#- The tasks already write the reason into `summary`; this only renames it. -#}
-{% set idle_reason_label = {'notInWar': 'kein Krieg aktiv',
-                            'not ongoing': 'kein Raid aktiv',
-                            'notFound': 'keine CWL aktiv'} %}
 
 {%- macro secs(v) -%}
 {%- if v is none -%}—
@@ -756,7 +752,7 @@
 
                 <div class="reg-fig">{{ cadence(t.cadence) }}<small>
                     {%- if t.health == 'idle' and t.idle_reason -%}
-                        {{ idle_reason_label.get(t.idle_reason, t.idle_reason) }}
+                        {{ t.idle_reason }}
                     {%- else -%}zuletzt {{ ago(t.minutes_since) }}{%- endif -%}
                 </small></div>
                 <div class="reg-fig r">{{ thou(t.runs) }}<small>{% if t.skipped %}{{ t.skipped }} übersprungen{% else %}alle aktiv{% endif %}</small></div>

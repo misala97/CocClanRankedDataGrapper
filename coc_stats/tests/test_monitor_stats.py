@@ -578,7 +578,9 @@ def test_a_fixed_task_can_never_be_idle():
     assert s['health'] == 'up'
 
 
-def test_idle_reason_comes_from_the_last_summary():
+def test_idle_reason_ignores_whatever_the_summary_happens_to_say():
+    """The reason follows from which task is dormant, not from a summary string
+    that differs per code path within the same task."""
     rows = cadence_rows('task_update_raid_weekend', 3, 60,
                         status='skipped', interval=60)
     for r in rows:
@@ -586,7 +588,7 @@ def test_idle_reason_comes_from_the_last_summary():
     s = task_stats('task_update_raid_weekend',
                    runs_of(rows, 'task_update_raid_weekend'),
                    T0 + dt.timedelta(minutes=130))
-    assert s['idle_reason'] == 'not ongoing'
+    assert s['idle_reason'] == 'kein Raid aktiv'
 
 
 def test_an_active_task_has_no_idle_reason():
@@ -668,3 +670,26 @@ def test_a_real_gap_during_a_dormant_stretch_is_still_caught():
                      now=T0 + dt.timedelta(minutes=600))
     assert len(gaps) == 1
     assert gaps[0]['minutes'] == 400.0
+
+
+def test_idle_reason_does_not_leak_a_raw_summary():
+    """raid_weekend's 'ended' path writes status=success with summary
+    'logs_added=0' while on the hourly schedule, so a summary-derived reason
+    rendered that string straight into the UI."""
+    rows = cadence_rows('task_update_raid_weekend', 4, 60, interval=60)
+    for r in rows:
+        r.summary = 'logs_added=0'
+    s = task_stats('task_update_raid_weekend',
+                   runs_of(rows, 'task_update_raid_weekend'),
+                   T0 + dt.timedelta(minutes=200))
+    assert s['health'] == 'idle'
+    assert s['idle_reason'] == 'kein Raid aktiv'
+
+
+def test_each_dynamic_task_has_its_own_idle_reason():
+    for key, expected in [('task_update_clan_war', 'kein Krieg aktiv'),
+                          ('task_update_cwl', 'keine CWL aktiv'),
+                          ('task_update_raid_weekend', 'kein Raid aktiv')]:
+        rows = cadence_rows(key, 4, 60, status='skipped', interval=60)
+        s = task_stats(key, runs_of(rows, key), T0 + dt.timedelta(minutes=200))
+        assert s['idle_reason'] == expected, key
