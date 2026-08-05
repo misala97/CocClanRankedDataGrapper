@@ -169,6 +169,23 @@ def test_from_th_ignores_a_downward_glitch():
     assert row['from_th'] == 15
 
 
+def test_from_th_is_none_when_every_pre_upgrade_reading_is_none():
+    """A player whose pre-upgrade town halls never parsed still gets an
+    upgrade detected: _upgrade_index treats a missing reading as 0 via
+    `or 0`, so the first real reading still looks like a rise from 0. But
+    from_th must report None rather than fabricate 0 - no real pre-upgrade
+    level was ever actually seen."""
+    none_facts = [{'src': 'war', 'attacker_tag': '#A', 'attacker_th': None,
+                   'defender_th': 14, 'stars': 2, 'destruction': 100.0,
+                   'clan_tag': '#US', 'war_id': i,
+                   'ended_at': T0 + dt.timedelta(days=i), 'attack_order': 1}
+                  for i in range(WINDOW)]
+    facts = none_facts + run('#A', 15, [1] * WINDOW, start=WINDOW)
+    row = upgrade_effect(facts, CURVE)['players'][0]
+    assert row['from_th'] is None
+    assert row['to_th'] == 15
+
+
 def test_median_recovery_is_the_median_not_the_mean():
     """With more than two recovered players, median and mean diverge - this
     must exercise that split, and the int() cast on a genuinely fractional

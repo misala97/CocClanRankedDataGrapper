@@ -12,6 +12,11 @@ clan_war_member has no clan_tag column at all and must take one from the war.
 Two sources, two different mistakes available; both closed here, once. A
 third: clan_war.clan_tag was added after the table already had rows, so the
 earliest war still reads NULL, and war_fact takes a resolved fallback for it.
+
+Every fact dict carries exactly these ten keys, and every study module
+downstream depends on this shape without re-checking it: src (war/cwl),
+war_id, ended_at, attacker_tag, attacker_th, defender_th, stars, destruction,
+clan_tag, attack_order.
 """
 
 

@@ -40,6 +40,12 @@ def test_war_fact_has_exactly_the_documented_keys():
     assert set(f) == FACT_KEYS
 
 
+def test_cwl_fact_has_exactly_the_documented_keys():
+    f = cwl_fact(attack(), member('#A', 14, clan_tag='#US'),
+                 member('#D', 14, clan_tag='#THEM'), NS(id=3, end_time=T0))
+    assert set(f) == FACT_KEYS
+
+
 def test_war_attack_by_our_side_is_credited_to_our_clan():
     f = war_fact(attack(), member('#A', 14, is_opponent=0),
                  member('#D', 15, is_opponent=1), war(clan='#US', opp='#THEM'))
@@ -87,11 +93,14 @@ def test_war_fact_uses_the_fallback_when_the_war_row_has_no_clan_tag():
 
 def test_opponent_side_of_a_null_clan_tag_war_ignores_the_fallback():
     """The opponent branch reads war.opponent_tag, never clan_tag_fallback —
-    a NULL our-side tag must not leak into how the opponent is identified."""
+    a NULL our-side tag must not leak into how the opponent is identified.
+    opponent_tag is also None here, so a mutant that applied the fallback to
+    the opponent branch too would produce '#US' instead of None — a truthy
+    opponent tag would let that mutant pass unnoticed."""
     f = war_fact(attack(), member('#A', 14, is_opponent=1),
-                 member('#D', 15, is_opponent=0), war(clan=None, opp='#THEM'),
+                 member('#D', 15, is_opponent=0), war(clan=None, opp=None),
                  clan_tag_fallback='#US')
-    assert f['clan_tag'] == '#THEM'
+    assert f['clan_tag'] is None
 
 
 def test_a_real_clan_tag_wins_over_the_fallback():

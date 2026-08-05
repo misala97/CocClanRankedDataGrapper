@@ -5,6 +5,14 @@ Every study is viewer-invariant - the same answer for every admin - so the
 result is cached rather than recomputed per view. The key is a census of the
 source tables, so new wars, weeks or raids invalidate it on arrival; the TTL is
 only a backstop for edits that do not change a row count.
+
+Row counts, not the spec's proposed max(last_updated): three of the four
+source tables (ClanWarAttack, CWLAttack, RaidWeekendLog) carry no such column,
+so a row-count census is the cheap check that actually exists on all four.
+
+build_briefing() returns the cached dict itself, not a copy. Callers must
+treat it as immutable - re-sorting one of its lists in place, for instance,
+would corrupt what every other request sees for the rest of the TTL.
 """
 
 import datetime as dt

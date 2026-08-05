@@ -21,6 +21,12 @@ def clan_ranking(facts, curve, our_tag, min_attacks=MIN_CLAN_ATTACKS):
     """-> one row per clan, best first, thin clans last.
 
     CWL only. Regular war has no rival population to compare against.
+
+    n is every CWL attack the clan has, the figure a reader wants to see.
+    n_scored is how many of those actually landed in a curve bucket with an
+    expectation (mirrors curve.player_sae's n) - thin is gated on n_scored,
+    not n, since a clan with plenty of raw attacks but few scorable ones is
+    still a thin sample for this study's purpose.
     """
     by_clan = defaultdict(list)
     for f in facts:
@@ -37,12 +43,13 @@ def clan_ranking(facts, curve, our_tag, min_attacks=MIN_CLAN_ATTACKS):
         rows.append({
             'clan_tag':            tag,
             'n':                   len(clan_facts),
+            'n_scored':            len(deltas),
             'sae':                 sum(deltas) / len(deltas),
             'same_th_n':           len(same_th),
             'same_th_triple_rate': (sum(1 for f in same_th if f['stars'] == 3)
                                     / len(same_th)) if same_th else None,
             'is_ours':             tag == our_tag,
-            'thin':                len(clan_facts) < min_attacks,
+            'thin':                len(deltas) < min_attacks,
         })
 
     rows.sort(key=lambda r: (r['thin'], -r['sae']))

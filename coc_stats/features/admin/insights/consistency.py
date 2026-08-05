@@ -24,7 +24,7 @@ def series_stats(values):
     return {
         'n':       len(values),
         'mean':    sum(values) / len(values),
-        'sd':      statistics.pstdev(values) if len(values) > 1 else 0.0,
+        'sd':      statistics.pstdev(values),
         'floor':   min(values),
         'ceiling': max(values),
     }
