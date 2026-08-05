@@ -72,6 +72,49 @@ def resolve_clan_tag():
     return war.clan_tag if war else None
 
 
+def load_correlation_inputs():
+    """Per-player ranked-week and raid-weekend score series. Needs an app context."""
+    from collections import defaultdict
+
+    from extensions import db
+    from models import Player, RankedWeek, RaidWeekendLog
+    from services.helpers import _calc_ranked_score, _raid_verdict
+
+    players = Player.query.filter_by(in_clan=True).all()
+    tags    = [p.tag for p in players]
+
+    ranked_scores, ranked_games = defaultdict(list), defaultdict(int)
+    weeks = (RankedWeek.query
+             .filter(RankedWeek.player_tag.in_(tags), RankedWeek.is_done == True)
+             .options(db.joinedload(RankedWeek.battle_logs))
+             .all())
+    for week in weeks:
+        attacks = sum(1 for l in week.battle_logs if l.attack)
+        if not attacks:
+            continue
+        score, _, _ = _calc_ranked_score(week.battle_logs, week.townhall or 0,
+                                         week.max_attacks or attacks,
+                                         week.league_tier or '')
+        ranked_scores[week.player_tag].append(score)
+        ranked_games[week.player_tag] += attacks
+
+    per_weekend = defaultdict(list)
+    for log in RaidWeekendLog.query.filter(RaidWeekendLog.player_tag.in_(tags)).all():
+        per_weekend[(log.player_tag, log.raid_weekend_id)].append(log)
+
+    raid_scores, raid_attacks = defaultdict(list), defaultdict(int)
+    for (tag, _), logs in per_weekend.items():
+        if not logs:
+            continue
+        _, _, score = _raid_verdict(logs)
+        raid_scores[tag].append(score)
+        raid_attacks[tag] += len(logs)
+
+    roster = [{'tag': p.tag, 'name': p.name or p.tag, 'th': p.current_th or 0}
+              for p in players]
+    return ranked_scores, raid_scores, roster, ranked_games, raid_attacks
+
+
 def load_attack_facts():
     """Every war and CWL attack as a fact dict. Requires an app context.
 

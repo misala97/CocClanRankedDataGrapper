@@ -3,12 +3,12 @@
 
 Lifted out of features/admin/routes.py, where it lived inline behind an AJAX
 endpoint. The arithmetic is unchanged; what is new is that the pure part is
-separated from the loading part and now has tests.
+separated from the loading part (load_correlation_inputs now lives in
+loaders.py, the only DB-aware file) and now has tests.
 """
 
-from collections import defaultdict
-
-MIN_PERIODS = 3   # weeks or weekends before a player's average means anything
+MIN_PERIODS            = 3   # weeks or weekends before a player's average means anything
+MIN_CORRELATION_POINTS = 3   # players needed before r itself is meaningful
 
 
 def pearson_r(xs, ys):
@@ -18,7 +18,7 @@ def pearson_r(xs, ys):
     axis. Neither is an error, and neither should raise.
     """
     n = len(xs)
-    if n < MIN_PERIODS:
+    if n < MIN_CORRELATION_POINTS:
         return None
     mx, my = sum(xs) / n, sum(ys) / n
     num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
@@ -33,6 +33,10 @@ def build_correlation(ranked_scores, raid_scores, players,
     ranked_scores / raid_scores are {tag: [score per period]}. A player below
     MIN_PERIODS on an axis scores None there and sits out the correlation, but
     still appears in the table - the roster should not silently shrink.
+
+    Sorted by ranked_score, best first, unscored players last: `is None` sorts
+    them after every real score including a genuine 0.0, which `0.0 or -1`
+    used to conflate with "no score at all".
     """
     ranked_games = ranked_games or {}
     raid_attacks = raid_attacks or {}
@@ -55,46 +59,5 @@ def build_correlation(ranked_scores, raid_scores, players,
             xs.append(ranked)
             ys.append(raid)
 
-    rows.sort(key=lambda r: -(r['ranked_score'] or -1))
+    rows.sort(key=lambda r: (r['ranked_score'] is None, -(r['ranked_score'] or 0)))
     return {'players': rows, 'pearson_r': pearson_r(xs, ys), 'n_correlated': len(xs)}
-
-
-def load_correlation_inputs():
-    """Per-player ranked-week and raid-weekend score series. Needs an app context."""
-    from extensions import db
-    from models import Player, RankedWeek, RaidWeekendLog
-    from services.helpers import _calc_ranked_score, _raid_verdict
-
-    players = Player.query.filter_by(in_clan=True).all()
-    tags    = [p.tag for p in players]
-
-    ranked_scores, ranked_games = defaultdict(list), defaultdict(int)
-    weeks = (RankedWeek.query
-             .filter(RankedWeek.player_tag.in_(tags), RankedWeek.is_done == True)
-             .options(db.joinedload(RankedWeek.battle_logs))
-             .all())
-    for week in weeks:
-        attacks = sum(1 for l in week.battle_logs if l.attack)
-        if not attacks:
-            continue
-        score, _, _ = _calc_ranked_score(week.battle_logs, week.townhall or 0,
-                                         week.max_attacks or attacks,
-                                         week.league_tier or '')
-        ranked_scores[week.player_tag].append(score)
-        ranked_games[week.player_tag] += attacks
-
-    per_weekend = defaultdict(list)
-    for log in RaidWeekendLog.query.filter(RaidWeekendLog.player_tag.in_(tags)).all():
-        per_weekend[(log.player_tag, log.raid_weekend_id)].append(log)
-
-    raid_scores, raid_attacks = defaultdict(list), defaultdict(int)
-    for (tag, _), logs in per_weekend.items():
-        if not logs:
-            continue
-        _, _, score = _raid_verdict(logs)
-        raid_scores[tag].append(score)
-        raid_attacks[tag] += len(logs)
-
-    roster = [{'tag': p.tag, 'name': p.name or p.tag, 'th': p.current_th or 0}
-              for p in players]
-    return ranked_scores, raid_scores, roster, ranked_games, raid_attacks

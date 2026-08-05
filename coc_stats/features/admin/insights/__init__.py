@@ -10,7 +10,7 @@ only a backstop for edits that do not change a row count.
 import datetime as dt
 
 from . import benchmark, consistency, correlation, curve, upgrade
-from .loaders import load_attack_facts, resolve_clan_tag
+from .loaders import load_attack_facts, load_correlation_inputs, resolve_clan_tag
 
 _CACHE = {}
 _TTL   = 600          # seconds
@@ -42,7 +42,7 @@ def build_briefing():
     our_tag = resolve_clan_tag()
 
     ranked_scores, raid_scores, corr_roster, games, attacks = \
-        correlation.load_correlation_inputs()
+        load_correlation_inputs()
 
     ranked_rows = consistency.consistency(ranked_scores,
                                           consistency.MIN_RANKED_WEEKS)

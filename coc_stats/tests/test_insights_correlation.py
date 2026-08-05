@@ -78,3 +78,17 @@ def test_no_players_yields_an_empty_result_not_a_crash():
     out = build_correlation({}, {}, [])
     assert out['players'] == [] and out['pearson_r'] is None
     assert out['n_correlated'] == 0
+
+
+def test_a_zero_score_sorts_before_an_unscored_player_not_beside_them():
+    """The old key treated ranked_score=0.0 and ranked_score=None as the same
+    "no score" via `or -1`; a genuine zero must outrank no data at all. Player
+    order here (#C, #A, #B) is chosen so a stable sort on the old, buggy key
+    would place unscored #C ahead of zero-scored #A - proving the fix matters,
+    not just that it changed something."""
+    players = [PLAYERS[2], PLAYERS[0], PLAYERS[1]]   # #C, #A, #B
+    out = build_correlation(
+        {'#A': [0] * 3, '#B': [50] * 3},              # #C has no ranked scores
+        {'#A': [10] * 3, '#B': [10] * 3, '#C': [10] * 3},
+        players)
+    assert [p['tag'] for p in out['players']] == ['#B', '#A', '#C']
