@@ -205,6 +205,12 @@ class UptimeTracker(db.Model):
     status        = db.Column(db.String(20), default='success')
     error_message = db.Column(db.Text, nullable=True)
     summary       = db.Column(db.String(200), nullable=True)
+    # The interval, in minutes, governing the NEXT run — recorded at write time
+    # because three tasks retune themselves and nothing else preserves which
+    # schedule was in force. NULL where the task returned before reaching a
+    # reschedule decision (e.g. an API failure): readers carry the last known
+    # value forward rather than guessing.
+    interval_minutes = db.Column(db.Integer, nullable=True)
 
 
 class AppUser(db.Model):

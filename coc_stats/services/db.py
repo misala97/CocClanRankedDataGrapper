@@ -74,11 +74,14 @@ def create_db_uptime_tracker(func_name: str, duration: str, status: str = 'succe
     return UptimeTracker(function=func_name, duration=duration, status=status, error_message=error_message, summary=summary)
 
 
-def db_finalize_uptime(func_name: str, t0: float, status: str = 'success', error_message: str = None, summary: str = None, logger=None):
+def db_finalize_uptime(func_name: str, t0: float, status: str = 'success', error_message: str = None,
+                       summary: str = None, logger=None, interval_minutes: int = None):
     duration = round(time.time() - t0, 2)
     if logger:
         logger.info(f"Done in {duration}s | {summary or status}")
-    db.session.add(UptimeTracker(function=func_name, duration=duration, status=status, error_message=error_message, summary=summary))
+    db.session.add(UptimeTracker(function=func_name, duration=duration, status=status,
+                                 error_message=error_message, summary=summary,
+                                 interval_minutes=interval_minutes))
     db.session.commit()
 
 

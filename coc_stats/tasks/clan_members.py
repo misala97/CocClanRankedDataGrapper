@@ -4,6 +4,7 @@ import time
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_CLAN_DATA, JSON_PLAYER_DATA
 from tasks import task_lock
+from tasks.schedule import active_minutes
 
 clan_logger = setup_task_logger('clan_members', 'logs/task_clan_members.log')
 
@@ -33,7 +34,9 @@ def task_update_clan_members():
             member_list_api = json_get(clan_api, JSON_CLAN_DATA.MEMBER_LIST)
         except Exception as e:
             clan_logger.warning(f"Could not fetch clan data: {e}")
-            db_finalize_uptime(task_update_clan_members.__name__, t0, 'error', str(e), logger=clan_logger)
+            db_finalize_uptime(task_update_clan_members.__name__, t0, 'error', str(e),
+                               logger=clan_logger,
+                               interval_minutes=active_minutes(task_update_clan_members.__name__))
             return
 
         try:
@@ -67,4 +70,5 @@ def task_update_clan_members():
             task_update_clan_members.__name__, t0, status, error_msg,
             summary=f"added={players_added} updated={players_updated}",
             logger=clan_logger,
+            interval_minutes=active_minutes(task_update_clan_members.__name__),
         )

@@ -28,7 +28,7 @@
         .mon-sec:first-of-type { margin-top: 20px; }
         .mon-sec h2 {
             font-family: 'Big Shoulders Display', sans-serif;
-            font-weight: 800; font-size: 26px; line-height: 1;
+            font-weight: 800; font-size: 25px; line-height: 1;
             letter-spacing: .4px; text-transform: uppercase;
         }
         .mon-sec .hint { color: var(--muted); font-size: 12.5px; }
@@ -56,6 +56,7 @@
             font-size: 10.5px; font-weight: 700; letter-spacing: 1.1px;
             text-transform: uppercase; color: var(--muted);
         }
+        .sys-say .k-at { font-family: 'JetBrains Mono', monospace; letter-spacing: .4px; }
         .sys-say h3 {
             margin-top: 5px;
             font-family: 'Big Shoulders Display', sans-serif;
@@ -103,6 +104,8 @@
             --lane-err:       var(--red);
             --lane-void:      color-mix(in oklch, var(--red) 16%, transparent);
             --lane-void-line: color-mix(in oklch, var(--red) 55%, transparent);
+            /* Stretches where the task was dormant by design — behind everything. */
+            --lane-idle:      color-mix(in oklch, var(--blue) 10%, transparent);
         }
         .lane-track { height: 17px; background: var(--bg); border-radius: 2px; }
         .lane-track svg { width: 100%; height: 100%; display: block; }
@@ -137,7 +140,7 @@
         .corr-cap {
             position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
             margin-bottom: 3px; white-space: nowrap;
-            font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700;
             color: var(--red); background: var(--surface);
             border: 1px solid color-mix(in oklch, var(--red) 40%, transparent);
             border-radius: 4px; padding: 1px 5px;
@@ -164,6 +167,7 @@
         .lane-legend .sw-skip { background: var(--lane-skip); height: 3px; align-self: flex-end; margin-bottom: 2px; }
         .lane-legend .sw-err  { background: var(--lane-err); width: 3px; }
         .lane-legend .sw-void { background: var(--lane-void); border: 1px dashed var(--lane-void-line); }
+        .lane-legend .sw-idle { background: var(--lane-idle); }
 
         /* ── Ursachen: one row per cause, counted across tasks ── */
         .causes { border-top: 1px solid var(--bord2); }
@@ -175,7 +179,7 @@
             gap: 16px; padding: 12px 22px; border-top: 1px solid var(--bord2);
         }
         .cause-row:first-of-type { margin-top: 12px; }
-        .cause-n { font-family: 'JetBrains Mono', monospace; font-size: 21px; font-weight: 700; color: var(--red); line-height: 1; }
+        .cause-n { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--red); line-height: 1; }
         .cause-n.solo { color: var(--blue); }
         .cause-m { min-width: 0; }
         .cause-m b { display: block; font-size: 13px; font-weight: 700; }
@@ -199,7 +203,7 @@
         .sys-clear { padding: 24px 22px; text-align: center; border-top: 1px solid var(--bord2); }
         .sys-clear b {
             font-family: 'Big Shoulders Display', sans-serif; font-weight: 800;
-            font-size: 22px; letter-spacing: .3px; text-transform: uppercase; color: var(--green);
+            font-size: 25px; letter-spacing: .3px; text-transform: uppercase; color: var(--green);
         }
         .sys-clear p { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
 
@@ -207,7 +211,7 @@
         .reg { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
         .reg-head, .reg-row {
             display: grid; gap: 16px; align-items: center;
-            grid-template-columns: 1fr 106px 118px 92px 84px 96px auto;
+            grid-template-columns: 1fr 106px 126px 104px 84px 96px auto;
         }
         .reg-head { padding: 8px 22px; border-bottom: 1px solid var(--border); background: var(--bg); }
         .reg-head span {
@@ -219,6 +223,7 @@
         .reg-task:last-child { border-bottom: 0; }
         .reg-row { padding: 12px 22px; cursor: pointer; transition: background .15s var(--ease); }
         .reg-row:hover { background: var(--surf2); }
+        .reg-row:active { background: color-mix(in oklch, var(--surf2) 70%, var(--accent) 6%); }
         .reg-task:has(.reg-toggle:focus-visible) .reg-row { background: var(--surf2); }
 
         .reg-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -269,6 +274,7 @@
         }
         .reg-toggle:hover { color: var(--text); border-color: var(--bord2); }
         .reg-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .reg-toggle:active { transform: scale(.92); }
         .reg-chev { transition: transform .2s var(--ease); }
         .reg-toggle[aria-expanded="true"] .reg-chev { transform: rotate(180deg); }
 
@@ -282,8 +288,11 @@
         .mon-pill.warn    { color: var(--yellow); background: color-mix(in oklch, var(--yellow) 12%, transparent); border-color: color-mix(in oklch, var(--yellow) 32%, transparent); }
         /* Lightened from --red: at 11px/700 over its own 13% tint the base token
            measured 4.47:1, three hundredths under AA. This clears it. */
-        .mon-pill.down    { color: oklch(0.68 0.185 25); background: color-mix(in oklch, var(--red) 13%, transparent); border-color: color-mix(in oklch, var(--red) 36%, transparent); }
-        .mon-pill.absent  { color: oklch(0.68 0.185 25); background: color-mix(in oklch, var(--red) 13%, transparent); border-color: color-mix(in oklch, var(--red) 55%, transparent); border-style: dashed; }
+        .mon-pill.down    { color: var(--red-txt); background: color-mix(in oklch, var(--red) 13%, transparent); border-color: color-mix(in oklch, var(--red) 36%, transparent); }
+        .mon-pill.absent  { color: var(--red-txt); background: color-mix(in oklch, var(--red) 13%, transparent); border-color: color-mix(in oklch, var(--red) 55%, transparent); border-style: dashed; }
+        /* Dormant by design: neither health nor warning, so neither green nor
+           amber. Only ever appears on the three tasks that retune themselves. */
+        .mon-pill.idle    { color: var(--blue); background: color-mix(in oklch, var(--blue) 11%, transparent); border-color: color-mix(in oklch, var(--blue) 30%, transparent); }
         .mon-pill.unknown { color: var(--muted);  background: color-mix(in oklch, var(--muted) 10%, transparent);  border-color: color-mix(in oklch, var(--muted) 26%, transparent); }
 
         /* ── ZONE 3 · per-task depth, inside its own row ──
@@ -334,6 +343,7 @@
         }
         .msg:hover .msg-label { text-decoration-color: var(--accent); }
         .msg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+        .msg:active .msg-label { text-decoration-color: var(--accent); }
         .msg code {
             display: block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
             color: var(--muted); overflow: hidden; text-overflow: ellipsis;
@@ -388,6 +398,7 @@
         }
         .mon-toast-close:hover { color: var(--text); background: var(--surface); }
         .mon-toast-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .mon-toast-close:active { transform: scale(.9); }
         .mon-toast.err  { border-color: color-mix(in oklch, var(--red) 45%, transparent); }
         .mon-toast.warn { border-color: color-mix(in oklch, var(--yellow) 45%, transparent); }
 
@@ -499,8 +510,12 @@
 
 {#- 'absent' is its own state, not a flavour of 'down': the task produced no run
     at all in the window, which is a different thing from having fallen behind. -#}
-{% set health_label = {'up': 'Läuft', 'warn': 'Verzögert', 'down': 'Still',
-                       'absent': 'Kein Lauf', 'unknown': 'Unbekannt'} %}
+{% set health_label = {'up': 'Läuft', 'idle': 'Ruht', 'warn': 'Verzögert',
+                       'down': 'Still', 'absent': 'Kein Lauf', 'unknown': 'Unbekannt'} %}
+{#- The tasks already write the reason into `summary`; this only renames it. -#}
+{% set idle_reason_label = {'notInWar': 'kein Krieg aktiv',
+                            'not ongoing': 'kein Raid aktiv',
+                            'notFound': 'keine CWL aktiv'} %}
 
 {%- macro secs(v) -%}
 {%- if v is none -%}—
@@ -606,7 +621,8 @@
     <section class="sys" aria-labelledby="sec-sys">
         <div class="sys-top">
             <div class="sys-say">
-                <div class="k">Befund über {{ period_label(selected_days) }}</div>
+                <div class="k">Befund über {{ period_label(selected_days) }}
+                    <span class="k-at">· Stand {{ page.generated.strftime('%d.%m. %H:%M') }} UTC</span></div>
 
                 {#- The lead finding is decided in monitor_stats.build_verdict, not
                     here, and silence outranks failure correlation: a task that is
@@ -679,6 +695,7 @@
                 <i><span class="sw sw-skip"></span>übersprungen (planmäßig)</i>
                 <i><span class="sw sw-err"></span>Fehllauf</i>
                 <i><span class="sw sw-void"></span>kein Lauf</i>
+                <i><span class="sw sw-idle"></span>ruhend (kein Krieg/Raid/CWL)</i>
             </div>
         </div>
 
@@ -737,7 +754,11 @@
 
                 <span class="mon-pill {{ t.health }}"><span class="dot"></span>{{ health_label[t.health] }}</span>
 
-                <div class="reg-fig">{{ cadence(t.cadence) }}<small>zuletzt {{ ago(t.minutes_since) }}</small></div>
+                <div class="reg-fig">{{ cadence(t.cadence) }}<small>
+                    {%- if t.health == 'idle' and t.idle_reason -%}
+                        {{ idle_reason_label.get(t.idle_reason, t.idle_reason) }}
+                    {%- else -%}zuletzt {{ ago(t.minutes_since) }}{%- endif -%}
+                </small></div>
                 <div class="reg-fig r">{{ thou(t.runs) }}<small>{% if t.skipped %}{{ t.skipped }} übersprungen{% else %}alle aktiv{% endif %}</small></div>
                 <div class="reg-fig r {{ 'bad' if t.errors else 'dim' }}">{{ t.errors if t.errors else '—' }}<small>{{ 'Fehler' if t.errors else 'sauber' }}</small></div>
                 <div class="reg-fig r">{{ secs(t.avg_duration) }}<small>max {{ secs(t.max_duration) }}</small></div>
@@ -841,6 +862,7 @@
  {%- for t in page.tasks -%}
  {"key": "{{ t.key }}",
   "runs": [{% for p in t.series %}["{{ p.t.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ p.s }}"]{{ "," if not loop.last else "" }}{% endfor %}],
+  "idle": [{% for w in t.idle_windows %}["{{ w.start.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ w.end.strftime('%Y-%m-%dT%H:%M:%S') }}"]{{ "," if not loop.last else "" }}{% endfor %}],
   "gaps": [{% for g in t.gaps %}["{{ g.start.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ g.end.strftime('%Y-%m-%dT%H:%M:%S') }}"]{{ "," if not loop.last else "" }}{% endfor %}],
   "errs": [{% for e in page.incidents if e.kind != 'silence' and t.key in e.tasks %}["{{ e.start.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ e.end.strftime('%Y-%m-%dT%H:%M:%S') }}"]{{ "," if not loop.last else "" }}{% endfor %}]
  }{{ "," if not loop.last else "" }}
@@ -892,6 +914,11 @@
         data.lanes.forEach(lane => {
             const el = document.querySelector('.lane-track[data-lane="' + lane.key + '"]');
             if (!el) return;
+            // Behind everything else: this is context, not a signal.
+            const idle = (lane.idle || []).map(w =>
+                '<rect x="' + px(w[0]).toFixed(1) + '" y="0" width="' +
+                Math.max(1, px(w[1]) - px(w[0])).toFixed(1) +
+                '" height="' + H + '" fill="var(--lane-idle)"/>').join('');
             const runs = [], skips = [];
             lane.runs.forEach(r => {
                 const x = px(r[0]).toFixed(1);
@@ -909,7 +936,7 @@
                 '<rect x="' + (px(e[0]) - 1.4).toFixed(1) + '" y="0" width="' + Math.max(2.8, px(e[1]) - px(e[0])).toFixed(1) +
                 '" height="' + H + '" fill="var(--lane-err)"/>').join('');
             el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">' +
-                runs.join('') + skips.join('') + voids + errs + '</svg>';
+                idle + runs.join('') + skips.join('') + voids + errs + '</svg>';
         });
 
         const axis = document.getElementById('laneAxis');

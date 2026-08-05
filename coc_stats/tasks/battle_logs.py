@@ -4,6 +4,7 @@ import time
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_BATTLE_LOG_DATA
 from tasks import task_lock
+from tasks.schedule import active_minutes
 
 battle_logger = setup_task_logger('battle_logs', 'logs/task_battle_logs.log')
 
@@ -49,4 +50,6 @@ def task_update_battle_logs():
                     continue
             db.session.commit()
 
-        db_finalize_uptime(task_update_battle_logs.__name__, t0, summary=f"logs_added={logs_added}", logger=battle_logger)
+        db_finalize_uptime(task_update_battle_logs.__name__, t0, summary=f"logs_added={logs_added}",
+                           logger=battle_logger,
+                           interval_minutes=active_minutes(task_update_battle_logs.__name__))

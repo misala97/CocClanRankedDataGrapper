@@ -49,6 +49,11 @@
                under #fff, so those filled pills use this darker ground instead
                (white-on-red ≈5:1). */
             --red-solid: oklch(0.56 0.200 25);
+            /* Red as TEXT on a red-tinted surface. --red is tuned for text on the
+               plain dark bg; over a 10-15% red wash it drops under AA, so pages
+               were each inlining their own lighter value (4 copies in Members,
+               1 in Monitor). This is that value, once. */
+            --red-txt:   oklch(0.68 0.185 25);
             --yellow:  oklch(0.78 0.150 85);
             --purple:  oklch(0.62 0.170 290);
             --orange:  oklch(0.68 0.170 55);

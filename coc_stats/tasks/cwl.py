@@ -4,6 +4,7 @@ import time
 from logging_config import setup_task_logger
 from services.helpers import json_get, get_name_to_id, JSON_CWL_GROUP_DATA, JSON_CWL_WAR_DATA, JSON_PLAYER_DATA
 from tasks import task_lock
+from tasks.schedule import cwl_interval
 
 cwl_logger = setup_task_logger('cwl', 'logs/cwl.log')
 
@@ -36,9 +37,11 @@ def task_update_cwl():
         except RuntimeError as e:
             if '404' in str(e):
                 cwl_logger.info("Not in CWL (404 notFound) — skipping.")
+                interval = cwl_interval(None, None)
                 if extensions.scheduler:
-                    extensions.scheduler.reschedule_job('cwl_update', trigger='interval', hours=1)
-                db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', 'notFound', logger=cwl_logger)
+                    extensions.scheduler.reschedule_job('cwl_update', trigger='interval', minutes=interval)
+                db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', 'notFound',
+                                   logger=cwl_logger, interval_minutes=interval)
             else:
                 cwl_logger.warning(f"Could not fetch CWL league group: {e}")
                 db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', str(e), logger=cwl_logger)
@@ -56,15 +59,16 @@ def task_update_cwl():
         cfg         = db.session.get(ClanConfig, CLAN_TAG)
         league_name = cfg.cwl_league_name if cfg else None
         
+        # One decision per run: it sets the schedule and it gets recorded.
+        interval = cwl_interval(state, season_str)
+        if extensions.scheduler:
+            extensions.scheduler.reschedule_job('cwl_update', trigger='interval', minutes=interval)
+
         if state == 'notInWar' or not season_str:
-            if extensions.scheduler:
-                extensions.scheduler.reschedule_job('cwl_update', trigger='interval', hours=1)
             cwl_logger.info("Not in CWL — skipping.")
-            db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', summary='notInWar', logger=cwl_logger)
+            db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', summary='notInWar',
+                               logger=cwl_logger, interval_minutes=interval)
             return
-        else:
-            if extensions.scheduler:
-                extensions.scheduler.reschedule_job('cwl_update', trigger='interval', minutes=3)
 
         # ── Upsert season ─────────────────────────────────────────────────────
         try:
@@ -78,7 +82,8 @@ def task_update_cwl():
         except Exception as e:
             cwl_logger.error(f"Failed to upsert CWL season: {e}", exc_info=True)
             db.session.rollback()
-            db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger)
+            db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger,
+                               interval_minutes=interval)
             return
         db.session.commit()
 
@@ -114,7 +119,8 @@ def task_update_cwl():
         except Exception as e:
             cwl_logger.error(f"Failed to upsert CWL clans: {e}", exc_info=True)
             db.session.rollback()
-            db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger)
+            db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger,
+                               interval_minutes=interval)
             return
         db.session.commit()
 
@@ -129,7 +135,8 @@ def task_update_cwl():
             rounds = json_get(group, JSON_CWL_GROUP_DATA.ROUNDS) or []
         except Exception as e:
             cwl_logger.warning(f"Could not read CWL rounds: {e}")
-            db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger)
+            db_finalize_uptime(task_update_cwl.__name__, t0, 'error', str(e), logger=cwl_logger,
+                               interval_minutes=interval)
             return
 
         for round_num, round_data in enumerate(rounds, start=1):
@@ -229,5 +236,6 @@ def task_update_cwl():
         error_msg = f"Failed to save {len(set(failed_war_tags))} war(s): {', '.join(set(failed_war_tags))}" if failed_war_tags else None
         summary = f"season={season_str} state={state} wars_updated={wars_updated} attacks_added={attacks_added} wars_failed={len(set(failed_war_tags))}"
         cwl_logger.info(summary)
-        db_finalize_uptime(task_update_cwl.__name__, t0, status, error_msg, summary, logger=cwl_logger)
+        db_finalize_uptime(task_update_cwl.__name__, t0, status, error_msg, summary, logger=cwl_logger,
+                           interval_minutes=interval)
 

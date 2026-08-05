@@ -17,7 +17,6 @@ from types import SimpleNamespace as NS
 import pytest
 
 from features.admin.monitor_stats import (
-    CADENCE_SAMPLE,
     CLUSTER_GAP_MIN,
     LANE_POINTS,
     TASKS,
@@ -27,7 +26,8 @@ from features.admin.monitor_stats import (
     downsample,
     find_gaps,
     group_errors,
-    infer_cadence,
+    idle_windows,
+    resolve_interval,
     normalize_runs,
     rollup_causes,
     task_stats,
@@ -41,15 +41,22 @@ UNKNOWN = 'HTTP Error: 500 - {"reason":"unknownException"}'
 SEASON = "'Key: [season] could not be found'"
 
 
-def row(fn, minutes, status='success', duration=1.0, error='', summary=''):
-    """One UptimeTracker-shaped row, `minutes` after T0."""
+def row(fn, minutes, status='success', duration=1.0, error='', summary='', interval=None):
+    """One UptimeTracker-shaped row, `minutes` after T0.
+
+    `interval` is the schedule in force for the NEXT run, as the tasks record it.
+    None models a path that returned before it knew its schedule.
+    """
     return NS(function=fn, time=T0 + dt.timedelta(minutes=minutes),
               duration=duration, status=status,
-              error_message=error, summary=summary)
+              error_message=error, summary=summary,
+              interval_minutes=interval)
 
 
-def cadence_rows(fn, count, every, start=0, status='success'):
-    return [row(fn, start + i * every, status=status) for i in range(count)]
+def cadence_rows(fn, count, every, start=0, status='success', interval=-1):
+    """A run of rows `every` minutes apart, recording that same interval."""
+    iv = every if interval == -1 else interval
+    return [row(fn, start + i * every, status=status, interval=iv) for i in range(count)]
 
 
 def runs_of(rows, fn):
@@ -81,30 +88,41 @@ def test_cause_label_keeps_distinct_causes_distinct():
     assert cause_label(MAINT) != cause_label(UNKNOWN)
 
 
-# ── infer_cadence ─────────────────────────────────────────────────────────────
+# ── resolve_interval ─────────────────────────────────────────────────────────
 
-def test_infer_cadence_is_the_median_interval():
-    runs = runs_of(cadence_rows('t', 10, 5), 't')
-    assert infer_cadence(runs) == 5.0
-
-
-def test_infer_cadence_ignores_skipped_runs():
-    rows = cadence_rows('t', 6, 5) + [row('t', 7, status='skipped')]
-    assert infer_cadence(runs_of(rows, 't')) == 5.0
+def test_resolve_interval_reads_the_persisted_value():
+    rows = cadence_rows('task_update_clan_war', 4, 60, interval=60)
+    minutes, assumed = resolve_interval(runs_of(rows, 'task_update_clan_war'),
+                                        'task_update_clan_war')
+    assert minutes == 60
+    assert assumed is False
 
 
-def test_infer_cadence_follows_the_current_schedule_not_the_history():
-    """clan_war alternates between a 3- and a 60-minute schedule. Averaging
-    across both describes neither, so only the recent window counts."""
-    old = cadence_rows('t', 30, 60)
-    recent_start = 30 * 60
-    new = cadence_rows('t', CADENCE_SAMPLE, 3, start=recent_start)
-    assert infer_cadence(runs_of(old + new, 't')) == 3.0
+def test_null_intervals_carry_the_last_known_schedule_forward():
+    """An API failure writes NULL because it returns before the task inspects
+    game state. A burst of them must not lose the schedule."""
+    rows = [row('task_update_clan_war', 0, 'skipped', summary='notInWar', interval=60)]
+    rows += [row('task_update_clan_war', 60 + i, 'error', interval=None) for i in range(3)]
+    minutes, assumed = resolve_interval(runs_of(rows, 'task_update_clan_war'),
+                                        'task_update_clan_war')
+    assert minutes == 60
+    assert assumed is False
 
 
-def test_infer_cadence_is_none_without_two_runs():
-    assert infer_cadence(runs_of([row('t', 0)], 't')) is None
-    assert infer_cadence([]) is None
+def test_all_null_falls_back_to_the_declared_active_interval():
+    rows = [row('task_update_clan_war', i, 'error', interval=None) for i in range(3)]
+    minutes, assumed = resolve_interval(runs_of(rows, 'task_update_clan_war'),
+                                        'task_update_clan_war')
+    assert minutes == 3
+    assert assumed is True
+
+
+def test_an_unknown_task_has_no_interval_to_fall_back_on():
+    rows = [row('task_update_future', i, interval=None) for i in range(3)]
+    minutes, assumed = resolve_interval(runs_of(rows, 'task_update_future'),
+                                        'task_update_future')
+    assert minutes is None
+    assert assumed is True
 
 
 # ── find_gaps ─────────────────────────────────────────────────────────────────
@@ -516,3 +534,113 @@ def test_sparse_data_escalates_to_down_rather_than_delayed():
     assert task_stats('t', runs, T0 + dt.timedelta(minutes=30))['health'] == 'up'
     assert task_stats('t', runs, T0 + dt.timedelta(hours=5))['health'] == 'warn'
     assert task_stats('t', runs, T0 + dt.timedelta(days=11))['health'] == 'down'
+
+
+# ── schedule awareness ───────────────────────────────────────────────────────
+
+def test_an_idle_task_is_not_reported_as_down():
+    """The bug this whole change exists to fix: clan_war polling correctly on
+    its hourly idle schedule was reported Still, because cadence was inferred
+    from war-time runs days earlier."""
+    rows = cadence_rows('task_update_clan_war', 5, 60, status='skipped', interval=60)
+    now = T0 + dt.timedelta(minutes=4 * 60 + 30)
+    s = task_stats('task_update_clan_war', runs_of(rows, 'task_update_clan_war'), now)
+    assert s['health'] == 'idle'
+    assert s['mode'] == 'idle'
+    assert s['cadence'] == 60
+
+
+def test_an_idle_task_that_stops_polling_still_goes_down():
+    """Scaling the threshold to the schedule must not mean never alerting."""
+    rows = cadence_rows('task_update_clan_war', 5, 60, status='skipped', interval=60)
+    runs = runs_of(rows, 'task_update_clan_war')
+    base = T0 + dt.timedelta(minutes=4 * 60)
+    assert task_stats('task_update_clan_war', runs, base + dt.timedelta(minutes=80))['health'] == 'idle'
+    assert task_stats('task_update_clan_war', runs, base + dt.timedelta(minutes=100))['health'] == 'warn'
+    assert task_stats('task_update_clan_war', runs, base + dt.timedelta(minutes=200))['health'] == 'down'
+
+
+def test_an_active_task_still_uses_its_fast_threshold():
+    rows = cadence_rows('task_update_clan_war', 8, 3, interval=3)
+    runs = runs_of(rows, 'task_update_clan_war')
+    base = T0 + dt.timedelta(minutes=21)
+    assert task_stats('task_update_clan_war', runs, base + dt.timedelta(minutes=2))['health'] == 'up'
+    assert task_stats('task_update_clan_war', runs, base + dt.timedelta(minutes=6))['health'] == 'warn'
+    assert task_stats('task_update_clan_war', runs, base + dt.timedelta(minutes=12))['health'] == 'down'
+
+
+def test_a_fixed_task_can_never_be_idle():
+    rows = cadence_rows('task_update_battle_logs', 6, 5, interval=5)
+    s = task_stats('task_update_battle_logs',
+                   runs_of(rows, 'task_update_battle_logs'),
+                   T0 + dt.timedelta(minutes=27))
+    assert s['mode'] == 'active'
+    assert s['health'] == 'up'
+
+
+def test_idle_reason_comes_from_the_last_summary():
+    rows = cadence_rows('task_update_raid_weekend', 3, 60,
+                        status='skipped', interval=60)
+    for r in rows:
+        r.summary = 'not ongoing'
+    s = task_stats('task_update_raid_weekend',
+                   runs_of(rows, 'task_update_raid_weekend'),
+                   T0 + dt.timedelta(minutes=130))
+    assert s['idle_reason'] == 'not ongoing'
+
+
+def test_an_active_task_has_no_idle_reason():
+    rows = cadence_rows('task_update_clan_war', 6, 3, interval=3)
+    s = task_stats('task_update_clan_war', runs_of(rows, 'task_update_clan_war'),
+                   T0 + dt.timedelta(minutes=16))
+    assert s['idle_reason'] is None
+
+
+def test_hourly_polling_is_not_counted_as_a_gap():
+    """find_gaps compared hourly idle polls against a 3-minute cadence."""
+    rows = cadence_rows('task_update_clan_war', 6, 60, status='skipped', interval=60)
+    s = task_stats('task_update_clan_war', runs_of(rows, 'task_update_clan_war'),
+                   T0 + dt.timedelta(minutes=5 * 60 + 10))
+    assert s['gaps'] == []
+
+
+def test_idle_windows_group_contiguous_dormant_stretches():
+    """Task 6 shades these behind the lane; a wrong grouping paints the wrong
+    span of history as dormant."""
+    rows  = cadence_rows('task_update_clan_war', 5, 3, interval=3)
+    rows += cadence_rows('task_update_clan_war', 4, 60, start=60,
+                         status='skipped', interval=60)
+    rows += cadence_rows('task_update_clan_war', 3, 3, start=400, interval=3)
+    windows = idle_windows(runs_of(rows, 'task_update_clan_war'), 'task_update_clan_war')
+    assert len(windows) == 1
+    assert windows[0]['start'] == T0 + dt.timedelta(minutes=60)
+
+
+def test_a_fixed_task_has_no_idle_windows():
+    rows = cadence_rows('task_update_battle_logs', 6, 5, interval=5)
+    assert idle_windows(runs_of(rows, 'task_update_battle_logs'),
+                        'task_update_battle_logs') == []
+
+
+def test_a_skipped_run_proves_the_task_is_alive():
+    """An idle task only ever writes `skipped` rows. Excluding them made a
+    perfectly healthy dormant task look silent for the whole idle stretch —
+    which is the same mistake, one layer down, that this change exists to fix."""
+    rows = cadence_rows('task_update_clan_war', 6, 60, status='skipped', interval=60)
+    gaps = find_gaps(runs_of(rows, 'task_update_clan_war'), cadence=60.0,
+                     now=T0 + dt.timedelta(minutes=5 * 60 + 20))
+    assert gaps == []
+
+
+def test_idle_tasks_count_as_healthy_in_the_summary():
+    """The verdict said 'alle Tasks im Takt' while the figure beside it read
+    4/6 in red, because dormant counted as neither healthy nor stalled."""
+    rows = []
+    for key in ('task_update_battle_logs', 'task_update_ranked_weeks',
+                'task_update_clan_members'):
+        rows += cadence_rows(key, 40, 5, interval=5)
+    for key in ('task_update_clan_war', 'task_update_cwl', 'task_update_raid_weekend'):
+        rows += cadence_rows(key, 4, 60, status='skipped', interval=60)
+    page = build_monitor_page(rows, T0 + dt.timedelta(minutes=200))
+    assert page['verdict']['kind'] == 'clear'
+    assert page['summary']['healthy'] == page['summary']['task_count']
