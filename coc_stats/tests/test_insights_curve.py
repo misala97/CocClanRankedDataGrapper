@@ -254,3 +254,31 @@ def test_a_player_with_no_scorable_attacks_is_absent_entirely():
 
 def test_no_facts_yields_no_rows():
     assert player_sae([], flat_curve(2.0)) == []
+
+
+def test_roster_excludes_attackers_outside_it():
+    facts = ([att('#IN', 0, 3) for _ in range(MIN_PLAYER_ATTACKS)] +
+             [att('#OUT', 0, 3) for _ in range(MIN_PLAYER_ATTACKS)])
+    rows = player_sae(facts, flat_curve(2.0), roster={'#IN'})
+    assert [r['tag'] for r in rows] == ['#IN']
+
+
+def test_roster_leaves_an_included_attacker_unaffected():
+    facts = ([att('#IN', 0, 3) for _ in range(MIN_PLAYER_ATTACKS)] +
+             [att('#OUT', 0, 1) for _ in range(MIN_PLAYER_ATTACKS)])
+    scoped   = {r['tag']: r for r in player_sae(facts, flat_curve(2.0), roster={'#IN'})}
+    unscoped = {r['tag']: r for r in player_sae(facts, flat_curve(2.0))}
+    assert scoped['#IN'] == unscoped['#IN']
+
+
+def test_roster_none_scores_every_attacker_the_default():
+    facts = ([att('#A', 0, 3) for _ in range(MIN_PLAYER_ATTACKS)] +
+             [att('#B', 0, 1) for _ in range(MIN_PLAYER_ATTACKS)])
+    rows = player_sae(facts, flat_curve(2.0), roster=None)
+    assert {r['tag'] for r in rows} == {'#A', '#B'}
+
+
+def test_roster_empty_set_yields_no_rows():
+    """An empty roster is a deliberate empty scope, not "no roster given"."""
+    facts = [att('#A', 0, 3) for _ in range(MIN_PLAYER_ATTACKS)]
+    assert player_sae(facts, flat_curve(2.0), roster=set()) == []

@@ -33,11 +33,15 @@ def build_briefing():
 
     from models import Player
 
+    players      = Player.query.all()
+    names        = {p.tag: p.name or p.tag for p in players}
+    in_clan_tags = {p.tag for p in players if p.in_clan}
+
     facts = load_attack_facts()
     fitted = curve.build_curve(facts)
     our_tag = resolve_clan_tag()
 
-    ranked_scores, raid_scores, roster, games, attacks = \
+    ranked_scores, raid_scores, corr_roster, games, attacks = \
         correlation.load_correlation_inputs()
 
     ranked_rows = consistency.consistency(ranked_scores,
@@ -47,16 +51,20 @@ def build_briefing():
 
     data = {
         'curve':              fitted,
-        'players_sae':        curve.player_sae(facts, fitted),
+        # Scope is in_clan=True: this study ranks who on OUR roster beats
+        # the curve, a roster decision. upgrade.py below deliberately stays
+        # unscoped (it studies a phenomenon, not a roster) - the two differ
+        # on purpose, do not "fix" them to match.
+        'players_sae':        curve.player_sae(facts, fitted, roster=in_clan_tags),
         'benchmark':          benchmark.clan_ranking(facts, fitted, our_tag),
         'consistency_ranked': ranked_rows,
         'consistency_raid':   raid_rows,
         'contrast_ranked':    consistency.contrast_pair(ranked_rows),
         'upgrade':            upgrade.upgrade_effect(facts, fitted),
         'correlation':        correlation.build_correlation(
-                                  ranked_scores, raid_scores, roster,
+                                  ranked_scores, raid_scores, corr_roster,
                                   games, attacks),
-        'names':              {p.tag: p.name or p.tag for p in Player.query.all()},
+        'names':              names,
         'our_clan_tag':       our_tag,
     }
 

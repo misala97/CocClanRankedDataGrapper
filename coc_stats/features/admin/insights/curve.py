@@ -118,15 +118,23 @@ def sae_of(fact, curve):
     return fact['stars'] - bucket['mean_stars']
 
 
-def player_sae(facts, curve, min_attacks=MIN_PLAYER_ATTACKS):
+def player_sae(facts, curve, min_attacks=MIN_PLAYER_ATTACKS, roster=None):
     """Per-attacker stars above expectation, best first, thin players last.
 
     Thin players keep their real figure - it is shown, just not ranked. A
     player with three lucky attacks should not appear above one with forty
     solid ones, and dropping them outright would silently shrink the roster.
+
+    roster, when given, is the set of attacker tags allowed to produce a row -
+    the caller's scope decision, made explicit at the call site rather than
+    filtered after the fact. roster=None means every attacker in facts, which
+    keeps every existing caller unchanged. roster=set() is a deliberate empty
+    scope, not "no scope given", and yields no rows.
     """
     by_player = defaultdict(list)
     for f in facts:
+        if roster is not None and f['attacker_tag'] not in roster:
+            continue
         by_player[f['attacker_tag']].append(f)
 
     rows = []
