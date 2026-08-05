@@ -115,3 +115,75 @@ def test_no_facts_yields_an_empty_aggregate_not_a_crash():
     out = upgrade_effect([], CURVE)
     assert out['players'] == [] and out['n_players'] == 0
     assert out['mean_dip'] is None and out['median_recovery'] is None
+
+
+def test_a_second_upgrade_inside_the_after_window_clips_it():
+    """The after-window for the first upgrade must not bleed into the second
+    upgrade's era. Six TH15 attacks then a TH16 upgrade means the after side
+    is those six attacks only, not ten."""
+    facts = (run('#A', 14, [3] * WINDOW) +
+             run('#A', 15, [1] * 6, start=WINDOW) +
+             run('#A', 16, [0] * WINDOW, start=WINDOW + 6))
+    row = upgrade_effect(facts, CURVE)['players'][0]
+    assert (row['from_th'], row['to_th']) == (14, 15)
+    assert row['n_after'] == 6
+    assert row['after'] == -1.0
+    assert row['dip'] == -2.0
+
+
+def test_clipping_below_min_side_drops_the_player():
+    """If the second upgrade lands before MIN_SIDE clean attacks accumulate,
+    there is nothing left to judge the first upgrade on."""
+    facts = (run('#A', 14, [3] * WINDOW) +
+             run('#A', 15, [1] * (MIN_SIDE - 1), start=WINDOW) +
+             run('#A', 16, [0] * WINDOW, start=WINDOW + MIN_SIDE - 1))
+    assert upgrade_effect(facts, CURVE)['players'] == []
+
+
+def test_from_th_skips_a_none_reading_immediately_before_the_upgrade():
+    """A row with no parsed town hall must not overwrite the real prior
+    level - the row that happens to sit right before the upgrade attack is
+    not necessarily the one that carries a usable attacker_th."""
+    none_row = {'src': 'war', 'attacker_tag': '#A', 'attacker_th': None,
+                'defender_th': 14, 'stars': 2, 'destruction': 100.0,
+                'clan_tag': '#US', 'war_id': 9,
+                'ended_at': T0 + dt.timedelta(days=9), 'attack_order': 1}
+    facts = (run('#A', 14, [3] * 9, start=0) + [none_row] +
+             run('#A', 16, [1] * WINDOW, start=10))
+    row = upgrade_effect(facts, CURVE)['players'][0]
+    assert row['from_th'] == 14
+    assert row['from_th'] is not None
+
+
+def test_from_th_ignores_a_downward_glitch():
+    """A stray low reading just before the upgrade (15, 14, 16) must not be
+    mistaken for the pre-upgrade level - the real prior level is the running
+    maximum, 15, not the glitch."""
+    glitch_row = {'src': 'war', 'attacker_tag': '#A', 'attacker_th': 14,
+                  'defender_th': 15, 'stars': 2, 'destruction': 100.0,
+                  'clan_tag': '#US', 'war_id': 9,
+                  'ended_at': T0 + dt.timedelta(days=9), 'attack_order': 1}
+    facts = (run('#A', 15, [3] * 9, start=0) + [glitch_row] +
+             run('#A', 16, [1] * WINDOW, start=10))
+    row = upgrade_effect(facts, CURVE)['players'][0]
+    assert row['from_th'] == 15
+
+
+def test_median_recovery_is_the_median_not_the_mean():
+    """With more than two recovered players, median and mean diverge - this
+    must exercise that split, and the int() cast on a genuinely fractional
+    median."""
+    def player(tag, after_stars):
+        return (run(tag, 14, [2] * WINDOW) +
+                run(tag, 15, after_stars, start=WINDOW))
+
+    facts = (player('#A', [2] * WINDOW) +                 # recovers at 5
+             player('#B', [2] * WINDOW) +                 # recovers at 5
+             player('#C', [0] + [2] * (WINDOW - 1)) +      # recovers at 6
+             player('#D', [0] * 5 + [2] * 5))              # recovers at 10
+
+    out = upgrade_effect(facts, CURVE)
+    recovered = sorted(r['recovered_after'] for r in out['players'])
+    assert recovered == [5, 5, 6, 10]
+    assert out['median_recovery'] == 5          # median([5,5,6,10]) = 5.5 -> 5
+    assert isinstance(out['median_recovery'], int)

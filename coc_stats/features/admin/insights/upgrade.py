@@ -60,16 +60,29 @@ def upgrade_effect(facts, curve):
             continue
 
         before = ordered[max(0, idx - WINDOW):idx]
-        after  = ordered[idx:idx + WINDOW]
+        # The after-window must not bleed into a second upgrade's era: if one
+        # falls sooner than WINDOW attacks away, the after side stops there.
+        after_end = idx + WINDOW
+        nxt = _upgrade_index(ordered[idx:])
+        if nxt is not None:
+            after_end = min(after_end, idx + nxt)
+        after  = ordered[idx:after_end]
         b_sae  = [d for d in (sae_of(f, curve) for f in before) if d is not None]
         a_sae  = [d for d in (sae_of(f, curve) for f in after) if d is not None]
         if len(b_sae) < MIN_SIDE or len(a_sae) < MIN_SIDE:
             continue
 
+        # The pre-upgrade level is the highest town hall seen before the
+        # upgrade - the same value _upgrade_index compared against - not
+        # whatever attacker_th the immediately preceding row happens to
+        # carry, which may be None or a downward glitch.
+        prior   = [f['attacker_th'] for f in ordered[:idx] if f['attacker_th']]
+        from_th = max(prior) if prior else None
+
         baseline = _mean(b_sae)
         rows.append({
             'tag':             tag,
-            'from_th':         ordered[idx - 1]['attacker_th'],
+            'from_th':         from_th,
             'to_th':           ordered[idx]['attacker_th'],
             'before':          baseline,
             'after':           _mean(a_sae),
