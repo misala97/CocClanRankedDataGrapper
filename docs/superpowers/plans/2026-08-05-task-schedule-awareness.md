@@ -23,80 +23,35 @@ Spec: `docs/superpowers/specs/2026-08-05-task-schedule-awareness-design.md`
 
 ---
 
-### Task 1: Fix `raid_weekend` never leaving its 3-minute schedule
+### Task 1: The schedule registry and the interval decisions
 
-`state == 'ended'` matches neither reschedule branch, so since the last raid weekend ended the job has kept its war interval — 480 runs in 24 hours against ~24 expected. Independent of everything else in this plan; ships first.
-
-**Files:**
-- Modify: `coc_stats/tasks/raid_weekend.py:58-66`
-
-**Interfaces:**
-- Consumes: nothing
-- Produces: nothing — behaviour-only change
-
-- [ ] **Step 1: Read the current branch to confirm the defect**
-
-Run: `sed -n '56,68p' coc_stats/tasks/raid_weekend.py`
-
-Expected: an `if ... not in ('ongoing', 'ended')` branch that reschedules hourly and returns, then an `elif ... == 'ongoing'` that reschedules to 3 minutes. No branch handles `'ended'`.
-
-- [ ] **Step 2: Make `'ended'` downshift**
-
-Replace the `elif` at `tasks/raid_weekend.py:63-66` with:
-
-```python
-        elif raid_weekend.state == 'ongoing':
-            if extensions.scheduler:
-                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', minutes=3)
-        else:
-            # state == 'ended': the weekend is over and its logs are final, but we
-            # still poll so a late-arriving attack log gets picked up. Hourly is
-            # plenty — this branch used to fall through with no reschedule at all,
-            # leaving the job on its 3-minute war interval indefinitely.
-            if extensions.scheduler:
-                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', hours=1)
-```
-
-- [ ] **Step 3: Verify the module still imports**
-
-Run: `cd coc_stats && python -c "import tasks.raid_weekend; print('ok')"`
-Expected: `ok`
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add coc_stats/tasks/raid_weekend.py
-git commit -m "fix(raid): drop to the hourly schedule once a raid weekend has ended
-
-state == 'ended' matched neither reschedule branch, so the job kept whatever
-interval it last held - 3 minutes, set while the weekend was live. The last
-weekend ended 2026-08-03 and the task has been polling every 3 minutes since:
-480 runs in 24 hours against ~24 expected, roughly 456 needless calls a day
-into an API this codebase already documents as timing out frequently."
-```
-
----
-
-### Task 2: Single source of truth for intervals
+Every background-task interval, and the rules that choose between them, in one
+pure module. This is also where the `raid_weekend` defect gets fixed — not by
+patching in the missing branch, but by making the decision a total function and
+testing that no state can fall through it.
 
 **Files:**
 - Create: `coc_stats/tasks/schedule.py`
 - Create: `coc_stats/tests/test_task_schedule.py`
-- Modify: `coc_stats/run_scheduler.py:39-44`
 
 **Interfaces:**
-- Produces: `TASK_SCHEDULE: dict[str, dict[str, int | None]]`, `active_minutes(key) -> int`, `idle_minutes(key) -> int | None`, `is_dynamic(key) -> bool`
+- Produces: `TASK_SCHEDULE`, `active_minutes(key) -> int`, `idle_minutes(key) -> int | None`, `is_dynamic(key) -> bool`, `war_interval(state) -> int`, `cwl_interval(state, season) -> int`, `raid_interval(state) -> int`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 Create `coc_stats/tests/test_task_schedule.py`:
 
 ```python
 # -*- coding: utf-8 -*-
-"""The interval registry is the only place task schedules are written.
+"""The interval registry and the rules that pick between intervals.
 
 run_scheduler.py, the three dynamic tasks and features/admin/monitor_stats.py
 all read from here. Duplicating the numbers is what this module exists to stop.
+
+The *_interval functions are total on purpose. raid_weekend shipped a bug where
+state == 'ended' matched neither reschedule branch and the job silently kept its
+3-minute war interval for two days; the exhaustiveness tests below are what
+catch that class of defect.
 """
 
 import pytest
@@ -104,8 +59,11 @@ import pytest
 from tasks.schedule import (
     TASK_SCHEDULE,
     active_minutes,
+    cwl_interval,
     idle_minutes,
     is_dynamic,
+    raid_interval,
+    war_interval,
 )
 
 
@@ -139,28 +97,77 @@ def test_idle_is_always_slower_than_active():
 def test_lookups_reject_unknown_tasks():
     with pytest.raises(KeyError):
         active_minutes('task_update_nonexistent')
+
+
+# ── the decisions must be total ──────────────────────────────────────────────
+
+@pytest.mark.parametrize('state', [
+    'ongoing', 'ended', 'notStarted', 'unknown', '', None,
+])
+def test_every_raid_state_maps_to_a_real_interval(state):
+    """Regression test for the two-day 3-minute poll: 'ended' matched no branch,
+    so the job kept whatever interval it happened to hold."""
+    assert raid_interval(state) in (3, 60)
+
+
+def test_only_an_ongoing_raid_weekend_polls_fast():
+    assert raid_interval('ongoing') == 3
+    assert raid_interval('ended') == 60
+    assert raid_interval('notStarted') == 60
+
+
+@pytest.mark.parametrize('state', [
+    'inWar', 'preparation', 'warEnded', 'notInWar', 'unknown', '', None,
+])
+def test_every_war_state_maps_to_a_real_interval(state):
+    assert war_interval(state) in (3, 60)
+
+
+def test_only_a_live_war_polls_fast():
+    assert war_interval('inWar') == 3
+    assert war_interval('preparation') == 3
+    assert war_interval('warEnded') == 60
+    assert war_interval('notInWar') == 60
+
+
+@pytest.mark.parametrize('state,season', [
+    ('inWar', '2026-08'), ('preparation', '2026-08'), ('notInWar', '2026-08'),
+    ('inWar', ''), ('inWar', None), (None, None), ('', ''),
+])
+def test_every_cwl_input_maps_to_a_real_interval(state, season):
+    assert cwl_interval(state, season) in (3, 60)
+
+
+def test_cwl_polls_fast_only_with_a_live_season():
+    assert cwl_interval('inWar', '2026-08') == 3
+    assert cwl_interval('notInWar', '2026-08') == 60
+    assert cwl_interval('inWar', '') == 60
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [ ] **Step 2: Run them to make sure they fail**
 
 Run: `cd coc_stats && python -m pytest tests/test_task_schedule.py -q`
 Expected: FAIL — `ModuleNotFoundError: No module named 'tasks.schedule'`
 
-- [ ] **Step 3: Create the registry**
+- [ ] **Step 3: Create the module**
 
 Create `coc_stats/tasks/schedule.py`:
 
 ```python
-"""The only place background-task intervals are written.
+"""The only place background-task intervals are written, and the rules that
+choose between them.
 
 Three of the six tasks retune themselves at runtime — clan_war, cwl and
-raid_weekend drop from a 3-minute war/season cadence to hourly when there is
-nothing to poll for. That interval used to be written in run_scheduler.py and
-again inside each task's reschedule call, with the Monitor reverse-engineering
-it from timestamps a third time. Three copies of one number is how they drift.
+raid_weekend drop from a 3-minute cadence to hourly when there is nothing to
+poll for. That interval used to be written in run_scheduler.py and again inside
+each task's reschedule call, with the Monitor reverse-engineering it from
+timestamps a third time. Three copies of one number is how they drift.
 
-run_scheduler.py registers jobs from here, the tasks reschedule from here, and
-features/admin/monitor_stats.py decides what "overdue" means from here.
+The *_interval functions are total: every possible state maps to an interval.
+raid_weekend previously decided this with an if/elif covering 'ongoing' and
+"neither ongoing nor ended", leaving state == 'ended' to match neither branch
+and the job to keep whatever interval it held. It polled every 3 minutes for
+two days.
 """
 
 TASK_SCHEDULE = {
@@ -186,62 +193,77 @@ def idle_minutes(key):
 def is_dynamic(key):
     """True when the task switches interval at runtime."""
     return TASK_SCHEDULE.get(key, {}).get('idle') is not None
+
+
+def _pick(key, active):
+    return active_minutes(key) if active else idle_minutes(key)
+
+
+def war_interval(state):
+    """Clan war: only a live war is worth polling every few minutes.
+
+    'warEnded' is still polled so the final result lands, but hourly is plenty.
+    """
+    return _pick('task_update_clan_war',
+                 state not in ('notInWar', 'warEnded', None, ''))
+
+
+def cwl_interval(state, season):
+    """CWL: needs both a season and a state that is not 'notInWar'."""
+    return _pick('task_update_cwl',
+                 bool(season) and state not in ('notInWar', None, ''))
+
+
+def raid_interval(state):
+    """Raid weekend: only an ongoing weekend polls fast.
+
+    'ended' is polled hourly so a late-arriving attack log still gets picked up.
+    """
+    return _pick('task_update_raid_weekend', state == 'ongoing')
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd coc_stats && python -m pytest tests/test_task_schedule.py -q`
-Expected: `5 passed`
+Expected: `26 passed`
 
-- [ ] **Step 5: Register jobs from the registry**
+- [ ] **Step 5: Teeth-check the exhaustiveness test**
 
-In `coc_stats/run_scheduler.py`, replace the six `add_job` lines (39-44) with:
-
-```python
-    # Intervals come from tasks/schedule.py — the dynamic three retune themselves
-    # from the same registry, so the number is written in exactly one place.
-    scheduler.add_job(func=task_update_clan_members, trigger="interval",
-                      minutes=active_minutes('task_update_clan_members'), max_instances=1)
-    scheduler.add_job(func=task_update_ranked_weeks, trigger="interval",
-                      minutes=active_minutes('task_update_ranked_weeks'), max_instances=1)
-    scheduler.add_job(func=task_update_battle_logs, trigger="interval",
-                      minutes=active_minutes('task_update_battle_logs'), max_instances=1)
-    scheduler.add_job(func=task_update_raid_weekend, trigger="interval",
-                      minutes=active_minutes('task_update_raid_weekend'),
-                      max_instances=1, id='raid_weekend_update')
-    scheduler.add_job(func=task_update_clan_war, trigger="interval",
-                      minutes=active_minutes('task_update_clan_war'),
-                      max_instances=1, id='clan_war_update')
-    scheduler.add_job(func=task_update_cwl, trigger="interval",
-                      minutes=active_minutes('task_update_cwl'),
-                      max_instances=1, id='cwl_update')
-```
-
-Add the import near the other `from tasks...` imports at the top of the file:
+Temporarily reintroduce the original defect — replace `raid_interval` with:
 
 ```python
-from tasks.schedule import active_minutes
+def raid_interval(state):
+    if state not in ('ongoing', 'ended'):
+        return idle_minutes('task_update_raid_weekend')
+    elif state == 'ongoing':
+        return active_minutes('task_update_raid_weekend')
 ```
 
-- [ ] **Step 6: Verify the scheduler module imports**
+Run: `cd coc_stats && python -m pytest tests/test_task_schedule.py -q`
+Expected: FAIL on `test_every_raid_state_maps_to_a_real_interval[ended]` — the function returns `None`.
 
-Run: `cd coc_stats && python -c "import run_scheduler; print('ok')"`
-Expected: `ok`
+Restore the correct version and re-run. Expected: `26 passed`. This is the exact defect that ran in production for two days; the suite now catches it.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add coc_stats/tasks/schedule.py coc_stats/tests/test_task_schedule.py coc_stats/run_scheduler.py
-git commit -m "refactor(tasks): put every background-task interval in one registry
+git add coc_stats/tasks/schedule.py coc_stats/tests/test_task_schedule.py
+git commit -m "feat(tasks): one registry for task intervals, with total decision rules
 
 The numbers lived in run_scheduler.py and again in each dynamic task's
 reschedule call, and the Monitor inferred them from timestamps a third time.
-Three copies of one number drift; tasks/schedule.py is now the only copy."
+Three copies of one number drift.
+
+The *_interval functions are total by design. raid_weekend decided this with an
+if/elif covering 'ongoing' and 'neither ongoing nor ended', so state == 'ended'
+matched neither and the job kept its 3-minute war interval for two days - 480
+runs in 24 hours against ~24 expected. A parametrised exhaustiveness test now
+fails if any state maps to nothing."
 ```
 
 ---
 
-### Task 3: Persist the interval on every run
+### Task 2: Persist the interval on every run
 
 **Files:**
 - Modify: `coc_stats/models.py` (UptimeTracker)
@@ -249,7 +271,7 @@ Three copies of one number drift; tasks/schedule.py is now the only copy."
 - Create: `coc_stats/migrations/versions/b4e7d2a91f56_add_interval_minutes_to_uptime.py`
 
 **Interfaces:**
-- Consumes: `tasks.schedule.TASK_SCHEDULE` (Task 2)
+- Consumes: `tasks.schedule.TASK_SCHEDULE` (Task 1)
 - Produces: `UptimeTracker.interval_minutes: int | None`; `db_finalize_uptime(..., interval_minutes=None)`
 
 - [ ] **Step 1: Add the column to the model**
@@ -400,26 +422,60 @@ state, so it genuinely does not know its schedule at that point."
 
 ---
 
-### Task 4: Have the tasks report their interval
+### Task 3: Wire the tasks and the scheduler to the registry
+
+One decision per run, used twice: it sets the schedule and it gets recorded.
+This is also where the `raid_weekend` fix reaches running code — Task 1 made the
+rule correct and tested, this makes the task obey it.
 
 **Files:**
-- Modify: `coc_stats/tasks/clan_war.py`
-- Modify: `coc_stats/tasks/cwl.py`
-- Modify: `coc_stats/tasks/raid_weekend.py`
+- Modify: `coc_stats/run_scheduler.py:39-44`
+- Modify: `coc_stats/tasks/clan_war.py`, `cwl.py`, `raid_weekend.py`
 - Modify: `coc_stats/tasks/battle_logs.py`, `clan_members.py`, `ranked_weeks.py`
 
 **Interfaces:**
-- Consumes: `db_finalize_uptime(..., interval_minutes=...)` (Task 3), `tasks.schedule` (Task 2)
+- Consumes: `tasks.schedule` (Task 1), `db_finalize_uptime(..., interval_minutes=)` (Task 2)
 
-- [ ] **Step 1: Fixed-interval tasks report their constant**
+- [ ] **Step 1: Register jobs from the registry**
 
-In each of `tasks/battle_logs.py`, `tasks/clan_members.py`, `tasks/ranked_weeks.py`, add the import:
+In `coc_stats/run_scheduler.py`, add near the other `from tasks...` imports:
 
 ```python
 from tasks.schedule import active_minutes
 ```
 
-and add `interval_minutes=active_minutes(<task_func>.__name__)` to **every** `db_finalize_uptime(...)` call in the file. Example for `battle_logs.py`:
+Replace the six `add_job` lines (39-44) with:
+
+```python
+    # Intervals come from tasks/schedule.py — the dynamic three retune themselves
+    # from the same registry, so the number is written in exactly one place.
+    scheduler.add_job(func=task_update_clan_members, trigger="interval",
+                      minutes=active_minutes('task_update_clan_members'), max_instances=1)
+    scheduler.add_job(func=task_update_ranked_weeks, trigger="interval",
+                      minutes=active_minutes('task_update_ranked_weeks'), max_instances=1)
+    scheduler.add_job(func=task_update_battle_logs, trigger="interval",
+                      minutes=active_minutes('task_update_battle_logs'), max_instances=1)
+    scheduler.add_job(func=task_update_raid_weekend, trigger="interval",
+                      minutes=active_minutes('task_update_raid_weekend'),
+                      max_instances=1, id='raid_weekend_update')
+    scheduler.add_job(func=task_update_clan_war, trigger="interval",
+                      minutes=active_minutes('task_update_clan_war'),
+                      max_instances=1, id='clan_war_update')
+    scheduler.add_job(func=task_update_cwl, trigger="interval",
+                      minutes=active_minutes('task_update_cwl'),
+                      max_instances=1, id='cwl_update')
+```
+
+- [ ] **Step 2: Fixed-interval tasks report their constant**
+
+In each of `tasks/battle_logs.py`, `tasks/clan_members.py`, `tasks/ranked_weeks.py`, add:
+
+```python
+from tasks.schedule import active_minutes
+```
+
+and add `interval_minutes=active_minutes(<task_func>.__name__)` to **every**
+`db_finalize_uptime(...)` call in that file. Example from `battle_logs.py`:
 
 ```python
         db_finalize_uptime(task_update_battle_logs.__name__, t0, 'error', str(e),
@@ -427,93 +483,148 @@ and add `interval_minutes=active_minutes(<task_func>.__name__)` to **every** `db
                            interval_minutes=active_minutes(task_update_battle_logs.__name__))
 ```
 
-These tasks never change interval, so every row — including error rows — carries the true value.
+These tasks never change interval, so every row — error rows included — carries
+the true value.
 
-- [ ] **Step 2: Dynamic tasks report the interval they just set**
+- [ ] **Step 3: `clan_war` decides once, then applies and records it**
 
 In `tasks/clan_war.py`, add:
 
 ```python
-from tasks.schedule import active_minutes, idle_minutes
+from tasks.schedule import war_interval
 ```
 
-Then pass the matching value at each site that follows a reschedule:
-
-- the `notInWar` branch → `interval_minutes=idle_minutes(task_update_clan_war.__name__)`
-- the `warEnded` / already-finalized branch → `interval_minutes=idle_minutes(...)`
-- the final `db_finalize_uptime` at the end of a processed war → `interval_minutes=active_minutes(...)`
-- **the early `except` around the API fetch → leave `interval_minutes` unset (NULL)**, because that path returns before the task learns the war state
-
-In `tasks/cwl.py`, add the same import, then:
+Immediately after `state` is read (line 42), compute the interval once and apply it:
 
 ```python
-# the 404 "not in CWL" branch — reschedules hourly, so report idle
+        interval = war_interval(state)
+        _reschedule(minutes=interval)
+```
+
+Then delete the three scattered `_reschedule(hours=1)` / `_reschedule(minutes=3)`
+calls at lines 50, 55 and 65, and pass `interval_minutes=interval` on each
+`db_finalize_uptime` that follows the decision:
+
+```python
+            db_finalize_uptime(task_update_clan_war.__name__, t0, 'skipped',
+                               summary='notInWar', logger=clan_war_logger,
+                               interval_minutes=interval)
+```
+
+Apply the same to the `already finalized` call and the final call at the end of a
+processed war.
+
+**Leave the early `except` at line 45 alone** — it returns before `state` exists,
+so no decision was made and the row must stay NULL.
+
+- [ ] **Step 4: Same shape for `cwl` and `raid_weekend`**
+
+`tasks/cwl.py` — add `from tasks.schedule import cwl_interval`. The season string
+is only known after the group fetch, so the 404 branch decides on its own:
+
+```python
+# the 404 "not in CWL" branch
+                interval = cwl_interval(None, None)
+                if extensions.scheduler:
+                    extensions.scheduler.reschedule_job('cwl_update', trigger='interval',
+                                                        minutes=interval)
                 db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', 'notFound',
-                                   logger=cwl_logger,
-                                   interval_minutes=idle_minutes(task_update_cwl.__name__))
-
-# the non-404 fetch failure directly below it — no reschedule happened, leave NULL
-                db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', str(e), logger=cwl_logger)
-
-# the 'notInWar or not season_str' branch — reschedules hourly
-            db_finalize_uptime(task_update_cwl.__name__, t0, 'skipped', summary='notInWar',
-                               logger=cwl_logger,
-                               interval_minutes=idle_minutes(task_update_cwl.__name__))
+                                   logger=cwl_logger, interval_minutes=interval)
 ```
 
-and pass `interval_minutes=active_minutes(task_update_cwl.__name__)` on the final `db_finalize_uptime` of a processed season.
-
-In `tasks/raid_weekend.py`, add the same import, then:
+and after `state` and `season_str` are both known, replace the `if/else` pair of
+reschedule calls with one decision:
 
 ```python
-# the 'not ongoing' branch — reschedules hourly
+        interval = cwl_interval(state, season_str)
+        if extensions.scheduler:
+            extensions.scheduler.reschedule_job('cwl_update', trigger='interval',
+                                                minutes=interval)
+```
+
+passing `interval_minutes=interval` on the `notInWar` skip and on the final
+processed-season call. Leave the non-404 fetch failure NULL.
+
+`tasks/raid_weekend.py` — add `from tasks.schedule import raid_interval`. Replace
+the whole `if/elif` block at lines 58-66 with:
+
+```python
+        interval = raid_interval(raid_weekend.state)
+        if extensions.scheduler:
+            extensions.scheduler.reschedule_job('raid_weekend_update',
+                                                trigger='interval', minutes=interval)
+        if raid_weekend.state not in ('ongoing', 'ended'):
+            raid_weekend_logger.info("No active raid weekend — skipping.")
             db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'skipped',
                                summary='not ongoing', logger=raid_weekend_logger,
-                               interval_minutes=idle_minutes(task_update_raid_weekend.__name__))
+                               interval_minutes=interval)
+            return
 ```
 
-and pass `interval_minutes=active_minutes(task_update_raid_weekend.__name__)` on the final `db_finalize_uptime` when the weekend is `ongoing`, `interval_minutes=idle_minutes(...)` on it when the state is `'ended'` (the branch added in Task 1), and leave the two early API-error calls at `raid_weekend.py:40` and `:53` unset.
+`'ended'` now falls through to the processing below on an hourly interval, which
+is the fix. Pass `interval_minutes=interval` on the final call too, and leave the
+two early API-error calls at lines 40 and 53 NULL.
 
-- [ ] **Step 3: Verify every task imports**
+- [ ] **Step 5: Verify every task imports**
 
 Run:
 ```bash
 cd coc_stats && python -c "
+import run_scheduler
 import tasks.battle_logs, tasks.clan_members, tasks.ranked_weeks
 import tasks.clan_war, tasks.cwl, tasks.raid_weekend
-print('all six import ok')"
+print('scheduler + all six tasks import ok')"
 ```
-Expected: `all six import ok`
+Expected: `scheduler + all six tasks import ok`
 
-- [ ] **Step 4: Confirm no call site was missed**
+- [ ] **Step 6: Confirm no reschedule call bypasses the registry**
 
 Run:
 ```bash
-cd coc_stats && grep -c "db_finalize_uptime(" tasks/*.py && grep -c "interval_minutes" tasks/*.py
+cd coc_stats && grep -n "hours=1\|minutes=3\|minutes=5\|minutes=10" tasks/*.py run_scheduler.py
 ```
-Expected: for each file, the `interval_minutes` count equals the `db_finalize_uptime` count **minus** the number of early-API-error paths deliberately left NULL (1 each in `clan_war.py`, `cwl.py`, `raid_weekend.py`; 0 in the fixed three).
+Expected: **no matches.** Every interval now comes from `tasks/schedule.py`. A
+literal here means a fourth copy of a number that already has one home.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Confirm the NULL paths are deliberate**
+
+Run:
+```bash
+cd coc_stats && grep -c "db_finalize_uptime(" tasks/*.py && echo "---" && grep -c "interval_minutes" tasks/*.py
+```
+Expected: for `battle_logs.py`, `clan_members.py` and `ranked_weeks.py` the two
+counts match. For `clan_war.py`, `cwl.py` and `raid_weekend.py` the
+`interval_minutes` count is lower — by exactly the number of early API-error
+paths (1, 1 and 2 respectively), which are the rows that must stay NULL.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add coc_stats/tasks/
-git commit -m "feat(tasks): record the interval in force with every uptime row
+git add coc_stats/run_scheduler.py coc_stats/tasks/
+git commit -m "fix(tasks): schedule and record from one decision per run
 
-The dynamic three reschedule before they write, so the value is already correct
-at write time. Paths that return before inspecting game state write NULL rather
-than guess - readers carry the last known schedule forward."
+Each dynamic task now computes its interval once from tasks/schedule.py, applies
+it, and records it on the uptime row. run_scheduler registers from the same
+registry, so no interval literal survives anywhere in tasks/ or the scheduler.
+
+This is where the raid_weekend fix reaches running code: state == 'ended' now
+resolves through raid_interval() to the hourly schedule instead of falling
+through an if/elif that handled every other case.
+
+Paths that return before the task learns its game state - the early API failures
+- record NULL rather than guess. Readers carry the last known schedule forward."
 ```
 
 ---
 
-### Task 5: Derive health from the persisted interval
+### Task 4: Derive health from the persisted interval
 
 **Files:**
 - Modify: `coc_stats/features/admin/monitor_stats.py`
 - Modify: `coc_stats/tests/test_monitor_stats.py`
 
 **Interfaces:**
-- Consumes: `tasks.schedule` (Task 2), `UptimeTracker.interval_minutes` (Task 3)
+- Consumes: `tasks.schedule` (Task 1), `UptimeTracker.interval_minutes` (Task 1)
 - Produces: `resolve_interval(runs, key) -> (int, bool)` returning `(minutes, assumed)`; `task_stats()` gains `mode` (`'active'` | `'idle'`) and `idle_reason` (str | None); `health` gains `'idle'`; `infer_cadence` is removed
 
 - [ ] **Step 1: Write the failing tests**
@@ -599,7 +710,7 @@ def test_idle_reason_comes_from_the_last_summary():
 
 
 def test_idle_windows_group_contiguous_dormant_stretches():
-    """Task 7 shades these behind the lane; a wrong grouping paints the wrong
+    """Task 6 shades these behind the lane; a wrong grouping paints the wrong
     span of history as dormant."""
     rows  = [sched_row('task_update_clan_war', i * 3, 3) for i in range(5)]
     rows += [sched_row('task_update_clan_war', 60 + i * 60, 60, 'skipped', 'notInWar')
@@ -688,7 +799,7 @@ In `task_stats()`, replace the `cadence = infer_cadence(runs)` line and the heal
             health = 'down'
 ```
 
-Add the window grouper next to `find_gaps`, so the lane strip in Task 7 has something to shade:
+Add the window grouper next to `find_gaps`, so the lane strip in Task 6 has something to shade:
 
 ```python
 def idle_windows(runs, key):
@@ -755,13 +866,13 @@ genuinely stops polling still reaches Still - at 150 minutes rather than 7.5."
 
 ---
 
-### Task 6: Nav strip reads the same helper
+### Task 5: Nav strip reads the same helper
 
 **Files:**
 - Modify: `coc_stats/app.py:88-112` (`_nav_task_status`)
 
 **Interfaces:**
-- Consumes: `monitor_stats.resolve_interval`, `task_stats` health vocabulary (Task 5)
+- Consumes: `monitor_stats.resolve_interval`, `task_stats` health vocabulary (Task 4)
 
 - [ ] **Step 1: Replace the hand-rolled thresholds**
 
@@ -841,13 +952,13 @@ hairline."
 
 ---
 
-### Task 7: Show the dynamic behaviour on the Monitor
+### Task 6: Show the dynamic behaviour on the Monitor
 
 **Files:**
 - Modify: `coc_stats/templates/admin/admin_monitor.html`
 
 **Interfaces:**
-- Consumes: `task_stats()` fields `mode`, `idle_reason`, `health == 'idle'` (Task 5)
+- Consumes: `task_stats()` fields `mode`, `idle_reason`, `health == 'idle'` (Task 4)
 
 - [ ] **Step 1: Add the `Ruht` pill**
 
@@ -883,7 +994,7 @@ In the `laneData` JSON block, emit each task's idle windows by walking its serie
   "idle": [{% for w in t.idle_windows %}["{{ w.start.strftime('%Y-%m-%dT%H:%M:%S') }}","{{ w.end.strftime('%Y-%m-%dT%H:%M:%S') }}"]{{ "," if not loop.last else "" }}{% endfor %}]
 ```
 
-This requires `task_stats()` to produce `idle_windows` — add it in Task 5's module alongside `gaps`, grouping consecutive series points by mode.
+This requires `task_stats()` to produce `idle_windows` — add it in Task 4's module alongside `gaps`, grouping consecutive series points by mode.
 
 In the lane-drawing JS, draw the band **first**, before the run marks, so it sits behind them:
 
@@ -934,7 +1045,7 @@ was actually at war."
 The spec asks for the backfill to be tested against synthetic rows. It has no
 pytest coverage here on purpose: `monitor_stats` is a pure module and this repo
 has no DB-backed test harness, so a migration test would mean standing one up —
-more machinery than the one-shot `UPDATE` warrants. Task 3 Steps 4 and 5 verify
+more machinery than the one-shot `UPDATE` warrants. Task 2 Steps 4 and 5 verify
 it directly instead: a per-task/per-interval row count after `upgrade`, and a
 full `downgrade` → `upgrade` cycle. If that turns out to be insufficient, the
 right fix is a DB fixture, not a weaker check.
