@@ -49,7 +49,7 @@
         .nm-verdict { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 5px 13px; border-radius: 20px; flex-shrink: 0; white-space: nowrap; }
         .v-accept  { background: color-mix(in oklch, var(--green) 15%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 34%, transparent); }
         .v-consider{ background: color-mix(in oklch, var(--yellow) 15%, transparent); color: var(--yellow); border: 1px solid color-mix(in oklch, var(--yellow) 34%, transparent); }
-        .v-decline { background: color-mix(in oklch, var(--red) 14%, transparent);    color: oklch(0.66 0.200 25); border: 1px solid color-mix(in oklch, var(--red) 34%, transparent); }
+        .v-decline { background: color-mix(in oklch, var(--red) 14%, transparent);    color: var(--red-txt); border: 1px solid color-mix(in oklch, var(--red) 34%, transparent); }
         .nm-th { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; color: var(--text); padding: 3px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; flex-shrink: 0; }
         .nm-idblk { min-width: 150px; flex-shrink: 0; }
         .nm-name { font-weight: 700; font-size: 14px; line-height: 1.2; }
@@ -66,7 +66,7 @@
         .chk .cg { font-weight: 800; font-size: 11px; line-height: 1; flex-shrink: 0; }  /* ✓ / ! / ✗ — shape carries status, not colour alone */
         .chk-pass { background: color-mix(in oklch, var(--green) 11%, transparent);  color: var(--green);  border: 1px solid color-mix(in oklch, var(--green) 26%, transparent); }
         .chk-warn { background: color-mix(in oklch, var(--yellow) 11%, transparent); color: var(--yellow); border: 1px solid color-mix(in oklch, var(--yellow) 26%, transparent); }
-        .chk-fail { background: color-mix(in oklch, var(--red) 10%, transparent);    color: oklch(0.66 0.200 25); border: 1px solid color-mix(in oklch, var(--red) 26%, transparent); }
+        .chk-fail { background: color-mix(in oklch, var(--red) 10%, transparent);    color: var(--red-txt); border: 1px solid color-mix(in oklch, var(--red) 26%, transparent); }
         .nm-act { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .nm-mark {
             display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; cursor: pointer;
@@ -76,7 +76,7 @@
         }
         .nm-mark:hover { color: var(--green); border-color: color-mix(in oklch, var(--green) 40%, transparent); background: color-mix(in oklch, var(--green) 8%, transparent); }
         .nm-mark svg { width: 13px; height: 13px; }
-        .nm-err { color: oklch(0.66 0.200 25); font-size: 12px; }
+        .nm-err { color: var(--red-txt); font-size: 12px; }
 
         /* ── disclosure (reused from Roster) ── */
         .nm-disc-btn { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; background: transparent; border: none; color: var(--muted); cursor: pointer; font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
@@ -148,7 +148,7 @@
         .wp-lbl { font-family: 'Manrope', sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); }
         .wp-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; padding: 5px 12px; border-radius: 20px; font-family: 'Rajdhani', sans-serif; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; border: 1px solid; }
         .wp-in   { color: var(--green); border-color: color-mix(in oklch, var(--green) 34%, transparent); background: color-mix(in oklch, var(--green) 10%, transparent); }
-        .wp-out  { color: oklch(0.66 0.200 25); border-color: color-mix(in oklch, var(--red) 34%, transparent); background: color-mix(in oklch, var(--red) 10%, transparent); }
+        .wp-out  { color: var(--red-txt); border-color: color-mix(in oklch, var(--red) 34%, transparent); background: color-mix(in oklch, var(--red) 10%, transparent); }
         .wp-none { color: var(--muted); border-color: color-mix(in oklch, var(--muted) 22%, transparent); background: transparent; }
         /* read-only in-game value reads as flat text (no pill chrome) so the bordered
            override pill beside it is clearly the editable control */
