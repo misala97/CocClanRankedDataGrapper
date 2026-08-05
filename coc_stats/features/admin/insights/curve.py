@@ -102,3 +102,44 @@ def build_curve(facts):
                 curve[(src, d)] = _bucket([], merged=False)
 
     return curve
+
+
+def sae_of(fact, curve):
+    """One attack's stars above expectation, or None if its bucket has none.
+
+    None means "this attack cannot be judged", which is different from zero -
+    counting it as zero would drag every average toward the mean and quietly
+    reward players whose attacks landed in unmeasured buckets.
+    """
+    bucket = curve.get((fact['src'], clamp_diff(fact['attacker_th'],
+                                                fact['defender_th'])))
+    if not bucket or bucket['mean_stars'] is None:
+        return None
+    return fact['stars'] - bucket['mean_stars']
+
+
+def player_sae(facts, curve, min_attacks=MIN_PLAYER_ATTACKS):
+    """Per-attacker stars above expectation, best first, thin players last.
+
+    Thin players keep their real figure - it is shown, just not ranked. A
+    player with three lucky attacks should not appear above one with forty
+    solid ones, and dropping them outright would silently shrink the roster.
+    """
+    by_player = defaultdict(list)
+    for f in facts:
+        by_player[f['attacker_tag']].append(f)
+
+    rows = []
+    for tag, player_facts in by_player.items():
+        deltas = [d for d in (sae_of(f, curve) for f in player_facts) if d is not None]
+        if not deltas:
+            continue
+        rows.append({
+            'tag':  tag,
+            'n':    len(deltas),
+            'sae':  sum(deltas) / len(deltas),
+            'thin': len(deltas) < min_attacks,
+        })
+
+    rows.sort(key=lambda r: (r['thin'], -r['sae']))
+    return rows

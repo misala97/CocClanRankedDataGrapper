@@ -173,3 +173,84 @@ def test_a_populated_centre_absorbs_thin_arms_on_both_sides():
     assert c[('war', 0)]['merged'] is True
     assert c[('war', 0)] == c[('war', 1)] == c[('war', -1)]
     assert c[('war', 0)]['n'] == 19
+
+
+# ── stars above expectation ──────────────────────────────────────────────────
+
+from features.admin.insights.curve import MIN_PLAYER_ATTACKS, player_sae, sae_of
+
+
+def att(tag, diff, stars, src='war'):
+    return {'src': src, 'attacker_tag': tag, 'attacker_th': 14,
+            'defender_th': 14 + diff, 'stars': stars, 'destruction': 100.0,
+            'clan_tag': '#US', 'war_id': 1, 'ended_at': None, 'attack_order': 1}
+
+
+def flat_curve(mean):
+    return {('war', d): {'n': 99, 'mean_stars': mean, 'triple_rate': 0.5,
+                         'merged': False} for d in range(-3, 4)}
+
+
+def test_sae_is_the_gap_between_the_attack_and_its_bucket():
+    assert sae_of(att('#A', 0, 3), flat_curve(2.0)) == 1.0
+    assert sae_of(att('#A', 0, 1), flat_curve(2.0)) == -1.0
+
+
+def test_sae_is_none_when_the_bucket_has_no_expectation():
+    curve = {('war', 0): {'n': 0, 'mean_stars': None,
+                          'triple_rate': None, 'merged': False}}
+    assert sae_of(att('#A', 0, 3), curve) is None
+
+
+def test_identical_raw_stars_rank_differently_by_difficulty():
+    """The whole point of the study. Both players score 2.0 stars an attack;
+    one did it against equal bases, the other against bases two levels up.
+    Raw stars call that a tie. SAE does not."""
+    curve = {
+        ('war', 0): {'n': 99, 'mean_stars': 2.5, 'triple_rate': .7, 'merged': False},
+        ('war', 2): {'n': 99, 'mean_stars': 1.2, 'triple_rate': .2, 'merged': False},
+    }
+    facts = ([att('#EASY', 0, 2) for _ in range(MIN_PLAYER_ATTACKS)] +
+             [att('#HARD', 2, 2) for _ in range(MIN_PLAYER_ATTACKS)])
+    rows = {r['tag']: r for r in player_sae(facts, curve)}
+
+    assert rows['#EASY']['sae'] < 0            # below what equal bases usually give
+    assert rows['#HARD']['sae'] > 0            # above what +2 usually gives
+    assert player_sae(facts, curve)[0]['tag'] == '#HARD'
+
+
+def test_a_player_one_attack_short_is_marked_thin_and_sorted_last():
+    facts = ([att('#THIN', 0, 3) for _ in range(MIN_PLAYER_ATTACKS - 1)] +
+             [att('#SOLID', 0, 1) for _ in range(MIN_PLAYER_ATTACKS)])
+    rows = player_sae(facts, flat_curve(2.0))
+    by_tag = {r['tag']: r for r in rows}
+
+    assert by_tag['#THIN']['thin'] is True
+    assert by_tag['#SOLID']['thin'] is False
+    # #THIN has the better SAE and still must not outrank a solid player.
+    assert by_tag['#THIN']['sae'] > by_tag['#SOLID']['sae']
+    assert rows[0]['tag'] == '#SOLID'
+
+
+def test_a_player_exactly_at_the_threshold_is_not_thin():
+    facts = [att('#EDGE', 0, 3) for _ in range(MIN_PLAYER_ATTACKS)]
+    assert player_sae(facts, flat_curve(2.0))[0]['thin'] is False
+
+
+def test_attacks_with_no_expectation_are_skipped_not_counted_as_zero():
+    curve = {('war', 0): {'n': 99, 'mean_stars': 2.0, 'triple_rate': .5, 'merged': False},
+             ('war', 1): {'n': 0, 'mean_stars': None, 'triple_rate': None, 'merged': False}}
+    facts = [att('#A', 0, 3), att('#A', 1, 3)]
+    row = player_sae(facts, curve)[0]
+    assert row['n'] == 1
+    assert row['sae'] == 1.0
+
+
+def test_a_player_with_no_scorable_attacks_is_absent_entirely():
+    curve = {('war', 0): {'n': 0, 'mean_stars': None,
+                          'triple_rate': None, 'merged': False}}
+    assert player_sae([att('#A', 0, 3)], curve) == []
+
+
+def test_no_facts_yields_no_rows():
+    assert player_sae([], flat_curve(2.0)) == []
