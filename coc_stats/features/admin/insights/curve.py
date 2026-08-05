@@ -46,6 +46,10 @@ def build_curve(facts):
     +3 folds into +2, and if +2 is also sparse the pair folds into +1, and so
     on. Both keys then report the same merged stats with merged=True, so a
     caller can tell a measured expectation from a borrowed one.
+
+    A diff with zero attacks of its own never merges, even if it sits on a
+    cascade path toward a centre bucket that does have data: its bucket
+    carries n=0 and mean_stars=None, not a borrowed number that looks real.
     """
     raw = defaultdict(list)
     for f in facts:
