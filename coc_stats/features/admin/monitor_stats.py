@@ -15,6 +15,8 @@ across three tasks; the page this module feeds has to say that, not print
 import datetime as dt
 from collections import Counter, defaultdict
 
+from tasks.schedule import TASK_SCHEDULE, active_minutes, idle_minutes
+
 # ── Task registry ─────────────────────────────────────────────────────────────
 # Order is fixed and meaningful: the page shows all six every time, in the same
 # places, so a missing one reads as missing rather than as a shorter list.
@@ -30,12 +32,11 @@ TASK_META = {k: {'key': k, 'short': k.replace('task_update_', ''),
                  'label': lbl, 'purpose': p} for k, lbl, p in TASKS}
 
 # ── Tunable thresholds ────────────────────────────────────────────────────────
-CADENCE_SAMPLE   = 20    # recent successful runs used to infer the current cadence
 DOWN_FACTOR      = 2.5   # silence beyond cadence × this reads as "down"
 WARN_FACTOR      = 1.5   # …and beyond cadence × this as "delayed"
 GAP_FACTOR       = 2.5   # a run-to-run interval beyond cadence × this is a gap
-NO_CADENCE_WARN  = 120   # minutes of silence that warn when cadence is unknowable
-NO_CADENCE_DOWN  = 1440  # …and beyond a day of it, call the task down, not delayed
+NO_CADENCE_WARN  = 120   # silence that warns when the task has no declared schedule
+NO_CADENCE_DOWN  = 1440  # …and beyond a day of it, call it down rather than delayed
 
 CLUSTER_GAP_MIN  = 20    # failures within this many minutes belong to one incident
 LANE_POINTS      = 240   # downsample target per task for the shared lane strip
@@ -83,26 +84,53 @@ def normalize_runs(rows):
             'status':  r.status or 'success',
             'summary': r.summary or '',
             'error':   r.error_message or '',
+            'interval_minutes': getattr(r, 'interval_minutes', None),
         })
     for runs in by_task.values():
         runs.sort(key=lambda x: x['time'])
     return by_task
 
 
-def infer_cadence(runs):
-    """Median interval between recent non-skipped runs, in minutes.
+def resolve_interval(runs, key):
+    """The interval governing this task, in minutes, and whether it is assumed.
 
-    Only the most recent CADENCE_SAMPLE runs count: clan_war switches between a
-    3-minute and a 60-minute schedule, and averaging across both modes would
-    describe neither.
+    Reads the most recent NON-NULL interval_minutes rather than strictly the
+    last row's: an API failure writes NULL because it returns before the task
+    inspects game state, and a burst of those must not lose the schedule.
+
+    This replaced a median-gap inference that filtered out `skipped` rows — so
+    an idle task was judged against the 3-minute cadence of a war that ended
+    days earlier, and reported down while polling perfectly.
     """
-    active = [r for r in runs if r['status'] != 'skipped']
-    recent = active[-CADENCE_SAMPLE:]
-    gaps = [(recent[i]['time'] - recent[i - 1]['time']).total_seconds() / 60
-            for i in range(1, len(recent))]
-    if not gaps:
-        return None
-    return round(sorted(gaps)[len(gaps) // 2], 1)
+    for r in reversed(runs):
+        if r.get('interval_minutes') is not None:
+            return r['interval_minutes'], False
+    if key in TASK_SCHEDULE:
+        return active_minutes(key), True
+    return None, True
+
+
+def idle_windows(runs, key):
+    """Contiguous stretches where the task was on its dormant schedule.
+
+    Drawn as a faint band behind the lane, which turns the strip into a history
+    of when the clan was actually at war rather than just an uptime chart.
+    """
+    idle = idle_minutes(key) if key in TASK_SCHEDULE else None
+    if idle is None:
+        return []
+    out, start, prev = [], None, None
+    for r in runs:
+        on_idle = r.get('interval_minutes') == idle
+        if on_idle and start is None:
+            start = r['time']
+        elif not on_idle and start is not None:
+            out.append({'start': start, 'end': prev})
+            start = None
+        prev = r['time']
+    if start is not None:
+        out.append({'start': start, 'end': prev})
+    return out
 
 
 def find_gaps(runs, cadence, now=None):
@@ -184,7 +212,9 @@ def task_stats(key, runs, now):
                                'label': key, 'purpose': ''})
     active = [r for r in runs if r['status'] != 'skipped']
     durations = [r['duration'] for r in active]
-    cadence = infer_cadence(runs)
+    cadence, cadence_assumed = resolve_interval(runs, key)
+    mode = 'idle' if cadence is not None and cadence == (
+        idle_minutes(key) if key in TASK_SCHEDULE else None) else 'active'
 
     last = runs[-1] if runs else None
     minutes_since, health = None, 'absent'
@@ -198,8 +228,9 @@ def task_stats(key, runs, now):
             elif minutes_since > cadence * WARN_FACTOR:
                 health = 'warn'
             else:
-                health = 'up'
-        # A single run in the window leaves no interval to measure, so cadence is
+                # Dormant by design is its own state — not health, not warning.
+                health = 'idle' if mode == 'idle' else 'up'
+        # An unknown task has no declared schedule, so cadence is
         # unknowable. Escalating on absolute age matters here: without it a task
         # last seen eleven days ago reported "delayed", never "down" — the rule
         # inverted exactly where the data was thinnest.
@@ -218,6 +249,10 @@ def task_stats(key, runs, now):
         avg_duration=round(sum(durations) / len(durations), 2) if durations else 0,
         max_duration=round(max(durations), 2) if durations else 0,
         cadence=cadence,
+        cadence_assumed=cadence_assumed,
+        mode=mode,
+        idle_reason=(last['summary'] or None) if last and mode == 'idle' else None,
+        idle_windows=idle_windows(runs, key),
         minutes_since=minutes_since,
         health=health,
         last_time=last['time'] if last else None,
