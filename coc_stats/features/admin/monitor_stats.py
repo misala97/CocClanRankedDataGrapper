@@ -143,7 +143,9 @@ def find_gaps(runs, cadence, now=None):
     """
     if not cadence:
         return []
-    active = [r for r in runs if r['status'] != 'skipped']
+    # Every run counts, skips included: a skipped run means the task woke up,
+    # looked, and correctly found nothing to do. That is liveness, not silence.
+    active = list(runs)
     out = []
     for i in range(1, len(active)):
         minutes = (active[i]['time'] - active[i - 1]['time']).total_seconds() / 60
@@ -421,7 +423,7 @@ def build_monitor_page(rows, now, days=DEFAULT_DAYS):
         'lead_incident': verdict.get('lead'),
         'summary': {
             'task_count':    len(tasks),
-            'healthy':       sum(1 for t in tasks if t['health'] == 'up'),
+            'healthy':       sum(1 for t in tasks if t['health'] in ('up', 'idle')),
             'stalled':       sum(1 for t in tasks if t['health'] in ('down', 'absent')),
             'absent':        sum(1 for t in tasks if t['health'] == 'absent'),
             'total_runs':    sum(t['runs'] for t in tasks),

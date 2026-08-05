@@ -620,3 +620,27 @@ def test_a_fixed_task_has_no_idle_windows():
     rows = cadence_rows('task_update_battle_logs', 6, 5, interval=5)
     assert idle_windows(runs_of(rows, 'task_update_battle_logs'),
                         'task_update_battle_logs') == []
+
+
+def test_a_skipped_run_proves_the_task_is_alive():
+    """An idle task only ever writes `skipped` rows. Excluding them made a
+    perfectly healthy dormant task look silent for the whole idle stretch —
+    which is the same mistake, one layer down, that this change exists to fix."""
+    rows = cadence_rows('task_update_clan_war', 6, 60, status='skipped', interval=60)
+    gaps = find_gaps(runs_of(rows, 'task_update_clan_war'), cadence=60.0,
+                     now=T0 + dt.timedelta(minutes=5 * 60 + 20))
+    assert gaps == []
+
+
+def test_idle_tasks_count_as_healthy_in_the_summary():
+    """The verdict said 'alle Tasks im Takt' while the figure beside it read
+    4/6 in red, because dormant counted as neither healthy nor stalled."""
+    rows = []
+    for key in ('task_update_battle_logs', 'task_update_ranked_weeks',
+                'task_update_clan_members'):
+        rows += cadence_rows(key, 40, 5, interval=5)
+    for key in ('task_update_clan_war', 'task_update_cwl', 'task_update_raid_weekend'):
+        rows += cadence_rows(key, 4, 60, status='skipped', interval=60)
+    page = build_monitor_page(rows, T0 + dt.timedelta(minutes=200))
+    assert page['verdict']['kind'] == 'clear'
+    assert page['summary']['healthy'] == page['summary']['task_count']
