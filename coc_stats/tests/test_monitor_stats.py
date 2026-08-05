@@ -644,3 +644,27 @@ def test_idle_tasks_count_as_healthy_in_the_summary():
     page = build_monitor_page(rows, T0 + dt.timedelta(minutes=200))
     assert page['verdict']['kind'] == 'clear'
     assert page['summary']['healthy'] == page['summary']['task_count']
+
+
+def test_gaps_are_judged_against_the_interval_in_force_at_the_time():
+    """A task that switched schedule mid-window was judged entirely against its
+    CURRENT interval, so every legitimate hourly poll during a dormant stretch
+    read as a gap. Live data showed 122 false gaps on clan_war."""
+    rows  = cadence_rows('task_update_clan_war', 5, 60, status='skipped', interval=60)
+    rows += cadence_rows('task_update_clan_war', 10, 3, start=300, interval=3)
+    runs = runs_of(rows, 'task_update_clan_war')
+    # resolve_interval returns 3 — the schedule it is on NOW.
+    assert resolve_interval(runs, 'task_update_clan_war')[0] == 3
+    gaps = find_gaps(runs, cadence=3, now=T0 + dt.timedelta(minutes=330))
+    assert gaps == [], f"hourly polls misread as gaps: {len(gaps)}"
+
+
+def test_a_real_gap_during_a_dormant_stretch_is_still_caught():
+    """Scaling per row must not mean never detecting silence."""
+    rows  = cadence_rows('task_update_clan_war', 3, 60, status='skipped', interval=60)
+    rows += cadence_rows('task_update_clan_war', 2, 60, start=120 + 400,
+                         status='skipped', interval=60)
+    gaps = find_gaps(runs_of(rows, 'task_update_clan_war'), cadence=60,
+                     now=T0 + dt.timedelta(minutes=600))
+    assert len(gaps) == 1
+    assert gaps[0]['minutes'] == 400.0
