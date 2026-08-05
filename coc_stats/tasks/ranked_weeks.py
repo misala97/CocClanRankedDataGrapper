@@ -4,6 +4,7 @@ import time
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_PLAYER_DATA, JSON_RANKED_GROUP_DATA
 from tasks import task_lock
+from tasks.schedule import active_minutes
 
 ranked_logger = setup_task_logger('ranked_weeks', 'logs/task_ranked_weeks.log')
 
@@ -150,4 +151,6 @@ def task_update_ranked_weeks():
             db.session.commit()
 
         summary = f"weeks_created={weeks_created} weeks_updated={weeks_updated} attack_logs={attack_logs_added} defense_logs={defense_logs_added} players_failed={players_failed}"
-        db_finalize_uptime(task_update_ranked_weeks.__name__, t0, summary=summary, logger=ranked_logger)
+        db_finalize_uptime(task_update_ranked_weeks.__name__, t0, summary=summary,
+                           logger=ranked_logger,
+                           interval_minutes=active_minutes(task_update_ranked_weeks.__name__))

@@ -4,6 +4,7 @@ import time
 from logging_config import setup_task_logger
 from services.helpers import json_get, JSON_RAID_WEEKEND_DATA
 from tasks import task_lock
+from tasks.schedule import raid_interval
 
 raid_weekend_logger = setup_task_logger('raid_weekend', 'logs/raid_weekend.log')
 
@@ -55,15 +56,19 @@ def task_update_raid_weekend():
         db.session.commit()
         
         
+        # One decision per run: it sets the schedule and it gets recorded.
+        # 'ended' used to match neither branch here, so no reschedule ran at all
+        # and the job kept whatever interval it held — 3 minutes, for two days.
+        interval = raid_interval(raid_weekend.state)
+        if extensions.scheduler:
+            extensions.scheduler.reschedule_job('raid_weekend_update',
+                                                trigger='interval', minutes=interval)
+
         if raid_weekend.state not in ('ongoing', 'ended'):
-            if extensions.scheduler:
-                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', hours=1)
             raid_weekend_logger.info("No active raid weekend — skipping.")
-            db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'skipped', summary='not ongoing', logger=raid_weekend_logger)
+            db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'skipped', summary='not ongoing',
+                               logger=raid_weekend_logger, interval_minutes=interval)
             return
-        elif raid_weekend.state == 'ongoing':
-            if extensions.scheduler:
-                extensions.scheduler.reschedule_job('raid_weekend_update', trigger='interval', minutes=3)
         
 
         try:
@@ -71,7 +76,8 @@ def task_update_raid_weekend():
             members_api     = json_get(current_raid_weekend, JSON_RAID_WEEKEND_DATA.ITEMS_MEMBERS, raise_on_missing=False) or []
         except Exception as e:
             raid_weekend_logger.warning(f"Could not get attack log for raid weekend: {e}")
-            db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'error', str(e), logger=raid_weekend_logger)
+            db_finalize_uptime(task_update_raid_weekend.__name__, t0, 'error', str(e),
+                               logger=raid_weekend_logger, interval_minutes=interval)
             return
 
         try:
@@ -149,6 +155,7 @@ def task_update_raid_weekend():
             task_update_raid_weekend.__name__, t0, status, error_msg,
             summary=f"logs_added={logs_added}",
             logger=raid_weekend_logger,
+            interval_minutes=interval,
         )
 
 
