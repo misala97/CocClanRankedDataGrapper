@@ -63,10 +63,11 @@ def admin_roster():
 @admin_bp.route('/admin/insights')
 @require_super_admin
 def admin_insights():
-    # Clan-analytics home. Shell page — the skill-correlation tool fetches its own
-    # data via the existing /admin/skill-correlation AJAX endpoint. Framed as a
-    # growable home so future clan-wide analytics land here rather than in a tool page.
-    return render_template('admin/admin_insights.html')
+    # Clan-analytics home. Five studies over the war, CWL, ranked and raid
+    # tables, computed on load behind a data-version cache — they are
+    # viewer-invariant, so there is nothing to gain from making the admin ask.
+    from features.admin.insights import build_briefing
+    return render_template('admin/admin_insights.html', **build_briefing())
 
 
 @admin_bp.route('/admin/users')
