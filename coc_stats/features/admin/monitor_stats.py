@@ -148,8 +148,14 @@ def find_gaps(runs, cadence, now=None):
     active = list(runs)
     out = []
     for i in range(1, len(active)):
+        # Judge each interval against the schedule in force AT THAT TIME, not the
+        # one the task is on now. The recorded value is precisely "the interval
+        # governing the next run", so the earlier row is the right authority. A
+        # task that switched 60 → 3 mid-window otherwise had every legitimate
+        # hourly poll read as a gap; live data showed 122 of them on clan_war.
+        expected = active[i - 1].get('interval_minutes') or cadence
         minutes = (active[i]['time'] - active[i - 1]['time']).total_seconds() / 60
-        if minutes > cadence * GAP_FACTOR:
+        if minutes > expected * GAP_FACTOR:
             out.append({
                 'start':   active[i - 1]['time'],
                 'end':     active[i]['time'],
@@ -157,8 +163,9 @@ def find_gaps(runs, cadence, now=None):
                 'ongoing': False,
             })
     if now is not None and active:
+        expected = active[-1].get('interval_minutes') or cadence
         trailing = (now - active[-1]['time']).total_seconds() / 60
-        if trailing > cadence * GAP_FACTOR:
+        if trailing > expected * GAP_FACTOR:
             out.append({
                 'start':   active[-1]['time'],
                 'end':     now,

@@ -64,6 +64,16 @@ def upgrade():
         {"fns": list(DYNAMIC)},
     )
 
+    # clan_war's 'warEnded' runs SUCCEED while already on the hourly schedule —
+    # the task reschedules before it processes — so the status alone would mark
+    # them as 3-minute runs and every legitimate hourly poll afterwards would
+    # read as a gap. The summary records the state, so use it.
+    conn.execute(sa.text(
+        "UPDATE uptime_tracker SET interval_minutes = 60 "
+        "WHERE `function` = 'task_update_clan_war' AND status = 'success' "
+        "AND summary LIKE 'state=warEnded%'"
+    ))
+
 
 def downgrade():
     conn = op.get_bind()
