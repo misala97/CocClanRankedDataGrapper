@@ -44,8 +44,10 @@ def build_curve(facts):
 
     Thin buckets merge toward zero, which is where the attacks are: a sparse
     +3 folds into +2, and if +2 is also sparse the pair folds into +1, and so
-    on. Both keys then report the same merged stats with merged=True, so a
-    caller can tell a measured expectation from a borrowed one.
+    on. Both keys then report the same merged stats with merged=True - true
+    exactly when a diff's own attacks were pooled with another diff's, never
+    merely because it sat on the cascade path - so a caller can tell a
+    measured expectation from a borrowed one.
 
     A diff with zero attacks of its own never merges, even if it sits on a
     cascade path toward a centre bucket that does have data: its bucket
@@ -61,8 +63,13 @@ def build_curve(facts):
         for sign in (1, -1):
             carried, carried_keys = [], []
             for d in range(DIFF_CLAMP * sign, 0, -sign):
-                group = raw.get((src, d), []) + carried
-                keys  = carried_keys + [d]
+                own   = raw.get((src, d), [])
+                group = own + carried
+                # A diff with no attacks of its own contributes no evidence, so its
+                # label must not enter `keys`: `merged` means "this bucket borrowed
+                # real data", and an empty label would make a self-sufficient
+                # bucket claim it borrowed.
+                keys  = carried_keys + ([d] if own else [])
                 if len(group) < MIN_BUCKET_N:
                     carried, carried_keys = group, keys
                     continue
@@ -80,9 +87,11 @@ def build_curve(facts):
             curve[(src, k)] = stats
 
         # A diff nobody ever attacked at reports no expectation, full stop -
-        # even one that got carried into a distant, unrelated centre bucket
-        # along the way. Merging borrows strength for thin-but-real evidence;
-        # it must not manufacture evidence for a diff that has none of its own.
+        # even one that sat on a cascade path toward a centre bucket that does
+        # have data. The loop above never gives such a diff a key (an empty
+        # diff carries no evidence to merge), so `curve` still has no entry
+        # for it here; this pass fills that gap in with n=0, it does not
+        # override anything the loop already decided.
         for d in range(-DIFF_CLAMP, DIFF_CLAMP + 1):
             if not raw.get((src, d)):
                 curve[(src, d)] = _bucket([], merged=False)

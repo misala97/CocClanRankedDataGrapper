@@ -95,3 +95,40 @@ def test_an_empty_bucket_reports_no_expectation_rather_than_zero():
 
 def test_no_facts_yields_no_curve():
     assert build_curve([]) == {}
+
+
+def test_a_self_sufficient_bucket_is_not_merged_by_an_empty_diff():
+    """30 attacks at diff 0 alone: every other diff is empty, not thin, so
+    diff 0 never borrows anything and must not be flagged merged."""
+    c = build_curve(facts('war', 0, 30, 3))
+    assert c[('war', 0)]['merged'] is False
+
+
+def test_a_self_sufficient_inner_bucket_is_not_merged_by_an_empty_outer_diff():
+    """Diff 2 stands five clear of MIN_BUCKET_N on its own; diff 3 is empty,
+    not thin. Diff 2 must not report merged=True just because an empty label
+    rode along the cascade."""
+    f = facts('war', 2, 25, 2) + facts('war', 0, 25, 0)
+    c = build_curve(f)
+    assert c[('war', 2)]['merged'] is False
+    assert c[('war', 2)]['n'] == 25
+
+
+def test_a_genuinely_thin_bucket_still_merges():
+    """Guard against over-correcting: diff -3 really is thin (6 attacks of
+    its own, not zero) and must still fold into -2 and report merged=True."""
+    f = facts('war', -2, 22, 1) + facts('war', -3, 6, 3)
+    c = build_curve(f)
+    assert c[('war', -3)]['merged'] is True
+    assert c[('war', -3)] == c[('war', -2)]
+    assert c[('war', -2)]['n'] == 28
+
+
+def test_a_multi_diff_cascade_still_merges_into_centre():
+    """Thin-but-real evidence on both flanks (+1 and -1) still pools into the
+    centre bucket and reports merged=True, with n covering every contributor."""
+    f = facts('war', 0, 15, 3) + facts('war', 1, 3, 1) + facts('war', -1, 2, 0)
+    c = build_curve(f)
+    assert c[('war', 0)]['merged'] is True
+    assert c[('war', 1)] == c[('war', 0)] == c[('war', -1)]
+    assert c[('war', 0)]['n'] == 20
