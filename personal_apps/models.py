@@ -249,6 +249,13 @@ class WorkoutSession(db.Model):
     # session's structure. The follower's page polls it; an unchanged version
     # means the poll costs a few bytes and no re-render.
     structure_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    # What the lifter weighed on the day of this workout. Deliberately per
+    # session rather than a daily weigh-in log: every question worth asking
+    # of it ("what did I weigh when I lifted this") is a question about a
+    # session, and a second table would need its own screen, its own history
+    # and its own gaps. NULL whenever it was skipped, which is most of them.
+    bodyweight_kg = db.Column(db.Float, nullable=True)
+    notes         = db.Column(db.Text, nullable=True)
 
     template = db.relationship('WorkoutTemplate', back_populates='sessions_started_from')
     exercises = db.relationship(
@@ -274,6 +281,13 @@ class SessionExercise(db.Model):
     # original plus the substitute that replaced it). NULL on every ordinary
     # session, which is almost all of them.
     mirrors_id   = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    # A twinge, flagged with one tap. Deliberately a boolean and not a
+    # description: mid-set is the worst possible moment to ask for prose, and
+    # "something hurt here" is already the whole signal a later reader needs
+    # to go looking.
+    pain  = db.Column(db.Boolean, nullable=False, default=False,
+                      server_default=sa.false())
 
     session  = db.relationship('WorkoutSession', back_populates='exercises')
     exercise = db.relationship('Exercise', back_populates='session_exercises')
