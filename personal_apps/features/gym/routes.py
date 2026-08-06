@@ -11,6 +11,7 @@ from models import (
     PushSubscription, PendingPush, SharedSession, SharedSessionExercise, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
 )
 from auth import login_required
+from features.gym import export
 from features.gym import stats
 from features.gym.scope import (
     current_user_id, my_exercises, my_sessions, my_templates,
@@ -2132,7 +2133,8 @@ def gym_export():
     SessionExercise rows are exported (mirroring what a finished session's
     own detail view already shows -- see session_detail's visible_exercises
     computation), each carrying replaces/replaced_by exercise names so a
-    swap is fully traceable."""
+    swap is fully traceable. The payload shape is schema v2 and lives in
+    features/gym/export.py."""
     ids_param = request.args.get('ids', '')
     session_ids = []
     for raw_id in ids_param.split(','):
@@ -2150,38 +2152,7 @@ def gym_export():
         .all()
     ) if session_ids else []
 
-    payload = {
-        'exported_at': dt.datetime.utcnow().isoformat() + 'Z',
-        'requested_session_ids': session_ids,
-        'sessions': [
-            {
-                'id': s.id,
-                'name': s.name,
-                'template_name': s.template.name if s.template else None,
-                'started_at': s.started_at.isoformat() + 'Z',
-                'finished_at': s.finished_at.isoformat() + 'Z',
-                'is_deload': s.is_deload,
-                'deload_pct': s.deload_pct,
-                'exercises': [
-                    {
-                        'exercise_name': se.exercise.name,
-                        'muscle_group': se.exercise.muscle_group,
-                        'position': se.position,
-                        'rest_seconds': se.rest_seconds,
-                        'skipped': se.skipped,
-                        'replaces': se.replaces.exercise.name if se.replaces else None,
-                        'replaced_by': se.replaced_by.exercise.name if se.replaced_by else None,
-                        'sets': [
-                            {'position': st.position, 'weight': st.weight, 'reps': st.reps, 'completed': st.completed}
-                            for st in se.sets
-                        ],
-                    }
-                    for se in s.exercises
-                ],
-            }
-            for s in sessions
-        ],
-    }
+    payload = export.build_payload(sessions, session_ids, dt.datetime.utcnow())
 
     resp = jsonify(payload)
     filename = f"gym-export-{len(sessions)}-workouts.json"
