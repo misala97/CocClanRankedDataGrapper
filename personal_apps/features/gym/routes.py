@@ -1130,7 +1130,7 @@ def gym_update_session_meta(session_id):
     and the first set is a field you skip anyway."""
     session = owned_session(session_id)
     session.bodyweight_kg = _to_increment(request.form.get('bodyweight_kg', ''))
-    session.notes = (request.form.get('notes', '') or '').strip() or None
+    session.notes = request.form.get('notes', '').strip() or None
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session.id))
 
@@ -1142,7 +1142,7 @@ def gym_update_session_exercise_meta(session_exercise_id):
     belong to the session rather than the catalogue: "shoulder pinched
     today" is not a property of the machine."""
     session_exercise = owned_session_exercise(session_exercise_id)
-    session_exercise.notes = (request.form.get('notes', '') or '').strip() or None
+    session_exercise.notes = request.form.get('notes', '').strip() or None
     session_exercise.pain = request.form.get('pain') == 'on'
     db.session.commit()
     return redirect(url_for('gym.session_detail',
