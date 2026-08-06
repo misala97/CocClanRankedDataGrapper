@@ -514,6 +514,74 @@ document.addEventListener('click', function (e) {
     display.textContent = decimals ? next.toFixed(decimals).replace('.', ',') : String(next);
 });
 
+// ---- typing a number instead of stepping to it ----------------------------
+// The steppers are right when the prefilled number is already close, which is
+// the ordinary case and stays one tap. It is wrong when it is not: an exercise
+// with no history starts at the default placeholder, and stepping from there to
+// a real working weight is dozens of taps. So the readout opens a field.
+//
+// The hidden input remains the single source of truth -- this writes into the
+// same [data-role="value"] the steppers write into, and never submits. The
+// confirm button still commits the set.
+function openNumberEntry(display) {
+    var field = display.closest('.field-num');
+    var input = field.querySelector('[data-role="value"]');
+    var decimals = parseInt(field.dataset.decimals, 10) || 0;
+    if (field.querySelector('.field-num__entry')) { return; }
+
+    var entry = document.createElement('input');
+    entry.type = 'text';
+    entry.inputMode = decimals ? 'decimal' : 'numeric';
+    entry.className = 'field-num__entry';
+    entry.value = decimals
+        ? parseFloat(input.value || 0).toFixed(decimals).replace('.', ',')
+        : String(parseInt(input.value, 10) || 0);
+    entry.setAttribute('aria-label', display.getAttribute('aria-label'));
+
+    // entry.replaceWith(display) below fires a synchronous blur on entry as
+    // part of the removal -- nested inside whichever call (Enter/Escape/blur
+    // itself) triggered it, and BEFORE entry.isConnected flips to false. So an
+    // isConnected guard does not stop the reentrant blur-triggered commit(true)
+    // from clobbering an Escape that just decided not to save. A flag set
+    // before any DOM mutation closes that window instead.
+    var settled = false;
+    function commit(save) {
+        if (settled) { return; }
+        settled = true;
+        if (save) {
+            // Accept both separators: the app renders commas, phone keypads
+            // vary on which one they offer, and rejecting either would be a
+            // silent no-op at the exact moment the lifter is trying to correct
+            // a number.
+            var parsed = parseFloat(entry.value.replace(',', '.'));
+            if (isFinite(parsed) && parsed >= 0) {
+                // Not snapped to the exercise's increment. The increment governs
+                // stepping; typing is exact by intent -- that is what it is for.
+                input.value = decimals ? parsed : Math.round(parsed);
+                display.textContent = decimals
+                    ? parsed.toFixed(decimals).replace('.', ',')
+                    : String(Math.round(parsed));
+            }
+        }
+        entry.replaceWith(display);
+    }
+
+    entry.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+    });
+    entry.addEventListener('blur', function () { commit(true); });
+
+    display.replaceWith(entry);
+    entry.focus();
+    entry.select();
+}
+
+document.addEventListener('click', function (e) {
+    var display = e.target.closest && e.target.closest('.field-num__val');
+    if (display) { openNumberEntry(display); }
+});
+
 // ---- motion ---------------------------------------------------------------
 // One place that answers "is motion allowed", read at call time rather than
 // once at load: the setting can change while a workout is open, and the CSS
