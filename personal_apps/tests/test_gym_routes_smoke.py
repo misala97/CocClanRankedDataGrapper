@@ -723,10 +723,11 @@ def scratch_deload_session():
 
 
 def test_deload_scales_the_suggestion_for_an_exercise_added_mid_session(client, scratch_deload_session):
-    """A session started without a template has no sets for gym_toggle_deload to
-    scale, and gym_add_session_exercise creates none either -- so the steppers
-    fall back to the raw suggestion, which offered the full working weight and
-    silently handed back the deload the lifter had just asked for.
+    """gym_add_session_exercise seeds from history through _seeded_sets, so the
+    sets it creates must already carry the deload -- history is recorded at full
+    working weight, and handing it back untouched would silently undo the deload
+    the lifter just asked for. This exercise HAS history; the no-history default
+    is a separate path, covered in test_gym_cold_start.py.
     """
     live_id, _, exercise_id = scratch_deload_session
 

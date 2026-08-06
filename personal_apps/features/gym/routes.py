@@ -290,8 +290,9 @@ def _last_full_performance(exercise_id, position=None):
 
 
 def _seeded_sets(session_, exercise_id, position):
-    """Pending sets pre-filled from history for `exercise_id` in `position`,
-    honouring the session's deload if one is on.
+    """Pending sets for `exercise_id` in `position` -- pre-filled from history
+    when there is any (honouring the session's deload), and a plain default plan
+    when there is none.
 
     History is always recorded at full working weight (_last_session_exercise
     skips deload sessions on purpose), so seeding raw would hand a deload
@@ -307,7 +308,16 @@ def _seeded_sets(session_, exercise_id, position):
     """
     seeded = _last_full_performance(exercise_id, position=position)
     if not seeded:
-        return []
+        # No history: a plain default plan, NOT a deload-scaled one. A deload is
+        # a percentage of a real working weight, and there isn't one here --
+        # scaling an invented number would dress a placeholder up as a
+        # prescription. base_weight stays None for the same reason: there is no
+        # working weight for gym_toggle_deload to restore this to.
+        return [
+            SessionSet(position=j, weight=stats.DEFAULT_PLAN_WEIGHT,
+                       reps=stats.DEFAULT_PLAN_REPS, completed=False)
+            for j in range(1, stats.DEFAULT_PLAN_SETS + 1)
+        ]
 
     pct = session_.deload_pct if session_.is_deload else None
     if not pct:
@@ -1013,6 +1023,8 @@ def session_detail(session_id):
         # Passed in rather than hardcoded in the template, so the badge's
         # copy cannot drift from the rule that decides it.
         min_full_reps=stats.DELOAD_REPS,
+        default_plan_weight=stats.DEFAULT_PLAN_WEIGHT,
+        default_plan_reps=stats.DEFAULT_PLAN_REPS,
         exercises=exercises,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),

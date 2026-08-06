@@ -159,8 +159,12 @@
        not from the session's opening suggestion: the reason you are adding one
        is that the last one went well enough to want another. #}
     {% set last_done = live_sets[-1] if live_sets else None %}
-    {% set pair_weight = next_set.weight if next_set else (last_done.weight if last_done else (start.weight if start else 20.0)) %}
-    {% set pair_reps = next_set.reps if next_set else (last_done.reps if last_done else (start.reps if start else 8)) %}
+    {# The last link of each chain is the same default _seeded_sets falls back to,
+       read from stats rather than re-typed, so the two cannot drift. It is close
+       to unreachable now -- every path into a session seeds a plan -- but an
+       exercise can still reach zero sets by having them deleted individually. #}
+    {% set pair_weight = next_set.weight if next_set else (last_done.weight if last_done else (start.weight if start else default_plan_weight)) %}
+    {% set pair_reps = next_set.reps if next_set else (last_done.reps if last_done else (start.reps if start else default_plan_reps)) %}
     {# The steppers and the confirm button render in every state, including
        "everything is logged". They used to stop at the two states that had a
        set to point at, and the third sent you to the row's own sheet -- the
