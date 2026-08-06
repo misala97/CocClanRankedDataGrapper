@@ -2,6 +2,8 @@
 database, and no fixtures beyond plain data."""
 import datetime as dt
 
+import pytest
+
 from features.gym import stats
 
 
@@ -703,7 +705,6 @@ def test_snap_to_stack_rejects_a_direction_that_is_not_down_or_up():
     # Anything other than the literal 'down' silently fell through to the
     # 'up' branch -- for a deload that is exactly the direction its sibling
     # deload_weight() calls "the one direction that defeats the point".
-    import pytest
     with pytest.raises(ValueError):
         stats.snap_to_stack(42.0, [5, 13, 21], 'DOWN')
 

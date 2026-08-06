@@ -788,7 +788,7 @@ def test_deload_seeding_snaps_to_the_exercises_real_stack_stops(client, scratch_
     live_id, _, exercise_id = scratch_deload_session
     with flask_app.app_context():
         exercise = db.session.get(Exercise, exercise_id)
-        exercise.stack_kg = [5, 12, 18, 29, 33, 61, 68, 92]
+        exercise.stack_kg = [5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0]
         db.session.commit()
 
     client.post(f'/gym/session/{live_id}/exercises/add', data={'exercise_id': str(exercise_id)})
@@ -814,14 +814,14 @@ def test_seeded_suggestion_snaps_to_the_exercises_real_stack_stops(client, scrat
     live_id, _, exercise_id = scratch_deload_session
     with flask_app.app_context():
         exercise = db.session.get(Exercise, exercise_id)
-        exercise.stack_kg = [5, 12, 18, 29, 33, 61, 68, 92]
+        exercise.stack_kg = [5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0]
         se = SessionExercise(session_id=live_id, exercise_id=exercise_id, position=1)
         db.session.add(se)
         db.session.commit()
 
     html = client.get(f'/gym/session/{live_id}').get_data(as_text=True)
     assert 'zuletzt 68,0 kg' in html
-    assert 'name="weight" value="68"' in html
+    assert 'name="weight" value="68.0"' in html
     assert 'zuletzt 70,0 kg' not in html
     assert 'name="weight" value="70"' not in html
 
@@ -881,7 +881,7 @@ def test_deload_toggle_snaps_to_the_exercises_real_stack_stops(client, scratch_d
     live_id, _, exercise_id = scratch_deload_session
     with flask_app.app_context():
         exercise = db.session.get(Exercise, exercise_id)
-        exercise.stack_kg = [5, 12, 18, 29, 33, 61, 68, 92]
+        exercise.stack_kg = [5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0]
         live = db.session.get(WorkoutSession, live_id)
         live.is_deload, live.deload_pct = False, None   # start plain, like the toggle test above
         se = SessionExercise(session_id=live_id, exercise_id=exercise_id, position=1)

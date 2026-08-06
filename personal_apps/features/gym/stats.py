@@ -517,10 +517,14 @@ def snap_to_stack(weight, steps, direction):
     the direction deload_weight()'s own docstring calls "the one direction
     that defeats the point".
     """
-    if not steps:
-        return weight
+    # Checked before the falsy-steps shortcut, not after: no exercise carries
+    # stops yet, so a typo'd direction would otherwise stay silent until the
+    # day someone records one -- which is the latent failure this raise exists
+    # to prevent.
     if direction not in ('down', 'up'):
         raise ValueError("direction must be 'down' or 'up', got {!r}".format(direction))
+    if not steps:
+        return weight
     ordered = sorted(steps)
     if direction == 'down':
         below = [s for s in ordered if s <= weight]
