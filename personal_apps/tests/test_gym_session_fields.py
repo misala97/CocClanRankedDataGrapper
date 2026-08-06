@@ -63,3 +63,55 @@ def test_session_fields_round_trip(temp_session):
         se = db.session.get(SessionExercise, se_id)
         assert se.notes == 'linke Schulter zwickt'
         assert se.pain is True
+
+
+def test_session_meta_route_saves_bodyweight_and_notes(client, temp_session):
+    session_id, _, _ = temp_session
+    response = client.post(f'/gym/sessions/{session_id}/meta', data={
+        'bodyweight_kg': '96,8',
+        'notes': 'nach 8h Schicht',
+    })
+    assert response.status_code == 302
+    with flask_app.app_context():
+        session = db.session.get(WorkoutSession, session_id)
+        assert session.bodyweight_kg == 96.8, 'a German decimal comma is accepted'
+        assert session.notes == 'nach 8h Schicht'
+
+
+def test_blank_bodyweight_clears_it(client, temp_session):
+    session_id, _, _ = temp_session
+    client.post(f'/gym/sessions/{session_id}/meta', data={'bodyweight_kg': '96.8'})
+    client.post(f'/gym/sessions/{session_id}/meta', data={'bodyweight_kg': ''})
+    with flask_app.app_context():
+        session = db.session.get(WorkoutSession, session_id)
+        assert session.bodyweight_kg is None
+
+
+def test_exercise_meta_route_saves_note_and_pain(client, temp_session):
+    _, se_id, _ = temp_session
+    response = client.post(f'/gym/session-exercises/{se_id}/meta', data={
+        'notes': 'linke Schulter zwickt',
+        'pain': 'on',
+    })
+    assert response.status_code == 302
+    with flask_app.app_context():
+        se = db.session.get(SessionExercise, se_id)
+        assert se.notes == 'linke Schulter zwickt'
+        assert se.pain is True
+
+
+def test_unchecked_pain_clears_the_flag(client, temp_session):
+    _, se_id, _ = temp_session
+    client.post(f'/gym/session-exercises/{se_id}/meta', data={'pain': 'on'})
+    client.post(f'/gym/session-exercises/{se_id}/meta', data={'notes': ''})
+    with flask_app.app_context():
+        se = db.session.get(SessionExercise, se_id)
+        assert se.pain is False
+
+
+def test_meta_routes_refuse_another_users_workout(anon_client, temp_session):
+    session_id, se_id, _ = temp_session
+    assert anon_client.post(f'/gym/sessions/{session_id}/meta',
+                            data={'notes': 'x'}).status_code in (302, 401, 403)
+    assert anon_client.post(f'/gym/session-exercises/{se_id}/meta',
+                            data={'notes': 'x'}).status_code in (302, 401, 403)
