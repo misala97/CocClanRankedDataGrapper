@@ -1083,8 +1083,9 @@ def gym_add_session_exercise(session_id):
         # create nothing, which left the exercise leaning on the suggestion
         # alone -- and on a session started without a template that was the
         # only number on screen, so a deload never reached it. An exercise
-        # with no history still seeds nothing, which is the same empty slot
-        # as before.
+        # with no history now seeds the default plan too, the same as every
+        # other seeding path -- there is no longer an empty slot for a
+        # deload to miss.
         session_exercise.sets.extend(
             _seeded_sets(session_, exercise_id, next_position))
         db.session.add(session_exercise)
