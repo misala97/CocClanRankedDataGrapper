@@ -261,6 +261,38 @@ def sessions_since_pr(rows, position=None):
     return since
 
 
+def ready_for_more(rows, position=None):
+    """Whether the last comparable session says the working weight has become
+    easy -- two or more sets at that session's own heaviest weight, each run
+    to a full set's worth of reps.
+
+    Returns the evidence rather than a bare yes: the badge quotes it, the way
+    the stagnation line beside it quotes its count. A lifter who cannot see
+    why a nudge appeared has to go looking for the reason.
+
+    "That session's heaviest", not an all-time best: the question is whether
+    the weight you are actually working at has room left in it, and a ramp-up
+    set says nothing about that. Two sets, not one, because one good set is a
+    good set and two is a pattern.
+
+    Deload sessions are excluded (progression_rows): light weight for ten reps
+    is what a deload IS, so counting it would leave this permanently lit. The
+    position lens and its fallback come from _scoped() -- exercise order
+    decides how fatigued you were, and a slot with too little history borrows
+    from the others rather than going silent.
+    """
+    scoped = _scoped(progression_rows(rows), position)
+    if not scoped:
+        return None
+    last = scoped[-1]
+    top = max(weight for weight, _ in last.sets)
+    qualifying = [reps for weight, reps in last.sets
+                  if weight == top and reps >= DELOAD_REPS]
+    if len(qualifying) < 2:
+        return None
+    return {'sets': len(qualifying), 'weight': top}
+
+
 def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):
     """One of 'neu', 'rekord', 'stagniert', 'steigend', or None for stable.
     Mutually exclusive; first match wins. Deload sessions are excluded

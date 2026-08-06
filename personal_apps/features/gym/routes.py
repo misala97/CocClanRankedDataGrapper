@@ -897,6 +897,12 @@ def session_detail(session_id):
             for s in se.sets:
                 if s.completed and stats.is_new_best(s.weight, s.reps, prior):
                     record_set_ids.add(s.id)
+    ready_for_more = None
+    if not session_.is_deload and live_se is not None:
+        # Only the live exercise: the queue below is an overview, and seven
+        # badges at once is decoration rather than a decision.
+        ready_for_more = stats.ready_for_more(
+            by_exercise.get(live_se.exercise_id, []), position=live_se.position)
     exercises = my_exercises().order_by(Exercise.name).all()
 
     # One tick per set in the whole workout, in order, so the strip reads as
@@ -996,6 +1002,10 @@ def session_detail(session_id):
         suggestions=suggestions,
         stagnation_counts=stagnation_counts,
         record_set_ids=record_set_ids,
+        ready_for_more=ready_for_more,
+        # Passed in rather than hardcoded in the template, so the badge's
+        # copy cannot drift from the rule that decides it.
+        min_full_reps=stats.DELOAD_REPS,
         exercises=exercises,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),

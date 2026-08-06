@@ -77,6 +77,23 @@
     </p>
     {% endif %}
 
+    {# Same slot as Stagniert and for the same reason: this is advice about
+       the numbers you are about to set, so it belongs above the workspace,
+       not under the confirm button. The two never contradict each other --
+       stagnation counts sessions without a PR, this one reads the last
+       session's reps -- but if both fire, both are worth saying. #}
+    {% if ready_for_more %}
+    <p class="live__ready">
+      <span class="live__ready-lbl">Bereit</span>
+      {# One text line, not one per {{ }}: a line break here is a literal
+         newline in the rendered HTML (Jinja does not collapse it the way a
+         browser collapses visual whitespace), and a test asserting on the
+         rendered sentence would otherwise see "auf\n      35,0" instead of
+         "auf 35,0". #}
+      Letztes Mal {{ ready_for_more.sets }} Sätze auf {{ ("%.1f"|format(ready_for_more.weight)).replace(".", ",") }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mit {{ min_full_reps }}+ Wdh.
+    </p>
+    {% endif %}
+
     {# Set chips: outline = offen, filled rose = erledigt, gold = ein Rekord,
        outlined warm = the one you are about to do. Tapping a done chip posts
        the same toggle endpoint the old checkbox did, so un-checking a set is

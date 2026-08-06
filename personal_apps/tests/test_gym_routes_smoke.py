@@ -1622,3 +1622,49 @@ def test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for(client):
             if ex is not None:
                 db.session.delete(ex)
             db.session.commit()
+
+
+def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
+    """Two sets at last session's top weight with 10+ reps, so the live card
+    says so before the first set of today."""
+    with flask_app.app_context():
+        exercise = Exercise(name='ZZ Ready Lift', user_id=_admin_id(),
+                            muscle_group='Rücken')
+        db.session.add(exercise)
+        db.session.flush()
+        past = WorkoutSession(name='ZZ Ready Past', user_id=_admin_id(),
+                              started_at=dt.datetime.utcnow() - dt.timedelta(days=7),
+                              finished_at=dt.datetime.utcnow() - dt.timedelta(days=7))
+        db.session.add(past)
+        db.session.flush()
+        past_se = SessionExercise(session_id=past.id, exercise_id=exercise.id, position=1)
+        db.session.add(past_se)
+        db.session.flush()
+        for i, reps in enumerate((10, 11), start=1):
+            db.session.add(SessionSet(session_exercise_id=past_se.id, position=i,
+                                      weight=35.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=7)))
+        today = WorkoutSession(name='ZZ Ready Today', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow())
+        db.session.add(today)
+        db.session.flush()
+        today_se = SessionExercise(session_id=today.id, exercise_id=exercise.id, position=1)
+        db.session.add(today_se)
+        db.session.flush()
+        db.session.add(SessionSet(session_exercise_id=today_se.id, position=1,
+                                  weight=35.0, reps=10, completed=False))
+        db.session.commit()
+        ids = (today.id, past.id, exercise.id)
+
+    try:
+        html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
+        assert 'live__ready' in html
+        assert 'Letztes Mal 2 Sätze auf 35,0 kg' in html
+    finally:
+        with flask_app.app_context():
+            for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
+                                  (Exercise, ids[2])):
+                row = db.session.get(model, row_id)
+                if row is not None:
+                    db.session.delete(row)
+            db.session.commit()

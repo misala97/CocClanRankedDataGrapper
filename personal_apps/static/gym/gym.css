@@ -1736,6 +1736,19 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--stall-ink);
 }
 
+/* Same shape as .live__stall above, different ink on purpose: a stall is a
+   warning and wears --stall-ink, readiness is the good news and wears the
+   same accent the chip you are about to perform does. */
+.live__ready {
+  margin-top: var(--sp-4); padding: var(--sp-3);
+  border-radius: var(--r-inset); box-shadow: inset 0 0 0 1px var(--live);
+  font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
+}
+.live__ready-lbl {
+  display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--live-ink);
+}
+
 /* ---- set chips ---- */
 /* Wraps, because a row that only ever compressed hit 35px per chip at eight
    sets and broke "66,0 × 8" onto two lines inside a pill -- and drop sets and

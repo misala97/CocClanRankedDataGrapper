@@ -1114,3 +1114,72 @@ def test_rest_medians_ignores_gaps_with_no_planned_time():
     contribute a plan, and must not drag the planned median toward zero."""
     from features.gym import stats
     assert stats.rest_medians([(180, 150), (200, None), (220, 150)]) == (150, 200)
+
+
+def test_two_top_weight_sets_at_ten_reps_say_go_heavier():
+    """The rule, in its plainest form: the working weight has become easy."""
+    row = perf([(35.0, 10), (35.0, 11), (35.0, 8)])
+    assert stats.ready_for_more([row]) == {'sets': 2, 'weight': 35.0}
+
+
+def test_nine_reps_is_not_enough():
+    """DELOAD_REPS is this app's own definition of a full set. Nine is a set
+    you finished, not one that had room left in it."""
+    row = perf([(35.0, 9), (35.0, 9), (35.0, 9)])
+    assert stats.ready_for_more([row]) is None
+
+
+def test_one_good_top_set_is_not_a_pattern():
+    row = perf([(35.0, 12), (30.0, 12), (30.0, 12)])
+    assert stats.ready_for_more([row]) is None
+
+
+def test_only_the_sessions_own_heaviest_weight_counts():
+    """A ramp-up set at a lighter weight says nothing about whether the
+    working weight is easy, however many reps it ran to."""
+    row = perf([(20.0, 15), (20.0, 15), (35.0, 10)])
+    assert stats.ready_for_more([row]) is None
+
+
+def test_a_deload_session_is_not_evidence():
+    """Two easy sets at a deload's top weight are the expected outcome, not
+    readiness -- so the judgement falls through to the last real session."""
+    deload = perf([(25.0, 10), (25.0, 10)], is_deload=True,
+                  started_at=dt.datetime(2026, 8, 3), session_id=2)
+    real = perf([(35.0, 8), (35.0, 7)],
+                started_at=dt.datetime(2026, 7, 27), session_id=1)
+    assert stats.ready_for_more([deload, real]) is None
+
+
+def test_the_newest_qualifying_session_wins():
+    older = perf([(30.0, 12), (30.0, 12)],
+                 started_at=dt.datetime(2026, 7, 20), session_id=1)
+    newer = perf([(35.0, 10), (35.0, 11)],
+                 started_at=dt.datetime(2026, 7, 27), session_id=2)
+    assert stats.ready_for_more([older, newer]) == {'sets': 2, 'weight': 35.0}
+
+
+def test_a_thin_slot_falls_back_to_every_position():
+    """_scoped()'s own rule: fewer than two sessions in this slot cannot
+    support a judgement, and answering from another slot beats answering
+    'no idea'."""
+    row = perf([(35.0, 10), (35.0, 10)], position=1,
+               started_at=dt.datetime(2026, 7, 27), session_id=1)
+    assert stats.ready_for_more([row], position=7) == {'sets': 2, 'weight': 35.0}
+
+
+def test_a_populated_slot_is_judged_on_its_own_sessions():
+    """Two sessions in slot 7 is enough to answer from slot 7 alone, so slot
+    1's easy session must not leak in."""
+    easy_elsewhere = perf([(35.0, 12), (35.0, 12)], position=1,
+                          started_at=dt.datetime(2026, 7, 20), session_id=1)
+    hard_here_a = perf([(35.0, 6), (35.0, 5)], position=7,
+                       started_at=dt.datetime(2026, 7, 24), session_id=2)
+    hard_here_b = perf([(35.0, 7), (35.0, 6)], position=7,
+                       started_at=dt.datetime(2026, 7, 27), session_id=3)
+    rows = [easy_elsewhere, hard_here_a, hard_here_b]
+    assert stats.ready_for_more(rows, position=7) is None
+
+
+def test_no_history_says_nothing():
+    assert stats.ready_for_more([]) is None
