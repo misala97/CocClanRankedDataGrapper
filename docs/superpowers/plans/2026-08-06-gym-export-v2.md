@@ -668,9 +668,19 @@ def test_route_returns_v2(client):
     response = client.get('/gym/export?ids=')
     assert response.status_code == 200
     body = response.get_json()
+    assert set(body) == {'schema_version', 'exported_at', 'range',
+                         'requested_session_ids', 'sessions'}
     assert body['schema_version'] == 2
     assert body['range'] == {'from': None, 'to': None}
-    assert 'is_deload' not in str(body), 'v1 field name must be gone'
+
+
+def test_v1_field_name_is_gone():
+    """`is_deload` became `deload`. Asserted against a payload that actually
+    HAS a session -- against an empty export the same assertion passes no
+    matter what the session shape is."""
+    payload = export.build_payload([_session()], [33], dt.datetime(2026, 8, 6, 18, 0))
+    assert 'deload' in payload['sessions'][0]
+    assert 'is_deload' not in payload['sessions'][0]
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
