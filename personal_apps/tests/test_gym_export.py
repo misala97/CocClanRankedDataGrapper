@@ -297,6 +297,7 @@ def test_a_deload_session_with_a_skipped_noted_exercise():
     assert payload['deload'] is True
     assert payload['deload_pct'] == 85
     assert payload['exercises'][0]['skipped'] is True
+    assert payload['exercises'][0]['pain'] is True
     assert payload['exercises'][0]['notes'] == 'linke Schulter zwickt'
 
 
