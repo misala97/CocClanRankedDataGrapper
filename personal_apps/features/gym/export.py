@@ -9,8 +9,11 @@ those recommends weights that cannot be selected.
 This module takes ORM rows and returns plain dicts. It holds no queries
 and no request handling, so the contract can be tested without a database
 or an HTTP client -- which is the point, because the contract is the part
-that must not drift.
+that must not drift. `stats` is imported anyway: it is a pure module (no
+queries, no I/O either -- see its own docstring), so pulling in
+resolve_increment does not violate the rule.
 """
+from features.gym import stats
 
 SCHEMA_VERSION = 2
 
@@ -62,8 +65,16 @@ def exercise_payload(session_exercise):
         'weight_convention': weight_convention(exercise.equipment, exercise.is_unilateral),
         'bar_weight': exercise.bar_weight,
         # Mutually exclusive by contract: real stops are a complete answer,
-        # and a step size beside them would be a second, coarser one.
-        'increment_kg': None if stack_kg else exercise.weight_increment,
+        # and a step size beside them would be a second, coarser one. When
+        # there is no stack, the *resolved* increment is sent rather than the
+        # raw column: weight_increment is NULL-means-default, and the app
+        # itself never shows a lifter a null step -- it prescribes
+        # stats.resolve_increment's fallback. Sending the raw NULL would tell
+        # the coaching tool to guess a number the app already knows, and its
+        # guess could disagree with what the app would actually offer next.
+        'increment_kg': (None if stack_kg else
+                         stats.resolve_increment(exercise.weight_increment,
+                                                 exercise.is_unilateral)),
         'stack_kg': stack_kg,
         'position': session_exercise.position,
         'replaces': (session_exercise.replaces.exercise.name
@@ -73,7 +84,7 @@ def exercise_payload(session_exercise):
         'rest_seconds': session_exercise.rest_seconds,
         'notes': session_exercise.notes or '',
         'pain': bool(session_exercise.pain),
-        'skipped': session_exercise.skipped,
+        'skipped': bool(session_exercise.skipped),
         'sets': [set_payload(s) for s in session_exercise.sets],
     }
 
@@ -90,7 +101,10 @@ def session_payload(session):
         # from "it was one".
         'deload_pct': session.deload_pct,
         'bodyweight_kg': session.bodyweight_kg,
-        'notes': session.notes or '',
+        # Unlike the exercise note below, absent here stays null: the
+        # contract sample pins '' for the exercise note specifically, not
+        # for every absent scalar in the document.
+        'notes': session.notes,
         'exercises': [exercise_payload(se) for se in session.exercises],
     }
 
