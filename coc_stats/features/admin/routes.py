@@ -63,10 +63,11 @@ def admin_roster():
 @admin_bp.route('/admin/insights')
 @require_super_admin
 def admin_insights():
-    # Clan-analytics home. Shell page — the skill-correlation tool fetches its own
-    # data via the existing /admin/skill-correlation AJAX endpoint. Framed as a
-    # growable home so future clan-wide analytics land here rather than in a tool page.
-    return render_template('admin/admin_insights.html')
+    # Clan-analytics home. Five studies over the war, CWL, ranked and raid
+    # tables, computed on load behind a data-version cache — they are
+    # viewer-invariant, so there is nothing to gain from making the admin ask.
+    from features.admin.insights import build_briefing
+    return render_template('admin/admin_insights.html', **build_briefing())
 
 
 @admin_bp.route('/admin/users')
@@ -766,90 +767,6 @@ def admin_evaluate_new_members():
     ))
 
     return jsonify(results=results, count=len(results))
-
-
-# ── Ranked × Raid Skill Correlation ──────────────────────────────────────────
-
-@admin_bp.route('/admin/skill-correlation')
-@require_super_admin
-def admin_skill_correlation():
-    from collections import defaultdict
-    from models import RankedWeek, RaidWeekendLog
-    from services.helpers import _calc_ranked_score, _raid_verdict
-
-    players = Player.query.filter_by(in_clan=True).all()
-    tags    = [p.tag for p in players]
-    pmap    = {p.tag: p for p in players}
-
-    # Ranked verdict score per completed active week
-    weeks = (RankedWeek.query
-             .filter(RankedWeek.player_tag.in_(tags), RankedWeek.is_done == True)
-             .options(db.joinedload(RankedWeek.battle_logs))
-             .all())
-
-    ranked_scores_map = defaultdict(list)
-    ranked_games_map  = defaultdict(int)
-    for week in weeks:
-        tag       = week.player_tag
-        att_count = sum(1 for l in week.battle_logs if l.attack)
-        if att_count == 0:
-            continue
-        score_100, _, _ = _calc_ranked_score(
-            week.battle_logs, week.townhall or 0,
-            week.max_attacks or att_count, week.league_tier or ''
-        )
-        ranked_scores_map[tag].append(score_100)
-        ranked_games_map[tag] += att_count
-
-    # Raid verdict score per raid weekend
-    raid_logs = RaidWeekendLog.query.filter(RaidWeekendLog.player_tag.in_(tags)).all()
-    raid_by_player_wknd = defaultdict(list)
-    for log in raid_logs:
-        raid_by_player_wknd[(log.player_tag, log.raid_weekend_id)].append(log)
-
-    raid_scores_map  = defaultdict(list)
-    raid_attacks_map = defaultdict(int)
-    for (tag, _), logs in raid_by_player_wknd.items():
-        if not logs:
-            continue
-        _, _, score_100 = _raid_verdict(logs)
-        raid_scores_map[tag].append(score_100)
-        raid_attacks_map[tag] += len(logs)
-
-    def pearson_r(xs, ys):
-        n = len(xs)
-        if n < 3:
-            return None
-        mx, my = sum(xs)/n, sum(ys)/n
-        num = sum((x-mx)*(y-my) for x, y in zip(xs, ys))
-        den = (sum((x-mx)**2 for x in xs) * sum((y-my)**2 for y in ys)) ** 0.5
-        return round(num/den, 3) if den else None
-
-    result, xs, ys = [], [], []
-    for tag in tags:
-        p = pmap[tag]
-        rk_scores = ranked_scores_map.get(tag, [])
-        rd_scores = raid_scores_map.get(tag, [])
-
-        n_ranked_weeks  = len(rk_scores)
-        n_raid_weekends = len(rd_scores)
-        ranked_score = round(sum(rk_scores) / n_ranked_weeks, 1) if n_ranked_weeks >= 3 else None
-        raid_score   = round(sum(rd_scores) / n_raid_weekends, 1) if n_raid_weekends >= 3 else None
-
-        entry = {
-            'tag': tag, 'name': p.name or tag, 'th': p.current_th or 0,
-            'ranked_score': ranked_score, 'ranked_weeks': n_ranked_weeks,
-            'ranked_games': ranked_games_map.get(tag, 0),
-            'raid_score': raid_score, 'raid_weekends': n_raid_weekends,
-            'raid_attacks': raid_attacks_map.get(tag, 0),
-        }
-        result.append(entry)
-        if ranked_score is not None and raid_score is not None:
-            xs.append(ranked_score)
-            ys.append(raid_score)
-
-    result.sort(key=lambda e: (-(e['ranked_score'] or -1)))
-    return jsonify(players=result, pearson_r=pearson_r(xs, ys), n_correlated=len(xs))
 
 
 # ── CWL Roster Recommendation ─────────────────────────────────────────────────
