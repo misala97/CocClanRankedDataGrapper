@@ -229,9 +229,9 @@ no text.
   value is `null`
 - the `weight_convention` derivation matrix, all six combinations
 - `increment_kg` / `stack_kg` mutual exclusion
-- `finished_at` is `null` exactly for sets that were never ticked, which also
-  covers every set completed before `completed_at` existed -- `completed: true`
-  with `completed_at: null` is real, pre-migration data, not an impossible state
+- `finished_at` is `null` for a set that was never ticked, and for any set
+  logged before `completed_at` existed -- `completed: true` with
+  `finished_at: null` is real pre-migration data, not an impossible state
 - `range` derives from the exported sessions, and is `{null, null}` for an empty
   selection
 

@@ -816,7 +816,7 @@ def session_detail(session_id):
         for entry, se in zip(data['exercises'], reported_session_exercises):
             entry['set_rows'] = [s for s in se.sets if s.completed]
             # Same reason as set_rows above: the note-and-pain fields
-            # (session_finished.html's "Sätze korrigieren" sheet, extended)
+            # (session_finished.html's "Sätze & Notizen" sheet)
             # post to gym_update_session_exercise_meta, which needs the real
             # SessionExercise id and its current notes/pain -- session_report's
             # own entries carry neither.
@@ -1356,7 +1356,7 @@ def gym_update_set(set_id):
     session. Deliberately narrow -- unlike gym_toggle_set_complete, this
     never touches `completed`, and works regardless of session.finished_at
     (that route's edit form is only shown for active sessions; this one's
-    form is the quiet "Sätze korrigieren" disclosure in
+    form is the quiet "Sätze & Notizen" disclosure in
     session_finished.html, one per exercise, shown only for finished
     sessions)."""
     set_ = owned_set(set_id)
