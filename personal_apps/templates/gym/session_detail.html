@@ -229,51 +229,42 @@
 <dialog class="sheet" id="sheet-add-exercise" aria-labelledby="sheet-add-exercise-title">
   <div class="sheet__head">
     <h2 class="sheet__title" id="sheet-add-exercise-title">Übung hinzufügen</h2>
-    <button type="button" class="sheet__close" data-close>Abbrechen</button>
+    <button type="button" class="sheet__close" data-close>Fertig</button>
   </div>
   <div class="sheet__body">
-    {# Two panes, one per path, because they are two different actions.
-       The catalogue select used to carry a "— Neue Übung —" option that
-       doubled as a mode switch, with the name and muscle-group fields sitting
-       permanently beside it -- so picking an existing lift and inventing one
-       looked like the same form, and nothing said which you were doing.
-       Separate forms rather than one: each submits only its own fields, which
-       is exactly the shape gym_add_session_exercise already branches on. #}
-    <div class="sheet__pane" id="add-pick-pane" data-sheet-title="Übung hinzufügen"
-         {% if not exercises %}hidden{% endif %}>
-      <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" class="add-exercise" id="add-exercise-form">
-        <div class="field grow">
-          <label class="label" for="exercise-select">Übung</label>
-          <select name="exercise_id" id="exercise-select" class="select">
-            {% for e in exercises %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
-          </select>
-        </div>
-        <button type="submit" class="btn btn--live btn--block">Hinzufügen</button>
-      </form>
-      <button type="button" class="sheet__switch" data-show-pane="add-new-pane">+ Neue Übung anlegen</button>
-    </div>
+    {# One field, two jobs. The sheet used to be two panes -- pick an existing
+       lift, or switch modes and invent one -- which meant a first-time user with
+       an empty catalogue had to understand the split before they could log
+       anything. Here the create path is simply what the list offers when the
+       search matches nothing, so an empty catalogue reaches it without choosing
+       a mode at all.
 
-    <div class="sheet__pane" id="add-new-pane" data-sheet-title="Neue Übung"
-         {% if exercises %}hidden{% endif %}>
-      {% if exercises %}
-      <button type="button" class="sheet__back" data-show-pane="add-pick-pane">← Vorhandene wählen</button>
-      {% else %}
-      <p class="sheet__hint">Du hast noch keine Übungen. Leg deine erste an — sie bleibt dann in deiner Liste.</p>
-      {% endif %}
-      <form method="post" action="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}" class="add-exercise">
-        <div class="field grow field--full">
-          <label class="label" for="new-exercise-name-input">Name</label>
-          <input type="text" id="new-exercise-name-input" name="new_exercise_name" class="input" placeholder="z.B. Kniebeuge">
-        </div>
-        <div class="field grow">
-          <label class="label" for="new-exercise-muscle-select">Muskelgruppe</label>
-          <select id="new-exercise-muscle-select" name="muscle_group" class="select">
-            <option value="">— optional —</option>
-            {% for mg in muscle_groups %}<option value="{{ mg }}">{{ mg }}</option>{% endfor %}
-          </select>
-        </div>
-        <button type="submit" class="btn btn--live btn--block">Anlegen und hinzufügen</button>
-      </form>
+       The sheet also stays open: it used to close and full-page-render on every
+       add, so building a six-exercise workout was six round trips. Rows post in
+       place through the same performMutation the live panel uses. #}
+    <input type="search" id="exadd-search" class="input" autocomplete="off"
+           placeholder="Übung suchen oder anlegen" aria-label="Übung suchen oder anlegen"
+           aria-controls="exadd-list">
+    <div class="exadd" id="exadd-list" data-add-url="{{ url_for('gym.gym_add_session_exercise', session_id=session.id) }}">
+      {# Rendered server-side and re-rendered by every refresh, so the "schon
+         drin" counts are the session's real contents rather than a tally the
+         client keeps and could get wrong. #}
+      {% for e in exercises %}
+      {% set in_session = session.exercises|selectattr('exercise_id', 'equalto', e.id)|list|length %}
+      <button type="button" class="exadd__row" data-exercise-id="{{ e.id }}"
+              data-name="{{ e.name|lower }}">
+        <span class="exadd__name">{{ e.name }}</span>
+        {% if e.muscle_group %}<span class="exadd__group">{{ e.muscle_group }}</span>{% endif %}
+        {% if in_session %}<span class="exadd__in">{{ in_session }}× drin</span>{% endif %}
+      </button>
+      {% endfor %}
+      <button type="button" class="exadd__row exadd__row--new" id="exadd-create" hidden>
+        <span class="exadd__name">Anlegen: <b id="exadd-create-name"></b></span>
+        <span class="exadd__group">neue Übung</span>
+      </button>
+      <p class="exadd__empty" id="exadd-empty" {% if exercises %}hidden{% endif %}>
+        Tippe einen Namen — die Übung wird angelegt und bleibt in deiner Liste.
+      </p>
     </div>
   </div>
 </dialog>
@@ -582,6 +573,74 @@ document.addEventListener('click', function (e) {
     if (display) { openNumberEntry(display); }
 });
 
+// ---- the add-exercise search ----------------------------------------------
+// Filtering is client-side over a list the server already rendered: a lifter's
+// catalogue is tens of rows, not thousands, and a round trip per keystroke on
+// gym wifi would be worse than useless.
+function filterAddList() {
+    var search = document.getElementById('exadd-search');
+    var list = document.getElementById('exadd-list');
+    if (!search || !list) { return; }
+    var q = search.value.trim().toLowerCase();
+    var hits = 0;
+    list.querySelectorAll('.exadd__row:not(.exadd__row--new)').forEach(function (row) {
+        var match = !q || row.dataset.name.indexOf(q) !== -1;
+        row.hidden = !match;
+        if (match) { hits += 1; }
+    });
+
+    // The create row is what the list offers when nothing matches -- which is
+    // every search on an empty catalogue, so a first-time user never has to
+    // find a separate "new exercise" mode.
+    var create = document.getElementById('exadd-create');
+    var name = document.getElementById('exadd-create-name');
+    if (create && name) {
+        create.hidden = !q || hits > 0;
+        name.textContent = search.value.trim();
+    }
+    var empty = document.getElementById('exadd-empty');
+    if (empty) { empty.hidden = !!q || hits > 0; }
+}
+
+document.addEventListener('input', function (e) {
+    if (e.target.id === 'exadd-search') { filterAddList(); }
+});
+
+// One row tap = one add, posted in place so the sheet stays open. The list is
+// re-rendered by refreshBody, which is what updates the "schon drin" counts.
+const addRowsInFlight = new WeakSet();
+
+document.addEventListener('click', function (e) {
+    var row = e.target.closest && e.target.closest('.exadd__row');
+    if (!row) { return; }
+    var list = document.getElementById('exadd-list');
+    var search = document.getElementById('exadd-search');
+    if (!list) { return; }
+    if (addRowsInFlight.has(row)) { return; }
+
+    var data = new FormData();
+    if (row.id === 'exadd-create') {
+        var typed = search ? search.value.trim() : '';
+        if (!typed) { return; }
+        data.append('new_exercise_name', typed);
+    } else {
+        data.append('exercise_id', row.dataset.exerciseId);
+    }
+
+    addRowsInFlight.add(row);
+    row.classList.add('is-busy');
+    performMutation(list.dataset.addUrl, {
+        method: 'POST', body: data, credentials: 'same-origin',
+    }).finally(function () {
+        addRowsInFlight.delete(row);
+        row.classList.remove('is-busy');
+        // Clearing the search after a create is the difference between "added"
+        // and "still looks like it did not take": the create row would otherwise
+        // sit there offering to create the same name again.
+        if (search && row.id === 'exadd-create') { search.value = ''; filterAddList(); }
+    });
+});
+
 // ---- motion ---------------------------------------------------------------
 // One place that answers "is motion allowed", read at call time rather than
 // once at load: the setting can change while a workout is open, and the CSS
@@ -853,6 +912,16 @@ function refreshBody(html) {
         if (freshNum) { countUp(freshNum, wasVolume); }
         syncAfterSwap(fresh);
         announce(said);
+    }
+    // The sheet lives outside #session-body, so the wholesale swap above never
+    // touches it -- and its rows carry "schon drin" counts that go stale the
+    // moment one is tapped. Swap the list too, then re-apply whatever the
+    // search field is currently filtering by.
+    var freshList = doc.getElementById('exadd-list');
+    var oldList = document.getElementById('exadd-list');
+    if (freshList && oldList) {
+        oldList.replaceWith(freshList);
+        filterAddList();
     }
     startRestTick();
     startClocks();

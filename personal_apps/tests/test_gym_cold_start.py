@@ -281,3 +281,32 @@ def test_history_still_wins_over_the_default(client, virgin_session):
             if doomed is not None:
                 db.session.delete(doomed)
                 db.session.commit()
+
+
+def test_creating_an_exercise_from_the_search_leaves_no_muscle_group(client, virgin_session):
+    """The search sheet's create path posts a name and nothing else -- the
+    muscle-group select is gone from it, because mid-workout is the worst moment
+    to ask and the field is optional and editable later in Übungen. Pinned
+    because the route still accepts a muscle_group it will now never receive."""
+    from extensions import db
+    from models import Exercise, SessionExercise
+    from features.gym import stats
+    live_id, _ = virgin_session
+
+    response = client.post(f'/gym/session/{live_id}/exercises/add',
+                           data={'new_exercise_name': 'pytest search created lift'})
+    assert response.status_code in (302, 303)
+
+    with flask_app.app_context():
+        created = Exercise.query.filter_by(name='pytest search created lift',
+                                           user_id=_admin_id()).one()
+        assert created.muscle_group is None
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        assert se.exercise_id == created.id
+        # A brand-new exercise has no history by construction, so it must arrive
+        # with the default plan -- this is the exact first-time-user path.
+        assert len(se.sets) == stats.DEFAULT_PLAN_SETS
+        db.session.delete(se)
+        db.session.commit()
+        db.session.delete(created)
+        db.session.commit()

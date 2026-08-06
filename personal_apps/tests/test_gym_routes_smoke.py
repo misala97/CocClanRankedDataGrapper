@@ -997,29 +997,38 @@ def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session
         assert s.base_weight == 100.0       # weight was echoed unchanged, baseline survives
 
 
-def test_the_add_exercise_sheet_separates_picking_from_creating(client, scratch_session):
-    """The sheet used to carry a "— Neue Übung —" option in the catalogue select
-    plus a permanently visible name field, so both paths were one form and
-    neither was signposted. They are two panes and two forms now.
+def test_the_add_exercise_sheet_is_one_searchable_list(client, scratch_session):
+    """The sheet used to be two panes -- a catalogue <select> in one, an
+    invent-a-new-exercise form (with a muscle-group field) in the other, with
+    buttons to switch between them. It is one search field and one list now:
+    tapping a catalogue row posts exercise_id, and the row the search shows
+    when nothing matches (#exadd-create) posts new_exercise_name and nothing
+    else -- no muscle group, no separate pane to find first.
 
-    Pins the structural guarantee rather than the styling: the pick form must
-    not offer a create option, and the create form must not carry an
-    exercise_id -- that empty-value pair is exactly what made the old sheet
-    ambiguous, and it is what gym_add_session_exercise branches on.
+    Pins the structural guarantee rather than the styling: the two-pane
+    machinery (add-pick-pane / add-new-pane / the "— Neue Übung —" switch) is
+    gone from THIS sheet, even though the per-exercise replace sheet still
+    uses the same sheet__pane / sheet__switch / sheet__back classes elsewhere
+    on the page.
     """
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
 
-    assert 'id="add-pick-pane"' in html
-    assert 'id="add-new-pane"' in html
+    assert 'id="add-pick-pane"' not in html
+    assert 'id="add-new-pane"' not in html
     assert '— Neue Übung —' not in html, 'the fake select option is back'
 
-    pick = html.split('id="add-pick-pane"', 1)[1].split('id="add-new-pane"', 1)[0]
-    assert 'name="exercise_id"' in pick
-    assert 'name="new_exercise_name"' not in pick, 'create fields leaked into the pick pane'
+    sheet = html.split('id="sheet-add-exercise"', 1)[1].split('</dialog>', 1)[0]
+    assert 'id="exadd-search"' in sheet
+    assert 'id="exadd-list"' in sheet
+    assert 'class="exadd__row"' in sheet
+    assert 'data-exercise-id=' in sheet
 
-    create = html.split('id="add-new-pane"', 1)[1].split('</dialog>', 1)[0]
-    assert 'name="new_exercise_name"' in create
-    assert 'name="exercise_id"' not in create, 'the create form still submits an exercise id'
+    create = sheet.split('id="exadd-create"', 1)[1].split('</button>', 1)[0]
+    assert 'name="new_exercise_name"' not in create, \
+        'the create row is a button, not a form -- the name travels via JS from #exadd-search'
+    assert 'name="muscle_group"' not in sheet, 'the muscle-group field is back mid-workout'
+    assert 'name="exercise_id"' not in sheet, \
+        'a lingering <select name="exercise_id"> means the old pick pane is back'
 
 
 def test_a_finished_exercise_can_still_append_a_set_from_the_panel(client, scratch_session):
