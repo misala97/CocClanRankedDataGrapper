@@ -57,7 +57,14 @@ Two more fields per exercise, unrelated to loading:
   tuple, so a push session's triceps work is visible to anything counting volume
   per muscle.
 - `weight_increment` — already exists and already holds correct production
-  values. Untouched; it simply gains an export field name (`increment_kg`).
+  values, but is NULL-means-default on several rows. The export does not send
+  the raw column: it sends `stats.resolve_increment(weight_increment,
+  is_unilateral)` — the stored value when there is one, otherwise the app's
+  own fallback (halved when the exercise is unilateral) — under the field
+  name `increment_kg`. Sending the raw `null` would leave the coaching tool
+  guessing a step the app already knows; sending the resolved value keeps its
+  recommendation in agreement with the app's own stepper instead of
+  contradicting it.
 
 ## Seed Values
 
@@ -177,6 +184,10 @@ Rules:
   survives beside it, because how deep a deload went is not recoverable from a
   boolean.
 - Timestamps are ISO 8601 UTC with a trailing `Z`, matching v1.
+- An absent note exports differently depending on where it lives: the session
+  `notes` field stays `null` when absent, while the exercise `notes` field
+  exports as `""` (pinned by `""` in the sample payload above). The two
+  fields are not interchangeable — do not normalize one to match the other.
 
 ## Weight Suggestions On An Uneven Stack
 

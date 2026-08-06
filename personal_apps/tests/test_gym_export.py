@@ -58,7 +58,7 @@ def temp_finished_session():
     with flask_app.app_context():
         exercise = Exercise(name='ZZ Test Export Exercise', user_id=_admin_id(),
                             muscle_group='Schultern', equipment='plate_loaded',
-                            bar_weight=20.0, weight_increment=2.5)
+                            bar_weight=20.0)
         db.session.add(exercise)
         db.session.flush()
         session = WorkoutSession(name='ZZ Test Export Session', user_id=_admin_id(),
@@ -281,9 +281,23 @@ def test_exercise_notes_is_empty_string_when_absent():
 def test_pain_and_skipped_are_both_coerced_to_bool():
     """Both columns are non-nullable booleans; the export must treat them
     the same way rather than coercing one and trusting the other."""
-    payload = export.exercise_payload(_session_exercise(pain=1, skipped=0))
-    assert payload['pain'] is True
-    assert payload['skipped'] is False
+    payload = export.exercise_payload(_session_exercise(pain=0, skipped=1))
+    assert payload['pain'] is False
+    assert payload['skipped'] is True
+
+
+def test_a_deload_session_with_a_skipped_noted_exercise():
+    """Every other fixture in this file leaves skipped/deload/deload_pct/notes
+    at their falsy default, so a hardcoded False/False/None/'' in the export
+    module would pass every other test here. This is the one test that
+    actually flips each of them and checks the flip survives."""
+    se = _session_exercise(notes='linke Schulter zwickt', pain=True, skipped=True)
+    payload = export.session_payload(
+        _session(is_deload=True, deload_pct=85, exercises=[se]))
+    assert payload['deload'] is True
+    assert payload['deload_pct'] == 85
+    assert payload['exercises'][0]['skipped'] is True
+    assert payload['exercises'][0]['notes'] == 'linke Schulter zwickt'
 
 
 def test_range_derives_from_the_sessions_actually_exported():
@@ -337,6 +351,7 @@ def test_route_exports_a_real_finished_session(client, temp_finished_session):
         'stack_kg', 'position', 'replaces', 'replaced_by', 'rest_seconds',
         'notes', 'pain', 'skipped', 'sets',
     }
+    assert exercises[0]['increment_kg'] == stats.DEFAULT_INCREMENT
     sets = exercises[0]['sets']
     assert len(sets) == 1
     assert set(sets[0]) == {'position', 'weight', 'reps', 'completed', 'finished_at'}
