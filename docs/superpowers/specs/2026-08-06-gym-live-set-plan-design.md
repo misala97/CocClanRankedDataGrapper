@@ -71,8 +71,12 @@ Today's session is never part of the evidence. The badge answers "what did last
 time tell me", and the sets being logged right now are the thing it is advising
 about.
 
-The badge names no weight and changes no prefilled value. It is a reminder of
-what happened, not a prescription — the lifter taps `+` if they agree.
+The badge names no NEXT weight and changes no prefilled value. It is a reminder
+of what happened, not a prescription — the lifter taps `+` if they agree. It
+does name the evidence, the way the neighbouring `Stagniert` line names its
+count: *„Bereit — letztes Mal 2 Sätze auf 35,0 kg mit 10+ Wdh."*, and `kg je
+Seite` on a unilateral exercise, matching every other weight on this screen.
+A bare badge would make the lifter go looking for the reason it appeared.
 
 It renders only on the live exercise card, not on the queue rows beneath it.
 The queue is an overview; seven badges at once is decoration, and the decision
@@ -80,10 +84,15 @@ is made at the machine.
 
 ## Where The Code Goes
 
-`stats.ready_for_more(rows, position=None) -> bool`, a pure function beside the
-other judgements, fed by the `PerformedExercise` rows the live route already
-loads. Those rows carry only completed sets, which is exactly the input this
-rule wants.
+`stats.ready_for_more(rows, position=None)`, a pure function beside the other
+judgements, fed by the `PerformedExercise` rows the live route already loads.
+Those rows carry only completed sets, which is exactly the input this rule
+wants.
+
+It returns `None` when the rule does not fire, and otherwise the evidence the
+badge quotes: `{'sets': 2, 'weight': 35.0}` — how many sets qualified and the
+weight they were performed at. A bool would force the template to re-derive
+numbers the function already computed.
 
 The route passes the flag into the live template. No new query: the live screen
 already loads this exercise's history for the suggestion and record logic.
@@ -92,16 +101,16 @@ already loads this exercise's history for the suggestion and record logic.
 
 `ready_for_more` is pure, so its rule is testable directly:
 
-- two sets at the top weight with 10 and 11 reps → true
-- two sets at the top weight with 9 reps → false
-- one set at the top weight with 12 reps, one lighter set with 12 → false
+- two sets at the top weight with 10 and 11 reps → `{'sets': 2, 'weight': ...}`
+- two sets at the top weight with 9 reps → `None`
+- one set at the top weight with 12 reps, one lighter set with 12 → `None`
 - the qualifying session is a deload, the one before it is not → judged on the
   earlier one
 - three qualifying sets at a different position, fewer than two sessions in
-  this slot → true via the `_scoped()` fallback
+  this slot → fires, via the `_scoped()` fallback
 - three qualifying sets at a different position, two or more sessions in this
-  slot that do not qualify → false
-- no history at all → false
+  slot that do not qualify → `None`
+- no history at all → `None`
 
 Each test states the number it asserts on, not merely that a boolean came back.
 
