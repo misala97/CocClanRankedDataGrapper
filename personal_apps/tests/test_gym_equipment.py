@@ -9,6 +9,7 @@ from app import app as flask_app
 from extensions import db
 from models import Exercise, EQUIPMENT_TYPES, EQUIPMENT_LABELS
 from conftest import _admin_id
+from test_gym_sharing import linked_pair
 
 
 @pytest.fixture()
@@ -79,17 +80,33 @@ def test_seed_left_unilateral_flags_alone():
             assert rows['Military Press'].bar_weight == 20
 
 
-def test_cloned_partner_exercise_inherits_equipment_facts():
+def test_cloned_partner_exercise_inherits_equipment_facts(linked_pair):
     """A shared workout clones the leader's exercise into the follower's
     catalogue. Equipment is a property of the machine, so it travels --
-    unlike weight_increment, which is per-person and deliberately does not."""
-    import inspect
+    weight_increment stays behind because increments are per-person and are
+    deliberately not copied here."""
     from features.gym import sharing
-    source = inspect.getsource(sharing)
-    for field in ('equipment=leader_exercise.equipment',
-                  'bar_weight=leader_exercise.bar_weight',
-                  'stack_kg=leader_exercise.stack_kg',
-                  'secondary_muscle_groups=leader_exercise.secondary_muscle_groups'):
-        assert field in source, field
-    assert 'weight_increment=leader_exercise' not in source, \
-        'increments are per-person and must not be copied'
+    from models import SharedSession
+
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, linked_pair['shared'])
+        rigged = Exercise(name='pytest shared rigged lift',
+                          user_id=linked_pair['leader_user'],
+                          equipment='plate_loaded', bar_weight=20.0,
+                          stack_kg=[5, 13, 21, 29],
+                          secondary_muscle_groups=['Trizeps', 'Schultern'],
+                          weight_increment=2.5)
+        db.session.add(rigged)
+        db.session.flush()
+
+        resolved_id = sharing.follower_exercise_for(shared, rigged.id)
+        db.session.commit()
+
+        created = db.session.get(Exercise, resolved_id)
+        assert created.equipment == 'plate_loaded'
+        assert created.bar_weight == 20.0
+        assert created.stack_kg == [5, 13, 21, 29]
+        assert created.secondary_muscle_groups == ['Trizeps', 'Schultern']
+        assert created.weight_increment is None, (
+            'weight_increment is per-person and must not be copied, even '
+            'though the leader had one set')

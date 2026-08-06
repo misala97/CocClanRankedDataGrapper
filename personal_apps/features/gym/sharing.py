@@ -90,7 +90,8 @@ def follower_exercise_for(shared, leader_exercise_id):
             # figure for the follower's copy at half its real value.
             is_unilateral=leader_exercise.is_unilateral,
             # Equipment facts describe the machine, not the person, so they
-            # travel with the name too -- unlike weight_increment below.
+            # travel with the name too. weight_increment stays behind on
+            # purpose -- it is per-person and is never set here.
             equipment=leader_exercise.equipment,
             bar_weight=leader_exercise.bar_weight,
             stack_kg=leader_exercise.stack_kg,
