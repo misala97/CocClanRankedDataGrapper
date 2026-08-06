@@ -769,6 +769,24 @@ def test_session_report_suggests_a_real_stack_stop_not_an_invented_position():
     assert report['advice'][0]['suggested_weight'] == 77.0
 
 
+def test_session_report_drops_advice_when_already_topped_out_on_the_stack():
+    """Same stagnation setup again, but stuck on the HEAVIEST stop this stack
+    has. snap_to_stack('up') clamps a jump past the top back down to it, so
+    the naive advice would tell the lifter to "go heavier" and then name the
+    exact weight they are already stuck at -- worse than no advice. The right
+    answer is no advice entry at all, not a same-number one."""
+    steps = (5, 13, 21, 29, 37, 45, 53, 61, 69, 77)
+    history = [
+        perf([(77.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(7 * n), session_id=n + 1)
+        for n in range(4)
+    ]
+    current = [perf([(77.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(28), session_id=9)]
+    report = stats.session_report(current, history)
+
+    assert report['exercises'][0]['verdict'] == 'stagniert'
+    assert report['advice'] == []
+
+
 def test_deload_row_does_not_count_as_a_session_without_a_pr():
     # Without the exclusion this is 2 sessions since the PR; the deload in the
     # middle is not a failed attempt at one.

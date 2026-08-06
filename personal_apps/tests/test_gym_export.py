@@ -251,6 +251,18 @@ def test_unfinished_set_exports_a_null_timestamp():
     assert payload['finished_at'] is None
 
 
+def test_a_completed_pre_migration_set_also_exports_a_null_timestamp():
+    """completed_at was added in migration d1f6b83c25e9. Every set ticked
+    before that migration ran carries completed=True, completed_at=None --
+    routes.py's rest-gap computation already treats that as real data, not a
+    bug (see _session_rest_entries). null must not be read as "this set never
+    happened": it is also the honest export of a set that happened before the
+    app could time it."""
+    payload = export.set_payload(_set(completed=True, completed_at=None))
+    assert payload['completed'] is True
+    assert payload['finished_at'] is None
+
+
 def test_replacement_names_survive():
     original = SimpleNamespace(exercise=_exercise(name='T Bar Row (Standing)'))
     substitute = SimpleNamespace(exercise=_exercise(name='T Bar Row (Lying)'))

@@ -815,6 +815,12 @@ def session_detail(session_id):
         ]
         for entry, se in zip(data['exercises'], reported_session_exercises):
             entry['set_rows'] = [s for s in se.sets if s.completed]
+            # Same reason as set_rows above: the note-and-pain fields
+            # (session_finished.html's "Sätze korrigieren" sheet, extended)
+            # post to gym_update_session_exercise_meta, which needs the real
+            # SessionExercise id and its current notes/pain -- session_report's
+            # own entries carry neither.
+            entry['session_exercise'] = se
         # session_report only sees PerformedExercise rows, which do not carry
         # the percentage -- it belongs to the session row itself.
         data['deload_pct'] = session_.deload_pct

@@ -666,15 +666,25 @@ def session_report(current, history, comparable_session_volumes=()):
                             'previous_at': previous_row.started_at})
 
         if entry['verdict'] == 'stagniert':
-            advice.append({
-                'exercise_id': row.exercise_id,
-                'name': row.name,
-                'stuck_at': weight,
-                'sessions': since,
-                'suggested_weight': snap_to_stack(
-                    _next_weight(weight, resolve_increment(row.weight_increment, row.is_unilateral)),
-                    row.stack_kg, 'up'),
-            })
+            suggested_weight = snap_to_stack(
+                _next_weight(weight, resolve_increment(row.weight_increment, row.is_unilateral)),
+                row.stack_kg, 'up')
+            # Topped out: on a machine whose real stops are known, snap_to_stack
+            # clamps a jump past the heaviest stop back down to that stop -- so a
+            # lifter already sitting on the top step gets suggested_weight ==
+            # stuck_at, the exact number the plateau is already stuck at. Without
+            # a stack (or one with room above the current weight) the jump is
+            # always strictly upward, so this never fires on that path -- it
+            # exists only for the one case where "go heavier" has no honest
+            # answer, and dropping the entry beats repeating a number.
+            if suggested_weight > weight:
+                advice.append({
+                    'exercise_id': row.exercise_id,
+                    'name': row.name,
+                    'stuck_at': weight,
+                    'sessions': since,
+                    'suggested_weight': suggested_weight,
+                })
 
     # NOT by raw value: `value` is kilograms-lifted for a weight record and
     # kilograms-of-volume for a volume one, and a session total is two orders of

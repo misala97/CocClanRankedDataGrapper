@@ -145,6 +145,9 @@ def test_copy_templates_forks_the_exercises_into_the_destination(throwaway_user)
             source_id = _admin_id()
             shared = Exercise(name='pytest fork lift', muscle_group='Brust',
                               weight_increment=9.0, is_unilateral=True,
+                              equipment='plate_loaded', bar_weight=20.0,
+                              stack_kg=[5, 13, 21],
+                              secondary_muscle_groups=['Trizeps'],
                               user_id=source_id)
             db.session.add(shared)
             db.session.flush()
@@ -171,6 +174,10 @@ def test_copy_templates_forks_the_exercises_into_the_destination(throwaway_user)
             assert copies[0].weight_increment == 9.0
             assert copies[0].is_unilateral is True
             assert copies[0].id != made[0][1], 'pointed at the source exercise'
+            assert copies[0].equipment == 'plate_loaded'
+            assert copies[0].bar_weight == 20.0
+            assert copies[0].stack_kg == [5, 13, 21]
+            assert copies[0].secondary_muscle_groups == ['Trizeps']
 
             for template in WorkoutTemplate.query.filter_by(user_id=throwaway_user):
                 for te in template.exercises:

@@ -896,6 +896,83 @@ def test_deload_toggle_snaps_to_the_exercises_real_stack_stops(client, scratch_d
         assert [s.weight for s in se.sets] == [68.0]
 
 
+@pytest.fixture()
+def scratch_stagnant_stack_session():
+    """A finished session sitting at the end of a stagnation streak, on an
+    exercise with an UNEVEN recorded stack (5, 12, 18, 29, 33, 61, 68, 92).
+
+    This is the route-level counterpart to the pure stats.py stack tests: it
+    exercises routes.py's own _to_performed(), the fourth call site that reads
+    exercise.stack_kg into a PerformedExercise (session_detail.html's finished
+    branch, load_performed()) -- the one the earlier stack-plumbing review
+    missed. 61 kg is itself a real stop; the default 2.5 kg grid would suggest
+    63.5 kg next, a position this machine does not have.
+    """
+    import datetime as dt
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    with flask_app.app_context():
+        exercise = Exercise(name='pytest stagnant stack lift', muscle_group='Brust',
+                            user_id=_admin_id(),
+                            stack_kg=[5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0])
+        db.session.add(exercise)
+        db.session.flush()
+
+        base = dt.datetime.utcnow() - dt.timedelta(days=28)
+        sessions = []
+        for n in range(4):
+            past = WorkoutSession(name=f'pytest stagnant history {n}',
+                                  started_at=base + dt.timedelta(days=7 * n),
+                                  finished_at=base + dt.timedelta(days=7 * n, hours=1),
+                                  user_id=_admin_id())
+            se = SessionExercise(exercise_id=exercise.id, position=1)
+            se.sets = [SessionSet(position=1, weight=61.0, reps=8, completed=True)]
+            past.exercises.append(se)
+            sessions.append(past)
+
+        current = WorkoutSession(name='pytest stagnant current',
+                                 started_at=base + dt.timedelta(days=28),
+                                 finished_at=base + dt.timedelta(days=28, hours=1),
+                                 user_id=_admin_id())
+        current_se = SessionExercise(exercise_id=exercise.id, position=1)
+        current_se.sets = [SessionSet(position=1, weight=61.0, reps=8, completed=True)]
+        current.exercises.append(current_se)
+        sessions.append(current)
+
+        db.session.add_all(sessions)
+        db.session.commit()
+        session_ids = [s.id for s in sessions]
+        finished_id = current.id
+        exercise_id = exercise.id
+    yield finished_id
+    with flask_app.app_context():
+        for sid in session_ids:
+            doomed = db.session.get(WorkoutSession, sid)
+            if doomed is not None:
+                doomed.resting_set_id = None
+                db.session.commit()
+                db.session.delete(doomed)
+                db.session.commit()
+        doomed_exercise = db.session.get(Exercise, exercise_id)
+        if doomed_exercise is not None:
+            db.session.delete(doomed_exercise)
+            db.session.commit()
+
+
+def test_finished_session_advice_snaps_to_the_exercises_real_stack_stops(
+        client, scratch_stagnant_stack_session):
+    """Route-level regression guard for _to_performed's stack_kg plumbing
+    (routes.py:478), the fourth call site the earlier stack-plumbing review
+    missed. Setting stack_kg=None there leaves the full suite green, because
+    nothing else exercises this exact path -- the "Nächstes Mal" advice on
+    session_finished.html, the app's own "go heavier" prescription.
+    """
+    html = client.get(f'/gym/session/{scratch_stagnant_stack_session}').get_data(as_text=True)
+    assert 'auf' in html and 'gehen' in html, 'expected a "Nächstes Mal" advice block'
+    assert '<b>68,0 kg</b> gehen' in html
+    assert '63,5' not in html
+
+
 def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session):
     """Symmetric with the weight rule: a typed rep count is ground truth, so a
     later toggle-off must not overwrite it."""

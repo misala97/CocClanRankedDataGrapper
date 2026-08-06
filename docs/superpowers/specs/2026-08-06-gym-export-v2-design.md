@@ -116,7 +116,8 @@ between "start" and "first set".
 
 Set timestamps need nothing new: `SessionSet.completed_at` already records when a
 set actually landed. It becomes `finished_at` in the export, `null` for a set
-that was never ticked.
+that was never ticked -- or, for any set logged before `completed_at` existed,
+one that predates set timestamps regardless of whether it was ticked.
 
 ## Export v2 Shape
 
@@ -228,15 +229,17 @@ no text.
   value is `null`
 - the `weight_convention` derivation matrix, all six combinations
 - `increment_kg` / `stack_kg` mutual exclusion
-- `finished_at` is `null` exactly for sets that were never completed
+- `finished_at` is `null` exactly for sets that were never ticked, which also
+  covers every set completed before `completed_at` existed -- `completed: true`
+  with `completed_at: null` is real, pre-migration data, not an impossible state
 - `range` derives from the exported sessions, and is `{null, null}` for an empty
   selection
 
 Route tests cover the new form fields persisting, and that a session with no
 bodyweight, no notes and no pain flag still exports every key.
 
-The migration's seed is verified against a catalogue containing an unlisted
-exercise and a user missing several listed ones.
+The migration is one-shot and was verified by hand against the live catalogue;
+no automated seed test exists for it.
 
 ## Delivery
 

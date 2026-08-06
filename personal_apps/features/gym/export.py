@@ -48,7 +48,12 @@ def set_payload(session_set):
         'reps': session_set.reps,
         'completed': session_set.completed,
         # completed_at is cleared whenever a set stops being completed, so
-        # this is null exactly for sets that never happened.
+        # this is null for a set that was never ticked. It is ALSO null for
+        # every set logged before completed_at existed (migration
+        # d1f6b83c25e9) even when completed is true -- routes.py's rest-gap
+        # computation already treats that combination as real data, not a
+        # bug, so null here means "never ticked, or predates set timestamps",
+        # never "never happened".
         'finished_at': _stamp(session_set.completed_at),
     }
 
