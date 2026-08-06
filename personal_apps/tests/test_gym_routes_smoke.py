@@ -1628,7 +1628,15 @@ def test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for(client):
 def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
     """Two sets at last session's top weight with 10+ reps, so the live card
     says so before the first set of today -- and stays quiet once the
-    session in progress is a deliberately light deload."""
+    session in progress is a deliberately light deload.
+
+    Today's planned weight (30,0) is deliberately a different, LOWER number
+    than the evidence session's (35,0): a mutant that reads the badge's
+    weight off `next_set.weight` instead of `ready_for_more.weight` would
+    print 30,0 here and survive if the two fixtures ever coincided. Lower,
+    not higher, also proves the retirement rule (finding 1b) is one-sided --
+    a ramp-up whose first chip is lighter than the evidence must still show
+    the badge."""
     with flask_app.app_context():
         exercise = Exercise(name='ZZ Ready Lift', user_id=_admin_id(),
                             muscle_group='Rücken')
@@ -1654,7 +1662,7 @@ def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
         db.session.add(today_se)
         db.session.flush()
         db.session.add(SessionSet(session_exercise_id=today_se.id, position=1,
-                                  weight=35.0, reps=10, completed=False))
+                                  weight=30.0, reps=10, completed=False))
         db.session.commit()
         ids = (today.id, past.id, exercise.id)
 
@@ -1696,7 +1704,12 @@ def test_the_ready_badge_says_je_seite_for_unilateral_exercises(client):
     on its own): the set-chip weight stepper carries the identical 'kg je
     Seite' text on unilateral exercises regardless of whether the badge
     renders at all, so a bare substring check would pass even with the
-    badge's own {% if live_se.exercise.is_unilateral %} clause deleted."""
+    badge's own {% if live_se.exercise.is_unilateral %} clause deleted.
+
+    Finding 4: the same clause has to land in all three chip aria-label
+    branches (record, completed, open), not just the open one -- today's
+    live exercise carries one of each so a mutant that fixes only one
+    branch still fails this test."""
     with flask_app.app_context():
         exercise = Exercise(name='ZZ Ready Unilateral Lift', user_id=_admin_id(),
                             muscle_group='Rücken', is_unilateral=True)
@@ -1721,7 +1734,19 @@ def test_the_ready_badge_says_je_seite_for_unilateral_exercises(client):
         today_se = SessionExercise(session_id=today.id, exercise_id=exercise.id, position=1)
         db.session.add(today_se)
         db.session.flush()
+        # Set 1: same weight as the evidence (20,0, so finding 1b's
+        # retirement rule does not fire) but more reps than the past
+        # session's best -- a live e1RM PR, so this chip renders through
+        # the is_record branch of the label.
         db.session.add(SessionSet(session_exercise_id=today_se.id, position=1,
+                                  weight=20.0, reps=15, completed=True,
+                                  completed_at=dt.datetime.utcnow()))
+        # Set 2: completed but not a record -- the plain "erledigt" branch.
+        db.session.add(SessionSet(session_exercise_id=today_se.id, position=2,
+                                  weight=18.0, reps=8, completed=True,
+                                  completed_at=dt.datetime.utcnow()))
+        # Set 3: still open -- the "geplant" branch.
+        db.session.add(SessionSet(session_exercise_id=today_se.id, position=3,
                                   weight=20.0, reps=10, completed=False))
         db.session.commit()
         ids = (today.id, past.id, exercise.id)
@@ -1729,10 +1754,275 @@ def test_the_ready_badge_says_je_seite_for_unilateral_exercises(client):
     try:
         html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
         assert f'kg je Seite mit {stats.DELOAD_REPS}+ Wdh.' in html
+        # Finding 4: every one of the three aria-label branches carries the
+        # weight (unlike the old ordinal-only open-chip label) and must say
+        # "je Seite" too, the same as the badge above it and the weight
+        # stepper below it.
+        assert 'Satz 1 — Rekord, 20,0 kg je Seite mal 15' in html
+        assert 'Satz 2 erledigt, 18,0 kg je Seite mal 8' in html
+        assert 'Satz 3, geplant 20,0 kg je Seite mal 10' in html
     finally:
         with flask_app.app_context():
             for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
                                   (Exercise, ids[2])):
+                row = db.session.get(model, row_id)
+                if row is not None:
+                    db.session.delete(row)
+            db.session.commit()
+
+
+def test_the_ready_badge_never_claims_a_false_letztes_mal(client):
+    """The reviewer's exact divergence fixture: a slot-1 exercise trained
+    twice at 35,0 x 11/10 more than ROLLING_WINDOW_DAYS ago, a slot-3
+    session 5 days ago at 45,0 x 8/7/6, live today in slot 1 with the chips
+    that session would prefill (45,0 x 8/7/6).
+
+    Before finding 1: the badge read "Letztes Mal 2 Satze auf 35,0 kg" next
+    to chips at 45,0 -- a dated claim about a 45+ day old session, false on
+    its face, and advice pointing the wrong way (the lifter is already
+    planned ABOVE the weight the badge calls easy). Finding 1b retires the
+    badge outright once today is already planned heavier than the evidence
+    it would quote -- the fix for the false claim is not better wording,
+    it's silence."""
+    with flask_app.app_context():
+        exercise = Exercise(name='ZZ Ready Divergence Lift', user_id=_admin_id(),
+                            muscle_group='Rücken')
+        db.session.add(exercise)
+        db.session.flush()
+
+        old_a = WorkoutSession(name='ZZ Ready Divergence Old A', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow() - dt.timedelta(days=50),
+                               finished_at=dt.datetime.utcnow() - dt.timedelta(days=50))
+        db.session.add(old_a)
+        db.session.flush()
+        old_a_se = SessionExercise(session_id=old_a.id, exercise_id=exercise.id, position=1)
+        db.session.add(old_a_se)
+        db.session.flush()
+        for i, reps in enumerate((11, 10), start=1):
+            db.session.add(SessionSet(session_exercise_id=old_a_se.id, position=i,
+                                      weight=35.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=50)))
+
+        old_b = WorkoutSession(name='ZZ Ready Divergence Old B', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow() - dt.timedelta(days=45),
+                               finished_at=dt.datetime.utcnow() - dt.timedelta(days=45))
+        db.session.add(old_b)
+        db.session.flush()
+        old_b_se = SessionExercise(session_id=old_b.id, exercise_id=exercise.id, position=1)
+        db.session.add(old_b_se)
+        db.session.flush()
+        for i, reps in enumerate((11, 10), start=1):
+            db.session.add(SessionSet(session_exercise_id=old_b_se.id, position=i,
+                                      weight=35.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=45)))
+
+        recent = WorkoutSession(name='ZZ Ready Divergence Recent', user_id=_admin_id(),
+                                started_at=dt.datetime.utcnow() - dt.timedelta(days=5),
+                                finished_at=dt.datetime.utcnow() - dt.timedelta(days=5))
+        db.session.add(recent)
+        db.session.flush()
+        recent_se = SessionExercise(session_id=recent.id, exercise_id=exercise.id, position=3)
+        db.session.add(recent_se)
+        db.session.flush()
+        for i, reps in enumerate((8, 7, 6), start=1):
+            db.session.add(SessionSet(session_exercise_id=recent_se.id, position=i,
+                                      weight=45.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=5)))
+
+        today = WorkoutSession(name='ZZ Ready Divergence Today', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow())
+        db.session.add(today)
+        db.session.flush()
+        today_se = SessionExercise(session_id=today.id, exercise_id=exercise.id, position=1)
+        db.session.add(today_se)
+        db.session.flush()
+        for i, reps in enumerate((8, 7, 6), start=1):
+            db.session.add(SessionSet(session_exercise_id=today_se.id, position=i,
+                                      weight=45.0, reps=reps, completed=False))
+        db.session.commit()
+        ids = (today.id, old_a.id, old_b.id, recent.id, exercise.id)
+
+    try:
+        html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
+        assert '45,0 × 8' in html, 'the chips still prefill from the recent slot-3 session'
+        assert 'live__ready' not in html, \
+            'planned-heavier-than-evidence must retire the badge, not merely reword it'
+    finally:
+        with flask_app.app_context():
+            for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
+                                  (WorkoutSession, ids[2]), (WorkoutSession, ids[3]),
+                                  (Exercise, ids[4])):
+                row = db.session.get(model, row_id)
+                if row is not None:
+                    db.session.delete(row)
+            db.session.commit()
+
+
+def test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest(client):
+    """Same borrowed-evidence shape as the divergence fixture above, but
+    today's planned weight (20,0) stays BELOW the evidence (35,0), so
+    finding 1b's retirement rule does not fire and the badge renders --
+    proving finding 1a's wording rule on its own: is_latest is false (a
+    newer slot-3 session exists), so the sentence must read 'Zuletzt in
+    diesem Slot', never 'Letztes Mal', about a session that was not last.
+
+    The evidence session (old_b) carries THREE qualifying sets, not two --
+    the same finding-2 mutation-survivor concern as the stats-level test:
+    a template that hardcodes 'Sätze' to a literal 2 instead of reading
+    `ready_for_more.sets` would still pass a fixture with exactly two."""
+    with flask_app.app_context():
+        exercise = Exercise(name='ZZ Ready Slot Wording Lift', user_id=_admin_id(),
+                            muscle_group='Rücken')
+        db.session.add(exercise)
+        db.session.flush()
+
+        old_a = WorkoutSession(name='ZZ Ready Slot Wording Old A', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow() - dt.timedelta(days=60),
+                               finished_at=dt.datetime.utcnow() - dt.timedelta(days=60))
+        db.session.add(old_a)
+        db.session.flush()
+        old_a_se = SessionExercise(session_id=old_a.id, exercise_id=exercise.id, position=1)
+        db.session.add(old_a_se)
+        db.session.flush()
+        for i, reps in enumerate((11, 10), start=1):
+            db.session.add(SessionSet(session_exercise_id=old_a_se.id, position=i,
+                                      weight=35.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=60)))
+
+        old_b = WorkoutSession(name='ZZ Ready Slot Wording Old B', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow() - dt.timedelta(days=45),
+                               finished_at=dt.datetime.utcnow() - dt.timedelta(days=45))
+        db.session.add(old_b)
+        db.session.flush()
+        old_b_se = SessionExercise(session_id=old_b.id, exercise_id=exercise.id, position=1)
+        db.session.add(old_b_se)
+        db.session.flush()
+        for i, reps in enumerate((11, 10, 12), start=1):
+            db.session.add(SessionSet(session_exercise_id=old_b_se.id, position=i,
+                                      weight=35.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=45)))
+
+        recent = WorkoutSession(name='ZZ Ready Slot Wording Recent', user_id=_admin_id(),
+                                started_at=dt.datetime.utcnow() - dt.timedelta(days=5),
+                                finished_at=dt.datetime.utcnow() - dt.timedelta(days=5))
+        db.session.add(recent)
+        db.session.flush()
+        recent_se = SessionExercise(session_id=recent.id, exercise_id=exercise.id, position=3)
+        db.session.add(recent_se)
+        db.session.flush()
+        for i, reps in enumerate((8, 7, 6), start=1):
+            db.session.add(SessionSet(session_exercise_id=recent_se.id, position=i,
+                                      weight=20.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=5)))
+
+        today = WorkoutSession(name='ZZ Ready Slot Wording Today', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow())
+        db.session.add(today)
+        db.session.flush()
+        today_se = SessionExercise(session_id=today.id, exercise_id=exercise.id, position=1)
+        db.session.add(today_se)
+        db.session.flush()
+        db.session.add(SessionSet(session_exercise_id=today_se.id, position=1,
+                                  weight=20.0, reps=8, completed=False))
+        db.session.commit()
+        ids = (today.id, old_a.id, old_b.id, recent.id, exercise.id)
+
+    try:
+        html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
+        assert 'class="live__ready"' in html
+        assert 'Zuletzt in diesem Slot 3 Sätze auf 35,0 kg' in html
+        assert 'Letztes Mal' not in html
+    finally:
+        with flask_app.app_context():
+            for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
+                                  (WorkoutSession, ids[2]), (WorkoutSession, ids[3]),
+                                  (Exercise, ids[4])):
+                row = db.session.get(model, row_id)
+                if row is not None:
+                    db.session.delete(row)
+            db.session.commit()
+
+
+def test_the_ready_badge_respects_the_live_exercises_own_slot(client):
+    """Finding 3: deleting `position=live_se.position` from the route's call
+    to ready_for_more survives every other fixture, because both of them put
+    the live exercise in slot 1 with only one other slot on record.
+
+    Here slot 1 holds a qualifying session that is also the chronologically
+    NEWEST row overall, and slot 3 holds two non-qualifying sessions. The
+    live exercise is in slot 3. Correctly scoped, slot 3 has enough sessions
+    of its own (two) to judge itself and never looks at slot 1, so the badge
+    must not render. If position were ever dropped, _scoped() would fall
+    back to every row's plain chronological order, hand back slot 1's
+    qualifying session as "last", and the badge would wrongly appear.
+    Today's own planned weight (20,0) is kept below slot 1's evidence
+    (35,0) so finding 1b's retirement rule cannot accidentally mask the
+    bug by suppressing the wrongly-produced badge anyway."""
+    with flask_app.app_context():
+        exercise = Exercise(name='ZZ Ready Slot Scoping Lift', user_id=_admin_id(),
+                            muscle_group='Rücken')
+        db.session.add(exercise)
+        db.session.flush()
+
+        slot3_a = WorkoutSession(name='ZZ Ready Slot Scoping 3A', user_id=_admin_id(),
+                                 started_at=dt.datetime.utcnow() - dt.timedelta(days=10),
+                                 finished_at=dt.datetime.utcnow() - dt.timedelta(days=10))
+        db.session.add(slot3_a)
+        db.session.flush()
+        slot3_a_se = SessionExercise(session_id=slot3_a.id, exercise_id=exercise.id, position=3)
+        db.session.add(slot3_a_se)
+        db.session.flush()
+        for i, reps in enumerate((6, 5), start=1):
+            db.session.add(SessionSet(session_exercise_id=slot3_a_se.id, position=i,
+                                      weight=40.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=10)))
+
+        slot3_b = WorkoutSession(name='ZZ Ready Slot Scoping 3B', user_id=_admin_id(),
+                                 started_at=dt.datetime.utcnow() - dt.timedelta(days=8),
+                                 finished_at=dt.datetime.utcnow() - dt.timedelta(days=8))
+        db.session.add(slot3_b)
+        db.session.flush()
+        slot3_b_se = SessionExercise(session_id=slot3_b.id, exercise_id=exercise.id, position=3)
+        db.session.add(slot3_b_se)
+        db.session.flush()
+        for i, reps in enumerate((7, 6), start=1):
+            db.session.add(SessionSet(session_exercise_id=slot3_b_se.id, position=i,
+                                      weight=40.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=8)))
+
+        slot1 = WorkoutSession(name='ZZ Ready Slot Scoping 1', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+                               finished_at=dt.datetime.utcnow() - dt.timedelta(days=2))
+        db.session.add(slot1)
+        db.session.flush()
+        slot1_se = SessionExercise(session_id=slot1.id, exercise_id=exercise.id, position=1)
+        db.session.add(slot1_se)
+        db.session.flush()
+        for i, reps in enumerate((10, 11), start=1):
+            db.session.add(SessionSet(session_exercise_id=slot1_se.id, position=i,
+                                      weight=35.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=2)))
+
+        today = WorkoutSession(name='ZZ Ready Slot Scoping Today', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow())
+        db.session.add(today)
+        db.session.flush()
+        today_se = SessionExercise(session_id=today.id, exercise_id=exercise.id, position=3)
+        db.session.add(today_se)
+        db.session.flush()
+        db.session.add(SessionSet(session_exercise_id=today_se.id, position=1,
+                                  weight=20.0, reps=8, completed=False))
+        db.session.commit()
+        ids = (today.id, slot3_a.id, slot3_b.id, slot1.id, exercise.id)
+
+    try:
+        html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
+        assert 'live__ready' not in html
+    finally:
+        with flask_app.app_context():
+            for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
+                                  (WorkoutSession, ids[2]), (WorkoutSession, ids[3]),
+                                  (Exercise, ids[4])):
                 row = db.session.get(model, row_id)
                 if row is not None:
                     db.session.delete(row)

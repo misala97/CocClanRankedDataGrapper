@@ -301,17 +301,32 @@ def ready_for_more(rows, position=None):
     in THIS slot easy", the chip is answering "what should I load RIGHT
     NOW", and those are legitimately different questions. Unifying the two
     lenses is a design decision, not a fix -- left alone on purpose.
+
+    What IS a bug is stating that divergence as if it were not one: the
+    returned dict carries `is_latest`, true only when the evidence session is
+    also the most recent session in `rows` at ANY position. The caller uses
+    it to say "Letztes Mal" (a dated claim) only when it is true, and a
+    slot-scoped "Zuletzt in diesem Slot" otherwise -- so the sentence never
+    asserts a false "last time" about a session that was not, in fact, last.
     """
-    scoped = _scoped(progression_rows(rows), position)
+    prog = progression_rows(rows)
+    scoped = _scoped(prog, position)
     if not scoped:
         return None
     last = scoped[-1]
     top = max(weight for weight, _ in last.sets)
+    # A bodyweight set (weight 0) has no weight to add -- every set trivially
+    # "matches the heaviest weight", so this would otherwise fire forever on
+    # a pure-bodyweight exercise instead of only when there is genuinely room
+    # to load more.
+    if top == 0:
+        return None
     qualifying = [reps for weight, reps in last.sets
                   if weight == top and reps >= DELOAD_REPS]
     if len(qualifying) < 2:
         return None
-    return {'sets': len(qualifying), 'weight': top}
+    newest = _chronological(prog)[-1]
+    return {'sets': len(qualifying), 'weight': top, 'is_latest': last is newest}
 
 
 def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):

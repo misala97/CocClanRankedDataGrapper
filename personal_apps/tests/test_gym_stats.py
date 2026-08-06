@@ -1119,7 +1119,7 @@ def test_rest_medians_ignores_gaps_with_no_planned_time():
 def test_two_top_weight_sets_at_ten_reps_say_go_heavier():
     """The rule, in its plainest form: the working weight has become easy."""
     row = perf([(35.0, 10), (35.0, 11), (35.0, 8)])
-    assert stats.ready_for_more([row]) == {'sets': 2, 'weight': 35.0}
+    assert stats.ready_for_more([row]) == {'sets': 2, 'weight': 35.0, 'is_latest': True}
 
 
 def test_nine_reps_is_not_enough():
@@ -1156,16 +1156,22 @@ def test_the_newest_qualifying_session_wins():
                  started_at=dt.datetime(2026, 7, 20), session_id=1)
     newer = perf([(35.0, 10), (35.0, 11)],
                  started_at=dt.datetime(2026, 7, 27), session_id=2)
-    assert stats.ready_for_more([older, newer]) == {'sets': 2, 'weight': 35.0}
+    assert stats.ready_for_more([older, newer]) == {'sets': 2, 'weight': 35.0, 'is_latest': True}
 
 
 def test_a_thin_slot_falls_back_to_every_position():
     """_scoped()'s own rule: fewer than two sessions in this slot cannot
     support a judgement, and answering from another slot beats answering
-    'no idea'."""
-    row = perf([(35.0, 10), (35.0, 10)], position=1,
+    'no idea'.
+
+    Three qualifying sets, not two: a mutant that hardcodes the returned
+    count to 2 (`'sets': len(qualifying)` -> `'sets': 2`) survives every
+    other fixture in this file, because they all happen to have exactly two
+    qualifying sets. This is the one that pins the real count."""
+    row = perf([(35.0, 10), (35.0, 10), (35.0, 11)], position=1,
                started_at=dt.datetime(2026, 7, 27), session_id=1)
-    assert stats.ready_for_more([row], position=7) == {'sets': 2, 'weight': 35.0}
+    assert stats.ready_for_more([row], position=7) == {
+        'sets': 3, 'weight': 35.0, 'is_latest': True}
 
 
 def test_a_populated_slot_is_judged_on_its_own_sessions():
@@ -1176,8 +1182,10 @@ def test_a_populated_slot_is_judged_on_its_own_sessions():
     -- _scoped()'s fallback path reads scoped[-1], and if position were ever
     ignored, this is the row that would win. An older leaking session would
     let position-blind code land on the real slot-7 session by accident and
-    pass for the wrong reason."""
-    easy_elsewhere = perf([(35.0, 12), (35.0, 12)], position=1,
+    pass for the wrong reason. It also carries three qualifying sets, not
+    two, so this stays a real test of scoping even against a strong
+    temptation to leak in -- not just a coincidence of a weak fixture."""
+    easy_elsewhere = perf([(35.0, 12), (35.0, 12), (35.0, 11)], position=1,
                           started_at=dt.datetime(2026, 7, 28), session_id=4)
     hard_here_a = perf([(35.0, 6), (35.0, 5)], position=7,
                        started_at=dt.datetime(2026, 7, 24), session_id=2)
@@ -1189,3 +1197,30 @@ def test_a_populated_slot_is_judged_on_its_own_sessions():
 
 def test_no_history_says_nothing():
     assert stats.ready_for_more([]) is None
+
+
+def test_a_bodyweight_exercise_never_qualifies():
+    """At 0 kg every set trivially 'matches the heaviest weight', so without
+    this guard 3x12 pull-ups would badge forever -- there is no weight to
+    add, so the badge has nothing honest left to suggest."""
+    row = perf([(0.0, 12), (0.0, 12), (0.0, 12)])
+    assert stats.ready_for_more([row]) is None
+
+
+def test_an_older_qualifying_session_is_not_the_latest():
+    """is_latest is false the moment a NEWER session exists anywhere in the
+    rows, even at a different position and even one that does not itself
+    qualify -- the badge must not say 'Letztes Mal' about a session that was
+    not, in fact, the last one trained.
+
+    Slot 1 has two sessions of its own so _scoped() judges from slot 1
+    without falling back -- the evidence is genuinely the newest SLOT-1
+    session, just not the newest session overall."""
+    old_p1 = perf([(30.0, 12), (30.0, 12)], position=1,
+                  started_at=dt.datetime(2026, 7, 1), session_id=1)
+    new_p1 = perf([(35.0, 10), (35.0, 11)], position=1,
+                  started_at=dt.datetime(2026, 7, 20), session_id=2)
+    newer_p3 = perf([(45.0, 8), (45.0, 7), (45.0, 6)], position=3,
+                    started_at=dt.datetime(2026, 8, 1), session_id=3)
+    result = stats.ready_for_more([old_p1, new_p1, newer_p3], position=1)
+    assert result == {'sets': 2, 'weight': 35.0, 'is_latest': False}

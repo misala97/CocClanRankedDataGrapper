@@ -90,7 +90,7 @@
          browser collapses visual whitespace), and a test asserting on the
          rendered sentence would otherwise see "auf\n      35,0" instead of
          "auf 35,0". #}
-      Letztes Mal {{ ready_for_more.sets }} Sätze auf {{ ("%.1f"|format(ready_for_more.weight)).replace(".", ",") }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mit {{ min_full_reps }}+ Wdh.
+      {% if ready_for_more.is_latest %}Letztes Mal{% else %}Zuletzt in diesem Slot{% endif %} {{ ready_for_more.sets }} Sätze auf {{ ("%.1f"|format(ready_for_more.weight)).replace(".", ",") }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mit {{ min_full_reps }}+ Wdh.
     </p>
     {% endif %}
 
@@ -124,7 +124,7 @@
         <input type="hidden" name="completed" value="{{ '0' if s.completed else '1' }}">
         <button type="submit"
                 class="set{% if is_record %} is-record{% elif s.completed %} is-done{% elif next_set and s.id == next_set.id %} is-now{% endif %}"
-                aria-label="{% if is_record %}Satz {{ loop.index }} — Rekord, {{ weight_de }} kg mal {{ s.reps }} — antippen zum Zurücksetzen{% elif s.completed %}Satz {{ loop.index }} erledigt, {{ weight_de }} kg mal {{ s.reps }} — antippen zum Zurücksetzen{% else %}Satz {{ loop.index }}, geplant {{ weight_de }} kg mal {{ s.reps }}{% endif %}">
+                aria-label="{% if is_record %}Satz {{ loop.index }} — Rekord, {{ weight_de }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mal {{ s.reps }} — antippen zum Zurücksetzen{% elif s.completed %}Satz {{ loop.index }} erledigt, {{ weight_de }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mal {{ s.reps }} — antippen zum Zurücksetzen{% else %}Satz {{ loop.index }}, geplant {{ weight_de }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mal {{ s.reps }}{% endif %}">
           {{ weight_de }} × {{ s.reps }}
         </button>
       </form>

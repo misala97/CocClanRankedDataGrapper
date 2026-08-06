@@ -42,8 +42,12 @@ invent an exception.
 
 ## The Signal
 
-A badge on the live exercise card, beside the exercise name: **Bereit für
-mehr**.
+A badge on the live exercise card: **Bereit**, followed by the sentence of
+evidence below. It renders as its own full-width line above the set chips, in
+the same slot as the neighbouring `Stagniert` line and for the same reason —
+it is advice about the numbers about to be set, so it belongs above the
+workspace, not under the confirm button. It does not sit beside the exercise
+name: the sentence is far too long for a chip next to an `<h2>`.
 
 It appears when, in the last session that counts, at least **two** sets were
 performed at that session's **heaviest weight** for at least **10 reps**.
@@ -82,6 +86,30 @@ It renders only on the live exercise card, not on the queue rows beneath it.
 The queue is an overview; seven badges at once is decoration, and the decision
 is made at the machine.
 
+**Naming the evidence honestly.** `_scoped()`'s slot lens (no staleness
+cutoff, falls back across positions) and the chips' own prefill lens
+(`routes._last_session_exercise`, which drops a stale slot after
+`ROLLING_WINDOW_DAYS` in favour of the most recent session at any position)
+can legitimately disagree once a slot's history goes stale — the badge is
+answering "was the last time in THIS slot easy", the chips are answering
+"what should I load RIGHT NOW". That divergence is left alone on purpose. What
+is not left alone is the sentence claiming to be about *the* last time when it
+is not: `ready_for_more` also reports whether its evidence session is the
+newest session in the rows it was given, at any position. The badge says
+*„Letztes Mal …"* only when it is; otherwise it says *„Zuletzt in diesem Slot
+…"*, naming the same numbers without asserting they were the most recent
+thing trained.
+
+**Retiring itself once today has already answered.** "That weight went easy"
+is only useful advice while that weight is still what the lifter is about to
+lift. Right after `ready_for_more` is computed, the route compares its
+evidence weight against the heaviest weight already planned across today's
+own sets for this exercise; if today's planned top is heavier, the badge does
+not render at all — reworded evidence would still be arguing with the chips
+underneath it. The comparison is one-sided (`>`, not `!=`): a ramp-up whose
+first chip is lighter than the evidence must still see the badge, since
+nothing about today has answered the question yet.
+
 ## Where The Code Goes
 
 `stats.ready_for_more(rows, position=None)`, a pure function beside the other
@@ -90,9 +118,13 @@ Those rows carry only completed sets, which is exactly the input this rule
 wants.
 
 It returns `None` when the rule does not fire, and otherwise the evidence the
-badge quotes: `{'sets': 2, 'weight': 35.0}` — how many sets qualified and the
-weight they were performed at. A bool would force the template to re-derive
-numbers the function already computed.
+badge quotes: `{'sets': 2, 'weight': 35.0, 'is_latest': True}` — how many sets
+qualified, the weight they were performed at, and whether that evidence
+session is also the newest session in the rows it was given, at any position.
+A bool would force the template to re-derive numbers the function already
+computed; `is_latest` exists for the same reason `sets` and `weight` do — so
+the template states a fact the function already checked instead of assuming
+one.
 
 The route passes the flag into the live template. No new query: the live screen
 already loads this exercise's history for the suggestion and record logic.

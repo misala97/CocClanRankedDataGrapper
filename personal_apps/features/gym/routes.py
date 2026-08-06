@@ -903,6 +903,13 @@ def session_detail(session_id):
         # badges at once is decoration rather than a decision.
         ready_for_more = stats.ready_for_more(
             by_exercise.get(live_se.exercise_id, []), position=live_se.position)
+        # "That weight went easy" is only advice while that weight is what you
+        # are about to lift. Above it, the lifter has already acted -- or the
+        # evidence is older than what the prefill found, and the nudge would
+        # argue with the chips underneath it.
+        planned_top = max((s.weight for s in live_se.sets), default=None)
+        if ready_for_more and planned_top is not None and planned_top > ready_for_more['weight']:
+            ready_for_more = None
     exercises = my_exercises().order_by(Exercise.name).all()
 
     # One tick per set in the whole workout, in order, so the strip reads as
