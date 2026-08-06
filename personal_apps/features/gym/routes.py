@@ -122,14 +122,17 @@ def _clean_equipment(raw, current='stack'):
 def _to_stack_steps(raw):
     """The real stops of an uneven stack, typed as a list.
 
-    Comma or semicolon separated, sorted ascending, junk dropped. Empty
-    means None rather than [] -- an empty list would read as "this machine
-    has no positions", and the column's whole meaning is "NULL: steps
-    evenly, ask weight_increment instead".
+    Separators are comma or semicolon; a decimal point is a dot (e.g.
+    "5, 13, 21, 29" or "5.5; 13.2"), not a German-locale comma decimal --
+    stack pins are whole kilograms in practice, so that's a documented
+    limitation rather than a case this needs to support. Sorted ascending,
+    deduped, junk dropped. Empty means None rather than [] -- an empty list
+    would read as "this machine has no positions", and the column's whole
+    meaning is "NULL: steps evenly, ask weight_increment instead".
     """
     steps = []
     for chunk in (raw or '').replace(';', ',').split(','):
-        chunk = chunk.strip().replace(',', '.')
+        chunk = chunk.strip()
         if not chunk:
             continue
         try:
@@ -2682,15 +2685,20 @@ def gym_add_exercise():
         return redirect(url_for('gym.gym_uebungen', name_taken=1))
 
     muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''))
+    equipment = _clean_equipment(request.form.get('equipment', ''))
     exercise = Exercise(
         name=name,
         muscle_group=muscle_group,
         default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
         weight_increment=_to_increment(request.form.get('weight_increment', '')),
         is_unilateral=request.form.get('is_unilateral') == 'on',
-        equipment=_clean_equipment(request.form.get('equipment', '')),
+        equipment=equipment,
         bar_weight=_to_increment(request.form.get('bar_weight', '')),
-        stack_kg=_to_stack_steps(request.form.get('stack_kg', '')),
+        # Stack steps only mean something for a stack machine -- the hidden
+        # Stack-Stufen input still submits its old value even when Art has
+        # been switched away from stack, and increment_kg/stack_kg are meant
+        # to be mutually exclusive (the export derives one from the other).
+        stack_kg=_to_stack_steps(request.form.get('stack_kg', '')) if equipment == 'stack' else None,
         secondary_muscle_groups=_clean_secondary_groups(
             request.form.getlist('secondary_muscle_groups'), muscle_group),
         user_id=current_user_id(),
@@ -2722,7 +2730,13 @@ def gym_update_exercise(exercise_id):
     exercise.equipment = _clean_equipment(request.form.get('equipment', ''),
                                           current=exercise.equipment)
     exercise.bar_weight = _to_increment(request.form.get('bar_weight', ''))
-    exercise.stack_kg = _to_stack_steps(request.form.get('stack_kg', ''))
+    # Stack steps only mean something for a stack machine -- the hidden
+    # Stack-Stufen input still submits its old value even when Art has been
+    # switched away from stack, and increment_kg/stack_kg are meant to be
+    # mutually exclusive (the export derives one from the other).
+    exercise.stack_kg = (
+        _to_stack_steps(request.form.get('stack_kg', '')) if exercise.equipment == 'stack' else None
+    )
     exercise.secondary_muscle_groups = _clean_secondary_groups(
         request.form.getlist('secondary_muscle_groups'), exercise.muscle_group)
     db.session.commit()

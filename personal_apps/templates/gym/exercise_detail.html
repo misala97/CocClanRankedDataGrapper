@@ -329,7 +329,7 @@
          Schrittweite above, and typing 5,10,15,... would be the same fact twice. #}
       <div class="field grow" data-role="stack-field"{% if exercise.equipment != 'stack' %} hidden{% endif %}>
         <label class="label" for="meta-stack">Stack-Stufen (kg, kommagetrennt)</label>
-        <input type="text" id="meta-stack" name="stack_kg" class="input" inputmode="numeric"
+        <input type="text" id="meta-stack" name="stack_kg" class="input"
                value="{{ exercise.stack_kg|join(', ') if exercise.stack_kg else '' }}" placeholder="5, 13, 21, 29">
       </div>
       <div class="field grow">

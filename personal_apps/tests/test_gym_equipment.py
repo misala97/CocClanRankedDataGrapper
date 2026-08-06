@@ -180,3 +180,32 @@ def test_update_form_persists_stack_steps(client, temp_exercise):
         assert row.bar_weight is None
         assert row.stack_kg == [5.0, 13.0, 21.0, 29.0]
         assert row.secondary_muscle_groups == ['Bizeps']
+
+
+def test_update_form_drops_stack_steps_when_equipment_changes_away(client, temp_exercise):
+    """The Stack-Stufen input is only hidden (not removed) once Art leaves
+    stack, so a hidden field still submits its old, now-stale value. Saving
+    over to a non-stack equipment must not carry those steps along --
+    increment_kg and stack_kg are mutually exclusive downstream in the
+    export, and stale steps on a dumbbell exercise would silently suppress
+    its weight_increment forever."""
+    with flask_app.app_context():
+        row = db.session.get(Exercise, temp_exercise)
+        row.equipment = 'stack'
+        row.stack_kg = [5.0, 13.0, 21.0, 29.0]
+        db.session.commit()
+
+    response = client.post(f'/gym/exercises/{temp_exercise}/update', data={
+        'name': 'ZZ Test Equipment',
+        'muscle_group': 'Rücken',
+        'equipment': 'dumbbell',
+        'bar_weight': '',
+        # Stale value the hidden input still submits from before the Art switch.
+        'stack_kg': '5, 13, 21, 29',
+        'secondary_muscle_groups': ['Bizeps'],
+    }, follow_redirects=False)
+    assert response.status_code == 302
+    with flask_app.app_context():
+        row = db.session.get(Exercise, temp_exercise)
+        assert row.equipment == 'dumbbell'
+        assert row.stack_kg is None
