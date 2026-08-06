@@ -17,6 +17,22 @@
         :root { --ease: cubic-bezier(.25,1,.5,1); }
         .container { padding-bottom: 72px; }
 
+        /* ── MOTION ──────────────────────────────────────────────────────────
+           There is deliberately no entrance animation. This is a product
+           surface the owner opens mid-task, and the register bans page-load
+           choreography — the previous version of this page staggered its
+           figures in on appearance and that was flagged as exactly that.
+
+           What motion does here instead is surface numbers the page computes
+           and would otherwise throw away: the sample size behind each rung of
+           the curve, and every rival clan's actual figure in the strip. Both
+           stay legible without hovering; hover only lifts them out of the
+           quiet layer. Nothing is available to a mouse alone.
+
+           The prefers-reduced-motion block lives at the FOOT of this stylesheet,
+           not here: placed above the rules it overrides it loses the cascade and
+           silently does nothing, which is how it first shipped. */
+
         /* ── standing band: where the clan sits ── */
         .stand { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
         .stand-in { display: grid; grid-template-columns: minmax(0, 330px) minmax(0, 1fr); }
@@ -33,12 +49,34 @@
         .stand-rk i { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
 
         .dist { display: flex; align-items: flex-end; gap: 3px; height: 92px; margin-top: auto; padding-top: 22px; }
-        .dc { flex: 1; background: var(--surf2); border-radius: 2px 2px 0 0; min-height: 3px; position: relative; }
+        .dc { flex: 1; background: var(--surf2); border-radius: 2px 2px 0 0; min-height: 3px; position: relative;
+              transition: background .15s var(--ease), opacity .15s var(--ease); }
         .dc.us { background: var(--accent); }
         /* The top three get a lit bar so the strip reads as a ranking rather
            than a grey wall with one marker in it. */
         .dc.hi { background: color-mix(in oklch, var(--green) 48%, var(--surf2)); }
-        .dc .lbl { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+        .dc .lbl { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+                   font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+                   color: var(--accent); white-space: nowrap; pointer-events: none; }
+        /* Every bar carries its rank and figure; only ours is pinned open. The
+           rest surface on hover, which is what turns 21 anonymous bars into a
+           readable distribution. Screen readers get the same list in .sr-only
+           below the strip, so none of this is mouse-only. */
+        .dc .fig { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+                   font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+                   color: var(--text); white-space: nowrap; opacity: 0; pointer-events: none;
+                   transition: opacity .15s var(--ease); }
+        .dc:first-child .fig { left: 0; transform: none; }
+        .dc:last-child  .fig { left: auto; right: 0; transform: none; }
+        /* Bars only — no text rides on these, so recessing them is safe. Kept
+           at .6 rather than .45 so the shape of the distribution stays readable
+           while one bar is singled out. */
+        .dist:hover .dc:not(.us) { opacity: .6; }
+        .dist .dc:hover { opacity: 1; background: color-mix(in oklch, var(--text) 34%, var(--surf2)); }
+        .dist .dc.hi:hover { background: color-mix(in oklch, var(--green) 66%, var(--surf2)); }
+        .dist .dc.us:hover { background: var(--accent); }
+        .dc:hover .fig { opacity: 1; }
+        .dc:hover .lbl { opacity: 0; }
         .dist-ax { display: flex; justify-content: space-between; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
 
         /* ── tier 1: featured panels ── */
@@ -54,13 +92,31 @@
 
         /* the difficulty ladder */
         .lad { display: flex; flex-direction: column; gap: 4px; }
-        .lr { display: grid; grid-template-columns: 54px 1fr 44px; align-items: center; gap: 10px; }
+        .lr { display: grid; grid-template-columns: 54px 1fr 44px 48px; align-items: center; gap: 10px;
+              transition: opacity .15s var(--ease); }
         .lr-k { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--muted); text-align: right; }
         .lr-k.now { color: var(--text); }
         .lr-t { height: 19px; background: var(--surf2); border-radius: 3px; overflow: hidden; }
-        .lr-f { height: 100%; border-radius: 3px; }
+        .lr-f { height: 100%; border-radius: 3px; transition: filter .15s var(--ease); }
+        /* Sample size per rung: 65 % off 354 attacks and 3 % off 34 are not the
+           same claim. Always rendered, just quiet until the row is pointed at.
+           In its own column, not inside the track — at 99 % fill the bar runs
+           under the text and the contrast collapses. */
+        /* No opacity here. At .55 this composited to 2.64:1 against the panel —
+           it is a sample size, not decoration, and it has to stay readable
+           without pointing at it. Quiet comes from 9.5px and --muted (6.18:1),
+           and hover promotes it to --text rather than fading it in. */
+        .lr-n { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: .3px;
+                color: var(--muted); white-space: nowrap;
+                transition: color .15s var(--ease); }
+        /* Hover adds emphasis to the target row; it never dims the others.
+           Fading siblings to .5 also faded the coloured percentages that are
+           the whole point of the comparison, and dropped them under contrast. */
+        .lad .lr:hover .lr-f { filter: brightness(1.14); }
+        .lad .lr:hover .lr-n { color: var(--text); }
+        .lad .lr:hover .lr-k { color: var(--text); }
         .lr-v { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; text-align: right; }
-        .cliffrow { display: grid; grid-template-columns: 54px 1fr 44px; gap: 10px; }
+        .cliffrow { display: grid; grid-template-columns: 54px 1fr 44px 48px; gap: 10px; }
         .cliff { grid-column: 2; font-size: 10px; color: var(--red-txt); font-weight: 700; display: flex; align-items: center; gap: 7px; margin: 1px 0; }
         .cliff::before, .cliff::after { content: ''; height: 1px; background: color-mix(in oklch, var(--red) 38%, transparent); flex: 1; }
         .lad-foot { margin-top: 14px; font-size: 11.5px; color: var(--muted); line-height: 1.55; }
@@ -71,6 +127,12 @@
         .ct th.r, .ct td.r { text-align: right; }
         .ct td { padding: 7px 0; border-bottom: 1px solid var(--bord2); }
         .ct tr:last-child td { border-bottom: none; }
+        /* Row tracking across three columns — the reason this exists is the
+           eye losing its line between a name and a signed number. */
+        .ct tbody tr { transition: background .12s var(--ease); }
+        .ct tbody tr:hover { background: color-mix(in oklch, var(--text) 4%, transparent);
+                             box-shadow: 0 0 0 6px color-mix(in oklch, var(--text) 4%, transparent); }
+        .ct tbody tr.mid:hover { background: none; box-shadow: none; }
         .ct .nm { font-weight: 600; }
         .ct .v { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
         .ct .a { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
@@ -108,6 +170,13 @@
             /* Dense divided rows on mobile, never per-item cards. */
             .mrow { grid-template-columns: 1fr; gap: 9px; padding: 14px 16px; }
             .stand-rank b { font-size: 44px; }
+        }
+
+        /* Last in the sheet on purpose — it has to outrank the transitions it
+           cancels. The readouts still appear on hover; they just appear at once
+           instead of fading, so no information is lost with motion off. */
+        @media (prefers-reduced-motion: reduce) {
+            .lr, .lr-f, .lr-n, .dc, .dc .fig, .ct tbody tr { transition: none; }
         }
     </style>
 </head>
@@ -157,16 +226,25 @@
                 {% set hi = solid | map(attribute='sae') | max %}
                 {% set lo = solid | map(attribute='sae') | min %}
                 {% set span = (hi - lo) if (hi - lo) > 0 else 1 %}
-                <div class="dist" role="img"
-                     aria-label="Alle {{ benchmark|length }} Clans der Gruppe nach Sternen über Erwartung; euer Clan auf Platz {{ us.rank }}.">
+                <div class="dist" aria-hidden="true">
                     {% for c in benchmark %}
                         {% set h = (6 + ((c.sae - lo) / span) * 94) | round(1) %}
                         <div class="dc{{ ' us' if c.is_ours else (' hi' if loop.index <= 3) }}" style="height: {{ h }}%">
                             {% if c.is_ours %}<span class="lbl">ihr</span>{% endif %}
+                            <span class="fig">{{ c.rank }} · {{ '%+.2f'|format(c.sae) | replace('.', ',') }}</span>
                         </div>
                     {% endfor %}
                 </div>
-                <div class="dist-ax"><span>bester</span><span>schwächster</span></div>
+                <div class="dist-ax" aria-hidden="true"><span>bester</span><span>schwächster</span></div>
+                {#- The strip is a hover surface; this is the same ranking as text,
+                    so nothing in it is reachable by mouse alone. -#}
+                <ol class="sr-only">
+                    {% for c in benchmark %}
+                    <li>Platz {{ c.rank }}: {{ 'euer Clan' if c.is_ours else c.clan_tag }},
+                        {{ '%+.2f'|format(c.sae) | replace('.', ',') }} Sterne über Erwartung
+                        über {{ c.n }} Angriffe.</li>
+                    {% endfor %}
+                </ol>
             </div>
         </div>
     </section>
@@ -211,6 +289,7 @@
                         <div class="lr-v" style="color: {{ 'var(--green)' if r.diff < 0 else ('var(--yellow)' if r.diff == 1 else ('var(--red-txt)' if r.diff > 1 else 'var(--text)')) }}">
                             {% if r.triple_rate is not none %}{{ (r.triple_rate * 100) | round | int }} %{% else %}—{% endif %}
                         </div>
+                        <div class="lr-n">n {{ r.n }}</div>
                     </div>
                 {% endfor %}
             </div>

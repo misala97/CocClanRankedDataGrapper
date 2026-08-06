@@ -142,8 +142,16 @@ Compare mean SAE before against mean SAE after, per player, then aggregate:
 mean dip, and attacks-to-recovery measured as the first point where a trailing
 5-attack mean SAE returns to the player's pre-upgrade mean.
 
-**Stated on the page:** n=23, confounded with everything else in that player's
-life, and offered as an observation rather than a verdict.
+**Stated on the page:** confounded with everything else in that player's life,
+and offered as an observation rather than a verdict.
+
+**Measured after implementation: n=8, not the 15 estimated above.** The estimate
+counted players with ten attacks *in total*; the study needs five on *each side*
+of the upgrade, and someone with thirty attacks before upgrading and two after
+clears the first bar and fails the second. Eight players, each with at most ten
+attacks a side, is thin even for an observation — thin enough that whether this
+study belongs on the page at all is worth re-deciding before the design pass.
+The other four studies do not depend on it.
 
 ### E · Ranked × Raid
 
@@ -159,9 +167,9 @@ Measured against the live tables 2026-08-05:
 | A | player | 8 attacks | **27** of 44 in clan |
 | A | curve bucket | 20 attacks, else merge | 7 of 7 both sources |
 | B | clan | 30 attacks | **22** of 22 |
-| C | player, ranked | 6 completed weeks | 26 |
+| C | player, ranked | 6 completed weeks | **25** |
 | C | player, raid | 4 weekends | 31 |
-| D | player | 5 attacks each side | **15** of the 23 with a TH change |
+| D | player | 5 attacks each side | **8** of the 20 with a TH change |
 | E | player | 3 weeks and 3 weekends | unchanged |
 
 Every threshold clears a usable population today, and none of them is doing
