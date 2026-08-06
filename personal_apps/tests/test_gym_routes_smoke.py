@@ -776,6 +776,28 @@ def test_adding_an_exercise_to_a_deload_session_seeds_scaled_sets(client, scratc
         assert [(s.weight, s.base_weight, s.reps) for s in se.sets] == [(70.0, 100.0, 10)]
 
 
+def test_deload_seeding_snaps_to_the_exercises_real_stack_stops(client, scratch_deload_session):
+    """The route wiring, not just the pure function: stats.deload_weight()
+    correctly snapping to a stack is worthless if the exercise's own
+    stack_kg never reaches it. 100 kg at 70 % on the default 2.5 grid is
+    exactly 70.0 -- a value this stack does not have -- so this only passes
+    if _seeded_sets actually read exercise.stack_kg and passed it through.
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise
+    live_id, _, exercise_id = scratch_deload_session
+    with flask_app.app_context():
+        exercise = db.session.get(Exercise, exercise_id)
+        exercise.stack_kg = [5, 12, 18, 29, 33, 61, 68, 92]
+        db.session.commit()
+
+    client.post(f'/gym/session/{live_id}/exercises/add', data={'exercise_id': str(exercise_id)})
+
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        assert [(s.weight, s.base_weight, s.reps) for s in se.sets] == [(68.0, 100.0, 10)]
+
+
 def test_deload_seeds_ten_reps_and_remembers_the_real_ones(client, scratch_deload_session):
     """A deload prescribes a rep count as well as a weight. History is recorded
     at working reps, so seeding them raw hands back half the prescription."""

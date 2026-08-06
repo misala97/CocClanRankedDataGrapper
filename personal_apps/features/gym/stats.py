@@ -135,6 +135,9 @@ class PerformedExercise:
     # this module never touches the ORM. Defaulted for the same reason
     # is_deload is.
     weight_increment: Optional[float] = None
+    # The machine's real stops, when they are uneven enough to be worth
+    # recording. None on everything that steps evenly -- see snap_to_stack.
+    stack_kg: Optional[Tuple] = None
 
 
 def epley_1rm(weight, reps):
@@ -495,7 +498,31 @@ def _next_weight(weight, increment):
     return weight + increment
 
 
-def deload_weight(weight, pct, increment):
+def snap_to_stack(weight, steps, direction):
+    """The nearest real position of a machine whose stops are known.
+
+    Almost nothing needs this: an evenly stepping stack is already fully
+    described by its increment, and deload_weight's anchor-to-working-weight
+    rule keeps even an offset grid (5, 13, 21 ...) honest without knowing the
+    stops. It exists for the machine whose gaps are uneven, where counting
+    increments from anywhere invents a position -- the first such exercise
+    entered into the form computes correctly the same day instead of
+    prescribing a weight nobody can select.
+
+    `steps` falsy means the exercise has no recorded stops, and the weight
+    passes through untouched.
+    """
+    if not steps:
+        return weight
+    ordered = sorted(steps)
+    if direction == 'down':
+        below = [s for s in ordered if s <= weight]
+        return below[-1] if below else ordered[0]
+    above = [s for s in ordered if s >= weight]
+    return above[0] if above else ordered[-1]
+
+
+def deload_weight(weight, pct, increment, stack_kg=None):
     """`pct` of a working weight, taken DOWN to a loadable weight.
 
     Down, not to nearest: rounding a deload up makes it heavier than
@@ -517,7 +544,10 @@ def deload_weight(weight, pct, increment):
         return weight          # a bodyweight set stays bodyweight
     # ceil, so the result lands at or below the prescription rather than above it
     steps = math.ceil((weight - weight * pct / 100.0) / increment)
-    return max(increment, weight - steps * increment)
+    prescribed = max(increment, weight - steps * increment)
+    # A recorded stack overrides the increment grid: its stops are the only
+    # positions that exist, and the grid is at best a good guess at them.
+    return snap_to_stack(prescribed, stack_kg, 'down')
 
 
 def _verdict(entry, since):

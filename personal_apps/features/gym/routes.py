@@ -324,7 +324,7 @@ def _seeded_sets(session_, exercise_id, position):
     return [
         SessionSet(
             position=j,
-            weight=stats.deload_weight(prev['weight'], pct, increment),
+            weight=stats.deload_weight(prev['weight'], pct, increment, stack_kg=exercise.stack_kg),
             base_weight=prev['weight'],
             reps=stats.DELOAD_REPS,
             base_reps=prev['reps'],
@@ -355,7 +355,7 @@ def _seeded_suggestion(session_, exercise, position):
     if not pct:
         return last
     increment = stats.resolve_increment(exercise.weight_increment, exercise.is_unilateral)
-    return {'weight': stats.deload_weight(last['weight'], pct, increment),
+    return {'weight': stats.deload_weight(last['weight'], pct, increment, stack_kg=exercise.stack_kg),
             'reps': stats.DELOAD_REPS}
 
 
@@ -474,6 +474,7 @@ def _to_performed(session_exercise, completed_sets):
         muscle_group=exercise.muscle_group,
         is_unilateral=exercise.is_unilateral,
         weight_increment=exercise.weight_increment,
+        stack_kg=tuple(exercise.stack_kg) if exercise.stack_kg else None,
         position=session_exercise.position,
         session_id=session_exercise.session_id,
         started_at=session_exercise.session.started_at,
@@ -1771,7 +1772,9 @@ def gym_toggle_deload(session_id):
                     # 32.5 kg instead of 47.5 kg, and a double-tap compounds.
                     if s.base_weight is None:
                         s.base_weight = s.weight
-                    s.weight = stats.deload_weight(s.base_weight, pct, increment)
+                    s.weight = stats.deload_weight(
+                        s.base_weight, pct, increment,
+                        stack_kg=session_exercise.exercise.stack_kg)
                     # Reps move with the weight, and for the same reason: a
                     # deload is a prescription, not a scaled-down copy of the
                     # last hard session. Captured first so switching the

@@ -7,7 +7,7 @@ from features.gym import stats
 
 def perf(sets, position=1, started_at=None, is_unilateral=False,
          exercise_id=1, name='Bankdruecken', muscle_group='Brust', session_id=1,
-         is_deload=False, weight_increment=None):
+         is_deload=False, weight_increment=None, stack_kg=None):
     """Build one PerformedExercise. `sets` is [(weight, reps), ...]."""
     return stats.PerformedExercise(
         exercise_id=exercise_id,
@@ -20,6 +20,7 @@ def perf(sets, position=1, started_at=None, is_unilateral=False,
         sets=tuple(sets),
         is_deload=is_deload,
         weight_increment=weight_increment,
+        stack_kg=stack_kg,
     )
 
 
@@ -29,6 +30,17 @@ def test_performed_exercise_defaults_to_not_deload():
 
 def test_performed_exercise_carries_the_deload_flag():
     assert perf([(80.0, 8)], is_deload=True).is_deload is True
+
+
+def test_performed_exercise_defaults_stack_kg_to_none():
+    # Nothing in production has stack_kg set yet -- every row built without
+    # it (which is every row today) must construct exactly as it did before
+    # this field existed.
+    assert perf([(80.0, 8)]).stack_kg is None
+
+
+def test_performed_exercise_carries_stack_kg():
+    assert perf([(80.0, 8)], stack_kg=(5, 13, 21)).stack_kg == (5, 13, 21)
 
 
 def test_epley_1rm_at_one_rep_is_the_weight_itself():
@@ -659,6 +671,48 @@ def test_deload_weight_stays_on_an_offset_stacks_own_grid():
 def test_deload_weight_never_floors_below_one_stack_plate():
     # 9 * 0.70 = 6.3 -> would floor to 0.0; the lightest real position is 9.
     assert stats.deload_weight(9.0, 70, 9.0) == 9.0
+
+
+def test_snap_to_stack_returns_the_weight_when_there_are_no_steps():
+    """Everything in this gym steps evenly, so this is the path almost every
+    exercise takes: no stops recorded, increment logic untouched."""
+    assert stats.snap_to_stack(42.0, None, 'down') == 42.0
+    assert stats.snap_to_stack(42.0, [], 'up') == 42.0
+
+
+def test_snap_to_stack_lands_on_a_real_stop():
+    steps = [5, 13, 21, 29, 37, 45]
+    assert stats.snap_to_stack(42.0, steps, 'down') == 37
+    assert stats.snap_to_stack(42.0, steps, 'up') == 45
+    assert stats.snap_to_stack(37.0, steps, 'down') == 37, 'an exact stop stays put'
+    assert stats.snap_to_stack(37.0, steps, 'up') == 37
+
+
+def test_snap_to_stack_clamps_at_the_ends():
+    steps = [5, 13, 21]
+    assert stats.snap_to_stack(2.0, steps, 'down') == 5, 'below the lightest stop'
+    assert stats.snap_to_stack(99.0, steps, 'up') == 21, 'above the heaviest'
+
+
+def test_deload_lands_on_a_real_stop_when_steps_are_known():
+    """The bug this guards: 70 % of 69 on an 8 kg stack sitting on a 5 kg
+    carriage is 48.3, and 48 is not a position the machine has."""
+    steps = [5, 13, 21, 29, 37, 45, 53, 61, 69, 77]
+    weight = stats.deload_weight(69.0, 70, 8, stack_kg=steps)
+    assert weight in steps
+    assert weight <= 69 * 0.7 + 0.001
+
+
+def test_deload_snap_overrides_a_grid_position_the_stack_does_not_have():
+    """The case the previous test cannot tell apart from plain anchoring:
+    here the working weight (50) is itself a real stop, but the anchoring
+    grid (stepping down in 6s from 50) lands on 32 -- not one of this
+    machine's genuinely uneven stops (5, 12, 18, 29, 33, 50). Without the
+    snap this prescribes a weight nobody can select; with it, the answer is
+    the nearest stop at or below the grid's own 32, which is 29.
+    """
+    steps = [5, 12, 18, 29, 33, 50]
+    assert stats.deload_weight(50.0, 70, 6, stack_kg=steps) == 29
 
 
 def test_next_weight_adds_the_exercises_own_increment():
