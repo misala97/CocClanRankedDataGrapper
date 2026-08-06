@@ -4,6 +4,8 @@ import pytest
 
 from app import app as flask_app
 from conftest import _admin_id, acting_as
+from extensions import db
+from models import Exercise, SessionExercise, SessionSet, WorkoutSession
 
 import datetime as dt
 
@@ -1573,3 +1575,45 @@ def test_the_lead_routine_briefing_is_silent_when_nothing_stalls():
                 if doomed is not None:
                     db.session.delete(doomed)
                     db.session.commit()
+
+
+def test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for(client):
+    """The numbers are already on the row, prefilled from last time. A chip
+    that says only "Satz 2" makes the lifter at the machine remember last
+    week to decide whether to add weight -- which is the thing a tracker
+    exists to stop."""
+    with flask_app.app_context():
+        exercise = Exercise(name='ZZ Chip Plan', user_id=_admin_id(),
+                            muscle_group='Rücken')
+        db.session.add(exercise)
+        db.session.flush()
+        session = WorkoutSession(name='ZZ Chip Plan Session', user_id=_admin_id(),
+                                 started_at=dt.datetime.utcnow())
+        db.session.add(session)
+        db.session.flush()
+        se = SessionExercise(session_id=session.id, exercise_id=exercise.id, position=1)
+        db.session.add(se)
+        db.session.flush()
+        db.session.add(SessionSet(session_exercise_id=se.id, position=1, weight=35.0,
+                                  reps=11, completed=True,
+                                  completed_at=dt.datetime.utcnow()))
+        db.session.add(SessionSet(session_exercise_id=se.id, position=2, weight=35.0,
+                                  reps=9, completed=False))
+        db.session.commit()
+        session_id, exercise_id = session.id, exercise.id
+
+    try:
+        html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
+        assert '35,0 × 11' in html, 'the done set still wears its result'
+        assert '35,0 × 9' in html, 'the open set now wears its plan'
+        assert 'Satz 2, geplant 35,0 kg mal 9' in html, \
+            'the ordinal moved into the label, it did not vanish'
+    finally:
+        with flask_app.app_context():
+            row = db.session.get(WorkoutSession, session_id)
+            if row is not None:
+                db.session.delete(row)
+            ex = db.session.get(Exercise, exercise_id)
+            if ex is not None:
+                db.session.delete(ex)
+            db.session.commit()
