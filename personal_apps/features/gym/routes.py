@@ -324,7 +324,8 @@ def _seeded_sets(session_, exercise_id, position):
     return [
         SessionSet(
             position=j,
-            weight=stats.deload_weight(prev['weight'], pct, increment, stack_kg=exercise.stack_kg),
+            weight=stats.deload_weight(prev['weight'], pct, increment,
+                                       stack_kg=exercise.stack_kg if exercise else None),
             base_weight=prev['weight'],
             reps=stats.DELOAD_REPS,
             base_reps=prev['reps'],

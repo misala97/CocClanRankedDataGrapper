@@ -511,9 +511,16 @@ def snap_to_stack(weight, steps, direction):
 
     `steps` falsy means the exercise has no recorded stops, and the weight
     passes through untouched.
+
+    `direction` must be exactly 'down' or 'up' -- anything else raises rather
+    than silently falling through to 'up', which for a deload is precisely
+    the direction deload_weight()'s own docstring calls "the one direction
+    that defeats the point".
     """
     if not steps:
         return weight
+    if direction not in ('down', 'up'):
+        raise ValueError("direction must be 'down' or 'up', got {!r}".format(direction))
     ordered = sorted(steps)
     if direction == 'down':
         below = [s for s in ordered if s <= weight]
@@ -539,6 +546,11 @@ def deload_weight(weight, pct, increment, stack_kg=None):
 
     Applied per set by the caller, never to the top set alone, so any ramping
     or drop-off in the session's shape survives the deload.
+
+    When the machine's real stops are known (`stack_kg`), the increment grid
+    above is only a guess at them -- the 5/13/.../69 carriage is exactly the
+    shape that guess can miss -- so the grid's result is snapped DOWN onto the
+    nearest stop the machine actually has.
     """
     if weight <= 0:
         return weight          # a bodyweight set stays bodyweight
@@ -655,8 +667,9 @@ def session_report(current, history, comparable_session_volumes=()):
                 'name': row.name,
                 'stuck_at': weight,
                 'sessions': since,
-                'suggested_weight': _next_weight(
-                    weight, resolve_increment(row.weight_increment, row.is_unilateral)),
+                'suggested_weight': snap_to_stack(
+                    _next_weight(weight, resolve_increment(row.weight_increment, row.is_unilateral)),
+                    row.stack_kg, 'up'),
             })
 
     # NOT by raw value: `value` is kilograms-lifted for a weight record and

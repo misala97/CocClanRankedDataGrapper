@@ -798,6 +798,34 @@ def test_deload_seeding_snaps_to_the_exercises_real_stack_stops(client, scratch_
         assert [(s.weight, s.base_weight, s.reps) for s in se.sets] == [(68.0, 100.0, 10)]
 
 
+def test_seeded_suggestion_snaps_to_the_exercises_real_stack_stops(client, scratch_deload_session):
+    """The GET-time suggestion (_seeded_suggestion), not the POST-time seeding
+    covered above (_seeded_sets): an exercise attached to the session with no
+    sets of its own yet -- the "live" slot, since it is the only exercise --
+    reads its opening weight from _seeded_suggestion alone, which must also
+    read exercise.stack_kg. 100 kg at 70 % on the default 2.5 grid is exactly
+    70.0 -- a value this stack does not have -- so this only passes if
+    _seeded_suggestion actually passes stack_kg through. The "zuletzt ..."
+    line (_session_live.html) and the hidden stepper input both read the same
+    suggestion, so both are checked.
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise
+    live_id, _, exercise_id = scratch_deload_session
+    with flask_app.app_context():
+        exercise = db.session.get(Exercise, exercise_id)
+        exercise.stack_kg = [5, 12, 18, 29, 33, 61, 68, 92]
+        se = SessionExercise(session_id=live_id, exercise_id=exercise_id, position=1)
+        db.session.add(se)
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{live_id}').get_data(as_text=True)
+    assert 'zuletzt 68,0 kg' in html
+    assert 'name="weight" value="68"' in html
+    assert 'zuletzt 70,0 kg' not in html
+    assert 'name="weight" value="70"' not in html
+
+
 def test_deload_seeds_ten_reps_and_remembers_the_real_ones(client, scratch_deload_session):
     """A deload prescribes a rep count as well as a weight. History is recorded
     at working reps, so seeding them raw hands back half the prescription."""
@@ -839,6 +867,33 @@ def test_toggling_a_deload_on_rewrites_reps_and_off_restores_them(client, scratc
         s = SessionExercise.query.filter_by(session_id=live_id).one().sets[0]
         assert (s.weight, s.reps) == (100.0, 8)
         assert (s.base_weight, s.base_reps) == (None, None)
+
+
+def test_deload_toggle_snaps_to_the_exercises_real_stack_stops(client, scratch_deload_session):
+    """The toggle route's own deload_weight() call (gym_toggle_deload), not the
+    seeding paths covered above: switching a deload on for a session that
+    already has sets logged at working weight must also read
+    exercise.stack_kg. 100 kg at 70 % on the default 2.5 grid is exactly
+    70.0 -- a value this stack does not have.
+    """
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    live_id, _, exercise_id = scratch_deload_session
+    with flask_app.app_context():
+        exercise = db.session.get(Exercise, exercise_id)
+        exercise.stack_kg = [5, 12, 18, 29, 33, 61, 68, 92]
+        live = db.session.get(WorkoutSession, live_id)
+        live.is_deload, live.deload_pct = False, None   # start plain, like the toggle test above
+        se = SessionExercise(session_id=live_id, exercise_id=exercise_id, position=1)
+        se.sets = [SessionSet(position=1, weight=100.0, reps=8, completed=False)]
+        db.session.add(se)
+        db.session.commit()
+
+    client.post(f'/gym/session/{live_id}/deload', data={'on': '1', 'pct': '70'})
+
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        assert [s.weight for s in se.sets] == [68.0]
 
 
 def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session):

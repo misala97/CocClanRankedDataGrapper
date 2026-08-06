@@ -33,10 +33,15 @@ def test_performed_exercise_carries_the_deload_flag():
 
 
 def test_performed_exercise_defaults_stack_kg_to_none():
-    # Nothing in production has stack_kg set yet -- every row built without
-    # it (which is every row today) must construct exactly as it did before
-    # this field existed.
-    assert perf([(80.0, 8)]).stack_kg is None
+    # Built directly, bypassing perf()'s own default -- perf() now always
+    # passes stack_kg=, so calling it here would test the helper's default
+    # rather than the dataclass's own.
+    row = stats.PerformedExercise(
+        exercise_id=1, name='Bankdruecken', muscle_group='Brust',
+        is_unilateral=False, position=1, session_id=1,
+        started_at=dt.datetime(2020, 1, 1), sets=((80.0, 8),),
+    )
+    assert row.stack_kg is None
 
 
 def test_performed_exercise_carries_stack_kg():
@@ -694,6 +699,15 @@ def test_snap_to_stack_clamps_at_the_ends():
     assert stats.snap_to_stack(99.0, steps, 'up') == 21, 'above the heaviest'
 
 
+def test_snap_to_stack_rejects_a_direction_that_is_not_down_or_up():
+    # Anything other than the literal 'down' silently fell through to the
+    # 'up' branch -- for a deload that is exactly the direction its sibling
+    # deload_weight() calls "the one direction that defeats the point".
+    import pytest
+    with pytest.raises(ValueError):
+        stats.snap_to_stack(42.0, [5, 13, 21], 'DOWN')
+
+
 def test_deload_lands_on_a_real_stop_when_steps_are_known():
     """The bug this guards: 70 % of 69 on an 8 kg stack sitting on a 5 kg
     carriage is 48.3, and 48 is not a position the machine has."""
@@ -733,6 +747,25 @@ def test_session_report_suggests_the_exercises_own_increment():
 
     assert report['advice'][0]['stuck_at'] == 63.0
     assert report['advice'][0]['suggested_weight'] == 72.0
+
+
+def test_session_report_suggests_a_real_stack_stop_not_an_invented_position():
+    # Same stagnation setup, but on a stack with uneven stops: weight + increment
+    # (63 + 9 = 72) happens to land on a real stop here by coincidence, so use
+    # a stack where the naive sum is NOT a stop -- 63 + 9 = 72 is not one of
+    # these steps, and the honest "go heavier" answer is the nearest stop AT
+    # OR ABOVE it, 77.
+    steps = (5, 13, 21, 29, 37, 45, 53, 61, 69, 77)
+    history = [perf([(72.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(0), session_id=1)]
+    history += [
+        perf([(63.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(7 * n), session_id=n + 1)
+        for n in range(1, 4)
+    ]
+    current = [perf([(63.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(28), session_id=9)]
+    report = stats.session_report(current, history)
+
+    assert report['advice'][0]['stuck_at'] == 63.0
+    assert report['advice'][0]['suggested_weight'] == 77.0
 
 
 def test_deload_row_does_not_count_as_a_session_without_a_pr():
