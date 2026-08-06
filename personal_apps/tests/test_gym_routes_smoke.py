@@ -1608,6 +1608,11 @@ def test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for(client):
         assert '35,0 × 9' in html, 'the open set now wears its plan'
         assert 'Satz 2, geplant 35,0 kg mal 9' in html, \
             'the ordinal moved into the label, it did not vanish'
+        # The done branch's label reads its weight through the same formatter
+        # as the visible chip. Untested, it was the one place in this file a
+        # raw float could reach a screen reader as "35.0".
+        assert 'Satz 1 erledigt, 35,0 kg mal 11' in html, \
+            'a logged set says its weight the German way too'
     finally:
         with flask_app.app_context():
             row = db.session.get(WorkoutSession, session_id)
