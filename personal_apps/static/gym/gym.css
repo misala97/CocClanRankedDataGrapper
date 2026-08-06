@@ -580,6 +580,10 @@ label.label {
 
 .field { display: flex; flex-direction: column; gap: var(--sp-1); }
 .field > .label { color: var(--dim); }
+/* An author `display` beats the UA `[hidden]{display:none}` on a tie -- the
+   stack-steps field toggles [hidden] via JS when Art isn't Steckgewicht, and
+   without this it stayed painted, flex-laid-out, right where it was. */
+.field[hidden] { display: none; }
 
 .input, .select, .textarea {
   min-block-size: 44px;

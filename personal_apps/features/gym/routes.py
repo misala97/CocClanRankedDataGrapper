@@ -9,6 +9,7 @@ from extensions import db
 from models import (
     AppUser, Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
     PushSubscription, PendingPush, SharedSession, SharedSessionExercise, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
+    EQUIPMENT_TYPES, EQUIPMENT_LABELS,
 )
 from auth import login_required
 from features.gym import export
@@ -107,6 +108,49 @@ def _clean_muscle_group(value, current=None):
     if current and value == current:
         return current
     return None
+
+
+def _clean_equipment(raw, current='stack'):
+    """An unknown value keeps whatever the exercise already had. The form
+    only ever submits the three real values; anything else is a hand-rolled
+    request, and silently widening the column's vocabulary from one of those
+    would break the export's derivation table."""
+    value = (raw or '').strip()
+    return value if value in EQUIPMENT_TYPES else current
+
+
+def _to_stack_steps(raw):
+    """The real stops of an uneven stack, typed as a list.
+
+    Comma or semicolon separated, sorted ascending, junk dropped. Empty
+    means None rather than [] -- an empty list would read as "this machine
+    has no positions", and the column's whole meaning is "NULL: steps
+    evenly, ask weight_increment instead".
+    """
+    steps = []
+    for chunk in (raw or '').replace(';', ',').split(','):
+        chunk = chunk.strip().replace(',', '.')
+        if not chunk:
+            continue
+        try:
+            value = float(chunk)
+        except ValueError:
+            continue
+        if value > 0:
+            steps.append(value)
+    return sorted(set(steps)) or None
+
+
+def _clean_secondary_groups(values, primary):
+    """Known groups only, in the order given, primary removed. None when
+    nothing is left -- the column treats NULL and [] the same and NULL is
+    the cheaper of the two to store."""
+    seen = []
+    for value in values or []:
+        value = (value or '').strip()
+        if value in MUSCLE_GROUPS and value != primary and value not in seen:
+            seen.append(value)
+    return seen or None
 
 
 def _get_active_session():
@@ -2241,6 +2285,7 @@ def gym_uebungen():
         'gym/uebungen.html',
         grouped=grouped,
         muscle_groups=MUSCLE_GROUPS,
+        equipment_labels=EQUIPMENT_LABELS,
         open_by_default=len(exercises) <= UEBUNGEN_FOLD_ABOVE,
         # The sheet's rest placeholder said 90 while this is what a blank field
         # actually stores.
@@ -2563,6 +2608,7 @@ def exercise_detail(exercise_id):
     chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
     return render_template(
         'gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS,
+        equipment_labels=EQUIPMENT_LABELS,
         chip_class=chip_class, chip_label=chip_label,
         selected_position_is_default=position_is_default,
         selected_position_reason=default_reason,
@@ -2635,12 +2681,18 @@ def gym_add_exercise():
     if my_exercises().filter_by(name=name).first():
         return redirect(url_for('gym.gym_uebungen', name_taken=1))
 
+    muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''))
     exercise = Exercise(
         name=name,
-        muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
+        muscle_group=muscle_group,
         default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
         weight_increment=_to_increment(request.form.get('weight_increment', '')),
         is_unilateral=request.form.get('is_unilateral') == 'on',
+        equipment=_clean_equipment(request.form.get('equipment', '')),
+        bar_weight=_to_increment(request.form.get('bar_weight', '')),
+        stack_kg=_to_stack_steps(request.form.get('stack_kg', '')),
+        secondary_muscle_groups=_clean_secondary_groups(
+            request.form.getlist('secondary_muscle_groups'), muscle_group),
         user_id=current_user_id(),
     )
     db.session.add(exercise)
@@ -2667,6 +2719,12 @@ def gym_update_exercise(exercise_id):
     exercise.default_rest_seconds = _to_int(request.form.get('default_rest_seconds', ''))
     exercise.weight_increment = _to_increment(request.form.get('weight_increment', ''))
     exercise.is_unilateral = request.form.get('is_unilateral') == 'on'
+    exercise.equipment = _clean_equipment(request.form.get('equipment', ''),
+                                          current=exercise.equipment)
+    exercise.bar_weight = _to_increment(request.form.get('bar_weight', ''))
+    exercise.stack_kg = _to_stack_steps(request.form.get('stack_kg', ''))
+    exercise.secondary_muscle_groups = _clean_secondary_groups(
+        request.form.getlist('secondary_muscle_groups'), exercise.muscle_group)
     db.session.commit()
     return redirect(url_for(
         'gym.exercise_detail', exercise_id=exercise.id, name_taken=1 if name_taken else None,

@@ -110,3 +110,73 @@ def test_cloned_partner_exercise_inherits_equipment_facts(linked_pair):
         assert created.weight_increment is None, (
             'weight_increment is per-person and must not be copied, even '
             'though the leader had one set')
+
+
+def test_stack_steps_parser_accepts_a_typed_list():
+    from features.gym.routes import _to_stack_steps
+    assert _to_stack_steps('5, 13,21 , 29') == [5.0, 13.0, 21.0, 29.0]
+    assert _to_stack_steps('5; 13') == [5.0, 13.0]
+    assert _to_stack_steps('21, 5, 13') == [5.0, 13.0, 21.0], 'sorted ascending'
+    assert _to_stack_steps('') is None
+    assert _to_stack_steps('   ') is None
+    assert _to_stack_steps('abc') is None
+    assert _to_stack_steps('5, abc, 13') == [5.0, 13.0], 'junk entries dropped'
+
+
+def test_equipment_parser_rejects_unknown_values():
+    from features.gym.routes import _clean_equipment
+    assert _clean_equipment('dumbbell') == 'dumbbell'
+    assert _clean_equipment('barbell') == 'stack', 'unknown falls back to current'
+    assert _clean_equipment('barbell', current='plate_loaded') == 'plate_loaded'
+    assert _clean_equipment('') == 'stack'
+
+
+def test_secondary_groups_parser_filters_and_dedupes():
+    from features.gym.routes import _clean_secondary_groups
+    assert _clean_secondary_groups(['Trizeps', 'Schultern'], 'Brust') == ['Trizeps', 'Schultern']
+    assert _clean_secondary_groups(['Trizeps', 'Trizeps'], None) == ['Trizeps']
+    assert _clean_secondary_groups(['Brust', 'Trizeps'], 'Brust') == ['Trizeps'], \
+        'the primary group is not also a secondary one'
+    assert _clean_secondary_groups(['Erfundenes'], None) is None
+    assert _clean_secondary_groups([], None) is None
+
+
+def test_add_form_persists_equipment_facts(client):
+    """The catalogue's add form is the only place a brand new exercise gets
+    its equipment, so it must carry every field the edit sheet does."""
+    response = client.post('/gym/exercises/add', data={
+        'name': 'ZZ Form Equipment',
+        'muscle_group': 'Brust',
+        'equipment': 'plate_loaded',
+        'bar_weight': '20',
+        'stack_kg': '',
+        'secondary_muscle_groups': ['Trizeps', 'Schultern'],
+    }, follow_redirects=False)
+    assert response.status_code == 302
+    with flask_app.app_context():
+        row = Exercise.query.filter_by(name='ZZ Form Equipment').first()
+        assert row is not None
+        assert row.equipment == 'plate_loaded'
+        assert row.bar_weight == 20.0
+        assert row.stack_kg is None
+        assert row.secondary_muscle_groups == ['Trizeps', 'Schultern']
+        db.session.delete(row)
+        db.session.commit()
+
+
+def test_update_form_persists_stack_steps(client, temp_exercise):
+    response = client.post(f'/gym/exercises/{temp_exercise}/update', data={
+        'name': 'ZZ Test Equipment',
+        'muscle_group': 'Rücken',
+        'equipment': 'stack',
+        'bar_weight': '',
+        'stack_kg': '5, 13, 21, 29',
+        'secondary_muscle_groups': ['Bizeps'],
+    }, follow_redirects=False)
+    assert response.status_code == 302
+    with flask_app.app_context():
+        row = db.session.get(Exercise, temp_exercise)
+        assert row.equipment == 'stack'
+        assert row.bar_weight is None
+        assert row.stack_kg == [5.0, 13.0, 21.0, 29.0]
+        assert row.secondary_muscle_groups == ['Bizeps']

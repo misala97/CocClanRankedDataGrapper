@@ -312,6 +312,34 @@
         <input type="number" id="meta-increment" name="weight_increment" step="0.25" min="0" class="input input--num"
                value="{{ '%g'|format(exercise.weight_increment) if exercise.weight_increment is not none else '' }}" placeholder="2,5">
       </div>
+      <div class="field grow">
+        <label class="label" for="meta-equipment">Art</label>
+        <select id="meta-equipment" name="equipment" class="select" data-role="equipment">
+          {% for value, label in equipment_labels.items() %}
+          <option value="{{ value }}" {{ 'selected' if exercise.equipment == value else '' }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="meta-bar">Stangengewicht (kg)</label>
+        <input type="number" id="meta-bar" name="bar_weight" step="0.5" min="0" class="input input--num"
+               value="{{ '%g'|format(exercise.bar_weight) if exercise.bar_weight is not none else '' }}" placeholder="0">
+      </div>
+      {# Only meaningful on an uneven stack. Even ones are already described by
+         Schrittweite above, and typing 5,10,15,... would be the same fact twice. #}
+      <div class="field grow" data-role="stack-field"{% if exercise.equipment != 'stack' %} hidden{% endif %}>
+        <label class="label" for="meta-stack">Stack-Stufen (kg, kommagetrennt)</label>
+        <input type="text" id="meta-stack" name="stack_kg" class="input" inputmode="numeric"
+               value="{{ exercise.stack_kg|join(', ') if exercise.stack_kg else '' }}" placeholder="5, 13, 21, 29">
+      </div>
+      <div class="field grow">
+        <label class="label" for="meta-secondary">Sekundäre Muskelgruppen</label>
+        <select id="meta-secondary" name="secondary_muscle_groups" class="select" multiple size="5">
+          {% for mg in muscle_groups %}
+          <option value="{{ mg }}" {{ 'selected' if exercise.secondary_muscle_groups and mg in exercise.secondary_muscle_groups else '' }}>{{ mg }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <label class="sheet__row">
         <input type="checkbox" name="is_unilateral" class="check" {{ 'checked' if exercise.is_unilateral else '' }}>
         <span class="label">Einseitig (pro Seite)</span>
@@ -342,5 +370,14 @@ document.addEventListener('click', function (e) {
 var editSheet = document.getElementById('sheet-edit');
 if (editSheet && editSheet.showModal) { editSheet.showModal(); }
 {% endif %}
+
+// The stack-steps field only applies to a stack. Shown and hidden rather
+// than always visible: on a dumbbell it is not an empty answer, it is a
+// meaningless question.
+document.addEventListener('change', function (e) {
+    if (!e.target.matches || !e.target.matches('[data-role="equipment"]')) return;
+    var field = document.querySelector('[data-role="stack-field"]');
+    if (field) field.hidden = e.target.value !== 'stack';
+});
 </script>
 {% endblock %}
