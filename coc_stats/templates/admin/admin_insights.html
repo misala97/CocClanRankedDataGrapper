@@ -1,120 +1,113 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 {% set page_title = 'Insights – CoC Analytics' %}
-{% set float_tooltip = true %}
 {% include '_head.html' %}
 
-        /* ═══ ADMIN INSIGHTS — clan-analytics home ═══
-           A growable home for clan-wide analytics (first resident: the ranked×raid
-           skill-correlation study). Neutral gunmetal modules — colour is signal
-           (TH hues on the scatter dots, r-strength on the headline figure), never
-           decoration. Threat Magenta stays interactive-only. */
+        /* ═══ ADMIN INSIGHTS — clan-analytics briefing ═══
+           Five studies over war, CWL, ranked and raid, all computed server-side
+           and cached (they are viewer-invariant). The page opens with the
+           answers; nothing is gated behind a run button.
+
+           Layout is a standing band over two featured panels over quiet
+           mini-rows — the two-tier split that keeps this off the
+           identical-card-grid reflex. Colour is signal only: green/red carry
+           the SIGN of a deviation (above or below the curve), Threat Magenta
+           marks us in the group, and the two thin studies are stated as thin
+           rather than dressed up. */
         :root { --ease: cubic-bezier(.25,1,.5,1); }
         .container { padding-bottom: 72px; }
 
-        .imod {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 10px; margin-top: 22px; overflow: hidden;
-        }
-        .imod:first-child { margin-top: 20px; }
-        .imod-head { padding: 18px 22px; border-bottom: 1px solid var(--bord2); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px 20px; flex-wrap: wrap; }
-        .imod-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
-        .imod-ico { color: var(--blue); display: flex; flex-shrink: 0; }
-        .imod-ico svg { width: 24px; height: 24px; }
-        .imod-title { font-family: 'Big Shoulders Display', sans-serif; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; line-height: 1; }
-        .imod-sub { font-size: 12px; color: var(--muted); margin-top: 5px; max-width: 62ch; }
-        .imod-body { padding: 20px 22px 22px; }
+        /* ── standing band: where the clan sits ── */
+        .stand { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+        .stand-in { display: grid; grid-template-columns: minmax(0, 330px) minmax(0, 1fr); }
+        .stand-l { padding: 22px 24px; border-right: 1px solid var(--bord2); }
+        .stand-r { padding: 22px 24px; display: flex; flex-direction: column; }
+        .stand-k { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+        .stand-rank { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
+        .stand-rank b { font-family: 'JetBrains Mono', monospace; font-size: 52px; font-weight: 700; line-height: .9; letter-spacing: -.02em; }
+        .stand-rank i { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 17px; color: var(--muted); }
+        .stand-say { margin-top: 14px; font-size: 14px; font-weight: 600; line-height: 1.45; }
+        .stand-sub { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.55; }
+        .stand-rk { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+        .stand-rk b { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+        .stand-rk i { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
 
-        .imod-run {
-            display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px;
-            background: transparent; color: var(--accent);
-            border: 1px solid color-mix(in oklch, var(--accent) 38%, transparent); border-radius: 7px;
-            font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .5px;
-            text-transform: uppercase; cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s, transform .1s; white-space: nowrap;
-        }
-        .imod-run:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 10%, transparent); border-color: var(--accent); box-shadow: 0 0 12px color-mix(in oklch, var(--accent) 18%, transparent); }
-        .imod-run:active:not(:disabled) { transform: scale(.97); }
-        .imod-run:disabled { opacity: .55; cursor: default; }
-        .imod-run svg { width: 13px; height: 13px; }
-        .imod-loading { font-size: 12px; color: var(--muted); align-self: center; }
+        .dist { display: flex; align-items: flex-end; gap: 3px; height: 92px; margin-top: auto; padding-top: 22px; }
+        .dc { flex: 1; background: var(--surf2); border-radius: 2px 2px 0 0; min-height: 3px; position: relative; }
+        .dc.us { background: var(--accent); }
+        /* The top three get a lit bar so the strip reads as a ranking rather
+           than a grey wall with one marker in it. */
+        .dc.hi { background: color-mix(in oklch, var(--green) 48%, var(--surf2)); }
+        .dc .lbl { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+        .dist-ax { display: flex; justify-content: space-between; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
 
-        .imod-idle {
-            padding: 30px 22px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6;
-            border: 1px dashed var(--border); border-radius: 8px; background: color-mix(in oklch, var(--blue) 2%, transparent);
-        }
-        .imod-idle strong { color: var(--text); font-weight: 700; }
+        /* ── tier 1: featured panels ── */
+        /* align-items:start — otherwise the shorter curve panel stretches to the
+           taller roster panel and carries ~350px of dead space. */
+        .feat { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 16px; margin-top: 16px; align-items: start; }
+        .pan { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 20px 22px; }
+        .pan-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
+        .pan-h h2 { font-family: 'Big Shoulders Display', sans-serif; font-size: 19px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; line-height: 1; }
+        .pan-h i { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+        .pan-say { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 18px; max-width: 62ch; }
+        .pan-say b { color: var(--text); }
 
-        /* summary figures */
-        /* One shared-border readout with 1px dividers (the Stat-Cell recipe) — not four
-           free-standing bordered tiles. The quadrant cards below are the only bordered tier. */
-        .sc-figs { display: flex; align-items: stretch; margin-bottom: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-        .sc-fig { flex: 1 1 150px; padding: 14px 18px; }
-        .sc-fig + .sc-fig { border-left: 1px solid var(--bord2); }
-        .sc-fig .l { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted); }
-        .sc-fig .v { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 27px; line-height: 1; margin-top: 8px; color: var(--text); }
-        .sc-fig .s { font-size: 10px; color: var(--muted); margin-top: 5px; }
+        /* the difficulty ladder */
+        .lad { display: flex; flex-direction: column; gap: 4px; }
+        .lr { display: grid; grid-template-columns: 54px 1fr 44px; align-items: center; gap: 10px; }
+        .lr-k { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--muted); text-align: right; }
+        .lr-k.now { color: var(--text); }
+        .lr-t { height: 19px; background: var(--surf2); border-radius: 3px; overflow: hidden; }
+        .lr-f { height: 100%; border-radius: 3px; }
+        .lr-v { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; text-align: right; }
+        .cliffrow { display: grid; grid-template-columns: 54px 1fr 44px; gap: 10px; }
+        .cliff { grid-column: 2; font-size: 10px; color: var(--red-txt); font-weight: 700; display: flex; align-items: center; gap: 7px; margin: 1px 0; }
+        .cliff::before, .cliff::after { content: ''; height: 1px; background: color-mix(in oklch, var(--red) 38%, transparent); flex: 1; }
+        .lad-foot { margin-top: 14px; font-size: 11.5px; color: var(--muted); line-height: 1.55; }
 
-        .sc-block-label { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin: 0 0 11px; }
-        .sc-hint { font-size: 11px; color: var(--muted); margin-top: 9px; line-height: 1.5; }
+        /* over/under the curve */
+        .ct { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .ct th { text-align: left; font-family: 'Manrope', sans-serif; font-size: 9.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); padding: 0 0 8px; border-bottom: 1px solid var(--bord2); }
+        .ct th.r, .ct td.r { text-align: right; }
+        .ct td { padding: 7px 0; border-bottom: 1px solid var(--bord2); }
+        .ct tr:last-child td { border-bottom: none; }
+        .ct .nm { font-weight: 600; }
+        .ct .v { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+        .ct .a { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
+        .ct .mid td { padding: 5px 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+        .thin-note { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--bord2); font-size: 11px; color: var(--muted); line-height: 1.55; }
+        .thin-note b { color: var(--text); font-weight: 600; }
 
-        /* desktop: scatter + table side by side */
-        .sc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
-        .sc-plot-wrap { background: var(--surf2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-        .sc-table-scroll { overflow-y: auto; max-height: 360px; border: 1px solid var(--border); border-radius: 10px; }
-        .ct { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .ct thead { background: var(--surf2); position: sticky; top: 0; z-index: 1; }
-        .ct th { padding: 8px 11px; text-align: left; font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
-        .ct th.c, .ct td.c { text-align: center; }
-        .ct td { padding: 7px 11px; border-bottom: 1px solid var(--bord2); }
-        .ct tbody tr:last-child td { border-bottom: none; }
-        .ct tbody tr:hover { background: color-mix(in oklch, var(--text) 2%, transparent); }
-        .ct .mono { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
-        .ct .nd { color: var(--muted); font-size: 10px; }
+        /* ── tier 2: quiet mini-rows ── */
+        .mini-h { font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin: 26px 0 10px; }
+        .rows { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .mrow { display: grid; grid-template-columns: 158px minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 15px 22px; border-bottom: 1px solid var(--bord2); }
+        .mrow:last-child { border-bottom: none; }
+        .mrow-k h3 { font-family: 'Big Shoulders Display', sans-serif; font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; line-height: 1.1; }
+        .mrow-k i { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+        .mrow-s { font-size: 13px; line-height: 1.5; }
+        .mrow-s b { font-weight: 700; }
+        .mrow-s span { color: var(--muted); }
+        .mrow-f { display: flex; align-items: baseline; gap: 8px; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+        .mrow-f b { font-size: 23px; font-weight: 700; }
+        .mrow-f i { font-style: normal; font-size: 11px; color: var(--muted); }
 
-        /* quadrants */
-        .sc-quads { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 11px; margin-top: 20px; }
-        .sc-quad { background: var(--surf2); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
-        .sc-quad-h { display: flex; align-items: center; gap: 8px; }
-        .sc-quad-name { font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 15px; text-transform: uppercase; letter-spacing: .3px; }
-        .sc-quad-n { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; margin-left: auto; }
-        .sc-quad-desc { font-size: 10.5px; color: var(--muted); margin: 3px 0 8px; }
-        .sc-quad-names { font-size: 11.5px; color: var(--text); line-height: 1.7; }
+        .flag { display: inline-flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--blue); border: 1px solid color-mix(in oklch, var(--blue) 35%, transparent); border-radius: 4px; padding: 2px 6px; margin-left: 6px; white-space: nowrap; }
 
-        /* mobile combined ranked list (replaces both scatter and table) */
-        .sc-rows { display: none; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-        .scr { padding: 10px 14px; border-bottom: 1px solid var(--bord2); }
-        .scr:last-child { border-bottom: none; }
-        .scr-top { display: flex; align-items: center; gap: 9px; }
-        .scr-th { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 11px; padding: 2px 7px; border-radius: 5px; background: var(--surf2); flex-shrink: 0; }
-        .scr-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .scr-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 700; }
-        .scr-stats .u { color: var(--muted); font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 10px; margin-right: 3px; text-transform: uppercase; letter-spacing: .4px; }
+        .vsline { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+        .vsb { flex: 1; height: 7px; background: var(--surf2); border-radius: 4px; position: relative; min-width: 60px; }
+        .vsb i { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+        .vsn { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 
-        .page-footer {
-            text-align: center; padding: 18px; color: var(--muted); font-size: 12px;
-            margin-top: 30px; border-top: 1px solid var(--bord2);
-            font-family: 'Manrope', sans-serif; font-weight: 600; letter-spacing: .3px;
-        }
+        .empty { padding: 26px 22px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; border: 1px dashed var(--border); border-radius: 12px; }
 
-        /* ── MOTION — reveal after the analysis runs; capped stagger on figures/quadrants ── */
-        @keyframes rsIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-        .sc-fig, .sc-quad { animation: rsIn .32s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
-        .sc-grid, .sc-rows { animation: rsIn .34s var(--ease) both; }
-        @media (prefers-reduced-motion: reduce) {
-            .imod-run { transition: none; } .imod-run:active { transform: none; }
-            .sc-fig, .sc-quad, .sc-grid, .sc-rows { animation: none; }
-        }
-        @media (max-width: 1040px) {
-            .sc-grid { display: none; }
-            .sc-rows { display: block; }
-        }
-        @media (max-width: 620px) {
-            .sc-figs { flex-direction: column; }
-            .sc-fig + .sc-fig { border-left: none; border-top: 1px solid var(--bord2); }
-        }
-        @media (max-width: 480px) {
-            .imod-head, .imod-body { padding-left: 16px; padding-right: 16px; }
-            .sc-fig .v { font-size: 23px; }
+        @media (max-width: 1000px) {
+            .stand-in { grid-template-columns: 1fr; }
+            .stand-l { border-right: none; border-bottom: 1px solid var(--bord2); }
+            .feat { grid-template-columns: 1fr; }
+            /* Dense divided rows on mobile, never per-item cards. */
+            .mrow { grid-template-columns: 1fr; gap: 9px; padding: 14px 16px; }
+            .stand-rank b { font-size: 44px; }
         }
     </style>
 </head>
@@ -122,285 +115,232 @@
 
 {% include '_nav.html' %}
 
+{% set war_n = curve_rows.get('war', []) | sum(attribute='n') %}
+{% set cwl_n = curve_rows.get('cwl', []) | sum(attribute='n') %}
 {% set page_header_title = 'Clan <span>Insights</span>' %}
-{% set page_header_desc = 'Analytics across the whole roster — patterns you can only see when the clan is looked at together.' %}
+{% set page_header_desc = 'Fünf Auswertungen über den ganzen Clan — die Antworten stehen schon da.' %}
+{% set page_header_meta = [
+     {'value': '{:,}'.format(war_n + cwl_n) | replace(',', '.'), 'label': 'Angriffe ausgewertet'},
+     {'value': benchmark | length,                              'label': 'Clans verglichen'},
+     {'value': players_sae | rejectattr('thin') | list | length, 'label': 'Mitglieder gewertet'},
+   ] %}
 {% include '_page_header.html' %}
 
 {% include 'admin/_admin_tabs.html' %}
 
 <div class="container" id="main" role="main">
 
-    <section class="imod" id="corrMod" aria-labelledby="corrTitle">
-        <div class="imod-head">
-            <div class="imod-id">
-                <span class="imod-ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"/><circle cx="9" cy="10.5" r="1.5"/><circle cx="13.5" cy="13.5" r="1.5"/><circle cx="18.5" cy="7" r="1.5"/><path d="m10.2 9.6 2.4 2.4M15 12.4 17.6 8.1"/></svg></span>
-                <div>
-                    <h2 class="imod-title" id="corrTitle">Ranked × Raid Skill</h2>
-                    <div class="imod-sub">Does ladder skill predict raid-weekend performance? Each member's ranked score plotted against their raid score, with the clan-wide correlation.</div>
+    {# ── STANDING: the one number the page leads with ── #}
+    {% if us %}
+    {% set solid = benchmark | rejectattr('thin') | list %}
+    <section class="stand" aria-labelledby="standH">
+        <div class="stand-in">
+            <div class="stand-l">
+                <h2 class="stand-k" id="standH">Platz in eurer CWL-Gruppe</h2>
+                <div class="stand-rank"><b>{{ us.rank }}</b><i>/ {{ benchmark | length }}</i></div>
+                {% if group_same_th and us.same_th_triple_rate %}
+                    {% set better = us.same_th_triple_rate > group_same_th %}
+                    <p class="stand-say">Gleichauf
+                        <span style="color: var(--{{ 'green' if better else 'red-txt' }})">{{ 'stark' if better else 'schwach' }}</span>,
+                        insgesamt {{ 'Mittelfeld' if us.rank > 3 and us.rank < (benchmark|length - 2) else ('Spitze' if us.rank <= 3 else 'hinten') }}.</p>
+                    <p class="stand-sub">Gegen gleiche Rathäuser holt ihr
+                        {{ '%.1f'|format(us.same_th_triple_rate * 100) | replace('.', ',') }} % Triples,
+                        die Gruppe {{ '%.1f'|format(group_same_th * 100) | replace('.', ',') }} %.
+                        Rechnet man die Schwierigkeit aller Angriffe heraus, bleibt Platz {{ us.rank }}.</p>
+                {% endif %}
+            </div>
+            <div class="stand-r">
+                <div class="stand-rk">
+                    <b>{{ benchmark | length }} Clans, schwierigkeitsbereinigt</b>
+                    <i>Sterne über Erwartung</i>
                 </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:12px;">
-                <button class="imod-run" id="corrRun" onclick="runCorr()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5z"/></svg> Run analysis</button>
-                <span class="imod-loading" id="corrLoading" role="status" aria-live="polite" style="display:none;">Analysing…</span>
-            </div>
-        </div>
-        <div class="imod-body">
-            <div class="imod-idle" id="corrIdle">
-                <strong>Not run yet.</strong><br>Run the analysis to correlate every member's ranked-ladder skill with their raid-weekend output.
-            </div>
-            <div id="corrResult" style="display:none;">
-                <div class="sc-figs" id="corrFigs"></div>
-                <div class="sc-grid">
-                    <div>
-                        <div class="sc-block-label">Ranked score vs raid score</div>
-                        <div class="sc-plot-wrap" id="corrPlot"></div>
-                        <div class="sc-hint">Dashed lines mark the clan average on each axis — the four quadrants below. Hover a point for the player's full breakdown.</div>
-                    </div>
-                    <div>
-                        <div class="sc-block-label">Per-player breakdown</div>
-                        <div class="sc-table-scroll table-scroll" id="corrTableWrap" tabindex="0" role="region"
-                             aria-label="Per-player breakdown, scrollable"></div>
-                    </div>
+                {% set hi = solid | map(attribute='sae') | max %}
+                {% set lo = solid | map(attribute='sae') | min %}
+                {% set span = (hi - lo) if (hi - lo) > 0 else 1 %}
+                <div class="dist" role="img"
+                     aria-label="Alle {{ benchmark|length }} Clans der Gruppe nach Sternen über Erwartung; euer Clan auf Platz {{ us.rank }}.">
+                    {% for c in benchmark %}
+                        {% set h = (6 + ((c.sae - lo) / span) * 94) | round(1) %}
+                        <div class="dc{{ ' us' if c.is_ours else (' hi' if loop.index <= 3) }}" style="height: {{ h }}%">
+                            {% if c.is_ours %}<span class="lbl">ihr</span>{% endif %}
+                        </div>
+                    {% endfor %}
                 </div>
-                <div class="sc-rows" id="corrRows"></div>
-                <div class="sc-quads" id="corrQuads"></div>
+                <div class="dist-ax"><span>bester</span><span>schwächster</span></div>
             </div>
         </div>
     </section>
+    {% endif %}
 
+    {# ── TIER 1 ── #}
+    <div class="feat">
+
+        {# ---- the difficulty curve ---- #}
+        <section class="pan" aria-labelledby="curveH">
+            {% set war = curve_rows.get('war', []) %}
+            {% set same = (war | selectattr('diff', 'equalto', 0) | first) %}
+            {% set up1  = (war | selectattr('diff', 'equalto', 1) | first) %}
+            {% set up2  = (war | selectattr('diff', 'equalto', 2) | first) %}
+            <div class="pan-h">
+                <h2 id="curveH">Die Schwierigkeitskurve</h2>
+                <i>{{ '{:,}'.format(war | sum(attribute='n')) | replace(',', '.') }} Angriffe</i>
+            </div>
+            {% if same and up1 and up2 and same.triple_rate is not none %}
+            <p class="pan-say">Eine Stufe höher kostet
+                <b>{{ ((same.triple_rate - up1.triple_rate) * 100) | round | int }} Punkte</b> Triple-Quote.
+                Zwei Stufen kosten <b>{{ ((same.triple_rate - up2.triple_rate) * 100) | round | int }}</b> —
+                dort bricht es weg, nicht bei +1.</p>
+            {% endif %}
+            <div class="lad">
+                {% for r in war %}
+                    {% if r.diff == 2 %}<div class="cliffrow"><span class="cliff">hier bricht es weg</span></div>{% endif %}
+                    <div class="lr">
+                        <div class="lr-k{{ ' now' if r.diff == 0 }}">{% if r.diff == 0 %}gleich{% else %}{{ '%+d'|format(r.diff) }} TH{% endif %}</div>
+                        <div class="lr-t">
+                            {% if r.triple_rate is not none %}
+                                {#- Mix percentages are clamped to 100: at diff -3 the unclamped
+                                    formula produced color-mix(... 104%), which is invalid CSS and
+                                    silently rendered the bar transparent. -#}
+                                {% set c = 'var(--accent)' if r.diff == 0
+                                    else ('color-mix(in oklch, var(--green) ' ~ [62 - r.diff * 14, 100] | min ~ '%, var(--surf2))' if r.diff < 0
+                                    else ('color-mix(in oklch, var(--yellow) 60%, var(--surf2))' if r.diff == 1
+                                    else 'color-mix(in oklch, var(--red) ' ~ [50 + r.diff * 12, 100] | min ~ '%, var(--surf2))')) %}
+                                <div class="lr-f" style="width: {{ (r.triple_rate * 100) | round(1) }}%; background: {{ c }}"></div>
+                            {% endif %}
+                        </div>
+                        <div class="lr-v" style="color: {{ 'var(--green)' if r.diff < 0 else ('var(--yellow)' if r.diff == 1 else ('var(--red-txt)' if r.diff > 1 else 'var(--text)')) }}">
+                            {% if r.triple_rate is not none %}{{ (r.triple_rate * 100) | round | int }} %{% else %}—{% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            {% set cwl = curve_rows.get('cwl', []) %}
+            {% if cwl %}
+            <p class="lad-foot">In CWL ist die Kurve flacher:
+                {% for d in [0, 1, 2] %}{% set r = (cwl | selectattr('diff', 'equalto', d) | first) %}
+                    {%- if r and r.triple_rate is not none -%}
+                        {{ (r.triple_rate * 100) | round | int }} %{{ ' gleichauf' if d == 0 else (' auf +' ~ d) }}{{ ', ' if not loop.last else '' }}
+                    {%- endif -%}
+                {% endfor %}. Ein Angriff nach oben kostet dort weniger — aber gleichauf gelingt auch seltener.</p>
+            {% endif %}
+        </section>
+
+        {# ---- over / under the curve ---- #}
+        <section class="pan" aria-labelledby="saeH">
+            {% set ranked = players_sae | rejectattr('thin') | list %}
+            {% set thin   = players_sae | selectattr('thin') | list %}
+            <div class="pan-h"><h2 id="saeH">Über der Kurve</h2><i>{{ ranked | length }} gewertet</i></div>
+            <p class="pan-say">Wer mehr holt, als Angriffe bei <b>derselben</b> Rathaus-Differenz normalerweise holen. Wer nach unten wischt, gewinnt hier nichts.</p>
+            {% if ranked %}
+            <table class="ct">
+                <thead><tr><th scope="col">Spieler</th><th scope="col" class="r">Angr.</th><th scope="col" class="r">Δ Sterne</th></tr></thead>
+                <tbody>
+                    {% for p in ranked[:5] %}
+                    <tr>
+                        <td class="nm">{{ names.get(p.tag, p.tag) }}</td>
+                        <td class="r a">{{ p.n }}</td>
+                        <td class="r v" style="color: {{ 'var(--green)' if p.sae > 0 else 'var(--red-txt)' }}">{{ '%+.2f'|format(p.sae) | replace('.', ',') }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if ranked | length > 10 %}
+                    <tr class="mid"><td colspan="3">… {{ ranked | length - 10 }} weitere im Mittelfeld</td></tr>
+                    {% endif %}
+                    {% for p in ranked[-5:] if ranked | length > 5 %}
+                    <tr>
+                        <td class="nm">{{ names.get(p.tag, p.tag) }}</td>
+                        <td class="r a">{{ p.n }}</td>
+                        <td class="r v" style="color: {{ 'var(--green)' if p.sae > 0 else 'var(--red-txt)' }}">{{ '%+.2f'|format(p.sae) | replace('.', ',') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+            {% if thin %}
+            <p class="thin-note"><b>{{ thin | length }}</b>
+                {{ 'Mitglied hat' if thin | length == 1 else 'Mitglieder haben' }} unter
+                {{ thresholds.player_attacks }} gewertete Angriffe und {{ 'wird' if thin | length == 1 else 'werden' }}
+                deshalb nicht gerankt:
+                {% for p in thin %}{{ names.get(p.tag, p.tag) }} ({{ p.n }}){{ ', ' if not loop.last }}{% endfor %}.</p>
+            {% endif %}
+        </section>
+    </div>
+
+    {# ── TIER 2: the quieter studies ── #}
+    <h2 class="mini-h">Weitere Auswertungen</h2>
+    <div class="rows">
+
+        {# ---- consistency ---- #}
+        <section class="mrow" aria-labelledby="consH">
+            {% set solid_c = consistency_ranked | rejectattr('thin') | list %}
+            <div class="mrow-k"><h3 id="consH">Verlässlichkeit</h3><i>{{ solid_c | length }} gewertet</i></div>
+            {% if contrast_ranked %}
+                {% set st = contrast_ranked.steady %}{% set sk = contrast_ranked.streaky %}
+                {% set worst = (solid_c | map(attribute='sd') | max) or 1 %}
+                <div class="mrow-s">
+                    <b>{{ names.get(st.tag, st.tag) }}</b> und <b>{{ names.get(sk.tag, sk.tag) }}</b>
+                    haben denselben Schnitt — nur einer ist planbar.
+                    {% for p, tone in [(st, 'green'), (sk, 'yellow')] %}
+                        {% set inset = (50 - (p.sd / worst) * 48) | round(1) %}
+                        <div class="vsline">
+                            <span class="vsn">{{ names.get(p.tag, p.tag) | truncate(11, true, '…') }} {{ '%.1f'|format(p.mean) | replace('.', ',') }}</span>
+                            <span class="vsb"><i style="left: {{ inset }}%; right: {{ inset }}%; background: var(--{{ tone }})"></i></span>
+                            <span class="vsn">σ {{ '%.1f'|format(p.sd) | replace('.', ',') }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="mrow-f">
+                    <b style="color: var(--yellow)">{{ '%.1f'|format(sk.sd / st.sd if st.sd else 0) | replace('.', ',') }}×</b><i>Streuung</i>
+                </div>
+            {% else %}
+                <div class="mrow-s"><span>Noch keine zwei Mitglieder mit vergleichbarem Schnitt und genug Wochen — der Kontrast braucht mindestens {{ thresholds.ranked_weeks }} gewertete Wochen je Spieler.</span></div>
+                <div class="mrow-f"><b style="color: var(--muted)">—</b></div>
+            {% endif %}
+        </section>
+
+        {# ---- upgrade slump ---- #}
+        <section class="mrow" aria-labelledby="upgH">
+            <div class="mrow-k"><h3 id="upgH">Rathaus-Upgrade</h3><i>{{ upgrade.n_players }} Spieler</i></div>
+            <div class="mrow-s">
+                {% if upgrade.n_players %}
+                    Nach einem Upgrade <b>{{ '%+.2f'|format(upgrade.mean_dip) | replace('.', ',') }} Sterne</b> je Angriff.
+                    {{ upgrade.n_recovered }} von {{ upgrade.n_players }} erholt{% if upgrade.median_recovery %} nach etwa {{ upgrade.median_recovery }} Angriffen{% endif %}.
+                    <span class="flag">dünne Daten</span>
+                    <div style="margin-top: 5px"><span>Ein Upgrade fällt mit neuen Truppen und Basen zusammen — gemessen wird das Paket, nicht das Rathaus.</span></div>
+                {% else %}
+                    <span>Noch kein Mitglied hat genug Angriffe auf beiden Seiten eines Rathaus-Wechsels.</span>
+                {% endif %}
+            </div>
+            <div class="mrow-f">
+                {% if upgrade.n_players %}
+                    <b style="color: {{ 'var(--red-txt)' if upgrade.mean_dip < 0 else 'var(--green)' }}">{{ '%+.2f'|format(upgrade.mean_dip) | replace('.', ',') }}</b><i>Sterne</i>
+                {% else %}<b style="color: var(--muted)">—</b>{% endif %}
+            </div>
+        </section>
+
+        {# ---- ranked x raid ---- #}
+        <section class="mrow" aria-labelledby="corrH">
+            <div class="mrow-k"><h3 id="corrH">Ranked × Raid</h3><i>{{ correlation.n_correlated }} korreliert</i></div>
+            <div class="mrow-s">
+                {% set r = correlation.pearson_r %}
+                {% if r is none %}
+                    <span>Zu wenige Mitglieder mit Daten auf beiden Seiten — noch keine Aussage möglich.</span>
+                {% elif r | abs < 0.3 %}
+                    Ladder-Stärke sagt <b>nichts</b> über Raid-Leistung. Bei {{ correlation.n_correlated }} Spielern
+                    ist r = {{ '%.2f'|format(r) | replace('.', ',') }} kaum von Zufall zu trennen.
+                    <span class="flag">kein Signal</span>
+                    <div style="margin-top: 5px"><span>Das ist die Antwort, nicht ihr Fehlen: wer im Raid liefern soll, wird nicht über die Ladder gefunden.</span></div>
+                {% else %}
+                    Ladder-Stärke und Raid-Leistung hängen <b>{{ 'zusammen' if r > 0 else 'gegenläufig zusammen' }}</b>
+                    — r = {{ '%.2f'|format(r) | replace('.', ',') }} über {{ correlation.n_correlated }} Spieler.
+                {% endif %}
+            </div>
+            <div class="mrow-f">
+                <b style="color: {{ 'var(--muted)' if r is none or r | abs < 0.3 else 'var(--text)' }}">{% if r is none %}—{% else %}{{ '%.2f'|format(r) | replace('.', ',') }}{% endif %}</b><i>r</i>
+            </div>
+        </section>
+    </div>
 </div>
 
 <div class="page-footer">Insights · Admin</div>
-
-<script>
-// Player name/tag are synced verbatim from the CoC API with no server-side
-// sanitization — escape before any innerHTML interpolation below.
-function escapeHTML(s) {
-    return String(s || '').replace(/[&<>"']/g, c =>
-        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-// OKLCH, tuned for the gunmetal surface — every entry clears AA on --surface
-// and --surf2. These were hex literals, which no theme change would follow and
-// which the CSS-only detector could never see.
-const TH_COLORS = {
-    8:  'oklch(0.74 0.075 250)', 9:  'oklch(0.76 0.090 200)', 10: 'oklch(0.78 0.105 160)',
-    11: 'oklch(0.80 0.120 130)', 12: 'oklch(0.82 0.135 100)', 13: 'oklch(0.74 0.150 330)',
-    14: 'oklch(0.78 0.140 70)',  15: 'oklch(0.72 0.120 250)', 16: 'oklch(0.68 0.180 25)',
-    17: 'oklch(0.70 0.160 300)', 18: 'oklch(0.80 0.150 85)',
-};
-
-function runCorr() {
-    document.getElementById('corrRun').disabled = true;
-    document.getElementById('corrLoading').style.display = 'inline';
-    fetch('/admin/skill-correlation')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('corrLoading').style.display = 'none';
-            document.getElementById('corrRun').disabled = false;
-            document.getElementById('corrIdle').style.display = 'none';
-            document.getElementById('corrResult').style.display = 'block';
-            renderCorr(data);
-        })
-        .catch(() => {
-            document.getElementById('corrLoading').textContent = 'Error loading data.';
-            document.getElementById('corrRun').disabled = false;
-        });
-}
-
-function renderCorr(data) {
-    const { players, pearson_r, n_correlated } = data;
-    const r = pearson_r;
-    const rLabel = r === null ? 'N/A' : (r > 0 ? '+' : '') + r.toFixed(2);
-    // One band table drives colour AND label, and the sign is respected. The
-    // old rule took Math.abs(r), so a STRONG NEGATIVE correlation rendered IFF
-    // Green — the hue DESIGN.md reserves for "positive / all clear" — while the
-    // caption beside it read "Strong negative link".
-    const rColor = r === null   ? 'var(--muted)'
-                 : r <= -0.35   ? 'var(--red)'
-                 : r >=  0.6    ? 'var(--green)'
-                 : r >=  0.35   ? 'var(--yellow)'
-                 : 'var(--muted)';
-    const rDesc = r === null ? 'Not enough data'
-        : Math.abs(r) >= 0.6 ? (r > 0 ? 'Strong positive link' : 'Strong negative link')
-        : Math.abs(r) >= 0.35 ? (r > 0 ? 'Moderate positive link' : 'Moderate negative link')
-        : Math.abs(r) >= 0.15 ? 'Weak link' : 'No meaningful link';
-
-    const withRanked = players.filter(p => p.ranked_score !== null).length;
-    const withRaid = players.filter(p => p.raid_score !== null).length;
-
-    document.getElementById('corrFigs').innerHTML = [
-        { l: 'Pearson r', v: rLabel, c: rColor, s: rDesc },
-        { l: 'Data points', v: n_correlated, c: 'var(--text)', s: '≥3 ranked weeks + ≥3 raid weekends' },
-        { l: 'Has ranked data', v: withRanked, c: 'var(--blue)', s: `of ${players.length} members` },
-        { l: 'Has raid data', v: withRaid, c: 'var(--red)', s: `of ${players.length} members` },
-    ].map((f, i) => `<div class="sc-fig" style="--i:${i}"><div class="l">${f.l}</div><div class="v" style="color:${f.c};">${f.v}</div><div class="s">${f.s}</div></div>`).join('');
-
-    const plotPlayers = players.filter(p => p.ranked_score !== null && p.raid_score !== null);
-    buildScatter(plotPlayers, r);
-    buildTable(players);
-    buildRows(players);
-    buildQuads(plotPlayers);
-}
-
-function buildScatter(pts, r) {
-    const W = 480, H = 340, ml = 52, mr = 14, mt = 14, mb = 46;
-    const iw = W - ml - mr, ih = H - mt - mb;
-    const xs = pts.map(p => p.ranked_score), ys = pts.map(p => p.raid_score);
-    const xmin = xs.length ? Math.max(0, Math.min(...xs) - 5) : 0;
-    const xmax = xs.length ? Math.min(100, Math.max(...xs) + 5) : 100;
-    const ymin = ys.length ? Math.max(0, Math.min(...ys) - 5) : 0;
-    const ymax = ys.length ? Math.min(100, Math.max(...ys) + 5) : 100;
-    const px = x => ml + (x - xmin) / (xmax - xmin) * iw;
-    const py = y => mt + ih - (y - ymin) / (ymax - ymin) * ih;
-
-    let regLine = '';
-    if (pts.length >= 3 && r !== null) {
-        const n = pts.length, mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
-        const num = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0);
-        const den = xs.reduce((s, x) => s + (x - mx) ** 2, 0);
-        if (den) {
-            const slope = num / den, intercept = my - slope * mx;
-            const y0 = slope * xmin + intercept, y1 = slope * xmax + intercept;
-            const col = Math.abs(r) >= 0.4 ? 'color-mix(in oklch, var(--green) 50%, transparent)' : 'color-mix(in oklch, var(--muted) 40%, transparent)';
-            regLine = `<line x1="${px(xmin)}" y1="${py(y0)}" x2="${px(xmax)}" y2="${py(y1)}" stroke="${col}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
-        }
-    }
-
-    const ticks = n => Array.from({ length: n + 1 }, (_, i) => i * (100 / n));
-    const vG = ticks(4).filter(v => v >= xmin && v <= xmax).map(v =>
-        `<line x1="${px(v)}" y1="${mt}" x2="${px(v)}" y2="${mt + ih}" stroke="var(--bord2)" stroke-width="1"/><text x="${px(v)}" y="${mt + ih + 15}" text-anchor="middle" font-size="10" fill="var(--muted)">${v}</text>`).join('');
-    const hG = ticks(4).filter(v => v >= ymin && v <= ymax).map(v =>
-        `<line x1="${ml}" y1="${py(v)}" x2="${ml + iw}" y2="${py(v)}" stroke="var(--bord2)" stroke-width="1"/><text x="${ml - 8}" y="${py(v) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`).join('');
-
-    const dots = pts.map((p, i) => {
-        const col = TH_COLORS[p.th] || 'var(--muted)';
-        return `<circle cx="${px(p.ranked_score)}" cy="${py(p.raid_score)}" r="7" fill="${col}" fill-opacity=".85" stroke="${col}" stroke-width="1.5" data-idx="${i}" class="sc-dot" style="cursor:pointer;"/>`;
-    }).join('');
-    // Label greedily in ranked order: place a name only if its box clears every label
-    // already placed. Colliding points stay discoverable via hover + the table below —
-    // better a few clean labels than an unreadable smear.
-    const placed = [];
-    const labels = pts.map(p => {
-        const cx = px(p.ranked_score), cy = py(p.raid_score);
-        const name = escapeHTML(p.name.split(' ')[0].slice(0, 10));
-        const w = name.length * 5.4, ly = cy - 11;
-        const box = { x1: cx - w / 2, x2: cx + w / 2, y1: ly - 11, y2: ly + 1 };
-        if (placed.some(b => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2))) return '';
-        placed.push(box);
-        return `<text x="${cx}" y="${ly}" text-anchor="middle" font-size="9.5" fill="var(--muted)" style="pointer-events:none;">${name}</text>`;
-    }).join('');
-
-    // Mean-split crosshair — the same split that defines the quadrant buckets below, drawn
-    // faintly so the plot and the quadrant cards read as one view of the same math.
-    const mxv = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
-    const myv = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : null;
-    const cross = (mxv !== null && mxv >= xmin && mxv <= xmax && myv >= ymin && myv <= ymax)
-        ? `<line x1="${px(mxv)}" y1="${mt}" x2="${px(mxv)}" y2="${mt + ih}" stroke="color-mix(in oklch, var(--muted) 32%, transparent)" stroke-width="1" stroke-dasharray="2 4"/>
-           <line x1="${ml}" y1="${py(myv)}" x2="${ml + iw}" y2="${py(myv)}" stroke="color-mix(in oklch, var(--muted) 32%, transparent)" stroke-width="1" stroke-dasharray="2 4"/>`
-        : '';
-
-    const rTxt = r === null ? 'not enough data' : (r > 0 ? '+' : '') + r.toFixed(2);
-    document.getElementById('corrPlot').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Scatter plot of ranked score versus raid score for ${pts.length} members; correlation r = ${rTxt}. Full values are in the table alongside." style="display:block;width:100%;height:auto;">
-        ${vG}${hG}${cross}
-        <line x1="${ml}" y1="${mt}" x2="${ml}" y2="${mt + ih}" stroke="var(--border)" stroke-width="1"/>
-        <line x1="${ml}" y1="${mt + ih}" x2="${ml + iw}" y2="${mt + ih}" stroke="var(--border)" stroke-width="1"/>
-        ${regLine}${dots}${labels}
-        <text x="${ml + iw / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)">Ranked score →</text>
-        <text x="12" y="${mt + ih / 2}" text-anchor="middle" font-size="11" fill="var(--muted)" transform="rotate(-90,12,${mt + ih / 2})">Raid score →</text>
-        ${r !== null ? `<text x="${ml + iw - 4}" y="${mt + 12}" text-anchor="end" font-size="10" fill="var(--muted)">r = ${(r > 0 ? '+' : '') + r.toFixed(2)}</text>` : ''}
-    </svg>`;
-
-    document.querySelectorAll('#corrPlot .sc-dot').forEach(el => {
-        const p = pts[+el.dataset.idx];
-        const html = `<div style="font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;margin-bottom:4px;">${escapeHTML(p.name)} · TH${p.th}</div>
-            <div style="color:var(--muted);line-height:1.8;">Ranked: <strong style="color:var(--text);font-family:'JetBrains Mono',monospace;">${p.ranked_score}</strong> <span style="font-size:10px;">(${p.ranked_weeks}w · ${p.ranked_games} battles)</span><br>
-            Raid: <strong style="color:var(--text);font-family:'JetBrains Mono',monospace;">${p.raid_score}</strong> <span style="font-size:10px;">(${p.raid_weekends} wknds · ${p.raid_attacks} atk)</span></div>`;
-        el.addEventListener('mouseenter', e => showFloatTip(html, e));
-        el.addEventListener('mousemove', e => moveFloatTip(e));
-        el.addEventListener('mouseleave', hideFloatTip);
-    });
-}
-
-function _combined(p) { return (p.ranked_score ?? -1) + (p.raid_score ?? -1); }
-
-function buildTable(players) {
-    const sorted = [...players].sort((a, b) => _combined(b) - _combined(a));
-    const rows = sorted.map(p => {
-        const col = TH_COLORS[p.th] || 'var(--muted)';
-        const wr = p.ranked_score !== null ? p.ranked_score : '<span class="nd">no data</span>';
-        const rd = p.raid_score !== null ? p.raid_score : '<span class="nd">no data</span>';
-        const hasB = p.ranked_score !== null && p.raid_score !== null;
-        const diff = hasB ? (p.ranked_score - p.raid_score).toFixed(1) : null;
-        const diffCell = diff !== null
-            ? `<span class="mono" style="color:${diff > 5 ? 'var(--green)' : diff < -5 ? 'var(--red)' : 'var(--muted)'};">${diff > 0 ? '+' : ''}${diff}</span>` : '—';
-        return `<tr>
-            <td><span class="mono" style="color:${col};">TH${p.th}</span></td>
-            <td style="font-weight:700;">${escapeHTML(p.name)}</td>
-            <td class="c mono">${wr}</td>
-            <td class="c mono">${rd}</td>
-            <td class="c">${diffCell}</td>
-            <td class="c nd">${p.ranked_weeks || '—'}</td>
-            <td class="c nd">${p.raid_weekends || '—'}</td>
-        </tr>`;
-    }).join('');
-    document.getElementById('corrTableWrap').innerHTML = `<table class="ct">
-        <thead><tr>
-            <th>TH</th><th>Player</th><th class="c">Ranked</th><th class="c">Raid</th>
-            <th class="c" title="Ranked minus Raid">Δ</th><th class="c">Rnk wks</th><th class="c">Raid wk</th>
-        </tr></thead><tbody>${rows}</tbody></table>`;
-}
-
-function buildRows(players) {
-    const sorted = [...players].sort((a, b) => _combined(b) - _combined(a));
-    document.getElementById('corrRows').innerHTML = sorted.map(p => {
-        const col = TH_COLORS[p.th] || 'var(--muted)';
-        const hasB = p.ranked_score !== null && p.raid_score !== null;
-        const diff = hasB ? (p.ranked_score - p.raid_score).toFixed(1) : null;
-        const rk = p.ranked_score !== null ? p.ranked_score : '—';
-        const rd = p.raid_score !== null ? p.raid_score : '—';
-        return `<div class="scr">
-            <div class="scr-top">
-                <span class="scr-th" style="color:${col};">TH${p.th}</span>
-                <span class="scr-name">${escapeHTML(p.name)}</span>
-            </div>
-            <div class="scr-stats">
-                <span><span class="u">Rnk</span>${rk}</span>
-                <span><span class="u">Raid</span>${rd}</span>
-                ${diff !== null ? `<span style="color:${diff > 5 ? 'var(--green)' : diff < -5 ? 'var(--red)' : 'var(--muted)'};"><span class="u">Δ</span>${diff > 0 ? '+' : ''}${diff}</span>` : ''}
-                <span style="color:var(--muted);"><span class="u">wks</span>${p.ranked_weeks || 0}/${p.raid_weekends || 0}</span>
-            </div>
-        </div>`;
-    }).join('');
-}
-
-function buildQuads(pts) {
-    const wrap = document.getElementById('corrQuads');
-    if (!pts.length) { wrap.innerHTML = ''; return; }
-    const mx = pts.reduce((s, p) => s + p.ranked_score, 0) / pts.length;
-    const my = pts.reduce((s, p) => s + p.raid_score, 0) / pts.length;
-    const q = { tr: [], tl: [], br: [], bl: [] };
-    pts.forEach(p => {
-        const key = (p.ranked_score >= mx ? 'r' : 'l') + (p.raid_score >= my ? 't' : 'b');
-        const slot = key[1] + key[0];
-        if (q[slot]) q[slot].push(p.name);
-    });
-    const defs = [
-        { key: 'tr', label: 'Elite', desc: 'High ranked + high raid', color: 'var(--green)' },
-        { key: 'tl', label: 'Raid specialist', desc: 'Lower ranked, strong raid', color: 'var(--red)' },
-        { key: 'br', label: 'Ranked specialist', desc: 'Strong ranked, lower raid', color: 'var(--blue)' },
-        { key: 'bl', label: 'Needs growth', desc: 'Lower on both', color: 'var(--muted)' },
-    ];
-    wrap.innerHTML = defs.map((d, i) => {
-        const names = q[d.key] || [];
-        return `<div class="sc-quad" style="--i:${i};border-color:color-mix(in oklch, ${d.color} 26%, var(--border));">
-            <div class="sc-quad-h"><span class="sc-quad-name" style="color:${d.color};">${d.label}</span><span class="sc-quad-n" style="color:${d.color};">${names.length}</span></div>
-            <div class="sc-quad-desc">${d.desc}</div>
-            <div class="sc-quad-names">${names.length ? names.map(escapeHTML).join(', ') : '<span style="color:var(--muted);">—</span>'}</div>
-        </div>`;
-    }).join('');
-}
-</script>
-
 </body>
 </html>

@@ -31,6 +31,37 @@ def _data_version():
             RankedWeek.query.count(), RaidWeekendLog.query.count())
 
 
+def curve_rows(fitted):
+    """The curve reshaped for display: {src: [row, ...]} ordered -3 -> +3.
+
+    The curve itself is keyed by a (src, diff) tuple, which a template cannot
+    index cleanly. Shaping it here keeps the studies' own contract untouched
+    and keeps the reshaping out of Jinja, where it could not be tested.
+    """
+    out = {}
+    for src, _ in fitted:
+        if src in out:
+            continue
+        out[src] = [dict(fitted[(src, d)], diff=d)
+                    for d in range(-curve.DIFF_CLAMP, curve.DIFF_CLAMP + 1)]
+    return out
+
+
+def group_same_th_rate(rows):
+    """The rivals' combined same-town-hall triple rate, for the us-vs-them line.
+
+    Weighted by each clan's attack count rather than averaging the per-clan
+    rates: a clan with six same-TH attacks should not swing the group figure
+    as hard as one with two hundred.
+    """
+    rivals = [r for r in rows
+              if not r['is_ours'] and r['same_th_triple_rate'] is not None]
+    n = sum(r['same_th_n'] for r in rivals)
+    if not n:
+        return None, 0
+    return sum(r['same_th_triple_rate'] * r['same_th_n'] for r in rivals) / n, n
+
+
 def build_briefing():
     """-> the whole page's data. Requires an app context."""
     key = _data_version()
@@ -57,14 +88,23 @@ def build_briefing():
     raid_rows   = consistency.consistency(raid_scores,
                                           consistency.MIN_RAID_WEEKENDS)
 
+    bench      = benchmark.clan_ranking(facts, fitted, our_tag)
+    group_rate, group_n = group_same_th_rate(bench)
+
     data = {
         'curve':              fitted,
+        'curve_rows':         curve_rows(fitted),
+        # The one row the page leads with, resolved here so the template does
+        # not have to search a 22-row list for it.
+        'us':                 next((r for r in bench if r['is_ours']), None),
+        'group_same_th':      group_rate,
+        'group_same_th_n':    group_n,
         # Scope is in_clan=True: this study ranks who on OUR roster beats
         # the curve, a roster decision. upgrade.py below deliberately stays
         # unscoped (it studies a phenomenon, not a roster) - the two differ
         # on purpose, do not "fix" them to match.
         'players_sae':        curve.player_sae(facts, fitted, roster=in_clan_tags),
-        'benchmark':          benchmark.clan_ranking(facts, fitted, our_tag),
+        'benchmark':          bench,
         'consistency_ranked': ranked_rows,
         'consistency_raid':   raid_rows,
         'contrast_ranked':    consistency.contrast_pair(ranked_rows),
@@ -74,6 +114,14 @@ def build_briefing():
                                   games, attacks),
         'names':              names,
         'our_clan_tag':       our_tag,
+        # Surfaced so the page can state its own cut-offs instead of hardcoding
+        # numbers that would drift the moment a threshold is retuned.
+        'thresholds': {
+            'player_attacks': curve.MIN_PLAYER_ATTACKS,
+            'ranked_weeks':   consistency.MIN_RANKED_WEEKS,
+            'raid_weekends':  consistency.MIN_RAID_WEEKENDS,
+            'clan_attacks':   benchmark.MIN_CLAN_ATTACKS,
+        },
     }
 
     _CACHE.clear()          # only the newest version is worth holding

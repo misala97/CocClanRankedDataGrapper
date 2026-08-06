@@ -154,9 +154,48 @@ def test_build_briefing_returns_every_key_the_route_passes_to_the_template(monke
     d = build_briefing()
 
     assert set(d) == {
-        'curve', 'players_sae', 'benchmark', 'consistency_ranked',
+        'curve', 'curve_rows', 'players_sae', 'benchmark', 'us',
+        'group_same_th', 'group_same_th_n', 'consistency_ranked',
         'consistency_raid', 'contrast_ranked', 'upgrade', 'correlation',
-        'names', 'our_clan_tag',
+        'names', 'our_clan_tag', 'thresholds',
     }
     assert d['our_clan_tag'] == '#US'
     assert d['names'] == {'#A': 'Ann', '#B': 'Bo'}
+
+
+def test_curve_rows_covers_every_differential_for_every_source():
+    """The template iterates these positionally; a missing diff would silently
+    shorten the ladder rather than raise."""
+    from features.admin.insights import curve_rows
+    from features.admin.insights.curve import DIFF_CLAMP, build_curve
+
+    facts = [{'src': s, 'attacker_th': 14, 'defender_th': 14 + d, 'stars': 2,
+              'destruction': 90.0, 'attacker_tag': '#P', 'clan_tag': '#US',
+              'war_id': 1, 'ended_at': None, 'attack_order': 1}
+             for s in ('war', 'cwl') for d in (-1, 0, 1)]
+    rows = curve_rows(build_curve(facts))
+
+    assert set(rows) == {'war', 'cwl'}
+    for src, got in rows.items():
+        assert [r['diff'] for r in got] == list(range(-DIFF_CLAMP, DIFF_CLAMP + 1)), src
+
+
+def test_group_rate_weights_by_attacks_not_by_clan():
+    """A rival with six same-TH attacks must not swing the group figure as hard
+    as one with two hundred."""
+    from features.admin.insights import group_same_th_rate
+
+    rate, n = group_same_th_rate([
+        {'is_ours': True,  'same_th_triple_rate': 1.0, 'same_th_n': 500},
+        {'is_ours': False, 'same_th_triple_rate': 1.0, 'same_th_n': 90},
+        {'is_ours': False, 'same_th_triple_rate': 0.0, 'same_th_n': 10},
+    ])
+    assert n == 100                 # ours excluded
+    assert round(rate, 3) == 0.9    # weighted, not the 0.5 a per-clan mean gives
+
+
+def test_group_rate_is_none_when_no_rival_faced_an_equal_town_hall():
+    from features.admin.insights import group_same_th_rate
+
+    assert group_same_th_rate([{'is_ours': True, 'same_th_triple_rate': 1.0,
+                                'same_th_n': 40}]) == (None, 0)
