@@ -73,6 +73,10 @@ def copy_templates(source_username, destination_username, commit):
                 default_rest_seconds=source_exercise.default_rest_seconds,
                 weight_increment=source_exercise.weight_increment,
                 is_unilateral=source_exercise.is_unilateral,
+                equipment=source_exercise.equipment,
+                bar_weight=source_exercise.bar_weight,
+                stack_kg=source_exercise.stack_kg,
+                secondary_muscle_groups=source_exercise.secondary_muscle_groups,
                 user_id=destination.id,
             )
             db.session.add(mine)

@@ -89,6 +89,12 @@ def follower_exercise_for(shared, leader_exercise_id):
             # and correctly stays behind. Dropping this left every volume
             # figure for the follower's copy at half its real value.
             is_unilateral=leader_exercise.is_unilateral,
+            # Equipment facts describe the machine, not the person, so they
+            # travel with the name too -- unlike weight_increment below.
+            equipment=leader_exercise.equipment,
+            bar_weight=leader_exercise.bar_weight,
+            stack_kg=leader_exercise.stack_kg,
+            secondary_muscle_groups=leader_exercise.secondary_muscle_groups,
             user_id=shared.follower_user_id,
         )
         db.session.add(match)

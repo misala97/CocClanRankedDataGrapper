@@ -148,6 +148,24 @@ MUSCLE_GROUPS = (
 )
 
 
+# How an exercise is loaded. Two orthogonal facts describe a logged weight:
+# this one, and is_unilateral below. Their combination is what the export's
+# `weight_convention` is derived from -- storing that enum instead would put
+# laterality in two places at once, and volume already depends on
+# is_unilateral alone (stats.set_volume).
+#
+# A loaded barbell is `plate_loaded` with a bar_weight; it is not a value of
+# its own, because "the bar is dead weight inside the number you logged" is
+# exactly what bar_weight already says.
+EQUIPMENT_TYPES = ('dumbbell', 'plate_loaded', 'stack')
+
+EQUIPMENT_LABELS = {
+    'dumbbell': 'Kurzhantel',
+    'plate_loaded': 'Scheiben',
+    'stack': 'Steckgewicht',
+}
+
+
 class Exercise(db.Model):
     __tablename__ = 'gym_exercises'
     # Owned per user since 2026-08-02: a third lifter joined who trains at the
@@ -164,6 +182,17 @@ class Exercise(db.Model):
     default_rest_seconds = db.Column(db.Integer, nullable=True)
     weight_increment     = db.Column(db.Float, nullable=True)  # smallest loadable jump on this equipment (dumbbells 2, a stack often 9); NULL means use stats.DEFAULT_INCREMENT
     is_unilateral        = db.Column(db.Boolean, nullable=False, default=False)  # logged weight/reps are per side (e.g. one-arm curls); volume must be doubled
+    equipment            = db.Column(db.String(20), nullable=False, default='stack',
+                                     server_default='stack')  # one of EQUIPMENT_TYPES
+    bar_weight           = db.Column(db.Float, nullable=True)   # dead weight (bar, carriage) already contained in the logged number
+    # The real stops of an uneven stack, ascending. NULL on everything that
+    # steps evenly -- weight_increment already answers those, and a list
+    # spelling out 5,10,15,... would be the same fact typed twice. Mutually
+    # exclusive with weight_increment in the export.
+    stack_kg             = db.Column(db.JSON, nullable=True)
+    # Values from MUSCLE_GROUPS. NULL and [] mean the same thing; readers
+    # normalise to [].
+    secondary_muscle_groups = db.Column(db.JSON, nullable=True)
 
     session_exercises  = db.relationship('SessionExercise', back_populates='exercise', lazy=True)
     template_exercises = db.relationship('TemplateExercise', back_populates='exercise', lazy=True)
