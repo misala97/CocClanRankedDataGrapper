@@ -48,22 +48,38 @@ SEED = {
 
 
 def upgrade():
+    bind = op.get_bind()
+    # Adding a column is DDL, and MySQL/MariaDB commit DDL immediately without
+    # rolling it back when the rest of the migration fails. The first run of
+    # this migration against production added all four columns and then died on
+    # the seed below, leaving the columns in place and alembic_version behind --
+    # so re-running it must not try to add them a second time.
+    existing = {column['name'] for column in
+                sa.inspect(bind).get_columns('gym_exercises')}
+
     # server_default on equipment: the column is NOT NULL and the table has
     # rows, which would otherwise fail the ALTER.
-    op.add_column('gym_exercises',
-                  sa.Column('equipment', sa.String(length=20), nullable=False,
-                            server_default='stack'))
-    op.add_column('gym_exercises', sa.Column('bar_weight', sa.Float(), nullable=True))
-    op.add_column('gym_exercises', sa.Column('stack_kg', sa.JSON(), nullable=True))
-    op.add_column('gym_exercises',
-                  sa.Column('secondary_muscle_groups', sa.JSON(), nullable=True))
+    if 'equipment' not in existing:
+        op.add_column('gym_exercises',
+                      sa.Column('equipment', sa.String(length=20), nullable=False,
+                                server_default='stack'))
+    if 'bar_weight' not in existing:
+        op.add_column('gym_exercises', sa.Column('bar_weight', sa.Float(), nullable=True))
+    if 'stack_kg' not in existing:
+        op.add_column('gym_exercises', sa.Column('stack_kg', sa.JSON(), nullable=True))
+    if 'secondary_muscle_groups' not in existing:
+        op.add_column('gym_exercises',
+                      sa.Column('secondary_muscle_groups', sa.JSON(), nullable=True))
 
-    bind = op.get_bind()
     for name, (equipment, bar_weight, secondary) in SEED.items():
         bind.execute(
+            # No CAST(... AS JSON) here: production is MariaDB, where JSON is an
+            # alias for LONGTEXT and that syntax is a parse error. Both engines
+            # accept a JSON string assigned straight to the column -- MySQL 8
+            # converts it on the way in, MariaDB stores the text as given.
             sa.text('UPDATE gym_exercises '
                     'SET equipment = :equipment, bar_weight = :bar_weight, '
-                    '    secondary_muscle_groups = CAST(:secondary AS JSON) '
+                    '    secondary_muscle_groups = :secondary '
                     'WHERE name = :name'),
             {'equipment': equipment, 'bar_weight': bar_weight,
              'secondary': json.dumps(secondary), 'name': name},
