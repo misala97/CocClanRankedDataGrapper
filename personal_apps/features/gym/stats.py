@@ -135,6 +135,9 @@ class PerformedExercise:
     # this module never touches the ORM. Defaulted for the same reason
     # is_deload is.
     weight_increment: Optional[float] = None
+    # The machine's real stops, when they are uneven enough to be worth
+    # recording. None on everything that steps evenly -- see snap_to_stack.
+    stack_kg: Optional[Tuple] = None
 
 
 def epley_1rm(weight, reps):
@@ -256,6 +259,78 @@ def sessions_since_pr(rows, position=None):
         else:
             since += 1
     return since
+
+
+def ready_for_more(rows, position=None):
+    """Whether the last comparable session says the working weight has become
+    easy -- two or more sets at that session's own heaviest weight, each run
+    to a full set's worth of reps.
+
+    Returns the evidence rather than a bare yes: the badge quotes it, the way
+    the stagnation line beside it quotes its count. A lifter who cannot see
+    why a nudge appeared has to go looking for the reason.
+
+    "That session's heaviest", not an all-time best: the question is whether
+    the weight you are actually working at has room left in it, and a ramp-up
+    set says nothing about that. Two sets, not one, because one good set is a
+    good set and two is a pattern.
+
+    Deload sessions are excluded (progression_rows): light weight for ten reps
+    is what a deload IS, so counting it would leave this permanently lit. The
+    position lens and its fallback come from _scoped() -- exercise order
+    decides how fatigued you were, and a slot with too little history borrows
+    from the others rather than going silent.
+
+    This badge and the set chips beside it can name different sessions as
+    their evidence, because they use two different lenses on the same
+    history:
+
+    - This function, via _scoped(): same slot once that slot has two or more
+      sessions logged, ever -- no time limit -- else every position.
+    - routes._last_session_exercise(), which pre-fills the chips' weight/
+      reps: same slot only while that slot's own record is still younger
+      than ROLLING_WINDOW_DAYS, else the most recent session at ANY
+      position.
+
+    The two agree while a slot is trained regularly. Once a slot's own
+    history goes stale, they can disagree: the badge can still be quoting an
+    old same-slot session (this lens has no staleness cutoff) while the chip
+    has already fallen back to a different, more recent slot -- so the badge
+    reads "Letztes Mal ... 35,0 kg" beside a chip prefilled at 40,0. This is
+    a known divergence, not a bug: the badge is answering "was the last time
+    in THIS slot easy", the chip is answering "what should I load RIGHT
+    NOW", and those are legitimately different questions. Unifying the two
+    lenses is a design decision, not a fix -- left alone on purpose.
+
+    What IS a bug is stating that divergence as if it were not one: the
+    returned dict carries `is_latest`, true only when the evidence session is
+    also the most recent session in `rows` at ANY position. The caller uses
+    it to say "Letztes Mal" (a dated claim) only when it is true, and a
+    slot-scoped "Zuletzt in diesem Slot" otherwise -- so the sentence never
+    asserts a false "last time" about a session that was not, in fact, last.
+    """
+    prog = progression_rows(rows)
+    scoped = _scoped(prog, position)
+    if not scoped:
+        return None
+    last = scoped[-1]
+    top = max(weight for weight, _ in last.sets)
+    # A bodyweight set (weight 0) has no weight to add -- every set trivially
+    # "matches the heaviest weight", so this would otherwise fire forever on
+    # a pure-bodyweight exercise instead of only when there is genuinely room
+    # to load more.
+    if top == 0:
+        return None
+    qualifying = [reps for weight, reps in last.sets
+                  if weight == top and reps >= DELOAD_REPS]
+    if len(qualifying) < 2:
+        return None
+    # "Newest" among the sessions that COUNT, not among all of them: a deload
+    # logged after the evidence must not downgrade the wording, because
+    # nothing on screen treats that deload as the last time either -- the
+    # chips' prefill skips it for the same reason this judgement does.
+    newest = _chronological(prog)[-1]
+    return {'sets': len(qualifying), 'weight': top, 'is_latest': last is newest}
 
 
 def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):
@@ -495,7 +570,42 @@ def _next_weight(weight, increment):
     return weight + increment
 
 
-def deload_weight(weight, pct, increment):
+def snap_to_stack(weight, steps, direction):
+    """The nearest real position of a machine whose stops are known.
+
+    Almost nothing needs this: an evenly stepping stack is already fully
+    described by its increment, and deload_weight's anchor-to-working-weight
+    rule keeps even an offset grid (5, 13, 21 ...) honest without knowing the
+    stops. It exists for the machine whose gaps are uneven, where counting
+    increments from anywhere invents a position -- the first such exercise
+    entered into the form computes correctly the same day instead of
+    prescribing a weight nobody can select.
+
+    `steps` falsy means the exercise has no recorded stops, and the weight
+    passes through untouched.
+
+    `direction` must be exactly 'down' or 'up' -- anything else raises rather
+    than silently falling through to 'up', which for a deload is precisely
+    the direction deload_weight()'s own docstring calls "the one direction
+    that defeats the point".
+    """
+    # Checked before the falsy-steps shortcut, not after: no exercise carries
+    # stops yet, so a typo'd direction would otherwise stay silent until the
+    # day someone records one -- which is the latent failure this raise exists
+    # to prevent.
+    if direction not in ('down', 'up'):
+        raise ValueError("direction must be 'down' or 'up', got {!r}".format(direction))
+    if not steps:
+        return weight
+    ordered = sorted(steps)
+    if direction == 'down':
+        below = [s for s in ordered if s <= weight]
+        return below[-1] if below else ordered[0]
+    above = [s for s in ordered if s >= weight]
+    return above[0] if above else ordered[-1]
+
+
+def deload_weight(weight, pct, increment, stack_kg=None):
     """`pct` of a working weight, taken DOWN to a loadable weight.
 
     Down, not to nearest: rounding a deload up makes it heavier than
@@ -512,12 +622,20 @@ def deload_weight(weight, pct, increment):
 
     Applied per set by the caller, never to the top set alone, so any ramping
     or drop-off in the session's shape survives the deload.
+
+    When the machine's real stops are known (`stack_kg`), the increment grid
+    above is only a guess at them -- the 5/13/.../69 carriage is exactly the
+    shape that guess can miss -- so the grid's result is snapped DOWN onto the
+    nearest stop the machine actually has.
     """
     if weight <= 0:
         return weight          # a bodyweight set stays bodyweight
     # ceil, so the result lands at or below the prescription rather than above it
     steps = math.ceil((weight - weight * pct / 100.0) / increment)
-    return max(increment, weight - steps * increment)
+    prescribed = max(increment, weight - steps * increment)
+    # A recorded stack overrides the increment grid: its stops are the only
+    # positions that exist, and the grid is at best a good guess at them.
+    return snap_to_stack(prescribed, stack_kg, 'down')
 
 
 def _verdict(entry, since):
@@ -620,14 +738,25 @@ def session_report(current, history, comparable_session_volumes=()):
                             'previous_at': previous_row.started_at})
 
         if entry['verdict'] == 'stagniert':
-            advice.append({
-                'exercise_id': row.exercise_id,
-                'name': row.name,
-                'stuck_at': weight,
-                'sessions': since,
-                'suggested_weight': _next_weight(
-                    weight, resolve_increment(row.weight_increment, row.is_unilateral)),
-            })
+            suggested_weight = snap_to_stack(
+                _next_weight(weight, resolve_increment(row.weight_increment, row.is_unilateral)),
+                row.stack_kg, 'up')
+            # Topped out: on a machine whose real stops are known, snap_to_stack
+            # clamps a jump past the heaviest stop back down to that stop -- so a
+            # lifter already sitting on the top step gets suggested_weight ==
+            # stuck_at, the exact number the plateau is already stuck at. Without
+            # a stack (or one with room above the current weight) the jump is
+            # always strictly upward, so this never fires on that path -- it
+            # exists only for the one case where "go heavier" has no honest
+            # answer, and dropping the entry beats repeating a number.
+            if suggested_weight > weight:
+                advice.append({
+                    'exercise_id': row.exercise_id,
+                    'name': row.name,
+                    'stuck_at': weight,
+                    'sessions': since,
+                    'suggested_weight': suggested_weight,
+                })
 
     # NOT by raw value: `value` is kilograms-lifted for a weight record and
     # kilograms-of-volume for a volume one, and a session total is two orders of

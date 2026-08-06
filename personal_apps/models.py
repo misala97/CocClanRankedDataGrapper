@@ -148,6 +148,24 @@ MUSCLE_GROUPS = (
 )
 
 
+# How an exercise is loaded. Two orthogonal facts describe a logged weight:
+# this one, and is_unilateral below. Their combination is what the export's
+# `weight_convention` is derived from -- storing that enum instead would put
+# laterality in two places at once, and volume already depends on
+# is_unilateral alone (stats.set_volume).
+#
+# A loaded barbell is `plate_loaded` with a bar_weight; it is not a value of
+# its own, because "the bar is dead weight inside the number you logged" is
+# exactly what bar_weight already says.
+EQUIPMENT_TYPES = ('dumbbell', 'plate_loaded', 'stack')
+
+EQUIPMENT_LABELS = {
+    'dumbbell': 'Kurzhantel',
+    'plate_loaded': 'Scheiben',
+    'stack': 'Steckgewicht',
+}
+
+
 class Exercise(db.Model):
     __tablename__ = 'gym_exercises'
     # Owned per user since 2026-08-02: a third lifter joined who trains at the
@@ -164,6 +182,17 @@ class Exercise(db.Model):
     default_rest_seconds = db.Column(db.Integer, nullable=True)
     weight_increment     = db.Column(db.Float, nullable=True)  # smallest loadable jump on this equipment (dumbbells 2, a stack often 9); NULL means use stats.DEFAULT_INCREMENT
     is_unilateral        = db.Column(db.Boolean, nullable=False, default=False)  # logged weight/reps are per side (e.g. one-arm curls); volume must be doubled
+    equipment            = db.Column(db.String(20), nullable=False, default='stack',
+                                     server_default='stack')  # one of EQUIPMENT_TYPES
+    bar_weight           = db.Column(db.Float, nullable=True)   # dead weight (bar, carriage) already contained in the logged number
+    # The real stops of an uneven stack, ascending. NULL on everything that
+    # steps evenly -- weight_increment already answers those, and a list
+    # spelling out 5,10,15,... would be the same fact typed twice. Mutually
+    # exclusive with weight_increment in the export.
+    stack_kg             = db.Column(db.JSON, nullable=True)
+    # Values from MUSCLE_GROUPS. NULL and [] mean the same thing; readers
+    # normalise to [].
+    secondary_muscle_groups = db.Column(db.JSON, nullable=True)
 
     session_exercises  = db.relationship('SessionExercise', back_populates='exercise', lazy=True)
     template_exercises = db.relationship('TemplateExercise', back_populates='exercise', lazy=True)
@@ -220,6 +249,13 @@ class WorkoutSession(db.Model):
     # session's structure. The follower's page polls it; an unchanged version
     # means the poll costs a few bytes and no re-render.
     structure_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    # What the lifter weighed on the day of this workout. Deliberately per
+    # session rather than a daily weigh-in log: every question worth asking
+    # of it ("what did I weigh when I lifted this") is a question about a
+    # session, and a second table would need its own screen, its own history
+    # and its own gaps. NULL whenever it was skipped, which is most of them.
+    bodyweight_kg = db.Column(db.Float, nullable=True)
+    notes         = db.Column(db.Text, nullable=True)
 
     template = db.relationship('WorkoutTemplate', back_populates='sessions_started_from')
     exercises = db.relationship(
@@ -245,6 +281,13 @@ class SessionExercise(db.Model):
     # original plus the substitute that replaced it). NULL on every ordinary
     # session, which is almost all of them.
     mirrors_id   = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    # A twinge, flagged with one tap. Deliberately a boolean and not a
+    # description: mid-set is the worst possible moment to ask for prose, and
+    # "something hurt here" is already the whole signal a later reader needs
+    # to go looking.
+    pain  = db.Column(db.Boolean, nullable=False, default=False,
+                      server_default=sa.false())
 
     session  = db.relationship('WorkoutSession', back_populates='exercises')
     exercise = db.relationship('Exercise', back_populates='session_exercises')

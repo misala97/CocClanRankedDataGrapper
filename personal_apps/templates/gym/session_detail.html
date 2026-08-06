@@ -89,6 +89,27 @@
     <button type="button" class="sheet__close" data-close>Fertig</button>
   </div>
   <div class="sheet__body">
+    {# Inside the sheet, never on the start path: the workout begins with one
+       tap and that stays true. Both fields are editable for as long as the
+       session exists. #}
+    <div class="sheet__group">
+      <form method="post" action="{{ url_for('gym.gym_update_session_meta', session_id=session.id) }}">
+        <div class="sheet__row">
+          <label class="label" for="session-bodyweight">Körpergewicht (kg)</label>
+          <input type="number" id="session-bodyweight" name="bodyweight_kg" step="0.1" min="0"
+                 class="input input--num rest-form__input"
+                 value="{{ '%g'|format(session.bodyweight_kg) if session.bodyweight_kg is not none else '' }}"
+                 placeholder="—">
+        </div>
+        <div class="field grow">
+          <label class="label" for="session-notes">Notiz</label>
+          <input type="text" id="session-notes" name="notes" class="input"
+                 value="{{ session.notes or '' }}" placeholder="z. B. nach 8h Schicht">
+        </div>
+        <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
+      </form>
+      <p class="sheet__note">Gilt für dieses Workout.</p>
+    </div>
     {# "Überspringen" used to sit in the panel, and gym_skip_rest's own docstring
        says why: the countdown had taken the confirm button's slot, so "I'm
        ready, go" needed an action of its own. It does not any more -- the
@@ -303,6 +324,24 @@
                value="{{ '%g'|format(se.exercise.weight_increment) if se.exercise.weight_increment is not none else '' }}" placeholder="2,5">
       </form>
       <p class="sheet__note">Gilt für die Übung, nicht nur heute.</p>
+    </div>
+
+    {# The opposite lifetime to the increment above: a twinge and a note
+       belong to this workout, not to the machine. #}
+    <div class="sheet__group">
+      <form method="post" action="{{ url_for('gym.gym_update_session_exercise_meta', session_exercise_id=se.id) }}">
+        <label class="sheet__row">
+          <input type="checkbox" name="pain" class="check" {{ 'checked' if se.pain else '' }}>
+          <span class="check__text">Schmerz / Zwicken</span>
+        </label>
+        <div class="field grow">
+          <label class="label" for="ex-notes-{{ se.id }}">Notiz</label>
+          <input type="text" id="ex-notes-{{ se.id }}" name="notes" class="input"
+                 value="{{ se.notes or '' }}" placeholder="—">
+        </div>
+        <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
+      </form>
+      <p class="sheet__note">Gilt nur für heute.</p>
     </div>
 
     {% if se.sets %}

@@ -9,8 +9,10 @@ from extensions import db
 from models import (
     AppUser, Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession, SessionExercise, SessionSet,
     PushSubscription, PendingPush, SharedSession, SharedSessionExercise, STALE_SESSION_TIMEOUT, MUSCLE_GROUPS,
+    EQUIPMENT_TYPES, EQUIPMENT_LABELS,
 )
 from auth import login_required
+from features.gym import export
 from features.gym import stats
 from features.gym.scope import (
     current_user_id, my_exercises, my_sessions, my_templates,
@@ -106,6 +108,52 @@ def _clean_muscle_group(value, current=None):
     if current and value == current:
         return current
     return None
+
+
+def _clean_equipment(raw, current='stack'):
+    """An unknown value keeps whatever the exercise already had. The form
+    only ever submits the three real values; anything else is a hand-rolled
+    request, and silently widening the column's vocabulary from one of those
+    would break the export's derivation table."""
+    value = (raw or '').strip()
+    return value if value in EQUIPMENT_TYPES else current
+
+
+def _to_stack_steps(raw):
+    """The real stops of an uneven stack, typed as a list.
+
+    Separators are comma or semicolon; a decimal point is a dot (e.g.
+    "5, 13, 21, 29" or "5.5; 13.2"), not a German-locale comma decimal --
+    stack pins are whole kilograms in practice, so that's a documented
+    limitation rather than a case this needs to support. Sorted ascending,
+    deduped, junk dropped. Empty means None rather than [] -- an empty list
+    would read as "this machine has no positions", and the column's whole
+    meaning is "NULL: steps evenly, ask weight_increment instead".
+    """
+    steps = []
+    for chunk in (raw or '').replace(';', ',').split(','):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            value = float(chunk)
+        except ValueError:
+            continue
+        if value > 0:
+            steps.append(value)
+    return sorted(set(steps)) or None
+
+
+def _clean_secondary_groups(values, primary):
+    """Known groups only, in the order given, primary removed. None when
+    nothing is left -- the column treats NULL and [] the same and NULL is
+    the cheaper of the two to store."""
+    seen = []
+    for value in values or []:
+        value = (value or '').strip()
+        if value in MUSCLE_GROUPS and value != primary and value not in seen:
+            seen.append(value)
+    return seen or None
 
 
 def _get_active_session():
@@ -276,7 +324,8 @@ def _seeded_sets(session_, exercise_id, position):
     return [
         SessionSet(
             position=j,
-            weight=stats.deload_weight(prev['weight'], pct, increment),
+            weight=stats.deload_weight(prev['weight'], pct, increment,
+                                       stack_kg=exercise.stack_kg if exercise else None),
             base_weight=prev['weight'],
             reps=stats.DELOAD_REPS,
             base_reps=prev['reps'],
@@ -307,7 +356,7 @@ def _seeded_suggestion(session_, exercise, position):
     if not pct:
         return last
     increment = stats.resolve_increment(exercise.weight_increment, exercise.is_unilateral)
-    return {'weight': stats.deload_weight(last['weight'], pct, increment),
+    return {'weight': stats.deload_weight(last['weight'], pct, increment, stack_kg=exercise.stack_kg),
             'reps': stats.DELOAD_REPS}
 
 
@@ -426,6 +475,7 @@ def _to_performed(session_exercise, completed_sets):
         muscle_group=exercise.muscle_group,
         is_unilateral=exercise.is_unilateral,
         weight_increment=exercise.weight_increment,
+        stack_kg=tuple(exercise.stack_kg) if exercise.stack_kg else None,
         position=session_exercise.position,
         session_id=session_exercise.session_id,
         started_at=session_exercise.session.started_at,
@@ -765,6 +815,12 @@ def session_detail(session_id):
         ]
         for entry, se in zip(data['exercises'], reported_session_exercises):
             entry['set_rows'] = [s for s in se.sets if s.completed]
+            # Same reason as set_rows above: the note-and-pain fields
+            # (session_finished.html's "Sätze & Notizen" sheet)
+            # post to gym_update_session_exercise_meta, which needs the real
+            # SessionExercise id and its current notes/pain -- session_report's
+            # own entries carry neither.
+            entry['session_exercise'] = se
         # session_report only sees PerformedExercise rows, which do not carry
         # the percentage -- it belongs to the session row itself.
         data['deload_pct'] = session_.deload_pct
@@ -841,6 +897,19 @@ def session_detail(session_id):
             for s in se.sets:
                 if s.completed and stats.is_new_best(s.weight, s.reps, prior):
                     record_set_ids.add(s.id)
+    ready_for_more = None
+    if not session_.is_deload and live_se is not None:
+        # Only the live exercise: the queue below is an overview, and seven
+        # badges at once is decoration rather than a decision.
+        ready_for_more = stats.ready_for_more(
+            by_exercise.get(live_se.exercise_id, []), position=live_se.position)
+        # "That weight went easy" is only advice while that weight is what you
+        # are about to lift. Above it, the lifter has already acted -- or the
+        # evidence is older than what the prefill found, and the nudge would
+        # argue with the chips underneath it.
+        planned_top = max((s.weight for s in live_se.sets), default=None)
+        if ready_for_more and planned_top is not None and planned_top > ready_for_more['weight']:
+            ready_for_more = None
     exercises = my_exercises().order_by(Exercise.name).all()
 
     # One tick per set in the whole workout, in order, so the strip reads as
@@ -940,6 +1009,10 @@ def session_detail(session_id):
         suggestions=suggestions,
         stagnation_counts=stagnation_counts,
         record_set_ids=record_set_ids,
+        ready_for_more=ready_for_more,
+        # Passed in rather than hardcoded in the template, so the badge's
+        # copy cannot drift from the rule that decides it.
+        min_full_reps=stats.DELOAD_REPS,
         exercises=exercises,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
@@ -1071,6 +1144,34 @@ def gym_update_session_exercise_rest(session_exercise_id):
     session_id = session_exercise.session_id
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_id))
+
+
+@gym_bp.route('/gym/sessions/<int:session_id>/meta', methods=['POST'])
+@login_required
+def gym_update_session_meta(session_id):
+    """Bodyweight and a note for this workout. Both optional, both editable
+    at any point -- during the session, or weeks later from Verlauf. The
+    start path deliberately does not ask for either: a field between "start"
+    and the first set is a field you skip anyway."""
+    session = owned_session(session_id)
+    session.bodyweight_kg = _to_increment(request.form.get('bodyweight_kg', ''))
+    session.notes = request.form.get('notes', '').strip() or None
+    db.session.commit()
+    return redirect(url_for('gym.session_detail', session_id=session.id))
+
+
+@gym_bp.route('/gym/session-exercises/<int:session_exercise_id>/meta', methods=['POST'])
+@login_required
+def gym_update_session_exercise_meta(session_exercise_id):
+    """A note and a twinge flag, for this exercise in this workout. Both
+    belong to the session rather than the catalogue: "shoulder pinched
+    today" is not a property of the machine."""
+    session_exercise = owned_session_exercise(session_exercise_id)
+    session_exercise.notes = request.form.get('notes', '').strip() or None
+    session_exercise.pain = request.form.get('pain') == 'on'
+    db.session.commit()
+    return redirect(url_for('gym.session_detail',
+                            session_id=session_exercise.session_id))
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/increment', methods=['POST'])
@@ -1272,7 +1373,7 @@ def gym_update_set(set_id):
     session. Deliberately narrow -- unlike gym_toggle_set_complete, this
     never touches `completed`, and works regardless of session.finished_at
     (that route's edit form is only shown for active sessions; this one's
-    form is the quiet "Sätze korrigieren" disclosure in
+    form is the quiet "Sätze & Notizen" disclosure in
     session_finished.html, one per exercise, shown only for finished
     sessions)."""
     set_ = owned_set(set_id)
@@ -1695,7 +1796,9 @@ def gym_toggle_deload(session_id):
                     # 32.5 kg instead of 47.5 kg, and a double-tap compounds.
                     if s.base_weight is None:
                         s.base_weight = s.weight
-                    s.weight = stats.deload_weight(s.base_weight, pct, increment)
+                    s.weight = stats.deload_weight(
+                        s.base_weight, pct, increment,
+                        stack_kg=session_exercise.exercise.stack_kg)
                     # Reps move with the weight, and for the same reason: a
                     # deload is a prescription, not a scaled-down copy of the
                     # last hard session. Captured first so switching the
@@ -2132,7 +2235,8 @@ def gym_export():
     SessionExercise rows are exported (mirroring what a finished session's
     own detail view already shows -- see session_detail's visible_exercises
     computation), each carrying replaces/replaced_by exercise names so a
-    swap is fully traceable."""
+    swap is fully traceable. The payload shape is schema v2 and lives in
+    features/gym/export.py."""
     ids_param = request.args.get('ids', '')
     session_ids = []
     for raw_id in ids_param.split(','):
@@ -2150,38 +2254,7 @@ def gym_export():
         .all()
     ) if session_ids else []
 
-    payload = {
-        'exported_at': dt.datetime.utcnow().isoformat() + 'Z',
-        'requested_session_ids': session_ids,
-        'sessions': [
-            {
-                'id': s.id,
-                'name': s.name,
-                'template_name': s.template.name if s.template else None,
-                'started_at': s.started_at.isoformat() + 'Z',
-                'finished_at': s.finished_at.isoformat() + 'Z',
-                'is_deload': s.is_deload,
-                'deload_pct': s.deload_pct,
-                'exercises': [
-                    {
-                        'exercise_name': se.exercise.name,
-                        'muscle_group': se.exercise.muscle_group,
-                        'position': se.position,
-                        'rest_seconds': se.rest_seconds,
-                        'skipped': se.skipped,
-                        'replaces': se.replaces.exercise.name if se.replaces else None,
-                        'replaced_by': se.replaced_by.exercise.name if se.replaced_by else None,
-                        'sets': [
-                            {'position': st.position, 'weight': st.weight, 'reps': st.reps, 'completed': st.completed}
-                            for st in se.sets
-                        ],
-                    }
-                    for se in s.exercises
-                ],
-            }
-            for s in sessions
-        ],
-    }
+    payload = export.build_payload(sessions, session_ids, dt.datetime.utcnow())
 
     resp = jsonify(payload)
     filename = f"gym-export-{len(sessions)}-workouts.json"
@@ -2270,6 +2343,7 @@ def gym_uebungen():
         'gym/uebungen.html',
         grouped=grouped,
         muscle_groups=MUSCLE_GROUPS,
+        equipment_labels=EQUIPMENT_LABELS,
         open_by_default=len(exercises) <= UEBUNGEN_FOLD_ABOVE,
         # The sheet's rest placeholder said 90 while this is what a blank field
         # actually stores.
@@ -2592,6 +2666,7 @@ def exercise_detail(exercise_id):
     chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
     return render_template(
         'gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS,
+        equipment_labels=EQUIPMENT_LABELS,
         chip_class=chip_class, chip_label=chip_label,
         selected_position_is_default=position_is_default,
         selected_position_reason=default_reason,
@@ -2664,12 +2739,23 @@ def gym_add_exercise():
     if my_exercises().filter_by(name=name).first():
         return redirect(url_for('gym.gym_uebungen', name_taken=1))
 
+    muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''))
+    equipment = _clean_equipment(request.form.get('equipment', ''))
     exercise = Exercise(
         name=name,
-        muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
+        muscle_group=muscle_group,
         default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
         weight_increment=_to_increment(request.form.get('weight_increment', '')),
         is_unilateral=request.form.get('is_unilateral') == 'on',
+        equipment=equipment,
+        bar_weight=_to_increment(request.form.get('bar_weight', '')),
+        # Stack steps only mean something for a stack machine -- the hidden
+        # Stack-Stufen input still submits its old value even when Art has
+        # been switched away from stack, and increment_kg/stack_kg are meant
+        # to be mutually exclusive (the export derives one from the other).
+        stack_kg=_to_stack_steps(request.form.get('stack_kg', '')) if equipment == 'stack' else None,
+        secondary_muscle_groups=_clean_secondary_groups(
+            request.form.getlist('secondary_muscle_groups'), muscle_group),
         user_id=current_user_id(),
     )
     db.session.add(exercise)
@@ -2696,6 +2782,18 @@ def gym_update_exercise(exercise_id):
     exercise.default_rest_seconds = _to_int(request.form.get('default_rest_seconds', ''))
     exercise.weight_increment = _to_increment(request.form.get('weight_increment', ''))
     exercise.is_unilateral = request.form.get('is_unilateral') == 'on'
+    exercise.equipment = _clean_equipment(request.form.get('equipment', ''),
+                                          current=exercise.equipment)
+    exercise.bar_weight = _to_increment(request.form.get('bar_weight', ''))
+    # Stack steps only mean something for a stack machine -- the hidden
+    # Stack-Stufen input still submits its old value even when Art has been
+    # switched away from stack, and increment_kg/stack_kg are meant to be
+    # mutually exclusive (the export derives one from the other).
+    exercise.stack_kg = (
+        _to_stack_steps(request.form.get('stack_kg', '')) if exercise.equipment == 'stack' else None
+    )
+    exercise.secondary_muscle_groups = _clean_secondary_groups(
+        request.form.getlist('secondary_muscle_groups'), exercise.muscle_group)
     db.session.commit()
     return redirect(url_for(
         'gym.exercise_detail', exercise_id=exercise.id, name_taken=1 if name_taken else None,

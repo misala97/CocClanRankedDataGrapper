@@ -580,6 +580,10 @@ label.label {
 
 .field { display: flex; flex-direction: column; gap: var(--sp-1); }
 .field > .label { color: var(--dim); }
+/* An author `display` beats the UA `[hidden]{display:none}` on a tie -- the
+   stack-steps field toggles [hidden] via JS when Art isn't Steckgewicht, and
+   without this it stayed painted, flex-laid-out, right where it was. */
+.field[hidden] { display: none; }
 
 .input, .select, .textarea {
   min-block-size: 44px;
@@ -1730,6 +1734,19 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 .live__stall-lbl {
   display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--stall-ink);
+}
+
+/* Same shape as .live__stall above, different ink on purpose: a stall is a
+   warning and wears --stall-ink, readiness is the good news and wears the
+   same accent the chip you are about to perform does. */
+.live__ready {
+  margin-top: var(--sp-4); padding: var(--sp-3);
+  border-radius: var(--r-inset); box-shadow: inset 0 0 0 1px var(--live);
+  font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
+}
+.live__ready-lbl {
+  display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--live-ink);
 }
 
 /* ---- set chips ---- */

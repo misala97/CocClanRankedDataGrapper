@@ -194,6 +194,30 @@
         <label class="label" for="uebungen-add-increment">Schrittweite (kg)</label>
         <input type="number" id="uebungen-add-increment" name="weight_increment" step="0.25" min="0" class="input input--num" placeholder="2,5">
       </div>
+      <div class="field grow">
+        <label class="label" for="uebungen-add-equipment">Art</label>
+        <select id="uebungen-add-equipment" name="equipment" class="select" data-role="equipment">
+          {% for value, label in equipment_labels.items() %}
+          <option value="{{ value }}" {{ 'selected' if value == 'stack' else '' }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="uebungen-add-bar">Stangengewicht (kg)</label>
+        <input type="number" id="uebungen-add-bar" name="bar_weight" step="0.5" min="0" class="input input--num" placeholder="0">
+      </div>
+      <div class="field grow" data-role="stack-field">
+        <label class="label" for="uebungen-add-stack">Stack-Stufen (kg, kommagetrennt)</label>
+        <input type="text" id="uebungen-add-stack" name="stack_kg" class="input" placeholder="5, 13, 21, 29">
+      </div>
+      <div class="field grow">
+        <label class="label" for="uebungen-add-secondary">Sekundäre Muskelgruppen</label>
+        <select id="uebungen-add-secondary" name="secondary_muscle_groups" class="select" multiple size="5">
+          {% for mg in muscle_groups %}
+          <option value="{{ mg }}">{{ mg }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <label class="sheet__row">
         <input type="checkbox" name="is_unilateral" class="check">
         <span class="check__text">Einseitig (pro Seite)</span>
@@ -424,6 +448,15 @@ document.addEventListener('click', function (e) {
         var open = e.target.closest('dialog');
         if (open) { open.close(); }
     }
+});
+
+// The stack-steps field only applies to a stack. Shown and hidden rather
+// than always visible: on a dumbbell it is not an empty answer, it is a
+// meaningless question.
+document.addEventListener('change', function (e) {
+    if (!e.target.matches || !e.target.matches('[data-role="equipment"]')) return;
+    var field = document.querySelector('[data-role="stack-field"]');
+    if (field) field.hidden = e.target.value !== 'stack';
 });
 </script>
 {% endblock %}

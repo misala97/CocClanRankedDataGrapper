@@ -215,7 +215,7 @@
     <button type="button" class="finished__correct sheet-open" data-sheet="sheet-correct"
             aria-haspopup="dialog" aria-controls="sheet-correct">
       {% with icon='edit' %}{% include 'gym/_icon.html' %}{% endwith %}
-      Sätze korrigieren
+      Sätze &amp; Notizen
     </button>
     {% else %}
     <p class="empty">Keine erledigten Sätze in diesem Workout.</p>
@@ -262,6 +262,17 @@
   {# Deleting a workout is a rare correction, not the way out of this screen.
      It used to be the largest, brightest, right-most element here. #}
   <div class="quiet-acts">
+    {#- Bodyweight and a session note: editable "at any point during or after
+        the workout" per spec, but this screen -- the ONLY one a finished
+        session ever renders -- carried neither field. Forgetting to log
+        bodyweight before tapping "Workout beenden" made it unrecordable
+        forever. Same sheet, same fields, same route
+        (gym_update_session_meta) as the live page's Workout-options sheet;
+        owned_session() has no finished-check, so the route already accepted
+        this, only the UI was missing. -#}
+    <button type="button" class="quiet-acts__btn sheet-open" data-sheet="sheet-meta">
+      Körpergewicht &amp; Notiz
+    </button>
     <form method="post" action="{{ url_for('gym.gym_toggle_deload', session_id=session.id) }}">
       <input type="hidden" name="on" value="{{ '0' if session.is_deload else '1' }}">
       <input type="hidden" name="pct" value="{{ session.deload_pct or deload_default_pct }}">
@@ -276,11 +287,41 @@
   </div>
 </div>
 
+{# Bodyweight and the session note. Identical markup and route to the live
+   page's sheet-session group (session_detail.html) -- ported here rather than
+   reinvented, so the two forms cannot drift apart. #}
+<dialog class="sheet" id="sheet-meta" aria-labelledby="sheet-meta-title">
+  <div class="sheet__head">
+    <h2 class="sheet__title" id="sheet-meta-title">Workout</h2>
+    <button type="button" class="sheet__close" data-close>Fertig</button>
+  </div>
+  <div class="sheet__body">
+    <div class="sheet__group">
+      <form method="post" action="{{ url_for('gym.gym_update_session_meta', session_id=session.id) }}">
+        <div class="sheet__row">
+          <label class="label" for="finished-session-bodyweight">Körpergewicht (kg)</label>
+          <input type="number" id="finished-session-bodyweight" name="bodyweight_kg" step="0.1" min="0"
+                 class="input input--num rest-form__input"
+                 value="{{ '%g'|format(session.bodyweight_kg) if session.bodyweight_kg is not none else '' }}"
+                 placeholder="—">
+        </div>
+        <div class="field grow">
+          <label class="label" for="finished-session-notes">Notiz</label>
+          <input type="text" id="finished-session-notes" name="notes" class="input"
+                 value="{{ session.notes or '' }}" placeholder="z. B. nach 8h Schicht">
+        </div>
+        <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
+      </form>
+      <p class="sheet__note">Gilt für dieses Workout.</p>
+    </div>
+  </div>
+</dialog>
+
 {# Corrections live in a sheet: a typo is rare, and the editor is a dense grid
    of number fields that has no business sitting under the debrief every time. #}
 <dialog class="sheet" id="sheet-correct" aria-labelledby="sheet-correct-title">
   <div class="sheet__head">
-    <h2 class="sheet__title" id="sheet-correct-title">Sätze korrigieren</h2>
+    <h2 class="sheet__title" id="sheet-correct-title">Sätze &amp; Notizen</h2>
     <button type="button" class="sheet__close" data-close>Fertig</button>
   </div>
   <div class="sheet__body">
@@ -303,6 +344,26 @@
         </button>
       </form>
       {% endfor %}
+      {#- The opposite lifetime to the sets above: a twinge and a note belong
+          to this workout, not to the set values. Same fields, same route
+          (gym_update_session_exercise_meta) as the live page's per-exercise
+          sheet -- ported here for the same reason the bodyweight sheet was:
+          this screen is the only one a finished session ever renders, and the
+          route already accepted the write with nowhere to send it from. -#}
+      {% if entry.session_exercise %}
+      <form method="post" action="{{ url_for('gym.gym_update_session_exercise_meta', session_exercise_id=entry.session_exercise.id) }}">
+        <label class="sheet__row">
+          <input type="checkbox" name="pain" class="check" {{ 'checked' if entry.session_exercise.pain else '' }}>
+          <span class="check__text">Schmerz / Zwicken</span>
+        </label>
+        <div class="field grow">
+          <label class="label" for="finished-ex-notes-{{ entry.session_exercise.id }}">Notiz</label>
+          <input type="text" id="finished-ex-notes-{{ entry.session_exercise.id }}" name="notes" class="input"
+                 value="{{ entry.session_exercise.notes or '' }}" placeholder="—">
+        </div>
+        <button type="submit" class="btn btn--ghost btn--sm">Speichern</button>
+      </form>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

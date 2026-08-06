@@ -2,12 +2,14 @@
 database, and no fixtures beyond plain data."""
 import datetime as dt
 
+import pytest
+
 from features.gym import stats
 
 
 def perf(sets, position=1, started_at=None, is_unilateral=False,
          exercise_id=1, name='Bankdruecken', muscle_group='Brust', session_id=1,
-         is_deload=False, weight_increment=None):
+         is_deload=False, weight_increment=None, stack_kg=None):
     """Build one PerformedExercise. `sets` is [(weight, reps), ...]."""
     return stats.PerformedExercise(
         exercise_id=exercise_id,
@@ -20,6 +22,7 @@ def perf(sets, position=1, started_at=None, is_unilateral=False,
         sets=tuple(sets),
         is_deload=is_deload,
         weight_increment=weight_increment,
+        stack_kg=stack_kg,
     )
 
 
@@ -29,6 +32,22 @@ def test_performed_exercise_defaults_to_not_deload():
 
 def test_performed_exercise_carries_the_deload_flag():
     assert perf([(80.0, 8)], is_deload=True).is_deload is True
+
+
+def test_performed_exercise_defaults_stack_kg_to_none():
+    # Built directly, bypassing perf()'s own default -- perf() now always
+    # passes stack_kg=, so calling it here would test the helper's default
+    # rather than the dataclass's own.
+    row = stats.PerformedExercise(
+        exercise_id=1, name='Bankdruecken', muscle_group='Brust',
+        is_unilateral=False, position=1, session_id=1,
+        started_at=dt.datetime(2020, 1, 1), sets=((80.0, 8),),
+    )
+    assert row.stack_kg is None
+
+
+def test_performed_exercise_carries_stack_kg():
+    assert perf([(80.0, 8)], stack_kg=(5, 13, 21)).stack_kg == (5, 13, 21)
 
 
 def test_epley_1rm_at_one_rep_is_the_weight_itself():
@@ -661,6 +680,56 @@ def test_deload_weight_never_floors_below_one_stack_plate():
     assert stats.deload_weight(9.0, 70, 9.0) == 9.0
 
 
+def test_snap_to_stack_returns_the_weight_when_there_are_no_steps():
+    """Everything in this gym steps evenly, so this is the path almost every
+    exercise takes: no stops recorded, increment logic untouched."""
+    assert stats.snap_to_stack(42.0, None, 'down') == 42.0
+    assert stats.snap_to_stack(42.0, [], 'up') == 42.0
+
+
+def test_snap_to_stack_lands_on_a_real_stop():
+    steps = [5, 13, 21, 29, 37, 45]
+    assert stats.snap_to_stack(42.0, steps, 'down') == 37
+    assert stats.snap_to_stack(42.0, steps, 'up') == 45
+    assert stats.snap_to_stack(37.0, steps, 'down') == 37, 'an exact stop stays put'
+    assert stats.snap_to_stack(37.0, steps, 'up') == 37
+
+
+def test_snap_to_stack_clamps_at_the_ends():
+    steps = [5, 13, 21]
+    assert stats.snap_to_stack(2.0, steps, 'down') == 5, 'below the lightest stop'
+    assert stats.snap_to_stack(99.0, steps, 'up') == 21, 'above the heaviest'
+
+
+def test_snap_to_stack_rejects_a_direction_that_is_not_down_or_up():
+    # Anything other than the literal 'down' silently fell through to the
+    # 'up' branch -- for a deload that is exactly the direction its sibling
+    # deload_weight() calls "the one direction that defeats the point".
+    with pytest.raises(ValueError):
+        stats.snap_to_stack(42.0, [5, 13, 21], 'DOWN')
+
+
+def test_deload_lands_on_a_real_stop_when_steps_are_known():
+    """The bug this guards: 70 % of 69 on an 8 kg stack sitting on a 5 kg
+    carriage is 48.3, and 48 is not a position the machine has."""
+    steps = [5, 13, 21, 29, 37, 45, 53, 61, 69, 77]
+    weight = stats.deload_weight(69.0, 70, 8, stack_kg=steps)
+    assert weight in steps
+    assert weight <= 69 * 0.7 + 0.001
+
+
+def test_deload_snap_overrides_a_grid_position_the_stack_does_not_have():
+    """The case the previous test cannot tell apart from plain anchoring:
+    here the working weight (50) is itself a real stop, but the anchoring
+    grid (stepping down in 6s from 50) lands on 32 -- not one of this
+    machine's genuinely uneven stops (5, 12, 18, 29, 33, 50). Without the
+    snap this prescribes a weight nobody can select; with it, the answer is
+    the nearest stop at or below the grid's own 32, which is 29.
+    """
+    steps = [5, 12, 18, 29, 33, 50]
+    assert stats.deload_weight(50.0, 70, 6, stack_kg=steps) == 29
+
+
 def test_next_weight_adds_the_exercises_own_increment():
     assert stats._next_weight(81.0, 9.0) == 90.0
     assert stats._next_weight(80.0, 2.5) == 82.5
@@ -679,6 +748,43 @@ def test_session_report_suggests_the_exercises_own_increment():
 
     assert report['advice'][0]['stuck_at'] == 63.0
     assert report['advice'][0]['suggested_weight'] == 72.0
+
+
+def test_session_report_suggests_a_real_stack_stop_not_an_invented_position():
+    # Same stagnation setup, but on a stack with uneven stops: weight + increment
+    # (63 + 9 = 72) happens to land on a real stop here by coincidence, so use
+    # a stack where the naive sum is NOT a stop -- 63 + 9 = 72 is not one of
+    # these steps, and the honest "go heavier" answer is the nearest stop AT
+    # OR ABOVE it, 77.
+    steps = (5, 13, 21, 29, 37, 45, 53, 61, 69, 77)
+    history = [perf([(72.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(0), session_id=1)]
+    history += [
+        perf([(63.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(7 * n), session_id=n + 1)
+        for n in range(1, 4)
+    ]
+    current = [perf([(63.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(28), session_id=9)]
+    report = stats.session_report(current, history)
+
+    assert report['advice'][0]['stuck_at'] == 63.0
+    assert report['advice'][0]['suggested_weight'] == 77.0
+
+
+def test_session_report_drops_advice_when_already_topped_out_on_the_stack():
+    """Same stagnation setup again, but stuck on the HEAVIEST stop this stack
+    has. snap_to_stack('up') clamps a jump past the top back down to it, so
+    the naive advice would tell the lifter to "go heavier" and then name the
+    exact weight they are already stuck at -- worse than no advice. The right
+    answer is no advice entry at all, not a same-number one."""
+    steps = (5, 13, 21, 29, 37, 45, 53, 61, 69, 77)
+    history = [
+        perf([(77.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(7 * n), session_id=n + 1)
+        for n in range(4)
+    ]
+    current = [perf([(77.0, 8)], weight_increment=9.0, stack_kg=steps, started_at=day(28), session_id=9)]
+    report = stats.session_report(current, history)
+
+    assert report['exercises'][0]['verdict'] == 'stagniert'
+    assert report['advice'] == []
 
 
 def test_deload_row_does_not_count_as_a_session_without_a_pr():
@@ -1008,3 +1114,125 @@ def test_rest_medians_ignores_gaps_with_no_planned_time():
     contribute a plan, and must not drag the planned median toward zero."""
     from features.gym import stats
     assert stats.rest_medians([(180, 150), (200, None), (220, 150)]) == (150, 200)
+
+
+def test_two_top_weight_sets_at_ten_reps_say_go_heavier():
+    """The rule, in its plainest form: the working weight has become easy."""
+    row = perf([(35.0, 10), (35.0, 11), (35.0, 8)])
+    assert stats.ready_for_more([row]) == {'sets': 2, 'weight': 35.0, 'is_latest': True}
+
+
+def test_nine_reps_is_not_enough():
+    """DELOAD_REPS is this app's own definition of a full set. Nine is a set
+    you finished, not one that had room left in it."""
+    row = perf([(35.0, 9), (35.0, 9), (35.0, 9)])
+    assert stats.ready_for_more([row]) is None
+
+
+def test_one_good_top_set_is_not_a_pattern():
+    row = perf([(35.0, 12), (30.0, 12), (30.0, 12)])
+    assert stats.ready_for_more([row]) is None
+
+
+def test_only_the_sessions_own_heaviest_weight_counts():
+    """A ramp-up set at a lighter weight says nothing about whether the
+    working weight is easy, however many reps it ran to."""
+    row = perf([(20.0, 15), (20.0, 15), (35.0, 10)])
+    assert stats.ready_for_more([row]) is None
+
+
+def test_a_deload_session_is_not_evidence():
+    """Two easy sets at a deload's top weight are the expected outcome, not
+    readiness -- so the judgement falls through to the last real session."""
+    deload = perf([(25.0, 10), (25.0, 10)], is_deload=True,
+                  started_at=dt.datetime(2026, 8, 3), session_id=2)
+    real = perf([(35.0, 8), (35.0, 7)],
+                started_at=dt.datetime(2026, 7, 27), session_id=1)
+    assert stats.ready_for_more([deload, real]) is None
+
+
+def test_the_newest_qualifying_session_wins():
+    older = perf([(30.0, 12), (30.0, 12)],
+                 started_at=dt.datetime(2026, 7, 20), session_id=1)
+    newer = perf([(35.0, 10), (35.0, 11)],
+                 started_at=dt.datetime(2026, 7, 27), session_id=2)
+    assert stats.ready_for_more([older, newer]) == {'sets': 2, 'weight': 35.0, 'is_latest': True}
+
+
+def test_a_deload_logged_afterwards_does_not_downgrade_the_wording():
+    """is_latest is measured among the sessions that COUNT. A deload after the
+    evidence must leave "Letztes Mal" intact: nothing on screen treats that
+    deload as the last time either -- the chips' prefill skips it too."""
+    evidence = perf([(35.0, 10), (35.0, 11)],
+                    started_at=dt.datetime(2026, 7, 27), session_id=1)
+    later_deload = perf([(25.0, 10), (25.0, 10)], is_deload=True,
+                        started_at=dt.datetime(2026, 8, 3), session_id=2)
+    assert stats.ready_for_more([evidence, later_deload]) == {
+        'sets': 2, 'weight': 35.0, 'is_latest': True}
+
+
+def test_a_thin_slot_falls_back_to_every_position():
+    """_scoped()'s own rule: fewer than two sessions in this slot cannot
+    support a judgement, and answering from another slot beats answering
+    'no idea'.
+
+    Three qualifying sets, not two: a mutant that hardcodes the returned
+    count to 2 (`'sets': len(qualifying)` -> `'sets': 2`) survives every
+    other fixture in this file, because they all happen to have exactly two
+    qualifying sets. This is the one that pins the real count."""
+    row = perf([(35.0, 10), (35.0, 10), (35.0, 11)], position=1,
+               started_at=dt.datetime(2026, 7, 27), session_id=1)
+    assert stats.ready_for_more([row], position=7) == {
+        'sets': 3, 'weight': 35.0, 'is_latest': True}
+
+
+def test_a_populated_slot_is_judged_on_its_own_sessions():
+    """Two sessions in slot 7 is enough to answer from slot 7 alone, so slot
+    1's easy session must not leak in.
+
+    The leaking session is deliberately the NEWEST row (2026-07-28, session 4)
+    -- _scoped()'s fallback path reads scoped[-1], and if position were ever
+    ignored, this is the row that would win. An older leaking session would
+    let position-blind code land on the real slot-7 session by accident and
+    pass for the wrong reason. It also carries three qualifying sets, not
+    two, so this stays a real test of scoping even against a strong
+    temptation to leak in -- not just a coincidence of a weak fixture."""
+    easy_elsewhere = perf([(35.0, 12), (35.0, 12), (35.0, 11)], position=1,
+                          started_at=dt.datetime(2026, 7, 28), session_id=4)
+    hard_here_a = perf([(35.0, 6), (35.0, 5)], position=7,
+                       started_at=dt.datetime(2026, 7, 24), session_id=2)
+    hard_here_b = perf([(35.0, 7), (35.0, 6)], position=7,
+                       started_at=dt.datetime(2026, 7, 27), session_id=3)
+    rows = [easy_elsewhere, hard_here_a, hard_here_b]
+    assert stats.ready_for_more(rows, position=7) is None
+
+
+def test_no_history_says_nothing():
+    assert stats.ready_for_more([]) is None
+
+
+def test_a_bodyweight_exercise_never_qualifies():
+    """At 0 kg every set trivially 'matches the heaviest weight', so without
+    this guard 3x12 pull-ups would badge forever -- there is no weight to
+    add, so the badge has nothing honest left to suggest."""
+    row = perf([(0.0, 12), (0.0, 12), (0.0, 12)])
+    assert stats.ready_for_more([row]) is None
+
+
+def test_an_older_qualifying_session_is_not_the_latest():
+    """is_latest is false the moment a NEWER session exists anywhere in the
+    rows, even at a different position and even one that does not itself
+    qualify -- the badge must not say 'Letztes Mal' about a session that was
+    not, in fact, the last one trained.
+
+    Slot 1 has two sessions of its own so _scoped() judges from slot 1
+    without falling back -- the evidence is genuinely the newest SLOT-1
+    session, just not the newest session overall."""
+    old_p1 = perf([(30.0, 12), (30.0, 12)], position=1,
+                  started_at=dt.datetime(2026, 7, 1), session_id=1)
+    new_p1 = perf([(35.0, 10), (35.0, 11)], position=1,
+                  started_at=dt.datetime(2026, 7, 20), session_id=2)
+    newer_p3 = perf([(45.0, 8), (45.0, 7), (45.0, 6)], position=3,
+                    started_at=dt.datetime(2026, 8, 1), session_id=3)
+    result = stats.ready_for_more([old_p1, new_p1, newer_p3], position=1)
+    assert result == {'sets': 2, 'weight': 35.0, 'is_latest': False}

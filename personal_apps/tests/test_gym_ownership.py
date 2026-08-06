@@ -182,6 +182,7 @@ SESSION_ROUTES = [
     ('POST', '/gym/session/{}/invite',             'session_id'),
     ('GET',  '/gym/session/{}/sync.json',          'session_id'),
     ('GET',  '/gym/session/{}/queue.html',         'session_id'),
+    ('POST', '/gym/sessions/{}/meta',              'session_id'),
 ]
 
 
@@ -294,6 +295,7 @@ DESCENDANT_ROUTES = [
     ('POST', '/gym/set/{}/delete',                 'set_id'),
     ('POST', '/gym/set/{}/toggle_complete',        'set_id'),
     ('POST', '/gym/set/{}/update',                 'set_id'),
+    ('POST', '/gym/session-exercises/{}/meta',     'session_exercise_id'),
 ]
 
 

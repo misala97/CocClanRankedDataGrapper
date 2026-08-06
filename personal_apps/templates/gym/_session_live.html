@@ -77,23 +77,45 @@
     </p>
     {% endif %}
 
+    {# Same slot as Stagniert and for the same reason: this is advice about
+       the numbers you are about to set, so it belongs above the workspace,
+       not under the confirm button. The two never contradict each other --
+       stagnation counts sessions without a PR, this one reads the last
+       session's reps -- but if both fire, both are worth saying. #}
+    {% if ready_for_more %}
+    <p class="live__ready">
+      <span class="live__ready-lbl">Bereit</span>
+      {# One text line, not one per {{ }}: a line break here is a literal
+         newline in the rendered HTML (Jinja does not collapse it the way a
+         browser collapses visual whitespace), and a test asserting on the
+         rendered sentence would otherwise see "auf\n      35,0" instead of
+         "auf 35,0". #}
+      {% if ready_for_more.is_latest %}Letztes Mal{% else %}Zuletzt in diesem Slot{% endif %} {{ ready_for_more.sets }} Sätze auf {{ ("%.1f"|format(ready_for_more.weight)).replace(".", ",") }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mit {{ min_full_reps }}+ Wdh.
+    </p>
+    {% endif %}
+
     {# Set chips: outline = offen, filled rose = erledigt, gold = ein Rekord,
        outlined warm = the one you are about to do. Tapping a done chip posts
        the same toggle endpoint the old checkbox did, so un-checking a set is
        still one tap and still re-opens it for editing.
 
-       A record says the word as well as wearing the colour (4.2). It has to,
-       twice over: the two fills are 1.03:1 apart in the dark theme, and the
-       chip's own aria-label was byte-identical to a logged set's, so the
-       rarest state in the app did not exist for a screen reader at all. The
-       chip cannot hold the word itself at any width the row wraps to, so the
-       visible one sits under the chip row and the chip keeps carrying the
-       load. Same treatment for the rail: a skipped segment sat 1.35:1 from an
-       untouched one with no text anywhere, so it now says so in the label. #}
+       Every chip shows the same weight-times-reps -- a filled chip is the
+       result it was logged at, an outlined chip is the plan it is prefilled
+       for. Without the plan the lifter at the machine had to remember last
+       week's numbers just to decide whether to add weight, which is the one
+       thing a tracker exists to do for them. The ordinal that used to be the
+       open chip's only text now lives in the aria-label instead, alongside
+       the same disambiguation a record needed: the two fills are 1.03:1
+       apart in the dark theme, and the chip's own aria-label was byte-
+       identical to a logged set's, so the rarest state in the app did not
+       exist for a screen reader at all. Same treatment for the rail: a
+       skipped segment sat 1.35:1 from an untouched one with no text
+       anywhere, so it now says so in the label. #}
     {% if live_sets %}
     <div class="sets">
       {% for s in live_sets %}
       {% set is_record = s.completed and s.id in record_set_ids %}
+      {% set weight_de = ("%.1f"|format(s.weight)).replace(".", ",") %}
       {# The chip states the state it wants, not "flip me" -- see
          gym_toggle_set_complete. A done chip un-logs, an open chip logs. #}
       <form method="post" action="{{ url_for('gym.gym_toggle_set_complete', set_id=s.id) }}" class="set-form">
@@ -102,8 +124,8 @@
         <input type="hidden" name="completed" value="{{ '0' if s.completed else '1' }}">
         <button type="submit"
                 class="set{% if is_record %} is-record{% elif s.completed %} is-done{% elif next_set and s.id == next_set.id %} is-now{% endif %}"
-                aria-label="{% if is_record %}Satz {{ loop.index }} — Rekord, {{ s.weight }} kg mal {{ s.reps }} — antippen zum Zurücksetzen{% elif s.completed %}Satz {{ loop.index }} erledigt, {{ s.weight }} kg mal {{ s.reps }} — antippen zum Zurücksetzen{% else %}Satz {{ loop.index }}, offen{% endif %}">
-          {% if s.completed %}{{ ("%.1f"|format(s.weight)).replace(".", ",") }} × {{ s.reps }}{% else %}Satz {{ loop.index }}{% endif %}
+                aria-label="{% if is_record %}Satz {{ loop.index }} — Rekord, {{ weight_de }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mal {{ s.reps }} — antippen zum Zurücksetzen{% elif s.completed %}Satz {{ loop.index }} erledigt, {{ weight_de }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mal {{ s.reps }} — antippen zum Zurücksetzen{% else %}Satz {{ loop.index }}, geplant {{ weight_de }} kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %} mal {{ s.reps }}{% endif %}">
+          {{ weight_de }} × {{ s.reps }}
         </button>
       </form>
       {% endfor %}
