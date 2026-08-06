@@ -1159,6 +1159,18 @@ def test_the_newest_qualifying_session_wins():
     assert stats.ready_for_more([older, newer]) == {'sets': 2, 'weight': 35.0, 'is_latest': True}
 
 
+def test_a_deload_logged_afterwards_does_not_downgrade_the_wording():
+    """is_latest is measured among the sessions that COUNT. A deload after the
+    evidence must leave "Letztes Mal" intact: nothing on screen treats that
+    deload as the last time either -- the chips' prefill skips it too."""
+    evidence = perf([(35.0, 10), (35.0, 11)],
+                    started_at=dt.datetime(2026, 7, 27), session_id=1)
+    later_deload = perf([(25.0, 10), (25.0, 10)], is_deload=True,
+                        started_at=dt.datetime(2026, 8, 3), session_id=2)
+    assert stats.ready_for_more([evidence, later_deload]) == {
+        'sets': 2, 'weight': 35.0, 'is_latest': True}
+
+
 def test_a_thin_slot_falls_back_to_every_position():
     """_scoped()'s own rule: fewer than two sessions in this slot cannot
     support a judgement, and answering from another slot beats answering

@@ -143,6 +143,14 @@ already loads this exercise's history for the suggestion and record logic.
 - three qualifying sets at a different position, two or more sessions in this
   slot that do not qualify → `None`
 - no history at all → `None`
+- the evidence session is the newest one in the rows → `is_latest: True`; an
+  older same-slot session with a newer session elsewhere → `is_latest: False`
+- a deload logged AFTER the evidence → still `is_latest: True`, because
+  nothing on screen counts that deload as the last time either
+- every set at weight 0 (a bodyweight exercise) → `None`, there is no weight
+  to add
+- today's heaviest planned OR already-logged set is above the evidence weight
+  → the route drops the badge entirely; equal or lighter → it still renders
 
 Each test states the number it asserts on, not merely that a boolean came back.
 

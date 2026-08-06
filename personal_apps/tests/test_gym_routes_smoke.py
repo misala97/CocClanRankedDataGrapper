@@ -1837,8 +1837,15 @@ def test_the_ready_badge_never_claims_a_false_letztes_mal(client):
         db.session.add(today_se)
         db.session.flush()
         for i, reps in enumerate((8, 7, 6), start=1):
+            # Set 1 is logged at 45,0 and the rest are planned BELOW the
+            # evidence weight, so the heaviest thing about today exists only
+            # as a completed set. "The lifter has already acted" is the
+            # retirement rule's own justification, and narrowing it to open
+            # sets would otherwise pass the entire suite.
             db.session.add(SessionSet(session_exercise_id=today_se.id, position=i,
-                                      weight=45.0, reps=reps, completed=False))
+                                      weight=45.0 if i == 1 else 30.0, reps=reps,
+                                      completed=(i == 1),
+                                      completed_at=dt.datetime.utcnow() if i == 1 else None))
         db.session.commit()
         ids = (today.id, old_a.id, old_b.id, recent.id, exercise.id)
 

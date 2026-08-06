@@ -325,6 +325,10 @@ def ready_for_more(rows, position=None):
                   if weight == top and reps >= DELOAD_REPS]
     if len(qualifying) < 2:
         return None
+    # "Newest" among the sessions that COUNT, not among all of them: a deload
+    # logged after the evidence must not downgrade the wording, because
+    # nothing on screen treats that deload as the last time either -- the
+    # chips' prefill skips it for the same reason this judgement does.
     newest = _chronological(prog)[-1]
     return {'sets': len(qualifying), 'weight': top, 'is_latest': last is newest}
 
