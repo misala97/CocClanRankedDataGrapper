@@ -1170,9 +1170,15 @@ def test_a_thin_slot_falls_back_to_every_position():
 
 def test_a_populated_slot_is_judged_on_its_own_sessions():
     """Two sessions in slot 7 is enough to answer from slot 7 alone, so slot
-    1's easy session must not leak in."""
+    1's easy session must not leak in.
+
+    The leaking session is deliberately the NEWEST row (2026-07-28, session 4)
+    -- _scoped()'s fallback path reads scoped[-1], and if position were ever
+    ignored, this is the row that would win. An older leaking session would
+    let position-blind code land on the real slot-7 session by accident and
+    pass for the wrong reason."""
     easy_elsewhere = perf([(35.0, 12), (35.0, 12)], position=1,
-                          started_at=dt.datetime(2026, 7, 20), session_id=1)
+                          started_at=dt.datetime(2026, 7, 28), session_id=4)
     hard_here_a = perf([(35.0, 6), (35.0, 5)], position=7,
                        started_at=dt.datetime(2026, 7, 24), session_id=2)
     hard_here_b = perf([(35.0, 7), (35.0, 6)], position=7,

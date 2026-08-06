@@ -5,6 +5,7 @@ import pytest
 from app import app as flask_app
 from conftest import _admin_id, acting_as
 from extensions import db
+from features.gym import stats
 from models import Exercise, SessionExercise, SessionSet, WorkoutSession
 
 import datetime as dt
@@ -1626,7 +1627,8 @@ def test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for(client):
 
 def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
     """Two sets at last session's top weight with 10+ reps, so the live card
-    says so before the first set of today."""
+    says so before the first set of today -- and stays quiet once the
+    session in progress is a deliberately light deload."""
     with flask_app.app_context():
         exercise = Exercise(name='ZZ Ready Lift', user_id=_admin_id(),
                             muscle_group='Rücken')
@@ -1658,8 +1660,75 @@ def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
 
     try:
         html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
-        assert 'live__ready' in html
+        assert 'class="live__ready"' in html
+        assert '>Bereit<' in html
         assert 'Letztes Mal 2 Sätze auf 35,0 kg' in html
+        # The threshold copy has to track stats.DELOAD_REPS, not restate it --
+        # read it from the constant so the two cannot silently drift apart.
+        assert f'mit {stats.DELOAD_REPS}+ Wdh.' in html
+
+        # Same session, now flagged as a deload: the badge must disappear even
+        # though the prior (non-deload) sessions are still in by_exercise --
+        # a "go heavier" nudge is wrong advice in a deliberately light week.
+        with flask_app.app_context():
+            today_row = db.session.get(WorkoutSession, ids[0])
+            today_row.is_deload = True
+            db.session.commit()
+
+        html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
+        assert 'live__ready' not in html
+    finally:
+        with flask_app.app_context():
+            for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
+                                  (Exercise, ids[2])):
+                row = db.session.get(model, row_id)
+                if row is not None:
+                    db.session.delete(row)
+            db.session.commit()
+
+
+def test_the_ready_badge_says_je_seite_for_unilateral_exercises(client):
+    """The badge's evidence weight is logged per side on a unilateral
+    exercise, so the sentence has to say so -- same rule as the set chips'
+    own 'kg je Seite' label, just a different line of the template.
+
+    Asserts on the full tail of the badge's sentence (not just 'kg je Seite'
+    on its own): the set-chip weight stepper carries the identical 'kg je
+    Seite' text on unilateral exercises regardless of whether the badge
+    renders at all, so a bare substring check would pass even with the
+    badge's own {% if live_se.exercise.is_unilateral %} clause deleted."""
+    with flask_app.app_context():
+        exercise = Exercise(name='ZZ Ready Unilateral Lift', user_id=_admin_id(),
+                            muscle_group='Rücken', is_unilateral=True)
+        db.session.add(exercise)
+        db.session.flush()
+        past = WorkoutSession(name='ZZ Ready Unilateral Past', user_id=_admin_id(),
+                              started_at=dt.datetime.utcnow() - dt.timedelta(days=7),
+                              finished_at=dt.datetime.utcnow() - dt.timedelta(days=7))
+        db.session.add(past)
+        db.session.flush()
+        past_se = SessionExercise(session_id=past.id, exercise_id=exercise.id, position=1)
+        db.session.add(past_se)
+        db.session.flush()
+        for i, reps in enumerate((10, 11), start=1):
+            db.session.add(SessionSet(session_exercise_id=past_se.id, position=i,
+                                      weight=20.0, reps=reps, completed=True,
+                                      completed_at=dt.datetime.utcnow() - dt.timedelta(days=7)))
+        today = WorkoutSession(name='ZZ Ready Unilateral Today', user_id=_admin_id(),
+                               started_at=dt.datetime.utcnow())
+        db.session.add(today)
+        db.session.flush()
+        today_se = SessionExercise(session_id=today.id, exercise_id=exercise.id, position=1)
+        db.session.add(today_se)
+        db.session.flush()
+        db.session.add(SessionSet(session_exercise_id=today_se.id, position=1,
+                                  weight=20.0, reps=10, completed=False))
+        db.session.commit()
+        ids = (today.id, past.id, exercise.id)
+
+    try:
+        html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
+        assert f'kg je Seite mit {stats.DELOAD_REPS}+ Wdh.' in html
     finally:
         with flask_app.app_context():
             for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),

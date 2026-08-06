@@ -280,6 +280,27 @@ def ready_for_more(rows, position=None):
     position lens and its fallback come from _scoped() -- exercise order
     decides how fatigued you were, and a slot with too little history borrows
     from the others rather than going silent.
+
+    This badge and the set chips beside it can name different sessions as
+    their evidence, because they use two different lenses on the same
+    history:
+
+    - This function, via _scoped(): same slot once that slot has two or more
+      sessions logged, ever -- no time limit -- else every position.
+    - routes._last_session_exercise(), which pre-fills the chips' weight/
+      reps: same slot only while that slot's own record is still younger
+      than ROLLING_WINDOW_DAYS, else the most recent session at ANY
+      position.
+
+    The two agree while a slot is trained regularly. Once a slot's own
+    history goes stale, they can disagree: the badge can still be quoting an
+    old same-slot session (this lens has no staleness cutoff) while the chip
+    has already fallen back to a different, more recent slot -- so the badge
+    reads "Letztes Mal ... 35,0 kg" beside a chip prefilled at 40,0. This is
+    a known divergence, not a bug: the badge is answering "was the last time
+    in THIS slot easy", the chip is answering "what should I load RIGHT
+    NOW", and those are legitimately different questions. Unifying the two
+    lenses is a design decision, not a fix -- left alone on purpose.
     """
     scoped = _scoped(progression_rows(rows), position)
     if not scoped:
