@@ -568,6 +568,83 @@ def test_a_propagated_correction_becomes_the_real_plan_not_a_new_placeholder(cli
             'a set that adopted a propagated correction must stop counting as an untouched default'
 
 
+def test_correcting_set_two_does_not_propagate_backwards_to_set_one(client, virgin_session):
+    """Mutation-tested guard: _propagate_default_correction skips any sibling
+    whose position is <= the corrected set's own. Every other test in this
+    file corrects set 1, so a mutant that deletes that guard -- propagating
+    BACKWARDS too -- sailed through the whole suite untouched. Correct set 2
+    instead, and assert set 1, still pending and still on the untouched
+    default, is left alone (while forward propagation to set 3 still works,
+    so this isn't just a weaker version of the forward test)."""
+    from extensions import db
+    from models import SessionExercise, SessionSet
+    from features.gym import stats
+    live_id, exercise_id = virgin_session
+
+    client.post(f'/gym/session/{live_id}/exercises/add',
+                data={'exercise_id': str(exercise_id)})
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        ordered = sorted(se.sets, key=lambda s: s.position)
+        first_id, second_id, third_id = [s.id for s in ordered]
+
+    client.post(f'/gym/set/{second_id}/toggle_complete',
+                data={'completed': '1', 'weight': '82.5', 'reps': '8'})
+
+    with flask_app.app_context():
+        first = db.session.get(SessionSet, first_id)
+        third = db.session.get(SessionSet, third_id)
+        assert (first.weight, first.reps, first.completed, first.is_default_seeded) == (
+            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True), \
+            'an earlier pending default set must not be propagated to backwards'
+        assert (third.weight, third.reps, third.is_default_seeded) == (82.5, 8, False), \
+            'forward propagation from set 2 to set 3 must still work'
+
+
+def test_retyping_an_already_hand_edited_set_does_not_re_propagate(client, virgin_session):
+    """Mutation-tested guard: gym_toggle_set_complete's trigger condition
+    checks `was_default_seeded` -- read before this request's own edits touch
+    the flag -- not just `completed and (weight_changed or reps_changed)`.
+
+    Hand-edit set 2 once (a deliberate drop set, not yet confirmed): its own
+    is_default_seeded clears, same as any hand-edit, and it is not completed
+    so no propagation fires. Set 3 is untouched, still sitting on the plain
+    default. Retype set 2 a SECOND time, to a different weight, and complete
+    it -- without the was_default_seeded guard this reads as merely
+    `completed and weight_changed` and fires propagation again, even though
+    set 2 was no longer an untouched default at the moment this second edit
+    arrived, and would incorrectly stamp set 3 with set 2's new number."""
+    from extensions import db
+    from models import SessionExercise, SessionSet
+    from features.gym import stats
+    live_id, exercise_id = virgin_session
+
+    client.post(f'/gym/session/{live_id}/exercises/add',
+                data={'exercise_id': str(exercise_id)})
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        ordered = sorted(se.sets, key=lambda s: s.position)
+        second_id, third_id = ordered[1].id, ordered[2].id
+
+    # First correction: a deliberate drop set on set 2, not yet confirmed.
+    client.post(f'/gym/set/{second_id}/toggle_complete',
+                data={'completed': '0', 'weight': '40.0', 'reps': '12'})
+    with flask_app.app_context():
+        second = db.session.get(SessionSet, second_id)
+        assert second.is_default_seeded is False, \
+            'fixture assumption broken: a changed weight must clear is_default_seeded'
+
+    # Second correction: retype set 2 to a different weight and confirm it.
+    client.post(f'/gym/set/{second_id}/toggle_complete',
+                data={'completed': '1', 'weight': '45.0', 'reps': '12'})
+
+    with flask_app.app_context():
+        third = db.session.get(SessionSet, third_id)
+        assert (third.weight, third.reps, third.completed, third.is_default_seeded) == (
+            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True), \
+            'a retype of an already hand-edited set must not re-propagate to a later default sibling'
+
+
 def test_creating_an_exercise_from_the_search_leaves_no_muscle_group(client, virgin_session):
     """The search sheet's create path posts a name and nothing else -- the
     muscle-group select is gone from it, because mid-workout is the worst moment
