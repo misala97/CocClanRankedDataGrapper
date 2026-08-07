@@ -23,6 +23,15 @@ from . import analytics
 from . import matching
 from . import push
 from . import sharing
+# The history -> pending-sets pipeline (_last_session_exercise,
+# _last_performance, _last_full_performance, _seeded_sets,
+# _seeded_suggestion) lives in seeding.py, not here -- sharing.py needs to
+# call _seeded_sets too, to seed a follower's mid-session additions (see
+# sharing.reconcile_follower), and sharing.py cannot import routes.py.
+from .seeding import (
+    _last_session_exercise, _last_performance, _last_full_performance,
+    _seeded_sets, _seeded_suggestion,
+)
 
 gym_bp = Blueprint('gym', __name__)
 
@@ -208,166 +217,6 @@ def inject_gym_nav_context():
     which is already idempotent (it only mutates state once, the first time
     it notices a session has gone stale past the timeout)."""
     return {'gym_active_session': _get_active_session()}
-
-
-def _last_session_exercise(exercise_id, position=None):
-    """The most recent SessionExercise (across any session) with at least one
-    *completed* set for this exercise.
-
-    If `position` is given, prefers a match where the exercise was performed
-    in that same position within its session -- exercise order affects
-    fatigue (the same exercise done 1st is fresher than done 3rd), so a
-    suggestion should reflect what you actually did in that same slot
-    before, not just the most recent time you did the exercise at all.
-
-    That preference is only honoured while the slot's own history is still
-    CURRENT (within stats.ROLLING_WINDOW_DAYS). Reorder an exercise and never
-    update the template, and months later the template still names the old
-    slot -- without the recency guard the pre-fill would resurrect whatever
-    you lifted there back then, which can be far below your actual working
-    weight today. Seated Row, real data: slot 2 is on 69 kg while slot 3 still
-    remembered 61 kg from months earlier, so starting the template pre-filled
-    61 and had to be corrected by hand every time.
-
-    The fatigue argument is about being fresher or more tired in a given
-    slot, and it only holds while both numbers describe the same training
-    period. Once the slot's record is stale, "most recent, any position" is
-    the more honest answer, and the lifter adjusts in the moment.
-
-    Falls back to the most recent regardless of position if you've never done
-    it in that position, or if that record has gone stale.
-
-    Deload sessions are skipped entirely. They are a deliberately light week,
-    not what you should come back to -- seeding from one would carry the
-    reduction forward into every session after it.
-    """
-    base_query = (
-        SessionExercise.query
-        .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(
-            SessionExercise.exercise_id == exercise_id,
-            SessionExercise.sets.any(SessionSet.completed == True),
-            # Never seed from a deload. Pre-filling the next session at 70 %
-            # would make the following one seed from *that*, and the lifter
-            # would silently never return to their real working weight.
-            WorkoutSession.is_deload == False,
-            # Suggestions come from your own training, never your partner's.
-            WorkoutSession.user_id == current_user_id(),
-        )
-    )
-    if position is not None:
-        match = base_query.filter(SessionExercise.position == position).order_by(WorkoutSession.started_at.desc()).first()
-        # same slot, but only while that record still describes current
-        # training -- see the docstring for why staleness overrides fatigue
-        cutoff = dt.datetime.utcnow() - dt.timedelta(days=stats.ROLLING_WINDOW_DAYS)
-        if match and match.session.started_at >= cutoff:
-            return match
-    return base_query.order_by(WorkoutSession.started_at.desc()).first()
-
-
-def _last_performance(exercise_id, position=None):
-    """Most recent completed set for this exercise (optionally position-
-    matched, see _last_session_exercise), used to pre-fill the add-set form."""
-    last_session_exercise = _last_session_exercise(exercise_id, position=position)
-    if not last_session_exercise:
-        return None
-    completed_sets = [s for s in last_session_exercise.sets if s.completed]
-    if not completed_sets:
-        return None
-    last_set = completed_sets[-1]
-    return {'weight': last_set.weight, 'reps': last_set.reps}
-
-
-def _last_full_performance(exercise_id, position=None):
-    """All completed sets from the most recent (optionally position-matched)
-    session that logged this exercise, in order -- used to pre-fill a new
-    session's sets when starting from a template, mirroring what was
-    actually done last time in that same slot."""
-    last_session_exercise = _last_session_exercise(exercise_id, position=position)
-    if not last_session_exercise:
-        return []
-    return [{'weight': s.weight, 'reps': s.reps} for s in last_session_exercise.sets if s.completed]
-
-
-def _seeded_sets(session_, exercise_id, position):
-    """Pending sets for `exercise_id` in `position` -- pre-filled from history
-    when there is any (honouring the session's deload), and a plain default plan
-    when there is none.
-
-    History is always recorded at full working weight (_last_session_exercise
-    skips deload sessions on purpose), so seeding raw would hand a deload
-    session the untouched working weights. Every call site that re-seeds a
-    slot -- reorder, un-skip -- can run *after* the deload was switched on,
-    which is exactly when that silently undid the prescription. Scaling here,
-    at the one place sets are derived from history, keeps the two in step
-    wherever a new one is added.
-
-    base_weight is set the same way gym_toggle_deload sets it, so switching
-    the deload back off restores these sets to the working weight like any
-    other.
-    """
-    seeded = _last_full_performance(exercise_id, position=position)
-    if not seeded:
-        # No history: a plain default plan, NOT a deload-scaled one. A deload is
-        # a percentage of a real working weight, and there isn't one here --
-        # scaling an invented number would dress a placeholder up as a
-        # prescription. base_weight stays None for the same reason: there is no
-        # working weight for gym_toggle_deload to restore this to.
-        return [
-            SessionSet(position=j, weight=stats.DEFAULT_PLAN_WEIGHT,
-                       reps=stats.DEFAULT_PLAN_REPS, completed=False)
-            for j in range(1, stats.DEFAULT_PLAN_SETS + 1)
-        ]
-
-    pct = session_.deload_pct if session_.is_deload else None
-    if not pct:
-        return [
-            SessionSet(position=j, weight=prev['weight'], reps=prev['reps'], completed=False)
-            for j, prev in enumerate(seeded, start=1)
-        ]
-
-    exercise = db.session.get(Exercise, exercise_id)
-    increment = stats.resolve_increment(
-        exercise.weight_increment if exercise else None,
-        bool(exercise and exercise.is_unilateral),
-    )
-    return [
-        SessionSet(
-            position=j,
-            weight=stats.deload_weight(prev['weight'], pct, increment,
-                                       stack_kg=exercise.stack_kg if exercise else None),
-            base_weight=prev['weight'],
-            reps=stats.DELOAD_REPS,
-            base_reps=prev['reps'],
-            completed=False,
-        )
-        for j, prev in enumerate(seeded, start=1)
-    ]
-
-
-def _seeded_suggestion(session_, exercise, position):
-    """The single weight/reps pair the steppers pre-fill with, deload-aware.
-
-    The scalar sibling of _seeded_sets, and it honours the deload for exactly
-    the same reason: history is recorded at full working weight, so offering
-    it untouched during a deload hands the lifter straight back the
-    prescription they just asked for.
-
-    _seeded_sets alone was not enough because it only runs where sets are
-    created -- starting from a template, un-skipping, reordering. An exercise
-    added mid-session gets no sets at all, and a session started WITHOUT a
-    template has none for gym_toggle_deload to scale either, so on that path
-    the suggestion is the only number the lifter ever sees.
-    """
-    last = _last_performance(exercise.id, position=position)
-    if not last:
-        return None
-    pct = session_.deload_pct if session_.is_deload else None
-    if not pct:
-        return last
-    increment = stats.resolve_increment(exercise.weight_increment, exercise.is_unilateral)
-    return {'weight': stats.deload_weight(last['weight'], pct, increment, stack_kg=exercise.stack_kg),
-            'reps': stats.DELOAD_REPS}
 
 
 def _template_exercises_from_session(session_):
@@ -1346,6 +1195,12 @@ def gym_toggle_set_complete(set_id):
             # completed-then-un-completed set unable to return to its working
             # weight.
             set_.base_weight = None
+            # Same reason gym_toggle_deload refuses to scale an
+            # is_default_seeded set: it was invented, not a real working
+            # weight. A hand-typed number stops that being true -- it is now
+            # the lifter's own choice, so a later deload should be free to
+            # scale it like any other set.
+            set_.is_default_seeded = False
         set_.weight = weight
     if reps is not None:
         if reps != set_.reps:
@@ -1402,6 +1257,12 @@ def gym_update_set(set_id):
             # completed-then-un-completed set unable to return to its working
             # weight.
             set_.base_weight = None
+            # Same reason gym_toggle_deload refuses to scale an
+            # is_default_seeded set: it was invented, not a real working
+            # weight. A hand-typed number stops that being true -- it is now
+            # the lifter's own choice, so a later deload should be free to
+            # scale it like any other set.
+            set_.is_default_seeded = False
         set_.weight = weight
     if reps is not None:
         if reps != set_.reps:
@@ -1663,8 +1524,13 @@ def gym_shared_accept(shared_id):
 
     Seeded from the leader's structure AS IT STANDS NOW, not as it stood when
     the invite was sent: anything added while you walked to the gym is
-    included. Your sets are seeded from YOUR history, which is why this runs
-    here -- in your request -- and not inside reconciliation.
+    included. sharing.reconcile_follower() below does the seeding too --
+    every row it creates is brand new here, so no row skips its branch --
+    reading YOUR history rather than the leader's because it takes
+    shared.follower_user_id explicitly instead of defaulting to
+    current_user_id(), which inside reconcile_follower's normal caller
+    (a leader's mid-workout structural change) would otherwise name the
+    leader.
     """
     shared = _invite_for_recipient(shared_id)
     refusal = _invite_refusal(shared)
@@ -1733,13 +1599,9 @@ def gym_shared_accept(shared_id):
     shared.accepted_at = dt.datetime.utcnow()
     db.session.flush()
 
+    # Builds AND seeds every row (see reconcile_follower's docstring) --
+    # nothing further to seed here.
     sharing.reconcile_follower(shared)
-
-    # Seed each slot from THIS lifter's history. Reconciliation cannot: it runs
-    # in the leader's request, where a history lookup reads the wrong person.
-    for row in follower_session.exercises:
-        if not row.sets:
-            row.sets.extend(_seeded_sets(follower_session, row.exercise_id, row.position))
     db.session.commit()
 
     return redirect(url_for('gym.session_detail', session_id=follower_session.id))
@@ -1780,6 +1642,13 @@ def gym_toggle_deload(session_id):
     other set returns to its own working weight. This asymmetry is intended:
     each set independently reflects whatever the user most recently said
     about it, not a single all-or-nothing session state.
+
+    A set seeded from _seeded_sets' no-history default plan is skipped
+    entirely -- see the is_default_seeded check below -- because there is no
+    real working weight underneath it to scale. The same hand-typed edit that
+    drops base_weight/base_reps also clears is_default_seeded, so a lifter who
+    turns the invented number into a real one makes it deload-eligible from
+    then on.
     """
     session_ = owned_session(session_id)
 
@@ -1801,6 +1670,20 @@ def gym_toggle_deload(session_id):
                 session_exercise.exercise.is_unilateral,
             )
             for s in session_exercise.sets:
+                if s.is_default_seeded:
+                    # An invented default-plan set (_seeded_sets, no history)
+                    # has no real working weight to take a percentage of --
+                    # scaling it would present a fabricated prescription as a
+                    # real one. Leave it exactly as seeded, regardless of
+                    # whether the exercise was added before or after this
+                    # toggle: previously that ordering decided the outcome,
+                    # because base_weight was only filled in here, on the way
+                    # in, so "deload already on when the exercise arrived"
+                    # skipped scaling (base_weight never got a chance to be
+                    # filled) while "deload switched on afterwards" scaled it
+                    # anyway. is_default_seeded makes the set itself say so,
+                    # so both orders behave the same.
+                    continue
                 if on:
                     # Capture the baseline the first time only. Re-applying the
                     # toggle, or changing the percentage, then always scales

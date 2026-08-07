@@ -76,32 +76,81 @@ def test_logging_one_set_does_not_advance_past_a_default_planned_exercise(client
     """The bug this whole task exists for. `_live_context` calls an exercise
     finished when every set it has is completed; with no planned sets the first
     confirmation both created and completed the list, so each exercise got
-    exactly one set before the screen moved on."""
+    exactly one set before the screen moved on.
+
+    A SECOND exercise is required to make this test able to fail at all.
+    `_live_context` falls back to `visible_exercises[-1]` when nothing is
+    live, and with only one exercise in the session that fallback names the
+    SAME row whether or not the screen actually advanced -- data-se-id would
+    be identical either way, so the assertions below could never catch a
+    regression. With two exercises present, "advanced" moves live off the
+    first row and onto the second's, which is now a real, different id.
+    """
     from extensions import db
-    from models import SessionExercise
+    from models import Exercise, SessionExercise
+    from conftest import _admin_id
+    from features.gym import stats
     live_id, exercise_id = virgin_session
 
-    client.post(f'/gym/session/{live_id}/exercises/add',
-                data={'exercise_id': str(exercise_id)})
     with flask_app.app_context():
-        se = SessionExercise.query.filter_by(session_id=live_id).one()
-        first_set_id = sorted(se.sets, key=lambda s: s.position)[0].id
-        se_id = se.id
+        second = Exercise(name='pytest cold start advance guard',
+                          muscle_group='Rücken', user_id=_admin_id())
+        db.session.add(second)
+        db.session.commit()
+        second_id = second.id
 
-    client.post(f'/gym/set/{first_set_id}/toggle_complete',
-                data={'completed': '1', 'weight': '60.0', 'reps': '8'})
+    try:
+        client.post(f'/gym/session/{live_id}/exercises/add',
+                    data={'exercise_id': str(exercise_id)})
+        client.post(f'/gym/session/{live_id}/exercises/add',
+                    data={'exercise_id': str(second_id)})
 
-    html = client.get(f'/gym/session/{live_id}').get_data(as_text=True)
-    # The live panel names its own session-exercise in data-se-id; if the screen
-    # had advanced there would be nothing left to be live and the panel would
-    # render the "Noch keine Übung" empty state instead.
-    assert f'<section class="live" data-se-id="{se_id}">' in html
-    assert 'Noch keine Übung' not in html
+        with flask_app.app_context():
+            rows = (SessionExercise.query.filter_by(session_id=live_id)
+                    .order_by(SessionExercise.position).all())
+            se = rows[0]
+            assert se.exercise_id == exercise_id, 'the exercise under test is not the first row'
+            # Explicit set count: the mutation this test exists to catch --
+            # seeding one set instead of DEFAULT_PLAN_SETS -- reproduces the
+            # advance-after-one-set bug exactly, and this assertion catches
+            # it directly rather than only through the live-panel side effect
+            # below.
+            assert len(se.sets) == stats.DEFAULT_PLAN_SETS, (
+                f'expected the default plan ({stats.DEFAULT_PLAN_SETS} sets), '
+                f'got {len(se.sets)}')
+            first_set_id = sorted(se.sets, key=lambda s: s.position)[0].id
+            se_id = se.id
+
+        client.post(f'/gym/set/{first_set_id}/toggle_complete',
+                    data={'completed': '1', 'weight': '60.0', 'reps': '8'})
+
+        html = client.get(f'/gym/session/{live_id}').get_data(as_text=True)
+        # The live panel names its own session-exercise in data-se-id; if the
+        # screen had advanced this would instead name the SECOND exercise's
+        # row (or, with the pre-fix `[]` seeding, render the "Noch keine
+        # Übung" empty state).
+        assert f'<section class="live" data-se-id="{se_id}">' in html
+        assert 'Noch keine Übung' not in html
+    finally:
+        with flask_app.app_context():
+            for se in SessionExercise.query.filter_by(exercise_id=second_id).all():
+                db.session.delete(se)
+            db.session.commit()
+            doomed = db.session.get(Exercise, second_id)
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()
 
 
 def test_a_deload_does_not_scale_an_invented_default(client, virgin_session):
     """There is no working weight to take a percentage of. Scaling the default
-    would present a fabricated prescription as a real one."""
+    would present a fabricated prescription as a real one.
+
+    This covers only the ORDER that was already safe: is_deload is set
+    directly on the model before the exercise is ever added, so
+    gym_toggle_deload (the route that fills base_weight) never runs at all --
+    see the sibling test below for the order that broke this.
+    """
     from extensions import db
     from models import SessionExercise, WorkoutSession
     from features.gym import stats
@@ -121,6 +170,51 @@ def test_a_deload_does_not_scale_an_invented_default(client, virgin_session):
         assert {s.weight for s in se.sets} == {stats.DEFAULT_PLAN_WEIGHT}
         assert {s.base_weight for s in se.sets} == {None}
         assert {s.reps for s in se.sets} == {stats.DEFAULT_PLAN_REPS}
+
+
+def test_a_deload_toggled_on_after_adding_does_not_scale_an_invented_default(client, virgin_session):
+    """The order that broke it. gym_toggle_deload used to fill base_weight for
+    every set that had None, with no way to tell an invented default-plan set
+    apart from a real one that happened to sit at the same weight -- so
+    add-exercise THEN deload-ON scaled the placeholder into a fabricated
+    12,5 kg x 10 prescription, while the other order (see the sibling test
+    above) stayed safe by accident. is_default_seeded makes the set say what
+    it is, so gym_toggle_deload can now refuse regardless of ordering.
+
+    Also proves the OFF round trip stays clean: nothing here was ever
+    scaled, so toggling back off must leave it untouched too, not attempt to
+    "restore" a baseline that was correctly never captured.
+    """
+    from extensions import db
+    from models import SessionExercise
+    from features.gym import stats
+    live_id, exercise_id = virgin_session
+
+    client.post(f'/gym/session/{live_id}/exercises/add',
+                data={'exercise_id': str(exercise_id)})
+
+    response = client.post(f'/gym/session/{live_id}/deload', data={'on': '1', 'pct': '70'})
+    assert response.status_code in (302, 303)
+
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        assert {s.weight for s in se.sets} == {stats.DEFAULT_PLAN_WEIGHT}, (
+            'deload toggled on after adding scaled an invented default')
+        assert {s.base_weight for s in se.sets} == {None}
+        assert {s.reps for s in se.sets} == {stats.DEFAULT_PLAN_REPS}
+        assert {s.base_reps for s in se.sets} == {None}
+        assert all(s.is_default_seeded for s in se.sets)
+
+    response = client.post(f'/gym/session/{live_id}/deload', data={'on': '0'})
+    assert response.status_code in (302, 303)
+
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        assert {s.weight for s in se.sets} == {stats.DEFAULT_PLAN_WEIGHT}, (
+            'toggling the deload back off moved a set nothing ever scaled')
+        assert {s.base_weight for s in se.sets} == {None}
+        assert {s.reps for s in se.sets} == {stats.DEFAULT_PLAN_REPS}
+        assert {s.base_reps for s in se.sets} == {None}
 
 
 def test_un_skipping_a_no_history_exercise_restores_the_default_plan(client, virgin_session):
