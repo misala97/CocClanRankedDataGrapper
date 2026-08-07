@@ -920,8 +920,17 @@ function refreshBody(html) {
     var freshList = doc.getElementById('exadd-list');
     var oldList = document.getElementById('exadd-list');
     if (freshList && oldList) {
+        // A keyboard user who just Enter'd a row is focused inside the node
+        // we're about to discard; replaceWith would drop focus to <body> and
+        // strand them at the top of the sheet on their next Tab. Only the
+        // add-another-exercise workflow hits this (the swap runs after every
+        // set too, sheet closed, focus elsewhere -- leave that alone), so
+        // recover focus onto the search field, which survives the swap and
+        // is where the next add naturally starts.
+        var hadFocusInList = oldList.contains(document.activeElement);
         oldList.replaceWith(freshList);
         filterAddList();
+        if (hadFocusInList) { document.getElementById('exadd-search').focus(); }
     }
     startRestTick();
     startClocks();
