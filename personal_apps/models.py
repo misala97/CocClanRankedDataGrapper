@@ -370,7 +370,7 @@ class SessionSet(db.Model):
     # reason: a hand-typed weight is ground truth from now on, so the number
     # stops being invented and a later deload is free to treat it like any
     # other real set.
-    is_default_seeded  = db.Column(db.Boolean, nullable=False, default=False)
+    is_default_seeded  = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')
 
