@@ -919,10 +919,16 @@ function rearmDragHandles() {
 // landed, and the session-level sheets (deload's "already logged a set" note,
 // in particular) never updated either. See syncSheets below.
 function syncAfterSwap(doc, body) {
-    var act = document.getElementById('skip-rest-act');
-    if (act) { act.hidden = !body.querySelector('#rest-fill'); }
-    rearmDragHandles();
+    // #skip-rest-act lives inside #sheet-session, which syncSheets (below) is
+    // about to replace wholesale with the server's fresh copy -- rendered
+    // from the same `resting` value, in the same response, that decided
+    // whether #rest-fill exists in `body`. So there is nothing to reconcile
+    // here; setting act.hidden before the replace would just be thrown away
+    // with the node it is set on.
     syncSheets(doc);
+    rearmDragHandles();
+    applyReorderUI();
+    applyNotifyState();
 }
 
 // Replaces every sheet with the fresh copy the server just sent, EXCEPT one
@@ -938,6 +944,14 @@ function syncAfterSwap(doc, body) {
 // lets that sheet stay open across its own in-place adds without losing the
 // search text or the row that is mid-flight -- swapping the whole dialog here
 // too would undo that on every single tap.
+//
+// THE RULE this function exists to enforce, for the next control added to a
+// sheet: any control inside a sheet must be document-delegated (never bound
+// to a node captured once at load), and any client-owned sheet state (a
+// mode the server does not know about, a per-device probe result) must be
+// re-applied after the swap, not just set once. This class of bug is silent
+// -- nothing throws, the control just stops responding -- so skipping either
+// half reproduces #reorder-toggle/#notify-enable-btn's exact regression.
 function syncSheets(doc) {
     if (!doc) { return; }
     var freshSheets = Array.prototype.slice.call(doc.querySelectorAll('dialog.sheet'));
@@ -955,7 +969,15 @@ function syncSheets(doc) {
             // #session-body's row already points a data-sheet="sheet-ex-<id>"
             // button at this id (see the queue/panel templates), so without
             // this the ⋯ on a freshly added exercise opens nothing.
-            document.body.appendChild(freshSheet);
+            //
+            // Appended beside an existing sheet rather than onto <body>
+            // directly, so every sheet -- full-page-rendered or added in
+            // place -- lives in the same parent (<main>). Nothing is
+            // ancestor-scoped to that today, but there is no reason to leave
+            // a trap for the day something is.
+            var existingSheet = document.querySelector('dialog.sheet');
+            var parent = existingSheet ? existingSheet.parentNode : (document.getElementById('gym-main') || document.body);
+            parent.appendChild(freshSheet);
         }
     });
 
@@ -1139,68 +1161,106 @@ function urlBase64ToUint8Array(base64String) {
     for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
     return outputArray;
 }
-const notifyBtn = document.getElementById('notify-enable-btn');
-const notifyRow = document.getElementById('notify-row');
-// Whether to offer this is a question about the device, not the account, so it
-// is answered here rather than in the template. Hidden only once this browser
-// is confirmed subscribed -- every other case (never subscribed, a second
-// phone, a reinstalled PWA, push unsupported) still gets the row, because in
-// all of them the person needs either the button or the reason it cannot work.
-if (notifyRow) {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        notifyRow.hidden = false;
-    } else {
-        navigator.serviceWorker.getRegistration('/gym/')
-            .then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; })
-            .then(function (sub) { notifyRow.hidden = !!sub; })
-            .catch(function () { notifyRow.hidden = false; });
-    }
-}
-if (notifyBtn) {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        notifyBtn.disabled = true;
-        notifyBtn.textContent = window.isSecureContext
+// #notify-row and #notify-enable-btn live inside #sheet-session, which
+// syncSheets replaces with a fresh, server-rendered copy (always `hidden`,
+// always the generic label) on every in-place mutation that does not have
+// that sheet open -- the server cannot know what this browser has done. So
+// the click handler is delegated from the document (see the sheet-open/
+// data-close handler above for the same pattern), and "is THIS device
+// subscribed" is probed exactly once and cached here, then re-applied after
+// every swap -- NOT re-asked via getSubscription() on every refresh.
+const pushSupported = ('serviceWorker' in navigator) && ('PushManager' in window);
+// null while the one-time probe below is in flight: the row stays at its
+// template default (hidden) until it resolves, same timing this had before
+// it was split out. Sets to true/false once known, and back to true the
+// instant this device subscribes -- without a second round trip.
+let pushSubscribed = null;
+
+// Whether to offer this is a question about the device, not the account, so
+// it is answered here rather than in the template. Hidden only once this
+// browser is confirmed subscribed -- every other case (never subscribed, a
+// second phone, a reinstalled PWA, push unsupported) still gets the row,
+// because in all of them the person needs either the button or the reason it
+// cannot work.
+function applyNotifyState() {
+    var row = document.getElementById('notify-row');
+    if (row) { row.hidden = pushSupported ? (pushSubscribed !== false) : false; }
+    var btn = document.getElementById('notify-enable-btn');
+    if (!btn) { return; }
+    if (!pushSupported) {
+        btn.disabled = true;
+        btn.textContent = window.isSecureContext
             ? 'Push wird von diesem Browser nicht unterstützt'
             : 'Push braucht HTTPS — über http:// im Heimnetz nicht möglich';
-    } else {
-        notifyBtn.addEventListener('click', async () => {
-            try {
-                const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/gym/' });
-                const permission = await Notification.requestPermission();
-                if (permission !== 'granted') { notifyBtn.textContent = 'Abgelehnt'; return; }
-                const subscription = await registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: urlBase64ToUint8Array('{{ vapid_public_key or "" }}'),
-                });
-                await fetch('{{ url_for("gym.gym_push_subscribe") }}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(subscription.toJSON()),
-                });
-                notifyBtn.textContent = 'Aktiviert ✓';
-                notifyBtn.disabled = true;
-            } catch (err) {
-                notifyBtn.textContent = 'Fehler';
-                console.error('Push subscribe failed', err);
-            }
-        });
+    } else if (pushSubscribed === true) {
+        btn.disabled = true;
+        btn.textContent = 'Aktiviert ✓';
     }
 }
+
+if (pushSupported) {
+    navigator.serviceWorker.getRegistration('/gym/')
+        .then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; })
+        .then(function (sub) { pushSubscribed = !!sub; applyNotifyState(); })
+        .catch(function () { pushSubscribed = false; applyNotifyState(); });
+} else {
+    applyNotifyState();
+}
+
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('#notify-enable-btn');
+    if (!btn || !pushSupported || btn.disabled) { return; }
+    (async () => {
+        try {
+            const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/gym/' });
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') { btn.textContent = 'Abgelehnt'; return; }
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array('{{ vapid_public_key or "" }}'),
+            });
+            await fetch('{{ url_for("gym.gym_push_subscribe") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(subscription.toJSON()),
+            });
+            pushSubscribed = true;
+            applyNotifyState();
+        } catch (err) {
+            btn.textContent = 'Fehler';
+            console.error('Push subscribe failed', err);
+        }
+    })();
+});
 
 // ---- reorder mode ---------------------------------------------------------
 // A mode with a visible banner, not a lock icon you have to decode. The drag
 // itself lives in session_reorder.js, which reads this flag.
 window.GymReorder = { unlocked: false, url: '{{ url_for("gym.gym_reorder_session_exercises", session_id=session.id) }}', refresh: refreshBody };
+applyReorderUI();
 // The handles are tabindex="-1" outside the mode, because outside the mode
 // they do nothing -- putting four inert marks in the tab order between the
 // queue rows would be worse than leaving them out. Entering the mode makes
 // them real stops and moves focus to the first one, so a keyboard user lands
 // on the thing the mode is for instead of hunting for it.
-function setReorder(on) {
-    window.GymReorder.unlocked = on;
+// Split from setReorder so syncAfterSwap can re-apply the same UI without
+// re-announcing or re-focusing: #reorder-label and #reorder-toggle live
+// inside #sheet-session, which syncSheets replaces with a fresh, always-
+// "off" copy on every in-place mutation -- the server has no notion of this
+// client-only mode. Without this, the label (and body class, further below)
+// would silently drift from window.GymReorder.unlocked, the actual state.
+function applyReorderUI() {
+    var on = !!(window.GymReorder && window.GymReorder.unlocked);
     document.body.classList.toggle('is-reordering', on);
     var label = document.getElementById('reorder-label');
     if (label) { label.textContent = on ? 'Reihenfolge fertig' : 'Reihenfolge ändern'; }
+    var toggle = document.getElementById('reorder-toggle');
+    if (toggle) { toggle.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+}
+
+function setReorder(on) {
+    window.GymReorder.unlocked = on;
+    applyReorderUI();
     rearmDragHandles();
     announce(on ? 'Reihenfolge ändern. Mit den Pfeiltasten verschieben.' : 'Reihenfolge gespeichert.');
     if (on) {
@@ -1209,17 +1269,21 @@ function setReorder(on) {
     }
 }
 
-const reorderToggle = document.getElementById('reorder-toggle');
-if (reorderToggle) {
-    reorderToggle.addEventListener('click', function () {
-        var next = !window.GymReorder.unlocked;
-        if (next) {
-            var sheet = reorderToggle.closest('dialog');
-            if (sheet) { sheet.close(); }
-        }
-        setReorder(next);
-    });
-}
+// #reorder-toggle lives inside #sheet-session, which syncSheets replaces
+// with a fresh copy on every in-place mutation that does not have that sheet
+// open -- so a listener bound to the node captured here at load stops firing
+// after the first such swap. Delegated from the document instead, same
+// pattern as the sheet-open/data-close handler above.
+document.addEventListener('click', function (e) {
+    var toggle = e.target.closest && e.target.closest('#reorder-toggle');
+    if (!toggle) { return; }
+    var next = !window.GymReorder.unlocked;
+    if (next) {
+        var sheet = toggle.closest('dialog');
+        if (sheet) { sheet.close(); }
+    }
+    setReorder(next);
+});
 const reorderDone = document.getElementById('reorder-done');
 if (reorderDone) { reorderDone.addEventListener('click', function () { setReorder(false); }); }
 
