@@ -3,9 +3,12 @@
 **Date:** 2026-08-07
 **Status:** implemented on `dev_personal` (a9dfb49), plus a final-review fix
 pass closing five findings (F1–F5, see `final-fixes-report.md`) — two of
-which corrected claims made below, and a follow-up (H1, below) that carries a
-corrected placeholder weight forward within an exercise. Not merged to
-`main`.
+which corrected claims made below, a follow-up (H1, below) that carries a
+corrected placeholder weight forward within an exercise, and a second,
+whole-branch blocker re-review (also F1–F5, see `blockers-report.md`) closing
+five more findings — two of which further correct claims below (marked
+"blocker-review" to distinguish them from the earlier final-review
+corrections). Not merged to `main`.
 **Branch:** `dev_personal`
 
 ## The problem
@@ -76,7 +79,7 @@ fallback chain and the seeding cannot drift apart.
 
 #### Why this seam
 
-All five call sites that put an exercise into a session already funnel through
+All call sites that put an exercise into a session funnel through
 `_seeded_sets`:
 
 | Line | Path |
@@ -86,9 +89,23 @@ All five call sites that put an exercise into a session already funnel through
 | `routes.py:1279` | un-skip |
 | `routes.py:1437` | reorder |
 | `routes.py:1729` | shared-session follower reconciliation |
+| `routes.py:980` | `gym_replace_session_exercise` (mid-workout substitute) |
 
 One change reaches freestyle, first-run templates and mid-session additions
 alike.
+
+**Correction (blocker-review F2):** the table above claimed "all" call sites
+at initial ship, but `gym_replace_session_exercise` was not actually one of
+them — it created the substitute `SessionExercise` directly, with no call to
+`_seeded_sets`, which is exactly the zero-sets shape symptom 1 was about: the
+first set logged against a substitute both created and completed its plan.
+Reachable any time a lifter swaps an exercise mid-workout for one they have no
+history with (equipment taken, trying a variant). Fixed by seeding the
+substitute the same way every other row in this table is seeded, at the
+substitute's own position — the original row and its already-logged sets are
+left untouched, as designed (they keep counting toward the original
+exercise's own history). See `blockers-report.md` (F2) for the fix and its
+test.
 
 **Correction (final-review F4):** the follower-reconciliation row above was
 aspirational, not actual, at initial ship. `sharing.reconcile_follower`
@@ -235,6 +252,24 @@ branches clear the flag on it). It writes the new value into every later
 sibling (`position >` the set just confirmed) that is not yet completed and
 is still `is_default_seeded`, then clears the flag on each of those siblings
 too.
+
+**Correction (blocker-review F1):** `gym_toggle_set_complete`'s confirm button
+is not the only weight/reps editor on the live screen. `session_detail.html`'s
+per-exercise sheet renders a second, fully functional editor per set, posting
+to `gym_update_set` — a route that clears `is_default_seeded` on a hand-typed
+change (same as the toggle route) but, at initial ship, never called
+`_propagate_default_correction`. Because the flag was already cleared,
+confirming that same set afterward through the toggle route's own button
+found `was_default_seeded` already `False` and silently skipped propagation
+too — the sheet's editor both bypassed propagation and disabled the later
+one, leaving the lifter back to retyping the weight on every set. Fixed by
+calling `_propagate_default_correction` from `gym_update_set` under the same
+condition (`was_default_seeded and` the value actually changed, read before
+the clearing branch), so either editor on the live screen carries a
+correction the same way. `gym_update_set`'s docstring, which described it as
+exclusive to the finished-session "Sätze & Notizen" disclosure, is corrected
+to note the live sheet as well. See `blockers-report.md` (F1) for the fix and
+its test.
 
 Three decisions were left to the implementation:
 
