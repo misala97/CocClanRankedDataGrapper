@@ -924,7 +924,7 @@ function countUp(el, from) {
     el.classList.add('is-counting');
     (function frame(now) {
         if (startedAt === null) { startedAt = now; }
-        var t = Math.min(1, (now - startedAt) / 320);
+        var t = Math.max(0, Math.min(1, (now - startedAt) / 320));
         var eased = 1 - Math.pow(1 - t, 4);            // ease-out-quart, = --ease
         el.textContent = deGrouped.format(Math.round(from + (to - from) * eased));
         if (t < 1) { requestAnimationFrame(frame); return; }
