@@ -645,6 +645,47 @@ def test_retyping_an_already_hand_edited_set_does_not_re_propagate(client, virgi
             'a retype of an already hand-edited set must not re-propagate to a later default sibling'
 
 
+def test_correcting_via_gym_update_set_also_propagates(client, virgin_session):
+    """F1 regression: session_detail.html's per-exercise sheet renders a
+    SECOND full weight/reps editor for each set, posting to gym_update_set --
+    not gym_toggle_set_complete's confirm button. Before this fix, that route
+    cleared is_default_seeded without ever propagating, and clearing the flag
+    then made the LATER toggle_complete confirm refuse to propagate too
+    (was_default_seeded read False by the time it ran). Reproduces the exact
+    repro: POST update with a corrected weight, then confirm the set via
+    toggle_complete, and assert sets 2/3 pick up the correction."""
+    from extensions import db
+    from models import SessionExercise, SessionSet
+    live_id, exercise_id = virgin_session
+
+    client.post(f'/gym/session/{live_id}/exercises/add',
+                data={'exercise_id': str(exercise_id)})
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        ordered = sorted(se.sets, key=lambda s: s.position)
+        first_id, second_id, third_id = [s.id for s in ordered]
+
+    client.post(f'/gym/set/{first_id}/update', data={'weight': '82.5', 'reps': '8'})
+
+    with flask_app.app_context():
+        second = db.session.get(SessionSet, second_id)
+        third = db.session.get(SessionSet, third_id)
+        assert (second.weight, second.reps, second.is_default_seeded) == (82.5, 8, False), \
+            'gym_update_set must propagate a default correction forward, same as gym_toggle_set_complete'
+        assert (third.weight, third.reps, third.is_default_seeded) == (82.5, 8, False)
+
+    # The other affordance on the same screen, confirming the same set --
+    # must not error, and must not undo what the update above already did.
+    client.post(f'/gym/set/{first_id}/toggle_complete',
+                data={'completed': '1', 'weight': '82.5', 'reps': '8'})
+
+    with flask_app.app_context():
+        second = db.session.get(SessionSet, second_id)
+        third = db.session.get(SessionSet, third_id)
+        assert (second.weight, second.reps) == (82.5, 8)
+        assert (third.weight, third.reps) == (82.5, 8)
+
+
 def test_creating_an_exercise_from_the_search_leaves_no_muscle_group(client, virgin_session):
     """The search sheet's create path posts a name and nothing else -- the
     muscle-group select is gone from it, because mid-workout is the worst moment
