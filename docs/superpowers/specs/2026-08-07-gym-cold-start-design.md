@@ -8,7 +8,9 @@ corrected placeholder weight forward within an exercise, and a second,
 whole-branch blocker re-review (also F1–F5, see `blockers-report.md`) closing
 five more findings — two of which further correct claims below (marked
 "blocker-review" to distinguish them from the earlier final-review
-corrections). Not merged to `main`.
+corrections), and a final non-blocking polish pass (F1–F4, see
+`polish-report.md`) closing four more — two of which (marked
+"final-polish") correct claims below once again. Not merged to `main`.
 **Branch:** `dev_personal`
 
 ## The problem
@@ -80,16 +82,20 @@ fallback chain and the seeding cannot drift apart.
 #### Why this seam
 
 All call sites that put an exercise into a session funnel through
-`_seeded_sets`:
+`_seeded_sets`. Anchored on function/symbol names, not line numbers: line
+numbers rot (this table already had to be corrected once, see below, and a
+final-polish pass found five of the six stale again at the same review that
+found this note necessary), while the point of the table -- "one change
+reaches all of them" -- only holds if each row still names a real call.
 
-| Line | Path |
-|------|------|
-| `routes.py:683` | `gym_start` from a template |
-| `routes.py:1077` | `gym_add_session_exercise` mid-workout |
-| `routes.py:1279` | un-skip |
-| `routes.py:1437` | reorder |
-| `routes.py:1729` | shared-session follower reconciliation |
-| `routes.py:980` | `gym_replace_session_exercise` (mid-workout substitute) |
+| Call site | Path |
+|-----------|------|
+| `gym_start` | from a template |
+| `gym_add_session_exercise` | mid-workout |
+| `gym_replace_session_exercise` | mid-workout substitute |
+| `gym_toggle_skip_session_exercise` | un-skip |
+| `gym_reorder_session_exercises` | reorder |
+| `sharing.reconcile_follower` | shared-session follower reconciliation |
 
 One change reaches freestyle, first-run templates and mid-session additions
 alike.
