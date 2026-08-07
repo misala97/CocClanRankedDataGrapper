@@ -713,3 +713,63 @@ def test_creating_an_exercise_from_the_search_leaves_no_muscle_group(client, vir
         db.session.commit()
         db.session.delete(created)
         db.session.commit()
+
+
+def test_replacing_an_exercise_with_no_history_seeds_a_default_plan(client, virgin_session):
+    """F2 regression: gym_replace_session_exercise created the substitute
+    SessionExercise without ever calling _seeded_sets, the only remaining
+    route that produced the zero-sets shape _live_context treats as "live
+    until one set lands, then finished" -- the headline cold-start bug this
+    whole file is about. The ORIGINAL row's own sets (seeded when it was
+    added, same no-history path) must be left completely untouched -- the
+    replace route deliberately keeps them so they keep counting toward the
+    original exercise's own history."""
+    from extensions import db
+    from models import Exercise, SessionExercise
+    from features.gym import stats
+    from conftest import _admin_id
+    live_id, exercise_id = virgin_session
+
+    client.post(f'/gym/session/{live_id}/exercises/add',
+                data={'exercise_id': str(exercise_id)})
+    with flask_app.app_context():
+        original = SessionExercise.query.filter_by(session_id=live_id).one()
+        original_id = original.id
+        original_sets_before = [(s.position, s.weight, s.reps) for s in original.sets]
+
+        substitute_exercise = Exercise(name='pytest replace no-history sub',
+                                       muscle_group='Brust', user_id=_admin_id())
+        db.session.add(substitute_exercise)
+        db.session.commit()
+        substitute_exercise_id = substitute_exercise.id
+
+    try:
+        response = client.post(f'/gym/session-exercise/{original_id}/replace',
+                               data={'exercise_id': str(substitute_exercise_id)})
+        assert response.status_code in (302, 303)
+
+        with flask_app.app_context():
+            substitute = SessionExercise.query.filter_by(
+                session_id=live_id, exercise_id=substitute_exercise_id).one()
+            assert [(s.position, s.weight, s.reps, s.completed, s.is_default_seeded)
+                    for s in substitute.sets] == [
+                (1, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True),
+                (2, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True),
+                (3, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True),
+            ]
+            assert substitute.replaces_id == original_id
+
+            original = db.session.get(SessionExercise, original_id)
+            assert [(s.position, s.weight, s.reps) for s in original.sets] == original_sets_before, \
+                'the original row and its own sets must be left untouched by the replace'
+    finally:
+        with flask_app.app_context():
+            leftover = SessionExercise.query.filter_by(
+                session_id=live_id, exercise_id=substitute_exercise_id).first()
+            if leftover is not None:
+                db.session.delete(leftover)
+                db.session.commit()
+            doomed = db.session.get(Exercise, substitute_exercise_id)
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()

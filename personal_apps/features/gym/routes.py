@@ -978,10 +978,24 @@ def gym_replace_session_exercise(session_exercise_id):
         owned_exercise(exercise_id)
 
     if exercise_id and exercise_id != original.exercise_id and not original.replaced_by:
-        db.session.add(SessionExercise(
+        substitute = SessionExercise(
             session_id=session_id, exercise_id=exercise_id, position=original.position,
             rest_seconds=original.rest_seconds, replaces_id=original.id,
-        ))
+        )
+        # Seeded the same way every other path that creates a SessionExercise
+        # does (gym_add_session_exercise, gym_start from a template, un-skip,
+        # reorder) -- see _seeded_sets. This route used to create the
+        # substitute with zero sets, which is exactly the shape _live_context
+        # treats as "live until one set lands, then finished": the first
+        # logged set on the substitute both created and completed its list
+        # and the screen advanced early. At the substitute's own position
+        # (== original.position, above), so a substitute with its own history
+        # seeds from that and one without gets the default plan -- the
+        # ORIGINAL row and its already-logged sets are left untouched, only
+        # the new substitute row is seeded.
+        substitute.sets.extend(
+            _seeded_sets(original.session, exercise_id, original.position))
+        db.session.add(substitute)
 
     # Always commit -- even when the replacement itself didn't happen (e.g.
     # the guard above rejected it), a newly created Exercise from new_name
