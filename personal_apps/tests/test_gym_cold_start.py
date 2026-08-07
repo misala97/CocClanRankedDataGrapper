@@ -686,6 +686,64 @@ def test_correcting_via_gym_update_set_also_propagates(client, virgin_session):
         assert (third.weight, third.reps) == (82.5, 8)
 
 
+def test_gym_update_set_does_not_propagate_on_a_finished_session(client, virgin_session):
+    """F2 (polish): gym_update_set had no liveness guard, and the finished
+    session's quiet "Sätze & Notizen" disclosure (session_finished.html)
+    posts to this same route. Confirm set 1 at the untouched default
+    (weight/reps unchanged, so is_default_seeded survives -- same
+    unchanged-value pattern as test_a_completed_set_is_never_rewritten_by_propagation
+    above), finish the session, then correct set 1's weight from the
+    finished page. Sets 2 and 3 were NEVER PERFORMED -- rewriting them
+    inside an already-closed historical record is wrong even though most
+    consumers filter on `completed`, because the JSON export does not. Only
+    set 1, the one actually edited, may change."""
+    from extensions import db
+    from models import SessionExercise, SessionSet, WorkoutSession
+    from features.gym import stats
+    live_id, exercise_id = virgin_session
+
+    client.post(f'/gym/session/{live_id}/exercises/add',
+                data={'exercise_id': str(exercise_id)})
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        ordered = sorted(se.sets, key=lambda s: s.position)
+        first_id, second_id, third_id = [s.id for s in ordered]
+
+    # Confirm set 1 at the untouched default -- unchanged value, so
+    # gym_toggle_set_complete's own "changed by hand" branch never fires and
+    # is_default_seeded survives.
+    client.post(f'/gym/set/{first_id}/toggle_complete',
+                data={'completed': '1',
+                      'weight': str(stats.DEFAULT_PLAN_WEIGHT),
+                      'reps': str(stats.DEFAULT_PLAN_REPS)})
+    with flask_app.app_context():
+        first = db.session.get(SessionSet, first_id)
+        assert (first.completed, first.is_default_seeded) == (True, True), \
+            'fixture assumption broken: confirming the unchanged default must not clear is_default_seeded'
+
+    with flask_app.app_context():
+        session_ = db.session.get(WorkoutSession, live_id)
+        session_.finished_at = dt.datetime.utcnow()
+        db.session.commit()
+
+    # Correct the typo from the finished page's own editor -- gym_update_set,
+    # same route the live sheet uses.
+    client.post(f'/gym/set/{first_id}/update', data={'weight': '82.5', 'reps': '8'})
+
+    with flask_app.app_context():
+        first = db.session.get(SessionSet, first_id)
+        second = db.session.get(SessionSet, second_id)
+        third = db.session.get(SessionSet, third_id)
+        assert (first.weight, first.reps) == (82.5, 8), \
+            'correcting a finished set must still apply to the set actually edited'
+        assert (second.weight, second.reps, second.is_default_seeded) == (
+            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, True), \
+            'a never-performed sibling must not be rewritten on a finished session'
+        assert (third.weight, third.reps, third.is_default_seeded) == (
+            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, True), \
+            'a never-performed sibling must not be rewritten on a finished session'
+
+
 def test_creating_an_exercise_from_the_search_leaves_no_muscle_group(client, virgin_session):
     """The search sheet's create path posts a name and nothing else -- the
     muscle-group select is gone from it, because mid-workout is the worst moment

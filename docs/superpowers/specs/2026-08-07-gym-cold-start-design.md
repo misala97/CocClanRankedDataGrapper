@@ -263,13 +263,40 @@ confirming that same set afterward through the toggle route's own button
 found `was_default_seeded` already `False` and silently skipped propagation
 too — the sheet's editor both bypassed propagation and disabled the later
 one, leaving the lifter back to retyping the weight on every set. Fixed by
-calling `_propagate_default_correction` from `gym_update_set` under the same
-condition (`was_default_seeded and` the value actually changed, read before
-the clearing branch), so either editor on the live screen carries a
-correction the same way. `gym_update_set`'s docstring, which described it as
-exclusive to the finished-session "Sätze & Notizen" disclosure, is corrected
-to note the live sheet as well. See `blockers-report.md` (F1) for the fix and
-its test.
+calling `_propagate_default_correction` from `gym_update_set` too, gated on
+`was_default_seeded and` the value actually changed, read before the
+clearing branch — but **not** under the same condition as the toggle route.
+`gym_toggle_set_complete`'s trigger also requires `set_.completed`, because
+that route decides completed/not and an edit typed but not yet confirmed
+must not fan out; `gym_update_set` has no `completed` field at all, so
+copying that conjunct literally would mean propagation could only ever fire
+on an already-completed set through this editor — backwards, since this
+form exists for a correction typed after the fact, not a confirmation. Both
+routes apply the edit itself identically (extracted final-polish pass into
+`_apply_typed_weight_reps`, see below); only the propagation trigger
+differs, and does so on purpose. `gym_update_set`'s docstring, which
+described it as exclusive to the finished-session "Sätze & Notizen"
+disclosure, is corrected to note the live sheet as well. See
+`blockers-report.md` (F1) for the fix and its test.
+
+**Correction (final-polish F1/F2):** two further issues survived the
+blocker-review fix above. First, the two routes' edit-application code
+(parse weight/reps, clear `base_weight`/`base_reps` and `is_default_seeded`
+on an actual change) was copy-pasted rather than shared, 30 lines
+byte-identical including comments — extracted into
+`_apply_typed_weight_reps(set_) -> (was_default_seeded, weight_changed,
+reps_changed)`, called by both routes, leaving the one intended difference
+(the propagation trigger, see above) visible at each call site instead of
+buried in a duplicate. Second, `gym_update_set`'s propagation trigger had no
+liveness guard: the finished-session "Sätze & Notizen" disclosure posts to
+this same route, so correcting a set's weight after the session ended could
+silently rewrite later sibling sets that were never actually performed —
+wrong even though most consumers filter on `completed`, since the JSON
+export does not. Fixed by adding `session_.finished_at is None` to
+`gym_update_set`'s trigger; the edit to the set actually being corrected
+still applies unconditionally, only the fan-out to untouched siblings is
+now scoped to a live session. See `polish-report.md` for both fixes and
+their tests.
 
 Three decisions were left to the implementation:
 

@@ -1221,6 +1221,51 @@ def _propagate_default_correction(set_, weight, reps):
         sibling.is_default_seeded = False
 
 
+def _apply_typed_weight_reps(set_):
+    """Read weight/reps off the request form and write them onto `set_`,
+    exactly as both weight/reps editors on the live screen have always done:
+    an actual change clears `base_weight`/`base_reps` (a hand-typed value is
+    ground truth, so a later deload-toggle must not overwrite it) and clears
+    `is_default_seeded` (it was invented, not a real working weight -- a
+    hand-typed number stops that being true). An unchanged value is just the
+    form echoing what is already stored and must NOT count as an edit, or a
+    completed-then-un-completed set would lose its way back to its own
+    working weight.
+
+    Shared by gym_toggle_set_complete and gym_update_set -- the two
+    affordances session_detail.html renders for the same set (the confirm
+    button's own fields, and the per-exercise sheet's editor) -- so this half
+    of the logic cannot drift between them. What is NOT shared is each
+    route's own decision about when to call _propagate_default_correction:
+    see the comment at each call site for why that condition differs and
+    must keep differing.
+
+    Returns (was_default_seeded, weight_changed, reps_changed) -- read
+    BEFORE the writes above, since was_default_seeded here is what the
+    caller needs to know about `set_` as it arrived, not as it now stands.
+    `set_.weight`/`set_.reps` already hold the new values on return, so a
+    caller that wants to propagate reads them from `set_` directly rather
+    than from a separate local.
+    """
+    was_default_seeded = set_.is_default_seeded
+    weight = _to_float(request.form.get('weight', ''))
+    reps = _to_int(request.form.get('reps', ''))
+    weight_changed = False
+    reps_changed = False
+    if weight is not None:
+        if weight != set_.weight:
+            weight_changed = True
+            set_.base_weight = None
+            set_.is_default_seeded = False
+        set_.weight = weight
+    if reps is not None:
+        if reps != set_.reps:
+            reps_changed = True
+            set_.base_reps = None
+        set_.reps = reps
+    return was_default_seeded, weight_changed, reps_changed
+
+
 @gym_bp.route('/gym/set/<int:set_id>/toggle_complete', methods=['POST'])
 @login_required
 def gym_toggle_set_complete(set_id):
@@ -1243,41 +1288,9 @@ def gym_toggle_set_complete(set_id):
     set_ = owned_set(set_id)
     session_ = set_.session_exercise.session
 
-    # Read before any of the edits below touch it -- propagation (see
-    # _propagate_default_correction) needs to know whether THIS set was still
-    # sitting on the untouched default plan at the moment the correction
-    # arrived, and the "changed by hand" branches just below are about to
-    # clear the flag on set_ itself.
-    was_default_seeded = set_.is_default_seeded
-    weight = _to_float(request.form.get('weight', ''))
-    reps = _to_int(request.form.get('reps', ''))
-    weight_changed = False
-    reps_changed = False
-    if weight is not None:
-        if weight != set_.weight:
-            weight_changed = True
-            # Changed by hand -- ground truth from now on, so drop any stale
-            # deload baseline that would otherwise overwrite it later. An
-            # unchanged value is just the form echoing what is already stored
-            # (the weight input and the check button share one form), and must
-            # NOT count as an edit: clearing the baseline there would leave a
-            # completed-then-un-completed set unable to return to its working
-            # weight.
-            set_.base_weight = None
-            # Same reason gym_toggle_deload refuses to scale an
-            # is_default_seeded set: it was invented, not a real working
-            # weight. A hand-typed number stops that being true -- it is now
-            # the lifter's own choice, so a later deload should be free to
-            # scale it like any other set.
-            set_.is_default_seeded = False
-        set_.weight = weight
-    if reps is not None:
-        if reps != set_.reps:
-            reps_changed = True
-            # Same rule as the weight above: a typed rep count is ground truth
-            # from now on, so a later toggle-off must not overwrite it.
-            set_.base_reps = None
-        set_.reps = reps
+    # See _apply_typed_weight_reps for why was_default_seeded has to be read
+    # before this call rather than after: it clears the flag itself.
+    was_default_seeded, weight_changed, reps_changed = _apply_typed_weight_reps(set_)
 
     wanted = request.form.get('completed')
     was_completed = set_.completed
@@ -1289,10 +1302,14 @@ def gym_toggle_set_complete(set_id):
     if set_.completed and was_default_seeded and (weight_changed or reps_changed):
         # A correction to the invented default plan, being confirmed done --
         # carry it to the sets that are still sitting on that same untouched
-        # default. See _propagate_default_correction for the rest of the
+        # default. `set_.completed` gates this route's trigger and NOT
+        # gym_update_set's (see its own call site below) because this is the
+        # route that decides completed/not -- an edit typed here but not yet
+        # confirmed is exactly the drop-set-in-progress case propagation must
+        # NOT fire on. See _propagate_default_correction for the rest of the
         # reasoning.
         _propagate_default_correction(
-            set_, weight if weight_changed else None, reps if reps_changed else None)
+            set_, set_.weight if weight_changed else None, set_.reps if reps_changed else None)
 
     if set_.completed and was_completed:
         # already logged, and the caller asked for logged: a duplicate request.
@@ -1322,44 +1339,34 @@ def gym_update_set(set_id):
     not exclusive to that page: session_detail.html's per-exercise sheet
     posts here too for a set on a still-live session, alongside
     gym_toggle_set_complete's own weight/reps fields on the same screen --
-    two affordances for the same edit, so both have to carry a correction the
-    same way (see the propagation call below)."""
+    two affordances for the same edit. They apply the edit itself
+    identically (see _apply_typed_weight_reps), but propagation to sibling
+    sets is gated differently in each -- see the comment on the trigger
+    below for why, and the finished-session guard next to it for the one
+    case where this route must still apply the edit but must NOT propagate."""
     set_ = owned_set(set_id)
-    # Read before either "changed by hand" branch below clears it -- same
-    # reason gym_toggle_set_complete reads was_default_seeded up front (see
-    # its comment at the top of that route).
-    was_default_seeded = set_.is_default_seeded
-    weight = _to_float(request.form.get('weight', ''))
-    reps = _to_int(request.form.get('reps', ''))
-    weight_changed = False
-    reps_changed = False
-    if weight is not None:
-        if weight != set_.weight:
-            weight_changed = True
-            # Changed by hand -- ground truth from now on, so drop any stale
-            # deload baseline that would otherwise overwrite it later. An
-            # unchanged value is just the form echoing what is already stored
-            # (the weight input and the check button share one form), and must
-            # NOT count as an edit: clearing the baseline there would leave a
-            # completed-then-un-completed set unable to return to its working
-            # weight.
-            set_.base_weight = None
-            # Same reason gym_toggle_deload refuses to scale an
-            # is_default_seeded set: it was invented, not a real working
-            # weight. A hand-typed number stops that being true -- it is now
-            # the lifter's own choice, so a later deload should be free to
-            # scale it like any other set.
-            set_.is_default_seeded = False
-        set_.weight = weight
-    if reps is not None:
-        if reps != set_.reps:
-            reps_changed = True
-            # Same rule as the weight above: a typed rep count is ground truth
-            # from now on, so a later toggle-off must not overwrite it.
-            set_.base_reps = None
-        set_.reps = reps
+    session_ = set_.session_exercise.session
+    # See _apply_typed_weight_reps for why was_default_seeded has to be read
+    # before this call rather than after: it clears the flag itself.
+    was_default_seeded, weight_changed, reps_changed = _apply_typed_weight_reps(set_)
 
-    if was_default_seeded and (weight_changed or reps_changed):
+    # No `completed` gate here, unlike gym_toggle_set_complete's trigger --
+    # this route never sets `completed` at all, so requiring it (as the
+    # other route's comment once wrongly implied both routes should) would
+    # make propagation never fire through this editor. Firing on the edit
+    # alone is correct here: this form's whole point is a correction typed
+    # after the fact, not a confirmation.
+    #
+    # But: only while the session is still live. A finished session's
+    # "Sätze & Notizen" disclosure posts here too, and rewriting sibling
+    # sets that were never performed inside an already-closed historical
+    # record is wrong even though most readers filter on `completed` -- the
+    # JSON export does not, and the cold-start propagation feature was
+    # scoped to the live screen throughout. Correcting a typo on a finished
+    # set must still update THAT set (the call to _apply_typed_weight_reps
+    # above already did, unconditionally); only the fan-out to siblings
+    # stops.
+    if session_.finished_at is None and was_default_seeded and (weight_changed or reps_changed):
         # This is the OTHER route that can correct a still-pending default
         # set -- session_detail.html's sheet posts here, not just
         # gym_toggle_set_complete's confirm button. Without this, a
@@ -1369,7 +1376,7 @@ def gym_update_set(set_id):
         # confirms a sibling set on the live screen. See
         # _propagate_default_correction for the rest of the reasoning.
         _propagate_default_correction(
-            set_, weight if weight_changed else None, reps if reps_changed else None)
+            set_, set_.weight if weight_changed else None, set_.reps if reps_changed else None)
 
     db.session.commit()
     # request.args carried through: the debrief's "Vorlage aktualisieren" offer

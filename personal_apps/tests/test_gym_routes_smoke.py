@@ -1173,6 +1173,24 @@ def test_every_gym_form_posts_fields_its_own_route_reads():
             bodies[current].append(line)
     bodies = {name: '\n'.join(lines) for name, lines in bodies.items()}
 
+    def resolve(name, seen=None):
+        # A route's own body is not always where the field is read anymore:
+        # _apply_typed_weight_reps (shared by gym_toggle_set_complete and
+        # gym_update_set, see the final-polish F1 extraction) is where
+        # 'weight'/'reps' actually get pulled off request.form. Follow calls
+        # to any other function defined in this module, transitively, so a
+        # field read by a shared helper still counts as read by its caller
+        # -- otherwise this test would force every route to inline its field
+        # reads, which is the opposite of what it's meant to guard.
+        seen = seen if seen is not None else set()
+        if name in seen or name not in bodies:
+            return ''
+        seen.add(name)
+        text = bodies[name]
+        for callee in sorted(set(re.findall(r'\b(\w+)\(', text)) & bodies.keys() - seen):
+            text += '\n' + resolve(callee, seen)
+        return text
+
     form_re = re.compile(
         r"<form[^>]*action=\"\{\{\s*url_for\('gym\.(\w+)'.*?\}\}\"(.*?)</form>", re.S)
     control_re = re.compile(r'<(?:input|select|textarea)\b[^>]*\bname="([^"{]+)"')
@@ -1181,10 +1199,10 @@ def test_every_gym_form_posts_fields_its_own_route_reads():
     for path in sorted((root / 'templates' / 'gym').glob('*.html')):
         html = path.read_text(encoding='utf-8')
         for endpoint, body in form_re.findall(html):
-            route = bodies.get(endpoint)
-            if route is None:
+            if endpoint not in bodies:
                 problems.append(f'{path.name}: posts to gym.{endpoint}, which does not exist')
                 continue
+            route = resolve(endpoint)
             for field in sorted(set(control_re.findall(body))):
                 if f"'{field}'" not in route and f'"{field}"' not in route:
                     problems.append(f'{path.name}: posts {field!r} to gym.{endpoint}, '
