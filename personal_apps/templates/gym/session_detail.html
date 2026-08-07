@@ -904,12 +904,69 @@ function rearmDragHandles() {
     document.querySelectorAll('.drag-handle').forEach(function (h) { h.tabIndex = on ? 0 : -1; });
 }
 
-// Everything outside #session-body that depends on state inside it. Sheets and
-// the shell survive the swap, so nothing else would ever update them.
-function syncAfterSwap(body) {
+// Everything outside #session-body that depends on state inside it. The
+// shell (skip-rest-act, drag handles) survives the swap and is patched here.
+//
+// Every <dialog class="sheet"> ALSO survives the swap -- they are siblings of
+// #session-body, not descendants -- but "survives" only ever meant "is not
+// destroyed", not "is still correct". The server response behind every
+// in-place mutation carries fresh copies of every sheet (a per-exercise
+// sheet's set list, the deload sheet's has-a-set-landed note, an add's own
+// brand-new #sheet-ex-<id>...), and until this function existed nothing ever
+// read them: a sheet showed whatever was true when the page last fully
+// loaded, same bug in three places -- a newly added exercise had NO sheet at
+// all, an already-open-able exercise sheet went stale the moment a set
+// landed, and the session-level sheets (deload's "already logged a set" note,
+// in particular) never updated either. See syncSheets below.
+function syncAfterSwap(doc, body) {
     var act = document.getElementById('skip-rest-act');
     if (act) { act.hidden = !body.querySelector('#rest-fill'); }
     rearmDragHandles();
+    syncSheets(doc);
+}
+
+// Replaces every sheet with the fresh copy the server just sent, EXCEPT one
+// that is currently open (native showModal() makes the rest of the page
+// inert, so in practice the only sheet that can be open while its own action
+// triggers this refresh is the add sheet below -- but this guards the general
+// case too, not just that one: destroying an open <dialog> node closes it,
+// full stop, so nothing here may ever replaceWith() or remove() one that has
+// .open set).
+//
+// #sheet-add-exercise itself is skipped entirely and handled by the
+// dedicated #exadd-list-only swap further down in refreshBody, which is what
+// lets that sheet stay open across its own in-place adds without losing the
+// search text or the row that is mid-flight -- swapping the whole dialog here
+// too would undo that on every single tap.
+function syncSheets(doc) {
+    if (!doc) { return; }
+    var freshSheets = Array.prototype.slice.call(doc.querySelectorAll('dialog.sheet'));
+    var freshIds = {};
+    freshSheets.forEach(function (s) { freshIds[s.id] = true; });
+
+    freshSheets.forEach(function (freshSheet) {
+        if (freshSheet.id === 'sheet-add-exercise') { return; }
+        var oldSheet = document.getElementById(freshSheet.id);
+        if (oldSheet) {
+            if (oldSheet.open) { return; }
+            oldSheet.replaceWith(freshSheet);
+        } else {
+            // A brand-new sheet -- an exercise added in place. The fresh
+            // #session-body's row already points a data-sheet="sheet-ex-<id>"
+            // button at this id (see the queue/panel templates), so without
+            // this the ⋯ on a freshly added exercise opens nothing.
+            document.body.appendChild(freshSheet);
+        }
+    });
+
+    // A sheet whose exercise is gone (replaced or removed elsewhere) would
+    // otherwise sit around as a dead node with a stale id nothing points at
+    // any more.
+    document.querySelectorAll('dialog.sheet').forEach(function (oldSheet) {
+        if (oldSheet.id === 'sheet-add-exercise') { return; }
+        if (oldSheet.open) { return; }
+        if (!freshIds[oldSheet.id]) { oldSheet.remove(); }
+    });
 }
 
 
@@ -948,7 +1005,7 @@ function refreshBody(html) {
         window.scrollTo(0, scrollY);
         var freshNum = fresh.querySelector('.grew__num');
         if (freshNum) { countUp(freshNum, wasVolume); }
-        syncAfterSwap(fresh);
+        syncAfterSwap(doc, fresh);
         announce(said);
     }
     // The sheet lives outside #session-body, so the wholesale swap above never
