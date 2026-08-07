@@ -1161,6 +1161,52 @@ def gym_delete_set(set_id):
     return redirect(url_for('gym.session_detail', session_id=session_id))
 
 
+def _propagate_default_correction(set_, weight, reps):
+    """A hand-typed correction to a set that was still sitting on the
+    invented default plan (3 sets at DEFAULT_PLAN_WEIGHT x DEFAULT_PLAN_REPS,
+    see seeding._seeded_sets) carries forward to any LATER set of the same
+    SessionExercise that is itself still untouched -- `completed` is False
+    and `is_default_seeded` is still True.
+
+    This is deliberately narrower than "always carry a weight change
+    forward": the owner was asked and explicitly rejected that, because it
+    would override a deliberate drop set or ramp-up on a normal templated
+    workout. Restricting it to is_default_seeded siblings makes it fire only
+    on the cold-start path this exists for -- a real history-seeded exercise
+    is never touched (see test_correcting_a_history_seeded_set_does_not_propagate).
+
+    Earlier sets, and any sibling the lifter has already hand-edited (its own
+    is_default_seeded already cleared) or already completed, are left alone
+    entirely -- only `weight`/`reps` was already established for `set_`
+    before this widened to its neighbours, so the same "already logged, or
+    already a real choice" guards apply to them too.
+
+    `weight`/`reps` are passed in as None when that particular field did not
+    change on `set_` -- e.g. correcting only the weight (the default reps of
+    8 already being right) must not stomp a sibling's reps with the same
+    unchanged 8 it already has.
+
+    The propagated-to sibling has its OWN is_default_seeded cleared too: the
+    correction is now the plan, not a guess. Leaving it set would mean a
+    second, later correction elsewhere in the exercise keeps re-propagating
+    past sets the lifter already silently accepted at the first corrected
+    number -- which is exactly the always-carry-forward behaviour rejected
+    above, just deferred by one set instead of skipped outright.
+    """
+    for sibling in set_.session_exercise.sets:
+        if sibling.id == set_.id:
+            continue
+        if sibling.position <= set_.position:
+            continue
+        if sibling.completed or not sibling.is_default_seeded:
+            continue
+        if weight is not None:
+            sibling.weight = weight
+        if reps is not None:
+            sibling.reps = reps
+        sibling.is_default_seeded = False
+
+
 @gym_bp.route('/gym/set/<int:set_id>/toggle_complete', methods=['POST'])
 @login_required
 def gym_toggle_set_complete(set_id):
@@ -1183,10 +1229,19 @@ def gym_toggle_set_complete(set_id):
     set_ = owned_set(set_id)
     session_ = set_.session_exercise.session
 
+    # Read before any of the edits below touch it -- propagation (see
+    # _propagate_default_correction) needs to know whether THIS set was still
+    # sitting on the untouched default plan at the moment the correction
+    # arrived, and the "changed by hand" branches just below are about to
+    # clear the flag on set_ itself.
+    was_default_seeded = set_.is_default_seeded
     weight = _to_float(request.form.get('weight', ''))
     reps = _to_int(request.form.get('reps', ''))
+    weight_changed = False
+    reps_changed = False
     if weight is not None:
         if weight != set_.weight:
+            weight_changed = True
             # Changed by hand -- ground truth from now on, so drop any stale
             # deload baseline that would otherwise overwrite it later. An
             # unchanged value is just the form echoing what is already stored
@@ -1204,6 +1259,7 @@ def gym_toggle_set_complete(set_id):
         set_.weight = weight
     if reps is not None:
         if reps != set_.reps:
+            reps_changed = True
             # Same rule as the weight above: a typed rep count is ground truth
             # from now on, so a later toggle-off must not overwrite it.
             set_.base_reps = None
@@ -1215,6 +1271,15 @@ def gym_toggle_set_complete(set_id):
     # The stamp follows the flag in both directions. Leaving it behind on an
     # un-complete would make the next tick measure the wrong interval.
     set_.completed_at = dt.datetime.utcnow() if set_.completed else None
+
+    if set_.completed and was_default_seeded and (weight_changed or reps_changed):
+        # A correction to the invented default plan, being confirmed done --
+        # carry it to the sets that are still sitting on that same untouched
+        # default. See _propagate_default_correction for the rest of the
+        # reasoning.
+        _propagate_default_correction(
+            set_, weight if weight_changed else None, reps if reps_changed else None)
+
     if set_.completed and was_completed:
         # already logged, and the caller asked for logged: a duplicate request.
         # Persist any weight/reps it carried, but do NOT restart the rest --

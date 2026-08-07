@@ -3,7 +3,9 @@
 **Date:** 2026-08-07
 **Status:** implemented on `dev_personal` (a9dfb49), plus a final-review fix
 pass closing five findings (F1–F5, see `final-fixes-report.md`) — two of
-which corrected claims made below. Not merged to `main`.
+which corrected claims made below, and a follow-up (H1, below) that carries a
+corrected placeholder weight forward within an exercise. Not merged to
+`main`.
 **Branch:** `dev_personal`
 
 ## The problem
@@ -206,6 +208,64 @@ Sheet forms currently navigate rather than post in place
 
 **Non-goal:** picker ordering. Recency or frequency ranking would help the
 well-worn case, not the cold-start one, and is a separate piece of work.
+
+---
+
+## Follow-up (H1) — a correction propagates to the remaining defaults
+
+A whole-branch review found that Change 2 (tap the readout to type it) only
+fixed the input *speed*, not the count: correcting the weight on set 1 of a
+new exercise left chips 2 and 3, and the next set's prefill, sitting at the
+invented 20,0 kg placeholder — three retypes per new exercise, on exactly the
+path this whole feature exists for.
+
+The owner was asked whether a corrected weight should carry to the remaining
+unlogged sets and chose **narrow, not universal**: a hand-typed weight (and/or
+reps) propagates forward **only** when the later, still-uncompleted sets of
+that same exercise are themselves still sitting on the untouched default plan
+(`SessionSet.is_default_seeded`). They explicitly rejected always-carrying a
+correction forward, because on a normal templated workout a mid-exercise
+weight change is usually a deliberate drop set or ramp-up, not a correction.
+
+Implemented in `gym_toggle_set_complete` (`features/gym/routes.py`) via a new
+`_propagate_default_correction` helper, run when a set is confirmed done and
+its own weight and/or reps changed from what was stored, and it was itself
+still `is_default_seeded` at that moment (read before the "changed by hand"
+branches clear the flag on it). It writes the new value into every later
+sibling (`position >` the set just confirmed) that is not yet completed and
+is still `is_default_seeded`, then clears the flag on each of those siblings
+too.
+
+Three decisions were left to the implementation:
+
+- **Does adopting the value clear `is_default_seeded` on the sibling that
+  received it?** Yes. The correction is now the plan, not a guess. Leaving
+  it set would let a *second*, independent correction later in the exercise
+  re-propagate past sets the lifter already silently accepted at the first
+  corrected number — which is the always-carry-forward behaviour the owner
+  rejected, just deferred by one set instead of skipped. Clearing it means
+  the exercise behaves like an ordinary templated one from the first
+  correction onward: any further divergence is deliberate and stays local.
+- **Do reps propagate on the same rule as weight, or only weight?** Same
+  rule as weight. The two are seeded together, cleared together
+  (`is_default_seeded` is one flag covering both), and `gym_toggle_set_complete`
+  already treats a hand-typed weight and a hand-typed rep count identically
+  everywhere else. Propagating only weight while leaving reps stuck at the
+  invented 8 would be a second, narrower version of the exact bug this fixes.
+- **Are earlier sets, or anything already completed, ever touched?** No.
+  Propagation only reaches later positions, and only sets that are not yet
+  completed — logged work is never rewritten, regardless of position or
+  flag state.
+
+Tests in `personal_apps/tests/test_gym_cold_start.py`: correcting set 1
+carries to pending default sets 2/3; a history-seeded exercise is
+unaffected (the owner's explicit condition); a set the lifter already
+hand-edited is not overwritten by a later correction; a completed set is
+never rewritten even if it is still `is_default_seeded`; a set that adopted
+a propagated correction has its own `is_default_seeded` cleared. Each was
+verified with a teeth experiment — the guarded mutation was applied to
+production code and the test confirmed to fail for the stated reason before
+being reverted.
 
 ---
 
