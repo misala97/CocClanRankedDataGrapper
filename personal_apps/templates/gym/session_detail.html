@@ -577,33 +577,59 @@ document.addEventListener('click', function (e) {
 // Filtering is client-side over a list the server already rendered: a lifter's
 // catalogue is tens of rows, not thousands, and a round trip per keystroke on
 // gym wifi would be worse than useless.
+// Returns the hit count. filterAddList() itself also runs from refreshBody,
+// re-syncing the list's "schon drin" counts after every add -- not just a
+// keystroke -- so the announcement below is scheduled by the 'input'
+// listener instead of from in here, or every add would also queue a stray
+// "N Treffer." a moment after its own "hinzugefügt" confirmation.
 function filterAddList() {
     var search = document.getElementById('exadd-search');
     var list = document.getElementById('exadd-list');
-    if (!search || !list) { return; }
+    if (!search || !list) { return 0; }
     var q = search.value.trim().toLowerCase();
     var hits = 0;
+    // data-name is already lowercased server-side (see the loop that renders
+    // these rows), q is lowercased above -- both sides of this compare are
+    // already case-folded.
+    var exact = false;
     list.querySelectorAll('.exadd__row:not(.exadd__row--new)').forEach(function (row) {
         var match = !q || row.dataset.name.indexOf(q) !== -1;
         row.hidden = !match;
         if (match) { hits += 1; }
+        if (q && row.dataset.name === q) { exact = true; }
     });
 
-    // The create row is what the list offers when nothing matches -- which is
-    // every search on an empty catalogue, so a first-time user never has to
-    // find a separate "new exercise" mode.
+    // The create row is what the list offers when nothing matches EXACTLY --
+    // gated on a substring hit instead, a catalogue entry like "Rudern eng"
+    // would swallow the create offer for "Rudern" and leave no way to add
+    // that name at all, even though it is a real, different exercise.
     var create = document.getElementById('exadd-create');
     var name = document.getElementById('exadd-create-name');
     if (create && name) {
-        create.hidden = !q || hits > 0;
+        create.hidden = !q || exact;
         name.textContent = search.value.trim();
     }
     var empty = document.getElementById('exadd-empty');
     if (empty) { empty.hidden = !!q || hits > 0; }
+    return hits;
 }
 
+var addFilterAnnounceTimer = null;
 document.addEventListener('input', function (e) {
-    if (e.target.id === 'exadd-search') { filterAddList(); }
+    if (e.target.id !== 'exadd-search') { return; }
+    var hits = filterAddList();
+    var q = e.target.value.trim();
+
+    // One announcement per pause in typing, not one per keystroke -- speaking
+    // on every keystroke would be worse than the silence this replaces.
+    // Reuses announce()/#rest-announce, the page's one live-region channel,
+    // rather than wiring a second one onto #exadd-list.
+    clearTimeout(addFilterAnnounceTimer);
+    if (q) {
+        addFilterAnnounceTimer = setTimeout(function () {
+            announce(hits > 0 ? hits + ' Treffer.' : 'Keine Treffer.');
+        }, 500);
+    }
 });
 
 // One row tap = one add, posted in place so the sheet stays open. The list is
@@ -619,21 +645,33 @@ document.addEventListener('click', function (e) {
     if (addRowsInFlight.has(row)) { return; }
 
     var data = new FormData();
+    var addedName;
     if (row.id === 'exadd-create') {
         var typed = search ? search.value.trim() : '';
         if (!typed) { return; }
         data.append('new_exercise_name', typed);
+        addedName = typed;
     } else {
         data.append('exercise_id', row.dataset.exerciseId);
+        var nameEl = row.querySelector('.exadd__name');
+        addedName = nameEl ? nameEl.textContent.trim() : '';
     }
 
+    var addFailed = false;
     addRowsInFlight.add(row);
     row.classList.add('is-busy');
     performMutation(list.dataset.addUrl, {
         method: 'POST', body: data, credentials: 'same-origin',
-    }).finally(function () {
+    }, function () { addFailed = true; }).finally(function () {
         addRowsInFlight.delete(row);
         row.classList.remove('is-busy');
+        if (!addFailed) {
+            // The one spoken confirmation a screen-reader user gets that the
+            // tap landed -- the sheet stays open and nothing else here is
+            // announced. Reuses announce()/#rest-announce rather than adding
+            // a second live region.
+            announce((addedName || 'Übung') + ' hinzugefügt.');
+        }
         // Clearing the search after a create is the difference between "added"
         // and "still looks like it did not take": the create row would otherwise
         // sit there offering to create the same name again.
