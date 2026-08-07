@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: all three tasks shipped** (`845e0c9`, `f6ce7be`, `871cbc2`/`a9dfb49`), plus a final-review fix pass closing five more findings (F1–F5 — see `docs/superpowers/specs/2026-08-07-gym-cold-start-design.md` and `.superpowers/sdd/final-fixes-report.md`). Two places this plan turned out wrong, found while executing it:
+
+1. **Task 2, Step 2's `entry.isConnected` reentrancy guard does not work.** Typing a value and pressing Enter fires `commit(true)`, which calls `entry.replaceWith(display)` — and `replaceWith` does not flip `isConnected` to `false` synchronously the way `remove()` does, so the `blur` handler that fires a moment later (focus leaving the now-detached-but-still-"connected" entry) re-entered `commit(true)` and ran the whole body a second time. The shipped code (`session_detail.html`, inside `openNumberEntry`) uses a plain `settled` boolean instead — set once, checked first, no ambiguity about DOM connectivity timing. See the comment directly above it for the blow-by-blow.
+2. **The plan did not anticipate `test_the_add_exercise_sheet_separates_picking_from_creating`** in `test_gym_routes_smoke.py`, an existing smoke test pinned to the two-pane sheet Task 3 removes. It had to be rewritten rather than just left alone — it became `test_the_add_exercise_sheet_is_one_searchable_list` in the same commit as the sheet itself (`871cbc2`).
+
 **Goal:** Make a workout usable when nothing has been logged yet — freestyle sessions and the first run of a new template.
 
 **Architecture:** Three independent changes against one root cause (an exercise with no history produces no plan, and the live screen assumes a plan exists). Task 1 is server-side and makes a plan always exist, which retires the advance-after-one-set bug without touching the live rule. Task 2 makes the steppers typeable. Task 3 collapses the add-exercise sheet into one search field that doubles as the create path. Tasks are ordered by dependency but each ships on its own.
@@ -51,7 +56,7 @@
 - Produces: `_seeded_sets(session_, exercise_id, position) -> list[SessionSet]` now returns `DEFAULT_PLAN_SETS` uncompleted `SessionSet` rows (positions 1..3, `weight=DEFAULT_PLAN_WEIGHT`, `reps=DEFAULT_PLAN_REPS`, `base_weight=None`, `base_reps=None`) when `_last_full_performance` yields nothing. Unchanged on the history branch.
 - Produces: template context names `default_plan_weight`, `default_plan_reps` in `session_detail.html`'s render context.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `personal_apps/tests/test_gym_cold_start.py`:
 
@@ -341,7 +346,7 @@ def test_history_still_wins_over_the_default(client, virgin_session):
                 db.session.commit()
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 cd personal_apps && python -m pytest tests/test_gym_cold_start.py -v
@@ -351,7 +356,7 @@ Expected: it errors first with `AttributeError: module 'features.gym.stats' has 
 
 If it is easier to see the real failures, do Step 3 first and re-run — the constants alone change no behaviour.
 
-- [ ] **Step 3: Add the constants**
+- [x] **Step 3: Add the constants**
 
 In `personal_apps/features/gym/stats.py`, directly after the `DEFAULT_INCREMENT = 2.5` block (line 99):
 
@@ -370,7 +375,7 @@ DEFAULT_PLAN_REPS = 8
 DEFAULT_PLAN_WEIGHT = 20.0
 ```
 
-- [ ] **Step 4: Return the default from `_seeded_sets`**
+- [x] **Step 4: Return the default from `_seeded_sets`**
 
 In `personal_apps/features/gym/routes.py`, replace the early return in `_seeded_sets` (currently lines 308-310):
 
@@ -405,7 +410,7 @@ Also extend the docstring's first line so it stops promising history is the only
     when there is none.
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 cd personal_apps && python -m pytest tests/test_gym_cold_start.py -v
@@ -413,7 +418,7 @@ cd personal_apps && python -m pytest tests/test_gym_cold_start.py -v
 
 Expected: 7 passed.
 
-- [ ] **Step 6: Run the full suite for regressions**
+- [x] **Step 6: Run the full suite for regressions**
 
 ```bash
 cd personal_apps && python -m pytest tests/ -q
@@ -421,7 +426,7 @@ cd personal_apps && python -m pytest tests/ -q
 
 Expected: all pass. If `test_deload_scales_the_suggestion_for_an_exercise_added_mid_session` or `test_seeded_suggestion_snaps_to_the_exercises_real_stack_stops` fail, stop — they use exercises *with* history and must be unaffected; a failure there means the history branch was changed by mistake.
 
-- [ ] **Step 7: Retire the duplicated literals in the template**
+- [x] **Step 7: Retire the duplicated literals in the template**
 
 In `personal_apps/features/gym/routes.py`, in the `render_template('gym/session_detail.html', ...)` call (around line 982), add two context names alongside the existing ones:
 
@@ -448,7 +453,7 @@ with:
     {% set pair_reps = next_set.reps if next_set else (last_done.reps if last_done else (start.reps if start else default_plan_reps)) %}
 ```
 
-- [ ] **Step 8: Fix the stale docstring**
+- [x] **Step 8: Fix the stale docstring**
 
 In `personal_apps/tests/test_gym_routes_smoke.py`, the docstring of `test_deload_scales_the_suggestion_for_an_exercise_added_mid_session` (lines 726-729) claims `gym_add_session_exercise` "creates none either". That stopped being true when the route started seeding, and is doubly wrong now. Replace the docstring with:
 
@@ -461,7 +466,7 @@ In `personal_apps/tests/test_gym_routes_smoke.py`, the docstring of `test_deload
     """
 ```
 
-- [ ] **Step 9: Verify the page renders and re-run everything**
+- [x] **Step 9: Verify the page renders and re-run everything**
 
 ```bash
 cd personal_apps && python -m pytest tests/ -q
@@ -469,7 +474,7 @@ cd personal_apps && python -m pytest tests/ -q
 
 Expected: all pass.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add personal_apps/features/gym/stats.py personal_apps/features/gym/routes.py personal_apps/templates/gym/_session_live.html personal_apps/tests/test_gym_cold_start.py personal_apps/tests/test_gym_routes_smoke.py
@@ -504,7 +509,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: nothing from Task 1.
 - Produces: `.field-num__val` becomes a `<button type="button" data-role="display">`. Its `data-role` is unchanged, so the existing stepper handler that writes `display.textContent` keeps working untouched.
 
-- [ ] **Step 1: Make the readout a button**
+- [x] **Step 1: Make the readout a button**
 
 In `personal_apps/templates/gym/_session_live.html`, replace the weight readout (line 194):
 
@@ -546,7 +551,7 @@ Update the comment above the pair (lines 178-182) — it currently states "No ke
        mid-session. #}
 ```
 
-- [ ] **Step 2: Add the typed-entry handler**
+- [x] **Step 2: Add the typed-entry handler**
 
 In `personal_apps/templates/gym/session_detail.html`, directly after the steppers handler (after line 515, before the `---- motion ----` comment), add:
 
@@ -612,7 +617,7 @@ document.addEventListener('click', function (e) {
 });
 ```
 
-- [ ] **Step 3: Style the entry field to sit exactly where the readout sat**
+- [x] **Step 3: Style the entry field to sit exactly where the readout sat**
 
 In `personal_apps/static/gym/gym.css`, update the `.field-num__val` rule (line 1806) and add the entry rule after it:
 
@@ -640,7 +645,7 @@ Also fix the section comment above `.pair` (line 1799), which says the same now-
 /* ---- the two numbers: stepped by default, typed when the prefill is wrong ---- */
 ```
 
-- [ ] **Step 4: Start the app**
+- [x] **Step 4: Start the app**
 
 ```bash
 cd personal_apps && python -c "from app import app; app.run(port=5001)"
@@ -648,7 +653,7 @@ cd personal_apps && python -c "from app import app; app.run(port=5001)"
 
 Leave it running in the background. If port 5001 is already serving, reuse it — but restart it, because a running server caches templates.
 
-- [ ] **Step 5: Write the playwright check**
+- [x] **Step 5: Write the playwright check**
 
 Create `personal_apps/scratchpad/verify_typed_entry.py`:
 
@@ -736,7 +741,7 @@ finally:
             db.session.commit()
 ```
 
-- [ ] **Step 6: Run it**
+- [x] **Step 6: Run it**
 
 ```bash
 cd personal_apps && PYTHONPATH=. python scratchpad/verify_typed_entry.py
@@ -744,7 +749,7 @@ cd personal_apps && PYTHONPATH=. python scratchpad/verify_typed_entry.py
 
 Expected: prints `OK`. Then **open `personal_apps/scratchpad/typed_entry.png` with the Read tool and actually look at it** — confirm the panel did not shift when the field replaced the readout, and that the typed value is legible at phone size. A passing assertion does not prove it looks right.
 
-- [ ] **Step 7: Confirm the dev database is clean**
+- [x] **Step 7: Confirm the dev database is clean**
 
 ```bash
 cd personal_apps && PYTHONPATH=. python -c "
@@ -758,7 +763,7 @@ with app.app_context():
 
 Expected: both `0`.
 
-- [ ] **Step 8: Run the test suite**
+- [x] **Step 8: Run the test suite**
 
 ```bash
 cd personal_apps && python -m pytest tests/ -q
@@ -766,7 +771,7 @@ cd personal_apps && python -m pytest tests/ -q
 
 Expected: all pass — this task is client-side, so nothing should move.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add personal_apps/templates/gym/_session_live.html personal_apps/templates/gym/session_detail.html personal_apps/static/gym/gym.css
@@ -801,7 +806,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Produces: `#exadd-list` — the container the refresh swaps so the sheet stays in step with the session. `refreshBody(html)` gains a second responsibility: if the incoming document has an `#exadd-list`, replace the current one.
 - No route changes. `gym_add_session_exercise` already branches on `exercise_id` vs `new_exercise_name` (`routes.py:1044-1057`), and its redirect is followed by `fetch`, so `performMutation` receives the re-rendered page either way.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `personal_apps/tests/test_gym_cold_start.py`:
 
@@ -835,7 +840,7 @@ def test_creating_an_exercise_from_the_search_leaves_no_muscle_group(client, vir
         db.session.commit()
 ```
 
-- [ ] **Step 2: Run it to verify it passes already**
+- [x] **Step 2: Run it to verify it passes already**
 
 ```bash
 cd personal_apps && python -m pytest tests/test_gym_cold_start.py::test_creating_an_exercise_from_the_search_leaves_no_muscle_group -v
@@ -843,7 +848,7 @@ cd personal_apps && python -m pytest tests/test_gym_cold_start.py::test_creating
 
 Expected: PASS. This one pins existing route behaviour that the UI change depends on — it is a regression guard, not a driver. The rest of this task is client-side and is driven by the playwright check in Step 7.
 
-- [ ] **Step 3: Replace the add sheet**
+- [x] **Step 3: Replace the add sheet**
 
 In `personal_apps/templates/gym/session_detail.html`, replace the whole `sheet-add-exercise` dialog (lines 229-279) with:
 
@@ -894,7 +899,7 @@ In `personal_apps/templates/gym/session_detail.html`, replace the whole `sheet-a
 
 Note what this deliberately drops: the `<select>`, both `sheet__pane` wrappers, the `sheet__switch` / `sheet__back` mode buttons, the `sheet__hint`, and the muscle-group field. **Do not delete their CSS or the `data-show-pane` handler** — the per-exercise replace sheet still uses all of them.
 
-- [ ] **Step 4: Keep the sheet list in step with the session**
+- [x] **Step 4: Keep the sheet list in step with the session**
 
 In `personal_apps/templates/gym/session_detail.html`, inside `refreshBody` (line 773), after the `if (fresh && old) { ... }` block and before `startRestTick();`, add:
 
@@ -911,7 +916,7 @@ In `personal_apps/templates/gym/session_detail.html`, inside `refreshBody` (line
     }
 ```
 
-- [ ] **Step 5: Add the sheet's script**
+- [x] **Step 5: Add the sheet's script**
 
 In `personal_apps/templates/gym/session_detail.html`, after the typed-entry handler added in Task 2, add:
 
@@ -985,7 +990,7 @@ document.addEventListener('click', function (e) {
 });
 ```
 
-- [ ] **Step 6: Style the rows**
+- [x] **Step 6: Style the rows**
 
 In `personal_apps/static/gym/gym.css`, after the `.sheet__pane .field--full` rule (line 2446), append:
 
@@ -1014,7 +1019,7 @@ In `personal_apps/static/gym/gym.css`, after the `.sheet__pane .field--full` rul
 .exadd__empty[hidden] { display: none; }
 ```
 
-- [ ] **Step 7: Write the playwright check**
+- [x] **Step 7: Write the playwright check**
 
 Create `personal_apps/scratchpad/verify_add_search.py`:
 
@@ -1105,7 +1110,7 @@ finally:
                 db.session.commit()
 ```
 
-- [ ] **Step 8: Restart the server and run it**
+- [x] **Step 8: Restart the server and run it**
 
 ```bash
 cd personal_apps && PYTHONPATH=. python scratchpad/verify_add_search.py
@@ -1115,11 +1120,11 @@ The server caches templates, so restart it first or the old sheet will still be 
 
 Then **open both PNGs with the Read tool and look at them.** Check the row list is legible at 390px, the "×  drin" marker reads as a count rather than a button, and the create row is distinguishable from a real catalogue row.
 
-- [ ] **Step 9: Confirm the replace sheet still works**
+- [x] **Step 9: Confirm the replace sheet still works**
 
 The pane machinery this task stopped using is shared. Verify by hand at `http://localhost:5001/gym/session/<id>`: open a per-exercise sheet, expand "Übung ersetzen", and confirm the "+ Neue Übung anlegen" / "← Vorhandene wählen" switch still toggles.
 
-- [ ] **Step 10: Confirm the dev database is clean**
+- [x] **Step 10: Confirm the dev database is clean**
 
 ```bash
 cd personal_apps && PYTHONPATH=. python -c "
@@ -1133,7 +1138,7 @@ with app.app_context():
 
 Expected: both `0`.
 
-- [ ] **Step 11: Run the full suite**
+- [x] **Step 11: Run the full suite**
 
 ```bash
 cd personal_apps && python -m pytest tests/ -q
@@ -1141,7 +1146,7 @@ cd personal_apps && python -m pytest tests/ -q
 
 Expected: all pass.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add personal_apps/templates/gym/session_detail.html personal_apps/static/gym/gym.css personal_apps/tests/test_gym_cold_start.py

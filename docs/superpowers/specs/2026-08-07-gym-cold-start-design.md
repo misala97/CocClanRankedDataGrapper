@@ -1,7 +1,9 @@
 # Gym Tracker — the cold-start path
 
 **Date:** 2026-08-07
-**Status:** approved, not yet implemented
+**Status:** implemented on `dev_personal` (a9dfb49), plus a final-review fix
+pass closing five findings (F1–F5, see `final-fixes-report.md`) — two of
+which corrected claims made below. Not merged to `main`.
 **Branch:** `dev_personal`
 
 ## The problem
@@ -86,6 +88,19 @@ All five call sites that put an exercise into a session already funnel through
 One change reaches freestyle, first-run templates and mid-session additions
 alike.
 
+**Correction (final-review F4):** the follower-reconciliation row above was
+aspirational, not actual, at initial ship. `sharing.reconcile_follower`
+(then at `routes.py:1729`, now `sharing.py`) created the follower's mirrored
+`SessionExercise` row but never called `_seeded_sets` on it — its own
+docstring said so explicitly. An exercise a leader added mid-workout still
+arrived on the follower's side as an empty slot, reproducing symptom 1 for
+the follower alone. `_seeded_sets` and its history-lookup helpers moved to a
+new `features/gym/seeding.py` (sharing.py cannot import routes.py) and now
+take an explicit `user_id`, and `reconcile_follower` seeds every new row it
+creates, passing the follower's own id explicitly rather than relying on
+`current_user_id()` — which inside a leader's request would otherwise name
+the leader. See `final-fixes-report.md` for the fix and its tests.
+
 #### What it fixes for free
 
 Symptom 1 requires no change to `_live_context`. With three planned sets, one
@@ -112,6 +127,21 @@ A no-history exercise gets the plain default, **not** a deload-scaled one.
 `_seeded_sets` applies `deload_pct` only on the history branch. There is no
 working weight to take a percentage of, and scaling an invented number would
 present a fabricated prescription as a real one.
+
+**Correction (final-review F1):** that guarantee held only for `_seeded_sets`
+itself, and only claimed to hold for `gym_toggle_deload` by inference — the
+original comment ("base_weight stays None … there is no working weight for
+gym_toggle_deload to restore this to") assumed the toggle would never fill
+`base_weight` for one of these sets, but `gym_toggle_deload` actually filled
+`base_weight` for **every** set where it was `None`, with no way to tell an
+invented default-plan set apart from a real one that happened to sit at the
+same weight. Add-exercise-then-deload-ON scaled the placeholder into a
+fabricated prescription; the reverse order stayed safe by accident. Fixed by
+giving `SessionSet` an `is_default_seeded` column, set only by `_seeded_sets`'
+no-history branch and cleared the same moment a hand-typed edit clears
+`base_weight`/`base_reps` (turning the invented number into a real, lifter-
+chosen one). `gym_toggle_deload` skips any set carrying it, regardless of
+ordering.
 
 #### Considered and dropped
 
