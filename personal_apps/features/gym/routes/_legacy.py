@@ -20,21 +20,21 @@ from features.gym.scope import (
 )
 from features.gym.push import is_valid_push_endpoint
 from features.gym.schemas import ExerciseDetailPayload
-from . import analytics
-from . import matching
-from . import push
-from . import sharing
+from .. import analytics
+from .. import matching
+from .. import push
+from .. import sharing
 # The history -> pending-sets pipeline (_last_session_exercise,
 # _last_performance, _last_full_performance, _seeded_sets,
 # _seeded_suggestion) lives in seeding.py, not here -- sharing.py needs to
 # call _seeded_sets too, to seed a follower's mid-session additions (see
 # sharing.reconcile_follower), and sharing.py cannot import routes.py.
-from .seeding import (
+from ..seeding import (
     _last_session_exercise, _last_performance, _last_full_performance,
     _seeded_sets, _seeded_suggestion,
 )
 
-gym_bp = Blueprint('gym', __name__)
+from ._blueprint import gym_bp
 
 
 @gym_bp.route('/sw.js')

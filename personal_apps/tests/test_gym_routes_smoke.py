@@ -1160,9 +1160,18 @@ def test_every_gym_form_posts_fields_its_own_route_reads():
     from pathlib import Path
 
     root = Path(flask_app.root_path)
-    source = (root / 'features' / 'gym' / 'routes.py').read_text(encoding='utf-8')
-    # Split routes.py into function bodies, so a field is checked against the
-    # route it is actually posted to rather than the whole module.
+    # Every module in the routes package, concatenated. It was one file until
+    # the package split; reading only one module now would silently stop
+    # covering every route that had moved out of it, which is the exact
+    # failure this test exists to prevent. The transitive call resolution
+    # below still works across modules because they share one `bodies` map.
+    routes_dir = root / 'features' / 'gym' / 'routes'
+    modules = sorted(routes_dir.glob('*.py'))
+    assert modules, \
+        f'no route modules under {routes_dir} -- this test would pass by reading nothing'
+    source = '\n'.join(path.read_text(encoding='utf-8') for path in modules)
+    # Split into function bodies, so a field is checked against the route it is
+    # actually posted to rather than the whole package.
     bodies, current = {}, None
     for line in source.splitlines():
         match = re.match(r'def (\w+)\(', line)
