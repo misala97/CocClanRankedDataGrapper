@@ -147,7 +147,10 @@ class ExerciseDetailPayload(_Model):
     pr_weight: WeightPR | None
     pr_e1rm: E1rmPR | None
     last_progression: SessionRow | None
-    state: str
+    # 'neu' | 'rekord' | 'stagniert' | 'steigend', or None for stable --
+    # exercise_state() documents None as a real answer, not an absence.
+    state: str | None
+    # None when there is too little history to say anything.
     sessions_since_pr: int | None
     chart: ChartGeometry | None
     chip_class: str | None

@@ -339,6 +339,7 @@ def test_a_stranger_gets_404_on_someone_elses_template(
 CATALOGUE_ROUTES = [
     ('GET',  '/gym/exercises/{}',               'exercise_id'),
     ('GET',  '/gym/exercises/{}/progress.json', 'exercise_id'),
+    ('GET',  '/gym/exercises/{}/detail.json',   'exercise_id'),
     ('POST', '/gym/exercises/{}/update',        'exercise_id'),
     ('POST', '/gym/exercises/{}/delete',        'exercise_id'),
 ]

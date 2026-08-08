@@ -18,6 +18,9 @@
 - **The chart is inline SVG and must stay inline SVG.** It reads `var(--done)`, `var(--record)`, `var(--unlit)`, `var(--edge)` directly. A canvas cannot resolve CSS variables — this codebase has been bitten by that before. Do not introduce a charting library.
 - **Existing CSS is untouched.** `static/gym/gym.css` (3613 lines) keeps every class name. Components emit the same class names the Jinja emitted.
 - **Branch:** `dev_personal`. Never commit to `main`.
+- **Any new id-taking gym route must be added to the table in `tests/test_gym_ownership.py`** (near line 340). `test_every_id_taking_gym_route_is_covered_by_a_table` fails otherwise, and registering it is what makes the suite verify the route rejects another user's data.
+- **The exercise model is `Exercise`, not `GymExercise`.** `requirements.txt` is at the **repo root**, shared by both apps — there is no `personal_apps/requirements.txt`.
+- **Breadth over samples in tests.** Iterate every owned exercise rather than picking the first one. Doing the latter hid a real `state=None` crash through an entire green test run, because the first exercise happened to have history.
 - **Python:** existing venv, `personal_apps/requirements.txt`. **Node:** 22 LTS.
 - **Tests run from `personal_apps/`:** `python -m pytest tests/ -q`. The suite runs against the real local dev database (see `tests/conftest.py`), which is disposable dev data.
 
@@ -563,7 +566,9 @@ class ExerciseDetailPayload(_Model):
     pr_weight: WeightPR | None
     pr_e1rm: E1rmPR | None
     last_progression: SessionRow | None
-    state: str
+    # 'neu' | 'rekord' | 'stagniert' | 'steigend', or None for stable --
+    # exercise_state() documents None as a real answer, not an absence.
+    state: str | None
     sessions_since_pr: int | None
     chart: ChartGeometry | None
     chip_class: str | None

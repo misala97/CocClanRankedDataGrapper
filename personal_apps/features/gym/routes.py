@@ -19,6 +19,7 @@ from features.gym.scope import (
     owned_exercise, owned_session, owned_session_exercise, owned_set, owned_template,
 )
 from features.gym.push import is_valid_push_endpoint
+from features.gym.schemas import ExerciseDetailPayload
 from . import analytics
 from . import matching
 from . import push
@@ -2628,27 +2629,32 @@ def _chart_geometry(series, pr_e1rm=None):
             'has_record': any(p['is_best'] for p in plotted)}
 
 
-@gym_bp.route('/gym/exercises/<int:exercise_id>')
-@login_required
-def exercise_detail(exercise_id):
-    exercise = owned_exercise(exercise_id)
+def _exercise_detail_payload(exercise, raw_position):
+    """Everything the exercise page shows, for one exercise and one requested
+    position.
+
+    Shared by the HTML route and the JSON route so the default-slot rule below
+    cannot drift between them -- two copies of it would disagree the first time
+    either was touched, and the page and a refetch would then show different
+    slots.
+
+    The default view is one slot, not all of them. "Alle" draws every position
+    at once, which is the comparison view -- useful when you want it, and a
+    poor thing to land on: the answer to "how is this lift going" is a single
+    line, and overlapping slots bury it.
+
+    Which slot: the best-performing one, meaning highest best-e1RM -- but only
+    among slots with at least two sessions. A slot used once is a data point,
+    not a track record, and defaulting to it would show a flattering line
+    built from a single lucky day. With nothing qualifying, fall back to the
+    slot the exercise actually lives in (the most sessions).
+
+    `?position=all` is how the page asks for the comparison view, so the
+    default stays reachable in one click and the URL stays honest about what
+    it is showing.
+    """
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
 
-    # The default view is one slot, not all of them. "Alle" draws every position
-    # at once, which is the comparison view -- useful when you want it, and a
-    # poor thing to land on: the answer to "how is this lift going" is a single
-    # line, and overlapping slots bury it.
-    #
-    # Which slot: the best-performing one, meaning highest best-e1RM -- but only
-    # among slots with at least two sessions. A slot used once is a data point,
-    # not a track record, and defaulting to it would show a flattering line
-    # built from a single lucky day. With nothing qualifying, fall back to the
-    # slot the exercise actually lives in (the most sessions).
-    #
-    # `?position=all` is how the template asks for the comparison view, so the
-    # default stays reachable in one click and the URL stays honest about what
-    # it is showing.
-    raw_position = request.args.get('position')
     default_reason = None
     if raw_position == 'all':
         position = None
@@ -2668,18 +2674,63 @@ def exercise_detail(exercise_id):
 
     data = stats.exercise_progress(rows, position=position)
     chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
-    return render_template(
-        'gym/exercise_detail.html', exercise=exercise, muscle_groups=MUSCLE_GROUPS,
-        equipment_labels=EQUIPMENT_LABELS,
-        chip_class=chip_class, chip_label=chip_label,
-        selected_position_is_default=position_is_default,
-        selected_position_reason=default_reason,
-        chart=_chart_geometry(data['series'], data.get('pr_e1rm')),
+    return ExerciseDetailPayload.model_validate({
+        'exercise': {
+            'id': exercise.id,
+            'name': exercise.name,
+            'muscle_group': exercise.muscle_group,
+            'is_unilateral': exercise.is_unilateral,
+            'default_rest_seconds': exercise.default_rest_seconds,
+            'weight_increment': exercise.weight_increment,
+            'equipment': exercise.equipment,
+            'bar_weight': exercise.bar_weight,
+            'stack_kg': exercise.stack_kg,
+            'secondary_muscle_groups': exercise.secondary_muscle_groups,
+        },
+        'selected_position_is_default': position_is_default,
+        'selected_position_reason': default_reason,
+        'chart': _chart_geometry(data['series'], data.get('pr_e1rm')),
+        'chip_class': chip_class,
+        'chip_label': chip_label,
         # Only offer deletion when nothing depends on it -- same test the
         # catalogue used before this moved off the list.
-        can_delete=not exercise.session_exercises and not exercise.template_exercises,
+        'can_delete': not exercise.session_exercises and not exercise.template_exercises,
+        'muscle_groups': list(MUSCLE_GROUPS),
+        'equipment_labels': dict(EQUIPMENT_LABELS),
         **data,
-    )
+    })
+
+
+@gym_bp.route('/gym/exercises/<int:exercise_id>')
+@login_required
+def exercise_detail(exercise_id):
+    exercise = owned_exercise(exercise_id)
+    payload = _exercise_detail_payload(exercise, request.args.get('position'))
+    # model_dump() rather than mode='json': the template still runs datetimes
+    # through the |local filter, so they have to stay datetime objects. Jinja
+    # resolves dotted access on plain dicts, so the template needs no change
+    # here -- Task 6 is what replaces it.
+    context = payload.model_dump()
+    # The template wants the ORM object, not the serialized identity dict:
+    # it reads exercise.stack_kg through a join filter and passes the object
+    # to url_for.
+    context.pop('exercise')
+    return render_template('gym/exercise_detail.html', exercise=exercise, **context)
+
+
+@gym_bp.route('/gym/exercises/<int:exercise_id>/detail.json')
+@login_required
+def gym_exercise_detail_json(exercise_id):
+    """The full exercise page as JSON.
+
+    Distinct from gym_exercise_progress_json below, which backs the in-workout
+    quick-glance modal and deliberately falls back to all-time data when the
+    requested slot is empty. This one honours the filter exactly, because the
+    page's pills have to mean what they say.
+    """
+    exercise = owned_exercise(exercise_id)
+    payload = _exercise_detail_payload(exercise, request.args.get('position'))
+    return jsonify(payload.model_dump(mode='json'))
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/progress.json')
