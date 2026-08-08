@@ -2,36 +2,42 @@
 
 Importing a module here is what registers its routes onto gym_bp, so every
 module must be imported below even though the names look unused -- hence the
-noqa markers.
+noqa markers. gym_bp itself lives in _blueprint.py so no domain module has to
+import a sibling to reach it, which is what keeps these imports acyclic.
 
 The re-exports at the bottom are not decoration. Eleven test call sites and
 scripts/make_chart_fixture.py import these private helpers from
-`features.gym.routes`, and keeping that path working is what let this split
-happen without touching a single caller.
+`features.gym.routes`, and keeping that path working is what let the 2912-line
+routes.py split into this package without touching a single caller.
 """
 from ._blueprint import gym_bp
 
 from . import helpers          # noqa: F401
 from . import history          # noqa: F401
 from . import workout          # noqa: F401
-from . import _legacy          # noqa: F401
+from . import partners         # noqa: F401
+from . import session_admin    # noqa: F401
+from . import reports          # noqa: F401
+from . import catalogue        # noqa: F401
+from . import exercise_detail  # noqa: F401
+from . import push_routes      # noqa: F401
 
 from .helpers import (         # noqa: F401
     _to_float, _to_increment, _to_int, _clean_muscle_group,
     _clean_equipment, _to_stack_steps, _clean_secondary_groups,
-    _get_active_session, _cancel_pending_push,
+    _get_active_session, _cancel_pending_push, _username,
 )
 from .history import (         # noqa: F401
     load_performed, _to_performed, _session_rest_entries,
     performed_from_session,
 )
-from .workout import _live_context                       # noqa: F401
-from ._legacy import (         # noqa: F401
+from .workout import _live_context, _template_exercises_from_session   # noqa: F401
+from .exercise_detail import (                                         # noqa: F401
     _exercise_detail_payload, _chart_geometry, _default_position,
 )
-# Re-exported, not defined in the routes package: seeding.py owns it because
+# Re-exported, not defined in this package: seeding.py owns it because
 # sharing.py needs it too and cannot import a module that registers routes.
 # Three tests import it from `features.gym.routes`, so the path has to survive.
-from ..seeding import _last_full_performance             # noqa: F401
+from ..seeding import _last_full_performance                           # noqa: F401
 
 __all__ = ['gym_bp']

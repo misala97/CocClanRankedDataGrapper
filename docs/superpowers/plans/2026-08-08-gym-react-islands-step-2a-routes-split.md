@@ -448,7 +448,7 @@ git commit -m "refactor(gym): finish the routes split and drop _legacy"
 - [ ] The gym route count matches the pre-split count exactly
 - [ ] Every name in the Global Constraints re-export list imports from `features.gym.routes`
 - [ ] `features/gym/routes.py` no longer exists and `_legacy.py` is gone
-- [ ] `git log --follow personal_apps/features/gym/routes/workout.py` reaches commits from before the split
+- [x] ~~`git log --follow` on a domain module reaches pre-split commits~~ — **this was wrong and was removed.** Git follows renames one-to-one; splitting one file into nine is one-to-many, so no domain module can carry the old history. What actually survives: the `routes.py → routes/_legacy.py` rename preserves it up to `_legacy`'s deletion, and `git log -S'<some code>'` finds any moved line's real history. Use those.
 - [ ] The exercise detail page pixel-diffs clean against the pre-split baseline
 
 ## What this deliberately does not do
