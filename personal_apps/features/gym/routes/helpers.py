@@ -15,7 +15,7 @@ import datetime as dt
 
 from extensions import db
 from models import (
-    WorkoutSession, PendingPush, STALE_SESSION_TIMEOUT,
+    AppUser, WorkoutSession, PendingPush, STALE_SESSION_TIMEOUT,
     MUSCLE_GROUPS, EQUIPMENT_TYPES,
 )
 from features.gym import stats
@@ -200,3 +200,25 @@ def _cancel_pending_push(session_):
     set/exercise/session it was scheduled for is no longer current, and the
     daemon fires it regardless the moment it's due."""
     PendingPush.query.filter_by(session_id=session_.id, sent=False).delete()
+
+
+# These four were defined near their first *reader* in the pre-split routes.py,
+# which worked only because module globals resolve at call time -- WEEKDAY_SHORT
+# sat 1300 lines below the gym_heute that used it. Splitting the file turns that
+# latent ordering dependency into an import, so they live here, where every
+# domain module can reach them.
+
+# Here for the same reason MONTH_NAMES is: strftime('%a') follows the server's
+# locale, which is not the UI's.
+WEEKDAY_SHORT = ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So')
+
+# Buckets in MUSCLE_GROUPS that are not muscle groups, so a section built
+# from the full vocabulary does not carry them at zero forever.
+NON_MUSCLE_GROUPS = ('Cardio', 'Sonstiges')
+
+# How many finished workouts the Start page lists.
+RECENT_SESSIONS = 5
+
+def _username(user_id):
+    row = db.session.get(AppUser, user_id)
+    return row.username if row is not None else 'Jemand'

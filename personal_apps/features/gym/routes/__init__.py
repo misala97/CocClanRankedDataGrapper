@@ -13,6 +13,7 @@ from ._blueprint import gym_bp
 
 from . import helpers          # noqa: F401
 from . import history          # noqa: F401
+from . import workout          # noqa: F401
 from . import _legacy          # noqa: F401
 
 from .helpers import (         # noqa: F401
@@ -24,9 +25,9 @@ from .history import (         # noqa: F401
     load_performed, _to_performed, _session_rest_entries,
     performed_from_session,
 )
+from .workout import _live_context                       # noqa: F401
 from ._legacy import (         # noqa: F401
-    _live_context, _exercise_detail_payload, _chart_geometry,
-    _default_position,
+    _exercise_detail_payload, _chart_geometry, _default_position,
 )
 # Re-exported, not defined in the routes package: seeding.py owns it because
 # sharing.py needs it too and cannot import a module that registers routes.
