@@ -1,0 +1,129 @@
+{
+  "exercise_id": 14,
+  "chart": {
+    "series": [
+      {
+        "position": 7,
+        "points": [
+          {
+            "x": 10.0,
+            "y": 101.8,
+            "e1rm": 44.3,
+            "started_at": "2026-06-15T12:28:00",
+            "is_best": false,
+            "is_deload": false
+          },
+          {
+            "x": 48.95,
+            "y": 101.8,
+            "e1rm": 44.3,
+            "started_at": "2026-06-21T11:31:00",
+            "is_best": false,
+            "is_deload": false
+          },
+          {
+            "x": 97.67,
+            "y": 75.88,
+            "e1rm": 45.5,
+            "started_at": "2026-06-28T22:26:00",
+            "is_best": false,
+            "is_deload": false
+          },
+          {
+            "x": 123.83,
+            "y": 75.88,
+            "e1rm": 45.5,
+            "started_at": "2026-07-02T22:30:00",
+            "is_best": false,
+            "is_deload": false
+          },
+          {
+            "x": 156.03,
+            "y": 75.88,
+            "e1rm": 45.5,
+            "started_at": "2026-07-07T20:44:49",
+            "is_best": false,
+            "is_deload": false
+          },
+          {
+            "x": 182.17,
+            "y": 49.96,
+            "e1rm": 46.7,
+            "started_at": "2026-07-11T20:44:04",
+            "is_best": false,
+            "is_deload": false
+          },
+          {
+            "x": 198.65,
+            "y": 49.96,
+            "e1rm": 46.7,
+            "started_at": "2026-07-14T09:16:50",
+            "is_best": false,
+            "is_deload": false
+          },
+          {
+            "x": 218.14,
+            "y": 49.96,
+            "e1rm": 46.7,
+            "started_at": "2026-07-17T08:50:38",
+            "is_best": false,
+            "is_deload": true
+          },
+          {
+            "x": 244.5,
+            "y": 26.2,
+            "e1rm": 47.8,
+            "started_at": "2026-07-21T09:38:26",
+            "is_best": false,
+            "is_deload": true
+          },
+          {
+            "x": 310.0,
+            "y": 26.2,
+            "e1rm": 47.8,
+            "started_at": "2026-07-31T10:11:23",
+            "is_best": true,
+            "is_deload": false
+          }
+        ],
+        "opacity": 1.0,
+        "width": 2.5,
+        "is_main": true,
+        "label_x": 302.0,
+        "label_y": 18.2,
+        "label_anchor": "end"
+      }
+    ],
+    "lo": 44.3,
+    "hi": 47.8,
+    "axis_lo": 43.55,
+    "axis_hi": 48.55,
+    "ticks": [
+      {
+        "y_pct": 7.812,
+        "text": "48,5"
+      },
+      {
+        "y_pct": 50.0,
+        "text": "46"
+      },
+      {
+        "y_pct": 92.188,
+        "text": "43,5"
+      }
+    ],
+    "dates": [
+      "15.06.",
+      "08.07.",
+      "31.07."
+    ],
+    "width": 320.0,
+    "height": 128.0,
+    "has_deload": true,
+    "has_record": true
+  },
+  "session_count": 10,
+  "first_date": "15.06.2026",
+  "last_date": "31.07.2026",
+  "jinja_svg": "<svg viewBox=\"0 0 320 128\" role=\"img\"\n           aria-label=\"Verlauf des e1RM über 10 Einheiten,\n                       15.06.2026 bis 31.07.2026.\n                       Zwischen 44,3 und 47,8 Kilogramm.\n                       Die Tabelle darunter enthält dieselben Werte.\">\n        <g stroke=\"var(--edge)\" stroke-width=\"1\">\n          <line x1=\"0\" y1=\"10\" x2=\"320\" y2=\"10\"/>\n          <line x1=\"0\" y1=\"64\" x2=\"320\" y2=\"64\"/>\n          <line x1=\"0\" y1=\"118\" x2=\"320\" y2=\"118\"/>\n        </g>\n        \n        <g class=\"chart__ink\">\n        \n        \n        <g opacity=\"1.0\">\n        \n        \n        <line x1=\"10.0\" y1=\"101.8\" x2=\"48.95\" y2=\"101.8\"\n              stroke=\"var(--done)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              ></line>\n        \n        \n        <line x1=\"48.95\" y1=\"101.8\" x2=\"97.67\" y2=\"75.88\"\n              stroke=\"var(--done)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              ></line>\n        \n        \n        <line x1=\"97.67\" y1=\"75.88\" x2=\"123.83\" y2=\"75.88\"\n              stroke=\"var(--done)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              ></line>\n        \n        \n        <line x1=\"123.83\" y1=\"75.88\" x2=\"156.03\" y2=\"75.88\"\n              stroke=\"var(--done)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              ></line>\n        \n        \n        <line x1=\"156.03\" y1=\"75.88\" x2=\"182.17\" y2=\"49.96\"\n              stroke=\"var(--done)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              ></line>\n        \n        \n        <line x1=\"182.17\" y1=\"49.96\" x2=\"198.65\" y2=\"49.96\"\n              stroke=\"var(--done)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              ></line>\n        \n        \n        <line x1=\"198.65\" y1=\"49.96\" x2=\"218.14\" y2=\"49.96\"\n              stroke=\"var(--unlit)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              stroke-dasharray=\"3 4\"></line>\n        \n        \n        <line x1=\"218.14\" y1=\"49.96\" x2=\"244.5\" y2=\"26.2\"\n              stroke=\"var(--unlit)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              stroke-dasharray=\"3 4\"></line>\n        \n        \n        <line x1=\"244.5\" y1=\"26.2\" x2=\"310.0\" y2=\"26.2\"\n              stroke=\"var(--unlit)\"\n              stroke-width=\"2.5\"\n              stroke-linecap=\"round\"\n              stroke-dasharray=\"3 4\"></line>\n        \n        \n        \n        <circle cx=\"10.0\" cy=\"101.8\" r=\"3.5\"\n                \n                \n                fill=\"var(--done)\"></circle>\n        \n        \n        <circle cx=\"48.95\" cy=\"101.8\" r=\"3.5\"\n                \n                \n                fill=\"var(--done)\"></circle>\n        \n        \n        <circle cx=\"97.67\" cy=\"75.88\" r=\"3.5\"\n                \n                \n                fill=\"var(--done)\"></circle>\n        \n        \n        <circle cx=\"123.83\" cy=\"75.88\" r=\"3.5\"\n                \n                \n                fill=\"var(--done)\"></circle>\n        \n        \n        <circle cx=\"156.03\" cy=\"75.88\" r=\"3.5\"\n                \n                \n                fill=\"var(--done)\"></circle>\n        \n        \n        <circle cx=\"182.17\" cy=\"49.96\" r=\"3.5\"\n                \n                \n                fill=\"var(--done)\"></circle>\n        \n        \n        <circle cx=\"198.65\" cy=\"49.96\" r=\"3.5\"\n                \n                \n                fill=\"var(--done)\"></circle>\n        \n        \n        <circle cx=\"218.14\" cy=\"49.96\" r=\"3.5\"\n                \n                stroke=\"var(--unlit)\" stroke-width=\"1.5\"\n                fill=\"none\"></circle>\n        \n        \n        <circle cx=\"244.5\" cy=\"26.2\" r=\"3.5\"\n                \n                stroke=\"var(--unlit)\" stroke-width=\"1.5\"\n                fill=\"none\"></circle>\n        \n        \n        <circle cx=\"310.0\" cy=\"26.2\" r=\"6\"\n                class=\"chart__pr\" style=\"--at: 0.969\"\n                stroke=\"var(--done)\" stroke-width=\"1.5\"\n                \n                fill=\"var(--record)\"></circle>\n        \n        \n        </g>\n        \n        </g>\n      </svg>"
+}

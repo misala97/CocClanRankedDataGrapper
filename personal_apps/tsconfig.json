@@ -9,6 +9,7 @@
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noEmit": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },

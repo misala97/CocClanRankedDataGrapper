@@ -15,6 +15,7 @@ formats them for display, because German date formatting is a presentation
 concern and the server should not decide it twice.
 """
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -107,7 +108,10 @@ class ChartSeries(_Model):
     is_main: bool
     label_x: float
     label_y: float
-    label_anchor: str
+    # Only ever 'end' (label flipped left of a point near the right edge) or
+    # 'start'. Narrowed so a third value added to _chart_geometry fails here
+    # rather than reaching an SVG attribute that will not accept it.
+    label_anchor: Literal['start', 'end']
 
 
 class ChartGeometry(_Model):

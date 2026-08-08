@@ -845,6 +845,8 @@ The most exacting part of the port: ~85 lines of SVG whose colours, opacities an
 
 - [ ] **Step 1: Create the shared types**
 
+> **Implemented — `static/gym/src/types.ts` is the source of truth, not the block below.** Reading the real producers corrected five fields the block still shows: `ChartPoint` also carries `e1rm` and `started_at`, `ChartSeries` also carries `is_main`, `ChartGeometry` also carries `axis_lo`/`axis_hi`, `state` is `string | null` (null means stable, a real answer), and `label_anchor` is narrowed to `'start' | 'end'` so SVG's `textAnchor` accepts it.
+
 `personal_apps/static/gym/src/types.ts`:
 
 ```ts
