@@ -1,4 +1,4 @@
-# Gym Tracker — the frontend on Preact islands
+# Gym Tracker — the frontend on React islands
 
 **Date:** 2026-08-08
 **Status:** designed, not implemented
@@ -92,11 +92,13 @@ cannot do it: between the tap and the round trip there is nothing to show.
 
 | Decision | Chosen | Rejected, and why |
 |---|---|---|
-| Renderer | Preact | React — 45 KB against 3 KB, identical API, and this runs on gym wifi. |
+| Renderer | React | Preact — ~5 KB against ~45 KB, and initially chosen for it. Reversed: that cost is one-time and service-worker cached, while the owner works alone and searches for answers alone, where React's ecosystem depth is worth far more than 40 KB. `preact/compat` aliasing was also rejected — stack traces referencing Preact internals while the docs say React is the worst position to debug from. |
+| Server-state layer | TanStack Query | Hand-rolled fetch plus reducers — its `onMutate`/`onError` pair *is* optimistic-write-with-rollback, which is precisely what this design needs. Hand-rolling it would repeat the mistake this project exists to undo. |
+| Client-state layer | Zustand | Jotai — atom composition is more than eleven mostly-independent flags need. Preact signals — not available now that the renderer is React. |
 | Language | TypeScript | Plain JS — types across the new JSON boundary are half the reason the boundary is worth having. |
 | Bundler | Vite, eight entry points, one shared component library | `htm` with no build step — avoids the toolchain but forfeits JSX ergonomics and typing, which is most of the value. |
 | Server contract | JSON | Continuing to return HTML — optimistic rendering is impossible without client-owned markup. |
-| Navigation | Flask keeps routing; one Preact root per page | An SPA with a client router (see below). |
+| Navigation | Flask keeps routing; one React root per page | An SPA with a client router (see below). |
 | Offline | None. Optimistic writes with rollback, plus a service-worker cache | A local-first sync queue — the owner confirmed gym wifi is reliable; a sync engine would be scope paid for nothing. |
 | Scope | All eight gym pages | `session_detail` alone — the owner chose the full set after being shown that seven of eight pages have no defect problem. |
 | Build location | VPS, via `npm ci && npm run build` in the deploy script | Committing `dist/` — a merge conflict on every `dev_personal` → `main` merge, and merges are frequent. |
@@ -123,13 +125,13 @@ stays a contained change if it is ever wanted.
 ## Architecture
 
 Eight Flask routes at unchanged URLs. Each renders a thin Jinja shell that
-mounts one Preact root. Flask keeps routing, the auth gate, and 404s exactly as
+mounts one React root. Flask keeps routing, the auth gate, and 404s exactly as
 today.
 
 ```
 personal_apps/static/gym/src/
   components/     sheet, stepper, set-row, exercise-row, badge, rail
-  state/          signals — one module per client-state concern
+  state/          Zustand stores — one module per client-state concern
   api/            typed fetch wrappers, one per mutation
   pages/          heute.tsx      session.tsx    uebungen.tsx
                   verlauf.tsx    statistik.tsx  exercise.tsx
@@ -146,8 +148,8 @@ replaced wholesale on every mutation response. The same authority model as
 today: the server recomputes which exercise is live, and the client does not
 argue.
 
-**Client state** — the eleven pieces above. Preact signals. Never derived from
-server output, therefore never destroyed by a refresh.
+**Client state** — the eleven pieces above. Zustand. Never derived from server
+output, therefore never destroyed by a refresh.
 
 `syncSheets`, `syncAfterSwap`, `applyReorderUI`, `applyNotifyState` and the
 focus-recovery block are deleted. Not repaired — made structurally impossible to
@@ -156,14 +158,22 @@ need, because there is no longer a DOM swap for client state to survive.
 ### Data flow
 
 **First paint.** The server embeds initial data in the shell as
-`<script type="application/json">`. Preact reads it synchronously. No fetch
+`<script type="application/json">`, and it seeds the TanStack Query cache as
+initial data so the first render has everything it needs. No fetch
 waterfall on load, so first paint does not regress — this is what keeps
 `statistik`, which is entirely static, from getting slower.
 
-**Mutation.** The signal updates immediately, so the UI is correct before the
-network is involved. The POST fires. The server's JSON replaces server state on
-success. On failure the pre-mutation snapshot is restored and the existing error
-banner appears with its existing retry.
+**Mutation.** One TanStack Query mutation per write. `onMutate` snapshots the
+cache and applies the change locally, so the UI is correct before the network is
+involved. The POST fires. On success the server's JSON replaces server state; on
+error `onError` restores the snapshot and the existing banner appears with its
+existing retry.
+
+That rollback pair is the reason TanStack Query is in the stack rather than a
+hand-written fetch wrapper: `performMutation` (`session_detail.html:1088`)
+already hand-rolls the timeout, the in-flight count and the retry, and
+rebuilding that by hand in React would repeat exactly the mistake this project
+exists to undo.
 
 **Shared sessions.** The existing poll continues unchanged — `gym_session_sync`
 (`features/gym/routes.py:1466`) already returns JSON.
@@ -234,10 +244,15 @@ nothing merged.
 
 - **German copy moves from Jinja into TSX.** The highest-probability source of
   silent drift. Screenshot review is the guard.
-- **`statistik` and `shared_confirm` gain a runtime they do not need** —
-  roughly 3 KB, rendered once, on pages with no client behaviour at all. Paid
-  deliberately, so that one component library exists rather than two markup
-  systems on one app.
+- **`statistik` and `shared_confirm` gain a runtime they do not need** — with
+  React rather than Preact this is roughly 45 KB (nearer 60 KB with TanStack
+  Query and Zustand), gzipped, rendered once, on pages with no client behaviour
+  at all. Materially more than the 3 KB the Preact draft assumed, and stated
+  here rather than buried. Accepted for two reasons: it is cached by the
+  service worker after first load, and the owner has confirmed connection
+  quality is not a constraint. The alternative — leaving those two pages on
+  Jinja — would mean maintaining two markup systems inside one app for the sake
+  of two static screens.
 - **The component library is designed against `exercise_detail`, the simplest
   page, and then meets `session_detail`, the hardest.** Expect one round of
   reshaping at step 2. Budget for it rather than treating it as a failure.
