@@ -1,8 +1,8 @@
-"""The exercise-detail JSON contract.
+"""The gym JSON contracts: the exercise-detail page, and the live workout.
 
-Mirrors what stats.exercise_progress() and routes._chart_geometry() already
-return -- this types an existing shape rather than designing a new one. The
-React page in static/gym/src/ reads exactly these field names.
+Each mirrors what its route already computes -- these type existing shapes
+rather than designing new ones. The React pages in static/gym/src/ read
+exactly these field names.
 
 Every model forbids extra fields on purpose. The schema is a mirror, not a
 subset: a field added to stats.py and not to here should fail loudly at the
@@ -162,3 +162,142 @@ class ExerciseDetailPayload(_Model):
     can_delete: bool
     muscle_groups: list[str]
     equipment_labels: dict[str, str]
+
+
+# ---------------------------------------------------------------------------
+# The live workout screen.
+#
+# Mirrors what routes/workout.py:session_detail already computes for
+# session_detail.html. Every type here was read off that function rather than
+# inferred from the template -- the exercise-detail schema above was written
+# the other way round and was wrong in five places.
+# ---------------------------------------------------------------------------
+
+
+class SessionMeta(_Model):
+    """The session row itself. finished_at is always None here: a finished
+    session renders session_finished.html, a different page with a different
+    payload."""
+    id: int
+    started_at: datetime
+    finished_at: datetime | None
+    is_deload: bool
+    deload_pct: int | None
+    rest_ends_at: datetime | None
+    resting_set_id: int | None
+    template_id: int | None
+    template_name: str | None
+
+
+class LiveSet(_Model):
+    id: int
+    weight: float
+    reps: int
+    completed: bool
+    # Non-NULL exactly when this set's weight is deload-scaled. It is what
+    # `deload_applied` is derived from -- the session's is_deload flag is not,
+    # because a session flagged after a set was logged keeps its full weights.
+    base_weight: float | None
+
+
+class LiveExercise(_Model):
+    """One row of the queue. `id` is the SessionExercise, `exercise_id` the
+    catalogue entry -- suggestions and stagnation_counts are keyed by the
+    former, records and history by the latter."""
+    id: int
+    exercise_id: int
+    name: str
+    muscle_group: str | None
+    position: int
+    skipped: bool
+    is_unilateral: bool
+    rest_seconds: int | None
+    increment: float
+    notes: str | None
+    pain: str | None
+    sets: list[LiveSet]
+
+
+class CatalogueExercise(_Model):
+    """An entry in the add-exercise sheet's list."""
+    id: int
+    name: str
+    muscle_group: str | None
+
+
+class Suggestion(_Model):
+    """What the steppers pre-fill with. None for an exercise with no history
+    to seed from, so the containing dict's value is optional."""
+    weight: float
+    reps: int
+
+
+class ReadyForMore(_Model):
+    """`that weight went easy` -- only ever computed for the live exercise,
+    and never during a deload."""
+    sets: int
+    weight: float
+    is_latest: bool
+
+
+class PartnerStatus(_Model):
+    username: str
+    accepted: bool
+
+
+class Partner(_Model):
+    id: int
+    username: str
+
+
+class SessionDetailPayload(_Model):
+    session: SessionMeta
+    visible_exercises: list[LiveExercise]
+    # The SessionExercise that is live, or None when the session has no
+    # visible exercises at all.
+    live_id: int | None
+    # 1-based position of the live exercise in visible_exercises; 0 when none.
+    live_index: int
+    live_increment: float
+
+    # One entry per set in the whole workout, in order: 'done', 'now' or
+    # 'open'. Sets belonging to a skipped exercise are omitted entirely.
+    tick_states: list[str]
+    sets_done: int
+    sets_total: int
+    sets_open: int
+    session_volume: float
+
+    resting: bool
+    # 0 when nothing is resting, never None -- the progress bar divides by it.
+    # Comes from the exercise that OWNS the resting set, not the live one.
+    rest_total_seconds: int
+
+    # Both keyed by SessionExercise.id. JSON object keys are always strings,
+    # so model_dump(mode='json') emits '10', not 10 -- the client reads
+    # string keys. Pinned by test_int_keyed_dicts_serialize_as_string_keys.
+    suggestions: dict[str, Suggestion | None]
+    stagnation_counts: dict[str, int]
+    # A set in the route; a list here. json.dumps cannot serialize a set, so
+    # the builder converts and this type is what makes that non-optional.
+    record_set_ids: list[int]
+    ready_for_more: ReadyForMore | None
+
+    min_full_reps: int
+    default_plan_weight: float
+    default_plan_reps: int
+
+    exercises: list[CatalogueExercise]
+    muscle_groups: list[str]
+    # None whenever VAPID_PUBLIC_KEY is unset in .env, which is the normal
+    # state on a fresh checkout.
+    vapid_public_key: str | None
+    has_completed_set: bool
+
+    deload_applied: bool
+    deload_pcts: list[int]
+    deload_default_pct: int
+
+    partners: list[Partner]
+    partner_status: list[PartnerStatus]
+    session_is_shared: bool
