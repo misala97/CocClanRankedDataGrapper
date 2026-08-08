@@ -21,7 +21,7 @@
 - **Any new id-taking gym route must be added to the table in `tests/test_gym_ownership.py`** (near line 340). `test_every_id_taking_gym_route_is_covered_by_a_table` fails otherwise, and registering it is what makes the suite verify the route rejects another user's data.
 - **The exercise model is `Exercise`, not `GymExercise`.** `requirements.txt` is at the **repo root**, shared by both apps — there is no `personal_apps/requirements.txt`.
 - **Breadth over samples in tests.** Iterate every owned exercise rather than picking the first one. Doing the latter hid a real `state=None` crash through an entire green test run, because the first exercise happened to have history.
-- **Python:** existing venv, `personal_apps/requirements.txt`. **Node:** 22 LTS.
+- **Python:** existing venv, root `requirements.txt` (there is no `personal_apps/requirements.txt`). **Node:** 24 LTS — installed 2026-08-08, replacing 20.18 which was past end of life. Vite's floor is `^20.19 || >=22.12`.
 - **Tests run from `personal_apps/`:** `python -m pytest tests/ -q`. The suite runs against the real local dev database (see `tests/conftest.py`), which is disposable dev data.
 
 ---

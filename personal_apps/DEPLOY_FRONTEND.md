@@ -9,11 +9,21 @@ from here.**
 
 ## One-time setup on the VPS
 
-Install Node 22 LTS (Vite requires `^20.19 || >=22.12`), then:
+Install **Node 24 LTS**, then:
 
 ```bash
 cd /root/coc-stats/personal_apps && npm ci
 ```
+
+Vite's floor is `^20.19 || >=22.12`, but do not aim for the floor: Node 20
+reached end of life in April 2026, so it no longer receives security patches.
+24 is the current LTS and matches the development machine.
+
+`npm ci` on npm 11 blocks package install scripts by default and will warn that
+esbuild's `postinstall` was skipped. That is fine and needs no action — modern
+esbuild ships its platform binary as an optional dependency, and the build was
+verified to work with the script blocked. Do not run `npm approve-scripts`
+without a reason to.
 
 ## The deploy script change
 
