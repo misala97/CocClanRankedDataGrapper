@@ -8,6 +8,7 @@ The manifest key format is Vite's own: paths relative to the Vite root, which
 vite.config.ts leaves at personal_apps/. Verified against a real build.
 """
 import json
+import os
 
 import pytest
 
@@ -41,6 +42,28 @@ def test_unknown_entry_raises(tmp_path):
         resolve_asset('exercise', dist_dir=tmp_path)
 
 
+def test_a_rebuild_invalidates_the_cache(tmp_path):
+    """`flask run` carries no reloader unless --debug is passed, and
+    .claude/launch.json does not pass it. A cache that ignored the manifest's
+    mtime kept serving the previous build's hashed filename after `npm run
+    build`; Vite empties outDir, so that file is gone and the page loads a 404
+    for its bundle -- blank screen, no error where anyone is looking."""
+    manifest = tmp_path / '.vite' / 'manifest.json'
+    manifest.parent.mkdir(parents=True)
+    key = 'static/gym/src/entries/exercise.tsx'
+
+    manifest.write_text(json.dumps({key: {'file': 'assets/exercise-OLD.js'}}), encoding='utf-8')
+    first = resolve_asset('exercise', dist_dir=tmp_path)
+    assert first.endswith('exercise-OLD.js')
+
+    manifest.write_text(json.dumps({key: {'file': 'assets/exercise-NEW.js'}}), encoding='utf-8')
+    # A same-second rewrite can land on an identical mtime on coarse
+    # filesystems, which would make this pass for the wrong reason.
+    os.utime(manifest, (0, 0))
+
+    assert resolve_asset('exercise', dist_dir=tmp_path).endswith('exercise-NEW.js')
+
+
 def test_resolves_against_the_real_build(tmp_path):
     """Guards the key format against a Vite upgrade changing it. Skips rather
     than fails when dist/ is absent, because a fresh checkout has not built
@@ -49,8 +72,8 @@ def test_resolves_against_the_real_build(tmp_path):
     if not (_DIST / '.vite' / 'manifest.json').exists():
         pytest.skip('no build present; run `npm run build` in personal_apps/')
 
-    url = resolve_asset('smoke')
-    assert url.startswith('/static/gym/dist/assets/smoke-')
+    url = resolve_asset('exercise')
+    assert url.startswith('/static/gym/dist/assets/exercise-')
     assert url.endswith('.js')
 
 
@@ -78,9 +101,9 @@ def test_a_template_resolves_a_bundle():
     from app import app as flask_app
 
     rendered = flask_app.jinja_env.from_string(
-        "<script src=\"{{ vite_asset('smoke') }}\"></script>").render()
+        "<script src=\"{{ vite_asset('exercise') }}\"></script>").render()
 
-    assert 'src="/static/gym/dist/assets/smoke-' in rendered
+    assert 'src="/static/gym/dist/assets/exercise-' in rendered
 
 
 def test_a_template_typo_fails_loudly():

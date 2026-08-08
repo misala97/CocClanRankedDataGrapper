@@ -66,8 +66,8 @@ export function ExerciseDetailPage({ payload, nameTaken }: Props) {
                       read "10 Einheiten" under a chart already filtered to one
                       slot. */}
                   <span className="label">
-                    {p.selected_position !== null && `Pos. ${p.selected_position} · `}
-                    {count} {count === 1 ? 'Einheit' : 'Einheiten'}
+                    {(p.selected_position !== null ? `Pos. ${p.selected_position} · ` : '')
+                      + `${count} ${count === 1 ? 'Einheit' : 'Einheiten'}`}
                   </span>
                 </div>
 
@@ -93,10 +93,10 @@ export function ExerciseDetailPage({ payload, nameTaken }: Props) {
                         with the record band. */}
                     {p.selected_position_is_default && (
                       <p className="exdetail__scope">
-                        Zeigt Position {p.selected_position} —{' '}
-                        {p.selected_position_reason === 'strongest'
-                          ? 'die stärkste mit mindestens zwei Einheiten'
-                          : 'die einzige mit nennenswerter Historie'}.
+                        {`Zeigt Position ${p.selected_position} — ` +
+                          (p.selected_position_reason === 'strongest'
+                            ? 'die stärkste mit mindestens zwei Einheiten'
+                            : 'die einzige mit nennenswerter Historie') + '.'}
                       </p>
                     )}
                   </>

@@ -19,15 +19,17 @@ export function RecordsBand({
           <span className="pr">
             <span className="pr__val">{kg1(prWeight.weight)}<small>kg</small></span>
             <span className="label">Bestes Gewicht</span>
+            {/* One string, not interpolated children -- see ExerciseHeader for
+                why the raster depends on it. */}
             <span className="pr__sub">
-              {prWeight.reps} Wdh. · Pos. {prWeight.position} · {shortDate(prWeight.started_at)}
+              {`${prWeight.reps} Wdh. · Pos. ${prWeight.position} · ${shortDate(prWeight.started_at)}`}
             </span>
           </span>
           <span className="pr">
             <span className="pr__val">{kg1(prE1rm.e1rm)}<small>kg</small></span>
             <span className="label">Bestes e1RM</span>
             <span className="pr__sub">
-              {kg1(prE1rm.weight)} kg × {prE1rm.reps} · Pos. {prE1rm.position} · {shortDate(prE1rm.started_at)}
+              {`${kg1(prE1rm.weight)} kg × ${prE1rm.reps} · Pos. ${prE1rm.position} · ${shortDate(prE1rm.started_at)}`}
             </span>
           </span>
         </div>
@@ -46,7 +48,7 @@ export function RecordsBand({
         </section>
       ) : sessionsSincePr !== null && sessionsSincePr > 0 ? (
         <p className="exdetail__since">
-          Seit {sessionsSincePr} {sessionsSincePr === 1 ? 'Workout' : 'Workouts'} kein neuer e1RM-PR
+          {`Seit ${sessionsSincePr} ${sessionsSincePr === 1 ? 'Workout' : 'Workouts'} kein neuer e1RM-PR`}
         </p>
       ) : null}
     </>

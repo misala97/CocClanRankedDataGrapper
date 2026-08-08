@@ -21,15 +21,24 @@ export function ExerciseHeader({ exercise, lastOverall, chipClass, chipLabel }: 
             was a span, so the document outline was empty and heading
             navigation had nothing to land on. */}
         <h1 className="exdetail__name">{exercise.name}</h1>
+        {/* lastOverall, not table[0]: `table` is the FILTERED view, so under
+            ?position=5 this announced "Zuletzt ... Pos. 5" as though that were
+            the last time you did the lift at all. Identity metadata is never
+            scoped to a filter.
+
+            Assembled into one string rather than interpolated as JSX children:
+            React emits a text node per expression and the browser rounds glyph
+            advances per run, which changes antialiasing against the single
+            text node Jinja produced. Nothing moves either way; this keeps the
+            raster identical. */}
         <span className="exdetail__sub">
-          {exercise.muscle_group || 'Ohne Gruppe'}
-          {/* lastOverall, not table[0]: `table` is the FILTERED view, so under
-              ?position=5 this announced "Zuletzt ... Pos. 5" as though that
-              were the last time you did the lift at all. Identity metadata is
-              never scoped to a filter. */}
-          {lastOverall !== null &&
-            ` · Zuletzt ${shortDate(lastOverall.started_at)} · Pos. ${lastOverall.position}`}
-          {exercise.is_unilateral && ' · einseitig'}
+          {[
+            exercise.muscle_group || 'Ohne Gruppe',
+            lastOverall !== null
+              ? `Zuletzt ${shortDate(lastOverall.started_at)} · Pos. ${lastOverall.position}`
+              : null,
+            exercise.is_unilateral ? 'einseitig' : null,
+          ].filter(Boolean).join(' · ')}
         </span>
       </span>
       {chipLabel !== null && <span className={`vtag vtag--${chipClass}`}>{chipLabel}</span>}

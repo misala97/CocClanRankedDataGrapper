@@ -3,6 +3,9 @@
 Runs against the real local development database. Every row created here is
 deleted in a finally.
 """
+import json
+import re
+
 import pytest
 
 from app import app as flask_app
@@ -292,9 +295,26 @@ def test_a_non_admin_owner_sees_the_edit_control_on_their_exercise_page(stranger
             db.session.commit()
             exercise_id = exercise.id
 
-        body = stranger_client.get(f'/gym/exercises/{exercise_id}').get_data(as_text=True)
-        assert 'Name, Muskelgruppe, Standard-Pause bearbeiten' in body, \
-            'a non-admin owner does not see the edit control on their own exercise page'
+        response = stranger_client.get(f'/gym/exercises/{exercise_id}')
+        assert response.status_code == 200, \
+            'a non-admin owner cannot open their own exercise page'
+        body = response.get_data(as_text=True)
+
+        # The page is a React island now, so the control's label is no longer
+        # in the server HTML -- ExerciseDetail.test.tsx covers that it renders.
+        # What the server still decides, and what the original {% if is_admin %}
+        # bug lived in, is whether this user is handed the exercise at all.
+        payload = json.loads(
+            re.search(r'<script type="application/json" id="gym-data">(.*?)</script>',
+                      body, re.S).group(1))
+        assert payload['exercise']['id'] == exercise_id, \
+            'a non-admin owner is not given their own exercise in the payload'
+
+        # And the gate cannot come back the way it did: nothing in the payload
+        # describes the viewer, so no component can branch on admin-ness
+        # without someone first adding a field here.
+        assert not any('admin' in key for key in payload), \
+            'the payload gained a viewer-role field -- an admin gate can now be re-added'
     finally:
         with flask_app.app_context():
             if exercise_id is not None:

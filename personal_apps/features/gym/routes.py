@@ -2706,16 +2706,14 @@ def _exercise_detail_payload(exercise, raw_position):
 def exercise_detail(exercise_id):
     exercise = owned_exercise(exercise_id)
     payload = _exercise_detail_payload(exercise, request.args.get('position'))
-    # model_dump() rather than mode='json': the template still runs datetimes
-    # through the |local filter, so they have to stay datetime objects. Jinja
-    # resolves dotted access on plain dicts, so the template needs no change
-    # here -- Task 6 is what replaces it.
-    context = payload.model_dump()
-    # The template wants the ORM object, not the serialized identity dict:
-    # it reads exercise.stack_kg through a join filter and passes the object
-    # to url_for.
-    context.pop('exercise')
-    return render_template('gym/exercise_detail.html', exercise=exercise, **context)
+    # mode='json' so datetimes are ISO strings the island can parse. `exercise`
+    # is still passed separately because the shell's <title> block reads its
+    # name before any JavaScript runs.
+    return render_template(
+        'gym/exercise_detail.html',
+        exercise=exercise,
+        payload_json=payload.model_dump(mode='json'),
+    )
 
 
 @gym_bp.route('/gym/exercises/<int:exercise_id>/detail.json')

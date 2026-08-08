@@ -59,11 +59,17 @@ export function SessionLog({
                 {isRecord && <span className="vtag vtag--record">Rekord</span>}
                 {row.is_deload && <span className="vtag vtag--neu">Deload</span>}
               </span>
-              <span className="row__meta">Pos. {row.position} · {row.sets_display}</span>
+              {/* One template literal, not interpolated JSX children: React
+                  would emit a separate text node per expression, and the
+                  browser rounds glyph advances per run -- which changes
+                  antialiasing against the single text node Jinja produced.
+                  Nothing moves either way, but this keeps the raster
+                  identical. */}
+              <span className="row__meta">{`Pos. ${row.position} · ${row.sets_display}`}</span>
             </span>
             <span className="row__trail row__trail--stack">
               <span className="vol">{volume(row.volume)}<small>kg</small></span>
-              <span className="e1rm">e1RM {kg1(row.e1rm)}</span>
+              <span className="e1rm">{`e1RM ${kg1(row.e1rm)}`}</span>
             </span>
           </a>
         )

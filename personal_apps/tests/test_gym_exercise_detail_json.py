@@ -85,12 +85,28 @@ def test_agrees_with_the_html_route_on_the_default_slot(client):
     assert from_endpoint['selected_position_is_default'] == direct.selected_position_is_default
 
 
-def test_the_html_page_still_renders(client):
-    """Task 3 refactors exercise_detail onto the shared helper without
-    changing what it serves. Task 6 is what replaces the template."""
+def test_the_html_page_embeds_the_payload_and_the_bundle(client):
+    """The page is a React shell: it carries the payload inline so the first
+    render needs no fetch, and a module script for the built bundle. The body
+    markup itself is now the island's, so there is nothing else to assert on
+    here -- the components are covered by vitest."""
+    import json
+    import re
+
     response = client.get(f'/gym/exercises/{_an_exercise_id()}')
     assert response.status_code == 200
-    assert b'exdetail' in response.data
+    body = response.get_data(as_text=True)
+
+    assert '<div id="gym-root"></div>' in body
+    assert re.search(r'<script type="module" src="/static/gym/dist/assets/exercise-[^"]+\.js">', body), \
+        'the built bundle is not referenced -- run `npm run build` in personal_apps/'
+
+    embedded = re.search(
+        r'<script type="application/json" id="gym-data">(.*?)</script>', body, re.S)
+    assert embedded, 'the payload is not embedded'
+    payload = json.loads(embedded.group(1))
+    assert payload['exercise']['id'] == _an_exercise_id()
+    assert 'table' in payload and 'chart' in payload
 
 
 def test_requires_a_login(anon_client):
