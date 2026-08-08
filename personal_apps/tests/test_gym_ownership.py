@@ -337,6 +337,7 @@ def test_a_stranger_gets_404_on_someone_elses_template(
 # a stranger gets 404 like everywhere else -- including the two GETs, which
 # used to render a shared page with the owner's history filtered out of it.
 CATALOGUE_ROUTES = [
+    ('GET',  '/gym/session/{}/detail.json',    'session_id'),
     ('GET',  '/gym/exercises/{}',               'exercise_id'),
     ('GET',  '/gym/exercises/{}/progress.json', 'exercise_id'),
     ('GET',  '/gym/exercises/{}/detail.json',   'exercise_id'),

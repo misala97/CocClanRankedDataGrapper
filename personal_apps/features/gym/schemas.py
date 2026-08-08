@@ -179,6 +179,7 @@ class SessionMeta(_Model):
     session renders session_finished.html, a different page with a different
     payload."""
     id: int
+    name: str | None
     started_at: datetime
     finished_at: datetime | None
     is_deload: bool
@@ -187,6 +188,12 @@ class SessionMeta(_Model):
     resting_set_id: int | None
     template_id: int | None
     template_name: str | None
+    bodyweight_kg: float | None
+    notes: str | None
+    # What the follower's poll compares. reconcile_follower bumps it on the
+    # FOLLOWER's session only, which is why a leader polling sync.json would
+    # burn a request every 5s for a version that can never change.
+    structure_version: int
 
 
 class LiveSet(_Model):
@@ -214,7 +221,10 @@ class LiveExercise(_Model):
     rest_seconds: int | None
     increment: float
     notes: str | None
-    pain: str | None
+    # A boolean flag ("this hurt"), not free text -- NOT NULL with a False
+    # default, so never None. Typed str here first and the endpoint rejected
+    # its own payload the moment a real session was fed through it.
+    pain: bool
     sets: list[LiveSet]
 
 

@@ -21,6 +21,7 @@ from models import (
 )
 from auth import login_required
 from features.gym import stats
+from features.gym.schemas import SessionDetailPayload
 from features.gym.scope import (
     current_user_id, my_exercises, my_sessions, my_templates,
     owned_exercise, owned_session, owned_session_exercise, owned_set,
@@ -280,6 +281,289 @@ def _live_context(session_):
             'live_id': live_se.id if live_se else None}
 
 
+def _live_data(session_):
+    """Every value session_detail.html renders from, ORM objects included.
+
+    Split out so _session_payload can serialize this same computation
+    rather than repeat it: the page and the JSON endpoint must not be
+    able to disagree about which exercise is live.
+    """
+    # visible_exercises and which one is live: see _live_context's own
+    # docstring for why this is a call rather than the computation itself.
+    live_ctx = _live_context(session_)
+    visible_exercises = live_ctx['visible_exercises']
+    live_se = next((se for se in visible_exercises if se.id == live_ctx['live_id']), None)
+    suggestions = {se.id: _seeded_suggestion(session_, se.exercise, se.position) for se in visible_exercises}
+    history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
+    by_exercise = {}
+    for row in history:
+        if row.session_id != session_.id:
+            by_exercise.setdefault(row.exercise_id, []).append(row)
+    stagnation_counts = {}
+    record_set_ids = set()
+    # Both signals below are progress judgements, and a deload session is not
+    # an attempt at progress -- so neither is computed during one. The PR flare
+    # must agree with the recap screen (session_report awards no record on a
+    # deload), and a "go heavier" nudge is wrong advice beside deliberately
+    # reduced weights. Guarding the whole loop rather than `continue`-ing per
+    # iteration: is_deload is loop-invariant, and a per-iteration skip would
+    # let a later maintainer add work above it that silently never runs.
+    if not session_.is_deload:
+        for se in visible_exercises:
+            prior = by_exercise.get(se.exercise_id, [])
+            count = stats.sessions_since_pr(prior, position=se.position)
+            if count is not None and count >= stats.STAGNATION_THRESHOLD:
+                stagnation_counts[se.id] = count
+            # Live equivalent of the finished-session PR flare (session_report's
+            # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
+            # same prior-sessions-only pool, so a set can light up cyan the
+            # instant it's confirmed rather than only on the recap screen an
+            # hour later.
+            for s in se.sets:
+                if s.completed and stats.is_new_best(s.weight, s.reps, prior):
+                    record_set_ids.add(s.id)
+    ready_for_more = None
+    if not session_.is_deload and live_se is not None:
+        # Only the live exercise: the queue below is an overview, and seven
+        # badges at once is decoration rather than a decision.
+        ready_for_more = stats.ready_for_more(
+            by_exercise.get(live_se.exercise_id, []), position=live_se.position)
+        # "That weight went easy" is only advice while that weight is what you
+        # are about to lift. Above it, the lifter has already acted -- or the
+        # evidence is older than what the prefill found, and the nudge would
+        # argue with the chips underneath it.
+        planned_top = max((s.weight for s in live_se.sets), default=None)
+        if ready_for_more and planned_top is not None and planned_top > ready_for_more['weight']:
+            ready_for_more = None
+    exercises = my_exercises().order_by(Exercise.name).all()
+
+    # One tick per set in the whole workout, in order, so the strip reads as
+    # the session filling up rather than as a chart. 'now' is the single set
+    # about to be performed -- the same set the steppers are bound to.
+    sets_done = sets_total = 0
+    tick_states = []
+    next_set_id = None
+    if live_se is not None:
+        next_set_id = next((s.id for s in live_se.sets if not s.completed), None)
+    for se in visible_exercises:
+        if se.skipped:
+            continue
+        for s in se.sets:
+            sets_total += 1
+            if s.completed:
+                sets_done += 1
+                tick_states.append('done')
+            elif s.id == next_set_id:
+                tick_states.append('now')
+            else:
+                tick_states.append('open')
+
+    session_volume = sum(
+        stats.set_volume(s.weight, s.reps, se.exercise.is_unilateral)
+        for se in visible_exercises for s in se.sets if s.completed
+    )
+
+    resting = bool(session_.rest_ends_at and session_.rest_ends_at > dt.datetime.utcnow())
+    # Whose rest is it? The set that started it, which after the last set of an
+    # exercise is no longer on the exercise that is now live.
+    rest_total_seconds = 0
+    if resting:
+        for se in visible_exercises:
+            if any(s.id == session_.resting_set_id for s in se.sets):
+                rest_total_seconds = se.rest_seconds or se.exercise.default_rest_seconds or 0
+                break
+
+    # Everyone else with an account. Three people use this app; a picker is
+    # the whole feature, and a friends list would be ceremony.
+    partners = (AppUser.query
+                .filter(AppUser.id != current_user_id())
+                .order_by(AppUser.username)
+                .all())
+    shared_out = (SharedSession.query
+                  .filter(SharedSession.leader_session_id == session_.id,
+                          SharedSession.ended_at.is_(None))
+                  .all())
+    partner_status = [
+        {'username': _username(link.follower_user_id),
+         'accepted': link.accepted_at is not None}
+        for link in shared_out
+    ]
+    # Whether THIS session is the FOLLOWER half of a live link -- gates the
+    # polling script in session_detail.html. Only the follower's structure
+    # ever changes out from under them, so only the follower needs to poll.
+    # Deliberately NOT db.or_(leader_session_id == ..., follower_session_id
+    # == ...): the leader's own structure_version is never bumped by
+    # anything (only reconcile_follower bumps it, and only on the FOLLOWER's
+    # session), so a leader polling sync.json would burn a request every 5s
+    # forever for a version that can never change.
+    session_is_shared = SharedSession.query.filter(
+        SharedSession.ended_at.is_(None),
+        SharedSession.accepted_at.isnot(None),
+        SharedSession.follower_session_id == session_.id).first() is not None
+
+    return dict(
+        session=session_,
+        live_se=live_se,
+        **live_ctx,
+        # Resolved here, not in Jinja: the template must never re-implement the
+        # fallback, or the two copies drift the moment DEFAULT_INCREMENT moves.
+        live_increment=stats.resolve_increment(
+            live_se.exercise.weight_increment, live_se.exercise.is_unilateral,
+        ) if live_se else stats.resolve_increment(None, False),
+        live_index=(visible_exercises.index(live_se) + 1) if live_se else 0,
+        tick_states=tick_states,
+        sets_done=sets_done,
+        sets_total=sets_total,
+        sets_open=sets_total - sets_done,
+        session_volume=session_volume,
+        # A rest is running if it has not elapsed. Deliberately NOT scoped to
+        # the live exercise: finishing an exercise's last set schedules a rest
+        # and advances the live exercise at the same moment, so requiring the
+        # resting set to belong to the live one hid the countdown for exactly
+        # the rest between two exercises -- the longest one you actually take.
+        #
+        # It still has to test the clock, not just the flag: the server keeps
+        # resting_set_id set until the NEXT set starts a rest, so the flag alone
+        # would show a dead countdown where the confirm button belongs.
+        resting=resting,
+        # The bar's total comes from the exercise that OWNS the resting set, not
+        # from whichever one is live now -- otherwise the fill is drawn against
+        # the wrong rest length the moment the rest spans an exercise boundary.
+        rest_total_seconds=rest_total_seconds,
+        suggestions=suggestions,
+        stagnation_counts=stagnation_counts,
+        record_set_ids=record_set_ids,
+        ready_for_more=ready_for_more,
+        # Passed in rather than hardcoded in the template, so the badge's
+        # copy cannot drift from the rule that decides it.
+        min_full_reps=stats.DELOAD_REPS,
+        default_plan_weight=stats.DEFAULT_PLAN_WEIGHT,
+        default_plan_reps=stats.DEFAULT_PLAN_REPS,
+        exercises=exercises,
+        muscle_groups=MUSCLE_GROUPS,
+        vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
+        # Scoped to the caller: PushSubscription.endpoint is a global table
+        # (one row per browser installation, re-pointed on re-subscribe), so
+        # "any row at all" would leak whether some OTHER user has push set up.
+        has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
+        # Whether the deload percentage was actually applied to the weights.
+        # base_weight is non-NULL exactly when a set's weight is deload-scaled,
+        # so this is the honest test -- the session's is_deload flag is not,
+        # because a session flagged after a set was already logged keeps its
+        # full working weights and would otherwise display a percentage that
+        # describes nothing on screen.
+        deload_applied=any(
+            s.base_weight is not None for se in session_.exercises for s in se.sets),
+        deload_pcts=stats.DELOAD_QUICK_PCTS,
+        deload_default_pct=stats.DELOAD_DEFAULT_PCT,
+        partners=partners,
+        partner_status=partner_status,
+        session_is_shared=session_is_shared,
+    )
+
+
+def _session_payload(session_):
+    """_live_data as a validated, JSON-safe payload.
+
+    Fields are listed explicitly rather than dumping ORM rows. extra='forbid'
+    on the schema then means a new database column cannot silently widen the
+    wire format, which is the whole point of the schema being a mirror.
+
+    Three conversions are not cosmetic. record_set_ids is a set in _live_data
+    and json.dumps cannot serialize one. suggestions and stagnation_counts are
+    keyed by SessionExercise.id, an int, and JSON object keys are always
+    strings -- doing it here rather than letting Pydantic coerce keeps the
+    client contract explicit. MUSCLE_GROUPS is a tuple.
+    """
+    data = _live_data(session_)
+    row = data['session']
+
+    def as_exercise(se):
+        return {
+            'id': se.id,
+            'exercise_id': se.exercise_id,
+            'name': se.exercise.name,
+            'muscle_group': se.exercise.muscle_group,
+            'position': se.position,
+            'skipped': se.skipped,
+            'is_unilateral': se.exercise.is_unilateral,
+            'rest_seconds': se.rest_seconds,
+            # Resolved, never raw: the fallback lives in stats and a second
+            # copy would drift the moment DEFAULT_INCREMENT moves.
+            'increment': stats.resolve_increment(
+                se.exercise.weight_increment, se.exercise.is_unilateral),
+            'notes': se.notes,
+            'pain': se.pain,
+            'sets': [{
+                'id': s.id, 'weight': s.weight, 'reps': s.reps,
+                'completed': s.completed, 'base_weight': s.base_weight,
+            } for s in se.sets],
+        }
+
+    return SessionDetailPayload.model_validate({
+        'session': {
+            'id': row.id,
+            'name': row.name,
+            'started_at': row.started_at,
+            'finished_at': row.finished_at,
+            'is_deload': row.is_deload,
+            'deload_pct': row.deload_pct,
+            'rest_ends_at': row.rest_ends_at,
+            'resting_set_id': row.resting_set_id,
+            'template_id': row.template_id,
+            'template_name': row.template.name if row.template else None,
+            'bodyweight_kg': row.bodyweight_kg,
+            'notes': row.notes,
+            'structure_version': row.structure_version,
+        },
+        'visible_exercises': [as_exercise(se) for se in data['visible_exercises']],
+        'live_id': data['live_id'],
+        'live_index': data['live_index'],
+        'live_increment': data['live_increment'],
+        'tick_states': data['tick_states'],
+        'sets_done': data['sets_done'],
+        'sets_total': data['sets_total'],
+        'sets_open': data['sets_open'],
+        'session_volume': data['session_volume'],
+        'resting': data['resting'],
+        'rest_total_seconds': data['rest_total_seconds'],
+        'suggestions': {str(k): v for k, v in data['suggestions'].items()},
+        'stagnation_counts': {str(k): v for k, v in data['stagnation_counts'].items()},
+        'record_set_ids': sorted(data['record_set_ids']),
+        'ready_for_more': data['ready_for_more'],
+        'min_full_reps': data['min_full_reps'],
+        'default_plan_weight': data['default_plan_weight'],
+        'default_plan_reps': data['default_plan_reps'],
+        'exercises': [
+            {'id': e.id, 'name': e.name, 'muscle_group': e.muscle_group}
+            for e in data['exercises']
+        ],
+        'muscle_groups': list(data['muscle_groups']),
+        'vapid_public_key': data['vapid_public_key'],
+        'has_completed_set': data['has_completed_set'],
+        'deload_applied': data['deload_applied'],
+        'deload_pcts': list(data['deload_pcts']),
+        'deload_default_pct': data['deload_default_pct'],
+        'partners': [
+            {'id': p.id, 'username': p.username} for p in data['partners']
+        ],
+        'partner_status': data['partner_status'],
+        'session_is_shared': data['session_is_shared'],
+    })
+
+
+@gym_bp.route('/gym/session/<int:session_id>/detail.json')
+@login_required
+def gym_session_detail_json(session_id):
+    """The live workout as JSON.
+
+    Distinct from gym_session_sync, which answers only "has the structure
+    changed" for the follower's poll. This is the whole screen.
+    """
+    session_ = owned_session(session_id)
+    return jsonify(_session_payload(session_).model_dump(mode='json'))
+
+
 @gym_bp.route('/gym/session/<int:session_id>')
 @login_required
 def session_detail(session_id):
@@ -417,179 +701,8 @@ def session_detail(session_id):
         return render_template('gym/session_finished.html', session=session_,
                                weekday_short=WEEKDAY_SHORT, rest_taken_seconds=rest_taken_seconds, **data)
 
-    # visible_exercises and which one is live: see _live_context's own
-    # docstring for why this is a call rather than the computation itself.
-    live_ctx = _live_context(session_)
-    visible_exercises = live_ctx['visible_exercises']
-    live_se = next((se for se in visible_exercises if se.id == live_ctx['live_id']), None)
-    suggestions = {se.id: _seeded_suggestion(session_, se.exercise, se.position) for se in visible_exercises}
-    history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
-    by_exercise = {}
-    for row in history:
-        if row.session_id != session_.id:
-            by_exercise.setdefault(row.exercise_id, []).append(row)
-    stagnation_counts = {}
-    record_set_ids = set()
-    # Both signals below are progress judgements, and a deload session is not
-    # an attempt at progress -- so neither is computed during one. The PR flare
-    # must agree with the recap screen (session_report awards no record on a
-    # deload), and a "go heavier" nudge is wrong advice beside deliberately
-    # reduced weights. Guarding the whole loop rather than `continue`-ing per
-    # iteration: is_deload is loop-invariant, and a per-iteration skip would
-    # let a later maintainer add work above it that silently never runs.
-    if not session_.is_deload:
-        for se in visible_exercises:
-            prior = by_exercise.get(se.exercise_id, [])
-            count = stats.sessions_since_pr(prior, position=se.position)
-            if count is not None and count >= stats.STAGNATION_THRESHOLD:
-                stagnation_counts[se.id] = count
-            # Live equivalent of the finished-session PR flare (session_report's
-            # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
-            # same prior-sessions-only pool, so a set can light up cyan the
-            # instant it's confirmed rather than only on the recap screen an
-            # hour later.
-            for s in se.sets:
-                if s.completed and stats.is_new_best(s.weight, s.reps, prior):
-                    record_set_ids.add(s.id)
-    ready_for_more = None
-    if not session_.is_deload and live_se is not None:
-        # Only the live exercise: the queue below is an overview, and seven
-        # badges at once is decoration rather than a decision.
-        ready_for_more = stats.ready_for_more(
-            by_exercise.get(live_se.exercise_id, []), position=live_se.position)
-        # "That weight went easy" is only advice while that weight is what you
-        # are about to lift. Above it, the lifter has already acted -- or the
-        # evidence is older than what the prefill found, and the nudge would
-        # argue with the chips underneath it.
-        planned_top = max((s.weight for s in live_se.sets), default=None)
-        if ready_for_more and planned_top is not None and planned_top > ready_for_more['weight']:
-            ready_for_more = None
-    exercises = my_exercises().order_by(Exercise.name).all()
-
-    # One tick per set in the whole workout, in order, so the strip reads as
-    # the session filling up rather than as a chart. 'now' is the single set
-    # about to be performed -- the same set the steppers are bound to.
-    sets_done = sets_total = 0
-    tick_states = []
-    next_set_id = None
-    if live_se is not None:
-        next_set_id = next((s.id for s in live_se.sets if not s.completed), None)
-    for se in visible_exercises:
-        if se.skipped:
-            continue
-        for s in se.sets:
-            sets_total += 1
-            if s.completed:
-                sets_done += 1
-                tick_states.append('done')
-            elif s.id == next_set_id:
-                tick_states.append('now')
-            else:
-                tick_states.append('open')
-
-    session_volume = sum(
-        stats.set_volume(s.weight, s.reps, se.exercise.is_unilateral)
-        for se in visible_exercises for s in se.sets if s.completed
-    )
-
-    resting = bool(session_.rest_ends_at and session_.rest_ends_at > dt.datetime.utcnow())
-    # Whose rest is it? The set that started it, which after the last set of an
-    # exercise is no longer on the exercise that is now live.
-    rest_total_seconds = 0
-    if resting:
-        for se in visible_exercises:
-            if any(s.id == session_.resting_set_id for s in se.sets):
-                rest_total_seconds = se.rest_seconds or se.exercise.default_rest_seconds or 0
-                break
-
-    # Everyone else with an account. Three people use this app; a picker is
-    # the whole feature, and a friends list would be ceremony.
-    partners = (AppUser.query
-                .filter(AppUser.id != current_user_id())
-                .order_by(AppUser.username)
-                .all())
-    shared_out = (SharedSession.query
-                  .filter(SharedSession.leader_session_id == session_.id,
-                          SharedSession.ended_at.is_(None))
-                  .all())
-    partner_status = [
-        {'username': _username(link.follower_user_id),
-         'accepted': link.accepted_at is not None}
-        for link in shared_out
-    ]
-    # Whether THIS session is the FOLLOWER half of a live link -- gates the
-    # polling script in session_detail.html. Only the follower's structure
-    # ever changes out from under them, so only the follower needs to poll.
-    # Deliberately NOT db.or_(leader_session_id == ..., follower_session_id
-    # == ...): the leader's own structure_version is never bumped by
-    # anything (only reconcile_follower bumps it, and only on the FOLLOWER's
-    # session), so a leader polling sync.json would burn a request every 5s
-    # forever for a version that can never change.
-    session_is_shared = SharedSession.query.filter(
-        SharedSession.ended_at.is_(None),
-        SharedSession.accepted_at.isnot(None),
-        SharedSession.follower_session_id == session_.id).first() is not None
-
     return render_template(
-        'gym/session_detail.html',
-        session=session_,
-        live_se=live_se,
-        **live_ctx,
-        # Resolved here, not in Jinja: the template must never re-implement the
-        # fallback, or the two copies drift the moment DEFAULT_INCREMENT moves.
-        live_increment=stats.resolve_increment(
-            live_se.exercise.weight_increment, live_se.exercise.is_unilateral,
-        ) if live_se else stats.resolve_increment(None, False),
-        live_index=(visible_exercises.index(live_se) + 1) if live_se else 0,
-        tick_states=tick_states,
-        sets_done=sets_done,
-        sets_total=sets_total,
-        sets_open=sets_total - sets_done,
-        session_volume=session_volume,
-        # A rest is running if it has not elapsed. Deliberately NOT scoped to
-        # the live exercise: finishing an exercise's last set schedules a rest
-        # and advances the live exercise at the same moment, so requiring the
-        # resting set to belong to the live one hid the countdown for exactly
-        # the rest between two exercises -- the longest one you actually take.
-        #
-        # It still has to test the clock, not just the flag: the server keeps
-        # resting_set_id set until the NEXT set starts a rest, so the flag alone
-        # would show a dead countdown where the confirm button belongs.
-        resting=resting,
-        # The bar's total comes from the exercise that OWNS the resting set, not
-        # from whichever one is live now -- otherwise the fill is drawn against
-        # the wrong rest length the moment the rest spans an exercise boundary.
-        rest_total_seconds=rest_total_seconds,
-        suggestions=suggestions,
-        stagnation_counts=stagnation_counts,
-        record_set_ids=record_set_ids,
-        ready_for_more=ready_for_more,
-        # Passed in rather than hardcoded in the template, so the badge's
-        # copy cannot drift from the rule that decides it.
-        min_full_reps=stats.DELOAD_REPS,
-        default_plan_weight=stats.DEFAULT_PLAN_WEIGHT,
-        default_plan_reps=stats.DEFAULT_PLAN_REPS,
-        exercises=exercises,
-        muscle_groups=MUSCLE_GROUPS,
-        vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
-        # Scoped to the caller: PushSubscription.endpoint is a global table
-        # (one row per browser installation, re-pointed on re-subscribe), so
-        # "any row at all" would leak whether some OTHER user has push set up.
-        has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
-        # Whether the deload percentage was actually applied to the weights.
-        # base_weight is non-NULL exactly when a set's weight is deload-scaled,
-        # so this is the honest test -- the session's is_deload flag is not,
-        # because a session flagged after a set was already logged keeps its
-        # full working weights and would otherwise display a percentage that
-        # describes nothing on screen.
-        deload_applied=any(
-            s.base_weight is not None for se in session_.exercises for s in se.sets),
-        deload_pcts=stats.DELOAD_QUICK_PCTS,
-        deload_default_pct=stats.DELOAD_DEFAULT_PCT,
-        partners=partners,
-        partner_status=partner_status,
-        session_is_shared=session_is_shared,
-    )
+        'gym/session_detail.html', **_live_data(session_))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/exercises/add', methods=['POST'])

@@ -19,16 +19,18 @@ def _minimal():
     """A freshly started workout: one exercise, one set, nothing completed."""
     return {
         'session': {
-            'id': 1, 'started_at': '2026-08-08T10:00:00', 'finished_at': None,
+            'id': 1, 'name': None,
+            'started_at': '2026-08-08T10:00:00', 'finished_at': None,
             'is_deload': False, 'deload_pct': None,
             'rest_ends_at': None, 'resting_set_id': None,
             'template_id': None, 'template_name': None,
+            'bodyweight_kg': None, 'notes': None, 'structure_version': 0,
         },
         'visible_exercises': [{
             'id': 10, 'exercise_id': 5, 'name': 'Bankdrücken',
             'muscle_group': 'Brust', 'position': 1, 'skipped': False,
             'is_unilateral': False, 'rest_seconds': 90, 'increment': 2.5,
-            'notes': None, 'pain': None,
+            'notes': None, 'pain': False,
             'sets': [{
                 'id': 100, 'weight': 60.0, 'reps': 8, 'completed': False,
                 'base_weight': None,

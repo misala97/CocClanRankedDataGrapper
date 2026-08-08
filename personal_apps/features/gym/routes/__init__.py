@@ -31,7 +31,9 @@ from .history import (         # noqa: F401
     load_performed, _to_performed, _session_rest_entries,
     performed_from_session,
 )
-from .workout import _live_context, _template_exercises_from_session   # noqa: F401
+from .workout import (                                                 # noqa: F401
+    _live_context, _live_data, _session_payload, _template_exercises_from_session,
+)
 from .exercise_detail import (                                         # noqa: F401
     _exercise_detail_payload, _chart_geometry, _default_position,
 )
