@@ -35,6 +35,16 @@ from ..seeding import (
 )
 
 from ._blueprint import gym_bp
+from .helpers import (
+    DEFAULT_REST_SECONDS, DAYPART_NAMES, WEEKDAY_NAMES, MONTH_NAMES,
+    EXERCISE_STATE_CHIP,
+    _to_float, _to_increment, _to_int, _clean_muscle_group, _clean_equipment,
+    _to_stack_steps, _clean_secondary_groups, _get_active_session,
+    _cancel_pending_push,
+)
+from .history import (
+    load_performed, _to_performed, _session_rest_entries, performed_from_session,
+)
 
 
 @gym_bp.route('/sw.js')
@@ -50,175 +60,6 @@ def gym_service_worker():
         'sw.js',
         mimetype='application/javascript',
     )
-
-DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest time is given
-
-# The UI is German regardless of the server's locale, so month names are stated
-# rather than taken from strftime('%B') -- which follows LC_TIME and would give
-# English on this machine and German on the VPS, or vice versa.
-# analytics.py speaks in keys and indexes, not in UI language: dayparts come
-# back as 'morning'/'evening' and weekdays as 0-6. Naming them is presentation,
-# so it happens here rather than in the analysis.
-DAYPART_NAMES = {'morning': 'Vormittags', 'evening': 'Abends'}
-WEEKDAY_NAMES = ('Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
-                 'Freitag', 'Samstag', 'Sonntag')
-
-MONTH_NAMES = (
-    'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-)
-
-# stats.exercise_state()'s return value -> (chip CSS modifier, display label),
-# spec 5.6's table. A state of None means "no chip" and has no entry here --
-# callers must check before indexing.
-EXERCISE_STATE_CHIP = {
-    'neu': ('neu', 'Neu'),
-    'rekord': ('record', 'Rekord'),
-    'stagniert': ('stall', 'Stagniert'),
-    'steigend': ('up', 'Steigend'),
-}
-
-
-def _to_float(value, fallback=None):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _to_increment(value):
-    """A weight increment as typed, or None.
-
-    Comma-tolerant: `type=number` normalises to a dot, but the field degrades
-    to text without JS and a German keyboard produces `2,5`. Blank,
-    unparseable and non-positive all store NULL, which
-    stats.resolve_increment() reads as "use the default" -- so clearing the
-    field is the way to put an exercise back on 2.5 kg.
-    """
-    parsed = _to_float(str(value).replace(',', '.').strip())
-    return parsed if parsed and parsed > 0 else None
-
-
-def _to_int(value, fallback=None):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _clean_muscle_group(value, current=None):
-    """Restricts new values to MUSCLE_GROUPS, but if the submitted value is
-    just the exercise's existing value coming back unchanged (e.g. a legacy
-    free-text category from before this enum existed), preserve it instead
-    of silently nulling it out -- only an actual attempt to change it is
-    held to the fixed list."""
-    value = (value or '').strip()
-    if value in MUSCLE_GROUPS:
-        return value
-    if current and value == current:
-        return current
-    return None
-
-
-def _clean_equipment(raw, current='stack'):
-    """An unknown value keeps whatever the exercise already had. The form
-    only ever submits the three real values; anything else is a hand-rolled
-    request, and silently widening the column's vocabulary from one of those
-    would break the export's derivation table."""
-    value = (raw or '').strip()
-    return value if value in EQUIPMENT_TYPES else current
-
-
-def _to_stack_steps(raw):
-    """The real stops of an uneven stack, typed as a list.
-
-    Separators are comma or semicolon; a decimal point is a dot (e.g.
-    "5, 13, 21, 29" or "5.5; 13.2"), not a German-locale comma decimal --
-    stack pins are whole kilograms in practice, so that's a documented
-    limitation rather than a case this needs to support. Sorted ascending,
-    deduped, junk dropped. Empty means None rather than [] -- an empty list
-    would read as "this machine has no positions", and the column's whole
-    meaning is "NULL: steps evenly, ask weight_increment instead".
-    """
-    steps = []
-    for chunk in (raw or '').replace(';', ',').split(','):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        try:
-            value = float(chunk)
-        except ValueError:
-            continue
-        if value > 0:
-            steps.append(value)
-    return sorted(set(steps)) or None
-
-
-def _clean_secondary_groups(values, primary):
-    """Known groups only, in the order given, primary removed. None when
-    nothing is left -- the column treats NULL and [] the same and NULL is
-    the cheaper of the two to store."""
-    seen = []
-    for value in values or []:
-        value = (value or '').strip()
-        if value in MUSCLE_GROUPS and value != primary and value not in seen:
-            seen.append(value)
-    return seen or None
-
-
-def _get_active_session():
-    """The one in-progress workout, if any. Sessions left open past
-    STALE_SESSION_TIMEOUT are treated as abandoned and auto-finished here,
-    capped at started_at + timeout rather than "now"."""
-    session_ = (
-        my_sessions()
-        .filter_by(finished_at=None)
-        .order_by(WorkoutSession.started_at.desc())
-        .first()
-    )
-    if session_ and dt.datetime.utcnow() - session_.started_at > STALE_SESSION_TIMEOUT:
-        session_.finished_at = session_.started_at + STALE_SESSION_TIMEOUT
-        session_.rest_ends_at = None
-        session_.resting_set_id = None
-        _cancel_pending_push(session_)
-        # This is a second, differently-spelled site that stamps finished_at
-        # (started_at + timeout, not utcnow()) -- the brief's suggested grep
-        # for the literal string "finished_at = dt.datetime.utcnow()" does not
-        # match it, but going stale ends the workout exactly as explicitly
-        # finishing it does, so the same rule applies: whoever finishes first
-        # ends the sharing, the other trains on alone.
-        sharing.end_links_for(session_)
-        db.session.commit()
-        return None
-    return session_
-
-
-@gym_bp.app_template_filter('local')
-def _local_filter(moment):
-    """Naive UTC -> naive local, for anything a person reads as a date or time.
-
-    Timestamps are stored naive-UTC and stay that way. Two hours of every CEST
-    day fall on the previous UTC date, so an unconverted `strftime` filed a
-    00:30 workout under yesterday -- next to a "vor 0 Tagen" that had already
-    been corrected to local. Every human-readable render goes through here.
-
-    NOT for durations. The elapsed clock's `data-started` stays UTC on purpose:
-    GymClock appends 'Z' and subtracts from Date.now(), which is a difference
-    between two instants and is the same number in any zone. Localising it
-    would shift the clock by the offset.
-    """
-    return stats.to_local(moment)
-
-
-@gym_bp.context_processor
-def inject_gym_nav_context():
-    """Makes the active session available to `_nav.html` on every gym page,
-    not just the dashboard -- so the nav can show a "session running" dot
-    and link straight to it from anywhere. Reuses `_get_active_session`,
-    which is already idempotent (it only mutates state once, the first time
-    it notices a session has gone stale past the timeout)."""
-    return {'gym_active_session': _get_active_session()}
-
 
 def _template_exercises_from_session(session_):
     """Build ordered, deduped TemplateExercise rows from a session's current
@@ -243,15 +84,6 @@ def _template_exercises_from_session(session_):
     return result
 
 
-def _cancel_pending_push(session_):
-    """Cancel this session's still-pending push, if any. Must be called
-    whenever resting_set_id/rest_ends_at is cleared or superseded -- an
-    orphaned PendingPush row has no way to tell the notifier daemon that the
-    set/exercise/session it was scheduled for is no longer current, and the
-    daemon fires it regardless the moment it's due."""
-    PendingPush.query.filter_by(session_id=session_.id, sent=False).delete()
-
-
 def _schedule_rest(session_set):
     """Start (or restart) the rest timer for this set's session, based on the
     exercise's configured rest time. Called whenever a set is confirmed done."""
@@ -269,119 +101,6 @@ def _schedule_rest(session_set):
     # multiple -- a new completed set means a new (possibly shorter) rest period.
     _cancel_pending_push(session_)
     db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
-
-
-def load_performed(exercise_ids=None, since=None, include_active=False, exclude_session_exercise_ids=None):
-    """Every exercise-as-performed with at least one completed set, as the
-    single flat shape stats.py consumes.
-
-    This exists to be called ONCE per request. The pages that need per-exercise
-    verdicts need them for the whole catalogue at once, and asking per exercise
-    would mean one query per row -- roughly forty on the catalogue page today,
-    and worse every time an exercise is added.
-
-    `include_active` also includes the current active (unfinished) session's
-    own completed sets. The exercise-detail page and its live progress modal
-    need this -- a set just logged mid-workout must show up immediately, not
-    only once the workout is finished. Callers building historical
-    comparisons (stagnation checks, past-session averages) must leave this
-    False: an in-progress workout's still-changing numbers must not leak into
-    an average or a "sessions since PR" count before the workout is actually
-    done.
-
-    `exclude_session_exercise_ids`, if given, drops those specific
-    SessionExercise rows outright before they ever become a PerformedExercise
-    -- gym_verlauf uses this to exclude a replaced-away original from its
-    own session's totals, the same exclusion performed_from_session() already
-    applies when building a single session's `current` for session_report().
-    Default (None) excludes nothing, so every other caller here is unaffected.
-    """
-    query = (
-        SessionExercise.query
-        .options(
-            joinedload(SessionExercise.exercise),
-            joinedload(SessionExercise.session),
-            joinedload(SessionExercise.sets),
-        )
-        .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
-        .filter(WorkoutSession.user_id == current_user_id())
-    )
-    if not include_active:
-        query = query.filter(WorkoutSession.finished_at.isnot(None))
-    if exercise_ids is not None:
-        query = query.filter(SessionExercise.exercise_id.in_(exercise_ids))
-    if since is not None:
-        query = query.filter(WorkoutSession.started_at >= since)
-
-    exclude_ids = exclude_session_exercise_ids or ()
-    performed = []
-    for session_exercise in query.order_by(WorkoutSession.started_at).all():
-        if session_exercise.id in exclude_ids:
-            continue
-        completed = tuple(
-            (s.weight, s.reps) for s in session_exercise.sets if s.completed
-        )
-        if not completed:
-            continue
-        performed.append(_to_performed(session_exercise, completed))
-    return performed
-
-
-def _to_performed(session_exercise, completed_sets):
-    exercise = session_exercise.exercise
-    return stats.PerformedExercise(
-        exercise_id=session_exercise.exercise_id,
-        name=exercise.name,
-        muscle_group=exercise.muscle_group,
-        is_unilateral=exercise.is_unilateral,
-        weight_increment=exercise.weight_increment,
-        stack_kg=tuple(exercise.stack_kg) if exercise.stack_kg else None,
-        position=session_exercise.position,
-        session_id=session_exercise.session_id,
-        started_at=session_exercise.session.started_at,
-        sets=completed_sets,
-        # session is already joinedload()ed by load_performed(), so this costs
-        # no extra query.
-        is_deload=session_exercise.session.is_deload,
-    )
-
-
-def _session_rest_entries(session_):
-    """(completed_at, planned_seconds) for every completed set in a session,
-    in the shape stats.rest_gaps() expects. Planned time falls back to the
-    exercise's default when the session didn't override it.
-
-    Shared by session_detail's finished branch and gym_statistik's habit
-    figure -- the planned-rest fallback chain is a business rule, and having
-    it written out twice meant either copy could drift from the other with
-    nothing to catch it.
-    """
-    return [
-        (s.completed_at, se.rest_seconds if se.rest_seconds is not None
-         else se.exercise.default_rest_seconds)
-        for se in session_.exercises for s in se.sets
-        if s.completed and s.completed_at is not None
-    ]
-
-
-def performed_from_session(session_):
-    """This session's exercises as performed.
-
-    A replaced-away original is skipped: its slot is represented by the
-    substitute that took over, and counting both would inflate the session's
-    totals with an exercise the historical comparison was never scoped to.
-    """
-    performed = []
-    for session_exercise in session_.exercises:
-        if session_exercise.replaced_by:
-            continue
-        completed = tuple(
-            (s.weight, s.reps) for s in session_exercise.sets if s.completed
-        )
-        if not completed:
-            continue
-        performed.append(_to_performed(session_exercise, completed))
-    return performed
 
 
 @gym_bp.route('/gym', strict_slashes=False)
