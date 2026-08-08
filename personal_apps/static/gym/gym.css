@@ -1796,7 +1796,7 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 }
 .set.just-flared { animation: set-flare 420ms var(--ease-out); }
 
-/* ---- the two numbers: no keyboard ever opens ---- */
+/* ---- the two numbers: stepped by default, typed when the prefill is wrong ---- */
 .pair { display: flex; gap: var(--sp-3); margin-top: var(--sp-4); }
 .field-num {
   flex: 1; min-inline-size: 0; background: var(--raised); border-radius: var(--r-control);
@@ -1806,6 +1806,17 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 .field-num__val {
   font-family: var(--font-display); font-size: var(--num-md); font-weight: var(--w-max);
   letter-spacing: var(--track-num); line-height: 1; font-variant-numeric: tabular-nums;
+  /* It is a button now, so it has to be told not to look like one. */
+  background: none; border: 0; padding: 0; color: inherit; cursor: pointer;
+}
+/* Replaces the readout in place, so it inherits the same metrics -- swapping to
+   a field must not move anything else in the panel. */
+.field-num__entry {
+  font-family: var(--font-display); font-size: var(--num-md); font-weight: var(--w-max);
+  letter-spacing: var(--track-num); line-height: 1; font-variant-numeric: tabular-nums;
+  inline-size: 100%; min-inline-size: 0; text-align: center;
+  background: none; border: 0; padding: 0; color: var(--live);
+  outline: none;
 }
 .field-num__lbl { font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit); margin-top: 2px; }
 .field-num__keys { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); inline-size: 100%; }
@@ -2444,6 +2455,29 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
    up sharing its row with the optional muscle group and each gets ~180px. The
    name is the thing being typed; it takes the row. */
 .sheet__pane .field--full { flex: 1 1 100%; }
+
+/* ---- the add-exercise search list ---- */
+/* A list, not a <select>: the select could not be searched, could not show what
+   is already in the session, and hid a catalogue behind a native picker. */
+#exadd-search { inline-size: 100%; }
+.exadd { display: flex; flex-direction: column; margin-top: var(--sp-3); }
+.exadd__row {
+  display: flex; align-items: center; gap: var(--sp-3);
+  min-block-size: var(--tap); inline-size: 100%;
+  padding: var(--sp-2) 0; text-align: start;
+  background: none; border: 0; border-block-end: 1px solid var(--edge);
+  color: var(--ink);
+}
+.exadd__row[hidden] { display: none; }   /* the [hidden] display trap: .exadd__row sets display:flex, which wins over the UA's [hidden] rule unless it is restated */
+.exadd__row:active { background: var(--raised); }
+.exadd__row.is-busy { opacity: 0.5; }
+.exadd__name { flex: 1; min-inline-size: 0; font-weight: var(--w-med); }
+.exadd__group { font-size: var(--t-meta); color: var(--unlit); }
+.exadd__in { font-size: var(--t-meta); color: var(--live); font-weight: var(--w-semi); }
+.exadd__row--new .exadd__name b { color: var(--live); }
+.exadd__row--new[hidden] { display: none; }
+.exadd__empty { font-size: var(--t-meta); color: var(--unlit); padding: var(--sp-3) 0; }
+.exadd__empty[hidden] { display: none; }
 
 .correct__name {
   margin: 0; font-family: var(--font-body); font-size: var(--t-sm);

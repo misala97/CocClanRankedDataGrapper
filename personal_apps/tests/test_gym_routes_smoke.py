@@ -723,10 +723,11 @@ def scratch_deload_session():
 
 
 def test_deload_scales_the_suggestion_for_an_exercise_added_mid_session(client, scratch_deload_session):
-    """A session started without a template has no sets for gym_toggle_deload to
-    scale, and gym_add_session_exercise creates none either -- so the steppers
-    fall back to the raw suggestion, which offered the full working weight and
-    silently handed back the deload the lifter had just asked for.
+    """gym_add_session_exercise seeds from history through _seeded_sets, so the
+    sets it creates must already carry the deload -- history is recorded at full
+    working weight, and handing it back untouched would silently undo the deload
+    the lifter just asked for. This exercise HAS history; the no-history default
+    is a separate path, covered in test_gym_cold_start.py.
     """
     live_id, _, exercise_id = scratch_deload_session
 
@@ -996,29 +997,38 @@ def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session
         assert s.base_weight == 100.0       # weight was echoed unchanged, baseline survives
 
 
-def test_the_add_exercise_sheet_separates_picking_from_creating(client, scratch_session):
-    """The sheet used to carry a "— Neue Übung —" option in the catalogue select
-    plus a permanently visible name field, so both paths were one form and
-    neither was signposted. They are two panes and two forms now.
+def test_the_add_exercise_sheet_is_one_searchable_list(client, scratch_session):
+    """The sheet used to be two panes -- a catalogue <select> in one, an
+    invent-a-new-exercise form (with a muscle-group field) in the other, with
+    buttons to switch between them. It is one search field and one list now:
+    tapping a catalogue row posts exercise_id, and the row the search shows
+    when nothing matches (#exadd-create) posts new_exercise_name and nothing
+    else -- no muscle group, no separate pane to find first.
 
-    Pins the structural guarantee rather than the styling: the pick form must
-    not offer a create option, and the create form must not carry an
-    exercise_id -- that empty-value pair is exactly what made the old sheet
-    ambiguous, and it is what gym_add_session_exercise branches on.
+    Pins the structural guarantee rather than the styling: the two-pane
+    machinery (add-pick-pane / add-new-pane / the "— Neue Übung —" switch) is
+    gone from THIS sheet, even though the per-exercise replace sheet still
+    uses the same sheet__pane / sheet__switch / sheet__back classes elsewhere
+    on the page.
     """
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
 
-    assert 'id="add-pick-pane"' in html
-    assert 'id="add-new-pane"' in html
+    assert 'id="add-pick-pane"' not in html
+    assert 'id="add-new-pane"' not in html
     assert '— Neue Übung —' not in html, 'the fake select option is back'
 
-    pick = html.split('id="add-pick-pane"', 1)[1].split('id="add-new-pane"', 1)[0]
-    assert 'name="exercise_id"' in pick
-    assert 'name="new_exercise_name"' not in pick, 'create fields leaked into the pick pane'
+    sheet = html.split('id="sheet-add-exercise"', 1)[1].split('</dialog>', 1)[0]
+    assert 'id="exadd-search"' in sheet
+    assert 'id="exadd-list"' in sheet
+    assert 'class="exadd__row"' in sheet
+    assert 'data-exercise-id=' in sheet
 
-    create = html.split('id="add-new-pane"', 1)[1].split('</dialog>', 1)[0]
-    assert 'name="new_exercise_name"' in create
-    assert 'name="exercise_id"' not in create, 'the create form still submits an exercise id'
+    create = sheet.split('id="exadd-create"', 1)[1].split('</button>', 1)[0]
+    assert 'name="new_exercise_name"' not in create, \
+        'the create row is a button, not a form -- the name travels via JS from #exadd-search'
+    assert 'name="muscle_group"' not in sheet, 'the muscle-group field is back mid-workout'
+    assert 'name="exercise_id"' not in sheet, \
+        'a lingering <select name="exercise_id"> means the old pick pane is back'
 
 
 def test_a_finished_exercise_can_still_append_a_set_from_the_panel(client, scratch_session):
@@ -1163,6 +1173,24 @@ def test_every_gym_form_posts_fields_its_own_route_reads():
             bodies[current].append(line)
     bodies = {name: '\n'.join(lines) for name, lines in bodies.items()}
 
+    def resolve(name, seen=None):
+        # A route's own body is not always where the field is read anymore:
+        # _apply_typed_weight_reps (shared by gym_toggle_set_complete and
+        # gym_update_set, see the final-polish F1 extraction) is where
+        # 'weight'/'reps' actually get pulled off request.form. Follow calls
+        # to any other function defined in this module, transitively, so a
+        # field read by a shared helper still counts as read by its caller
+        # -- otherwise this test would force every route to inline its field
+        # reads, which is the opposite of what it's meant to guard.
+        seen = seen if seen is not None else set()
+        if name in seen or name not in bodies:
+            return ''
+        seen.add(name)
+        text = bodies[name]
+        for callee in sorted(set(re.findall(r'\b(\w+)\(', text)) & bodies.keys() - seen):
+            text += '\n' + resolve(callee, seen)
+        return text
+
     form_re = re.compile(
         r"<form[^>]*action=\"\{\{\s*url_for\('gym\.(\w+)'.*?\}\}\"(.*?)</form>", re.S)
     control_re = re.compile(r'<(?:input|select|textarea)\b[^>]*\bname="([^"{]+)"')
@@ -1171,10 +1199,10 @@ def test_every_gym_form_posts_fields_its_own_route_reads():
     for path in sorted((root / 'templates' / 'gym').glob('*.html')):
         html = path.read_text(encoding='utf-8')
         for endpoint, body in form_re.findall(html):
-            route = bodies.get(endpoint)
-            if route is None:
+            if endpoint not in bodies:
                 problems.append(f'{path.name}: posts to gym.{endpoint}, which does not exist')
                 continue
+            route = resolve(endpoint)
             for field in sorted(set(control_re.findall(body))):
                 if f"'{field}'" not in route and f'"{field}"' not in route:
                     problems.append(f'{path.name}: posts {field!r} to gym.{endpoint}, '

@@ -159,8 +159,12 @@
        not from the session's opening suggestion: the reason you are adding one
        is that the last one went well enough to want another. #}
     {% set last_done = live_sets[-1] if live_sets else None %}
-    {% set pair_weight = next_set.weight if next_set else (last_done.weight if last_done else (start.weight if start else 20.0)) %}
-    {% set pair_reps = next_set.reps if next_set else (last_done.reps if last_done else (start.reps if start else 8)) %}
+    {# The last link of each chain is the same default _seeded_sets falls back to,
+       read from stats rather than re-typed, so the two cannot drift. It is close
+       to unreachable now -- every path into a session seeds a plan -- but an
+       exercise can still reach zero sets by having them deleted individually. #}
+    {% set pair_weight = next_set.weight if next_set else (last_done.weight if last_done else (start.weight if start else default_plan_weight)) %}
+    {% set pair_reps = next_set.reps if next_set else (last_done.reps if last_done else (start.reps if start else default_plan_reps)) %}
     {# The steppers and the confirm button render in every state, including
        "everything is logged". They used to stop at the two states that had a
        set to point at, and the third sent you to the row's own sheet -- the
@@ -175,11 +179,15 @@
     {% elif not next_set %}
     <p class="live__alldone">Alle Sätze erledigt. Unten beenden — oder hier noch einen anhängen.</p>
     {% endif %}
-    {# The two numbers. No keyboard ever opens during a workout: the steppers
-       carry the value in a hidden input and the readout is text. The weight
-       step is the exercise's own increment, already resolved by the route
-       (see stats.resolve_increment) -- a bar moves in 2.5 kg, a dumbbell pair
-       often in 2, a selectorised stack in 9. Reps always step by 1. #}
+    {# The two numbers. The steppers carry the value in a hidden input and the
+       readout is text, so no keyboard opens for the ordinary case -- the weight
+       step is the exercise's own increment, already resolved by the route (see
+       stats.resolve_increment), so a prefilled number is one or two taps from
+       right. That only holds while the prefill is CLOSE. On an exercise with no
+       history it starts at the default placeholder, where stepping to a real
+       working weight is dozens of taps, so the readout itself is tappable and
+       opens a numeric field. Same escape when you move to a different machine
+       mid-session. #}
     <form method="post"
           action="{{ url_for('gym.gym_toggle_set_complete', set_id=next_set.id) if next_set else url_for('gym.gym_add_set', session_exercise_id=live_se.id) }}"
           class="pair-form" id="live-set-form">
@@ -191,7 +199,8 @@
       {% if next_set %}<input type="hidden" name="completed" value="1">{% endif %}
       <div class="pair">
         <div class="field-num" data-step="{{ live_increment }}" data-decimals="1">
-          <span class="field-num__val" data-role="display">{{ ("%.1f"|format(pair_weight)).replace(".", ",") }}</span>
+          <button type="button" class="field-num__val" data-role="display"
+                  aria-label="Gewicht eingeben">{{ ("%.1f"|format(pair_weight)).replace(".", ",") }}</button>
           <span class="field-num__lbl">kg{% if live_se.exercise.is_unilateral %} je Seite{% endif %}</span>
           <input type="hidden" name="weight" value="{{ pair_weight }}" data-role="value">
           <span class="field-num__keys">
@@ -200,7 +209,8 @@
           </span>
         </div>
         <div class="field-num" data-step="1" data-decimals="0">
-          <span class="field-num__val" data-role="display">{{ pair_reps }}</span>
+          <button type="button" class="field-num__val" data-role="display"
+                  aria-label="Wiederholungen eingeben">{{ pair_reps }}</button>
           <span class="field-num__lbl">Wdh.</span>
           <input type="hidden" name="reps" value="{{ pair_reps }}" data-role="value">
           <span class="field-num__keys">

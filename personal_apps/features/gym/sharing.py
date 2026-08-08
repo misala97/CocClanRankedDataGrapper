@@ -26,6 +26,7 @@ from models import (Exercise, PendingPush, SessionExercise, SharedSession,
                     SharedSessionExercise, WorkoutSession)
 
 from .matching import normalise
+from .seeding import _seeded_sets
 
 
 def active_links_led_by(session_id):
@@ -215,13 +216,17 @@ def reconcile_follower(shared):
     is gone cascades to its sets, and it must -- an exercise the leader
     genuinely removed cannot keep its sets on the follower's side either.
 
-    NOTHING here seeds sets. This runs inside the LEADER's request, where
-    current_user_id() is the leader, so any history lookup would pre-fill the
-    follower's sets from the wrong person's training. An exercise added
-    mid-session therefore arrives as an empty slot; the follower's own steppers
-    still pre-fill from their history when the page renders in THEIR request.
-    Seeding at accept time is correct for the same reason -- that runs in the
-    follower's request.
+    A newly created follower row IS seeded here, through the same
+    _seeded_sets every other path uses (template start, un-skip, reorder,
+    gym_add_session_exercise) -- an exercise the leader adds mid-workout used
+    to arrive on the follower's side as an empty slot, which is exactly the
+    shape that made the first confirmed set complete the exercise and skip
+    ahead (see stats.DEFAULT_PLAN_* / gym_add_session_exercise). This runs
+    inside the LEADER's request, where current_user_id() names the leader, so
+    the history lookup is passed shared.follower_user_id explicitly rather
+    than left to default -- exercise_id here is already the FOLLOWER's own
+    catalogue row (follower_exercise_for's return value), so the two must
+    agree on whose history that row's seeding reads.
     """
     if shared is None or shared.accepted_at is None or shared.ended_at is not None:
         return False
@@ -268,6 +273,21 @@ def reconcile_follower(shared):
                 skipped=leader_row.skipped,
                 mirrors_id=leader_row.id,
             )
+            if not leader_row.skipped:
+                # Seeded the same way every other path that creates pending
+                # sets is -- see _seeded_sets. An exercise the leader adds
+                # mid-workout used to arrive here with none at all, which
+                # reproduced this feature's headline bug on the follower's
+                # side too: the first confirmed set both created and
+                # completed the plan (see stats.DEFAULT_PLAN_* and
+                # gym_add_session_exercise). user_id is passed explicitly --
+                # see the docstring above -- rather than left to default to
+                # current_user_id(), which inside this request names the
+                # leader. A skipped leader row gets none, matching
+                # gym_toggle_skip_session_exercise's own rule that a skipped
+                # exercise carries no pending sets.
+                row.sets.extend(_seeded_sets(follower, follower_exercise_id, leader_row.position,
+                                             user_id=shared.follower_user_id))
             db.session.add(row)
             mirrored[leader_row.id] = row
             changed = True

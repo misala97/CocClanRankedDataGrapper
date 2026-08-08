@@ -189,6 +189,125 @@ def test_an_added_exercise_appears_on_the_followers_side(linked_pair):
             'the follower was linked to the LEADER\'s exercise row')
 
 
+def test_a_mid_workout_addition_seeds_the_followers_default_plan(linked_pair):
+    """F4 (gym cold-start review): an exercise the leader adds mid-workout
+    must not arrive on the follower's side as an empty slot -- that
+    reproduces this feature's headline bug for the follower too, one
+    confirmed set both creating and completing the plan. Neither side has
+    ever performed this exercise, so the follower's mirrored row must get the
+    same no-history default plan _seeded_sets hands every other empty slot."""
+    from extensions import db
+    from features.gym import sharing, stats
+    from models import Exercise, SessionExercise, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
+        squat = Exercise(name='pytest shared mid workout squat', user_id=linked_pair['leader_user'])
+        db.session.add(squat)
+        db.session.flush()
+        leader_session.exercises.append(
+            SessionExercise(exercise_id=squat.id, position=2))
+        db.session.commit()
+
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        added = [se for se in follower_session.exercises
+                 if se.exercise.name == 'pytest shared mid workout squat']
+        assert len(added) == 1, 'the added exercise did not carry across'
+        se = added[0]
+        assert len(se.sets) == stats.DEFAULT_PLAN_SETS, (
+            f'mid-workout addition arrived on the follower with {len(se.sets)} sets, '
+            'not seeded like every other path that creates a SessionExercise')
+        assert {s.weight for s in se.sets} == {stats.DEFAULT_PLAN_WEIGHT}
+        assert {s.reps for s in se.sets} == {stats.DEFAULT_PLAN_REPS}
+        assert {s.base_weight for s in se.sets} == {None}
+        assert all(s.is_default_seeded for s in se.sets), (
+            'default-seeded follower sets must carry the marker too, or a later '
+            'deload on the follower\'s side could scale an invented number (F1)')
+
+
+def test_a_mid_workout_addition_seeds_from_the_followers_own_history_not_the_leaders(linked_pair):
+    """Reconciliation runs inside the LEADER's request. Seeding a newly
+    created follower row must not default to current_user_id() there -- that
+    would name the leader, and since the follower's own WorkoutSessions never
+    carry the leader's user_id, the lookup would silently match nothing and
+    always fall back to the default plan, even when the follower has real
+    history for the exact same movement.
+
+    Set up entirely independent of the linked_pair fixture's own bench
+    mapping: the follower already owns 'pytest shared row lift' with real
+    completed history at a weight the default plan could never produce by
+    coincidence. The leader creates their OWN same-named exercise (a
+    different id, same as linked_pair's own leader/follower bench pair) and
+    adds it mid-workout -- follower_exercise_for matches it to the follower's
+    existing row by name, exactly as it would for a real partner who happens
+    to train the same lift.
+    """
+    import datetime as dt
+    from extensions import db
+    from features.gym import sharing
+    from models import Exercise, SessionExercise, SessionSet, SharedSession, WorkoutSession
+
+    made = {}
+    try:
+        with flask_app.app_context():
+            follower_row_lift = Exercise(name='pytest shared row lift',
+                                         user_id=linked_pair['follower_user'])
+            db.session.add(follower_row_lift)
+            db.session.flush()
+            made['follower_row_lift'] = follower_row_lift.id
+
+            past = WorkoutSession(
+                name='pytest shared row lift history',
+                started_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+                finished_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+                user_id=linked_pair['follower_user'])
+            past_se = SessionExercise(exercise_id=follower_row_lift.id, position=1)
+            past_se.sets = [SessionSet(position=1, weight=55.0, reps=8, completed=True)]
+            past.exercises.append(past_se)
+            db.session.add(past)
+            db.session.commit()
+            made['past_session'] = past.id
+
+            leader_row_lift = Exercise(name='pytest shared row lift',
+                                       user_id=linked_pair['leader_user'])
+            db.session.add(leader_row_lift)
+            db.session.flush()
+
+            leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
+            leader_session.exercises.append(
+                SessionExercise(exercise_id=leader_row_lift.id, position=2))
+            db.session.commit()
+
+            sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+            db.session.commit()
+
+            follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+            added = [se for se in follower_session.exercises
+                     if se.exercise_id == follower_row_lift.id]
+            assert len(added) == 1, (
+                'follower_exercise_for did not match the follower\'s existing '
+                'same-named exercise')
+            se = added[0]
+            assert [(s.weight, s.reps) for s in se.sets] == [(55.0, 8)], (
+                "the follower's mid-workout addition did not seed from THEIR OWN "
+                f'history (got {[(s.weight, s.reps) for s in se.sets]})')
+    finally:
+        with flask_app.app_context():
+            if made.get('past_session'):
+                doomed = db.session.get(WorkoutSession, made['past_session'])
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+            # leader_row_lift's mirrored follower SessionExercise cascades away
+            # with follower_session in linked_pair's own teardown; both Exercise
+            # rows are swept by that teardown's 'pytest shared%' name sweep.
+
+
 def test_a_removed_exercise_disappears_from_the_followers_side(linked_pair):
     """Mirrors what the real delete route does: remove_mirrors_of() runs
     BEFORE the leader's row is deleted, while mirrors_id still resolves --

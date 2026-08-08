@@ -354,6 +354,23 @@ class SessionSet(db.Model):
     # a deload prescribes a weight AND a rep count, and toggling it back off
     # has to return both.
     base_reps           = db.Column(db.Integer, nullable=True)
+    # True for exactly the sets _seeded_sets invents when an exercise has no
+    # history at all (stats.DEFAULT_PLAN_WEIGHT/REPS) -- never for a set
+    # seeded from real history, and never for one a lifter actually logged.
+    #
+    # gym_toggle_deload reads this to refuse to scale these sets: a deload is
+    # a percentage of a real working weight, and there isn't one here, so
+    # scaling the placeholder would dress it up as a prescription (that
+    # invariant used to depend on `weight` never happening to already equal
+    # the default, and on the toggle always running before the exercise was
+    # added -- both false in general, so it needed its own column rather than
+    # being inferred).
+    #
+    # Cleared the same moment base_weight/base_reps are, and for the same
+    # reason: a hand-typed weight is ground truth from now on, so the number
+    # stops being invented and a later deload is free to treat it like any
+    # other real set.
+    is_default_seeded  = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
 
     session_exercise = db.relationship('SessionExercise', back_populates='sets')
 
