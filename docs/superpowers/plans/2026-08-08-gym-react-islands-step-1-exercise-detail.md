@@ -73,14 +73,16 @@ The VPS deploy does `git reset --hard origin/main`, so `dist/` must be built the
     "@testing-library/react": "^16.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^5.2.0",
     "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
-    "vite": "^6.0.3",
-    "vitest": "^2.1.8"
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
   }
 }
 ```
+
+**Versions corrected during execution.** The originally-planned Vite 6 / Vitest 2 pulled an esbuild with advisory GHSA-67mh-4wv8-2f99 — 5 reported vulnerabilities, all the same root cause, and only exploitable against an esbuild dev server this project never runs. Bumping to current majors clears it to 0. Vite 8 was tried first and reverted: it requires Node ^20.19 || >=22.12 and the dev machine is on 20.18. Vite 7 declares the same floor but builds fine on 20.18 with a warning — **local Node should move to 22 LTS**, matching the VPS target in Task 7, before this gets deeper.
 
 `build` runs `tsc --noEmit` first so a type error fails the build rather than shipping.
 
@@ -89,34 +91,50 @@ The VPS deploy does `git reset --hard origin/main`, so `dist/` must be built the
 - [ ] **Step 3: Create `personal_apps/vite.config.ts`**
 
 ```ts
-import { defineConfig } from 'vite'
+/// <reference types="vitest" />
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
+
+// defineConfig comes from vitest/config, not vite: the `test` block below is
+// not part of Vite's own config type and fails to type-check against it.
+//
+// import.meta.url rather than __dirname -- package.json sets "type": "module",
+// so this file is ESM and __dirname does not exist in it.
+const here = fileURLToPath(new URL('.', import.meta.url))
 
 // One build, one entry per gym page. Only `smoke` exists now; steps 2-8 of the
 // spec add their own entries here. Output lands in static/gym/dist/ with a
 // manifest that vite_assets.py reads for the hashed filenames.
+//
+// `root` is left at this directory rather than pointed at static/gym/src, so
+// that outDir stays inside the root and Vite does not warn about emptying a
+// directory outside it. The consequence is that manifest keys are paths
+// relative to here -- 'static/gym/src/entries/<name>.tsx' -- which is what
+// vite_assets.resolve_asset looks up.
 export default defineConfig({
   plugins: [react()],
-  root: resolve(__dirname, 'static/gym/src'),
   base: '/static/gym/dist/',
   build: {
-    outDir: resolve(__dirname, 'static/gym/dist'),
+    outDir: resolve(here, 'static/gym/dist'),
     emptyOutDir: true,
     manifest: true,
     rollupOptions: {
       input: {
-        smoke: resolve(__dirname, 'static/gym/src/entries/smoke.tsx'),
+        smoke: resolve(here, 'static/gym/src/entries/smoke.tsx'),
       },
     },
   },
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: [resolve(__dirname, 'static/gym/src/test-setup.ts')],
+    setupFiles: [resolve(here, 'static/gym/src/test-setup.ts')],
   },
 })
 ```
+
+**Three corrections applied during execution**, all verified against a real build: `defineConfig` must come from `vitest/config`; `__dirname` does not exist in an ESM config; and `root` stays at `personal_apps/` so `outDir` is inside it. That last one sets the manifest key format below.
 
 - [ ] **Step 4: Create `personal_apps/tsconfig.json`**
 
@@ -190,7 +208,7 @@ def test_resolves_hashed_filename(tmp_path):
     manifest = tmp_path / '.vite' / 'manifest.json'
     manifest.parent.mkdir(parents=True)
     manifest.write_text(json.dumps({
-        'entries/exercise.tsx': {'file': 'assets/exercise-a1b2c3d4.js'},
+        'static/gym/src/entries/exercise.tsx': {'file': 'assets/exercise-a1b2c3d4.js'},
     }), encoding='utf-8')
 
     assert resolve_asset('exercise', dist_dir=tmp_path) == \
@@ -264,7 +282,7 @@ def resolve_asset(entry: str, dist_dir: Path | None = None) -> str:
             f'which deletes the untracked dist/ directory.')
 
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-    key = f'entries/{entry}.tsx'
+    key = f'static/gym/src/entries/{entry}.tsx'
     record = manifest.get(key)
     if record is None:
         raise ViteManifestError(

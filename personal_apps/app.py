@@ -55,6 +55,12 @@ app.register_blueprint(tips_bp)
 app.register_blueprint(quizbank_bp)
 app.register_blueprint(gym_bp)
 
+# Gym templates call {{ vite_asset('exercise') }} for the content-hashed bundle
+# built by `npm run build`. Raises rather than returning an empty src when the
+# build has not run -- see vite_assets.py and DEPLOY_FRONTEND.md.
+from vite_assets import resolve_asset
+app.jinja_env.globals['vite_asset'] = resolve_asset
+
 # Hostname that should require login for every page (the "full access" domain).
 # Other hostnames (e.g. the public pubquiz-only domain) are unaffected and keep
 # whatever per-route protection each blueprint already defines.
