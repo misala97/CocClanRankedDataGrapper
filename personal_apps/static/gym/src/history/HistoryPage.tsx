@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { HistoryEntry, HistoryPayload } from './types'
 import { useHistoryUi } from './store'
 import { Icon } from '../components/Icon'
+import { morphFrom } from '../vt'
 
 const de = (value: number) => Math.round(value).toLocaleString('de-DE')
 
@@ -35,7 +36,8 @@ function Row({ entry, weekdayShort }: {
           <span className="pick__box" aria-hidden="true"><Icon name="check" /></span>
         </label>
       )}
-      <a href={`/gym/session/${entry.session_id}`} className="row__main stack">
+      <a href={`/gym/session/${entry.session_id}`} className="row__main stack"
+        onClick={morphFrom('session')}>
         <span className="row__name row__name--strong">{name}</span>
         {/* Weekday first: it is the one time dimension a training log is read
             for, and the band above already states the month. Sub-minute

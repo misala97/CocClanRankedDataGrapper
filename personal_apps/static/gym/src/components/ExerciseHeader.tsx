@@ -20,7 +20,7 @@ export function ExerciseHeader({ exercise, lastOverall, chipClass, chipLabel }: 
         {/* The page's h1. It had NO heading of any level -- the exercise name
             was a span, so the document outline was empty and heading
             navigation had nothing to land on. */}
-        <h1 className="exdetail__name">{exercise.name}</h1>
+        <h1 className="exdetail__name" style={{ viewTransitionName: 'ex' }}>{exercise.name}</h1>
         {/* lastOverall, not table[0]: `table` is the FILTERED view, so under
             ?position=5 this announced "Zuletzt ... Pos. 5" as though that were
             the last time you did the lift at all. Identity metadata is never

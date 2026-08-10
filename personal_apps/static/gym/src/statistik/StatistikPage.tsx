@@ -2,6 +2,7 @@ import type {
   ProgressionRow, StatistikPayload, TimelineRecord,
 } from './types'
 import { kg1, roundTo, signedWhole, volume as de, whole } from '../format'
+import { morphFrom } from '../vt'
 
 /** Local time, from a naive-UTC timestamp. */
 const local = (iso: string) => new Date(`${iso}Z`)
@@ -31,7 +32,8 @@ function Record({ record }: { record: TimelineRecord }) {
   const move = record.weight ?? record.e1rm!
   const unit = record.weight ? 'kg' : 'kg e1RM'
   return (
-    <a className="rec" href={`/gym/session/${record.session_id}`}>
+    <a className="rec" href={`/gym/session/${record.session_id}`}
+      onClick={morphFrom('session', '.rec__name')}>
       <span className="rec__date">{dmy(record.started_at)}</span>
       <span className="rec__name">{record.name}</span>
       <span className="rec__val">
@@ -48,7 +50,8 @@ function Record({ record }: { record: TimelineRecord }) {
 function Progression({ entry }: { entry: ProgressionRow }) {
   return (
     <div className="prog">
-      <a className="prog__name" href={`/gym/exercises/${entry.exercise_id}`}>
+      <a className="prog__name" href={`/gym/exercises/${entry.exercise_id}`}
+        onClick={morphFrom('ex', null)}>
         {entry.name}
       </a>
       <span className="prog__spark">

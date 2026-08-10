@@ -3611,3 +3611,31 @@ body.is-exporting .verlauf__row .pick {
   .rec__val { inline-size: auto; margin-inline-start: auto; }
   .stack-bar { block-size: 34px; }
 }
+
+/* =============================== Seitenwechsel ===============================
+   Cross-document view transitions: every gym navigation crossfades instead of
+   flashing white. Opt-in per document pair, so this only animates between gym
+   pages -- leaving to /login or another app is a plain load. Browsers without
+   the at-rule ignore it wholesale; nothing else depends on it.
+
+   Fast on purpose: the default ~250ms reads as the app being slow, not as
+   polish. The tab bar and top bar are visually identical on both sides of
+   nearly every navigation, so the crossfade reads as content swapping inside
+   a stable frame.
+
+   Shared elements are named at TAP time from React (see src/vt.ts), never
+   statically on whole lists -- two elements sharing a name on one page skips
+   the whole transition, and a bfcache restore brings the mutated DOM back. */
+@view-transition { navigation: auto; }
+
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 0.16s; }
+
+/* The morphing element keeps text readable while it moves: the outgoing copy
+   drops instantly, the incoming one rides the geometry animation. */
+::view-transition-old(ex),
+::view-transition-old(session) { animation-duration: 0s; }
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+}

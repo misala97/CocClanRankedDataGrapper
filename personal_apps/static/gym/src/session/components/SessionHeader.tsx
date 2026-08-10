@@ -50,7 +50,7 @@ export function SessionHeader({ session, deloadApplied, deloadDefaultPct }: Prop
       {/* The page's h1. It was a <span>, which left the whole document
           starting at h2 -- the live exercise's name -- so heading navigation
           returned one exercise and nothing about the workout. */}
-      <h1 className="session-top__name">{session.name || 'Workout'}</h1>
+      <h1 className="session-top__name" style={{ viewTransitionName: 'session' }}>{session.name || 'Workout'}</h1>
       {session.is_deload && (
         <span className="session-top__deload">
           {deloadApplied

@@ -5,6 +5,7 @@ import { useSheets, usePush } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
 import { kg1 } from '../format'
+import { morphFrom } from '../vt'
 
 const de = (value: number) => Math.round(value).toLocaleString('de-DE')
 const local = (iso: string) => new Date(`${iso}Z`)
@@ -31,7 +32,8 @@ function useElapsed(startedAt: string): string {
 
 function StallRow({ item }: { item: Stall }) {
   return (
-    <a className="row row--top" href={`/gym/exercises/${item.exercise_id}`}>
+    <a className="row row--top" href={`/gym/exercises/${item.exercise_id}`}
+      onClick={morphFrom('ex')}>
       <span className="row__main stack">
         <span className="row__name row__name--wrap">{item.name}</span>
         <span className="row__meta">
@@ -378,7 +380,8 @@ export function StartPage({ payload }: { payload: HeutePayload }) {
               const minutes = Math.floor(
                 (local(s.finished_at).getTime() - local(s.started_at).getTime()) / 60000)
               return (
-                <a className="row" href={`/gym/session/${s.session_id}`} key={s.session_id}>
+                <a className="row" href={`/gym/session/${s.session_id}`} key={s.session_id}
+                  onClick={morphFrom('session')}>
                   <span className="row__main stack">
                     <span className="row__name row__name--strong">{s.name ?? 'Workout'}</span>
                     <span className="row__meta">

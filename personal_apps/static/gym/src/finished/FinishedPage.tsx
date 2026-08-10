@@ -113,7 +113,7 @@ export function FinishedPage({ payload }: { payload: FinishedPayload }) {
             once -- the name often already embeds one, and on older rows the two
             disagreed because the name was built from UTC. */}
         <span className="session-top__name stack">
-          <h1 className="finished__name">{session.name ?? 'Workout'}</h1>
+          <h1 className="finished__name" style={{ viewTransitionName: 'session' }}>{session.name ?? 'Workout'}</h1>
           <span className="finished__when">
             {`${weekday} · ${dmy(session.started_at)} · ${minutes(elapsed)}`}
           </span>

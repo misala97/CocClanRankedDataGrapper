@@ -6,6 +6,7 @@ import { useCatalogueUi } from './store'
 import { useSheets } from '../session/stores'
 import { Icon } from '../components/Icon'
 import { NewExerciseSheet } from './NewExerciseSheet'
+import { morphFrom } from '../vt'
 
 const SORTS: { mode: SortMode; label: string }[] = [
   { mode: 'muscle', label: 'Muskelgruppe' },
@@ -26,6 +27,7 @@ function ExerciseRow({ entry, group, isNew }: {
     // link-list navigation announced the name and never the weight.
     <a className={`row row--top uebungen-row${isNew ? ' is-new' : ''}`}
       href={`/gym/exercises/${entry.exercise.id}`}
+      onClick={morphFrom('ex', '.nameline__n')}
       data-group={group}>
       <span className="row__main stack">
         <span className="nameline">
