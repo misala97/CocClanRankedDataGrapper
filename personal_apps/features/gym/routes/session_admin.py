@@ -4,7 +4,7 @@ and saving it back to a template."""
 from features.gym import stats
 
 from flask import (
-    flash, redirect, request, url_for,
+    flash, jsonify, redirect, request, url_for,
 )
 from extensions import (
     db,
@@ -19,10 +19,10 @@ from features.gym.scope import (
     current_user_id, my_sessions, my_templates, owned_session, owned_template,
 )
 from .helpers import (
-    _to_int,
+    _to_int, _wants_json,
 )
 from .workout import (
-    _template_exercises_from_session,
+    _heute_payload, _template_exercises_from_session,
 )
 from ._blueprint import (
     gym_bp,
@@ -228,6 +228,13 @@ def gym_rename_template(template_id):
     if new_name:
         template.name = new_name
         db.session.commit()
+    # The island edits in place and re-renders from the fresh payload -- its
+    # feedback is the row itself changing, so no flash on this path. flash()
+    # here would sit queued in the session and surface on some unrelated
+    # later full load.
+    if _wants_json():
+        return jsonify(_heute_payload().model_dump(mode='json'))
+    if new_name:
         flash(f'Routine heißt jetzt „{new_name}“.', 'success')
     else:
         flash('Kein Name eingegeben — die Routine heißt weiter wie vorher.', 'error')
@@ -244,5 +251,7 @@ def gym_delete_template(template_id):
     name = template.name
     db.session.delete(template)
     db.session.commit()
+    if _wants_json():
+        return jsonify(_heute_payload().model_dump(mode='json'))
     flash(f'Routine „{name}“ gelöscht. Die Workouts daraus bleiben im Verlauf.', 'success')
     return redirect(url_for('gym.gym_heute'))

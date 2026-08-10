@@ -161,3 +161,98 @@ def test_a_finished_session_form_post_still_redirects(client, temp_finished_sess
 
     response = client.post(f'/gym/set/{set_id}/update', data={'weight': '42.0', 'reps': '8'})
     assert response.status_code in (302, 303)
+
+
+@pytest.fixture()
+def temp_template():
+    """A throwaway routine owned by the admin. Yields its id."""
+    from app import app as flask_app
+    from extensions import db
+    from models import WorkoutTemplate
+    with flask_app.app_context():
+        template = WorkoutTemplate(name='ZZ mutation json routine', user_id=_admin_id())
+        db.session.add(template)
+        db.session.commit()
+        template_id = template.id
+    yield template_id
+    with flask_app.app_context():
+        doomed = db.session.get(WorkoutTemplate, template_id)
+        if doomed is not None:
+            db.session.delete(doomed)
+            db.session.commit()
+
+
+def test_renaming_a_routine_answers_with_the_fresh_start_page(client, temp_template):
+    """The island edits in place, so the answer is the whole HeutePayload --
+    the same shape a fresh load renders from, with the new name in it."""
+    from features.gym.schemas import HeutePayload
+
+    response = client.post(f'/gym/templates/{temp_template}/rename',
+                           data={'name': 'ZZ renamed routine'},
+                           headers={'Accept': 'application/json'})
+    assert response.status_code == 200
+    payload = HeutePayload.model_validate(response.get_json())
+    assert 'ZZ renamed routine' in [t.name for t in payload.templates]
+
+    # And no flash left queued for some unrelated later page load: the row
+    # changing IS the feedback on this path.
+    html = client.get('/gym').get_data(as_text=True)
+    assert 'Routine heißt jetzt' not in html
+
+
+def test_deleting_a_routine_answers_with_the_fresh_start_page(client, temp_template):
+    from features.gym.schemas import HeutePayload
+
+    response = client.post(f'/gym/templates/{temp_template}/delete',
+                           headers={'Accept': 'application/json'})
+    assert response.status_code == 200
+    payload = HeutePayload.model_validate(response.get_json())
+    assert temp_template not in [t.template_id for t in payload.templates]
+
+    html = client.get('/gym').get_data(as_text=True)
+    assert 'gelöscht' not in html
+
+
+def test_a_form_post_rename_still_redirects_and_flashes(client, temp_template):
+    """The no-JS path keeps its feedback."""
+    response = client.post(f'/gym/templates/{temp_template}/rename',
+                           data={'name': 'ZZ form renamed'})
+    assert response.status_code in (302, 303)
+    html = client.get('/gym').get_data(as_text=True)
+    assert 'Routine heißt jetzt' in html
+
+
+def test_creating_an_exercise_answers_with_the_fresh_catalogue(client):
+    """The sheet closes and the new row arrives highlighted -- added_id in the
+    payload, exactly what the ?added= redirect used to deliver."""
+    from app import app as flask_app
+    from extensions import db
+    from features.gym.schemas import CataloguePayload
+    from models import Exercise
+
+    exercise_id = None
+    try:
+        response = client.post('/gym/exercises/add',
+                               data={'name': 'ZZ json created lift'},
+                               headers={'Accept': 'application/json'})
+        assert response.status_code == 200
+        payload = CataloguePayload.model_validate(response.get_json())
+        names = [e.exercise.name for g in payload.groups for e in g.entries]
+        assert 'ZZ json created lift' in names
+        exercise_id = next(e.exercise.id for g in payload.groups for e in g.entries
+                           if e.exercise.name == 'ZZ json created lift')
+        assert payload.added_id == exercise_id
+        assert payload.name_taken is False
+
+        # The collision is a page state, not an exception: same 200, banner up.
+        collision = client.post('/gym/exercises/add',
+                                data={'name': 'ZZ json created lift'},
+                                headers={'Accept': 'application/json'})
+        assert collision.status_code == 200
+        assert CataloguePayload.model_validate(collision.get_json()).name_taken is True
+    finally:
+        with flask_app.app_context():
+            doomed = db.session.get(Exercise, exercise_id) if exercise_id else None
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()

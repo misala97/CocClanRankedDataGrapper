@@ -6,7 +6,7 @@ from features.gym.schemas import CataloguePayload
 import datetime as dt
 
 from flask import (
-    flash, redirect, render_template, request, url_for,
+    flash, jsonify, redirect, render_template, request, url_for,
 )
 from extensions import (
     db,
@@ -21,7 +21,7 @@ from features.gym.scope import (
     current_user_id, my_exercises, owned_exercise,
 )
 from .helpers import (
-    DEFAULT_REST_SECONDS, EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _clean_equipment, _clean_muscle_group, _clean_secondary_groups, _to_increment, _to_int, _to_stack_steps,
+    DEFAULT_REST_SECONDS, EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _clean_equipment, _clean_muscle_group, _clean_secondary_groups, _to_increment, _to_int, _to_stack_steps, _wants_json,
 )
 from .history import (
     load_performed,
@@ -34,6 +34,20 @@ from ._blueprint import (
 @gym_bp.route('/gym/uebungen')
 @login_required
 def gym_uebungen():
+    return render_template(
+        'gym/uebungen.html',
+        payload_json=_catalogue_payload(
+            added_id=_to_int(request.args.get('added')),
+            name_taken=bool(request.args.get('name_taken')),
+        ).model_dump(mode='json'),
+    )
+
+
+def _catalogue_payload(added_id=None, name_taken=False):
+    """The whole catalogue as a validated payload. Shared by the page render
+    and by gym_add_exercise's JSON answer, so a create made from the sheet
+    re-renders from exactly what a fresh load would show -- added/name_taken
+    are parameters here and query args on the page, same meaning."""
     now = dt.datetime.utcnow()
     exercises = my_exercises().order_by(Exercise.name).all()
 
@@ -135,11 +149,10 @@ def gym_uebungen():
         # The sheet's rest placeholder said 90 while this is what a blank field
         # actually stores.
         'default_rest_seconds': DEFAULT_REST_SECONDS,
-        'added_id': _to_int(request.args.get('added')),
-        'name_taken': bool(request.args.get('name_taken')),
+        'added_id': added_id,
+        'name_taken': name_taken,
     })
-    return render_template('gym/uebungen.html',
-                           payload_json=payload.model_dump(mode='json'))
+    return payload
 
 
 
@@ -168,6 +181,10 @@ def gym_add_exercise():
     # not reach here through the UI, and ?name_taken already renders a banner on
     # the page that says this in context. A flash would say it twice.
     if my_exercises().filter_by(name=name).first():
+        if _wants_json():
+            # A collision is a page state, not an exception: the same banner
+            # the redirect used to produce, minus the reload.
+            return jsonify(_catalogue_payload(name_taken=True).model_dump(mode='json'))
         return redirect(url_for('gym.gym_uebungen', name_taken=1))
 
     muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''))
@@ -191,6 +208,8 @@ def gym_add_exercise():
     )
     db.session.add(exercise)
     db.session.commit()
+    if _wants_json():
+        return jsonify(_catalogue_payload(added_id=exercise.id).model_dump(mode='json'))
     return redirect(url_for('gym.gym_uebungen', added=exercise.id))
 
 

@@ -32,7 +32,7 @@ from ._blueprint import gym_bp
 from .helpers import (
     DEFAULT_REST_SECONDS, NON_MUSCLE_GROUPS, RECENT_SESSIONS, WEEKDAY_SHORT,
     _cancel_pending_push, _clean_muscle_group, _get_active_session,
-    _to_float, _to_increment, _to_int, _username,
+    _to_float, _to_increment, _to_int, _username, _wants_json,
 )
 from .history import load_performed, performed_from_session, _session_rest_entries
 
@@ -93,9 +93,11 @@ def _as_routine(template, last_done, days_ago):
     }
 
 
-@gym_bp.route('/gym', strict_slashes=False)
-@login_required
-def gym_heute():
+def _heute_payload():
+    """The whole Start page as a validated payload. Shared by the page render
+    and by the template mutations' JSON answers (rename/delete), so an edit
+    made from the page re-renders from exactly what a fresh load would show.
+    Needs a request context: scope.py reads the session."""
     now = dt.datetime.utcnow()
     active_session = _get_active_session()
 
@@ -195,9 +197,7 @@ def gym_heute():
             SharedSession.ended_at.is_(None)).all()
     ]
 
-    return render_template(
-        'gym/heute.html',
-        payload_json=HeutePayload.model_validate({
+    return HeutePayload.model_validate({
             'now': now,
             'active_session_id': active_session.id if active_session else None,
             'active_session_name': active_session.name if active_session else None,
@@ -222,7 +222,15 @@ def gym_heute():
             'tonnage_peak': max((week['volume'] for week in tonnage), default=0.0),
             'templates': [_as_routine(t, None, None) for t in templates],
             'pending_invites': pending_invites,
-        }).model_dump(mode='json'),
+        })
+
+
+@gym_bp.route('/gym', strict_slashes=False)
+@login_required
+def gym_heute():
+    return render_template(
+        'gym/heute.html',
+        payload_json=_heute_payload().model_dump(mode='json'),
     )
 
 
@@ -581,15 +589,10 @@ def _mutation_response(session_, endpoint, **values):
     its return type duplicates all of that. The 2a split exists because that
     kind of duplication already drifted once at file scale.
 
-    Both halves of the test are load-bearing. A browser form post sends
-    `Accept: text/html,...,*/*;q=0.8`, so accept_json is TRUE via the wildcard
-    -- testing it alone would flip every form post to JSON and take the page
-    down. A bare fetch() sends */* and lands here too, which is why the island
-    must send `Accept: application/json` explicitly.
+    The negotiation rule itself lives in helpers._wants_json -- the template
+    mutations on Heute answer through it too.
     """
-    wants_json = (request.accept_mimetypes.accept_json
-                  and not request.accept_mimetypes.accept_html)
-    if wants_json:
+    if _wants_json():
         # The island that asked gets the payload for the page it is: a
         # correction saved from the debrief re-renders the debrief, not the
         # live screen's shape wearing a finished_at.

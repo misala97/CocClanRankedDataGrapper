@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { CatalogueEntry, CataloguePayload, SortMode } from './types'
 import { fold, recency, sincePr } from './format'
 import { kg1 } from '../format'
@@ -6,6 +6,7 @@ import { useCatalogueUi } from './store'
 import { useSheets } from '../session/stores'
 import { Icon } from '../components/Icon'
 import { NewExerciseSheet } from './NewExerciseSheet'
+import { postFormData, MutationFailed } from '../api'
 import { morphFrom } from '../vt'
 
 const SORTS: { mode: SortMode; label: string }[] = [
@@ -66,7 +67,7 @@ function ExerciseRow({ entry, group, isNew }: {
   )
 }
 
-export function CataloguePage({ payload }: { payload: CataloguePayload }) {
+export function CataloguePage({ payload: initial }: { payload: CataloguePayload }) {
   const query = useCatalogueUi((s) => s.query)
   const setQuery = useCatalogueUi((s) => s.setQuery)
   const sort = useCatalogueUi((s) => s.sort)
@@ -74,6 +75,29 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
   const isOpen = useCatalogueUi((s) => s.isOpen)
   const toggleGroup = useCatalogueUi((s) => s.toggleGroup)
   const openSheet = useSheets((s) => s.open)
+  const closeSheet = useSheets((s) => s.close)
+  // Creating an exercise answers with the fresh catalogue: added_id
+  // highlights the new row, name_taken raises the banner -- exactly what the
+  // ?added= / ?name_taken=1 redirects delivered, minus the reload.
+  const [payload, setPayload] = useState(initial)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const createExercise = async (fields: FormData): Promise<boolean> => {
+    try {
+      const fresh = await postFormData<CataloguePayload>('/gym/exercises/add', fields)
+      setPayload(fresh)
+      setSaveError(null)
+      // Closed on the collision too: the redirect flow closed it (the page
+      // reloaded), and the banner explains itself in page context.
+      closeSheet()
+      return !fresh.name_taken
+    } catch (error) {
+      setSaveError(error instanceof MutationFailed
+        ? error.germanMessage
+        : 'Speichern fehlgeschlagen.')
+      return false
+    }
+  }
 
   const total = payload.groups.reduce((n, g) => n + g.entries.length, 0)
   const needle = fold(query.trim())
@@ -113,6 +137,9 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
         </button>
       </header>
 
+      {saveError !== null && (
+        <p className="flash flash--error" role="alert">{saveError}</p>
+      )}
       {payload.name_taken && (
         <section className="next-time">
           <div className="next-time__lbl">Nicht gespeichert</div>
@@ -235,7 +262,8 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
 
       <NewExerciseSheet muscleGroups={payload.muscle_groups}
         equipmentLabels={payload.equipment_labels}
-        defaultRestSeconds={payload.default_rest_seconds} />
+        defaultRestSeconds={payload.default_rest_seconds}
+        onCreate={createExercise} />
     </>
   )
 }

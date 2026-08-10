@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StartPage } from './StartPage'
 import type { HeutePayload, RoutineMemory, Stall } from './types'
 import { usePush, useSheets } from '../session/stores'
@@ -216,5 +217,78 @@ describe('StartPage', () => {
     expect(screen.getByText(/Noch keine Vorlagen/)).toBeInTheDocument()
     // Starting without one is still a real path.
     expect(screen.getByRole('button', { name: /Freies Workout/ })).toBeInTheDocument()
+  })
+})
+
+describe('editing a routine in place', () => {
+  it('renames over fetch and re-renders the row from the answer', async () => {
+    const fresh: HeutePayload = {
+      ...base,
+      routines: [routine({ name: 'Push v2' })],
+      templates: [routine({ name: 'Push v2' })],
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, json: async () => fresh,
+    } as unknown as Response)))
+
+    const { container } = mount()
+    const user = userEvent.setup()
+    await user.click(container.querySelector('.lead__edit-toggle')!)
+    const input = screen.getByLabelText('Neuer Name für Push')
+    await user.clear(input)
+    await user.type(input, 'Push v2')
+    await user.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    const [url, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/gym/templates/1/rename')
+    expect((init.headers as Record<string, string>)['Accept']).toBe('application/json')
+    expect((init.body as FormData).get('name')).toBe('Push v2')
+
+    const routines = screen.getByRole('region', { name: /Am längsten her|Routinen/ })
+    expect(await within(routines).findByText('Push v2')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('deletes after the confirm and drops the row', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, json: async () => ({ ...base, routines: [], templates: [] }),
+    } as unknown as Response)))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const { container } = mount()
+    const user = userEvent.setup()
+    await user.click(container.querySelector('.lead__edit-toggle')!)
+    await user.click(screen.getByRole('button', { name: 'Löschen' }))
+
+    expect(await screen.findByText(/Noch keine Vorlagen/)).toBeInTheDocument()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('does nothing when the confirm is declined', async () => {
+    const spy = vi.fn()
+    vi.stubGlobal('fetch', spy)
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    const { container } = mount()
+    const user = userEvent.setup()
+    await user.click(container.querySelector('.lead__edit-toggle')!)
+    await user.click(screen.getByRole('button', { name: 'Löschen' }))
+
+    expect(spy).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('states a failure and keeps the page', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline') }))
+    const { container } = mount()
+    const user = userEvent.setup()
+    await user.click(container.querySelector('.lead__edit-toggle')!)
+    await user.click(screen.getByRole('button', { name: 'Speichern' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Verbindung fehlgeschlagen')
+    const routines = screen.getByRole('region', { name: /Am längsten her|Routinen/ })
+    expect(within(routines).getByText('Push')).toBeInTheDocument()
+    vi.unstubAllGlobals()
   })
 })

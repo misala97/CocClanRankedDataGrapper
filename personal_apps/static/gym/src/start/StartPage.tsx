@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import type { HeutePayload, RoutineMemory, Stall } from './types'
+import { postForm, MutationFailed } from '../api'
 import { recency, sincePr } from '../catalogue/format'
 import { useSheets, usePush } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
@@ -45,7 +46,27 @@ function StallRow({ item }: { item: Stall }) {
   )
 }
 
-function RoutineEdit({ routine }: { routine: RoutineMemory }) {
+interface RoutineEditProps {
+  routine: RoutineMemory
+  /** POSTs over fetch and hands back the fresh HeutePayload the route
+   *  answers with; the page re-renders from it, no reload. */
+  onSave: (url: string, fields: Record<string, string>) => Promise<void>
+}
+
+function RoutineEdit({ routine, onSave }: RoutineEditProps) {
+  const submit = (url: string, confirmText?: string) =>
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      if (confirmText !== undefined && !confirm(confirmText)) return
+      const form = event.currentTarget
+      const fields: Record<string, string> = {}
+      new FormData(form).forEach((value, key) => { fields[key] = String(value) })
+      void onSave(url, fields).then(() => {
+        // The panel is done: the row it edits re-renders around it.
+        form.closest('details')?.removeAttribute('open')
+      })
+    }
+
   return (
     <details className="lead__edit">
       <summary className="lead__edit-toggle" aria-label={`${routine.name} bearbeiten`}>
@@ -53,13 +74,14 @@ function RoutineEdit({ routine }: { routine: RoutineMemory }) {
       </summary>
       <div className="lead__edit-body">
         <form method="post" action={`/gym/templates/${routine.template_id}/rename`}
-          className="lead__edit-form">
+          className="lead__edit-form"
+          onSubmit={submit(`/gym/templates/${routine.template_id}/rename`)}>
           <input type="text" name="name" defaultValue={routine.name} className="input"
             aria-label={`Neuer Name für ${routine.name}`} required />
           <button type="submit" className="btn btn--ghost btn--sm">Speichern</button>
         </form>
         <form method="post" action={`/gym/templates/${routine.template_id}/delete`}
-          onSubmit={(e) => { if (!confirm('Vorlage löschen?')) e.preventDefault() }}>
+          onSubmit={submit(`/gym/templates/${routine.template_id}/delete`, 'Vorlage löschen?')}>
           <button type="submit" className="btn btn--quiet-danger btn--sm btn--block">
             Löschen
           </button>
@@ -69,10 +91,25 @@ function RoutineEdit({ routine }: { routine: RoutineMemory }) {
   )
 }
 
-export function StartPage({ payload }: { payload: HeutePayload }) {
+export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   const openSheet = useSheets((s) => s.open)
   const subscribed = usePush((s) => s.subscribed)
   const setSubscribed = usePush((s) => s.setSubscribed)
+  // Renaming or deleting a routine answers with the fresh HeutePayload, and
+  // the page re-renders from it -- the row changing is the feedback.
+  const [payload, setPayload] = useState(initial)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const saveRoutine = async (url: string, fields: Record<string, string>) => {
+    try {
+      setPayload(await postForm<HeutePayload>(url, fields))
+      setSaveError(null)
+    } catch (error) {
+      setSaveError(error instanceof MutationFailed
+        ? error.germanMessage
+        : 'Speichern fehlgeschlagen.')
+    }
+  }
 
   const running = payload.active_session_id !== null
   // Nothing on this page can start a workout while one is running: gym_start
@@ -173,6 +210,9 @@ export function StartPage({ payload }: { payload: HeutePayload }) {
       ))}
 
       <section className="sec" aria-labelledby="sec-routinen">
+        {saveError !== null && (
+          <p className="flash flash--error" role="alert">{saveError}</p>
+        )}
         {payload.routines.length > 0 ? (
           <>
             <div className="sec__head">
@@ -188,7 +228,7 @@ export function StartPage({ payload }: { payload: HeutePayload }) {
                     <span className="lead__due">{recency(lead.days_ago, true)}</span>
                     <span className="lead__name">{lead.name}</span>
                   </span>
-                  <RoutineEdit routine={lead} />
+                  <RoutineEdit routine={lead} onSave={saveRoutine} />
                 </div>
                 <p className="lead__list">
                   {lead.exercises.length > 0 ? lead.exercises.join(' · ') : 'Keine Übungen'}
@@ -223,7 +263,7 @@ export function StartPage({ payload }: { payload: HeutePayload }) {
                   </span>
                 </span>
                 <span className="row__trail">
-                  <RoutineEdit routine={routine} />
+                  <RoutineEdit routine={routine} onSave={saveRoutine} />
                   {canStart && (
                     <form method="post" action="/gym/start">
                       <input type="hidden" name="template_id" value={routine.template_id} />

@@ -13,6 +13,8 @@ Moved verbatim from the pre-split routes.py.
 """
 import datetime as dt
 
+from flask import request
+
 from extensions import db
 from models import (
     AppUser, WorkoutSession, PendingPush, STALE_SESSION_TIMEOUT,
@@ -222,3 +224,16 @@ RECENT_SESSIONS = 5
 def _username(user_id):
     row = db.session.get(AppUser, user_id)
     return row.username if row is not None else 'Jemand'
+
+
+def _wants_json():
+    """Whether this request is an island's fetch rather than a form post.
+
+    Both halves are load-bearing. A browser form post sends
+    `Accept: text/html,...,*/*;q=0.8`, so accept_json is TRUE via the wildcard
+    -- testing it alone would flip every form post to JSON and take the page
+    down. A bare fetch() sends */* and lands on the html side too, which is
+    why every island sends `Accept: application/json` explicitly (src/api.ts).
+    """
+    return (request.accept_mimetypes.accept_json
+            and not request.accept_mimetypes.accept_html)

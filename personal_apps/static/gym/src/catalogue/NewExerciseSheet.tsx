@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Sheet } from '../session/components/Sheet'
 
 interface Props {
@@ -6,26 +6,40 @@ interface Props {
   equipmentLabels: Record<string, string>
   /** What a blank rest field actually stores. The placeholder said 90. */
   defaultRestSeconds: number
+  /** POSTs the form over fetch; resolves true when the exercise was created
+   *  (false on a name collision). The page swaps its payload either way --
+   *  added_id highlights the new row, name_taken raises the banner. */
+  onCreate: (fields: FormData) => Promise<boolean>
 }
 
 /**
  * Creating an exercise from the catalogue.
  *
- * A native POST followed by a redirect, deliberately: the route answers with
- * ?added=<id> so the new row can arrive highlighted, and ?name_taken=1 when it
- * collides -- both of which the page reads on the way back in. Turning this
- * into a fetch would mean reimplementing that round trip for no gain.
+ * The submit goes over fetch and the page re-renders from the answered
+ * payload -- the same added_id / name_taken the ?added= redirect used to
+ * deliver, minus the reload. The raw FormData is what travels, because
+ * secondary_muscle_groups is a multi-select and flattening it would drop
+ * every value but one.
  */
 export function NewExerciseSheet({
-  muscleGroups, equipmentLabels, defaultRestSeconds,
+  muscleGroups, equipmentLabels, defaultRestSeconds, onCreate,
 }: Props) {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const form = event.currentTarget
+    void onCreate(new FormData(form)).then((created) => {
+      // Only a success clears the fields: after a collision you reopen to
+      // fix the name, not to retype everything.
+      if (created) form.reset()
+    })
+  }
   // The stack-steps field only applies to a stack: on a dumbbell it is not an
   // empty answer, it is a meaningless question.
   const [equipment, setEquipment] = useState('stack')
 
   return (
     <Sheet id="sheet-new-exercise" title="Neue Übung" closeLabel="Abbrechen">
-      <form method="post" action="/gym/exercises/add">
+      <form method="post" action="/gym/exercises/add" onSubmit={submit}>
         <div className="field grow">
           <label className="label" htmlFor="uebungen-add-name">Name</label>
           <input type="text" id="uebungen-add-name" name="name" className="input"

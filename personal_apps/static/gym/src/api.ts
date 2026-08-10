@@ -33,14 +33,19 @@ export class MutationFailed extends Error {
 /** POST form fields, get the page's fresh payload back. The caller names the
  *  payload type it is owed -- which page answers is the server's decision
  *  (_mutation_response branches on finished_at). */
-export async function postForm<T>(
+export function postForm<T>(
   url: string, fields: Record<string, string | number | boolean> = {},
 ): Promise<T> {
   const body = new FormData()
   for (const [key, value] of Object.entries(fields)) {
     body.append(key, String(value))
   }
+  return postFormData<T>(url, body)
+}
 
+/** Same, from a real form's FormData -- the only shape that keeps a
+ *  multi-select's repeated keys (request.form.getlist on the other side). */
+export async function postFormData<T>(url: string, body: FormData): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
