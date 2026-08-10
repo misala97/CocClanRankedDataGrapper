@@ -1428,8 +1428,12 @@ def test_the_lead_routine_names_a_stall_inside_it():
             with test_client.session_transaction() as flask_session:
                 flask_session['user_id'] = made['user']
             html = test_client.get('/gym').get_data(as_text=True)
-        assert 'pytest briefing lift' in html, 'the stalling lift was not named on Heute'
-        assert 'lead__watch' in html, 'no briefing line on the lead card'
+        # LeadWatch renders the line; what the server decides is that the
+        # stall is reported at all and that the lead routine contains it.
+        payload = embedded_payload(html)
+        stalled_ids = {s['exercise_id'] for s in payload['stalls']}
+        assert 'pytest briefing lift' in [s['name'] for s in payload['stalls']],             'the stalling lift was not reported on Heute'
+        assert stalled_ids & set(payload['routines'][0]['exercise_ids']),             'the lead routine does not contain it, so no briefing line would render'
     finally:
         with flask_app.app_context():
             for session_id in made['sessions']:
@@ -1520,10 +1524,17 @@ def test_the_lead_routine_ignores_a_stall_it_does_not_contain():
             with test_client.session_transaction() as flask_session:
                 flask_session['user_id'] = made['user']
             html = test_client.get('/gym').get_data(as_text=True)
-        watch = html.split('lead__watch', 1)[1].split('</p>', 1)[0] if 'lead__watch' in html else ''
-        assert 'pytest aaa outsider lift' not in watch,             'the briefing named a stall the routine does not contain'
-        assert 'pytest inroutine lift' in watch,             'the briefing did not name the stall the routine DOES contain'
-        assert 'weitere' not in watch,             'the briefing counted more stalls than the one exercise this routine has'
+        # LeadWatch intersects the lead routine's exercises with the stalls,
+        # so what has to hold server-side is that both lifts are reported and
+        # only one of them is in the routine.
+        payload = embedded_payload(html)
+        by_name = {s['name']: s['exercise_id'] for s in payload['stalls']}
+        assert 'pytest inroutine lift' in by_name
+        assert 'pytest aaa outsider lift' in by_name
+        # The intersection is by id, so that is what the payload has to support.
+        lead_ids = payload['routines'][0]['exercise_ids']
+        assert by_name['pytest inroutine lift'] in lead_ids,             'the briefing would not name the stall the routine DOES contain'
+        assert by_name['pytest aaa outsider lift'] not in lead_ids,             'the briefing would name a stall the routine does not contain'
     finally:
         with flask_app.app_context():
             for session_id in made['sessions']:
@@ -1613,9 +1624,12 @@ def test_the_lead_routine_briefing_is_silent_when_nothing_stalls():
             with test_client.session_transaction() as flask_session:
                 flask_session['user_id'] = made['user']
             html = test_client.get('/gym').get_data(as_text=True)
-        assert 'pytest no-stall routine' in html and 'lead__go' in html, \
+        payload = embedded_payload(html)
+        assert 'pytest no-stall routine' in [r['name'] for r in payload['routines']], \
             'the lead routine card itself did not render'
-        assert 'lead__watch' not in html, 'a briefing line rendered though nothing stalls'
+        # Nothing in the lead routine stalls, so LeadWatch renders nothing.
+        lead_ids = set(payload['routines'][0]['exercise_ids'])
+        assert not [s for s in payload['stalls'] if s['exercise_id'] in lead_ids],             'a briefing line would render though nothing in the routine stalls'
     finally:
         with flask_app.app_context():
             for session_id in made['sessions']:

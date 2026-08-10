@@ -1,4 +1,5 @@
 import type { LiveSet } from '../types'
+import { kg1 } from '../../format'
 
 interface Props {
   set: LiveSet
@@ -26,7 +27,7 @@ interface Props {
 export function SetRow({
   set, ordinal, isRecord, isNext, isUnilateral, busy = false, onToggle,
 }: Props) {
-  const weight = set.weight.toFixed(1).replace('.', ',')
+  const weight = kg1(set.weight)
   const perSide = isUnilateral ? ' je Seite' : ''
   const amount = `${weight} kg${perSide} mal ${set.reps}`
 

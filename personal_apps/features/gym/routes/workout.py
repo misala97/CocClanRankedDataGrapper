@@ -21,7 +21,7 @@ from models import (
 )
 from auth import login_required
 from features.gym import stats
-from features.gym.schemas import SessionDetailPayload
+from features.gym.schemas import HeutePayload, SessionDetailPayload
 from features.gym.scope import (
     current_user_id, my_exercises, my_sessions, my_templates,
     owned_exercise, owned_session, owned_session_exercise, owned_set,
@@ -77,6 +77,20 @@ def _schedule_rest(session_set):
     # multiple -- a new completed set means a new (possibly shorter) rest period.
     _cancel_pending_push(session_)
     db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
+
+
+def _as_routine(template, last_done, days_ago):
+    """A routine as the Start page reads it: its name, its exercises in order,
+    and when it was last trained."""
+    ordered = sorted(template.exercises, key=lambda te: te.position)
+    return {
+        'template_id': template.id,
+        'name': template.name,
+        'exercises': [te.exercise.name for te in ordered],
+        'exercise_ids': [te.exercise_id for te in ordered],
+        'last_done': last_done,
+        'days_ago': days_ago,
+    }
 
 
 @gym_bp.route('/gym', strict_slashes=False)
@@ -183,25 +197,32 @@ def gym_heute():
 
     return render_template(
         'gym/heute.html',
-        now=now,
-        active_session=active_session,
-        # Start now offers push activation to a device that has none -- see the
-        # notify-prompt in heute.html for why it moved out of the ⋮ sheet.
-        vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
-        consistency=stats.consistency(list(session_started_at.values()), now),
-        routines=stats.routine_memory(templates, routine_sessions, now),
-        recent_sessions=recent_sessions,
-        stalls=stalls,
-        deload_suggestion=deload_suggestion,
-        balance=stats.muscle_group_volume(performed, catalogue_groups, now),
-        tonnage=tonnage,
-        # The scale the bars are drawn against, named on the page so their
-        # heights mean something. Also the empty-state gate: 0 means there is
-        # nothing to chart, and the section says so instead of drawing eight
-        # stubs and asserting a running week over them.
-        tonnage_peak=max((week['volume'] for week in tonnage), default=0.0),
-        templates=templates,
-        pending_invites=pending_invites,
+        payload_json=HeutePayload.model_validate({
+            'now': now,
+            'active_session_id': active_session.id if active_session else None,
+            'active_session_name': active_session.name if active_session else None,
+            # Start offers push activation to a device that has none -- only
+            # the browser knows whether THIS device is subscribed.
+            'vapid_public_key': current_app.config.get('VAPID_PUBLIC_KEY'),
+            'consistency': stats.consistency(list(session_started_at.values()), now),
+            'routines': [_as_routine(r['template'], r['last_done'], r['days_ago'])
+                         for r in stats.routine_memory(templates, routine_sessions, now)],
+            'recent_sessions': [
+                {'session_id': r['session'].id, 'name': r['session'].name,
+                 'started_at': r['session'].started_at,
+                 'finished_at': r['session'].finished_at,
+                 'is_deload': r['session'].is_deload,
+                 'volume': r['volume'], 'records': r['records']}
+                for r in recent_sessions
+            ],
+            'stalls': stalls,
+            'deload_suggestion': deload_suggestion,
+            'balance': stats.muscle_group_volume(performed, catalogue_groups, now),
+            'tonnage': tonnage,
+            'tonnage_peak': max((week['volume'] for week in tonnage), default=0.0),
+            'templates': [_as_routine(t, None, None) for t in templates],
+            'pending_invites': pending_invites,
+        }).model_dump(mode='json'),
     )
 
 

@@ -1088,8 +1088,9 @@ def test_the_partner_sees_the_invite_on_their_start_page(leader_with_partner):
 
     partner_client = _client_for(leader_with_partner['partner'])
     html = partner_client.get('/gym').get_data(as_text=True)
-    assert 'pytest invite leader' in html, 'the invite is not on the partner\'s Start page'
-    assert 'invite-card' in html
+    invites = embedded_payload(html)['pending_invites']
+    assert [i['leader_name'] for i in invites] == ['pytest invite leader'], \
+        "the invite is not on the partner's Start page"
 
 
 def test_a_third_party_does_not_see_the_invite(leader_with_partner):
@@ -1112,7 +1113,7 @@ def test_a_third_party_does_not_see_the_invite(leader_with_partner):
             outsider_id = outsider.id
 
         html = _client_for(outsider_id).get('/gym').get_data(as_text=True)
-        assert 'invite-card' not in html
+        assert embedded_payload(html)['pending_invites'] == []
     finally:
         with flask_app.app_context():
             if outsider_id:

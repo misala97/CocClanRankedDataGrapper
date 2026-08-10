@@ -1,6 +1,7 @@
 import type { LiveExercise } from '../types'
 import { useSheets, useWorkoutUi } from '../stores'
 import { Icon } from '../../components/Icon'
+import { kg1 } from '../../format'
 
 interface Props {
   exercises: LiveExercise[]
@@ -15,7 +16,7 @@ function loadSummary(se: LiveExercise, isLive: boolean): string {
   if (isLive) return `${done}/${total}`
   if (total > 0 && done === total) return `${done}/${total}`
   if (total > 0) {
-    return `${total} × ${se.sets[0]!.weight.toFixed(1).replace('.', ',')}`
+    return `${total} × ${kg1(se.sets[0]!.weight)}`
   }
   return '—'
 }

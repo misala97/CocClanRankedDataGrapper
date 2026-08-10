@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { CatalogueEntry, CataloguePayload, SortMode } from './types'
 import { fold, recency, sincePr } from './format'
+import { kg1 } from '../format'
 import { useCatalogueUi } from './store'
 import { useSheets } from '../session/stores'
 import { Icon } from '../components/Icon'
@@ -46,12 +47,12 @@ function ExerciseRow({ entry, group, isNew }: {
                 per-side load above a bilateral one, which is the same weight
                 read as half. */}
             <span className="vol">
-              {entry.last_weight.toFixed(1).replace('.', ',')}
+              {kg1(entry.last_weight)}
               <small>{entry.exercise.is_unilateral ? 'kg/Seite' : 'kg'}</small>
             </span>
             <span className="lastline">
               {entry.best_weight !== null && entry.best_weight > entry.last_weight
-                ? `zuletzt · best ${entry.best_weight.toFixed(1).replace('.', ',')}`
+                ? `zuletzt · best ${kg1(entry.best_weight)}`
                 : 'zuletzt'}
             </span>
           </>

@@ -411,3 +411,107 @@ class HistoryPayload(_Model):
     # Stated rather than taken from strftime('%a'), which follows the server's
     # locale and not the UI's.
     weekday_short: list[str]
+
+
+# ---------------------------------------------------------------------------
+# The Start page.
+#
+# Mirrors what routes/workout.py:gym_heute computes. Every figure here comes
+# from that route's single load_performed() call -- this page must never issue
+# one query per session, however long the history gets.
+# ---------------------------------------------------------------------------
+
+
+class Consistency(_Model):
+    sessions: int
+    per_week: float
+    days_since_last: int | None
+    window_days: int
+
+
+class RoutineMemory(_Model):
+    """A routine and when it was last trained."""
+    template_id: int
+    name: str
+    exercises: list[str]
+    #: Parallel to `exercises`. The briefing intersects the lead routine with
+    #: the stall roster, and it does so by id -- two exercises can carry the
+    #: same name, and a name collision would report a stall the routine does
+    #: not actually contain.
+    exercise_ids: list[int]
+    last_done: datetime | None
+    days_ago: int | None
+
+
+class RecentSession(_Model):
+    session_id: int
+    name: str | None
+    started_at: datetime
+    finished_at: datetime
+    is_deload: bool
+    volume: float
+    records: int
+
+
+class Stall(_Model):
+    """A lift that has stopped moving. The roster this feeds is the whole
+    catalogue's stalls; the deload signal below is a narrower read of the same
+    data, limited to the active rotation."""
+    exercise_id: int
+    name: str
+    position: int
+    stuck_at: float
+    since: datetime
+    sessions_since_pr: int
+
+
+class DeloadSuggestion(_Model):
+    count: int
+    stalls: list[Stall]
+
+
+class MuscleBalance(_Model):
+    """Seeded from the app's own vocabulary, not from whichever groups happen
+    to own an exercise -- a group you have never built an exercise for could
+    otherwise not appear, so the section that exists to say "you have quietly
+    stopped training X" was structurally unable to name legs at all."""
+    group: str
+    sets: int
+    volume: float
+    share: float
+    under_trained: bool
+
+
+class TonnageWeek(_Model):
+    week_start: datetime
+    volume: float
+    is_current: bool
+    has_deload: bool
+
+
+class PendingInvite(_Model):
+    """Addressed to one person: an invite is only ever visible to its
+    recipient."""
+    shared_id: int
+    leader_name: str
+    session_name: str
+
+
+class HeutePayload(_Model):
+    now: datetime
+    active_session_id: int | None
+    active_session_name: str | None
+    vapid_public_key: str | None
+    consistency: Consistency
+    routines: list[RoutineMemory]
+    recent_sessions: list[RecentSession]
+    stalls: list[Stall]
+    deload_suggestion: DeloadSuggestion | None
+    balance: list[MuscleBalance]
+    tonnage: list[TonnageWeek]
+    # The scale the bars are drawn against, named on the page so their heights
+    # mean something. Also the empty-state gate: 0 means there is nothing to
+    # chart, and the section says so instead of drawing eight stubs.
+    tonnage_peak: float
+    templates: list[RoutineMemory]
+    pending_invites: list[PendingInvite]

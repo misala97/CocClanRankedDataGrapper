@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { kg1 } from '../../format'
 import { LivePanel } from './LivePanel'
 import { Rail } from './Rail'
 import { SessionTotals } from './SessionTotals'
@@ -32,7 +33,7 @@ describe('LivePanel', () => {
     const next = live.sets.find((s) => !s.completed)!
     render(<LivePanel payload={payload} {...handlers()} />)
     expect(screen.getByLabelText('Gewicht eingeben'))
-      .toHaveTextContent(next.weight.toFixed(1).replace('.', ','))
+      .toHaveTextContent(kg1(next.weight))
     expect(screen.getByLabelText('Wiederholungen eingeben'))
       .toHaveTextContent(String(next.reps))
   })
@@ -63,7 +64,7 @@ describe('LivePanel', () => {
     render(<LivePanel payload={allDone} {...handlers()} />)
     const last = live.sets[live.sets.length - 1]!
     expect(screen.getByLabelText('Gewicht eingeben'))
-      .toHaveTextContent(last.weight.toFixed(1).replace('.', ','))
+      .toHaveTextContent(kg1(last.weight))
     expect(screen.getByText(/Alle Sätze erledigt/)).toBeInTheDocument()
   })
 

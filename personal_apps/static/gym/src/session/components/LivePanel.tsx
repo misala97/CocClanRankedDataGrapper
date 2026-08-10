@@ -3,6 +3,7 @@ import type { SessionDetailPayload } from '../types'
 import { useSheets } from '../stores'
 import { useRestTick } from '../useRestTick'
 import { Icon } from '../../components/Icon'
+import { kg1 } from '../../format'
 import { SetRow } from './SetRow'
 import { Stepper } from './Stepper'
 
@@ -118,7 +119,7 @@ export function LivePanel({
       {ready !== null && (
         <p className="live__ready">
           <span className="live__ready-lbl">Bereit</span>
-          {` ${ready.is_latest ? 'Letztes Mal' : 'Zuletzt in diesem Slot'} ${ready.sets} Sätze auf ${ready.weight.toFixed(1).replace('.', ',')} kg${perSide} mit ${payload.min_full_reps}+ Wdh.`}
+          {` ${ready.is_latest ? 'Letztes Mal' : 'Zuletzt in diesem Slot'} ${ready.sets} Sätze auf ${kg1(ready.weight)} kg${perSide} mit ${payload.min_full_reps}+ Wdh.`}
         </p>
       )}
 
@@ -154,7 +155,7 @@ export function LivePanel({
 
       {live.sets.length === 0 && (
         <p className="live__empty">
-          {`Noch keine Sätze. Der erste wird angelegt, sobald du ihn bestätigst${suggestion ? ` — zuletzt ${suggestion.weight.toFixed(1).replace('.', ',')} kg × ${suggestion.reps}` : ''}.`}
+          {`Noch keine Sätze. Der erste wird angelegt, sobald du ihn bestätigst${suggestion ? ` — zuletzt ${kg1(suggestion.weight)} kg × ${suggestion.reps}` : ''}.`}
         </p>
       )}
       {live.sets.length > 0 && nextSet === null && (

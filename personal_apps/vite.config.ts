@@ -33,6 +33,7 @@ export default defineConfig({
         session: resolve(here, 'static/gym/src/entries/session.tsx'),
         catalogue: resolve(here, 'static/gym/src/entries/catalogue.tsx'),
         history: resolve(here, 'static/gym/src/entries/history.tsx'),
+        start: resolve(here, 'static/gym/src/entries/start.tsx'),
       },
     },
   },

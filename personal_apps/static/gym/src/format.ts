@@ -1,9 +1,22 @@
 // German number and date formatting, matching what the Jinja filters produced.
 // Comma decimal separator, dot thousands separator, dd.MM.yyyy dates.
 
-/** `'%.1f'|format(x)` + `.replace('.', ',')` */
+/** `'%.1f'|format(x)` + `.replace('.', ',')`
+ *
+ *  Not just toFixed: Python rounds a tie to the EVEN digit, JavaScript rounds
+ *  it away from zero. 3,25 Workouts pro Woche printed as "3,2" for years and
+ *  toFixed made it "3,3" -- and ties are not exotic here, they are the normal
+ *  case. Everything this formats is a dyadic rational: sessions / 4 weeks, and
+ *  weights in 1,25 / 2,5 kg steps. Both are exact in binary, so the tie test
+ *  below is exact too, and anything that is not a tie falls through to toFixed,
+ *  which agrees with Python everywhere else. */
 export function kg1(value: number): string {
-  return value.toFixed(1).replace('.', ',')
+  const tenths = value * 10
+  const lower = Math.floor(tenths)
+  const rounded = tenths - lower === 0.5
+    ? (lower % 2 === 0 ? lower : lower + 1) / 10
+    : value
+  return rounded.toFixed(1).replace('.', ',')
 }
 
 /** `'{:,.0f}'.format(v).replace(',', '.')` */
