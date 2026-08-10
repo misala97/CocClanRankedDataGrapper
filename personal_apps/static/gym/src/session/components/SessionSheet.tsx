@@ -41,86 +41,114 @@ export function SessionSheet({
 
   return (
     <Sheet id="sheet-session" title="Workout">
+      {/* Actions first: they are what a ⋯ is opened for mid-set. Each row is
+          the app's own list grammar -- icon tile, strong name, quiet meta line
+          answering the question the bare label always raised. */}
+      <div className="sheet__group">
+        {/* Ending a rest WITHOUT logging anything, after the last set of an
+            exercise, so the notifier does not fire "Pause vorbei" for a rest
+            you already walked away from. A workout-level action on a
+            session-level timer, which is why it is here and not in the thumb
+            zone. Rendered conditionally, which the Jinja version could not do:
+            its sheets survived every refresh, so `{% if resting %}` froze at
+            the last full page load. Nothing freezes now. */}
+        {resting && (
+          <button type="button" className="sheet-row" onClick={onSkipRest}>
+            <span className="sheet-row__lead"><Icon name="timer" /></span>
+            <span className="sheet-row__main">
+              <span className="sheet-row__name">Pause beenden</span>
+              <span className="sheet-row__meta">Ohne Satz — es kommt keine Benachrichtigung mehr.</span>
+            </span>
+          </button>
+        )}
+
+        <button type="button" className="sheet-row"
+          onClick={() => { setReorder(!reorderUnlocked); close() }}>
+          <span className="sheet-row__lead"><Icon name="swap" /></span>
+          <span className="sheet-row__main">
+            <span className="sheet-row__name">
+              {reorderUnlocked ? 'Reihenfolge fertig' : 'Reihenfolge ändern'}
+            </span>
+            <span className="sheet-row__meta">Übungen per Ziehen sortieren.</span>
+          </span>
+        </button>
+
+        <button type="button" className="sheet-row"
+          onClick={() => openSheet('sheet-add-exercise')}>
+          <span className="sheet-row__lead"><Icon name="plus" /></span>
+          <span className="sheet-row__main">
+            <span className="sheet-row__name">Übung hinzufügen</span>
+            <span className="sheet-row__meta">Aus dem Katalog oder neu anlegen.</span>
+          </span>
+        </button>
+
+        <button type="button" className="sheet-row"
+          onClick={() => openSheet('sheet-deload')}>
+          <span className="sheet-row__lead"><Icon name="deload" /></span>
+          <span className="sheet-row__main">
+            <span className="sheet-row__name">
+              {session.is_deload ? 'Deload-Markierung ändern' : 'Als Deload markieren'}
+            </span>
+            <span className="sheet-row__meta">Bewusst leichter — zählt nicht gegen deinen Schnitt.</span>
+          </span>
+        </button>
+
+        <button type="button" className="sheet-row"
+          onClick={() => openSheet('sheet-template')}>
+          <span className="sheet-row__lead"><Icon name="save" /></span>
+          <span className="sheet-row__main">
+            <span className="sheet-row__name">Als Vorlage speichern</span>
+            <span className="sheet-row__meta">Diese Übungsliste als Routine für Start.</span>
+          </span>
+        </button>
+
+        {/* Only the browser knows whether THIS device is subscribed. A
+            subscription is a browser endpoint, one per device, so a
+            server-side "has this user subscribed" hid the button on every
+            other device the same person owns. `subscribed === null` is the
+            one-time probe still running: the row stays out until it resolves
+            rather than guessing. */}
+        {pushSupported && subscribed === false && (
+          <div id="notify-row">
+            <button type="button" className="sheet-row" onClick={onEnablePush}>
+              <span className="sheet-row__lead"><Icon name="bell" /></span>
+              <span className="sheet-row__main">
+                <span className="sheet-row__name">Pausen-Benachrichtigung</span>
+                <span className="sheet-row__meta">Auf diesem Gerät, wenn die Pause endet.</span>
+              </span>
+            </button>
+            <p className="sheet__note">Installiere die App zuerst über „Zum Home-Bildschirm“.</p>
+          </div>
+        )}
+      </div>
+
       {/* Inside the sheet, never on the start path: the workout begins with
           one tap and that stays true. Both fields stay editable for as long
           as the session exists. */}
       <div className="sheet__group">
-        <div className="sheet__row">
+        <div className="sheet__group-head">
+          <span className="label">Dieses Workout</span>
+        </div>
+        <div className="field">
           <label className="label" htmlFor="session-bodyweight">Körpergewicht (kg)</label>
           <input type="number" id="session-bodyweight" step="0.1" min="0"
-            className="input input--num rest-form__input" placeholder="—"
+            className="input input--num" placeholder="—"
             value={bodyweight} onChange={(e) => setBodyweight(e.target.value)} />
         </div>
-        <div className="field grow">
-          <label className="label" htmlFor="session-notes">Notiz</label>
-          <input type="text" id="session-notes" className="input"
-            placeholder="z. B. nach 8h Schicht"
-            value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <div className="sheet__save-row">
+          <div className="field">
+            <label className="label" htmlFor="session-notes">Notiz</label>
+            <input type="text" id="session-notes" className="input"
+              placeholder="z. B. nach 8h Schicht"
+              value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <button type="button" className="btn btn--ghost btn--sm"
+            onClick={() => onMetaSave({
+              bodyweightKg: bodyweight === '' ? null : Number(bodyweight),
+              notes,
+            })}>Speichern</button>
         </div>
-        <button type="button" className="btn btn--ghost btn--sm"
-          onClick={() => onMetaSave({
-            bodyweightKg: bodyweight === '' ? null : Number(bodyweight),
-            notes,
-          })}>Speichern</button>
-        <p className="sheet__note">Gilt für dieses Workout.</p>
       </div>
-
-      {/* Ending a rest WITHOUT logging anything, after the last set of an
-          exercise, so the notifier does not fire "Pause vorbei" for a rest you
-          already walked away from. A workout-level action on a session-level
-          timer, which is why it is here and not in the thumb zone.
-
-          Rendered conditionally, which the Jinja version could not do: the
-          sheets sat outside #session-body and survived every refresh, so a
-          `{% if resting %}` would have frozen at whatever was true on the last
-          full page load -- almost always wrong, since rests start and end
-          entirely through refreshes. Nothing freezes now. */}
-      {resting && (
-        <button type="button" className="sheet__act" onClick={onSkipRest}>
-          <Icon name="timer" />
-          Pause beenden
-        </button>
-      )}
-
-      <button type="button" className="sheet__act"
-        onClick={() => openSheet('sheet-deload')}>
-        <Icon name="timer" />
-        {session.is_deload ? 'Deload-Markierung ändern' : 'Als Deload markieren'}
-      </button>
-
-      <button type="button" className="sheet__act"
-        onClick={() => { setReorder(!reorderUnlocked); close() }}>
-        <Icon name="swap" />
-        <span>{reorderUnlocked ? 'Reihenfolge fertig' : 'Reihenfolge ändern'}</span>
-      </button>
-
-      <button type="button" className="sheet__act"
-        onClick={() => openSheet('sheet-add-exercise')}>
-        <Icon name="plus" />
-        Übung hinzufügen
-      </button>
-
-      <button type="button" className="sheet__act"
-        onClick={() => openSheet('sheet-template')}>
-        <Icon name="save" />
-        Als Vorlage speichern
-      </button>
-
-      {/* Only the browser knows whether THIS device is subscribed. A
-          subscription is a browser endpoint, one per device, so a server-side
-          "has this user subscribed" hid the button on every other device the
-          same person owns and a second phone could never subscribe at all.
-          `subscribed === null` is the one-time probe still running: the row
-          stays out until it resolves rather than guessing. */}
-      {pushSupported && subscribed === false && (
-        <div id="notify-row">
-          <button type="button" className="sheet__act" onClick={onEnablePush}>
-            <Icon name="timer" />
-            Pausen-Benachrichtigung auf diesem Gerät aktivieren
-          </button>
-          <p className="sheet__note">Installiere die App zuerst über „Zum Home-Bildschirm“.</p>
-        </div>
-      )}
 
       {/* Three people use this app, so the picker IS the feature. The leader's
           session is never blocked on an answer: it started already, and the

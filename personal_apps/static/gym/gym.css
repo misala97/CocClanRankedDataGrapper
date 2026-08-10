@@ -2235,47 +2235,32 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
   padding: var(--sp-4) var(--sp-4) var(--sp-3);
 }
 
-/* A set row inside a sheet is label + weight + reps + save + delete, and the
-   two number fields were a fixed 5.75rem each. At 390 that overflowed the
-   sheet by 9px and at 360 by 39, putting both ✕ buttons past the edge where
-   they could only be reached by scrolling the dialog sideways. The fixed width
-   is right where the field is the widest thing in its row (it is measured --
-   see .input--num); in a five-control row it has to give.
+/* Set rows -- the sheet's set editors and the debrief's corrections -- are
+   one grid: ordinal · weight · unit · times · reps · actions. A grid with
+   definite tracks, because the flex ancestry of this exact row has produced,
+   in sequence, 645px forms, 261px inputs, a 0px input and "63,0" rendered as
+   "63,C". Tracks are widths, not negotiations.
 
-   It wraps rather than shrinking, because this is arithmetic and not a
-   tuning problem: .input--num is 5.75rem because that is the measured width of
-   "100,0" (see its own comment -- three-digit weights are the real ceiling),
-   and two of those plus a unit, a save and a delete simply do not fit 358px at
-   any flex setting. Shrinking them instead rendered "63,0" as "63,C".
-
-   A set-edit row is a flex row nested inside a flex row, and negotiating a
-   width down that chain is what produced, in turn, 645px forms, 261px inputs
-   and a 0px input. So the outer row stops being flex: it is a grid with three
-   definite tracks -- index, editable part, delete -- and the middle one is
-   minmax(0, 1fr), which is a real width rather than the result of a
-   negotiation. The editable part then wraps inside its own track when the
-   numbers and their two buttons cannot share a line.
-
-   Wrapping is always a fallback, never the layout: everything stays on one
-   line whenever the width allows, and the fields keep flex-grow: 0 (letting
-   them grow is what ate the space that wrapping had just freed). */
+   The number cells are the live panel's own raised look -- an inset cell with
+   a bold tabular numeral -- so the sheet's sets read as the same objects the
+   stepper edits, not as a settings form about them. */
 .sheet .sheet__row { min-inline-size: 0; }
-.sheet__group > div.sheet__row {
-  display: grid; align-items: center;
-  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
-  column-gap: var(--sp-3);
+.sset {
+  display: grid;
+  grid-template-columns: 1.1rem 5.2rem auto auto 5.2rem 1fr;
+  align-items: center; column-gap: var(--sp-2);
+  padding-block: var(--sp-1);
 }
-/* The editable part is five controls in a ~270px track, so it is tuned to fit
-   on one line rather than to wrap: a tighter gap, and fields at 5rem instead
-   of the 5.75rem the standalone control uses. Nothing is lost by that -- the
-   5.75rem figure was measured for a face this file no longer ships, and 100,0
-   already scrolled inside its own field at the larger width. Wrap stays as the
-   fallback for anything narrower than a phone. */
-.sheet__group > div.sheet__row > form.sheet__row {
-  flex-wrap: wrap; min-inline-size: 0; gap: var(--sp-2);
+.sset .label { text-align: start; }
+.sset .input--num {
+  inline-size: 100%; min-block-size: 44px; text-align: center;
+  font-variant-numeric: tabular-nums; font-weight: var(--w-bold); font-size: var(--t-name);
+  background: var(--raised); border: 0; box-shadow: none; border-radius: var(--r-control);
+  color: var(--ink);
 }
-.sheet__group > div.sheet__row > form.sheet__row .input--num { inline-size: 5rem; }
-.sheet__group > form.sheet__row { flex-wrap: wrap; }
+.sset__unit { font-size: var(--t-meta); color: var(--unlit); }
+.sset__acts { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-1); }
+.sset__acts .icon-btn { inline-size: 40px; block-size: 40px; }
 .sheet .sheet__row .load__unit,
 .sheet .sheet__row .load__x,
 .sheet .sheet__row .icon-btn { flex: none; }
@@ -2321,6 +2306,56 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
 .sheet__act--danger { color: var(--ink); box-shadow: inset 0 1px 0 var(--edge-hi); }
 .sheet__note { font-size: var(--t-meta); color: var(--unlit); line-height: 1.5; padding-block: var(--sp-2); }
 .sheet__group { padding-block: var(--sp-2); }
+
+/* Fields inside a sheet speak the app's own form vocabulary: label above
+   input, exactly as the catalogue's create sheet and Start's free-workout
+   sheet already do. The old inline label+input row is what kept clipping
+   labels into a column sized for a set ordinal. */
+.sheet .field { padding-block: var(--sp-1); }
+.sheet .field > .label { display: block; margin-block-end: var(--sp-1); }
+.sheet .field .input--num { inline-size: 6.5rem; }
+
+/* A field row that saves itself: the field grows, the button shares its
+   baseline. */
+.sheet__save-row { display: flex; align-items: flex-end; gap: var(--sp-2); }
+.sheet__save-row .field { flex: 1; min-inline-size: 0; }
+.sheet__save-row .btn { flex: none; margin-block-end: var(--sp-1); }
+
+/* Group caption: the lifetime note as the group's own header line. */
+.sheet__group-head { display: flex; align-items: baseline; gap: var(--sp-2); padding-block: var(--sp-2) var(--sp-1); }
+.sheet__group-head .label { color: var(--dim); }
+
+/* Menu rows in the app's own .row grammar: raised icon tile, strong name,
+   quiet meta line under it -- the anatomy every list on Heute and Verlauf
+   uses, so the menus stop reading as a settings page from another app.
+   Full-bleed press for the same reason .sheet__act is. */
+.sheet-row {
+  display: flex; align-items: center; gap: var(--sp-3);
+  inline-size: calc(100% + var(--sp-4) * 2);
+  margin-inline: calc(var(--sp-4) * -1); padding-inline: var(--sp-4);
+  padding-block: var(--sp-2); min-block-size: 56px;
+  text-align: start;
+  transition: background var(--dur-1) var(--ease);
+}
+.sheet-row:active { background: var(--raised); }
+.sheet-row + .sheet-row, .sheet-row + details, details + .sheet-row,
+/* the push row sits inside its own div (row + note travel together) */
+.sheet-row + #notify-row { border-top: 1px solid var(--edge); }
+.sheet-row__lead {
+  flex: none; inline-size: 38px; block-size: 38px;
+  display: grid; place-items: center;
+  border-radius: var(--r-control); background: var(--raised); color: var(--dim);
+}
+.sheet-row__lead .icon { inline-size: 17px; block-size: 17px; }
+.sheet-row__main { flex: 1; min-inline-size: 0; }
+.sheet-row__name { display: block; font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink); }
+.sheet-row__meta { display: block; font-size: var(--t-meta); color: var(--dim); margin-block-start: 1px; }
+/* Destructive rings its tile instead of filling it -- separation, not a hue
+   (same reasoning as .sheet__act--danger). */
+.sheet-row--danger .sheet-row__lead { background: transparent; box-shadow: inset 0 0 0 1px var(--edge-hi); }
+/* As a <summary>, the row keeps its grammar and drops the marker. */
+summary.sheet-row { cursor: pointer; list-style: none; }
+summary.sheet-row::-webkit-details-marker { display: none; }
 .sheet__row { display: flex; align-items: center; gap: var(--sp-3); padding-block: var(--sp-2); }
 .sheet__row label { flex: 1; font-size: var(--t-sm); color: var(--dim); }
 .sheet__picks { display: flex; gap: var(--sp-2); }

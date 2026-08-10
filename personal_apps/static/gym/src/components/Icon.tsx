@@ -57,6 +57,28 @@ const PATHS = {
       <path d="M8 6.6v2.6l1.7 1" /><path d="M6.4 1.8h3.2" />
     </>
   ),
+  // A bar coming down to the floor: deliberately lighter. Deload carries no
+  // hue anywhere in the app, and its icon is as plain as its chip.
+  deload: (
+    <>
+      <path d="M8 2.6v6.2" />
+      <path d="M5.4 6.2L8 8.8l2.6-2.6" />
+      <path d="M2.8 13.2h10.4" />
+    </>
+  ),
+  bell: (
+    <>
+      <path d="M12 5.4a4 4 0 0 0-8 0c0 4.4-1.9 5.7-1.9 5.7h11.8S12 9.8 12 5.4" />
+      <path d="M9.2 13.7a1.4 1.4 0 0 1-2.4 0" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M2.2 4.4h11.6" />
+      <path d="M5.4 4.4V3.1a1.2 1.2 0 0 1 1.2-1.2h2.8a1.2 1.2 0 0 1 1.2 1.2v1.3" />
+      <path d="M12.5 4.4l-.6 8.7a1.3 1.3 0 0 1-1.3 1.2H5.4a1.3 1.3 0 0 1-1.3-1.2l-.6-8.7" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS

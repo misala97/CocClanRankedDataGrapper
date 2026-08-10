@@ -37,11 +37,12 @@ function open(props: Partial<Parameters<typeof ExerciseSheet>[0]> = {}) {
 describe('ExerciseSheet', () => {
   it('separates the two fields with opposite lifetimes', () => {
     // Rest belongs to this session; the increment belongs to the exercise and
-    // outlives the workout. Identical styling with no caption would make that
-    // invisible, so each group carries its own note.
+    // outlives the workout. The caption names both lifetimes in one line, and
+    // the note-and-pain group carries its own head.
     open()
-    expect(screen.getByText('Gilt für die Übung, nicht nur heute.')).toBeInTheDocument()
-    expect(screen.getByText('Gilt nur für heute.')).toBeInTheDocument()
+    expect(screen.getByText('Pause gilt für dieses Workout, Schrittweite für die Übung.'))
+      .toBeInTheDocument()
+    expect(screen.getByText('Heute')).toBeInTheDocument()
   })
 
   it('saves the rest time on blur', async () => {
@@ -86,13 +87,13 @@ describe('ExerciseSheet', () => {
   it('pre-fills the append row from the suggestion', async () => {
     const user = userEvent.setup()
     const { actions: a } = open()
-    await user.click(screen.getByText('Satz anhängen'))
+    await user.click(screen.getByRole('button', { name: 'Satz anhängen' }))
     expect(a.onAddSet).toHaveBeenCalledWith(60, 8)
   })
 
   it('leaves the append row empty when there is nothing to seed from', () => {
     open({ suggestion: null })
-    expect(screen.getAllByLabelText('Gewicht in kg').at(-1)).toHaveValue(null)
+    expect(screen.getByLabelText('Neuer Satz, Gewicht in kg')).toHaveValue(null)
   })
 
   it('offers the replace picker filtered to the same muscle group', async () => {

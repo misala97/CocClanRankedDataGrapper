@@ -42,7 +42,8 @@ describe('SessionSheet', () => {
     expect(props.onMetaSave).toHaveBeenCalledWith({
       bodyweightKg: 82.4, notes: 'nach Schicht',
     })
-    expect(screen.getByText('Gilt für dieses Workout.')).toBeInTheDocument()
+    // The caption is the group's head now, not a floating footnote.
+    expect(screen.getByText('Dieses Workout')).toBeInTheDocument()
   })
 
   it('offers to end a rest only while one is running', () => {
