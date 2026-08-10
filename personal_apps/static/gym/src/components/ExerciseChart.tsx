@@ -1,6 +1,6 @@
-import type { CSSProperties } from 'react'
-import type { ChartGeometry } from '../types'
-import { kg1 } from '../format'
+import { useState, type CSSProperties } from 'react'
+import type { ChartGeometry, ChartPoint } from '../types'
+import { kg1, shortDate } from '../format'
 
 interface Props {
   chart: ChartGeometry
@@ -24,6 +24,13 @@ interface Props {
  * that never happened.
  */
 export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Props) {
+  // The tapped point, as (series position, point index). Pointer-only on
+  // purpose: the log below the chart carries every plotted value, so keyboard
+  // and screen-reader users already have a first-class path to the numbers --
+  // the SVG stays role="img", which tells assistive tech to read its label
+  // and skip the internals, and focusable children inside it would contradict
+  // that. See the a11y note on the readout below.
+  const [picked, setPicked] = useState<{ position: number; index: number } | null>(null)
   const width = Math.trunc(chart.width)
   const height = Math.trunc(chart.height)
   const mid = Math.trunc(chart.height / 2)
@@ -116,7 +123,56 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
             </g>
           ))}
         </g>
+
+        {/* Hit targets, OUTSIDE .chart__ink: the golden-master test compares
+            the ink group against the Jinja original, and these are
+            interaction, not drawing. Radius 14 in viewBox units -- the dots
+            themselves are 3.5, far below any usable touch target. */}
+        <g aria-hidden="true" className="chart__hits">
+          {picked !== null && (() => {
+            const point = chart.series
+              .find((entry) => entry.position === picked.position)
+              ?.points[picked.index]
+            return point === undefined ? null : (
+              <circle className="chart__picked" cx={point.x} cy={point.y} r="8"
+                fill="none" stroke="var(--ink)" strokeWidth="1.5" />
+            )
+          })()}
+          {chart.series.map((entry) => entry.points.map((point, i) => (
+            <circle
+              key={`hit-${entry.position}-${i}`}
+              cx={point.x} cy={point.y} r="14" fill="transparent"
+              onClick={() => setPicked(
+                picked?.position === entry.position && picked.index === i
+                  ? null
+                  : { position: entry.position, index: i })}
+            />
+          )))}
+        </g>
       </svg>
+
+      {/* What the tapped point is. A fixed line rather than a floating
+          tooltip: nothing to position, nothing to clip at the chart edge,
+          and the reserved height means tapping never shifts the page. Not a
+          live region -- the readout is the pointer path's affordance, and the
+          log below is the accessible one. */}
+      <p className="chart__read">
+        {(() => {
+          const point: ChartPoint | undefined = picked === null ? undefined
+            : chart.series.find((entry) => entry.position === picked.position)
+              ?.points[picked.index]
+          if (point === undefined) return <span className="chart__hint">Punkt antippen für Details</span>
+          return (
+            <>
+              {shortDate(point.started_at)}
+              {' · '}<b>{kg1(point.e1rm)} kg</b> e1RM
+              {chart.series.length > 1 && ` · P${picked!.position}`}
+              {point.is_best && <span className="chart__read-tag vtag vtag--record">Rekord</span>}
+              {point.is_deload && <span className="chart__read-tag vtag vtag--neu">Deload</span>}
+            </>
+          )
+        })()}
+      </p>
 
       {/* Three marks, not two: with only the ends labelled there is nothing to
           judge the middle of the line against. The middle one is the middle

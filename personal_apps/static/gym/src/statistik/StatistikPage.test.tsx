@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { StatistikPage } from './StatistikPage'
 import type { StatistikPayload, TimelineRecord } from './types'
@@ -160,6 +161,29 @@ describe('StatistikPage', () => {
       expect(bars[1]).toHaveStyle({ blockSize: '100%' })
       expect(bars[2]).toHaveStyle({ blockSize: '2%' })
       expect(bars[2]).toHaveClass('is-gap')
+    })
+
+    it('states a tapped month in words, and taps off again', async () => {
+      // The touch path to what aria-label already tells assistive tech and
+      // title tells the mouse.
+      const { container } = mount()
+      expect(screen.getByText('Balken antippen für Details')).toBeInTheDocument()
+      const bars = container.querySelectorAll('.mo')
+      const user = userEvent.setup()
+      await user.click(bars[0]!)
+      const read = container.querySelector('.chart__read')!
+      expect(read).toHaveTextContent('Juni 2026 · 51.247 kg')
+      expect(read).toHaveTextContent('Rekordmonat')
+      expect(bars[0]).toHaveClass('is-picked')
+      await user.click(bars[0]!)
+      expect(screen.getByText('Balken antippen für Details')).toBeInTheDocument()
+    })
+
+    it('names a gap month as one', async () => {
+      const { container } = mount()
+      await userEvent.setup().click(container.querySelectorAll('.mo')[2]!)
+      expect(container.querySelector('.chart__read'))
+        .toHaveTextContent('August 2026 · 0 kg · keine Einheit')
     })
 
     it('dedupes its ticks by index, not by text', () => {

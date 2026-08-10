@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type {
   ProgressionRow, StatistikPayload, TimelineRecord,
 } from './types'
@@ -79,6 +80,11 @@ function Progression({ entry }: { entry: ProgressionRow }) {
 }
 
 export function StatistikPage({ payload }: { payload: StatistikPayload }) {
+  // The tapped month of the career strip. Pointer-only sugar: every bar
+  // already states the same sentence through its aria-label, so assistive
+  // tech is served without this -- title= is mouse-only and this is the
+  // touch equivalent.
+  const [pickedMonth, setPickedMonth] = useState<string | null>(null)
   const {
     totals, months, progression, effort, rep_range: reps, fatigue,
     daypart, weekday, rest_gap: restGap, rest_habit: restHabit,
@@ -191,10 +197,12 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                   + (m.has_record ? ', Rekordmonat' : '')
                   + (m.has_deload ? ', Deload' : '')
                   + (m.is_gap ? ', keine Einheit' : '')
+                const key = `${m.year}-${m.month}`
                 return (
-                  <span key={`${m.year}-${m.month}`} role="listitem"
-                    className={`mo${m.has_record ? ' is-record' : ''}${m.has_deload ? ' is-deload' : ''}${m.is_gap ? ' is-gap' : ''}`}
+                  <span key={key} role="listitem"
+                    className={`mo${m.has_record ? ' is-record' : ''}${m.has_deload ? ' is-deload' : ''}${m.is_gap ? ' is-gap' : ''}${pickedMonth === key ? ' is-picked' : ''}`}
                     aria-label={label} title={label}
+                    onClick={() => setPickedMonth(pickedMonth === key ? null : key)}
                     style={{ blockSize: `${m.is_gap ? 2 : roundTo((m.volume / peak) * 100, 1)}%` }} />
                 )
               })}
@@ -206,6 +214,23 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 </span>
               ))}
             </div>
+            {/* The tapped bar, in words. Same sentence the bar's aria-label
+                carries; this is the touch path to it. */}
+            <p className="chart__read">
+              {(() => {
+                const m = months.find((x) => `${x.year}-${x.month}` === pickedMonth)
+                if (m === undefined) return <span className="chart__hint">Balken antippen für Details</span>
+                return (
+                  <>
+                    {`${payload.month_names[m.month - 1]} ${m.year} · `}
+                    <b>{`${de(m.volume)} kg`}</b>
+                    {m.has_record && <span className="chart__read-tag vtag vtag--record">Rekordmonat</span>}
+                    {m.has_deload && <span className="chart__read-tag vtag vtag--neu">Deload</span>}
+                    {m.is_gap && ' · keine Einheit'}
+                  </>
+                )
+              })()}
+            </p>
             {/* Each swatch is drawn the way its mark is drawn -- the deload key
                 was a solid square standing for a hatch. */}
             <div className="chart__legend">

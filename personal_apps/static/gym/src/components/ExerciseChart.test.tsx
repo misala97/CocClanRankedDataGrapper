@@ -126,3 +126,53 @@ describe('ExerciseChart', () => {
     expect(container.querySelectorAll('.chart__axis span')).toHaveLength(1)
   })
 })
+
+describe('tap to inspect', () => {
+  const user = () => import('@testing-library/user-event').then((m) => m.default.setup())
+
+  it('hints before anything is tapped, in reserved space', () => {
+    const { container } = render(<ExerciseChart chart={chart} {...labels} />)
+    expect(screen.getByText('Punkt antippen für Details')).toBeInTheDocument()
+    expect(container.querySelector('.chart__picked')).toBeNull()
+  })
+
+  it('states the tapped point and rings it', async () => {
+    const { container } = render(<ExerciseChart chart={chart} {...labels} />)
+    const hits = container.querySelectorAll('.chart__hits circle[r="14"]')
+    await (await user()).click(hits[2]!)
+    const read = container.querySelector('.chart__read')!
+    expect(read).toHaveTextContent('01.06.2026 · 100,0 kg e1RM')
+    expect(read).toHaveTextContent('Rekord')
+    // One series only: no P label in the readout.
+    expect(read).not.toHaveTextContent('P2')
+    expect(container.querySelector('.chart__picked')).not.toBeNull()
+  })
+
+  it('tags a deload point and names the slot with two series', async () => {
+    const { container } = render(<ExerciseChart chart={twoSeries()} {...labels} />)
+    const hits = container.querySelectorAll('.chart__hits circle[r="14"]')
+    await (await user()).click(hits[1]!)
+    const read = container.querySelector('.chart__read')!
+    expect(read).toHaveTextContent('Deload')
+    expect(read).toHaveTextContent('P2')
+  })
+
+  it('taps off again', async () => {
+    const { container } = render(<ExerciseChart chart={chart} {...labels} />)
+    const hit = container.querySelectorAll('.chart__hits circle[r="14"]')[0]!
+    const u = await user()
+    await u.click(hit)
+    await u.click(hit)
+    expect(screen.getByText('Punkt antippen für Details')).toBeInTheDocument()
+  })
+
+  it('keeps the hit overlay out of the ink and out of the accessibility tree', () => {
+    const { container } = render(<ExerciseChart chart={chart} {...labels} />)
+    // The golden-master compares .chart__ink against the Jinja original; the
+    // overlay must not be in it. role="img" already hides SVG internals from
+    // assistive tech -- the overlay stays pointer-only and aria-hidden, and
+    // the session log below the chart is the accessible path to the values.
+    expect(container.querySelectorAll('.chart__ink .chart__hits')).toHaveLength(0)
+    expect(container.querySelector('.chart__hits')).toHaveAttribute('aria-hidden', 'true')
+  })
+})

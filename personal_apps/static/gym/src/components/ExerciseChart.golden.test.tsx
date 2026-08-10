@@ -80,12 +80,15 @@ describe.each(Object.entries(cases))(
       />)
     const mine = container.querySelector('svg')!
 
+    // Scoped to the ink group plus the gridlines: the hit overlay added for
+    // tap-to-inspect is interaction, not drawing, and lives outside both.
     it('draws the same lines', () => {
       expect(shapes(mine, 'line')).toEqual(shapes(parsed, 'line'))
     })
 
     it('draws the same circles', () => {
-      expect(shapes(mine, 'circle')).toEqual(shapes(parsed, 'circle'))
+      expect(shapes(mine.querySelector('.chart__ink')!, 'circle'))
+        .toEqual(shapes(parsed.querySelector('.chart__ink') ?? parsed, 'circle'))
     })
 
     it('draws the same series labels', () => {

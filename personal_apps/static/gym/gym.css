@@ -3639,3 +3639,21 @@ body.is-exporting .verlauf__row .pick {
 @media (prefers-reduced-motion: reduce) {
   @view-transition { navigation: none; }
 }
+
+/* Tap-to-inspect: the fixed readout line under the exercise chart and the
+   career strip. Reserved height, so tapping never shifts the page; the hint
+   is the affordance for marks whose tappability is otherwise invisible. */
+.chart__read {
+  grid-column: 2;
+  margin-block-start: var(--sp-2);
+  min-block-size: 1.4rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+  display: flex; align-items: center; gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+.chart__hint { color: var(--dim); font-size: 0.8rem; }
+.chart__read-tag { margin-inline-start: var(--sp-2); }
+.chart__hits circle { cursor: pointer; }
+.months .mo { cursor: pointer; }
+.months .mo.is-picked { outline: 2px solid var(--ink); outline-offset: 1px; }
