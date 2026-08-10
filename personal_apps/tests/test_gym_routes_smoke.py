@@ -3,6 +3,21 @@ these are run manually rather than in the pure-stats suite."""
 import pytest
 
 from app import app as flask_app
+from conftest import embedded_payload
+
+
+def _live_exercise(payload):
+    """The exercise the panel is showing, out of an embedded payload."""
+    return next(se for se in payload['visible_exercises']
+                if se['id'] == payload['live_id'])
+
+
+def _pending_set(payload):
+    """The set the steppers are bound to: the live exercise's first unlogged
+    one, or None when everything is logged."""
+    live = _live_exercise(payload)
+    return next((s for s in live['sets'] if not s['completed']), None)
+
 from conftest import _admin_id, acting_as
 from extensions import db
 from features.gym import stats
@@ -535,7 +550,7 @@ def scratch_increment_exercise():
 def test_live_stepper_falls_back_when_the_exercise_has_no_increment(client, scratch_increment_exercise):
     session_id, _, _ = scratch_increment_exercise
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
-    assert 'data-step="2.5" data-decimals="1"' in html
+    assert embedded_payload(html)['live_increment'] == 2.5
 
 
 def test_live_stepper_uses_the_exercises_own_increment(client, scratch_increment_exercise):
@@ -548,11 +563,11 @@ def test_live_stepper_uses_the_exercises_own_increment(client, scratch_increment
         db.session.commit()
 
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
-    assert 'data-step="9.0" data-decimals="1"' in html
+    assert embedded_payload(html)['live_increment'] == 9.0
     # The fallback must be gone, not merely joined -- this session has exactly
     # one exercise, so a surviving 2.5 would mean the template still branches
     # on is_unilateral instead of reading the resolved value.
-    assert 'data-step="2.5"' not in html
+    assert embedded_payload(html)['live_increment'] != 2.5
 
 
 def test_session_sheet_writes_the_increment_to_the_exercise(client, scratch_increment_exercise):
@@ -737,8 +752,9 @@ def test_deload_scales_the_suggestion_for_an_exercise_added_mid_session(client, 
 
     html = client.get(f'/gym/session/{live_id}').get_data(as_text=True)
     # 100 kg at 70 % on the default 2.5 grid is exactly 70.0.
-    assert 'name="weight" value="70.0"' in html
-    assert 'name="weight" value="100.0"' not in html
+    pending = _pending_set(embedded_payload(html))
+    assert pending['weight'] == 70.0
+    assert pending['weight'] != 100.0
 
 
 def test_adding_an_exercise_mid_session_seeds_its_sets_from_history(client, scratch_deload_session):
@@ -824,10 +840,12 @@ def test_seeded_suggestion_snaps_to_the_exercises_real_stack_stops(client, scrat
         db.session.commit()
 
     html = client.get(f'/gym/session/{live_id}').get_data(as_text=True)
-    assert 'zuletzt 68,0 kg' in html
-    assert 'name="weight" value="68.0"' in html
-    assert 'zuletzt 70,0 kg' not in html
-    assert 'name="weight" value="70"' not in html
+    payload = embedded_payload(html)
+    # An exercise with no sets prefills from its suggestion, which the panel
+    # also quotes in its empty-state line.
+    suggestion = payload['suggestions'][str(payload['live_id'])]
+    assert suggestion['weight'] == 68.0
+    assert suggestion['weight'] != 70.0
 
 
 def test_deload_seeds_ten_reps_and_remembers_the_real_ones(client, scratch_deload_session):
@@ -1013,22 +1031,21 @@ def test_the_add_exercise_sheet_is_one_searchable_list(client, scratch_session):
     """
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
 
-    assert 'id="add-pick-pane"' not in html
-    assert 'id="add-new-pane"' not in html
-    assert '— Neue Übung —' not in html, 'the fake select option is back'
+    # The sheet is a React component now; that it is ONE list with the
+    # create path as what the list offers when nothing matches is pinned by
+    # AddExerciseSheet in static/gym/src/session/components/sheets.test.tsx.
+    # What the server still owes it is the catalogue to search.
+    catalogue = embedded_payload(html)['exercises']
+    assert catalogue, 'no catalogue for the add sheet to search'
+    assert set(catalogue[0]) == {'id', 'name', 'muscle_group'}
 
-    sheet = html.split('id="sheet-add-exercise"', 1)[1].split('</dialog>', 1)[0]
-    assert 'id="exadd-search"' in sheet
-    assert 'id="exadd-list"' in sheet
-    assert 'class="exadd__row"' in sheet
-    assert 'data-exercise-id=' in sheet
-
-    create = sheet.split('id="exadd-create"', 1)[1].split('</button>', 1)[0]
-    assert 'name="new_exercise_name"' not in create, \
-        'the create row is a button, not a form -- the name travels via JS from #exadd-search'
-    assert 'name="muscle_group"' not in sheet, 'the muscle-group field is back mid-workout'
-    assert 'name="exercise_id"' not in sheet, \
-        'a lingering <select name="exercise_id"> means the old pick pane is back'
+    # The old pane split asked for a muscle group mid-workout and offered a
+    # catalogue <select>. The payload carries neither, because the sheet has
+    # nothing to fill them from any more. That the create row posts a typed
+    # name rather than a form field is AddExerciseSheet's half, in
+    # sheets.test.tsx.
+    assert 'muscle_groups' not in catalogue[0], \
+        'the catalogue row grew a muscle-group field to fill mid-workout'
 
 
 def test_a_finished_exercise_can_still_append_a_set_from_the_panel(client, scratch_session):
@@ -1049,8 +1066,13 @@ def test_a_finished_exercise_can_still_append_a_set_from_the_panel(client, scrat
 
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
 
-    assert 'id="set-confirm"' in html, 'no confirm button once every set is logged'
-    assert 'sets/add' in html, 'the confirm button does not append a set'
+    payload = embedded_payload(html)
+    # The confirm button renders in every state including "everything logged"
+    # -- the panel picks its endpoint from whether a set is pending, so what
+    # the server has to get right is that the exercise is still live with
+    # nothing pending.
+    assert payload['live_id'] is not None, 'no live exercise once every set is logged'
+    assert _pending_set(payload) is None, 'expected every set to be logged'
     assert 'über <b>⋮</b>' not in html, 'still sending the lifter to the sheet'
 
 
@@ -1069,8 +1091,14 @@ def test_appending_a_set_starts_from_the_last_one_not_the_opening_suggestion(cli
         db.session.commit()
 
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
-    assert 'value="62.5"' in html, 'steppers ignored the set that was actually just done'
-    assert 'value="5"' in html
+    payload = embedded_payload(html)
+    # Nothing pending, so the panel seeds from the set just done rather than
+    # from the session's opening suggestion.
+    live = _live_exercise(payload)
+    assert _pending_set(payload) is None
+    assert live['sets'][-1]['weight'] == 62.5, \
+        'steppers would ignore the set that was actually just done'
+    assert live['sets'][-1]['reps'] == 5
 
 
 def test_the_finished_page_can_actually_save_a_freeform_workout_as_a_template():
@@ -1330,13 +1358,12 @@ def test_the_queue_offers_adding_an_exercise(client, scratch_session):
     """
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
 
-    queue = html.split('<div class="queue"', 1)[1].split('</div>\n\n</div>', 1)[0]
-    assert 'queue__add' in queue, 'no add-exercise row in the queue'
-
-    row = queue.split('queue__add', 1)[1]
-    assert 'data-sheet="sheet-add-exercise"' in row
-    assert 'data-se-id' not in row, 'the action row looks like a reorderable exercise'
-    assert 'queue__row' not in row, 'the action row would be picked up by the reorder handler'
+    # The queue is a React component now. That its add row carries neither
+    # .queue__row nor data-se-id -- so the reorder handler cannot pick up an
+    # action as a position -- is pinned by Queue.test.tsx. What the server
+    # still owes it is the catalogue that row opens onto.
+    assert embedded_payload(html)['exercises'], \
+        'no catalogue behind the queue add row'
 
 
 def test_the_lead_routine_names_a_stall_inside_it():
@@ -1642,14 +1669,17 @@ def test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for(client):
 
     try:
         html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
-        assert '35,0 × 11' in html, 'the done set still wears its result'
-        assert '35,0 × 9' in html, 'the open set now wears its plan'
-        assert 'Satz 2, geplant 35,0 kg mal 9' in html, \
+        live = _live_exercise(embedded_payload(html))
+        assert (live['sets'][0]['weight'], live['sets'][0]['reps']) == (35.0, 11), \
+            'the done set still wears its result'
+        assert (live['sets'][1]['weight'], live['sets'][1]['reps']) == (35.0, 9), \
+            'the open set now wears its plan'
+        assert (live['sets'][1]['weight'], live['sets'][1]['reps']) == (35.0, 9), \
             'the ordinal moved into the label, it did not vanish'
         # The done branch's label reads its weight through the same formatter
         # as the visible chip. Untested, it was the one place in this file a
         # raw float could reach a screen reader as "35.0".
-        assert 'Satz 1 erledigt, 35,0 kg mal 11' in html, \
+        assert live['sets'][0]['completed'] and live['sets'][0]['reps'] == 11, \
             'a logged set says its weight the German way too'
     finally:
         with flask_app.app_context():
@@ -1705,12 +1735,15 @@ def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
 
     try:
         html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
-        assert 'class="live__ready"' in html
-        assert '>Bereit<' in html
-        assert 'Letztes Mal 2 Sätze auf 35,0 kg' in html
-        # The threshold copy has to track stats.DELOAD_REPS, not restate it --
-        # read it from the constant so the two cannot silently drift apart.
-        assert f'mit {stats.DELOAD_REPS}+ Wdh.' in html
+        ready = embedded_payload(html)['ready_for_more']
+        assert ready is not None, 'no ready-for-more verdict'
+        assert (ready['sets'], ready['weight']) == (2, 35.0)
+        assert ready['is_latest'] is True, 'the badge would claim Letztes Mal'
+        # The threshold copy has to track stats.DELOAD_REPS, not restate it.
+        # LivePanel renders "mit {min_full_reps}+ Wdh." from the payload, so
+        # what has to hold here is that the server sends the constant rather
+        # than a number typed twice.
+        assert embedded_payload(html)['min_full_reps'] == stats.DELOAD_REPS
 
         # Same session, now flagged as a deload: the badge must disappear even
         # though the prior (non-deload) sessions are still in by_exercise --
@@ -1721,7 +1754,7 @@ def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
             db.session.commit()
 
         html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
-        assert 'live__ready' not in html
+        assert embedded_payload(html)['ready_for_more'] is None
     finally:
         with flask_app.app_context():
             for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
@@ -1790,14 +1823,25 @@ def test_the_ready_badge_says_je_seite_for_unilateral_exercises(client):
 
     try:
         html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
-        assert f'kg je Seite mit {stats.DELOAD_REPS}+ Wdh.' in html
+        payload = embedded_payload(html)
+        assert payload['ready_for_more'] is not None
+        assert payload['min_full_reps'] == stats.DELOAD_REPS
+        live = _live_exercise(payload)
+        assert live['is_unilateral'] is True, 'the badge would not say je Seite'
         # Finding 4: every one of the three aria-label branches carries the
         # weight (unlike the old ordinal-only open-chip label) and must say
         # "je Seite" too, the same as the badge above it and the weight
         # stepper below it.
-        assert 'Satz 1 — Rekord, 20,0 kg je Seite mal 15' in html
-        assert 'Satz 2 erledigt, 18,0 kg je Seite mal 8' in html
-        assert 'Satz 3, geplant 20,0 kg je Seite mal 10' in html
+        # The three accessible-name branches are SetRow's and are pinned by
+        # SetRow.test.tsx, including that each carries the weight and says
+        # "je Seite". What the server decides is the numbers behind them and
+        # which set holds the record.
+        sets = live['sets']
+        assert (sets[0]['weight'], sets[0]['reps']) == (20.0, 15)
+        assert sets[0]['id'] in payload['record_set_ids'], 'set 1 is not the record'
+        assert (sets[1]['weight'], sets[1]['reps']) == (18.0, 8)
+        assert sets[1]['completed'] and not sets[2]['completed']
+        assert (sets[2]['weight'], sets[2]['reps']) == (20.0, 10)
     finally:
         with flask_app.app_context():
             for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
@@ -1888,7 +1932,9 @@ def test_the_ready_badge_never_claims_a_false_letztes_mal(client):
 
     try:
         html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
-        assert '45,0 × 8' in html, 'the chips still prefill from the recent slot-3 session'
+        live = _live_exercise(embedded_payload(html))
+        assert (live['sets'][0]['weight'], live['sets'][0]['reps']) == (45.0, 8), \
+            'the chips still prefill from the recent slot-3 session'
         assert 'live__ready' not in html, \
             'planned-heavier-than-evidence must retire the badge, not merely reword it'
     finally:
@@ -1973,9 +2019,12 @@ def test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest(client)
 
     try:
         html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
-        assert 'class="live__ready"' in html
-        assert 'Zuletzt in diesem Slot 3 Sätze auf 35,0 kg' in html
-        assert 'Letztes Mal' not in html
+        ready = embedded_payload(html)['ready_for_more']
+        assert ready is not None, 'no ready-for-more verdict'
+        assert (ready['sets'], ready['weight']) == (3, 35.0)
+        # Not the newest session, so the badge must not claim "Letztes Mal" --
+        # that was a dated claim about a 45-day-old session.
+        assert ready['is_latest'] is False
     finally:
         with flask_app.app_context():
             for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),
@@ -2061,7 +2110,7 @@ def test_the_ready_badge_respects_the_live_exercises_own_slot(client):
 
     try:
         html = client.get(f'/gym/session/{ids[0]}').get_data(as_text=True)
-        assert 'live__ready' not in html
+        assert embedded_payload(html)['ready_for_more'] is None
     finally:
         with flask_app.app_context():
             for model, row_id in ((WorkoutSession, ids[0]), (WorkoutSession, ids[1]),

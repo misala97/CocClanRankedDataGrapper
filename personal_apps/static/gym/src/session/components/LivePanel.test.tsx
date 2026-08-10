@@ -142,7 +142,8 @@ describe('LivePanel', () => {
 describe('Rail', () => {
   it('states position and the skipped count in words, since the rail cannot', () => {
     render(<Rail exercises={payload.visible_exercises} liveId={payload.live_id}
-      liveIndex={payload.live_index} />)
+      liveIndex={payload.live_index} setsOpen={payload.sets_open}
+      setsTotal={payload.sets_total} />)
     const skipped = payload.visible_exercises.filter((se) => se.skipped).length
     expect(screen.getByText(
       `Übung ${payload.live_index} von ${payload.visible_exercises.length}, ${skipped} übersprungen`,
@@ -151,12 +152,33 @@ describe('Rail', () => {
 
   it('hides the segments from assistive tech', () => {
     const { container } = render(
-      <Rail exercises={payload.visible_exercises} liveId={payload.live_id} liveIndex={1} />)
+      <Rail exercises={payload.visible_exercises} liveId={payload.live_id} liveIndex={1}
+        setsOpen={payload.sets_open} setsTotal={payload.sets_total} />)
     expect(container.querySelector('.rail')).toHaveAttribute('aria-hidden', 'true')
   })
 
+  it('distinguishes none-yet from none-left, which are not the same state', () => {
+    // sets_open counts only sets that EXIST, so treating zero as "none left"
+    // is how a workout with nothing in it announced itself as finished.
+    const { rerender } = render(<Rail exercises={payload.visible_exercises}
+      liveId={payload.live_id} liveIndex={1} setsOpen={0} setsTotal={0} />)
+    expect(screen.getByText('Noch nichts geplant')).toBeInTheDocument()
+
+    rerender(<Rail exercises={payload.visible_exercises} liveId={payload.live_id}
+      liveIndex={1} setsOpen={0} setsTotal={3} />)
+    expect(screen.getByText('Alles erledigt')).toBeInTheDocument()
+
+    rerender(<Rail exercises={payload.visible_exercises} liveId={payload.live_id}
+      liveIndex={1} setsOpen={1} setsTotal={3} />)
+    expect(screen.getByText('Noch 1 Satz')).toBeInTheDocument()
+
+    rerender(<Rail exercises={payload.visible_exercises} liveId={payload.live_id}
+      liveIndex={1} setsOpen={2} setsTotal={3} />)
+    expect(screen.getByText('Noch 2 Sätze')).toBeInTheDocument()
+  })
+
   it('says so when there is nothing to show', () => {
-    render(<Rail exercises={[]} liveId={null} liveIndex={0} />)
+    render(<Rail exercises={[]} liveId={null} liveIndex={0} setsOpen={0} setsTotal={0} />)
     expect(screen.getByText('Noch keine Übungen')).toBeInTheDocument()
   })
 })

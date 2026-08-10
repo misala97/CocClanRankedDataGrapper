@@ -35,6 +35,24 @@ def anon_client():
         yield test_client
 
 
+def embedded_payload(html):
+    """The JSON the live-workout shell embeds for its React island.
+
+    session_detail.html renders no workout markup any more -- the body is a
+    React island and the server's contribution is this payload. Assertions
+    that used to read attributes or copy out of the HTML read the payload
+    instead; it is the same data, one step earlier, and it is what the
+    components are tested against on the client side.
+    """
+    import json
+    import re
+
+    match = re.search(
+        r'<script type="application/json" id="gym-data">(.*?)</script>', html, re.S)
+    assert match, 'no embedded payload -- is this the live-workout page?'
+    return json.loads(match.group(1))
+
+
 @pytest.fixture()
 def live_session():
     """An unfinished session with one exercise and two sets, one completed.

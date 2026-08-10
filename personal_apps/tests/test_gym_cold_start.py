@@ -10,7 +10,7 @@ import datetime as dt
 import pytest
 
 from app import app as flask_app
-from conftest import _admin_id
+from conftest import _admin_id, embedded_payload
 
 
 @pytest.fixture()
@@ -125,12 +125,14 @@ def test_logging_one_set_does_not_advance_past_a_default_planned_exercise(client
                     data={'completed': '1', 'weight': '60.0', 'reps': '8'})
 
         html = client.get(f'/gym/session/{live_id}').get_data(as_text=True)
-        # The live panel names its own session-exercise in data-se-id; if the
-        # screen had advanced this would instead name the SECOND exercise's
-        # row (or, with the pre-fix `[]` seeding, render the "Noch keine
-        # Übung" empty state).
-        assert f'<section class="live" data-se-id="{se_id}">' in html
-        assert 'Noch keine Übung' not in html
+        # Which exercise is live is the server's decision -- three surfaces
+        # have to agree on it -- so the payload names it directly. If the
+        # screen had advanced this would be the SECOND exercise's row, and
+        # with the pre-fix `[]` seeding it would be None, which is what
+        # renders the "Noch keine Übung" empty state.
+        payload = embedded_payload(html)
+        assert payload['live_id'] == se_id
+        assert payload['visible_exercises'], 'no exercises, so the panel is empty'
     finally:
         with flask_app.app_context():
             for se in SessionExercise.query.filter_by(exercise_id=second_id).all():

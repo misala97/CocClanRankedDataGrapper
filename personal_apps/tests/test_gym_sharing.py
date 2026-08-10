@@ -5,6 +5,7 @@ import datetime as dt
 import pytest
 
 from app import app as flask_app
+from conftest import embedded_payload
 
 
 def test_a_shared_session_links_two_sessions_and_starts_pending():
@@ -2204,10 +2205,10 @@ def test_the_leader_side_is_not_marked_shared_for_polling(joined_pair):
     leader polling sync.json every 5s would be pure waste."""
     html = _client_for(joined_pair['leader']).get(
         f"/gym/session/{joined_pair['session']}").get_data(as_text=True)
-    assert 'data-shared="0"' in html, "the leader's own session must not be marked shared"
+    assert embedded_payload(html)['session_is_shared'] is False,         "the leader's own session must not be marked shared"
 
 
 def test_the_follower_side_is_marked_shared_for_polling(joined_pair):
     html = _client_for(joined_pair['partner']).get(
         f"/gym/session/{joined_pair['follower_session']}").get_data(as_text=True)
-    assert 'data-shared="1"' in html, "the follower's session must be marked shared"
+    assert embedded_payload(html)['session_is_shared'] is True,         "the follower's session must be marked shared"

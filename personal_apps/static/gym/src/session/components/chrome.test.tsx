@@ -42,7 +42,7 @@ describe('SessionHeader', () => {
     // started_at is naive UTC; 30 minutes before the faked now.
     render(<SessionHeader session={{ ...session, started_at: '2026-08-10T12:00:00' }}
       deloadApplied={false} deloadDefaultPct={70} />)
-    expect(screen.getByText('30:00')).toBeInTheDocument()
+    expect(screen.getByText('00:30:00')).toBeInTheDocument()
   })
 
   it('badges a deload, with the percentage only once it is applied', () => {

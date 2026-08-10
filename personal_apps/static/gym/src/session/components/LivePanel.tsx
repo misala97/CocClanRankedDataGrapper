@@ -125,12 +125,18 @@ export function LivePanel({
       {live.sets.length > 0 && (
         <div className="sets">
           {live.sets.map((s, i) => (
-            <SetRow key={s.id} set={s} ordinal={i + 1}
-              isRecord={payload.record_set_ids.includes(s.id)}
-              isNext={nextSet !== null && s.id === nextSet.id}
-              isUnilateral={live.is_unilateral}
-              busy={busySetId === s.id}
-              onToggle={onToggleSet} />
+            // .set-form is what gives the chips their `flex: 1 1 5.5rem`, so
+            // they share a row instead of stacking. It was a <form> before the
+            // port and is a plain wrapper now -- the class is load-bearing for
+            // layout, not for semantics.
+            <div className="set-form" key={s.id}>
+              <SetRow set={s} ordinal={i + 1}
+                isRecord={payload.record_set_ids.includes(s.id)}
+                isNext={nextSet !== null && s.id === nextSet.id}
+                isUnilateral={live.is_unilateral}
+                busy={busySetId === s.id}
+                onToggle={onToggleSet} />
+            </div>
           ))}
         </div>
       )}

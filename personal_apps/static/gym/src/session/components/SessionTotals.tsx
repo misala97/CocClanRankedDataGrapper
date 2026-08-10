@@ -7,13 +7,11 @@ interface Props {
 }
 
 function elapsed(startedAt: string, now: number): string {
+  // Same format as the header's clock, and for the same reason: GymClock
+  // always rendered hh:mm:ss.
   const total = Math.max(0, Math.floor((now - new Date(`${startedAt}Z`).getTime()) / 1000))
   const pad = (n: number) => String(n).padStart(2, '0')
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  return hours > 0
-    ? `${hours}:${pad(minutes)}:${pad(total % 60)}`
-    : `${pad(minutes)}:${pad(total % 60)}`
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`
 }
 
 /**

@@ -5,6 +5,11 @@ interface Props {
   exercises: LiveExercise[]
   liveId: number | null
   liveIndex: number
+  /** Sets that exist and are not yet logged. */
+  setsOpen: number
+  /** Sets that exist at all. Zero and "none left" are different states -- see
+   *  the cap below. */
+  setsTotal: number
 }
 
 /**
@@ -16,8 +21,17 @@ interface Props {
  * nothing. The cap carries the skipped count for the same reason -- the rail
  * distinguishes a skipped segment visually and could not say so.
  */
-export function Rail({ exercises, liveId, liveIndex }: Props) {
+export function Rail({ exercises, liveId, liveIndex, setsOpen, setsTotal }: Props) {
   const skipped = exercises.filter((se) => se.skipped).length
+
+  // Three states, not two. sets_open counts only sets that EXIST, so treating
+  // zero as "none left" reads the same as "none yet" -- which is how a workout
+  // with nothing in it announced itself as finished.
+  const remaining = setsTotal === 0
+    ? 'Noch nichts geplant'
+    : setsOpen > 0
+      ? `Noch ${setsOpen} ${setsOpen === 1 ? 'Satz' : 'Sätze'}`
+      : 'Alles erledigt'
 
   return (
     <>
@@ -48,6 +62,7 @@ export function Rail({ exercises, liveId, liveIndex }: Props) {
             ? 'Noch keine Übungen'
             : `Übung ${liveIndex} von ${exercises.length}${skipped ? `, ${skipped} übersprungen` : ''}`}
         </span>
+        <span className="label">{remaining}</span>
       </div>
     </>
   )

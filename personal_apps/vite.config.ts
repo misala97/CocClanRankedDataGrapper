@@ -30,6 +30,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         exercise: resolve(here, 'static/gym/src/entries/exercise.tsx'),
+        session: resolve(here, 'static/gym/src/entries/session.tsx'),
       },
     },
   },

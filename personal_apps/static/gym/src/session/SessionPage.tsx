@@ -57,44 +57,46 @@ export function SessionPage({ payload, actions, pushSupported, busySetId = null 
   const announce = useAnnouncer((s) => s.announce)
 
   return (
+    // No wrapper element: the mount node in session_detail.html already IS
+    // .session-view, so adding one here would put an extra layer between
+    // #gym-main and it -- which measurably changed the page height.
     <>
-      <div className="session-view" id="session-root">
-        <SessionHeader session={payload.session}
+      <SessionHeader session={payload.session}
           deloadApplied={payload.deload_applied}
           deloadDefaultPct={payload.deload_default_pct} />
 
-        <SaveErrorBanner />
-        <ReorderBar />
-        <LiveRegion />
+      <SaveErrorBanner />
+      <ReorderBar />
+      <LiveRegion />
 
-        <Rail exercises={payload.visible_exercises} liveId={payload.live_id}
-          liveIndex={payload.live_index} />
+      <Rail exercises={payload.visible_exercises} liveId={payload.live_id}
+        liveIndex={payload.live_index}
+        setsOpen={payload.sets_open} setsTotal={payload.sets_total} />
 
-        <LivePanel payload={payload} busySetId={busySetId}
-          onConfirm={actions.onConfirmSet}
-          onToggleSet={actions.onToggleSet}
-          onRestOver={() => announce('Pause vorbei.')} />
+      <LivePanel payload={payload} busySetId={busySetId}
+        onConfirm={actions.onConfirmSet}
+        onToggleSet={actions.onToggleSet}
+        onRestOver={() => announce('Pause vorbei.')} />
 
-        <SessionTotals volume={payload.session_volume}
-          setsDone={payload.sets_done}
-          startedAt={payload.session.started_at} />
+      <SessionTotals volume={payload.session_volume}
+        setsDone={payload.sets_done}
+        startedAt={payload.session.started_at} />
 
-        <TickStrip states={payload.tick_states}
-          done={payload.sets_done} total={payload.sets_total} />
+      <TickStrip states={payload.tick_states}
+        done={payload.sets_done} total={payload.sets_total} />
 
-        <Queue exercises={payload.visible_exercises} liveId={payload.live_id} />
+      <Queue exercises={payload.visible_exercises} liveId={payload.live_id} />
 
-        <div className="session-foot">
-          <button type="button" className="btn btn--ghost btn--block"
-            onClick={() => {
-              if (confirm('Workout beenden?')) actions.onFinish()
-            }}>Workout beenden</button>
-        </div>
+      <div className="session-foot">
+        <button type="button" className="btn btn--ghost btn--block"
+          onClick={() => {
+            if (confirm('Workout beenden?')) actions.onFinish()
+          }}>Workout beenden</button>
       </div>
-
-      {/* Sheets are siblings of the page, not children of it -- a <dialog>
-          renders in the top layer regardless, and keeping them out of
-          .session-view keeps that explicit. */}
+      {/* Inside .session-view now rather than beside it. A modal <dialog> is
+          promoted to the top layer and is not laid out by its DOM ancestors,
+          and a closed one is display:none -- so nesting them costs no layout
+          and saves the wrapper that did. */}
       <SessionSheet session={payload.session} resting={payload.resting}
         partners={payload.partners} partnerStatus={payload.partner_status}
         pushSupported={pushSupported}

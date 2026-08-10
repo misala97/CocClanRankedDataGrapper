@@ -30,14 +30,12 @@ function useElapsed(startedAt: string): string {
     return () => clearInterval(id)
   }, [])
 
+  // Always hh:mm:ss, zero-padded, exactly as GymClock rendered it. Dropping
+  // the hours under an hour changes the header's width mid-workout and is not
+  // what this clock did.
   const total = Math.max(0, Math.floor((now - start) / 1000))
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const seconds = total % 60
   const pad = (n: number) => String(n).padStart(2, '0')
-  return hours > 0
-    ? `${hours}:${pad(minutes)}:${pad(seconds)}`
-    : `${pad(minutes)}:${pad(seconds)}`
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`
 }
 
 export function SessionHeader({ session, deloadApplied, deloadDefaultPct }: Props) {

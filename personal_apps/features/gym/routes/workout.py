@@ -723,8 +723,14 @@ def session_detail(session_id):
         return render_template('gym/session_finished.html', session=session_,
                                weekday_short=WEEKDAY_SHORT, rest_taken_seconds=rest_taken_seconds, **data)
 
+    # mode='json' so datetimes are ISO strings the island can parse. `session`
+    # is still passed separately because the shell's <title> block reads its
+    # name before any JavaScript runs.
     return render_template(
-        'gym/session_detail.html', **_live_data(session_))
+        'gym/session_detail.html',
+        session=session_,
+        payload_json=_session_payload(session_).model_dump(mode='json'),
+    )
 
 
 @gym_bp.route('/gym/session/<int:session_id>/exercises/add', methods=['POST'])
