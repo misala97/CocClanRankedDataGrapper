@@ -1,5 +1,7 @@
 """The two rollout scripts. They run once each against production, so their
 guards matter more than their happy paths."""
+import datetime as dt
+
 import pytest
 
 from app import app as flask_app
@@ -196,3 +198,89 @@ def test_copy_templates_forks_the_exercises_into_the_destination(throwaway_user)
                 if doomed is not None:
                     db.session.delete(doomed)
             db.session.commit()
+
+
+class TestWeeklyDigest:
+    """run_gym_notifier's Sunday summary."""
+
+    @staticmethod
+    def _make_week(user_id, now):
+        from extensions import db
+        from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+        exercise = Exercise(name='ZZ digest lift', user_id=user_id)
+        db.session.add(exercise)
+        db.session.flush()
+        made = []
+        for n in range(2):
+            started = now - dt.timedelta(days=n)
+            session_ = WorkoutSession(name=f'ZZ digest {n}', user_id=user_id,
+                                      started_at=started,
+                                      finished_at=started + dt.timedelta(hours=1))
+            se = SessionExercise(exercise_id=exercise.id, position=1)
+            se.sets = [SessionSet(position=1, weight=50.0, reps=10, completed=True)]
+            session_.exercises.append(se)
+            db.session.add(session_)
+            made.append(session_)
+        db.session.commit()
+        return exercise.id, [s.id for s in made]
+
+    def test_sums_the_week_in_german(self):
+        from app import app as flask_app
+        from extensions import db
+        from models import Exercise, WorkoutSession
+        from run_gym_notifier import _weekly_digest_for
+
+        # Mid-week anchor so both sessions (today and yesterday) stay inside
+        # the Monday-start week.
+        now = dt.datetime.utcnow()
+        if now.weekday() < 2:
+            now += dt.timedelta(days=2 - now.weekday())
+        exercise_id, session_ids = None, []
+        try:
+            with flask_app.app_context():
+                exercise_id, session_ids = self._make_week(_admin_id(), now)
+            payload = _weekly_digest_for(_admin_id(), now)
+            assert payload is not None
+            assert payload['title'] == 'Deine Trainingswoche'
+            assert '2 Workouts' in payload['body']
+            # 2 sessions x 500 kg -- plus whatever else the dev DB logged this
+            # week, so the number is not pinned, only its presence and format.
+            assert ' kg' in payload['body']
+        finally:
+            with flask_app.app_context():
+                for session_id in session_ids:
+                    doomed = db.session.get(WorkoutSession, session_id)
+                    if doomed is not None:
+                        doomed.resting_set_id = None
+                        db.session.commit()
+                        db.session.delete(doomed)
+                        db.session.commit()
+                if exercise_id:
+                    doomed = db.session.get(Exercise, exercise_id)
+                    if doomed is not None:
+                        db.session.delete(doomed)
+                        db.session.commit()
+
+    def test_an_empty_week_sends_nothing(self):
+        """Silence over nagging: no workouts, no push."""
+        from app import app as flask_app
+        from extensions import db
+        from models import AppUser
+        from werkzeug.security import generate_password_hash
+        from run_gym_notifier import _weekly_digest_for
+
+        user_id = None
+        try:
+            with flask_app.app_context():
+                ghost = AppUser(username='ZZ digest ghost',
+                                password_hash=generate_password_hash('x'), is_admin=False)
+                db.session.add(ghost)
+                db.session.commit()
+                user_id = ghost.id
+            assert _weekly_digest_for(user_id, dt.datetime.utcnow()) is None
+        finally:
+            with flask_app.app_context():
+                doomed = db.session.get(AppUser, user_id) if user_id else None
+                if doomed is not None:
+                    db.session.delete(doomed)
+                    db.session.commit()
