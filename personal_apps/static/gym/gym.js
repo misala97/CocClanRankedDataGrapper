@@ -1,15 +1,6 @@
-// Gym Tracker shared JS -- chart rendering + small utilities used across
-// exercise_detail.html (static Jinja-rendered data) and session_detail.html's
-// quick-glance progress modal (dynamically fetched JSON). Kept as one
-// implementation so the two never drift into two different chart looks.
-window.GymUtils = {
-    escapeHtml(value) {
-        const div = document.createElement('div');
-        div.textContent = value == null ? '' : String(value);
-        return div.innerHTML;
-    },
-};
-
+// The one piece of shared JS the gym pages still load. Everything else moved
+// into the React islands under static/gym/src/; this stays because _nav.html
+// is on every page, is still Jinja, and its resume strip ticks a clock.
 window.GymClock = {
     // Ticks HH:MM:SS into `element` from its data-started ISO timestamp.
     // The timestamps the server writes are naive UTC, so 'Z' has to be

@@ -265,15 +265,14 @@ def gym_start():
 
 
 def _live_context(session_):
-    """Exactly the Jinja names templates/gym/_session_queue.html reads that it
-    does not define itself: the ordered, visible exercise list and which one
-    is live.
+    """The ordered, visible exercise list and which one of them is live.
 
     session_detail computes both anyway for its own purposes (suggestions,
     the tick strip, the rest lookup...), so this is a straight extraction --
-    not a new computation -- moved here so gym_session_queue (the polling
-    endpoint) renders from the identical rule instead of a second copy that
-    could drift from the page's own.
+    not a new computation. It was extracted for the queue-polling endpoint,
+    which the React port removed; it stays because _live_data still builds on
+    it, and having one rule for "which exercise is live" is the point either
+    way.
     """
     # A replaced original is hidden from the active view, so its suggestion
     # would never be used -- skip computing it there. Visibility is derived
@@ -1385,12 +1384,3 @@ def gym_session_sync(session_id):
                     'shared': shared is not None})
 
 
-@gym_bp.route('/gym/session/<int:session_id>/queue.html')
-@login_required
-def gym_session_queue(session_id):
-    """The queue alone, for the polling swap.
-
-    Rendered from the same partial the page uses, so the two cannot drift.
-    """
-    session_ = owned_session(session_id)
-    return render_template('gym/_session_queue.html', **_live_context(session_))

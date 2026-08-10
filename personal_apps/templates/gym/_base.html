@@ -5,14 +5,13 @@
    personal_apps/PRODUCT.md for the "Puls" design brief this all serves.
 
    This paragraph described Saira and its width axis until Puls replaced it --
-   the font was deleted, the comment was not, and gym.js kept a matching
-   literal that quietly sent every canvas label to the fallback stack. If the
-   face changes again, the places that name it are here, figtree.css,
-   gym.css's header.
+   the font was deleted, the comment was not. If the face changes again, the
+   places that name it are here, figtree.css, and gym.css's header.
 
-   gym.js is loaded here (not deferred) so window.GymClock/GymUtils
-   already exist by the time any inline <script> later in the body runs --
-   in particular _nav.html's own inline script for the resume strip's clock.
+   gym.js is loaded here (not deferred) so window.GymClock already exists by
+   the time any inline <script> later in the body runs -- in particular
+   _nav.html's own inline script for the resume strip's clock. GymClock is all
+   that is left in it: every gym page below the nav is a React island now.
 
    <body> gets a `has-resume` class exactly when _nav.html is about to render
    the resume strip -- same gym_active_session + endpoint condition, kept in

@@ -1787,16 +1787,16 @@ def test_a_stranger_cannot_poll_someone_elses_session(joined_pair):
     assert _client_for(joined_pair['leader']).get(
         f"/gym/session/{joined_pair['follower_session']}/sync.json").status_code == 404
     assert _client_for(joined_pair['leader']).get(
-        f"/gym/session/{joined_pair['follower_session']}/queue.html").status_code == 404
+        f"/gym/session/{joined_pair['follower_session']}/detail.json").status_code == 404
 
 
-def test_the_queue_endpoint_renders_only_the_queue(joined_pair):
-    html = _client_for(joined_pair['partner']).get(
-        f"/gym/session/{joined_pair['follower_session']}/queue.html"
-    ).get_data(as_text=True)
-    assert 'queue' in html
-    assert 'pytest invite bench' in html
-    assert '<html' not in html.lower(), 'the queue endpoint returned a whole page'
+def test_the_follower_can_read_their_own_seeded_queue(joined_pair):
+    """Replaces the queue.html partial endpoint the imperative page polled:
+    the island reads the whole session as JSON, and the leader's structure has
+    to be in it."""
+    body = _client_for(joined_pair['partner']).get(
+        f"/gym/session/{joined_pair['follower_session']}/detail.json").get_json()
+    assert [se['name'] for se in body['visible_exercises']] == ['pytest invite bench']
 
 
 def test_the_leader_cannot_read_the_followers_workout(joined_pair):
@@ -1806,7 +1806,7 @@ def test_the_leader_cannot_read_the_followers_workout(joined_pair):
     follower_session = joined_pair['follower_session']
     for url in (f'/gym/session/{follower_session}',
                 f'/gym/session/{follower_session}/sync.json',
-                f'/gym/session/{follower_session}/queue.html',
+                f'/gym/session/{follower_session}/detail.json',
                 f'/gym/export?ids={follower_session}'):
         response = leader_client.get(url)
         assert response.status_code == 404 or (

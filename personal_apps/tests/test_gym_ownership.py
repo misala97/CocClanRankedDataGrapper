@@ -181,7 +181,6 @@ SESSION_ROUTES = [
     ('POST', '/gym/session/{}/save_as_template',   'session_id'),
     ('POST', '/gym/session/{}/invite',             'session_id'),
     ('GET',  '/gym/session/{}/sync.json',          'session_id'),
-    ('GET',  '/gym/session/{}/queue.html',         'session_id'),
     ('POST', '/gym/sessions/{}/meta',              'session_id'),
 ]
 
