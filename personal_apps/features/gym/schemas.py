@@ -834,3 +834,33 @@ class StatistikPayload(_Model):
     weekday_names: list[str]
     #: {'morning': 'Vormittags', ...} -- keyed by DaypartBucket.label.
     daypart_names: dict[str, str]
+
+
+# ---------------------------------------------------------------------------
+# The shared-workout confirm screen.
+# ---------------------------------------------------------------------------
+
+
+class MatchProposal(_Model):
+    """One of the leader's exercises, against your own catalogue.
+
+    An exact match is already resolved and says so; only the genuinely
+    ambiguous ones carry a decision, because asking seven times per shared
+    workout would make the common path the annoying one.
+    """
+    #: The leader's name for it, verbatim.
+    name: str
+    leader_exercise_id: int
+    #: A normalised-equal match, which needs no question.
+    exact_id: int | None
+    #: (id, name), best-first, always the full catalogue.
+    candidates: list[tuple[int, str]]
+
+
+class SharedConfirmPayload(_Model):
+    shared_id: int
+    leader_name: str
+    #: Why this invite cannot be accepted, or None. Present means the form is
+    #: replaced by the reason -- there is nothing to confirm.
+    refusal: str | None
+    proposals: list[MatchProposal]

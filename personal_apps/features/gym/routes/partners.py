@@ -1,6 +1,7 @@
 """Invites and shared sessions: inviting a partner, and the confirm /
 accept / decline flow they land in."""
 
+from features.gym.schemas import SharedConfirmPayload
 from .. import matching
 from .. import push
 from .. import sharing
@@ -147,13 +148,17 @@ def gym_shared_confirm(shared_id):
                 matching.propose_matches([e.name for e in leader_exercises], catalogue))
         ]
 
-    return render_template(
-        'gym/shared_confirm.html',
-        shared=shared,
+    payload = SharedConfirmPayload(
+        shared_id=shared.id,
         leader_name=_username(shared.leader_user_id),
         refusal=refusal,
         proposals=proposals,
     )
+    # `leader_name` is passed separately too: the shell's <title> block reads
+    # it before any JavaScript runs.
+    return render_template('gym/shared_confirm.html',
+                           leader_name=payload.leader_name,
+                           payload_json=payload.model_dump(mode='json'))
 
 
 @gym_bp.route('/gym/shared/<int:shared_id>/accept', methods=['POST'])

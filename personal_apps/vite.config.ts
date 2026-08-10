@@ -36,6 +36,7 @@ export default defineConfig({
         start: resolve(here, 'static/gym/src/entries/start.tsx'),
         finished: resolve(here, 'static/gym/src/entries/finished.tsx'),
         statistik: resolve(here, 'static/gym/src/entries/statistik.tsx'),
+        shared: resolve(here, 'static/gym/src/entries/shared.tsx'),
       },
     },
   },

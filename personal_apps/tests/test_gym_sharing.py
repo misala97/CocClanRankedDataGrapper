@@ -1270,7 +1270,10 @@ def test_a_partner_with_a_live_workout_is_refused(leader_with_partner):
 
     html = _client_for(leader_with_partner['partner']).get(
         f'/gym/shared/{shared_id}/confirm').get_data(as_text=True)
-    assert 'Du hast bereits ein laufendes Workout.' in html
+    payload = embedded_payload(html)
+    assert payload['refusal'] == 'Du hast bereits ein laufendes Workout.'
+    # A refusal replaces the form: there is nothing left to confirm.
+    assert payload['proposals'] == []
 
     with flask_app.app_context():
         shared = db.session.get(SharedSession, shared_id)
@@ -1295,7 +1298,10 @@ def test_an_invite_to_a_finished_workout_is_refused(leader_with_partner):
 
     html = _client_for(leader_with_partner['partner']).get(
         f'/gym/shared/{shared_id}/confirm').get_data(as_text=True)
-    assert 'Das Workout ist schon vorbei.' in html
+    payload = embedded_payload(html)
+    assert payload['refusal'] == 'Das Workout ist schon vorbei.'
+    # A refusal replaces the form: there is nothing left to confirm.
+    assert payload['proposals'] == []
 
 
 def test_a_partner_with_a_live_workout_is_refused_on_post_accept(leader_with_partner):
