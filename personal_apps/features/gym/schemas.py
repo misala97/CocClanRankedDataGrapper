@@ -358,3 +358,56 @@ class CataloguePayload(_Model):
     default_rest_seconds: int
     added_id: int | None
     name_taken: bool
+
+
+# ---------------------------------------------------------------------------
+# The history page.
+#
+# Mirrors what routes/reports.py:gym_verlauf computes. Search and the export
+# selection are client-side over these same rows -- the page is the one surface
+# that sees the whole history, and re-querying per keystroke would be absurd.
+# ---------------------------------------------------------------------------
+
+
+class HistoryEntry(_Model):
+    """One finished session."""
+    session_id: int
+    name: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    is_deload: bool
+    volume: float
+    record_count: int
+    # The same exercises the volume beside it was computed from. The row listed
+    # every SessionExercise including ones swapped out mid-workout, so a
+    # session showed 10 names next to a total built from 7.
+    exercises: list[str]
+    # Searchable date text, so a query like "31.07" or "juli" works. The
+    # searchable string carried only the name and the exercises, and session
+    # names stopped carrying the date -- so date search was degrading to
+    # nothing as history accumulated.
+    search_date: str
+    # Days since the session AFTER this one in time. history is newest-first,
+    # so the gap belongs to the row below the break. None on the newest row.
+    gap_days: int | None
+
+
+class HistoryMonth(_Model):
+    """A month band. Grouped server-side because Jinja can detect a change of
+    month while looping but cannot count a group it has not reached yet."""
+    label: str
+    slug: str
+    entries: list[HistoryEntry]
+    volume: float
+    records: int
+
+
+class HistoryPayload(_Model):
+    months: list[HistoryMonth]
+    total: int
+    # A break this long or longer gets called out. Below it the date column
+    # already tells the story; above it, a layoff was represented by nothing.
+    gap_threshold: int
+    # Stated rather than taken from strftime('%a'), which follows the server's
+    # locale and not the UI's.
+    weekday_short: list[str]

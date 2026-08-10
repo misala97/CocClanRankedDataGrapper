@@ -1,6 +1,7 @@
 """Read-only history and statistics pages, plus the JSON export."""
 
 from features.gym import stats
+from features.gym.schemas import HistoryPayload
 from features.gym import export
 from .. import analytics
 import datetime as dt
@@ -150,8 +151,37 @@ def gym_verlauf():
     for month in months:
         month['volume'] = round(month['volume'], 1)
 
-    return render_template('gym/verlauf.html', history=history, months=months,
-                           gap_threshold=VERLAUF_GAP_DAYS, weekday_short=WEEKDAY_SHORT)
+    payload = HistoryPayload.model_validate({
+        'months': [
+            {
+                'label': month['label'],
+                'slug': month['slug'],
+                'volume': month['volume'],
+                'records': month['records'],
+                'entries': [
+                    {
+                        'session_id': entry['session'].id,
+                        'name': entry['session'].name,
+                        'started_at': entry['session'].started_at,
+                        'finished_at': entry['session'].finished_at,
+                        'is_deload': entry['session'].is_deload,
+                        'volume': entry['volume'],
+                        'record_count': entry['record_count'],
+                        'exercises': entry['exercises'],
+                        'search_date': entry['search_date'],
+                        'gap_days': entry['gap_days'],
+                    }
+                    for entry in month['entries']
+                ],
+            }
+            for month in months
+        ],
+        'total': len(history),
+        'gap_threshold': VERLAUF_GAP_DAYS,
+        'weekday_short': list(WEEKDAY_SHORT),
+    })
+    return render_template('gym/verlauf.html',
+                           payload_json=payload.model_dump(mode='json'))
 
 
 # A break this long or longer gets called out in the history. Below it the
