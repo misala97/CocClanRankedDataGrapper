@@ -1236,3 +1236,65 @@ def test_an_older_qualifying_session_is_not_the_latest():
                     started_at=dt.datetime(2026, 8, 1), session_id=3)
     result = stats.ready_for_more([old_p1, new_p1, newer_p3], position=1)
     assert result == {'sets': 2, 'weight': 35.0, 'is_latest': False}
+
+
+class TestE1rmProjection:
+    """The "bei diesem Tempo" gate: every rule errs toward silence."""
+
+    @staticmethod
+    def _points(*values, spacing_days=7, end_days_ago=3, now=None):
+        now = now or dt.datetime(2026, 8, 11, 12, 0)
+        newest = now - dt.timedelta(days=end_days_ago)
+        count = len(values)
+        return now, [
+            (newest - dt.timedelta(days=spacing_days * (count - 1 - i)), v)
+            for i, v in enumerate(values)
+        ]
+
+    def test_projects_the_next_multiple_of_five(self):
+        # +1 kg per week from 80: 85 is ~4 weeks out from the fitted line.
+        now, points = self._points(80.0, 81.0, 82.0, 83.0)
+        result = stats.e1rm_projection(points, now)
+        assert result is not None
+        assert result['milestone'] == 85.0
+        assert abs(result['per_week'] - 1.0) < 0.01
+        days_out = (result['date'] - now).days
+        assert 5 <= days_out <= 14, 'fitted value ~83.4 at 1kg/wk puts 85 well inside two weeks'
+
+    def test_silent_below_four_points(self):
+        now, points = self._points(80.0, 82.0, 84.0)
+        assert stats.e1rm_projection(points, now) is None
+
+    def test_silent_when_the_trend_is_stale(self):
+        now, points = self._points(80.0, 81.0, 82.0, 83.0, end_days_ago=35)
+        assert stats.e1rm_projection(points, now) is None
+
+    def test_silent_on_a_flat_or_falling_trend(self):
+        now, flat = self._points(80.0, 80.0, 80.0, 80.0)
+        assert stats.e1rm_projection(flat, now) is None
+        now, falling = self._points(84.0, 83.0, 82.0, 81.0)
+        assert stats.e1rm_projection(falling, now) is None
+
+    def test_silent_when_the_milestone_is_too_far_out(self):
+        # +0.1 kg/week: the next multiple of five is years away. No date.
+        now, points = self._points(80.0, 80.1, 80.2, 80.3)
+        assert stats.e1rm_projection(points, now) is None
+
+    def test_one_hot_day_does_not_anchor_the_line(self):
+        # Last raw point spikes to 90, the fit stays on the trend: the
+        # projection anchors at the FITTED value, so the milestone is 90,
+        # not 95-from-the-spike.
+        now, points = self._points(80.0, 81.0, 82.0, 90.0)
+        result = stats.e1rm_projection(points, now)
+        assert result is not None
+        assert result['milestone'] == 90.0
+
+    def test_fits_only_the_newest_eight(self):
+        # Eight flat old points would kill the slope if they were included;
+        # the newest eight rise cleanly.
+        now = dt.datetime(2026, 8, 11, 12, 0)
+        old = [(now - dt.timedelta(days=200 - i * 7), 60.0) for i in range(6)]
+        _, fresh = self._points(80.0, 81.0, 82.0, 83.0, 84.0, 85.0, 86.0, 87.0)
+        result = stats.e1rm_projection(old + fresh, now)
+        assert result is not None
+        assert abs(result['per_week'] - 1.0) < 0.05

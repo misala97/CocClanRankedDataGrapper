@@ -176,3 +176,29 @@ describe('tap to inspect', () => {
     expect(container.querySelector('.chart__hits')).toHaveAttribute('aria-hidden', 'true')
   })
 })
+
+describe('the projection overlay', () => {
+  const withProjection: ChartGeometry = {
+    ...chart,
+    projection: {
+      x1: 280, y1: 40, x2: 315, y2: 14,
+      milestone: 85, date: '2026-09-12T12:00:00', per_week: 1.25,
+    },
+  }
+
+  it('draws the dotted trend outside the ink and states it in words', () => {
+    const { container } = render(<ExerciseChart chart={withProjection} {...labels} />)
+    const overlay = container.querySelector('.chart__proj')
+    expect(overlay).not.toBeNull()
+    expect(container.querySelector('.chart__ink .chart__proj')).toBeNull()
+    expect(overlay).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByText(/Bei diesem Tempo/).textContent)
+      .toContain('85,0 kg am 12.09.2026 · +1,25 kg/Woche')
+  })
+
+  it('is absent -- line and sentence -- without a projection', () => {
+    const { container } = render(<ExerciseChart chart={chart} {...labels} />)
+    expect(container.querySelector('.chart__proj')).toBeNull()
+    expect(screen.queryByText(/Bei diesem Tempo/)).not.toBeInTheDocument()
+  })
+})

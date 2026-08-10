@@ -4,6 +4,8 @@ _chart_geometry turns history into SVG coordinates. Inline SVG rather than a
 canvas, because a canvas can only read a resolved rgb() and a themed canvas
 silently loses its colours -- this project has been bitten by that."""
 
+import datetime as dt
+
 from features.gym import stats
 
 from flask import (
@@ -96,6 +98,23 @@ def _chart_geometry(series, pr_e1rm=None):
         return None
     data_lo, data_hi = min(values), max(values)
 
+    # "Bei diesem Tempo": the main series' trend, extended to the next round
+    # e1RM. Computed BEFORE the scales, because an honest projection has to
+    # live inside the drawing -- the axis range grows to cover the milestone
+    # and the time domain grows to reach its date, so the dotted line lands
+    # in the plot instead of being clipped at the edge. stats.e1rm_projection
+    # owns every silence gate (fresh, >=4 points, rising, near enough).
+    main_entry = max(series, key=lambda entry: len(entry['points']))
+    projection = stats.e1rm_projection(
+        [(point['started_at'], point['e1rm'])
+         for point in main_entry['points'] if not point['is_deload']],
+        dt.datetime.utcnow(),
+    )
+    if projection is not None:
+        data_projection_hi = max(data_hi, projection['milestone'])
+    else:
+        data_projection_hi = data_hi
+
     # The axis is padded to a floor, and that is not cosmetic. Auto-fitting to
     # the data alone means the y range is whatever the data happens to span, so
     # 0,7 kg of drift over a year gets stretched across the full plot height and
@@ -103,7 +122,7 @@ def _chart_geometry(series, pr_e1rm=None):
     # said how much. Below the floor the range is widened symmetrically around
     # its own midpoint, so a flat lift renders flat -- and the tick labels below
     # state the range either way, which is what actually makes the shape legible.
-    lo, hi = data_lo, data_hi
+    lo, hi = data_lo, data_projection_hi
     if hi - lo < CHART_MIN_SPAN:
         mid = (hi + lo) / 2.0
         lo, hi = mid - CHART_MIN_SPAN / 2.0, mid + CHART_MIN_SPAN / 2.0
@@ -118,7 +137,8 @@ def _chart_geometry(series, pr_e1rm=None):
     # them together.
     stamps = [point['started_at'] for entry in series for point in entry['points']]
     first, last = min(stamps), max(stamps)
-    days = (last - first).total_seconds() / 86400.0 or 1.0
+    domain_end = last if projection is None else max(last, projection['date'])
+    days = (domain_end - first).total_seconds() / 86400.0 or 1.0
 
     # Sessions on the SAME DAY land on the same x and stack into a vertical
     # line you cannot read. They are nudged apart by a few units each, keeping
@@ -282,10 +302,34 @@ def _chart_geometry(series, pr_e1rm=None):
     # contains no deload at all.
     plotted = [p for entry in out for p in entry['points']]
 
+    # The projection's drawing: from the fitted anchor at the newest main
+    # point to the milestone. Anchored at the FIT, not the last raw dot --
+    # one hot day must not aim the line (see stats.e1rm_projection).
+    projection_out = None
+    if projection is not None:
+        def x_of(stamp):
+            offset = (stamp - first).total_seconds() / 86400.0
+            return round(min(max(
+                CHART_PAD + offset / days * (CHART_W - 2 * CHART_PAD), 0.0), CHART_W), 2)
+
+        def y_of(value):
+            return round(CHART_H - CHART_PAD - (value - lo) / span * (CHART_H - 2 * CHART_PAD), 2)
+
+        newest_stamp = max(point['started_at'] for point in main_entry['points']
+                           if not point['is_deload'])
+        projection_out = {
+            'x1': x_of(newest_stamp), 'y1': y_of(projection['at_newest']),
+            'x2': x_of(projection['date']), 'y2': y_of(projection['milestone']),
+            'milestone': projection['milestone'],
+            'date': projection['date'],
+            'per_week': projection['per_week'],
+        }
+
     return {'series': out, 'lo': data_lo, 'hi': data_hi, 'axis_lo': lo, 'axis_hi': hi,
             'ticks': ticks, 'dates': dates, 'width': CHART_W, 'height': CHART_H,
             'has_deload': any(p['is_deload'] for p in plotted),
-            'has_record': any(p['is_best'] for p in plotted)}
+            'has_record': any(p['is_best'] for p in plotted),
+            'projection': projection_out}
 
 
 def _exercise_detail_payload(exercise, raw_position):

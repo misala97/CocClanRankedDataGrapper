@@ -82,6 +82,16 @@ export interface ChartSeries {
 /** lo/hi are the DATA range, which is what the accessible description quotes.
  *  axis_lo/axis_hi are the padded drawing range -- widened to a floor so a lift
  *  that drifted 0,7 kg over a year does not render as a cliff. */
+export interface ChartProjection {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  milestone: number
+  date: string
+  per_week: number
+}
+
 export interface ChartGeometry {
   series: ChartSeries[]
   lo: number
@@ -96,6 +106,9 @@ export interface ChartGeometry {
   height: number
   has_deload: boolean
   has_record: boolean
+  /** The "bei diesem Tempo" overlay, or null when any silence gate holds.
+   *  Optional so captured fixtures from before the field keep type-checking. */
+  projection?: ChartProjection | null
 }
 
 export interface ExerciseDetailPayload {

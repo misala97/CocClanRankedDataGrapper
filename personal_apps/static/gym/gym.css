@@ -3718,3 +3718,7 @@ body.is-focus .undo-toast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(
 .undo-toast__close { flex: none; min-block-size: var(--tap); padding-inline: var(--sp-2); color: var(--dim); }
 @keyframes undo-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
+
+/* The projection's sentence: quiet, under the legend, reads as a finding. */
+.chart__proj-note { grid-column: 2; margin-block-start: var(--sp-2); font-size: 0.8rem; color: var(--dim); }
+.chart__proj-note b { color: var(--ink); }

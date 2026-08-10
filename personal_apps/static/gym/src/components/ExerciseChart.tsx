@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react'
-import type { ChartGeometry, ChartPoint } from '../types'
+import type { ChartGeometry, ChartPoint, ChartProjection } from '../types'
 import { kg1, shortDate } from '../format'
 
 interface Props {
@@ -24,6 +24,7 @@ interface Props {
  * that never happened.
  */
 export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Props) {
+  const projection: ChartProjection | null = chart.projection ?? null
   // The tapped point, as (series position, point index). Pointer-only on
   // purpose: the log below the chart carries every plotted value, so keyboard
   // and screen-reader users already have a first-class path to the numbers --
@@ -124,6 +125,22 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
           ))}
         </g>
 
+        {/* The trend, extended to the next round e1RM. Outside .chart__ink
+            for the same reason as the hit targets: the golden-master compares
+            the ink against the captured original, and this is an overlay the
+            original never had. Dotted, not dashed -- deload legs own the
+            dash. aria-hidden; the sentence under the chart carries it. */}
+        {projection != null && (
+          <g aria-hidden="true" className="chart__proj">
+            <line x1={projection.x1} y1={projection.y1}
+              x2={projection.x2} y2={projection.y2}
+              stroke="var(--done)" strokeWidth="1.6" strokeLinecap="round"
+              strokeDasharray="0.1 5" opacity="0.75" />
+            <circle cx={projection.x2} cy={projection.y2} r="3"
+              fill="none" stroke="var(--done)" strokeWidth="1.4" opacity="0.75" />
+          </g>
+        )}
+
         {/* Hit targets, OUTSIDE .chart__ink: the golden-master test compares
             the ink group against the Jinja original, and these are
             interaction, not drawing. Radius 14 in viewBox units -- the dots
@@ -181,6 +198,18 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
       <div className="chart__axis">
         {chart.dates.map((d) => <span className="label" key={d}>{d}</span>)}
       </div>
+
+      {/* The projection in words: the drawn line's only honest reading. Range
+          and pace stated so the claim is checkable against the chart above. */}
+      {projection != null && (
+        <p className="chart__proj-note">
+          {'Bei diesem Tempo: '}
+          <b>{`${kg1(projection.milestone)} kg`}</b>
+          {/* per_week is server-rounded to two decimals; kg1 would halve a
+              quarter step (1,25 -> 1,2). */}
+          {` am ${shortDate(projection.date)} · +${String(projection.per_week).replace('.', ',')} kg/Woche`}
+        </p>
+      )}
 
       {/* A key for a mark that is not on the chart is noise, so the legend only
           claims what was actually plotted. */}

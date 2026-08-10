@@ -1078,3 +1078,75 @@ def _median(values):
     if len(ordered) % 2:
         return ordered[middle]
     return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+# --------------------------------------------------------------------------
+# e1RM projection: "bei diesem Tempo".
+# --------------------------------------------------------------------------
+
+#: How far ahead a projection may claim. Past this the extrapolation is
+#: fiction wearing a date, so the chart stays silent instead.
+PROJECTION_HORIZON_DAYS = 112
+#: Fit over at most this many of the newest points -- a year-old ramp says
+#: nothing about the current one.
+PROJECTION_FIT_POINTS = 8
+#: Milestones are the next multiple of this above the fitted value.
+PROJECTION_MILESTONE_KG = 5.0
+
+
+def e1rm_projection(points, now):
+    """Where the current trend puts the next round-number e1RM, or None.
+
+    `points` is [(started_at, e1rm), ...] for ONE series, deloads already
+    excluded. Least-squares over the newest PROJECTION_FIT_POINTS, and every
+    gate errs toward silence -- a wrong date on a chart outlives any caveat:
+
+    - fewer than 4 points: no trend to speak of;
+    - newest point older than ROLLING_WINDOW_DAYS: the trend describes a
+      lifter who stopped; projecting it forward is fiction;
+    - slope <= 0: stagnation already has its own vocabulary (cold cyan and
+      the word), a projected decline would just be a taunt;
+    - milestone further than PROJECTION_HORIZON_DAYS away: too slow to
+      promise a date on.
+
+    Returns {'milestone', 'date', 'per_week'} -- per_week is the fitted slope
+    in kg/week, carried for the copy.
+    """
+    if len(points) < 4:
+        return None
+    ordered = sorted(points, key=lambda p: p[0])[-PROJECTION_FIT_POINTS:]
+    newest = ordered[-1][0]
+    if (now - newest).days > ROLLING_WINDOW_DAYS:
+        return None
+
+    days = [(stamp - newest).total_seconds() / 86400.0 for stamp, _ in ordered]
+    values = [value for _, value in ordered]
+    n = float(len(ordered))
+    mean_x = sum(days) / n
+    mean_y = sum(values) / n
+    denominator = sum((x - mean_x) ** 2 for x in days)
+    if denominator == 0:
+        return None
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(days, values)) / denominator
+    if slope <= 0:
+        return None
+
+    # The fitted value NOW, not the last raw point: one hot day must not
+    # anchor the whole line.
+    at_newest = mean_y + slope * (0 - mean_x)
+    milestone = math.floor(at_newest / PROJECTION_MILESTONE_KG) * PROJECTION_MILESTONE_KG + PROJECTION_MILESTONE_KG
+    days_to = (milestone - at_newest) / slope
+    lead_days = (now - newest).total_seconds() / 86400.0
+    remaining = days_to - lead_days
+    if remaining <= 0 or days_to > PROJECTION_HORIZON_DAYS:
+        return None
+    return {
+        'milestone': milestone,
+        'date': now + dt.timedelta(days=remaining),
+        'per_week': round(slope * 7.0, 2),
+        # For the drawing: the fitted anchor at the newest point, and the
+        # slope in kg/day, so the route can turn the trend into coordinates
+        # without re-fitting.
+        'at_newest': at_newest,
+        'slope_per_day': slope,
+    }

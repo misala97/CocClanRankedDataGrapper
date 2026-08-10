@@ -114,6 +114,20 @@ class ChartSeries(_Model):
     label_anchor: Literal['start', 'end']
 
 
+class ChartProjection(_Model):
+    """The "bei diesem Tempo" overlay: the fitted trend of the main series,
+    extended to the next round e1RM. None whenever any of the silence gates in
+    stats.e1rm_projection holds -- a wrong date on a chart outlives any
+    caveat, so absence is the default."""
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    milestone: float
+    date: datetime
+    per_week: float
+
+
 class ChartGeometry(_Model):
     """SVG coordinates from routes._chart_geometry(). None when there is
     nothing to draw.
@@ -135,6 +149,7 @@ class ChartGeometry(_Model):
     height: float
     has_deload: bool
     has_record: bool
+    projection: ChartProjection | None
 
 
 class ExerciseDetailPayload(_Model):
