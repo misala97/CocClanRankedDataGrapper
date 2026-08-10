@@ -771,7 +771,8 @@ def gym_add_session_exercise(session_id):
         db.session.commit()
         sharing.propagate_structure(session_)
 
-    return redirect(url_for('gym.session_detail', session_id=session_.id))
+    return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_.id)
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/replace', methods=['POST'])
@@ -839,7 +840,8 @@ def gym_replace_session_exercise(session_exercise_id):
         db.session.rollback()
     sharing.propagate_structure(original.session)
 
-    return redirect(url_for('gym.session_detail', session_id=session_id))
+    return _mutation_response(
+        original.session, 'gym.session_detail', session_id=session_id)
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/rest', methods=['POST'])
@@ -849,7 +851,8 @@ def gym_update_session_exercise_rest(session_exercise_id):
     session_exercise.rest_seconds = _to_int(request.form.get('rest_seconds', ''))
     session_id = session_exercise.session_id
     db.session.commit()
-    return redirect(url_for('gym.session_detail', session_id=session_id))
+    return _mutation_response(
+        session_exercise.session, 'gym.session_detail', session_id=session_id)
 
 
 @gym_bp.route('/gym/sessions/<int:session_id>/meta', methods=['POST'])
@@ -863,7 +866,8 @@ def gym_update_session_meta(session_id):
     session.bodyweight_kg = _to_increment(request.form.get('bodyweight_kg', ''))
     session.notes = request.form.get('notes', '').strip() or None
     db.session.commit()
-    return redirect(url_for('gym.session_detail', session_id=session.id))
+    return _mutation_response(
+        session, 'gym.session_detail', session_id=session.id)
 
 
 @gym_bp.route('/gym/session-exercises/<int:session_exercise_id>/meta', methods=['POST'])
@@ -876,8 +880,8 @@ def gym_update_session_exercise_meta(session_exercise_id):
     session_exercise.notes = request.form.get('notes', '').strip() or None
     session_exercise.pain = request.form.get('pain') == 'on'
     db.session.commit()
-    return redirect(url_for('gym.session_detail',
-                            session_id=session_exercise.session_id))
+    return _mutation_response(
+        session_exercise.session, 'gym.session_detail', session_id=session_exercise.session_id)
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/increment', methods=['POST'])
@@ -902,7 +906,8 @@ def gym_update_exercise_increment(session_exercise_id):
         request.form.get('weight_increment', ''))
     session_id = session_exercise.session_id
     db.session.commit()
-    return redirect(url_for('gym.session_detail', session_id=session_id))
+    return _mutation_response(
+        session_exercise.session, 'gym.session_detail', session_id=session_id)
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/sets/add', methods=['POST'])
@@ -927,13 +932,17 @@ def gym_add_set(session_exercise_id):
         _schedule_rest(new_set)
         db.session.commit()
 
-    return redirect(url_for('gym.session_detail', session_id=session_exercise.session_id))
+    return _mutation_response(
+        session_exercise.session, 'gym.session_detail', session_id=session_exercise.session_id)
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_session_exercise(session_exercise_id):
     session_exercise = owned_session_exercise(session_exercise_id)
+    # Captured before the delete: walking session_exercise.session afterwards
+    # would traverse a row that no longer exists.
+    _doomed_session = session_exercise.session
     session_id = session_exercise.session_id
     session_ = session_exercise.session
     # If the currently-resting set belongs to this exercise, clear the
@@ -954,7 +963,8 @@ def gym_delete_session_exercise(session_exercise_id):
     db.session.delete(session_exercise)
     db.session.commit()
     sharing.propagate_structure(session_)
-    return redirect(url_for('gym.session_detail', session_id=session_id))
+    return _mutation_response(
+        _doomed_session, 'gym.session_detail', session_id=session_id)
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/skip', methods=['POST'])
@@ -970,7 +980,8 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
     session_exercise = owned_session_exercise(session_exercise_id)
     session_ = session_exercise.session
     if session_.finished_at:
-        return redirect(url_for('gym.session_detail', session_id=session_.id))
+        return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_.id)
 
     session_exercise.skipped = not session_exercise.skipped
     if session_exercise.skipped:
@@ -987,13 +998,17 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
 
     db.session.commit()
     sharing.propagate_structure(session_)
-    return redirect(url_for('gym.session_detail', session_id=session_.id))
+    return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_.id)
 
 
 @gym_bp.route('/gym/set/<int:set_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_set(set_id):
     set_ = owned_set(set_id)
+    # Captured before the delete, for the same reason as
+    # gym_delete_session_exercise.
+    _doomed_session = set_.session_exercise.session
     session_ = set_.session_exercise.session
     session_id = session_.id
     if session_.resting_set_id == set_.id:
@@ -1002,7 +1017,8 @@ def gym_delete_set(set_id):
         _cancel_pending_push(session_)
     db.session.delete(set_)
     db.session.commit()
-    return redirect(url_for('gym.session_detail', session_id=session_id))
+    return _mutation_response(
+        _doomed_session, 'gym.session_detail', session_id=session_id)
 
 
 def _propagate_default_correction(set_, weight, reps):
@@ -1215,9 +1231,8 @@ def gym_update_set(set_id):
     # is gated on ?just_finished, and this redirect dropped it -- so correcting
     # one mistyped set silently destroyed the offer, permanently, with no other
     # route to it. gym_session_summary already does exactly this.
-    return redirect(url_for('gym.session_detail',
-                            session_id=set_.session_exercise.session_id,
-                            **request.args.to_dict()))
+    return _mutation_response(
+        session_, 'gym.session_detail', session_id=set_.session_exercise.session_id, **request.args.to_dict())
 
 
 @gym_bp.route('/gym/session/<int:session_id>/exercises/reorder', methods=['POST'])
@@ -1252,7 +1267,8 @@ def gym_reorder_session_exercises(session_id):
             position += 1
     db.session.commit()
     sharing.propagate_structure(session_)
-    return redirect(url_for('gym.session_detail', session_id=session_id))
+    return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_id)
 
 
 @gym_bp.route('/gym/session/<int:session_id>/rest/skip', methods=['POST'])
@@ -1274,7 +1290,8 @@ def gym_skip_rest(session_id):
     session_.resting_set_id = None
     _cancel_pending_push(session_)
     db.session.commit()
-    return redirect(url_for('gym.session_detail', session_id=session_.id))
+    return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_.id)
 
 
 @gym_bp.route('/gym/session/<int:session_id>/finish', methods=['POST'])
