@@ -195,7 +195,7 @@
     "notes": null,
     "rest_ends_at": null,
     "resting_set_id": null,
-    "started_at": "2026-08-10T16:06:23",
+    "started_at": "2026-08-10T22:23:06",
     "structure_version": 0,
     "template_id": null,
     "template_name": null
@@ -206,14 +206,15 @@
   "sets_open": 2,
   "sets_total": 3,
   "stagnation_counts": {},
+  "stall_next_weight": {},
   "suggestions": {
     "10": {
-      "reps": 8,
-      "weight": 60.0
+      "reps": 7,
+      "weight": 63.0
     },
     "11": {
-      "reps": 7,
-      "weight": 66.0
+      "reps": 8,
+      "weight": 69.0
     }
   },
   "tick_states": [

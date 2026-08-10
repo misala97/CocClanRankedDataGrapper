@@ -119,6 +119,37 @@ describe('LivePanel', () => {
     expect(ready.textContent!.includes('je Seite')).toBe(live.is_unilateral)
   })
 
+  it('states the prescription in the stall line, and only states it', () => {
+    // Owner decision: a stall means the current weight is already at the
+    // edge, so the number is said, never seeded -- the steppers stay on the
+    // proven weight. Same copy as the debrief's Nächstes-Mal advice.
+    const advised: SessionDetailPayload = {
+      ...payload,
+      stagnation_counts: { [String(live.id)]: 4 },
+      stall_next_weight: { [String(live.id)]: 68 },
+    }
+    render(<LivePanel payload={advised} {...handlers()} />)
+    expect(screen.getByText(/auf 68,0 kg gehen, notfalls 2 Wdh\. weniger/))
+      .toBeInTheDocument()
+    // The steppers still pre-fill from history, not from the prescription --
+    // the stepper renders its value as text, kg1-formatted.
+    const next = live.sets.find((s) => !s.completed)!
+    expect(screen.getByLabelText('Gewicht eingeben'))
+      .toHaveTextContent(kg1(next.weight))
+  })
+
+  it('falls back to the generic nudge when the stack is topped out', () => {
+    // stall_next_weight omits an exercise whose known stack has no stop above
+    // the plateau -- repeating the stuck number is not advice.
+    const advised: SessionDetailPayload = {
+      ...payload,
+      stagnation_counts: { [String(live.id)]: 4 },
+      stall_next_weight: {},
+    }
+    render(<LivePanel payload={advised} {...handlers()} />)
+    expect(screen.getByText(/mehr Gewicht oder Wdh\. versuchen/)).toBeInTheDocument()
+  })
+
   it('keeps the button name stable while a rest runs', () => {
     // A name that rewrote itself every second would be worse than no
     // countdown, so the clock is aria-hidden and the announcement goes to the

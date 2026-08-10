@@ -288,6 +288,10 @@ class SessionDetailPayload(_Model):
     # string keys. Pinned by test_int_keyed_dicts_serialize_as_string_keys.
     suggestions: dict[str, Suggestion | None]
     stagnation_counts: dict[str, int]
+    #: Keyed like stagnation_counts. The stall line's "go to X" number --
+    #: display only, never seeded (owner decision: a stall is already at the
+    #: edge). Absent for an exercise whose known stack is topped out.
+    stall_next_weight: dict[str, float]
     # A set in the route; a list here. json.dumps cannot serialize a set, so
     # the builder converts and this type is what makes that non-optional.
     record_set_ids: list[int]

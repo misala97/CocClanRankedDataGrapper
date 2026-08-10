@@ -40,7 +40,7 @@ def _minimal():
         'tick_states': ['now'], 'sets_done': 0, 'sets_total': 1, 'sets_open': 1,
         'session_volume': 0.0, 'resting': False, 'rest_total_seconds': 0,
         'suggestions': {'10': {'weight': 60.0, 'reps': 8}},
-        'stagnation_counts': {}, 'record_set_ids': [],
+        'stagnation_counts': {}, 'stall_next_weight': {}, 'record_set_ids': [],
         'ready_for_more': None, 'min_full_reps': 5,
         'default_plan_weight': 20.0, 'default_plan_reps': 8,
         'exercises': [{'id': 5, 'name': 'Bankdrücken', 'muscle_group': 'Brust'}],
@@ -112,9 +112,11 @@ def test_int_keyed_dicts_serialize_as_string_keys():
     10. Pinned here so the React side is not surprised by it."""
     data = _minimal()
     data['stagnation_counts'] = {'10': 4}
+    data['stall_next_weight'] = {'10': 68.0}
     dumped = SessionDetailPayload.model_validate(data).model_dump(mode='json')
     assert list(dumped['stagnation_counts']) == ['10']
     assert list(dumped['suggestions']) == ['10']
+    assert list(dumped['stall_next_weight']) == ['10']
 
 
 def test_round_trips_to_json_mode():

@@ -116,6 +116,9 @@ export interface SessionDetailPayload {
    *  test_int_keyed_dicts_serialize_as_string_keys. */
   suggestions: Record<string, Suggestion | null>
   stagnation_counts: Record<string, number>
+  /** Keyed like stagnation_counts. The stall line's "go to X" number --
+   *  display only, never seeded. Absent when a known stack is topped out. */
+  stall_next_weight: Record<string, number>
   /** A set on the server, a list on the wire. */
   record_set_ids: number[]
   ready_for_more: ReadyForMore | null

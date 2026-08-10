@@ -24,66 +24,82 @@ from features.gym import stats
 from features.gym.scope import current_user_id
 
 
+def _session_exercise_e1rm(session_exercise):
+    """The best estimated 1RM among this row's completed sets. What "best"
+    means when two past performances compete: 60x12 beats 62x6, because more
+    reps at similar weight is the stronger performance, and comparing raw top
+    weight would seed the six-rep session as the better one."""
+    return max(
+        (stats.epley_1rm(s.weight, s.reps) for s in session_exercise.sets if s.completed),
+        default=0.0,
+    )
+
+
 def _last_session_exercise(exercise_id, position=None, user_id=None):
-    """The most recent SessionExercise (across any session) with at least one
-    *completed* set for this exercise.
+    """The SessionExercise to seed from. Owner-decided rules, in order:
 
-    If `position` is given, prefers a match where the exercise was performed
-    in that same position within its session -- exercise order affects
-    fatigue (the same exercise done 1st is fresher than done 3rd), so a
-    suggestion should reflect what you actually did in that same slot
-    before, not just the most recent time you did the exercise at all.
+    1. **Fresh history wins, best first.** Among sessions inside
+       stats.ROLLING_WINDOW_DAYS, pick the highest e1RM -- not the most
+       recent. You were provably that strong within the window; the seed
+       should say so.
 
-    That preference is only honoured while the slot's own history is still
-    CURRENT (within stats.ROLLING_WINDOW_DAYS). Reorder an exercise and never
-    update the template, and months later the template still names the old
-    slot -- without the recency guard the pre-fill would resurrect whatever
-    you lifted there back then, which can be far below your actual working
-    weight today. Seated Row, real data: slot 2 is on 69 kg while slot 3 still
-    remembered 61 kg from months earlier, so starting the template pre-filled
-    61 and had to be corrected by hand every time.
+    2. **Fatigue direction.** Position is a fatigue proxy: a result at the
+       SAME OR A LATER position is at least as impressive at this one (you
+       did it more tired), while a result from an earlier, fresher slot
+       overstates what this slot can do. So fresh candidates at
+       position >= `position` are preferred; only when the fresh window has
+       nothing at or after this slot do fresher-slot sessions compete. This
+       is what makes "did it better in slot 5 last week" beat "did it
+       moderately in slot 2 three weeks ago" when seeding slot 2.
 
-    The fatigue argument is about being fresher or more tired in a given
-    slot, and it only holds while both numbers describe the same training
-    period. Once the slot's record is stale, "most recent, any position" is
-    the more honest answer, and the lifter adjusts in the moment.
+    3. **A layoff seeds the last thing you did, never your best.** With
+       nothing inside the window at all, fall back to the most recent
+       session at any position. Best-ever would hand a detrained body its
+       all-time PR; most-recent is the honest re-entry point, adjusted in
+       the moment.
 
-    Falls back to the most recent regardless of position if you've never done
-    it in that position, or if that record has gone stale.
-
-    Deload sessions are skipped entirely. They are a deliberately light week,
-    not what you should come back to -- seeding from one would carry the
-    reduction forward into every session after it.
+    Deload sessions are skipped entirely -- they are a deliberately light
+    week, not what you should come back to, and seeding from one would carry
+    the reduction forward into every session after it. History is always the
+    lifter's own (`user_id`), never a partner's.
     """
     if user_id is None:
         user_id = current_user_id()
-    base_query = (
+    pool = (
         SessionExercise.query
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
         .filter(
             SessionExercise.exercise_id == exercise_id,
             SessionExercise.sets.any(SessionSet.completed == True),
-            # Never seed from a deload. Pre-filling the next session at 70 %
-            # would make the following one seed from *that*, and the lifter
-            # would silently never return to their real working weight.
+            # Never seed from a deload -- see the docstring.
             WorkoutSession.is_deload == False,
-            # Suggestions come from your own training, never your partner's.
             WorkoutSession.user_id == user_id,
         )
+        .order_by(WorkoutSession.started_at.desc())
+        .all()
     )
-    if position is not None:
-        match = base_query.filter(SessionExercise.position == position).order_by(WorkoutSession.started_at.desc()).first()
-        # same slot, but only while that record still describes current
-        # training -- see the docstring for why staleness overrides fatigue
-        cutoff = dt.datetime.utcnow() - dt.timedelta(days=stats.ROLLING_WINDOW_DAYS)
-        if match and match.session.started_at >= cutoff:
-            return match
-    return base_query.order_by(WorkoutSession.started_at.desc()).first()
+    if not pool:
+        return None
+
+    cutoff = dt.datetime.utcnow() - dt.timedelta(days=stats.ROLLING_WINDOW_DAYS)
+    fresh = [se for se in pool if se.session.started_at >= cutoff]
+    if not fresh:
+        # Layoff: rule 3. `pool` is newest-first.
+        return pool[0]
+
+    candidates = (
+        [se for se in fresh if position is None or se.position >= position]
+        or fresh
+    )
+    # Best e1RM; the newest wins a tie because `candidates` is newest-first
+    # and max() keeps the first of equals.
+    return max(candidates, key=_session_exercise_e1rm)
 
 
 def _last_performance(exercise_id, position=None, user_id=None):
-    """Most recent completed set for this exercise (optionally position-
-    matched, see _last_session_exercise), used to pre-fill the add-set form."""
+    """The last completed set of the session _last_session_exercise picks
+    (best fresh e1RM, fatigue-direction preferred, most-recent after a
+    layoff), used to pre-fill the steppers and the add-set form."""
     last_session_exercise = _last_session_exercise(exercise_id, position=position, user_id=user_id)
     if not last_session_exercise:
         return None
@@ -95,10 +111,9 @@ def _last_performance(exercise_id, position=None, user_id=None):
 
 
 def _last_full_performance(exercise_id, position=None, user_id=None):
-    """All completed sets from the most recent (optionally position-matched)
-    session that logged this exercise, in order -- used to pre-fill a new
-    session's sets when starting from a template, mirroring what was
-    actually done last time in that same slot."""
+    """All completed sets of the session _last_session_exercise picks, in
+    order -- used to pre-fill a new session's sets, mirroring the strongest
+    recent performance that is valid evidence for this slot."""
     last_session_exercise = _last_session_exercise(exercise_id, position=position, user_id=user_id)
     if not last_session_exercise:
         return []

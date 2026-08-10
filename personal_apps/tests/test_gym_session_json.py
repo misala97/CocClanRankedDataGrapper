@@ -91,3 +91,74 @@ def test_requires_a_login(anon_client, live_session):
     session_id = live_session['session']
     response = anon_client.get(f'/gym/session/{session_id}/detail.json')
     assert response.status_code in (302, 401, 403)
+
+
+def test_a_stalling_live_exercise_carries_its_prescription():
+    """The stall line's "auf X kg gehen" number: one increment up from the
+    pre-fill, snapped UP onto the machine's real stops -- same math as the
+    debrief's Nächstes-Mal advice. Display only, an owner decision: the
+    steppers keep pre-filling the proven weight, the payload just says what
+    going up would mean. 61 kg on a 5/12/18/29/33/61/68/92 stack must say
+    68, not the 63.5 the default grid would invent."""
+    import datetime as dt
+    from app import app as flask_app
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+
+    made = {'sessions': [], 'exercise': None}
+    try:
+        with flask_app.app_context():
+            exercise = Exercise(name='pytest live stall stack lift',
+                                user_id=_admin_id(),
+                                stack_kg=[5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0])
+            db.session.add(exercise)
+            db.session.flush()
+            made['exercise'] = exercise.id
+            # Five, not four: the first session IS the PR, so N sessions give
+            # N-1 without one, and STAGNATION_THRESHOLD is 4.
+            base = dt.datetime.utcnow() - dt.timedelta(days=27)
+            for n in range(5):
+                past = WorkoutSession(name=f'pytest live stall history {n}',
+                                      started_at=base + dt.timedelta(days=5 * n),
+                                      finished_at=base + dt.timedelta(days=5 * n, hours=1),
+                                      user_id=_admin_id())
+                se = SessionExercise(exercise_id=exercise.id, position=1)
+                se.sets = [SessionSet(position=1, weight=61.0, reps=8, completed=True)]
+                past.exercises.append(se)
+                db.session.add(past)
+                db.session.flush()
+                made['sessions'].append(past.id)
+            live = WorkoutSession(name='pytest live stall session',
+                                  started_at=dt.datetime.utcnow(), user_id=_admin_id())
+            live_se = SessionExercise(exercise_id=exercise.id, position=1)
+            live_se.sets = [SessionSet(position=1, weight=61.0, reps=8, completed=False)]
+            live.exercises.append(live_se)
+            db.session.add(live)
+            db.session.commit()
+            made['sessions'].append(live.id)
+            live_id, se_id = live.id, live_se.id
+
+        flask_app.config['TESTING'] = True
+        with flask_app.test_client() as test_client:
+            with test_client.session_transaction() as flask_session:
+                flask_session['user_id'] = _admin_id()
+            body = test_client.get(f'/gym/session/{live_id}/detail.json').get_json()
+
+        assert body['stagnation_counts'].get(str(se_id)) is not None, \
+            'the fixture did not actually stagnate'
+        assert body['stall_next_weight'] == {str(se_id): 68.0}
+        # And the pre-fill is untouched: said, never seeded.
+        assert body['suggestions'][str(se_id)]['weight'] == 61.0
+    finally:
+        with flask_app.app_context():
+            for session_id in made['sessions']:
+                doomed = db.session.get(WorkoutSession, session_id)
+                if doomed is not None:
+                    doomed.resting_set_id = None
+                    db.session.commit()
+                    db.session.delete(doomed)
+                    db.session.commit()
+            doomed = db.session.get(Exercise, made['exercise'])
+            if doomed is not None:
+                db.session.delete(doomed)
+                db.session.commit()

@@ -85,6 +85,7 @@ export function LivePanel({
   }
 
   const stall = payload.stagnation_counts[String(live.id)]
+  const stallNext = payload.stall_next_weight[String(live.id)]
   const ready = payload.ready_for_more
   const perSide = live.is_unilateral ? ' je Seite' : ''
   const records = live.sets.filter(
@@ -109,7 +110,12 @@ export function LivePanel({
       {stall !== undefined && (
         <p className="live__stall">
           <span className="live__stall-lbl">Stagniert</span>
-          {` ${stall} Workouts ohne neuen e1RM-PR — mehr Gewicht oder Wdh. versuchen.`}
+          {/* The prescription is said, never seeded -- the steppers stay on
+              the proven weight, and going up is the lifter's call. Same
+              number and same copy as the debrief's Nächstes-Mal advice. */}
+          {stallNext !== undefined
+            ? ` ${stall} Workouts ohne neuen e1RM-PR — auf ${kg1(stallNext)} kg gehen, notfalls 2 Wdh. weniger.`
+            : ` ${stall} Workouts ohne neuen e1RM-PR — mehr Gewicht oder Wdh. versuchen.`}
         </p>
       )}
 

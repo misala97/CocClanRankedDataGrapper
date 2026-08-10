@@ -350,6 +350,28 @@ def _live_data(session_):
             for s in se.sets:
                 if s.completed and stats.is_new_best(s.weight, s.reps, prior):
                     record_set_ids.add(s.id)
+    # The stall line's prescription: the same "+one increment, snapped up
+    # onto the machine's real stops" the debrief's Nächstes-Mal advice
+    # computes, anchored on the weight the steppers will actually pre-fill.
+    # DISPLAY ONLY, an owner decision: a stall means the current weight is
+    # already at the edge, so seeding heavier would push straight into failed
+    # sets -- the number is said, never written.
+    stall_next_weight = {}
+    for se_id, _count in stagnation_counts.items():
+        se = next(x for x in visible_exercises if x.id == se_id)
+        suggestion = suggestions.get(se_id)
+        if suggestion is None:
+            continue
+        increment = stats.resolve_increment(
+            se.exercise.weight_increment, se.exercise.is_unilateral)
+        next_weight = stats.snap_to_stack(
+            stats._next_weight(suggestion['weight'], increment),
+            se.exercise.stack_kg, 'up')
+        # Topped out on a known stack: snapping clamps back to the top stop,
+        # and repeating the number the plateau is stuck at is not advice.
+        if next_weight > suggestion['weight']:
+            stall_next_weight[se_id] = next_weight
+
     ready_for_more = None
     if not session_.is_deload and live_se is not None:
         # Only the live exercise: the queue below is an overview, and seven
@@ -460,6 +482,7 @@ def _live_data(session_):
         rest_total_seconds=rest_total_seconds,
         suggestions=suggestions,
         stagnation_counts=stagnation_counts,
+        stall_next_weight=stall_next_weight,
         record_set_ids=record_set_ids,
         ready_for_more=ready_for_more,
         # Passed in rather than hardcoded in the template, so the badge's
@@ -557,6 +580,7 @@ def _session_payload(session_):
         'rest_total_seconds': data['rest_total_seconds'],
         'suggestions': {str(k): v for k, v in data['suggestions'].items()},
         'stagnation_counts': {str(k): v for k, v in data['stagnation_counts'].items()},
+        'stall_next_weight': {str(k): v for k, v in data['stall_next_weight'].items()},
         'record_set_ids': sorted(data['record_set_ids']),
         'ready_for_more': data['ready_for_more'],
         'min_full_reps': data['min_full_reps'],
