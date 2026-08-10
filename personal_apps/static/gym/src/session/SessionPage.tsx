@@ -10,6 +10,7 @@ import { SessionTotals } from './components/SessionTotals'
 import { TickStrip } from './components/TickStrip'
 import { Queue } from './components/Queue'
 import { SessionSheet } from './components/SessionSheet'
+import { UndoToast } from '../undo'
 import { DeloadSheet } from './components/DeloadSheet'
 import { AddExerciseSheet } from './components/AddExerciseSheet'
 import { TemplateSheet } from './components/TemplateSheet'
@@ -125,6 +126,7 @@ export function SessionPage({ payload, actions, pushSupported, busySetId = null 
           suggestion={payload.suggestions[String(se.id)] ?? null}
           {...actions.exerciseActions(se.id)} />
       ))}
+      <UndoToast />
     </>
   )
 }

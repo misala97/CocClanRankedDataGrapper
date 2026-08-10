@@ -1,12 +1,14 @@
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useUndo } from '../../undo'
 import { ExerciseSheet } from './ExerciseSheet'
 import { useSheets } from '../stores'
 import { payload } from '../types.test-d'
 import type { LiveExercise } from '../types'
 
 beforeEach(() => {
+  useUndo.setState({ pending: null, timer: null })
   useSheets.setState(useSheets.getInitialState(), true)
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
@@ -80,8 +82,23 @@ describe('ExerciseSheet', () => {
     await user.click(screen.getByLabelText('Satz 1 speichern'))
     expect(a.onSetUpdate).toHaveBeenCalledWith(first.id, first.weight, first.reps)
 
+    const rowsBefore = screen.getAllByLabelText(/Satz \d+ löschen/).length
     await user.click(screen.getByLabelText('Satz 1 löschen'))
+    // Delayed commit: the row hides now (the ones behind it renumber), the
+    // DELETE waits out the undo window -- nothing has hit the server yet.
+    expect(a.onSetDelete).not.toHaveBeenCalled()
+    expect(screen.getAllByLabelText(/Satz \d+ löschen/)).toHaveLength(rowsBefore - 1)
+    useUndo.getState().commitNow()
     expect(a.onSetDelete).toHaveBeenCalledWith(first.id)
+  })
+
+  it('undo brings a deleted set back without any server call', async () => {
+    const user = userEvent.setup()
+    const { actions: a } = open()
+    await user.click(screen.getByLabelText('Satz 1 löschen'))
+    useUndo.getState().undoNow()
+    expect(screen.getByLabelText('Satz 1 löschen')).toBeInTheDocument()
+    expect(a.onSetDelete).not.toHaveBeenCalled()
   })
 
   it('pre-fills the append row from the suggestion', async () => {
@@ -140,19 +157,23 @@ describe('ExerciseSheet', () => {
     expect(screen.getByText('Nicht mehr überspringen')).toBeInTheDocument()
   })
 
-  it('confirms before removing the exercise from the workout', async () => {
+  it('offers undo instead of a confirm before removing the exercise', async () => {
     const user = userEvent.setup()
     const { actions: a } = open()
     await user.click(screen.getByText('Übung entfernen'))
-    expect(window.confirm).toHaveBeenCalledWith('Übung aus Workout entfernen?')
+    // No confirm() dialog, no write yet: the toast window is the decision.
+    expect(a.onRemove).not.toHaveBeenCalled()
+    expect(useUndo.getState().pending?.label).toContain('wird entfernt')
+    useUndo.getState().commitNow()
     expect(a.onRemove).toHaveBeenCalled()
   })
 
-  it('does not remove when the confirm is declined', async () => {
-    vi.mocked(window.confirm).mockReturnValue(false)
+  it('undo keeps the exercise, nothing was written', async () => {
     const user = userEvent.setup()
     const { actions: a } = open()
     await user.click(screen.getByText('Übung entfernen'))
+    useUndo.getState().undoNow()
     expect(a.onRemove).not.toHaveBeenCalled()
+    expect(useUndo.getState().pending).toBeNull()
   })
 })

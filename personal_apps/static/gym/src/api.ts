@@ -35,23 +35,29 @@ export class MutationFailed extends Error {
  *  (_mutation_response branches on finished_at). */
 export function postForm<T>(
   url: string, fields: Record<string, string | number | boolean> = {},
+  opts: { keepalive?: boolean } = {},
 ): Promise<T> {
   const body = new FormData()
   for (const [key, value] of Object.entries(fields)) {
     body.append(key, String(value))
   }
-  return postFormData<T>(url, body)
+  return postFormData<T>(url, body, opts)
 }
 
 /** Same, from a real form's FormData -- the only shape that keeps a
  *  multi-select's repeated keys (request.form.getlist on the other side). */
-export async function postFormData<T>(url: string, body: FormData): Promise<T> {
+export async function postFormData<T>(
+  url: string, body: FormData, opts: { keepalive?: boolean } = {},
+): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
     const response = await fetch(url, {
       method: 'POST', body, headers: JSON_HEADERS,
       credentials: 'same-origin', signal: controller.signal,
+      // The pagehide flush posts a write the page will not stay alive to see
+      // answered; keepalive lets the request outlive the document.
+      keepalive: opts.keepalive ?? false,
     })
     if (!response.ok) throw new MutationFailed('network')
     return await response.json() as T

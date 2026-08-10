@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { HeutePayload, RoutineMemory, Stall } from './types'
 import { postForm, MutationFailed } from '../api'
+import { UndoToast, useUndo } from '../undo'
 import { recency, sincePr } from '../catalogue/format'
 import { useSheets, usePush } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
@@ -51,13 +52,14 @@ interface RoutineEditProps {
   /** POSTs over fetch and hands back the fresh HeutePayload the route
    *  answers with; the page re-renders from it, no reload. */
   onSave: (url: string, fields: Record<string, string>) => Promise<void>
+  /** Hides the routine now, deletes it when the undo window closes. */
+  onDelete: (routine: RoutineMemory) => void
 }
 
-function RoutineEdit({ routine, onSave }: RoutineEditProps) {
-  const submit = (url: string, confirmText?: string) =>
+function RoutineEdit({ routine, onSave, onDelete }: RoutineEditProps) {
+  const submit = (url: string) =>
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      if (confirmText !== undefined && !confirm(confirmText)) return
       const form = event.currentTarget
       const fields: Record<string, string> = {}
       new FormData(form).forEach((value, key) => { fields[key] = String(value) })
@@ -66,6 +68,12 @@ function RoutineEdit({ routine, onSave }: RoutineEditProps) {
         form.closest('details')?.removeAttribute('open')
       })
     }
+
+  const remove = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    event.currentTarget.closest('details')?.removeAttribute('open')
+    onDelete(routine)
+  }
 
   return (
     <details className="lead__edit">
@@ -81,7 +89,7 @@ function RoutineEdit({ routine, onSave }: RoutineEditProps) {
           <button type="submit" className="btn btn--ghost btn--sm">Speichern</button>
         </form>
         <form method="post" action={`/gym/templates/${routine.template_id}/delete`}
-          onSubmit={submit(`/gym/templates/${routine.template_id}/delete`, 'Vorlage löschen?')}>
+          onSubmit={remove}>
           <button type="submit" className="btn btn--quiet-danger btn--sm btn--block">
             Löschen
           </button>
@@ -109,6 +117,30 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
         ? error.germanMessage
         : 'Speichern fehlgeschlagen.')
     }
+  }
+
+  const offerUndo = useUndo((s) => s.offer)
+  /** confirm() replaced by delayed commit: the row vanishes now, the DELETE
+   *  fires when the undo window closes, Rückgängig just puts the row back --
+   *  nothing has reached the server yet. */
+  const deleteRoutine = (routine: RoutineMemory) => {
+    const before = payload
+    setPayload((current) => ({
+      ...current,
+      routines: current.routines.filter((r) => r.template_id !== routine.template_id),
+      templates: current.templates.filter((r) => r.template_id !== routine.template_id),
+    }))
+    offerUndo({
+      label: `Routine „${routine.name}“ gelöscht.`,
+      undo: () => setPayload(before),
+      commit: (keepalive) => {
+        postForm<HeutePayload>(`/gym/templates/${routine.template_id}/delete`, {}, { keepalive })
+          .then(setPayload)
+          .catch((error) => setSaveError(error instanceof MutationFailed
+            ? error.germanMessage
+            : 'Löschen fehlgeschlagen.'))
+      },
+    })
   }
 
   const running = payload.active_session_id !== null
@@ -228,7 +260,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                     <span className="lead__due">{recency(lead.days_ago, true)}</span>
                     <span className="lead__name">{lead.name}</span>
                   </span>
-                  <RoutineEdit routine={lead} onSave={saveRoutine} />
+                  <RoutineEdit routine={lead} onSave={saveRoutine} onDelete={deleteRoutine} />
                 </div>
                 <p className="lead__list">
                   {lead.exercises.length > 0 ? lead.exercises.join(' · ') : 'Keine Übungen'}
@@ -263,7 +295,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                   </span>
                 </span>
                 <span className="row__trail">
-                  <RoutineEdit routine={routine} onSave={saveRoutine} />
+                  <RoutineEdit routine={routine} onSave={saveRoutine} onDelete={deleteRoutine} />
                   {canStart && (
                     <form method="post" action="/gym/start">
                       <input type="hidden" name="template_id" value={routine.template_id} />
@@ -464,6 +496,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
           <button type="submit" className="btn btn--live btn--block">Workout starten</button>
         </form>
       </Sheet>
+      <UndoToast />
     </>
   )
 }

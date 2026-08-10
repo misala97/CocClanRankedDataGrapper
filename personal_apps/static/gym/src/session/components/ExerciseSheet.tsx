@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { CatalogueExercise, LiveExercise, Suggestion } from '../types'
+import { useUndo } from '../../undo'
 import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
 
@@ -43,6 +44,23 @@ export function ExerciseSheet({
   const [pain, setPain] = useState(exercise.pain)
   const [notes, setNotes] = useState(exercise.notes ?? '')
   const [newName, setNewName] = useState('')
+  const offerUndo = useUndo((s) => s.offer)
+  // Sets hidden while their delete waits out the undo window. Ids, not
+  // indices: the payload swap after the commit removes them for real.
+  const [hiddenSetIds, setHiddenSetIds] = useState<number[]>([])
+
+  const deleteSet = (setId: number, ordinal: number) => {
+    setHiddenSetIds((ids) => [...ids, setId])
+    offerUndo({
+      label: `Satz ${ordinal} gelöscht.`,
+      undo: () => setHiddenSetIds((ids) => ids.filter((id) => id !== setId)),
+      // The keepalive flag stops here: the write goes through the session
+      // mutation layer, which owns its own fetch. A pagehide flush mid-window
+      // therefore races the navigation -- acceptable for a 5s window on a
+      // screen you leave by finishing the workout.
+      commit: () => onSetDelete(setId),
+    })
+  }
 
   // Filtered to the same muscle group, so it can be legitimately empty even
   // for a full catalogue -- which is why the pane choice keys off this list
@@ -110,9 +128,9 @@ export function ExerciseSheet({
         <div className="sheet__group-head">
           <span className="label">Sätze</span>
         </div>
-        {exercise.sets.map((s, i) => (
+        {exercise.sets.filter((s) => !hiddenSetIds.includes(s.id)).map((s, i) => (
           <SetEditor set={s} ordinal={i + 1} key={s.id}
-            onSave={onSetUpdate} onDelete={onSetDelete} />
+            onSave={onSetUpdate} onDelete={deleteSet} />
         ))}
         <AddSetRow suggestion={suggestion} onAdd={onAddSet} />
       </div>
@@ -190,9 +208,11 @@ export function ExerciseSheet({
         </details>
 
         <button type="button" className="sheet-row sheet-row--danger"
-          onClick={() => {
-            if (confirm('Übung aus Workout entfernen?')) onRemove()
-          }}>
+          onClick={() => offerUndo({
+            label: `${exercise.name} wird entfernt.`,
+            undo: () => {},
+            commit: () => onRemove(),
+          })}>
           <span className="sheet-row__lead"><Icon name="trash" /></span>
           <span className="sheet-row__main">
             <span className="sheet-row__name">Übung entfernen</span>
@@ -208,7 +228,7 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
   set: LiveExercise['sets'][number]
   ordinal: number
   onSave(setId: number, weight: number, reps: number): void
-  onDelete(setId: number): void
+  onDelete(setId: number, ordinal: number): void
 }) {
   const [weight, setWeight] = useState(String(set.weight))
   const [reps, setReps] = useState(String(set.reps))
@@ -234,7 +254,7 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
             purpose -- see Icon.tsx's header. */}
         <button type="button" className="icon-btn"
           aria-label={`Satz ${ordinal} löschen`}
-          onClick={() => onDelete(set.id)}>✕</button>
+          onClick={() => onDelete(set.id, ordinal)}>✕</button>
       </span>
     </div>
   )

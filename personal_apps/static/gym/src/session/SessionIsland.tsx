@@ -5,6 +5,7 @@ import { api, fetchSession } from './api'
 import { sessionKey, useSessionMutation } from './useSessionMutation'
 import * as optimistic from './optimistic'
 import { usePush, useSaveState, useSheets } from './stores'
+import { useWakeLock } from './useWakeLock'
 import { SessionPage, type SessionActions } from './SessionPage'
 import type { ExerciseSheetActions } from './components/ExerciseSheet'
 
@@ -20,6 +21,10 @@ const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window
  */
 function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   const sessionId = initial.session.id
+
+  // The screen stays on for as long as the workout is live -- this island
+  // only ever renders an unfinished session, so the flag is simply true.
+  useWakeLock(true)
 
   const { data } = useQuery({
     queryKey: sessionKey(sessionId),

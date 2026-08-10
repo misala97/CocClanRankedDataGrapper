@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StartPage } from './StartPage'
 import type { HeutePayload, RoutineMemory, Stall } from './types'
 import { usePush, useSheets } from '../session/stores'
+import { useUndo } from '../undo'
 
 beforeEach(() => {
   useSheets.setState(useSheets.getInitialState(), true)
   usePush.setState(usePush.getInitialState(), true)
+  useUndo.setState({ pending: null, timer: null })
 })
 
 const routine = (over: Partial<RoutineMemory> = {}): RoutineMemory => ({
@@ -249,35 +251,41 @@ describe('editing a routine in place', () => {
     vi.unstubAllGlobals()
   })
 
-  it('deletes after the confirm and drops the row', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
+  it('drops the row instantly and only deletes when the window closes', async () => {
+    const spy = vi.fn(async () => ({
       ok: true, json: async () => ({ ...base, routines: [], templates: [] }),
-    } as unknown as Response)))
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    } as unknown as Response))
+    vi.stubGlobal('fetch', spy)
 
     const { container } = mount()
     const user = userEvent.setup()
     await user.click(container.querySelector('.lead__edit-toggle')!)
     await user.click(screen.getByRole('button', { name: 'Löschen' }))
 
-    expect(await screen.findByText(/Noch keine Vorlagen/)).toBeInTheDocument()
+    // Gone from the page, said in the toast, nothing on the wire yet.
+    expect(screen.getByText(/Noch keine Vorlagen/)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Routine „Push“ gelöscht.')
+    expect(spy).not.toHaveBeenCalled()
+
+    useUndo.getState().commitNow()
+    expect(spy).toHaveBeenCalledWith('/gym/templates/1/delete', expect.anything())
     vi.unstubAllGlobals()
-    vi.restoreAllMocks()
   })
 
-  it('does nothing when the confirm is declined', async () => {
+  it('undo restores the row and never touches the server', async () => {
     const spy = vi.fn()
     vi.stubGlobal('fetch', spy)
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
 
     const { container } = mount()
     const user = userEvent.setup()
     await user.click(container.querySelector('.lead__edit-toggle')!)
     await user.click(screen.getByRole('button', { name: 'Löschen' }))
+    await user.click(screen.getByRole('button', { name: 'Rückgängig' }))
 
+    const routines = screen.getByRole('region', { name: /Am längsten her|Routinen/ })
+    expect(within(routines).getByText('Push')).toBeInTheDocument()
     expect(spy).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
-    vi.restoreAllMocks()
   })
 
   it('states a failure and keeps the page', async () => {
