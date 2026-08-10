@@ -30,6 +30,8 @@ const PATHS = {
       <circle cx="8" cy="12.6" r="1.15" fill="currentColor" stroke="none" />
     </>
   ),
+  check: <path d="M3.4 8.4l3.2 3.2 6-6.6" />,
+  plus: <path d="M8 3.4v9.2M3.4 8h9.2" />,
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS
