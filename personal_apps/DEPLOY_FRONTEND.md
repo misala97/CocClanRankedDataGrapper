@@ -50,9 +50,10 @@ rather than shipping.
 
 ## Failure mode
 
-If the build does not run, every ported gym page raises `ViteManifestError`
-with a message naming the fix. It fails loudly and identically on every such
-page — a 500, not a blank screen.
+If the build does not run, **every gym page** raises `ViteManifestError` with a
+message naming the fix. All eight are islands now, so there is no partly-working
+state to misread: the gym is either up or entirely down. It fails loudly and
+identically on every page — a 500, not a blank screen.
 
 That is deliberate. The alternative, emitting `<script src="">`, makes the
 browser re-request the page itself as a script: no error anywhere, just a page
