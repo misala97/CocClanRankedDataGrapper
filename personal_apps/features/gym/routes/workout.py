@@ -552,6 +552,28 @@ def _session_payload(session_):
     })
 
 
+def _mutation_response(session_, endpoint, **values):
+    """JSON for the island, the original redirect for a plain form post.
+
+    Negotiated on the existing URL rather than served from a parallel /json
+    route: each of these routes carries an ownership check, a mutation and in
+    several cases a propagation rule, and duplicating a route to change only
+    its return type duplicates all of that. The 2a split exists because that
+    kind of duplication already drifted once at file scale.
+
+    Both halves of the test are load-bearing. A browser form post sends
+    `Accept: text/html,...,*/*;q=0.8`, so accept_json is TRUE via the wildcard
+    -- testing it alone would flip every form post to JSON and take the page
+    down. A bare fetch() sends */* and lands here too, which is why the island
+    must send `Accept: application/json` explicitly.
+    """
+    wants_json = (request.accept_mimetypes.accept_json
+                  and not request.accept_mimetypes.accept_html)
+    if wants_json:
+        return jsonify(_session_payload(session_).model_dump(mode='json'))
+    return redirect(url_for(endpoint, **values))
+
+
 @gym_bp.route('/gym/session/<int:session_id>/detail.json')
 @login_required
 def gym_session_detail_json(session_id):
@@ -1124,7 +1146,8 @@ def gym_toggle_set_complete(set_id):
         # Persist any weight/reps it carried, but do NOT restart the rest --
         # that would extend a countdown the lifter is already part-way through.
         db.session.commit()
-        return redirect(url_for('gym.session_detail', session_id=session_.id))
+        return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_.id)
     if set_.completed:
         # just confirmed done -- this is the moment to start the rest timer
         _schedule_rest(set_)
@@ -1135,7 +1158,8 @@ def gym_toggle_set_complete(set_id):
         session_.rest_ends_at = None
         _cancel_pending_push(session_)
     db.session.commit()
-    return redirect(url_for('gym.session_detail', session_id=session_.id))
+    return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_.id)
 
 
 @gym_bp.route('/gym/set/<int:set_id>/update', methods=['POST'])

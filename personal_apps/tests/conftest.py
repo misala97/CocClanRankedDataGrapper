@@ -35,6 +35,59 @@ def anon_client():
         yield test_client
 
 
+@pytest.fixture()
+def live_session():
+    """An unfinished session with one exercise and two sets, one completed.
+
+    Built rather than found. The dev database contains no live workout, so
+    tests that went looking for one all skipped -- which is how a real bug
+    (pain typed str against a BOOLEAN column) hid behind a green suite.
+
+    Yields {'session', 'se', 'done_set', 'open_set', 'exercise'} of ids.
+
+    The teardown clears resting_set_id first. A mutation that completes a set
+    schedules a rest, which points the session at that set; deleting the sets
+    with that pointer still set trips the foreign key.
+    """
+    import datetime as dt
+
+    from extensions import db
+    from models import Exercise, PendingPush, SessionExercise, SessionSet, WorkoutSession
+
+    with flask_app.app_context():
+        user_id = _admin_id()
+        exercise = (Exercise.query.filter_by(user_id=user_id)
+                    .order_by(Exercise.id).first())
+        assert exercise is not None, 'the dev database needs an exercise'
+        session_ = WorkoutSession(user_id=user_id, started_at=dt.datetime.utcnow())
+        db.session.add(session_)
+        db.session.flush()
+        se = SessionExercise(session_id=session_.id, exercise_id=exercise.id, position=1)
+        db.session.add(se)
+        db.session.flush()
+        sets = [
+            SessionSet(session_exercise_id=se.id, weight=60.0, reps=8, completed=True),
+            SessionSet(session_exercise_id=se.id, weight=60.0, reps=8, completed=False),
+        ]
+        db.session.add_all(sets)
+        db.session.commit()
+        ids = {'session': session_.id, 'se': se.id,
+               'done_set': sets[0].id, 'open_set': sets[1].id,
+               'exercise': exercise.id}
+
+    yield ids
+
+    with flask_app.app_context():
+        row = db.session.get(WorkoutSession, ids['session'])
+        if row is not None:
+            row.resting_set_id = None
+            row.rest_ends_at = None
+            PendingPush.query.filter_by(session_id=row.id).delete()
+            db.session.flush()
+            db.session.delete(row)
+            db.session.commit()
+
+
 @contextmanager
 def acting_as(user_id):
     """Request context carrying a logged-in session.
