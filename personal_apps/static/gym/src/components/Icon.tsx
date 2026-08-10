@@ -32,6 +32,31 @@ const PATHS = {
   ),
   check: <path d="M3.4 8.4l3.2 3.2 6-6.6" />,
   plus: <path d="M8 3.4v9.2M3.4 8h9.2" />,
+  chart: (
+    <>
+      <path d="M2.5 13.5h11" /><path d="M4.5 13.5v-4" />
+      <path d="M8 13.5v-8" /><path d="M11.5 13.5v-5.5" />
+    </>
+  ),
+  skip: <><path d="M3.2 3.6l6 4.4-6 4.4z" /><path d="M12.2 3.6v8.8" /></>,
+  swap: (
+    <>
+      <path d="M2.6 5.6h9.2l-2.2-2.2" />
+      <path d="M13.4 10.4H4.2l2.2 2.2" />
+    </>
+  ),
+  save: (
+    <>
+      <path d="M3 3.2h7.4L13 5.8v7h-10z" />
+      <path d="M5.4 3.2v3.4h5.2V3.2" /><path d="M5.4 12.8V9.4h5.2v3.4" />
+    </>
+  ),
+  timer: (
+    <>
+      <circle cx="8" cy="9.2" r="4.8" />
+      <path d="M8 6.6v2.6l1.7 1" /><path d="M6.4 1.8h3.2" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS
