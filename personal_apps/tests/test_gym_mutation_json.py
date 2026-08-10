@@ -118,3 +118,46 @@ def test_the_two_navigations_still_redirect(client, live_session):
     response = client.post(
         f"/gym/session/{live_session['session']}/finish", headers=JSON)
     assert response.status_code in (302, 303)
+
+
+def test_a_finished_session_mutation_answers_with_the_debrief(client, temp_finished_session):
+    """The island that asked gets the page it is on. A correction saved from
+    the finished page must come back as FinishedPayload -- the live screen's
+    shape wearing a finished_at would blank the debrief on the first save."""
+    from features.gym.schemas import FinishedPayload
+    from extensions import db
+    from models import SessionExercise
+
+    from app import app as flask_app
+
+    session_id, se_id, _ = temp_finished_session
+    with flask_app.app_context():
+        set_id = next(s.id for s in db.session.get(SessionExercise, se_id).sets if s.completed)
+
+    response = client.post(f'/gym/set/{set_id}/update',
+                           data={'weight': '41.0', 'reps': '9'},
+                           headers={'Accept': 'application/json'})
+    assert response.status_code == 200
+    body = response.get_json()
+    # Validate the whole contract, not two spot fields.
+    payload = FinishedPayload.model_validate(body)
+    assert payload.session.id == session_id
+    corrected = [s for e in payload.exercises for s in e.set_rows if s.id == set_id]
+    assert corrected and corrected[0].weight == 41.0 and corrected[0].reps == 9
+    # A POST carries no ?just_finished; the island preserves its own flag.
+    assert payload.just_finished is False
+
+
+def test_a_finished_session_form_post_still_redirects(client, temp_finished_session):
+    """The negotiation must not swallow the no-JS path."""
+    from extensions import db
+    from models import SessionExercise
+
+    from app import app as flask_app
+
+    session_id, se_id, _ = temp_finished_session
+    with flask_app.app_context():
+        set_id = next(s.id for s in db.session.get(SessionExercise, se_id).sets if s.completed)
+
+    response = client.post(f'/gym/set/{set_id}/update', data={'weight': '42.0', 'reps': '8'})
+    assert response.status_code in (302, 303)

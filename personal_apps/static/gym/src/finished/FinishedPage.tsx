@@ -1,6 +1,8 @@
+import { useState, type FormEvent } from 'react'
 import type {
   FinishedExercise, FinishedPayload, RecordKind, SessionRecord,
 } from './types'
+import { postForm, MutationFailed } from '../api'
 import { kg1, volume as de } from '../format'
 import { useSheets } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
@@ -87,9 +89,39 @@ function RecordRow({ record }: { record: SessionRecord }) {
   )
 }
 
-export function FinishedPage({ payload }: { payload: FinishedPayload }) {
+export function FinishedPage({ payload: initial }: { payload: FinishedPayload }) {
   const openSheet = useSheets((s) => s.open)
+  // The server's answer to every save IS the next payload (_mutation_response
+  // returns FinishedPayload for a finished session), so a correction re-renders
+  // the whole debrief -- verdict, tags, sets_display -- without a reload, and
+  // the sheet you saved from stays open.
+  const [payload, setPayload] = useState(initial)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const { session } = payload
+
+  /** Submit this form's fields over fetch instead of navigating. just_finished
+   *  is preserved from the mount: the flare celebrates the visit, not the
+   *  data, and a POST carries no ?just_finished. */
+  const saves = (url: string | ((fields: FormData) => string)) =>
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const form = event.currentTarget
+      const fields = new FormData(form)
+      void (async () => {
+        try {
+          const target = typeof url === 'string' ? url : url(fields)
+          const entries: Record<string, string> = {}
+          fields.forEach((value, key) => { entries[key] = String(value) })
+          const fresh = await postForm<FinishedPayload>(target, entries)
+          setPayload((previous) => ({ ...fresh, just_finished: previous.just_finished }))
+          setSaveError(null)
+        } catch (error) {
+          setSaveError(error instanceof MutationFailed
+            ? error.germanMessage
+            : 'Speichern fehlgeschlagen.')
+        }
+      })()
+    }
 
   const elapsed = Math.floor(
     (local(session.finished_at).getTime() - local(session.started_at).getTime()) / 60000)
@@ -339,12 +371,16 @@ export function FinishedPage({ payload }: { payload: FinishedPayload }) {
 
       {/* Deleting a workout is a rare correction, not the way out of this
           screen. It used to be the largest, brightest, right-most element. */}
+      {saveError !== null && (
+        <p className="flash flash--error" role="alert">{saveError}</p>
+      )}
       <div className="quiet-acts">
         <button type="button" className="quiet-acts__btn"
           onClick={() => openSheet('sheet-meta')}>
           Körpergewicht &amp; Notiz
         </button>
-        <form method="post" action={`/gym/session/${session.id}/deload`}>
+        <form method="post" action={`/gym/session/${session.id}/deload`}
+          onSubmit={saves(`/gym/session/${session.id}/deload`)}>
           <input type="hidden" name="on" value={session.is_deload ? '0' : '1'} />
           <input type="hidden" name="pct"
             value={String(session.deload_pct ?? payload.deload_default_pct)} />
@@ -367,8 +403,12 @@ export function FinishedPage({ payload }: { payload: FinishedPayload }) {
           owned_session() has no finished-check, so the route already accepted
           this, only the UI was missing. */}
       <Sheet id="sheet-meta" title="Workout">
+        {saveError !== null && (
+          <p className="flash flash--error" role="alert">{saveError}</p>
+        )}
         <div className="sheet__group">
-          <form method="post" action={`/gym/sessions/${session.id}/meta`}>
+          <form method="post" action={`/gym/sessions/${session.id}/meta`}
+            onSubmit={saves(`/gym/sessions/${session.id}/meta`)}>
             <div className="sheet__row">
               <label className="label" htmlFor="finished-session-bodyweight">
                 Körpergewicht (kg)
@@ -392,6 +432,9 @@ export function FinishedPage({ payload }: { payload: FinishedPayload }) {
           grid of number fields that has no business sitting under the debrief
           every time. */}
       <Sheet id="sheet-correct" title="Sätze & Notizen">
+        {saveError !== null && (
+          <p className="flash flash--error" role="alert">{saveError}</p>
+        )}
         {payload.exercises.map((entry) => (
           <div className="sheet__group" key={entry.position}>
             {/* .label is the meta treatment: uppercase, mono, letterspaced. 4.4
@@ -399,7 +442,8 @@ export function FinishedPage({ payload }: { payload: FinishedPayload }) {
                 face, and calls it the most-violated rule in this project. */}
             <h3 className="correct__name">{entry.name}</h3>
             {entry.set_rows.map((s, i) => (
-              <form method="post" action={`/gym/set/${s.id}/update`} className="sheet__row" key={s.id}>
+              <form method="post" action={`/gym/set/${s.id}/update`} className="sheet__row"
+                key={s.id} onSubmit={saves(`/gym/set/${s.id}/update`)}>
                 <span className="label">{i + 1}</span>
                 <input type="number" name="weight" step="0.5" min="0"
                   className="input input--num" defaultValue={s.weight}
@@ -418,7 +462,8 @@ export function FinishedPage({ payload }: { payload: FinishedPayload }) {
                 belong to this workout, not to the set values. */}
             {entry.session_exercise_id !== null && (
               <form method="post"
-                action={`/gym/session-exercises/${entry.session_exercise_id}/meta`}>
+                action={`/gym/session-exercises/${entry.session_exercise_id}/meta`}
+                onSubmit={saves(`/gym/session-exercises/${entry.session_exercise_id}/meta`)}>
                 <label className="sheet__row">
                   <input type="checkbox" name="pain" className="check"
                     defaultChecked={entry.pain} />

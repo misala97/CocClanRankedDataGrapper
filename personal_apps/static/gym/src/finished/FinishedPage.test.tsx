@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FinishedPage } from './FinishedPage'
 import type { FinishedExercise, FinishedPayload, SessionRecord } from './types'
 import { useSheets } from '../session/stores'
@@ -334,5 +334,67 @@ describe('FinishedPage', () => {
     // Not one of the two ways out of this screen.
     expect(screen.getByRole('link', { name: 'Zum Start' })).toHaveAttribute('href', '/gym')
     expect(screen.getByRole('link', { name: 'Verlauf' })).toHaveAttribute('href', '/gym/verlauf')
+  })
+})
+
+describe('saving without a reload', () => {
+  const fetchPayload = (over: Partial<FinishedPayload>) =>
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...base, ...over }),
+    } as unknown as Response))
+
+  it('posts the correction and re-renders from the answer, sheet still open', async () => {
+    const fresh = exercise({ sets_display: '2 × 65 kg', set_rows: [
+      { id: 501, weight: 65, reps: 8 }, { id: 502, weight: 60, reps: 8 },
+    ] })
+    // just_finished true in the ANSWER: the client must overwrite it with its
+    // own, because a POST carries no ?just_finished and the flare belongs to
+    // the visit.
+    vi.stubGlobal('fetch', fetchPayload({ exercises: [fresh], just_finished: false }))
+
+    mount({ just_finished: true })
+    await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+    const sheet = screen.getByRole('dialog')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Satz 1 speichern' }))
+
+    const [url, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/gym/set/501/update')
+    expect((init.headers as Record<string, string>)['Accept']).toBe('application/json')
+    expect((init.body as FormData).get('weight')).toBe('60')
+
+    // Re-rendered from the answer...
+    expect(screen.getByText('2 × 65 kg')).toBeInTheDocument()
+    // ...with the sheet still open and the visit's flag preserved.
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Dieses Workout als Vorlage speichern?')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('re-renders the verdict when the deload toggle answers', async () => {
+    vi.stubGlobal('fetch', fetchPayload({
+      session: { ...base.session, is_deload: true, deload_pct: 60 },
+      is_deload: true,
+    }))
+    mount()
+    await userEvent.click(screen.getByRole('button', { name: 'War ein Deload' }))
+    expect(await screen.findByText('Als Deload markiert. Bewusst leichter.'))
+      .toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deload-Markierung entfernen' }))
+      .toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('says so when the save fails, and keeps the page', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline') }))
+    mount()
+    await userEvent.click(screen.getByRole('button', { name: /Körpergewicht/ }))
+    const sheet = screen.getByRole('dialog')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Speichern' }))
+    expect(await within(sheet).findByRole('alert'))
+      .toHaveTextContent('Verbindung fehlgeschlagen')
+    // Nothing navigated, nothing blanked.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Push Day')
+    vi.unstubAllGlobals()
   })
 })

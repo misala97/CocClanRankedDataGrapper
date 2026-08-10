@@ -590,6 +590,11 @@ def _mutation_response(session_, endpoint, **values):
     wants_json = (request.accept_mimetypes.accept_json
                   and not request.accept_mimetypes.accept_html)
     if wants_json:
+        # The island that asked gets the payload for the page it is: a
+        # correction saved from the debrief re-renders the debrief, not the
+        # live screen's shape wearing a finished_at.
+        if session_.finished_at:
+            return jsonify(_finished_payload(session_).model_dump(mode='json'))
         return jsonify(_session_payload(session_).model_dump(mode='json'))
     return redirect(url_for(endpoint, **values))
 
@@ -606,168 +611,188 @@ def gym_session_detail_json(session_id):
     return jsonify(_session_payload(session_).model_dump(mode='json'))
 
 
+def _finished_payload(session_):
+    """The debrief as a validated payload -- session_report plus everything it
+    structurally cannot know (real set ids, the session's own deload state,
+    measured rest). Shared by the page render and by _mutation_response, so a
+    correction saved from the finished page answers with the same shape the
+    page was mounted from.
+
+    Re-queries with eager loads regardless of how `session_` arrived:
+    performed_from_session walks se.sets, se.exercise and se.replaced_by per
+    row, all lazy -- 21 queries on a 7-exercise session without this.
+
+    `just_finished` reads the request args, so it is False on every mutation
+    POST; the island preserves its own flag across payload swaps because the
+    flare celebrates the visit, not the data.
+    """
+    # The finished workout is one page now (spec 6.5): build the report
+    # and hand off to session_finished.html instead of session_detail.html.
+    #
+    # Eager-loaded first. performed_from_session walks se.sets, se.exercise
+    # and se.replaced_by per row, all lazy -- 21 queries on a 7-exercise
+    # session. The live branch below already avoids touching se.replaced_by
+    # for exactly this reason and says so in its own comment; this branch
+    # was doing it twice.
+    session_ = (
+        my_sessions()
+        .options(
+            joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
+            joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
+            joinedload(WorkoutSession.exercises).joinedload(SessionExercise.replaced_by),
+        )
+        .filter(WorkoutSession.id == session_.id)
+        .one()
+    )
+    current = performed_from_session(session_)
+    history = [
+        row for row in load_performed(exercise_ids=[row.exercise_id for row in current])
+        if row.session_id != session_.id
+    ]
+    comparable = []
+    previous_session = None
+    if session_.template_id:
+        cohort = (
+            my_sessions()
+            .options(load_only(WorkoutSession.id, WorkoutSession.started_at))
+            .filter(
+                WorkoutSession.id != session_.id,
+                WorkoutSession.finished_at.isnot(None),
+                WorkoutSession.template_id == session_.template_id,
+                # A deliberately light session must not deflate the average
+                # every later session of this template is compared against.
+                # session_report cannot do this itself -- it receives bare
+                # floats with no flag to filter on.
+                WorkoutSession.is_deload.is_(False),
+            )
+            .all()
+        )
+        cohort_ids = {other.id for other in cohort}
+        volumes = {}
+        for row in load_performed():
+            if row.session_id in cohort_ids:
+                volumes[row.session_id] = volumes.get(row.session_id, 0.0) + stats.row_volume(row)
+        comparable = [volume for volume in volumes.values() if volume > 0]
+
+        # The session before this one, of the same routine. The mean is a
+        # judgement -- half of all sessions fall below it by construction --
+        # while "last time" is a fact, and the page had nothing to compare
+        # against except the mean. Every volume needed for this was already
+        # in `volumes`; only the mean survived.
+        earlier = sorted(
+            (other for other in cohort
+             if other.started_at < session_.started_at and volumes.get(other.id)),
+            key=lambda other: other.started_at,
+        )
+        if earlier:
+            last = earlier[-1]
+            previous_session = {
+                'id': last.id,
+                'started_at': last.started_at,
+                'volume': round(volumes[last.id], 1),
+            }
+    data = stats.session_report(current, history, comparable_session_volumes=comparable)
+    data['previous_session'] = previous_session
+    # session_report()'s entries carry only plain (weight, reps) tuples --
+    # PerformedExercise is deliberately ORM-free (stats.py has zero
+    # SQLAlchemy dependency, see its module docstring). The "correct a
+    # past set" affordance needs a real SessionSet.id to POST to
+    # gym_update_set, so attach the real rows here instead. `current`
+    # (and therefore data['exercises'], built from it 1:1 in order) came
+    # from performed_from_session()'s filtered/ordered walk of
+    # session_.exercises -- skip a replaced-away original, skip an
+    # exercise with no completed sets. Re-deriving that exact filter and
+    # zipping lines each entry back up with its real SessionExercise.
+    reported_session_exercises = [
+        se for se in session_.exercises
+        if not se.replaced_by and any(s.completed for s in se.sets)
+    ]
+    # Seeded before the zip: the template guarded on the presence of these
+    # keys, and the payload has to carry them either way rather than let a
+    # short zip drop a field the contract requires.
+    for entry in data['exercises']:
+        entry['set_rows'] = []
+        entry['session_exercise_id'] = None
+        entry['notes'] = None
+        entry['pain'] = False
+    for entry, se in zip(data['exercises'], reported_session_exercises):
+        entry['set_rows'] = [{'id': s.id, 'weight': s.weight, 'reps': s.reps}
+                             for s in se.sets if s.completed]
+        # Same reason as set_rows above: the note-and-pain fields
+        # (the debrief's "Sätze & Notizen" sheet) post to
+        # gym_update_session_exercise_meta, which needs the real
+        # SessionExercise id and its current notes/pain -- session_report's
+        # own entries carry neither.
+        entry['session_exercise_id'] = se.id
+        entry['notes'] = se.notes
+        entry['pain'] = se.pain
+    # session_report only sees PerformedExercise rows, which do not carry
+    # the percentage -- it belongs to the session row, and is carried there.
+    data.pop('deload_pct')
+    # Whether the deload percentage was actually applied to these weights.
+    # A finished session always has completed sets, so flagging one
+    # retroactively never rewrites anything -- without this the page would
+    # claim a percentage of the working weight over the real weights the
+    # user lifted. Same test the live page uses.
+    data['deload_applied'] = any(
+        s.base_weight is not None for se in session_.exercises for s in se.sets)
+    data['deload_default_pct'] = stats.DELOAD_DEFAULT_PCT
+    # The closed tick strip: one tick per logged set, in order, so the
+    # debrief finishes the thing the live screen spent the workout filling.
+    #
+    # A record is an exercise-level fact here (session_report awards one per
+    # exercise), so only a WEIGHT record can honestly be attributed to a
+    # single set -- the one that lifted it, first match only. Volume and
+    # e1RM records belong to the exercise as a whole and are carried by the
+    # flare and the per-exercise tag instead of by a gold tick that would be
+    # pointing at an arbitrary set.
+    records_by_name = {record['name']: record for record in data['records']}
+    tick_states = []
+    for entry in data['exercises']:
+        record = records_by_name.get(entry['name'])
+        claimed = False
+        for set_row in entry['set_rows']:
+            is_record = (
+                record is not None and record['kind'] == 'weight'
+                and not claimed and set_row['weight'] == record['value']
+            )
+            if is_record:
+                claimed = True
+            tick_states.append('record' if is_record else 'done')
+    data['tick_states'] = tick_states
+    # Rest measured rather than planned: the gap between consecutive sets, which
+    # exists only for sessions logged since completed_at was added. None means
+    # "no timestamps", which the template must render as silence, not as zero.
+    rest_gaps = stats.rest_gaps(_session_rest_entries(session_))
+    data['rest_taken_seconds'] = sum(actual for actual, _ in rest_gaps) or None
+    data['weekday_short'] = list(WEEKDAY_SHORT)
+    # Reading a three-week-old session from Verlauf is not celebrating, so
+    # the flare only fires on arrival. A query argument, not state -- the
+    # redirect that lands here is the only thing that sets it.
+    data['just_finished'] = request.args.get('just_finished') is not None
+    data['session'] = {
+        'id': session_.id, 'name': session_.name,
+        'started_at': session_.started_at, 'finished_at': session_.finished_at,
+        'is_deload': session_.is_deload, 'deload_pct': session_.deload_pct,
+        'bodyweight_kg': session_.bodyweight_kg, 'notes': session_.notes,
+        'template_id': session_.template_id,
+        'template_name': session_.template.name if session_.template else None,
+    }
+    return FinishedPayload(**data)
+
+
 @gym_bp.route('/gym/session/<int:session_id>')
 @login_required
 def session_detail(session_id):
     session_ = owned_session(session_id)
 
     if session_.finished_at:
-        # The finished workout is one page now (spec 6.5): build the report
-        # and hand off to session_finished.html instead of session_detail.html.
-        #
-        # Eager-loaded first. performed_from_session walks se.sets, se.exercise
-        # and se.replaced_by per row, all lazy -- 21 queries on a 7-exercise
-        # session. The live branch below already avoids touching se.replaced_by
-        # for exactly this reason and says so in its own comment; this branch
-        # was doing it twice.
-        session_ = (
-            my_sessions()
-            .options(
-                joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
-                joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
-                joinedload(WorkoutSession.exercises).joinedload(SessionExercise.replaced_by),
-            )
-            .filter(WorkoutSession.id == session_.id)
-            .one()
-        )
-        current = performed_from_session(session_)
-        history = [
-            row for row in load_performed(exercise_ids=[row.exercise_id for row in current])
-            if row.session_id != session_.id
-        ]
-        comparable = []
-        previous_session = None
-        if session_.template_id:
-            cohort = (
-                my_sessions()
-                .options(load_only(WorkoutSession.id, WorkoutSession.started_at))
-                .filter(
-                    WorkoutSession.id != session_.id,
-                    WorkoutSession.finished_at.isnot(None),
-                    WorkoutSession.template_id == session_.template_id,
-                    # A deliberately light session must not deflate the average
-                    # every later session of this template is compared against.
-                    # session_report cannot do this itself -- it receives bare
-                    # floats with no flag to filter on.
-                    WorkoutSession.is_deload.is_(False),
-                )
-                .all()
-            )
-            cohort_ids = {other.id for other in cohort}
-            volumes = {}
-            for row in load_performed():
-                if row.session_id in cohort_ids:
-                    volumes[row.session_id] = volumes.get(row.session_id, 0.0) + stats.row_volume(row)
-            comparable = [volume for volume in volumes.values() if volume > 0]
-
-            # The session before this one, of the same routine. The mean is a
-            # judgement -- half of all sessions fall below it by construction --
-            # while "last time" is a fact, and the page had nothing to compare
-            # against except the mean. Every volume needed for this was already
-            # in `volumes`; only the mean survived.
-            earlier = sorted(
-                (other for other in cohort
-                 if other.started_at < session_.started_at and volumes.get(other.id)),
-                key=lambda other: other.started_at,
-            )
-            if earlier:
-                last = earlier[-1]
-                previous_session = {
-                    'id': last.id,
-                    'started_at': last.started_at,
-                    'volume': round(volumes[last.id], 1),
-                }
-        data = stats.session_report(current, history, comparable_session_volumes=comparable)
-        data['previous_session'] = previous_session
-        # session_report()'s entries carry only plain (weight, reps) tuples --
-        # PerformedExercise is deliberately ORM-free (stats.py has zero
-        # SQLAlchemy dependency, see its module docstring). The "correct a
-        # past set" affordance needs a real SessionSet.id to POST to
-        # gym_update_set, so attach the real rows here instead. `current`
-        # (and therefore data['exercises'], built from it 1:1 in order) came
-        # from performed_from_session()'s filtered/ordered walk of
-        # session_.exercises -- skip a replaced-away original, skip an
-        # exercise with no completed sets. Re-deriving that exact filter and
-        # zipping lines each entry back up with its real SessionExercise.
-        reported_session_exercises = [
-            se for se in session_.exercises
-            if not se.replaced_by and any(s.completed for s in se.sets)
-        ]
-        # Seeded before the zip: the template guarded on the presence of these
-        # keys, and the payload has to carry them either way rather than let a
-        # short zip drop a field the contract requires.
-        for entry in data['exercises']:
-            entry['set_rows'] = []
-            entry['session_exercise_id'] = None
-            entry['notes'] = None
-            entry['pain'] = False
-        for entry, se in zip(data['exercises'], reported_session_exercises):
-            entry['set_rows'] = [{'id': s.id, 'weight': s.weight, 'reps': s.reps}
-                                 for s in se.sets if s.completed]
-            # Same reason as set_rows above: the note-and-pain fields
-            # (the debrief's "Sätze & Notizen" sheet) post to
-            # gym_update_session_exercise_meta, which needs the real
-            # SessionExercise id and its current notes/pain -- session_report's
-            # own entries carry neither.
-            entry['session_exercise_id'] = se.id
-            entry['notes'] = se.notes
-            entry['pain'] = se.pain
-        # session_report only sees PerformedExercise rows, which do not carry
-        # the percentage -- it belongs to the session row, and is carried there.
-        data.pop('deload_pct')
-        # Whether the deload percentage was actually applied to these weights.
-        # A finished session always has completed sets, so flagging one
-        # retroactively never rewrites anything -- without this the page would
-        # claim a percentage of the working weight over the real weights the
-        # user lifted. Same test the live page uses.
-        data['deload_applied'] = any(
-            s.base_weight is not None for se in session_.exercises for s in se.sets)
-        data['deload_default_pct'] = stats.DELOAD_DEFAULT_PCT
-        # The closed tick strip: one tick per logged set, in order, so the
-        # debrief finishes the thing the live screen spent the workout filling.
-        #
-        # A record is an exercise-level fact here (session_report awards one per
-        # exercise), so only a WEIGHT record can honestly be attributed to a
-        # single set -- the one that lifted it, first match only. Volume and
-        # e1RM records belong to the exercise as a whole and are carried by the
-        # flare and the per-exercise tag instead of by a gold tick that would be
-        # pointing at an arbitrary set.
-        records_by_name = {record['name']: record for record in data['records']}
-        tick_states = []
-        for entry in data['exercises']:
-            record = records_by_name.get(entry['name'])
-            claimed = False
-            for set_row in entry['set_rows']:
-                is_record = (
-                    record is not None and record['kind'] == 'weight'
-                    and not claimed and set_row['weight'] == record['value']
-                )
-                if is_record:
-                    claimed = True
-                tick_states.append('record' if is_record else 'done')
-        data['tick_states'] = tick_states
-        # Rest measured rather than planned: the gap between consecutive sets, which
-        # exists only for sessions logged since completed_at was added. None means
-        # "no timestamps", which the template must render as silence, not as zero.
-        rest_gaps = stats.rest_gaps(_session_rest_entries(session_))
-        data['rest_taken_seconds'] = sum(actual for actual, _ in rest_gaps) or None
-        data['weekday_short'] = list(WEEKDAY_SHORT)
-        # Reading a three-week-old session from Verlauf is not celebrating, so
-        # the flare only fires on arrival. A query argument, not state -- the
-        # redirect that lands here is the only thing that sets it.
-        data['just_finished'] = request.args.get('just_finished') is not None
-        data['session'] = {
-            'id': session_.id, 'name': session_.name,
-            'started_at': session_.started_at, 'finished_at': session_.finished_at,
-            'is_deload': session_.is_deload, 'deload_pct': session_.deload_pct,
-            'bodyweight_kg': session_.bodyweight_kg, 'notes': session_.notes,
-            'template_id': session_.template_id,
-            'template_name': session_.template.name if session_.template else None,
-        }
+        # The finished workout is one page now (spec 6.5): hand off to
+        # session_finished.html with the debrief payload.
         return render_template(
             'gym/session_finished.html',
             session=session_,
-            payload_json=FinishedPayload(**data).model_dump(mode='json'),
+            payload_json=_finished_payload(session_).model_dump(mode='json'),
         )
 
     # mode='json' so datetimes are ISO strings the island can parse. `session`

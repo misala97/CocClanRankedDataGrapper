@@ -1,68 +1,18 @@
 import type { SessionDetailPayload } from './types'
+import { getJson, postForm, MutationFailed } from '../api'
 
 /**
  * Every write the live workout can perform, and the one read it starts from.
- *
- * `Accept: application/json` is not optional and not a nicety. The routes
- * negotiate: a browser form post sends text/html followed by a wildcard, and a
- * bare fetch() sends the wildcard alone -- and a wildcard accepts HTML, so
- * neither of them gets JSON. Only this explicit header distinguishes the
- * island, and without it every mutation would answer with a 302 the client
- * cannot use. Pinned server-side by test_a_bare_fetch_does_not_get_json.
+ * The HTTP core (Accept negotiation, timeout, MutationFailed) lives in
+ * ../api.ts and is shared with the other islands' saves.
  */
-const JSON_HEADERS = { Accept: 'application/json' }
+export { MutationFailed }
 
-/**
- * A request that never resolves is the worst failure mode: the sweep runs
- * forever and the banner never comes, so the screen says "working" for as long
- * as you look at it. Eight seconds is well past a slow gym-wifi round trip and
- * well short of the point where you would put the phone down.
- */
-const TIMEOUT_MS = 8000
+const post = (url: string, fields: Record<string, string | number | boolean> = {}) =>
+  postForm<SessionDetailPayload>(url, fields)
 
-export class MutationFailed extends Error {
-  constructor(readonly reason: 'timeout' | 'network') {
-    super(reason)
-  }
-
-  /** The message the banner shows. German, because the banner is German. */
-  get germanMessage(): string {
-    return this.reason === 'timeout'
-      ? 'Keine Antwort vom Server — deine letzte Änderung wurde nicht gespeichert.'
-      : 'Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.'
-  }
-}
-
-async function post(url: string, fields: Record<string, string | number | boolean> = {}) {
-  const body = new FormData()
-  for (const [key, value] of Object.entries(fields)) {
-    body.append(key, String(value))
-  }
-
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-  try {
-    const response = await fetch(url, {
-      method: 'POST', body, headers: JSON_HEADERS,
-      credentials: 'same-origin', signal: controller.signal,
-    })
-    if (!response.ok) throw new MutationFailed('network')
-    return await response.json() as SessionDetailPayload
-  } catch (error) {
-    if (error instanceof MutationFailed) throw error
-    throw new MutationFailed(
-      (error as Error)?.name === 'AbortError' ? 'timeout' : 'network')
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-export async function fetchSession(sessionId: number): Promise<SessionDetailPayload> {
-  const response = await fetch(`/gym/session/${sessionId}/detail.json`, {
-    headers: JSON_HEADERS, credentials: 'same-origin',
-  })
-  if (!response.ok) throw new MutationFailed('network')
-  return await response.json() as SessionDetailPayload
+export function fetchSession(sessionId: number): Promise<SessionDetailPayload> {
+  return getJson<SessionDetailPayload>(`/gym/session/${sessionId}/detail.json`)
 }
 
 export const api = {

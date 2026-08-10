@@ -109,37 +109,6 @@ def test_unchecked_pain_clears_the_flag(client, temp_session):
         assert se.pain is False
 
 
-@pytest.fixture()
-def temp_finished_session():
-    """Same shape as temp_session, but FINISHED and with one completed set --
-    session_detail() hands a finished session to session_finished.html, and
-    that template only lists an exercise that has at least one completed set
-    (see routes.py's reported_session_exercises filter)."""
-    with flask_app.app_context():
-        exercise = Exercise(name='ZZ Test Finished Session Fields', user_id=_admin_id())
-        db.session.add(exercise)
-        db.session.flush()
-        session = WorkoutSession(name='ZZ Test Finished Session', user_id=_admin_id(),
-                                 started_at=dt.datetime.utcnow() - dt.timedelta(hours=1),
-                                 finished_at=dt.datetime.utcnow())
-        db.session.add(session)
-        db.session.flush()
-        se = SessionExercise(session_id=session.id, exercise_id=exercise.id, position=1)
-        se.sets = [SessionSet(position=1, weight=50.0, reps=8, completed=True)]
-        db.session.add(se)
-        db.session.commit()
-        ids = (session.id, se.id, exercise.id)
-    yield ids
-    with flask_app.app_context():
-        session = db.session.get(WorkoutSession, ids[0])
-        if session is not None:
-            db.session.delete(session)
-        exercise = db.session.get(Exercise, ids[2])
-        if exercise is not None:
-            db.session.delete(exercise)
-        db.session.commit()
-
-
 def test_meta_routes_persist_against_a_finished_session(client, temp_finished_session):
     """Finding 1: bodyweight, session note, exercise note and the pain flag
     must stay editable after "Workout beenden" -- forgetting to log one
