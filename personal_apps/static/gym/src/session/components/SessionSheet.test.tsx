@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,7 +12,9 @@ beforeEach(() => {
   usePush.setState(usePush.getInitialState(), true)
 })
 
-const base = {
+// Typed explicitly: an empty literal infers as never[], so any test passing a
+// populated partnerStatus would fail to compile while the suite stayed green.
+const base: ComponentProps<typeof SessionSheet> = {
   session: payload.session,
   resting: false,
   partners: [{ id: 7, username: 'Anna' }],
