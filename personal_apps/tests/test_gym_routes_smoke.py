@@ -990,9 +990,12 @@ def test_finished_session_advice_snaps_to_the_exercises_real_stack_stops(
     session_finished.html, the app's own "go heavier" prescription.
     """
     html = client.get(f'/gym/session/{scratch_stagnant_stack_session}').get_data(as_text=True)
-    assert 'auf' in html and 'gehen' in html, 'expected a "Nächstes Mal" advice block'
-    assert '<b>68,0 kg</b> gehen' in html
-    assert '63,5' not in html
+    advice = embedded_payload(html)['advice']
+    assert advice, 'expected a "Nächstes Mal" advice entry'
+    # The prescription itself, not the sentence FinishedPage wraps it in:
+    # snapped to the stack's real 68 kg stop rather than the arithmetic 63,5.
+    assert advice[0]['suggested_weight'] == 68.0
+    assert 63.5 not in [item['suggested_weight'] for item in advice]
 
 
 def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session):
@@ -1140,14 +1143,19 @@ def test_the_finished_page_can_actually_save_a_freeform_workout_as_a_template():
             # The prompt is gated on ?just_finished -- it is offered at the one
             # moment you know what you did, not on every later visit.
             html = client.get(f'/gym/session/{sid}?just_finished=1').get_data(as_text=True)
-            assert 'als Vorlage speichern' in html, 'the freeform prompt did not render'
+            payload = embedded_payload(html)
+            # What the server decides: the prompt is offered at the one moment
+            # you know what you did, and it is the freeform variant because
+            # this session came from no template.
+            assert payload['just_finished'] is True, 'the prompt would not render'
+            assert payload['session']['template_id'] is None
+            assert payload['total_sets'] > 0
 
-            form = html.split('save_as_template', 1)[1].split('</form>', 1)[0]
-            field = re.search(r'<input[^>]*type="text"[^>]*name="([^"]+)"', form)
-            assert field, 'no text input in the save-as-template form'
-
+            # The field name the form actually posts is checked against what
+            # this route reads by test_every_react_form_posts_fields_its_own_
+            # route_reads; here the round trip is what matters.
             response = client.post(f'/gym/session/{sid}/save_as_template',
-                                   data={field.group(1): 'pytest finished tpl name'})
+                                   data={'template_name': 'pytest finished tpl name'})
             assert response.status_code in (302, 303)
 
         with flask_app.app_context():
@@ -1173,17 +1181,9 @@ def test_the_finished_page_can_actually_save_a_freeform_workout_as_a_template():
                     db.session.delete(doomed)
                     db.session.commit()
 
-def test_every_gym_form_posts_fields_its_own_route_reads():
-    """The class of bug behind the finished page's broken save-as-template: the
-    form posted `name` while gym_save_as_template reads `template_name`, so the
-    route saw an empty string, skipped its `if`, and redirected -- the same
-    redirect a success produces. Ten days of a button that looked like it worked.
-
-    Checking that *some* route reads a field is not enough: `name` is read by
-    gym_add_exercise, so a global scan passes while the form is still broken.
-    The pairing is what matters, so this resolves each form's own action to its
-    route function and checks that function's body.
-    """
+def _route_bodies():
+    """{route function name: its own source, plus the source of everything it
+    calls}. Shared by the two form/route pairing tests below."""
     import re
     from pathlib import Path
 
@@ -1228,9 +1228,38 @@ def test_every_gym_form_posts_fields_its_own_route_reads():
             text += '\n' + resolve(callee, seen)
         return text
 
+    return bodies, resolve
+
+
+#: A form control that names a field. Excludes `name="{...` so a Jinja- or
+#: JSX-interpolated name is skipped rather than reported as a literal.
+CONTROL_RE = r'<(?:input|select|textarea)\b[^>]*\bname="([^"{]+)"'
+
+
+def test_every_jinja_form_posts_fields_its_own_route_reads():
+    """The class of bug behind the finished page's broken save-as-template: the
+    form posted `name` while gym_save_as_template reads `template_name`, so the
+    route saw an empty string, skipped its `if`, and redirected -- the same
+    redirect a success produces. Ten days of a button that looked like it worked.
+
+    Checking that *some* route reads a field is not enough: `name` is read by
+    gym_add_exercise, so a global scan passes while the form is still broken.
+    The pairing is what matters, so this resolves each form's own action to its
+    route function and checks that function's body.
+
+    The Jinja half. Every gym page that becomes a React island takes its forms
+    with it, so this one shrinks towards covering nothing without ever failing
+    -- which is why the TSX half below is named as its pair rather than as an
+    extra.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(flask_app.root_path)
+    bodies, resolve = _route_bodies()
     form_re = re.compile(
         r"<form[^>]*action=\"\{\{\s*url_for\('gym\.(\w+)'.*?\}\}\"(.*?)</form>", re.S)
-    control_re = re.compile(r'<(?:input|select|textarea)\b[^>]*\bname="([^"{]+)"')
+    control_re = re.compile(CONTROL_RE)
 
     problems = []
     for path in sorted((root / 'templates' / 'gym').glob('*.html')):
@@ -1246,6 +1275,51 @@ def test_every_gym_form_posts_fields_its_own_route_reads():
                                     f'which never reads it')
 
     assert not problems, 'form/route field mismatch:\n  ' + '\n  '.join(problems)
+
+
+def test_every_react_form_posts_fields_its_own_route_reads():
+    """The TSX half of the pairing check above, and the stricter of the two.
+
+    A Jinja form names its route through url_for, so a typo is a 500 the first
+    time anyone opens the page. A React form carries a literal path string,
+    which nothing validates -- a wrong URL is a silent 404 on submit, and four
+    of them were written into the finished page's first draft. So this resolves
+    each action against the real url_map before it looks at any field: an
+    action that matches no POST route is the failure, not just a field the
+    route ignores.
+    """
+    import re
+    from pathlib import Path
+
+    bodies, resolve = _route_bodies()
+    adapter = flask_app.url_map.bind('localhost')
+    src = Path(flask_app.root_path) / 'static' / 'gym' / 'src'
+    files = sorted(p for p in src.rglob('*.tsx') if '.test.' not in p.name)
+    assert files, f'no React sources under {src} -- this test would pass by reading nothing'
+
+    # action={`...`} or action="..." through to the matching </form>.
+    form_re = re.compile(r'<form[^>]*\baction=\{?[`"]([^`"]+)[`"]\}?(.*?)</form>', re.S)
+    control_re = re.compile(CONTROL_RE)
+
+    problems = []
+    for path in files:
+        for action, body in form_re.findall(path.read_text(encoding='utf-8')):
+            # Every ${...} is an id being interpolated; 1 matches any <int:>
+            # converter, which is the only kind these routes use.
+            url = re.sub(r'\$\{[^}]*\}', '1', action)
+            try:
+                endpoint, _ = adapter.match(url, method='POST')
+            except Exception as exc:
+                problems.append(f'{path.name}: posts to {url!r}, which matches no '
+                                f'POST route ({type(exc).__name__})')
+                continue
+            route = resolve(endpoint.split('.')[-1])
+            for field in sorted(set(control_re.findall(body))):
+                if f"'{field}'" not in route and f'"{field}"' not in route:
+                    problems.append(f'{path.name}: posts {field!r} to {endpoint}, '
+                                    f'which never reads it')
+
+    assert not problems, 'form/route mismatch:\n  ' + '\n  '.join(problems)
 
 
 def _finished_freeform_session(name):

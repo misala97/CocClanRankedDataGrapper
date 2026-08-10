@@ -8,7 +8,7 @@ import datetime as dt
 import pytest
 
 from app import app as flask_app
-from conftest import _admin_id
+from conftest import _admin_id, embedded_payload
 
 
 @pytest.fixture()
@@ -154,7 +154,7 @@ def test_the_finished_page_reports_the_rest_it_measured(client, finished_with_re
     """3 minutes then 2 gives 5 minutes of counted rest."""
     session_id, _ = finished_with_rest
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
-    assert 'davon 5 Minuten Pause' in html
+    assert embedded_payload(html)['rest_taken_seconds'] == 300
 
 
 def test_the_finished_page_says_nothing_about_rest_without_stamps(client, scratch_live_set):
@@ -172,7 +172,9 @@ def test_the_finished_page_says_nothing_about_rest_without_stamps(client, scratc
         db.session.commit()
 
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
-    assert 'Pause' not in html, 'claimed a rest figure with no timestamps to build it from'
+    # None, not 0: the page renders the absence as silence, and a 0 would have
+    # it print "davon unter 1 Minute Pause" about a session it cannot time.
+    assert embedded_payload(html)['rest_taken_seconds'] is None,         'claimed a rest figure with no timestamps to build it from'
 
 
 def test_statistik_reports_planned_against_actual_rest(client, finished_with_rest):

@@ -7,7 +7,7 @@ import pytest
 from app import app as flask_app
 from extensions import db
 from models import Exercise, WorkoutSession, SessionExercise, SessionSet
-from conftest import _admin_id
+from conftest import _admin_id, embedded_payload
 
 
 @pytest.fixture()
@@ -188,13 +188,14 @@ def test_finished_session_page_renders_bodyweight_and_exercise_note_fields(clien
         db.session.commit()
 
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
-    assert 'name="bodyweight_kg"' in html
-    assert 'value="91.4"' in html
-    assert 'nach Feierabend' in html
-    assert f'name="pain"' in html and 'checked' in html
-    assert 'rechtes Knie zwickt' in html
-    assert f'/gym/sessions/{session_id}/meta' in html
-    assert f'/gym/session-exercises/{se_id}/meta' in html
+    payload = embedded_payload(html)
+    assert payload['session']['bodyweight_kg'] == 91.4
+    assert payload['session']['notes'] == 'nach Feierabend'
+    entry = next(e for e in payload['exercises'] if e['session_exercise_id'] == se_id)
+    assert entry['pain'] is True
+    assert entry['notes'] == 'rechtes Knie zwickt'
+    # The routes the two sheets post to are checked as a pair against what
+    # those routes read, in test_gym_routes_smoke's react-form test.
 
 
 def test_meta_routes_require_login(anon_client, temp_session):

@@ -21,7 +21,7 @@ from models import (
 )
 from auth import login_required
 from features.gym import stats
-from features.gym.schemas import HeutePayload, SessionDetailPayload
+from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
 from features.gym.scope import (
     current_user_id, my_exercises, my_sessions, my_templates,
     owned_exercise, owned_session, owned_session_exercise, owned_set,
@@ -694,17 +694,28 @@ def session_detail(session_id):
             se for se in session_.exercises
             if not se.replaced_by and any(s.completed for s in se.sets)
         ]
+        # Seeded before the zip: the template guarded on the presence of these
+        # keys, and the payload has to carry them either way rather than let a
+        # short zip drop a field the contract requires.
+        for entry in data['exercises']:
+            entry['set_rows'] = []
+            entry['session_exercise_id'] = None
+            entry['notes'] = None
+            entry['pain'] = False
         for entry, se in zip(data['exercises'], reported_session_exercises):
-            entry['set_rows'] = [s for s in se.sets if s.completed]
+            entry['set_rows'] = [{'id': s.id, 'weight': s.weight, 'reps': s.reps}
+                                 for s in se.sets if s.completed]
             # Same reason as set_rows above: the note-and-pain fields
-            # (session_finished.html's "Sätze & Notizen" sheet)
-            # post to gym_update_session_exercise_meta, which needs the real
+            # (the debrief's "Sätze & Notizen" sheet) post to
+            # gym_update_session_exercise_meta, which needs the real
             # SessionExercise id and its current notes/pain -- session_report's
             # own entries carry neither.
-            entry['session_exercise'] = se
+            entry['session_exercise_id'] = se.id
+            entry['notes'] = se.notes
+            entry['pain'] = se.pain
         # session_report only sees PerformedExercise rows, which do not carry
-        # the percentage -- it belongs to the session row itself.
-        data['deload_pct'] = session_.deload_pct
+        # the percentage -- it belongs to the session row, and is carried there.
+        data.pop('deload_pct')
         # Whether the deload percentage was actually applied to these weights.
         # A finished session always has completed sets, so flagging one
         # retroactively never rewrites anything -- without this the page would
@@ -727,10 +738,10 @@ def session_detail(session_id):
         for entry in data['exercises']:
             record = records_by_name.get(entry['name'])
             claimed = False
-            for set_row in entry.get('set_rows', []):
+            for set_row in entry['set_rows']:
                 is_record = (
                     record is not None and record['kind'] == 'weight'
-                    and not claimed and set_row.weight == record['value']
+                    and not claimed and set_row['weight'] == record['value']
                 )
                 if is_record:
                     claimed = True
@@ -740,9 +751,25 @@ def session_detail(session_id):
         # exists only for sessions logged since completed_at was added. None means
         # "no timestamps", which the template must render as silence, not as zero.
         rest_gaps = stats.rest_gaps(_session_rest_entries(session_))
-        rest_taken_seconds = sum(actual for actual, _ in rest_gaps) or None
-        return render_template('gym/session_finished.html', session=session_,
-                               weekday_short=WEEKDAY_SHORT, rest_taken_seconds=rest_taken_seconds, **data)
+        data['rest_taken_seconds'] = sum(actual for actual, _ in rest_gaps) or None
+        data['weekday_short'] = list(WEEKDAY_SHORT)
+        # Reading a three-week-old session from Verlauf is not celebrating, so
+        # the flare only fires on arrival. A query argument, not state -- the
+        # redirect that lands here is the only thing that sets it.
+        data['just_finished'] = request.args.get('just_finished') is not None
+        data['session'] = {
+            'id': session_.id, 'name': session_.name,
+            'started_at': session_.started_at, 'finished_at': session_.finished_at,
+            'is_deload': session_.is_deload, 'deload_pct': session_.deload_pct,
+            'bodyweight_kg': session_.bodyweight_kg, 'notes': session_.notes,
+            'template_id': session_.template_id,
+            'template_name': session_.template.name if session_.template else None,
+        }
+        return render_template(
+            'gym/session_finished.html',
+            session=session_,
+            payload_json=FinishedPayload(**data).model_dump(mode='json'),
+        )
 
     # mode='json' so datetimes are ISO strings the island can parse. `session`
     # is still passed separately because the shell's <title> block reads its

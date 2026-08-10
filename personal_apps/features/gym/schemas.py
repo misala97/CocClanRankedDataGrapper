@@ -515,3 +515,135 @@ class HeutePayload(_Model):
     tonnage_peak: float
     templates: list[RoutineMemory]
     pending_invites: list[PendingInvite]
+
+
+# ---------------------------------------------------------------------------
+# The finished workout (the debrief).
+#
+# session_detail() branches on finished_at and builds this from
+# stats.session_report(), then bolts on what session_report structurally
+# cannot know: the real SessionSet rows the correction sheet posts to, the
+# session's own deload percentage, and the measured rest.
+# ---------------------------------------------------------------------------
+
+
+class FinishedSession(_Model):
+    """The session row. finished_at is never None here -- that is the branch
+    this page IS."""
+    id: int
+    name: str | None
+    started_at: datetime
+    finished_at: datetime
+    is_deload: bool
+    deload_pct: int | None
+    bodyweight_kg: float | None
+    notes: str | None
+    template_id: int | None
+    template_name: str | None
+
+
+class CorrectableSet(_Model):
+    """One completed set, as the correction sheet edits it. `id` is the real
+    SessionSet, because that is what gym_update_set writes to -- session_report
+    hands back bare (weight, reps) tuples and the sheet cannot post to those."""
+    id: int
+    weight: float
+    reps: int
+
+
+class FinishedExercise(_Model):
+    """One row of the Nach-Übung list, and one group of the correction sheet.
+
+    `sets` is session_report's own list of (weight, reps) pairs; `set_rows`
+    are the same sets with their database ids, attached by the route. Both are
+    carried: the display line is built from the former by stats.py, the sheet
+    edits the latter.
+    """
+    exercise_id: int
+    name: str
+    position: int
+    sets: list[tuple[float, int]]
+    sets_display: str
+    volume: float
+    best_weight: float
+    e1rm: float
+    has_history: bool
+    avg_volume: float | None
+    volume_delta_pct: int | None
+    is_weight_pr: bool
+    is_volume_pr: bool
+    is_e1rm_pr: bool
+    sessions_since_pr: int | None
+    # 'rekord' | 'stagniert' | 'steigend' | 'neu', or None -- a deload sets
+    # every verdict to None, which is why the tag strip can be empty.
+    verdict: str | None
+    set_rows: list[CorrectableSet]
+    # The per-exercise note and pain flag, which belong to the workout rather
+    # than to the set values. None for an exercise with no SessionExercise
+    # behind it, which the sheet renders as no form.
+    session_exercise_id: int | None
+    notes: str | None
+    pain: bool
+
+
+class SessionRecord(_Model):
+    """One record this session set. Ranked by kind then by relative gain, so
+    records[0] is the strongest claim rather than the biggest number."""
+    kind: Literal['weight', 'e1rm', 'volume']
+    name: str
+    exercise_id: int
+    position: int
+    value: float
+    previous: float
+    previous_at: datetime
+
+
+class SessionAdvice(_Model):
+    """A plateau worth acting on next time. Only ever produced for a verdict of
+    'stagniert', so a deload can never generate any."""
+    exercise_id: int
+    name: str
+    stuck_at: float
+    sessions: int
+    suggested_weight: float
+
+
+class PreviousSession(_Model):
+    """The session before this one, of the same routine. A fact, next to the
+    mean, which is a judgement."""
+    id: int
+    started_at: datetime
+    volume: float
+
+
+class FinishedPayload(_Model):
+    session: FinishedSession
+    exercises: list[FinishedExercise]
+    total_volume: float
+    total_sets: int
+    avg_total_volume: float | None
+    total_volume_delta_pct: int | None
+    records: list[SessionRecord]
+    record_count: int
+    advice: list[SessionAdvice]
+    is_deload: bool
+    # No top-level deload_pct: session_report reports one as None for shape
+    # stability, and the real value lives on the session row. Carrying it
+    # under two names is how the header and the verdict came to read
+    # different fields for the same number.
+    deload_default_pct: int
+    # Whether the percentage was actually applied to these weights. Flagging a
+    # session retroactively never rewrites them, and without this the page
+    # would quote a percentage of a working weight over the real numbers.
+    deload_applied: bool
+    previous_session: PreviousSession | None
+    # One entry per logged set, in order: 'record' only for the single set that
+    # lifted a WEIGHT record, 'done' for the rest.
+    tick_states: list[Literal['record', 'done']]
+    # Measured rest, not planned -- the gap between consecutive sets. None for
+    # any session logged before completed_at existed, which the page renders as
+    # silence rather than as zero.
+    rest_taken_seconds: int | None
+    weekday_short: list[str]
+    # Celebrate on arrival, not on every later visit from Verlauf.
+    just_finished: bool
