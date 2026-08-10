@@ -48,6 +48,19 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='gym/figtree.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
     <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
+    {# Registered on every page load, not only when push is enabled -- the
+       worker also serves the hashed bundles cache-first (sw.js), and a cache
+       that only exists for push users is not a cache. Idempotent; same
+       scope the push path registers with.
+
+       Scope '/gym', NOT '/gym/': a scope is a URL prefix, and the Start page
+       lives at /gym itself -- with the slash, every page was controlled
+       except the one the app opens on. #}
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/gym' });
+    }
+    </script>
 </head>
 {# `body_class` lets a page opt into a shell mode. Only session_detail.html uses
    it today, for `is-focus` (no tab bar, one way out). It is the template's call

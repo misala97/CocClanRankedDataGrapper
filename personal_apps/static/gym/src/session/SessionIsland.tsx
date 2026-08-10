@@ -39,7 +39,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   const setSubscribed = usePush((s) => s.setSubscribed)
   useEffect(() => {
     if (!pushSupported) { setSubscribed(false); return }
-    navigator.serviceWorker.getRegistration('/gym/')
+    navigator.serviceWorker.getRegistration('/gym')
       .then((registration) => registration?.pushManager.getSubscription() ?? null)
       .then((subscription) => setSubscribed(subscription !== null))
       .catch(() => setSubscribed(false))
@@ -176,7 +176,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
  *  it to go missing. Null whenever VAPID is unset in .env. */
 async function enablePush(vapidPublicKey: string | null) {
   if (vapidPublicKey === null) return
-  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/gym/' })
+  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/gym' })
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') return
   const subscription = await registration.pushManager.subscribe({

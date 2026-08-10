@@ -83,7 +83,7 @@ export function StartPage({ payload }: { payload: HeutePayload }) {
   const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window
   useEffect(() => {
     if (!pushSupported) { setSubscribed(false); return }
-    navigator.serviceWorker.getRegistration('/gym/')
+    navigator.serviceWorker.getRegistration('/gym')
       .then((reg) => reg?.pushManager.getSubscription() ?? null)
       .then((sub) => setSubscribed(sub !== null))
       .catch(() => setSubscribed(false))
@@ -443,7 +443,7 @@ async function enablePush(
   setSubscribed: (value: boolean) => void,
 ): Promise<void> {
   if (vapidPublicKey === null) return
-  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/gym/' })
+  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/gym' })
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') return
   const padding = '='.repeat((4 - (vapidPublicKey.length % 4)) % 4)

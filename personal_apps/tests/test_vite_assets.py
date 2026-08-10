@@ -115,3 +115,23 @@ def test_a_template_typo_fails_loudly():
 
     with pytest.raises(ViteManifestError, match='nosuchentry'):
         flask_app.jinja_env.from_string("{{ vite_asset('nosuchentry') }}").render()
+
+
+def test_hashed_bundles_are_served_immutable():
+    """The dist assets carry their content hash in the filename, so the same
+    URL can never mean different bytes -- revalidating them on every
+    navigation buys nothing. Everything else under /static keeps Flask's
+    default no-cache, because gym.css and sw.js DO change in place."""
+    import glob
+    import os
+    from app import app as flask_app
+
+    bundle = os.path.basename(glob.glob(
+        os.path.join(flask_app.root_path, 'static', 'gym', 'dist', 'assets', '*.js'))[0])
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as client:
+        hashed = client.get(f'/static/gym/dist/assets/{bundle}')
+        plain = client.get('/static/gym/gym.css')
+    assert hashed.status_code == 200
+    assert hashed.headers['Cache-Control'] == 'public, max-age=31536000, immutable'
+    assert 'immutable' not in (plain.headers.get('Cache-Control') or '')

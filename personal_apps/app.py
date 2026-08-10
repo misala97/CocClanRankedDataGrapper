@@ -61,6 +61,23 @@ app.register_blueprint(gym_bp)
 from vite_assets import resolve_asset
 app.jinja_env.globals['vite_asset'] = resolve_asset
 
+
+@app.after_request
+def _immutable_hashed_assets(response):
+    # The dist bundles carry their content hash in the filename, so a URL can
+    # never mean different bytes -- a rebuild changes the name, not the file.
+    # Flask's default (no-cache) made the browser revalidate every bundle on
+    # every navigation for nothing. Scoped to dist/assets/: gym.css and sw.js
+    # DO change in place and must keep revalidating.
+    if request.path.startswith('/static/gym/dist/assets/'):
+        # Werkzeug's static handler has already written no-cache; clear it
+        # rather than appending after it.
+        response.cache_control.no_cache = None
+        response.cache_control.public = True
+        response.cache_control.max_age = 31536000
+        response.cache_control.immutable = True
+    return response
+
 # Hostname that should require login for every page (the "full access" domain).
 # Other hostnames (e.g. the public pubquiz-only domain) are unaffected and keep
 # whatever per-route protection each blueprint already defines.
