@@ -21,6 +21,15 @@ const PATHS = {
       <path d="M10.2 3.3l2.3 2.3" />
     </>
   ),
+  // Filled, stroke-less: three dots drawn as outlines at this size read as
+  // rings rather than as a menu mark.
+  more: (
+    <>
+      <circle cx="8" cy="3.4" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="12.6" r="1.15" fill="currentColor" stroke="none" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS

@@ -148,3 +148,27 @@ export const usePush = create<PushState>((set) => ({
   subscribed: null,
   setSubscribed: (subscribed) => set({ subscribed }),
 }))
+
+
+// ---------------------------------------------------------------------------
+// The screen's live region.
+//
+// A live region has to persist to be announced -- the original kept #rest-announce
+// outside #session-body for exactly that reason, because a freshly inserted
+// region carrying pre-filled text does not reliably announce it. React keeps
+// it mounted, so what is left is the other half of the problem: writing the
+// same string into a live region does not re-fire it, and two identical
+// announcements in a row are two events. Hence the nonce.
+// ---------------------------------------------------------------------------
+
+interface AnnouncerState {
+  message: string
+  nonce: number
+  announce(message: string): void
+}
+
+export const useAnnouncer = create<AnnouncerState>((set) => ({
+  message: '',
+  nonce: 0,
+  announce: (message) => set((state) => ({ message, nonce: state.nonce + 1 })),
+}))
