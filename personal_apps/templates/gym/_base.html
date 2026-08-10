@@ -47,6 +47,10 @@
     <link rel="preload" href="{{ url_for('static', filename='gym/fonts/figtree-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ url_for('static', filename='gym/figtree.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
+    {# The CSRF token the islands read: src/api.ts sends it as X-CSRF-Token on
+       every fetch, <CsrfField/> embeds it in every native form. Minted per
+       session by auth._get_csrf_token (the same token the auth forms use). #}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
     {# Registered on every page load, not only when push is enabled -- the
        worker also serves the hashed bundles cache-first (sw.js), and a cache

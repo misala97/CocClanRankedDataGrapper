@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import type { SessionDetailPayload } from './types'
 import { api, fetchSession } from './api'
+import { csrfToken } from '../csrf'
 import { sessionKey, useSessionMutation } from './useSessionMutation'
 import * as optimistic from './optimistic'
 import { usePush, useSaveState, useSheets } from './stores'
@@ -190,7 +191,7 @@ async function enablePush(vapidPublicKey: string | null) {
   })
   await fetch('/gym/push/subscribe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify(subscription.toJSON()),
   })
   usePush.getState().setSubscribed(true)

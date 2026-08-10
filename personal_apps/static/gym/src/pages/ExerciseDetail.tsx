@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { CsrfField } from '../csrf'
 import type { ExerciseDetailPayload } from '../types'
 import { shortDate } from '../format'
 import { Icon } from '../components/Icon'
@@ -135,6 +136,7 @@ export function ExerciseDetailPage({ payload, nameTaken }: Props) {
           {p.can_delete && (
             <form method="post" action={`/gym/exercises/${id}/delete`}
               onSubmit={(e) => { if (!confirm('Übung löschen?')) e.preventDefault() }}>
+              <CsrfField />
               <button type="submit" className="quiet-acts__btn quiet-acts__btn--danger">
                 Übung löschen
               </button>

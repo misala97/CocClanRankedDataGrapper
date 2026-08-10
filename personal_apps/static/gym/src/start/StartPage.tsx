@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { HeutePayload, RoutineMemory, Stall } from './types'
 import { postForm, MutationFailed } from '../api'
+import { csrfToken, CsrfField } from '../csrf'
 import { UndoToast, useUndo } from '../undo'
 import { recency, sincePr } from '../catalogue/format'
 import { useSheets, usePush } from '../session/stores'
@@ -84,12 +85,14 @@ function RoutineEdit({ routine, onSave, onDelete }: RoutineEditProps) {
         <form method="post" action={`/gym/templates/${routine.template_id}/rename`}
           className="lead__edit-form"
           onSubmit={submit(`/gym/templates/${routine.template_id}/rename`)}>
+          <CsrfField />
           <input type="text" name="name" defaultValue={routine.name} className="input"
             aria-label={`Neuer Name für ${routine.name}`} required />
           <button type="submit" className="btn btn--ghost btn--sm">Speichern</button>
         </form>
         <form method="post" action={`/gym/templates/${routine.template_id}/delete`}
           onSubmit={remove}>
+          <CsrfField />
           <button type="submit" className="btn btn--quiet-danger btn--sm btn--block">
             Löschen
           </button>
@@ -271,6 +274,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                     what makes it worth reading when it appears. */}
                 <LeadWatch lead={lead} stalls={payload.stalls} />
                 <form method="post" action="/gym/start">
+                  <CsrfField />
                   <input type="hidden" name="template_id" value={lead.template_id} />
                   <button type="submit" className="lead__go">
                     <Icon name="skip" />
@@ -298,6 +302,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                   <RoutineEdit routine={routine} onSave={saveRoutine} onDelete={deleteRoutine} />
                   {canStart && (
                     <form method="post" action="/gym/start">
+                      <CsrfField />
                       <input type="hidden" name="template_id" value={routine.template_id} />
                       <button type="submit" className="row__go">Starten</button>
                     </form>
@@ -479,6 +484,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
 
       <Sheet id="sheet-free" title="Freies Workout" closeLabel="Abbrechen">
         <form method="post" action="/gym/start">
+          <CsrfField />
           <div className="field grow">
             <label className="label" htmlFor="start-name">Name (optional)</label>
             <input type="text" id="start-name" name="name" className="input"
@@ -532,7 +538,7 @@ async function enablePush(
   })
   await fetch('/gym/push/subscribe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify(subscription.toJSON()),
   })
   setSubscribed(true)

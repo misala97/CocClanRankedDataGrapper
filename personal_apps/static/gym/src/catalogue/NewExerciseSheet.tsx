@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { CsrfField } from '../csrf'
 import { Sheet } from '../session/components/Sheet'
 
 interface Props {
@@ -40,6 +41,7 @@ export function NewExerciseSheet({
   return (
     <Sheet id="sheet-new-exercise" title="Neue Übung" closeLabel="Abbrechen">
       <form method="post" action="/gym/exercises/add" onSubmit={submit}>
+        <CsrfField />
         <div className="field grow">
           <label className="label" htmlFor="uebungen-add-name">Name</label>
           <input type="text" id="uebungen-add-name" name="name" className="input"

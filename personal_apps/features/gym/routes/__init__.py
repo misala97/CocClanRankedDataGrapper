@@ -10,6 +10,8 @@ scripts/make_chart_fixture.py import these private helpers from
 `features.gym.routes`, and keeping that path working is what let the 2912-line
 routes.py split into this package without touching a single caller.
 """
+from flask import abort, current_app, request
+
 from ._blueprint import gym_bp
 
 from . import helpers          # noqa: F401
@@ -41,5 +43,29 @@ from .exercise_detail import (                                         # noqa: F
 # sharing.py needs it too and cannot import a module that registers routes.
 # Three tests import it from `features.gym.routes`, so the path has to survive.
 from ..seeding import _last_full_performance                           # noqa: F401
+
+@gym_bp.before_request
+def _require_csrf_on_writes():
+    """Second defence layer on every gym write, behind SameSite=Lax.
+
+    The token is auth.py's own per-session one (_get_csrf_token mints it,
+    the shell's <meta name="csrf-token"> delivers it): islands send it as
+    X-CSRF-Token from src/api.ts, native forms as a hidden csrf_token field
+    via <CsrfField/>. One rule at the blueprint gate rather than thirty
+    per-route checks, because the route that forgets is the whole exploit.
+
+    Suites run with the gate open -- Flask-WTF's own convention -- so five
+    hundred tests do not each mint and thread a token; test_gym_csrf.py sets
+    CSRF_STRICT and pins the closed gate explicitly.
+    """
+    if request.method != 'POST':
+        return
+    if current_app.config.get('TESTING') and not current_app.config.get('CSRF_STRICT'):
+        return
+    from auth import _valid_csrf
+    submitted = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+    if not _valid_csrf(submitted):
+        abort(403)
+
 
 __all__ = ['gym_bp']

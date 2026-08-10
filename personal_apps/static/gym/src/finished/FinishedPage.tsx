@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { CsrfField } from '../csrf'
 import type {
   FinishedExercise, FinishedPayload, RecordKind, SessionRecord,
 } from './types'
@@ -336,6 +337,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                   e.preventDefault()
                 }
               }}>
+              <CsrfField />
               <button type="submit" className="btn btn--ghost btn--block">
                 Vorlage aktualisieren
               </button>
@@ -348,6 +350,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           <section className="prompt">
             Dieses Workout als Vorlage speichern?
             <form method="post" action={`/gym/session/${session.id}/save_as_template`}>
+              <CsrfField />
               {/* template_name, not name: that is what gym_save_as_template
                   reads. This said name= from the day the finished pages were
                   merged, so the route saw an empty string, skipped its `if`,
@@ -381,6 +384,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         </button>
         <form method="post" action={`/gym/session/${session.id}/deload`}
           onSubmit={saves(`/gym/session/${session.id}/deload`)}>
+          <CsrfField />
           <input type="hidden" name="on" value={session.is_deload ? '0' : '1'} />
           <input type="hidden" name="pct"
             value={String(session.deload_pct ?? payload.deload_default_pct)} />
@@ -390,6 +394,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         </form>
         <form method="post" action={`/gym/session/${session.id}/delete`}
           onSubmit={(e) => { if (!confirm('Workout unwiderruflich löschen?')) e.preventDefault() }}>
+          <CsrfField />
           <button type="submit" className="quiet-acts__btn quiet-acts__btn--danger">
             Workout löschen
           </button>
@@ -409,6 +414,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         <div className="sheet__group">
           <form method="post" action={`/gym/sessions/${session.id}/meta`}
             onSubmit={saves(`/gym/sessions/${session.id}/meta`)}>
+            <CsrfField />
             <div className="sheet__row">
               <label className="label" htmlFor="finished-session-bodyweight">
                 Körpergewicht (kg)
@@ -444,6 +450,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             {entry.set_rows.map((s, i) => (
               <form method="post" action={`/gym/set/${s.id}/update`} className="sheet__row"
                 key={s.id} onSubmit={saves(`/gym/set/${s.id}/update`)}>
+                <CsrfField />
                 <span className="label">{i + 1}</span>
                 <input type="number" name="weight" step="0.5" min="0"
                   className="input input--num" defaultValue={s.weight}
@@ -464,6 +471,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
               <form method="post"
                 action={`/gym/session-exercises/${entry.session_exercise_id}/meta`}
                 onSubmit={saves(`/gym/session-exercises/${entry.session_exercise_id}/meta`)}>
+                  <CsrfField />
                 <label className="sheet__row">
                   <input type="checkbox" name="pain" className="check"
                     defaultChecked={entry.pain} />

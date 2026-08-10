@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { CsrfField } from '../csrf'
 import type { ExerciseMeta } from '../types'
 
 interface Props {
@@ -50,6 +51,7 @@ export const EditSheet = forwardRef<EditSheetHandle, Props>(function EditSheet(
       </div>
       <div className="sheet__body">
         <form method="post" action={`/gym/exercises/${exercise.id}/update`}>
+          <CsrfField />
           <div className="field grow">
             <label className="label" htmlFor="meta-name">Name</label>
             <input type="text" id="meta-name" name="name" className="input"

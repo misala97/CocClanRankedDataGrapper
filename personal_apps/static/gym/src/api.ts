@@ -7,7 +7,14 @@
 // island, and without it every mutation would answer with a 302 the client
 // cannot use. Pinned server-side by test_a_bare_fetch_does_not_get_json.
 
+import { csrfToken } from './csrf'
+
 const JSON_HEADERS = { Accept: 'application/json' }
+
+/** Every write carries the session's CSRF token -- the fetch twin of the
+ *  hidden field native forms embed. Built per request: the token is read
+ *  lazily from the shell's meta tag. */
+const writeHeaders = () => ({ ...JSON_HEADERS, 'X-CSRF-Token': csrfToken() })
 
 /**
  * A request that never resolves is the worst failure mode: the screen says
@@ -53,7 +60,7 @@ export async function postFormData<T>(
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
     const response = await fetch(url, {
-      method: 'POST', body, headers: JSON_HEADERS,
+      method: 'POST', body, headers: writeHeaders(),
       credentials: 'same-origin', signal: controller.signal,
       // The pagehide flush posts a write the page will not stay alive to see
       // answered; keepalive lets the request outlive the document.

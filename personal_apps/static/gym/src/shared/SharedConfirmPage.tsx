@@ -1,4 +1,5 @@
 import type { SharedConfirmPayload } from './types'
+import { CsrfField } from '../csrf'
 
 /**
  * Reuses the shared form primitives -- `.field` > `label.label` + `.select`,
@@ -25,6 +26,7 @@ export function SharedConfirmPage({ payload }: { payload: SharedConfirmPayload }
               ambiguous ones carry a decision, because asking seven times per
               shared workout would make the common path the annoying one. */}
           <form method="post" action={`/gym/shared/${payload.shared_id}/accept`}>
+            <CsrfField />
             {payload.proposals.map((proposal) => (
               <div className="field grow" key={proposal.leader_exercise_id}>
                 <label className="label" htmlFor={`match-${proposal.leader_exercise_id}`}>
@@ -45,6 +47,7 @@ export function SharedConfirmPage({ payload }: { payload: SharedConfirmPayload }
           </form>
 
           <form method="post" action={`/gym/shared/${payload.shared_id}/decline`}>
+            <CsrfField />
             <button type="submit" className="btn btn--ghost">Ablehnen</button>
           </form>
         </>
