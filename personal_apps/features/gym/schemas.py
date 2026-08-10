@@ -647,3 +647,190 @@ class FinishedPayload(_Model):
     weekday_short: list[str]
     # Celebrate on arrival, not on every later visit from Verlauf.
     just_finished: bool
+
+
+# ---------------------------------------------------------------------------
+# Statistik: the whole history, aggregated.
+#
+# Every model here mirrors one analytics.py return value. The `statable` flags
+# are analytics' own: a section with too little evidence says so rather than
+# stating a confident figure over three data points, and the page reads that
+# flag rather than re-deciding the threshold for itself.
+# ---------------------------------------------------------------------------
+
+
+class BestSession(_Model):
+    session_id: int
+    started_at: datetime
+    volume: float
+
+
+class Totals(_Model):
+    tonnage: float
+    sets: int
+    reps: int
+    sessions: int
+    # All three are None before the first logged set -- the page's own empty
+    # state, not a zero.
+    first_session: datetime | None
+    days_training: int | None
+    best_session: BestSession | None
+
+
+class TonnageMonth(_Model):
+    year: int
+    month: int
+    volume: float
+    #: A month with no training at all, drawn as a break rather than as a zero.
+    is_gap: bool
+    has_deload: bool
+    has_record: bool
+
+
+class ProgressionRow(_Model):
+    """One exercise's whole arc, with its sparkline already drawn.
+
+    Geometry in Python for the same reason the exercise chart's is: an inline
+    SVG inherits the palette where a canvas cannot, and the coordinate
+    arithmetic has one home.
+    """
+    exercise_id: int
+    name: str
+    sessions: int
+    first_e1rm: float
+    current_e1rm: float
+    change_pct: float
+    best_weight: float
+    points: list[float]
+    #: SVG polyline points, from routes._progression_view.
+    spark: str
+    #: Half-width of the diverging bar, scaled against the largest absolute
+    #: change on the page rather than against a fixed 100 %.
+    bar_pct: float
+    is_up: bool
+
+
+class RepBucket(_Model):
+    label: str
+    sets: int
+    share: float
+
+
+class RepRange(_Model):
+    buckets: list[RepBucket]
+    sample: int
+    dominant: RepBucket | None
+    statable: bool
+    #: Sets excluded from the distribution, counted so the page can say so.
+    skipped: int
+
+
+class Fatigue(_Model):
+    """How much a lift drops off across a session."""
+    sample: int
+    statable: bool
+    weight_change_pct: float | None
+    first_reps: float | None
+    last_reps: float | None
+
+
+class DaypartBucket(_Model):
+    #: 'morning' | 'evening' | 'other' -- keyed into DAYPART_NAMES for display.
+    label: str
+    sessions: int
+    volume: float
+    avg_volume: float
+
+
+class Daypart(_Model):
+    parts: list[DaypartBucket]
+    statable: bool
+
+
+class WeekdayBucket(_Model):
+    #: Monday-first, matching WEEKDAY_NAMES.
+    weekday: int
+    sessions: int
+    share: float
+
+
+class Weekday(_Model):
+    days: list[WeekdayBucket]
+    sample: int
+    statable: bool
+
+
+class RestGapBucket(_Model):
+    label: str
+    sessions: int
+    avg_volume: float
+
+
+class RestGap(_Model):
+    buckets: list[RestGapBucket]
+    statable: bool
+
+
+class EffortSlice(_Model):
+    label: str
+    volume: float
+    sets: int
+    share: float
+
+
+class Effort(_Model):
+    groups: list[EffortSlice]
+    exercises: list[EffortSlice]
+    total_volume: float
+
+
+class RecordMove(_Model):
+    value: float
+    previous: float
+
+
+class TimelineRecord(_Model):
+    started_at: datetime
+    session_id: int
+    exercise_id: int
+    name: str
+    #: A session can set either kind, both, or -- for a row that is here at
+    #: all -- at least one.
+    weight: RecordMove | None
+    e1rm: RecordMove | None
+
+
+class RecordYear(_Model):
+    year: int
+    records: list[TimelineRecord]
+
+
+class StatistikPayload(_Model):
+    totals: Totals
+    #: The only figure here not from analytics: cheap from the session dates
+    #: the page has loaded anyway, and the fact that makes the lede worth
+    #: reading.
+    longest_gap: int
+    months: list[TonnageMonth]
+    progression: list[ProgressionRow]
+    rep_range: RepRange
+    min_sets_for_rep_range: int
+    fatigue: Fatigue
+    daypart: Daypart
+    weekday: Weekday
+    rest_gap: RestGap
+    effort: Effort
+    #: (planned, actual) medians in seconds, or None when there is nothing to
+    #: report -- so the page says "noch keine Daten" instead of a confident 0.
+    rest_habit: tuple[int, int] | None
+    #: The newest RECENT_RECORDS shown flat; everything older folded into year
+    #: bands. Bounded by COUNT, not by calendar: grouping by year assumes a
+    #: history that spans years, and on 2 January the largest section on the
+    #: page would have collapsed to one row.
+    records_total: int
+    recent_records: list[TimelineRecord]
+    record_years: list[RecordYear]
+    month_names: list[str]
+    weekday_names: list[str]
+    #: {'morning': 'Vormittags', ...} -- keyed by DaypartBucket.label.
+    daypart_names: dict[str, str]

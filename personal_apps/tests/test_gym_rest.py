@@ -178,11 +178,19 @@ def test_the_finished_page_says_nothing_about_rest_without_stamps(client, scratc
 
 
 def test_statistik_reports_planned_against_actual_rest(client, finished_with_rest):
-    """The fixture plans 150 s and takes 180 and 120, so the medians are
-    2:30 planned against 2:30 actual -- the point is that both are stated."""
+    """Both figures are stated, and both come from real gaps.
+
+    Not a specific pair: `client` is the shared user, so the medians pool
+    every session in the database, not just this fixture's. The exact figure
+    is pinned on a fresh user in
+    test_rest_gaps_are_built_per_session_not_flattened_across_history.
+    """
     html = client.get('/gym/statistik').get_data(as_text=True)
-    assert 'Wie lange pausierst du' in html
-    assert 'Du planst' in html
+    # (planned, actual) in seconds -- StatistikPage formats them as mm:ss.
+    habit = embedded_payload(html)['rest_habit']
+    assert habit is not None, 'the page had no rest figures to state'
+    planned, actual = habit
+    assert planned > 0 and actual > 0
 
 
 @pytest.fixture()
@@ -339,11 +347,11 @@ def test_rest_gaps_are_built_per_session_not_flattened_across_history(two_close_
             flask_session['user_id'] = user_id
         html = test_client.get('/gym/statistik').get_data(as_text=True)
 
-    assert '3:30' in html, \
-        ('gym_statistik did not render the correct per-session pooled actual-rest '
-         'median (210 s -> "3:30"); if it instead flattened both sessions into one '
+    assert embedded_payload(html)['rest_habit'][1] == 210, \
+        ('gym_statistik did not report the correct per-session pooled actual-rest '
+         'median of 210 s; if it instead flattened both sessions into one '
          'rest_gaps() call, the spurious cross-session gap would pull the pooled '
-         'median to 180 s -> "3:00" instead')
+         'median down to 180 s')
 
 
 def test_statistik_says_nothing_about_rest_without_stamps(client):
@@ -359,7 +367,9 @@ def test_statistik_says_nothing_about_rest_without_stamps(client):
         db.session.commit()
     try:
         html = client.get('/gym/statistik').get_data(as_text=True)
-        assert 'Wie lange pausierst du' not in html
+        # None, not a zero pair: the section is absent entirely, because an
+        # unanswerable question on the page reads as a broken feature.
+        assert embedded_payload(html)['rest_habit'] is None
     finally:
         with flask_app.app_context():
             for set_id, when in saved:

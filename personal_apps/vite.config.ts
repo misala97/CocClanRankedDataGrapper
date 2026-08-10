@@ -35,6 +35,7 @@ export default defineConfig({
         history: resolve(here, 'static/gym/src/entries/history.tsx'),
         start: resolve(here, 'static/gym/src/entries/start.tsx'),
         finished: resolve(here, 'static/gym/src/entries/finished.tsx'),
+        statistik: resolve(here, 'static/gym/src/entries/statistik.tsx'),
       },
     },
   },

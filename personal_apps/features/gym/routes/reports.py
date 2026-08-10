@@ -1,7 +1,7 @@
 """Read-only history and statistics pages, plus the JSON export."""
 
 from features.gym import stats
-from features.gym.schemas import HistoryPayload
+from features.gym.schemas import HistoryPayload, StatistikPayload
 from features.gym import export
 from .. import analytics
 import datetime as dt
@@ -319,16 +319,18 @@ def gym_statistik():
         habit_gaps.extend(stats.rest_gaps(_session_rest_entries(session_)))
     rest_habit = stats.rest_medians(habit_gaps)
 
-    return render_template(
-        'gym/statistik.html',
+    payload = StatistikPayload(
         months=analytics.monthly_tonnage(performed, now),
         longest_gap=longest_gap,
-        records=records,
+        # Only the count is read -- the rows themselves reach the page as
+        # recent_records plus the year bands, and shipping all three would
+        # send every record twice.
+        records_total=len(records),
         recent_records=recent_records,
         record_years=record_years,
-        month_names=MONTH_NAMES,
-        daypart_names=DAYPART_NAMES,
-        weekday_names=WEEKDAY_NAMES,
+        month_names=list(MONTH_NAMES),
+        daypart_names=dict(DAYPART_NAMES),
+        weekday_names=list(WEEKDAY_NAMES),
         totals=analytics.totals(performed, now),
         progression=_progression_view(analytics.progression_ranking(performed)),
         rep_range=analytics.rep_range_distribution(performed),
@@ -340,6 +342,8 @@ def gym_statistik():
         effort=analytics.effort_distribution(performed),
         rest_habit=rest_habit,
     )
+    return render_template('gym/statistik.html',
+                           payload_json=payload.model_dump(mode='json'))
 
 
 @gym_bp.route('/gym/export')

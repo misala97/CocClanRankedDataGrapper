@@ -1,27 +1,63 @@
 // German number and date formatting, matching what the Jinja filters produced.
 // Comma decimal separator, dot thousands separator, dd.MM.yyyy dates.
 
-/** `'%.1f'|format(x)` + `.replace('.', ',')`
+/**
+ * `round(value)` as Python does it: a tie goes to the EVEN digit, where
+ * JavaScript's Math.round and toFixed both send it away from zero.
  *
- *  Not just toFixed: Python rounds a tie to the EVEN digit, JavaScript rounds
- *  it away from zero. 3,25 Workouts pro Woche printed as "3,2" for years and
- *  toFixed made it "3,3" -- and ties are not exotic here, they are the normal
- *  case. Everything this formats is a dyadic rational: sessions / 4 weeks, and
- *  weights in 1,25 / 2,5 kg steps. Both are exact in binary, so the tie test
- *  below is exact too, and anything that is not a tie falls through to toFixed,
- *  which agrees with Python everywhere else. */
+ * Every number-rendering helper here needs this, and every one of them is fed
+ * dyadic rationals -- sessions over four weeks, weights in 1,25 / 2,5 kg
+ * steps, shares of a total that land on x,5 -- so ties are the normal case,
+ * not an exotic one. Two of them shipped: "3,25 Workouts pro Woche" printed
+ * 3,2 for years and became 3,3, and a 22,5 % share printed 22 and became 23.
+ *
+ * Exact over that domain, because a dyadic rational scaled by a power of ten
+ * is still exact in binary, so the `=== 0.5` test is a real tie test rather
+ * than a float comparison. Anything that is not a tie is left alone for the
+ * caller to round normally, which agrees with Python everywhere else.
+ *
+ * Outside that domain it can differ by one in the last place: 0,8875 is really
+ * 0,887499..., which Python rounds down and the scaling here reads as a tie.
+ * Nothing on these pages formats a value like that -- the inputs are ints,
+ * one-decimal floats from Python, and quarters -- but it is the boundary.
+ *
+ * Jinja's `|round` filter documents "common" (half-up) rounding and does not
+ * do it -- it delegates to Python's round(). This mirrors the behaviour, not
+ * the documentation.
+ */
+function halfEven(value: number, places = 0): number {
+  const scale = 10 ** places
+  const scaled = value * scale
+  const lower = Math.floor(scaled)
+  if (scaled - lower !== 0.5) return value
+  return (lower % 2 === 0 ? lower : lower + 1) / scale
+}
+
+/** `'%.1f'|format(x)` + `.replace('.', ',')` */
 export function kg1(value: number): string {
-  const tenths = value * 10
-  const lower = Math.floor(tenths)
-  const rounded = tenths - lower === 0.5
-    ? (lower % 2 === 0 ? lower : lower + 1) / 10
-    : value
-  return rounded.toFixed(1).replace('.', ',')
+  return halfEven(value, 1).toFixed(1).replace('.', ',')
 }
 
 /** `'{:,.0f}'.format(v).replace(',', '.')` */
 export function volume(value: number): string {
-  return Math.round(value).toLocaleString('de-DE')
+  return Math.round(halfEven(value)).toLocaleString('de-DE')
+}
+
+/** `x|round|int` -- a whole-number percentage or count. */
+export function whole(value: number): number {
+  return Math.round(halfEven(value))
+}
+
+/** `x|round(places)` -- for a CSS length, where a tie is a pixel either way. */
+export function roundTo(value: number, places: number): number {
+  const scale = 10 ** places
+  return Math.round(halfEven(value, places) * scale) / scale
+}
+
+/** `'%+.0f'|format(x)`, which rounds a tie to even like everything else. */
+export function signedWhole(value: number): string {
+  const rounded = whole(Math.abs(value))
+  return `${value >= 0 ? '+' : '-'}${rounded}`
 }
 
 /** `(x|local).strftime('%d.%m.%Y')`
