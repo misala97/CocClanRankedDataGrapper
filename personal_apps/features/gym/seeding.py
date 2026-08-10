@@ -178,11 +178,11 @@ def _seeded_suggestion(session_, exercise, position, user_id=None):
     it untouched during a deload hands the lifter straight back the
     prescription they just asked for.
 
-    _seeded_sets alone was not enough because it only runs where sets are
-    created -- starting from a template, un-skipping, reordering. An exercise
-    added mid-session gets no sets at all, and a session started WITHOUT a
-    template has none for gym_toggle_deload to scale either, so on that path
-    the suggestion is the only number the lifter ever sees.
+    _seeded_sets alone was not enough because a session started WITHOUT a
+    template has no sets for gym_toggle_deload to scale, so on that path the
+    suggestion is the only number the lifter ever sees. (Mid-session adds used
+    to be a second such gap; gym_add_session_exercise seeds a full plan now,
+    like every other path that puts an exercise into a session.)
     """
     last = _last_performance(exercise.id, position=position, user_id=user_id)
     if not last:
