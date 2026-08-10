@@ -1,0 +1,285 @@
+{
+  "default_plan_reps": 8,
+  "default_plan_weight": 20.0,
+  "deload_applied": false,
+  "deload_default_pct": 70,
+  "deload_pcts": [
+    60,
+    70,
+    80
+  ],
+  "exercises": [
+    {
+      "id": 5528,
+      "muscle_group": "Gesäß",
+      "name": "234234"
+    },
+    {
+      "id": 738,
+      "muscle_group": "Beine",
+      "name": "Beinpresse"
+    },
+    {
+      "id": 9,
+      "muscle_group": "Brust",
+      "name": "Bench Press (Dumbbell)"
+    },
+    {
+      "id": 6,
+      "muscle_group": "Bizeps",
+      "name": "Biceps Curl (Rotating)"
+    },
+    {
+      "id": 10,
+      "muscle_group": "Brust",
+      "name": "Chest Fly (Machine)"
+    },
+    {
+      "id": 8,
+      "muscle_group": "Brust",
+      "name": "Chest Press (Machine, Lying)"
+    },
+    {
+      "id": 7,
+      "muscle_group": "Bizeps",
+      "name": "Hammer Curl (Dumbbell)"
+    },
+    {
+      "id": 5346,
+      "muscle_group": "Schultern",
+      "name": "hihi"
+    },
+    {
+      "id": 1,
+      "muscle_group": "Rücken",
+      "name": "Lat Pulldown (Single Arm, Hauptbahnhof)"
+    },
+    {
+      "id": 16,
+      "muscle_group": "Rücken",
+      "name": "Lat Pulldown Kabelzug"
+    },
+    {
+      "id": 12,
+      "muscle_group": "Schultern",
+      "name": "Lateral Raise (Machine, Good)"
+    },
+    {
+      "id": 11,
+      "muscle_group": "Schultern",
+      "name": "Military Press"
+    },
+    {
+      "id": 50210,
+      "muscle_group": null,
+      "name": "Penispump"
+    },
+    {
+      "id": 5,
+      "muscle_group": "Bizeps",
+      "name": "Preacher Curl (Machine, Good)"
+    },
+    {
+      "id": 17,
+      "muscle_group": "Bizeps",
+      "name": "Preacher Curl Bilateral"
+    },
+    {
+      "id": 4,
+      "muscle_group": "Schultern",
+      "name": "Reverse Fly (Machine)"
+    },
+    {
+      "id": 5527,
+      "muscle_group": null,
+      "name": "sdfsdf"
+    },
+    {
+      "id": 2,
+      "muscle_group": "Rücken",
+      "name": "Seated Row (Machine, Good)"
+    },
+    {
+      "id": 15,
+      "muscle_group": "Rücken",
+      "name": "T Bar Row (Lying)"
+    },
+    {
+      "id": 3,
+      "muscle_group": "Rücken",
+      "name": "T Bar Row (Standing)"
+    },
+    {
+      "id": 14,
+      "muscle_group": "Trizeps",
+      "name": "Triceps Extension (Cable, Overhead)"
+    },
+    {
+      "id": 13,
+      "muscle_group": "Trizeps",
+      "name": "Triceps Pushdown (Cable, EZ Bar)"
+    },
+    {
+      "id": 50211,
+      "muscle_group": null,
+      "name": "ZZTEST Exercise A"
+    },
+    {
+      "id": 50214,
+      "muscle_group": null,
+      "name": "ZZTEST Exercise A2"
+    },
+    {
+      "id": 50213,
+      "muscle_group": "Brust",
+      "name": "ZZTEST Exercise B2"
+    },
+    {
+      "id": 50215,
+      "muscle_group": "Brust",
+      "name": "ZZTEST Exercise B3"
+    },
+    {
+      "id": 50212,
+      "muscle_group": null,
+      "name": "ZZTEST Exercise C"
+    },
+    {
+      "id": 50216,
+      "muscle_group": "Brust",
+      "name": "ZZTEST Exercise C2"
+    },
+    {
+      "id": 50217,
+      "muscle_group": null,
+      "name": "ZZTEST Multi 1"
+    },
+    {
+      "id": 50218,
+      "muscle_group": null,
+      "name": "ZZTEST Multi 2"
+    }
+  ],
+  "has_completed_set": true,
+  "live_id": 10,
+  "live_increment": 2.5,
+  "live_index": 1,
+  "min_full_reps": 10,
+  "muscle_groups": [
+    "Bizeps",
+    "Trizeps",
+    "Brust",
+    "Rücken",
+    "Schultern",
+    "Beine",
+    "Bauch",
+    "Gesäß",
+    "Waden",
+    "Unterarme",
+    "Cardio",
+    "Sonstiges"
+  ],
+  "partner_status": [],
+  "partners": [],
+  "ready_for_more": null,
+  "record_set_ids": [],
+  "rest_total_seconds": 0,
+  "resting": false,
+  "session": {
+    "bodyweight_kg": null,
+    "deload_pct": null,
+    "finished_at": null,
+    "id": 1,
+    "is_deload": false,
+    "name": "Fixture Workout",
+    "notes": null,
+    "rest_ends_at": null,
+    "resting_set_id": null,
+    "started_at": "2026-08-10T16:06:23",
+    "structure_version": 0,
+    "template_id": null,
+    "template_name": null
+  },
+  "session_is_shared": false,
+  "session_volume": 960.0,
+  "sets_done": 1,
+  "sets_open": 2,
+  "sets_total": 3,
+  "stagnation_counts": {},
+  "suggestions": {
+    "10": {
+      "reps": 8,
+      "weight": 60.0
+    },
+    "11": {
+      "reps": 7,
+      "weight": 66.0
+    }
+  },
+  "tick_states": [
+    "done",
+    "now",
+    "open"
+  ],
+  "vapid_public_key": "BIIQUXykM-zucYOPuKEMBuRz2Ba0nysbpuH5gLNc1HCBauYw1UAd5LODCdqjG7hhfumtp_fTTaCfbHTZG26I5vE",
+  "visible_exercises": [
+    {
+      "exercise_id": 1,
+      "id": 10,
+      "increment": 2.5,
+      "is_unilateral": true,
+      "muscle_group": "Rücken",
+      "name": "Lat Pulldown (Single Arm, Hauptbahnhof)",
+      "notes": null,
+      "pain": false,
+      "position": 1,
+      "rest_seconds": null,
+      "sets": [
+        {
+          "base_weight": null,
+          "completed": true,
+          "id": 100,
+          "reps": 8,
+          "weight": 60.0
+        },
+        {
+          "base_weight": null,
+          "completed": false,
+          "id": 101,
+          "reps": 8,
+          "weight": 60.0
+        },
+        {
+          "base_weight": null,
+          "completed": false,
+          "id": 102,
+          "reps": 6,
+          "weight": 62.5
+        }
+      ],
+      "skipped": false
+    },
+    {
+      "exercise_id": 2,
+      "id": 11,
+      "increment": 2.5,
+      "is_unilateral": false,
+      "muscle_group": "Rücken",
+      "name": "Seated Row (Machine, Good)",
+      "notes": null,
+      "pain": false,
+      "position": 2,
+      "rest_seconds": null,
+      "sets": [
+        {
+          "base_weight": null,
+          "completed": false,
+          "id": 103,
+          "reps": 10,
+          "weight": 40.0
+        }
+      ],
+      "skipped": true
+    }
+  ]
+}
