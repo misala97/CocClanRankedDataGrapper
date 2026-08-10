@@ -2,6 +2,7 @@
 delete."""
 
 from features.gym import stats
+from features.gym.schemas import CataloguePayload
 import datetime as dt
 
 from flask import (
@@ -107,18 +108,38 @@ def gym_uebungen():
         if group_name not in MUSCLE_GROUPS:      # NO_GROUP_LABEL and legacy values
             grouped.append((group_name, [entries_by_id[e.id] for e in group_exercises]))
 
-    return render_template(
-        'gym/uebungen.html',
-        grouped=grouped,
-        muscle_groups=MUSCLE_GROUPS,
-        equipment_labels=EQUIPMENT_LABELS,
-        open_by_default=len(exercises) <= UEBUNGEN_FOLD_ABOVE,
+    def as_meta(exercise):
+        return {
+            'id': exercise.id,
+            'name': exercise.name,
+            'muscle_group': exercise.muscle_group,
+            'is_unilateral': exercise.is_unilateral,
+            'default_rest_seconds': exercise.default_rest_seconds,
+            'weight_increment': exercise.weight_increment,
+            'equipment': exercise.equipment,
+            'bar_weight': exercise.bar_weight,
+            'stack_kg': exercise.stack_kg,
+            'secondary_muscle_groups': exercise.secondary_muscle_groups,
+        }
+
+    payload = CataloguePayload.model_validate({
+        'groups': [
+            {'name': name,
+             'entries': [{**entry, 'exercise': as_meta(entry['exercise'])}
+                         for entry in entries]}
+            for name, entries in grouped
+        ],
+        'muscle_groups': list(MUSCLE_GROUPS),
+        'equipment_labels': dict(EQUIPMENT_LABELS),
+        'open_by_default': len(exercises) <= UEBUNGEN_FOLD_ABOVE,
         # The sheet's rest placeholder said 90 while this is what a blank field
         # actually stores.
-        default_rest_seconds=DEFAULT_REST_SECONDS,
-        added_id=_to_int(request.args.get('added')),
-        name_taken=bool(request.args.get('name_taken')),
-    )
+        'default_rest_seconds': DEFAULT_REST_SECONDS,
+        'added_id': _to_int(request.args.get('added')),
+        'name_taken': bool(request.args.get('name_taken')),
+    })
+    return render_template('gym/uebungen.html',
+                           payload_json=payload.model_dump(mode='json'))
 
 
 

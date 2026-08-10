@@ -31,6 +31,7 @@ export default defineConfig({
       input: {
         exercise: resolve(here, 'static/gym/src/entries/exercise.tsx'),
         session: resolve(here, 'static/gym/src/entries/session.tsx'),
+        catalogue: resolve(here, 'static/gym/src/entries/catalogue.tsx'),
       },
     },
   },

@@ -311,3 +311,50 @@ class SessionDetailPayload(_Model):
     partners: list[Partner]
     partner_status: list[PartnerStatus]
     session_is_shared: bool
+
+
+# ---------------------------------------------------------------------------
+# The exercise catalogue.
+#
+# Mirrors what routes/catalogue.py:gym_uebungen computes. The page's three
+# sorts and its search are client-side re-orderings of these same rows, never a
+# second round trip -- a lifter's catalogue is tens of rows.
+# ---------------------------------------------------------------------------
+
+
+class CatalogueEntry(_Model):
+    """One row. `last_weight` is what you would load TODAY, which is the
+    question a catalogue is opened with -- the row used to lead with the
+    all-time best, unlabelled, so a personal record could not be told apart
+    from a working weight."""
+    exercise: ExerciseMeta
+    chip_class: str | None
+    chip_label: str | None
+    last_done: datetime | None
+    best_weight: float | None
+    last_weight: float | None
+    days_ago: int | None
+    sessions_since_pr: int | None
+
+
+class CatalogueGroup(_Model):
+    """A muscle group and its exercises. Seeded from MUSCLE_GROUPS rather than
+    from the catalogue, so a group with nothing in it still gets a band -- the
+    strongest signal for the planning question was otherwise rendered as
+    nothing at all."""
+    name: str
+    entries: list[CatalogueEntry]
+
+
+class CataloguePayload(_Model):
+    groups: list[CatalogueGroup]
+    muscle_groups: list[str]
+    equipment_labels: dict[str, str]
+    # Above UEBUNGEN_FOLD_ABOVE the catalogue opens folded; at or below it
+    # every group starts open. Hardcoded shut, the page's default state
+    # contained no information about the catalogue's size.
+    open_by_default: bool
+    # What a blank rest field actually stores. The sheet's placeholder said 90.
+    default_rest_seconds: int
+    added_id: int | None
+    name_taken: bool
