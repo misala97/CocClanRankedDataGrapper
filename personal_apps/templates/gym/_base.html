@@ -61,6 +61,31 @@
         navigator.serviceWorker.register('/sw.js', { scope: '/gym' });
     }
     </script>
+    {# Speculation rules: the next page starts downloading on touch-down (and
+       on hover, on desktop), so the navigation itself feels instant. PREFETCH,
+       not prerender -- prefetch only pulls the HTML into cache, while
+       prerender would run the page's JavaScript early, and a live clock or a
+       push registration executing in a hidden renderer is not worth the
+       marginal win over prefetch + service-worker-cached bundles.
+
+       Scoped to /gym/* on purpose: /logout is a GET with a side effect, and a
+       prefetch that fires it would silently end the session on hover. The
+       export is excluded too -- prefetching a file download wastes exactly
+       the bytes it claims to save. Browsers without the API ignore the
+       script type wholesale. #}
+    <script type="speculationrules">
+    {
+      "prefetch": [{
+        "where": {
+          "and": [
+            { "href_matches": "/gym/*" },
+            { "not": { "href_matches": "/gym/export*" } }
+          ]
+        },
+        "eagerness": "moderate"
+      }]
+    }
+    </script>
 </head>
 {# `body_class` lets a page opt into a shell mode. Only session_detail.html uses
    it today, for `is-focus` (no tab bar, one way out). It is the template's call
