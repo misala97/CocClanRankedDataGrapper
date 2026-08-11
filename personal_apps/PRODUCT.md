@@ -293,8 +293,8 @@ electric-blue-on-near-black sport broadcast one system ago; lime or acid-green
 on near-black; violet-to-teal fitness gradients; any near-black page background
 at all — the field is a committed colour; italic as a signature; uppercase
 exercise names; colour used decoratively; **emoji as icons** (the app has one
-shared inline-SVG set — `_icon.html` — precisely so that emoji never come
-back); the faces that read as an AI default pick (Inter, Space Grotesk,
+shared inline-SVG set — `static/gym/src/components/Icon.tsx` — precisely so
+that emoji never come back); the faces that read as an AI default pick (Inter, Space Grotesk,
 Outfit).
 
 ## Accessibility & Inclusion
@@ -310,3 +310,28 @@ Outfit).
   primary confirm target is at least 64px tall.
 - `prefers-reduced-motion` disables the flare, the fills, the count-up, and every
   transition.
+
+
+## Implementation (since 2026-08-11)
+
+Where a design change actually lands. The gym pages are **React islands**:
+Flask routes embed a validated JSON payload (`features/gym/schemas.py`) into a
+thin Jinja shell, and everything below the nav renders from
+`static/gym/src/`. The Jinja templates are mount points — do not design in
+them.
+
+- **Tokens** live in `static/gym/gym.css` (its header carries the measured
+  palette arithmetic). Components reference tokens only.
+- **Shared primitives** — change once, every page inherits: the `.row` list
+  grammar, `Sheet` (bottom sheets), `Icon.tsx` (the one SVG set),
+  `Stepper`, the `.sheet-row` menu rows, `.sset` set-editor grid, the
+  `.field` form vocabulary, `UndoToast`.
+- **Guard rails a design pass must keep green:** vitest asserts on rendered
+  markup (`*.test.tsx` beside each page); the chart has a golden-master
+  against the captured original drawing (`ExerciseChart.golden.test.tsx` —
+  overlays go outside `.chart__ink`); the pairing test in
+  `tests/test_gym_routes_smoke.py` checks every form's action and fields
+  against the real routes.
+- **Process:** real HTML mockups against live `gym.css` before component
+  code, one screen per turn; visual verification via python-playwright
+  screenshots at 390×844 and 1280×800, both themes.
