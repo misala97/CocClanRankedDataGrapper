@@ -15,6 +15,13 @@ export function fetchSession(sessionId: number): Promise<SessionDetailPayload> {
   return getJson<SessionDetailPayload>(`/gym/session/${sessionId}/detail.json`)
 }
 
+/** The follower's version check. Reads the caller's OWN session -- a
+ *  structural change arrives as a write into their rows, so nothing here
+ *  reads the partner's data. */
+export function fetchSync(sessionId: number): Promise<{ version: number; shared: boolean }> {
+  return getJson<{ version: number; shared: boolean }>(`/gym/session/${sessionId}/sync.json`)
+}
+
 export const api = {
   /** States the state it wants rather than asking for a flip, which is what
    *  makes gym_toggle_set_complete idempotent -- a second tap is a no-op

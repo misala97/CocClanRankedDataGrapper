@@ -8,6 +8,7 @@ import { sessionKey, useSessionMutation } from './useSessionMutation'
 import * as optimistic from './optimistic'
 import { usePush, useSaveState, useSheets } from './stores'
 import { useWakeLock } from './useWakeLock'
+import { useFollowerSync } from './useFollowerSync'
 import { SessionPage, type SessionActions } from './SessionPage'
 import type { ExerciseSheetActions } from './components/ExerciseSheet'
 
@@ -37,6 +38,14 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     // asking a question it already has the answer to.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
+  })
+
+  // Training with a partner: the leader's structural edits land in these rows
+  // as writes, so the page only has to notice they happened. Server-gated to
+  // the follower half of a live link.
+  useFollowerSync(sessionId, {
+    enabled: data.session_is_shared,
+    knownVersion: data.session.structure_version,
   })
 
   // Only the browser knows whether THIS device is subscribed -- a subscription
