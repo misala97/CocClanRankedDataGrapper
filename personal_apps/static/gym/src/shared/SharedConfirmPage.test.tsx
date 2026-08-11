@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { SharedConfirmPage } from './SharedConfirmPage'
 import type { SharedConfirmPayload } from './types'
@@ -17,6 +18,7 @@ const base: SharedConfirmPayload = {
       candidates: [[57, 'Reverse Fly (Machine)']],
     },
   ],
+  templates: [],
 }
 
 const mount = (over: Partial<SharedConfirmPayload> = {}) =>
@@ -76,5 +78,67 @@ describe('SharedConfirmPage', () => {
     mount({ proposals: [] })
     expect(screen.getByRole('button', { name: 'Mitmachen' })).toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+})
+
+const templates = [
+  { id: 1, name: 'Push', exercise_ids: [55, 57] },
+  { id: 2, name: 'Ganzkörper', exercise_ids: [55] },
+]
+
+// `base.proposals` leaves Butterfly on exact_id: null so the top-level suite
+// can exercise the "Neu anlegen" fallback. Coverage math needs both exercises
+// actually matched going in -- otherwise every "starts fully covered" case
+// here would be indistinguishable from "nothing is covered", and the
+// recount test would toggle a select that was already on its target value,
+// passing whether or not the recount logic works at all.
+const proposals = [
+  {
+    name: 'Bankdrücken', leader_exercise_id: 10, exact_id: 55,
+    candidates: [[55, 'Bankdrücken'], [56, 'Bankdrücken (Kurzhantel)']] as [number, string][],
+  },
+  {
+    name: 'Butterfly', leader_exercise_id: 11, exact_id: 57,
+    candidates: [[57, 'Reverse Fly (Machine)']] as [number, string][],
+  },
+]
+
+describe('the routine picker', () => {
+  it('is absent when no routine shares an exercise', () => {
+    mount({ proposals, templates: [{ id: 3, name: 'Beine', exercise_ids: [99] }] })
+    expect(screen.queryByLabelText('Zählt bei dir als')).not.toBeInTheDocument()
+  })
+
+  it('ranks routines by how much of the workout they cover', () => {
+    mount({ proposals, templates })
+    const options = [...screen.getByLabelText('Zählt bei dir als')
+      .querySelectorAll('option')].map((o) => o.textContent)
+    expect(options).toEqual([
+      'Keine Routine', 'Push — 2 von 2 Übungen', 'Ganzkörper — 1 von 2 Übungen',
+    ])
+  })
+
+  it('preselects a routine that covers the whole workout', () => {
+    mount({ proposals, templates })
+    expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('1')
+  })
+
+  it('preselects nothing when two routines cover it', () => {
+    mount({ proposals, templates: [
+      { id: 1, name: 'Push', exercise_ids: [55, 57] },
+      { id: 2, name: 'Push alt', exercise_ids: [55, 57] },
+    ] })
+    expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('')
+  })
+
+  it('recounts when a match changes, since coverage depends on it', async () => {
+    // The reason this is computed on the client at all: switching the second
+    // exercise away from the routine's drops its coverage in place.
+    const user = userEvent.setup()
+    mount({ proposals, templates })
+    await user.selectOptions(screen.getByLabelText('Butterfly'), 'new')
+    const options = [...screen.getByLabelText('Zählt bei dir als')
+      .querySelectorAll('option')].map((o) => o.textContent)
+    expect(options).toContain('Push — 1 von 2 Übungen')
   })
 })
