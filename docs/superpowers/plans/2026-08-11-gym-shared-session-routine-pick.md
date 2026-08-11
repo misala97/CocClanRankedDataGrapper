@@ -25,11 +25,40 @@
 **Files:**
 - Modify: `personal_apps/features/gym/schemas.py` (add `ConfirmTemplate` next to `MatchProposal` at :878, extend `SharedConfirmPayload` at :894)
 - Modify: `personal_apps/features/gym/routes/partners.py` (`gym_shared_confirm`, :120-161)
-- Test: `personal_apps/tests/test_gym_sharing.py`
+- Test: `personal_apps/tests/test_gym_sharing.py` (including the `leader_with_partner` fixture teardown, :984-1010)
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: `SharedConfirmPayload.templates: list[ConfirmTemplate]`, where `ConfirmTemplate` has `id: int`, `name: str`, `exercise_ids: list[int]`. Task 3 renders from it; Task 2 stores the id it carries.
+
+- [ ] **Step 0: Let the fixture clean up more than one routine**
+
+`leader_with_partner`'s teardown deletes a single template out of a
+`made['template']` slot that tests mutate in. This task's test creates two (one
+per lifter) and Task 2's create one each, so a single slot silently cannot hold
+them — and an undeleted `WorkoutTemplate` blocks the `AppUser` delete that runs
+after it. Replace that block:
+
+```python
+        # Every routine either lifter's test created. This was a single id in
+        # a mutated dict slot, which could hold only one -- and a routine left
+        # behind blocks the AppUser delete below on its foreign key. Sessions
+        # pointing at one are already gone by now; TemplateExercise rows
+        # cascade with their template (WorkoutTemplate.exercises is
+        # delete-orphan).
+        from models import WorkoutTemplate
+        for user_id in (made['leader'], made['partner']):
+            for row in WorkoutTemplate.query.filter_by(user_id=user_id).all():
+                db.session.delete(row)
+        db.session.commit()
+```
+
+Tests no longer need to set `made['template']`; leave the existing
+`test_accepting_does_not_claim_the_leaders_routine` line that does, since it is
+now harmless and removing it is unrelated churn.
+
+Run: `python -m pytest tests/test_gym_sharing.py -q`
+Expected: unchanged — all pass. This step refactors cleanup only.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -58,7 +87,6 @@ def test_confirm_offers_the_followers_own_routines(leader_with_partner):
                                  user_id=leader_with_partner['leader'])
         db.session.add_all([mine, theirs])
         db.session.commit()
-        leader_with_partner['template'] = theirs.id
         expected = {'id': mine.id, 'name': 'pytest partner push',
                     'exercise_ids': [own_bench.id]}
 
@@ -112,9 +140,10 @@ and add the field to `SharedConfirmPayload`:
 
 - [ ] **Step 4: Build it in the confirm route**
 
-In `personal_apps/features/gym/routes/partners.py`, add `WorkoutTemplate` and
-`TemplateExercise` to the `models` import and `my_templates` to the
-`features.gym.scope` import. Then, inside `gym_shared_confirm`, extend the
+In `personal_apps/features/gym/routes/partners.py`, add `WorkoutTemplate` to
+the `models` import and `my_templates` to the `features.gym.scope` import
+(`TemplateExercise` is reached through the relationship, so it is not
+imported). Then, inside `gym_shared_confirm`, extend the
 `if refusal is None:` block — after `proposals = [...]` — with:
 
 ```python
@@ -201,7 +230,6 @@ def test_accepting_books_the_session_under_the_chosen_routine(leader_with_partne
                                user_id=leader_with_partner['partner'])
         db.session.add(mine)
         db.session.commit()
-        leader_with_partner['template'] = mine.id
         template_id = mine.id
 
     follower_session = _accept_with_template(leader_with_partner, template_id)
@@ -222,7 +250,6 @@ def test_accepting_refuses_a_routine_the_follower_does_not_own(leader_with_partn
                                  user_id=leader_with_partner['leader'])
         db.session.add(theirs)
         db.session.commit()
-        leader_with_partner['template'] = theirs.id
         template_id = theirs.id
 
     follower_session = _accept_with_template(leader_with_partner, template_id)
@@ -246,7 +273,6 @@ def test_the_booked_session_counts_as_that_routines_last_performance(leader_with
                                user_id=leader_with_partner['partner'])
         db.session.add(mine)
         db.session.commit()
-        leader_with_partner['template'] = mine.id
         template_id = mine.id
 
     _accept_with_template(leader_with_partner, template_id)
