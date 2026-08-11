@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type {
-  ProgressionRow, StatistikPayload, TimelineRecord,
+  ProgressionRow, StatistikPayload, TimelineRecord, TonnageMonth,
 } from './types'
 import { kg1, roundTo, signedWhole, volume as de, whole } from '../format'
 import { morphFrom } from '../vt'
@@ -16,24 +16,27 @@ const signed1 = (n: number) => `${n >= 0 ? '+' : '-'}${kg1(Math.abs(n))}`
 const mmss = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${pad(seconds % 60)}`
 
-/** The training span in whole years and months, or in days below a month. */
+/** The training span in years and months, or in days below a month. Months
+ *  ROUND rather than floor: 58 days read "1 Monat" next to a career strip
+ *  visibly spanning two. */
 function span(days: number): string {
-  const years = Math.floor(days / 365)
-  const months = Math.floor((days % 365) / 30)
-  if (!years && !months) return `${days} Tage`
+  if (days < 30) return `${days} Tage`
+  let years = Math.floor(days / 365)
+  let months = Math.round((days - years * 365) / 30.44)
+  if (months === 12) { years += 1; months = 0 }
   const parts = []
   if (years) parts.push(`${years} ${years === 1 ? 'Jahr' : 'Jahre'}`)
   if (months) parts.push(`${months} ${months === 1 ? 'Monat' : 'Monate'}`)
-  return parts.join(', ')
+  return parts.join(', ') || `${years} ${years === 1 ? 'Jahr' : 'Jahre'}`
 }
 
-function Record({ record }: { record: TimelineRecord }) {
+function Record({ record, hit = false }: { record: TimelineRecord; hit?: boolean }) {
   // A row is in the timeline because it set at least one of the two, and the
   // weight record leads when it set both.
   const move = record.weight ?? record.e1rm!
   const unit = record.weight ? 'kg' : 'kg e1RM'
   return (
-    <a className="rec" href={`/gym/session/${record.session_id}`}
+    <a className={`rec${hit ? ' is-hit' : ''}`} href={`/gym/session/${record.session_id}`}
       onClick={morphFrom('session', '.rec__name')}>
       <span className="rec__date">{dmy(record.started_at)}</span>
       <span className="rec__name">{record.name}</span>
@@ -80,15 +83,51 @@ function Progression({ entry }: { entry: ProgressionRow }) {
 }
 
 export function StatistikPage({ payload }: { payload: StatistikPayload }) {
-  // The tapped month of the career strip. Pointer-only sugar: every bar
-  // already states the same sentence through its aria-label, so assistive
-  // tech is served without this -- title= is mouse-only and this is the
-  // touch equivalent.
-  const [pickedMonth, setPickedMonth] = useState<string | null>(null)
+  // The selected stretch of the career strip, as month indices (inclusive,
+  // unordered -- normalised on read). A tap is a one-month selection; a drag
+  // across the bars brushes a range, and the readout under the strip
+  // re-aggregates what the bars encode for it. Real buttons, so the keyboard
+  // can do the tap half too.
+  const [sel, setSel] = useState<[number, number] | null>(null)
+  const brush = useRef<{ start: number; moved: boolean; had: boolean } | null>(null)
+  const justBrushed = useRef(false)
+  const monthsRef = useRef<HTMLDivElement>(null)
   const {
     totals, months, progression, effort, rep_range: reps, fatigue,
     daypart, weekday, rest_gap: restGap, rest_habit: restHabit,
   } = payload
+
+  const selRange: [number, number] | null = sel === null
+    ? null
+    : [Math.min(sel[0], sel[1]), Math.max(sel[0], sel[1])]
+  const selMonths: TonnageMonth[] = selRange === null
+    ? []
+    : months.slice(selRange[0], selRange[1] + 1)
+  const selKeys = useMemo(
+    () => new Set(selMonths.map((m) => `${m.year}-${m.month}`)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sel, months])
+
+  // UTC getters, matching the server's month bucketing -- local time would
+  // shift a record logged near midnight into the neighbouring month's bar.
+  const recordKey = (record: TimelineRecord) => {
+    const d = new Date(`${record.started_at}Z`)
+    return `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`
+  }
+  const allRecords = useMemo(
+    () => [...payload.recent_records, ...payload.record_years.flatMap((b) => b.records)],
+    [payload])
+  const recordsInSel = sel === null ? 0
+    : allRecords.filter((r) => selKeys.has(recordKey(r))).length
+
+  const monthIndexFromX = (clientX: number) => {
+    const el = monthsRef.current
+    if (el === null || months.length === 0) return 0
+    const box = el.getBoundingClientRect()
+    if (box.width === 0) return 0
+    const i = Math.floor(((clientX - box.left) / box.width) * months.length)
+    return Math.max(0, Math.min(months.length - 1, i))
+  }
 
   if (totals.sessions === 0) {
     return (
@@ -190,19 +229,52 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 ignore every child, so the per-bar titles were unreachable in
                 principle and the flagship figure conveyed exactly one fact:
                 that it existed. title= stays for the mouse. */}
-            <div className="months" role="list"
-              aria-label={`Monatliche Tonnage seit ${payload.month_names[months[0]!.month - 1]} ${months[0]!.year}`}>
-              {months.map((m) => {
+            <div className="months" role="list" ref={monthsRef}
+              aria-label={`Monatliche Tonnage seit ${payload.month_names[months[0]!.month - 1]} ${months[0]!.year}`}
+              onPointerDown={(e) => {
+                brush.current = { start: monthIndexFromX(e.clientX), moved: false, had: false }
+                try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* jsdom */ }
+              }}
+              onPointerMove={(e) => {
+                const b = brush.current
+                if (b === null) return
+                const i = monthIndexFromX(e.clientX)
+                if (i !== b.start) b.moved = true
+                if (b.moved) setSel([b.start, i])
+              }}
+              onPointerUp={() => {
+                const b = brush.current
+                brush.current = null
+                // The click that follows a finished drag must not toggle a
+                // single month on top of the range it just brushed.
+                if (b?.moved) justBrushed.current = true
+              }}
+              onPointerCancel={() => { brush.current = null }}>
+              {months.map((m, i) => {
+                // The strip's right edge is not a collapse: the running month
+                // says it is still filling. The LAST month is the running one
+                // by construction -- analytics builds the strip through now --
+                // so no clock is consulted (a clock check would flip the
+                // month-boundary render).
+                const isCurrent = i === months.length - 1 && !m.is_gap
                 const label = `${payload.month_names[m.month - 1]} ${m.year}: ${de(m.volume)} kg`
                   + (m.has_record ? ', Rekordmonat' : '')
                   + (m.has_deload ? ', Deload' : '')
                   + (m.is_gap ? ', keine Einheit' : '')
+                  + (isCurrent ? ', läuft noch' : '')
                 const key = `${m.year}-${m.month}`
                 return (
-                  <span key={key} role="listitem"
-                    className={`mo${m.has_record ? ' is-record' : ''}${m.has_deload ? ' is-deload' : ''}${m.is_gap ? ' is-gap' : ''}${pickedMonth === key ? ' is-picked' : ''}`}
+                  /* A real button (keyboard + focus), inside the pointer-brush
+                     container: pointer selection is handled above, so the
+                     button's own click only acts for the keyboard (detail 0). */
+                  <button type="button" key={key} role="listitem"
+                    className={`mo${m.has_record ? ' is-record' : ''}${m.has_deload ? ' is-deload' : ''}${m.is_gap ? ' is-gap' : ''}${isCurrent ? ' is-current' : ''}${selKeys.has(key) ? ' is-picked' : ''}`}
                     aria-label={label} title={label}
-                    onClick={() => setPickedMonth(pickedMonth === key ? null : key)}
+                    aria-pressed={selKeys.has(key)}
+                    onClick={() => {
+                      if (justBrushed.current) { justBrushed.current = false; return }
+                      setSel(sel !== null && sel[0] === i && sel[1] === i ? null : [i, i])
+                    }}
                     style={{ blockSize: `${m.is_gap ? 2 : roundTo((m.volume / peak) * 100, 1)}%` }} />
                 )
               })}
@@ -214,19 +286,37 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 </span>
               ))}
             </div>
-            {/* The tapped bar, in words. Same sentence the bar's aria-label
-                carries; this is the touch path to it. */}
+            {/* The selection, in words. One bar reads as before; a brushed
+                range re-aggregates what the bars encode -- tonnage, record
+                months, and (from the timeline below) the records inside it. */}
             <p className="chart__read">
               {(() => {
-                const m = months.find((x) => `${x.year}-${x.month}` === pickedMonth)
-                if (m === undefined) return <span className="chart__hint">Balken antippen für Details</span>
+                if (selMonths.length === 0) {
+                  return <span className="chart__hint">Balken antippen — oder ziehen für einen Zeitraum</span>
+                }
+                if (selMonths.length === 1) {
+                  const m = selMonths[0]!
+                  return (
+                    <>
+                      {`${payload.month_names[m.month - 1]} ${m.year} · `}
+                      <b>{`${de(m.volume)} kg`}</b>
+                      {m.has_record && <span className="chart__read-tag vtag vtag--record">Rekordmonat</span>}
+                      {m.has_deload && <span className="chart__read-tag vtag vtag--deload">Deload</span>}
+                      {m.is_gap && ' · keine Einheit'}
+                    </>
+                  )
+                }
+                const first = selMonths[0]!
+                const last = selMonths[selMonths.length - 1]!
+                const sum = selMonths.reduce((a, m) => a + m.volume, 0)
+                const recordMonths = selMonths.filter((m) => m.has_record).length
                 return (
                   <>
-                    {`${payload.month_names[m.month - 1]} ${m.year} · `}
-                    <b>{`${de(m.volume)} kg`}</b>
-                    {m.has_record && <span className="chart__read-tag vtag vtag--record">Rekordmonat</span>}
-                    {m.has_deload && <span className="chart__read-tag vtag vtag--neu">Deload</span>}
-                    {m.is_gap && ' · keine Einheit'}
+                    {`${payload.month_names[first.month - 1]} ${first.year} – ${payload.month_names[last.month - 1]} ${last.year}`}
+                    {` · ${selMonths.length} Monate · `}
+                    <b>{`${de(sum)} kg`}</b>
+                    {recordMonths > 0 && ` · ${recordMonths} ${recordMonths === 1 ? 'Rekordmonat' : 'Rekordmonate'}`}
+                    {recordsInSel > 0 && ` · ${recordsInSel} ${recordsInSel === 1 ? 'Rekord' : 'Rekorde'} unten markiert`}
                   </>
                 )
               })()}
@@ -246,6 +336,9 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
               </span>
               <span className="key">
                 <span className="key__dot key__dot--sq key__dot--gap" />Pause
+              </span>
+              <span className="key">
+                <span className="key__dot key__dot--sq key__dot--current" />Läuft noch
               </span>
             </div>
           </div>
@@ -280,22 +373,29 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             </div>
             {effort.groups.length > 0 ? (
               <>
+                {/* Every second segment hatched: at five groups the opacity
+                    ramp alone stepped by ~0.06, which made the last three
+                    segments (and their key swatches) indistinguishable. The
+                    hatch is a second carrier the ramp keeps failing to be. */}
                 <div className="stack-bar">
                   {effort.groups.map((group, i) => (
-                    <span key={group.label} style={{
-                      inlineSize: `${roundTo(group.share, 1)}%`,
-                      background: 'var(--done)',
-                      opacity: roundTo(1 - i * fade, 3),
-                    }} />
+                    <span key={group.label}
+                      className={i % 2 === 1 ? 'is-hatched' : undefined}
+                      style={{
+                        inlineSize: `${roundTo(group.share, 1)}%`,
+                        background: 'var(--done)',
+                        opacity: roundTo(1 - i * fade, 3),
+                      }} />
                   ))}
                 </div>
                 <div className="stack-key">
                   {effort.groups.map((group, i) => (
                     <span className="key" key={group.label}>
-                      <span className="key__dot key__dot--sq" style={{
-                        background: 'var(--done)',
-                        opacity: roundTo(1 - i * fade, 3),
-                      }} />
+                      <span className={`key__dot key__dot--sq${i % 2 === 1 ? ' is-hatched' : ''}`}
+                        style={{
+                          background: 'var(--done)',
+                          opacity: roundTo(1 - i * fade, 3),
+                        }} />
                       {` ${group.label} ${whole(group.share)} %`}
                     </span>
                   ))}
@@ -447,11 +547,15 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
           </div>
 
           {payload.recent_records.map((record) => (
-            <Record record={record} key={`${record.session_id}-${record.exercise_id}`} />
+            <Record record={record} key={`${record.session_id}-${record.exercise_id}`}
+              hit={selKeys.has(recordKey(record))} />
           ))}
 
           {payload.record_years.map((band) => (
-            <details className="year" key={band.year}>
+            /* A band with brushed records inside opens itself: a highlight
+               nobody can see is not a highlight. */
+            <details className="year" key={band.year}
+              open={band.records.some((r) => selKeys.has(recordKey(r))) || undefined}>
               <summary className="year__head">
                 <svg className="group__chev" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="3" strokeLinecap="round"
@@ -466,7 +570,8 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 <span className="label">{`${band.records.length} weitere`}</span>
               </summary>
               {band.records.map((record) => (
-                <Record record={record} key={`${record.session_id}-${record.exercise_id}`} />
+                <Record record={record} key={`${record.session_id}-${record.exercise_id}`}
+                  hit={selKeys.has(recordKey(record))} />
               ))}
             </details>
           ))}

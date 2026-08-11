@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CatalogueEntry, CataloguePayload, SortMode } from './types'
 import { fold, recency, sincePr } from './format'
 import { kg1 } from '../format'
@@ -76,6 +76,24 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
   const toggleGroup = useCatalogueUi((s) => s.toggleGroup)
   const openSheet = useSheets((s) => s.open)
   const closeSheet = useSheets((s) => s.close)
+  // Which group an empty band's "anlegen" opened the sheet for; the header
+  // button clears it.
+  const [presetGroup, setPresetGroup] = useState<string | null>(null)
+
+  // `/` focuses the search from anywhere on the page -- the desktop dividend
+  // on the one page that is mostly a search box.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT' || target.isContentEditable) return
+      e.preventDefault()
+      document.getElementById('uebungen-search')?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // Creating an exercise answers with the fresh catalogue: added_id
   // highlights the new row, name_taken raises the banner -- exactly what the
   // ?added= / ?name_taken=1 redirects delivered, minus the reload.
@@ -131,7 +149,7 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
         <span className="verlauf__count" aria-live="polite">{hits.length}</span>
         <span className="start__sp" />
         <button type="button" className="verlauf__act"
-          onClick={() => openSheet('sheet-new-exercise')}>
+          onClick={() => { setPresetGroup(null); openSheet('sheet-new-exercise') }}>
           <Icon name="plus" />
           Neue Übung
         </button>
@@ -157,7 +175,15 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
             <input type="search" id="uebungen-search" className="searchbar__input"
               placeholder="Übung suchen…" autoComplete="off"
               aria-label="Übungen durchsuchen"
-              value={query} onChange={(e) => setQuery(e.target.value)} />
+              value={query} onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter opens the first hit: type three letters, Enter, done.
+                if (e.key !== 'Enter' || needle === '') return
+                const first = hits[0]
+                if (first !== undefined) {
+                  window.location.href = `/gym/exercises/${first.entry.exercise.id}`
+                }
+              }} />
           </div>
 
           <div className="sorts" role="group" aria-label="Sortierung">
@@ -226,7 +252,17 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
                           </span>
                         </h2>
                         <p className="group__none">
-                          Lege hier eine Übung an, um die Gruppe zu trainieren.
+                          {/* The copy pointed at nothing: the only affordance
+                              was the header button, which does not know the
+                              group. This one does. */}
+                          <button type="button" className="linklike"
+                            onClick={() => {
+                              setPresetGroup(group.name)
+                              openSheet('sheet-new-exercise')
+                            }}>
+                            {`Übung für ${group.name} anlegen`}
+                          </button>
+                          {' — um die Gruppe zu trainieren.'}
                         </p>
                       </>
                     )}
@@ -263,7 +299,7 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
       <NewExerciseSheet muscleGroups={payload.muscle_groups}
         equipmentLabels={payload.equipment_labels}
         defaultRestSeconds={payload.default_rest_seconds}
-        onCreate={createExercise} />
+        onCreate={createExercise} presetGroup={presetGroup} />
     </>
   )
 }

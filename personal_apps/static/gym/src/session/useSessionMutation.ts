@@ -17,9 +17,9 @@ export const sessionKey = (sessionId: number) => ['session', sessionId] as const
  * mistake this port exists to undo.
  *
  * `optimistic` is optional. A write whose local effect cannot be computed
- * honestly -- replacing an exercise, adding one, reordering -- simply does not
- * supply it and waits for the server. Guessing there would show a screen that
- * is briefly a lie, which is worse than one that is briefly slow.
+ * honestly -- replacing an exercise, adding one -- simply does not supply it
+ * and waits for the server. Guessing there would show a screen that is
+ * briefly a lie, which is worse than one that is briefly slow.
  */
 export function useSessionMutation<Args extends unknown[]>(
   sessionId: number,
@@ -59,7 +59,12 @@ export function useSessionMutation<Args extends unknown[]>(
       if (context?.previous !== undefined) {
         client.setQueryData(key, context.previous)
       }
-      fail(error.germanMessage, () => { mutation.mutate(args) })
+      // A stale CSRF token cannot be retried into working -- the only fix is
+      // a fresh page (which mints a fresh token), so that is what the retry
+      // does for it.
+      fail(error.germanMessage, error.reason === 'forbidden'
+        ? () => { window.location.reload() }
+        : () => { mutation.mutate(args) })
     },
 
     onSettled: () => { end() },

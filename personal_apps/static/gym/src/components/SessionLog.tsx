@@ -57,7 +57,7 @@ export function SessionLog({
                     carrier, so a record was invisible in greyscale and absent
                     for a screen reader. */}
                 {isRecord && <span className="vtag vtag--record">Rekord</span>}
-                {row.is_deload && <span className="vtag vtag--neu">Deload</span>}
+                {row.is_deload && <span className="vtag vtag--deload">Deload</span>}
               </span>
               {/* One template literal, not interpolated JSX children: React
                   would emit a separate text node per expression, and the

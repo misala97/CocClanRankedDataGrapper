@@ -520,6 +520,16 @@ class HeutePayload(_Model):
     now: datetime
     active_session_id: int | None
     active_session_name: str | None
+    # The card's clock must measure from the session's start, not from the
+    # page render -- `now` measures the latter, and a card that says
+    # "00:00:01 läuft" twenty minutes into a workout is worse than no clock.
+    active_session_started_at: datetime | None
+    # The resume-strip heuristic's answer to "what was I on", so the card can
+    # say it without a navigation.
+    active_session_exercise: str | None
+    # Display target for the rest countdown; a stale value past the cap is the
+    # client's problem to ignore, same as the Jinja strip.
+    active_session_rest_ends_at: datetime | None
     vapid_public_key: str | None
     consistency: Consistency
     routines: list[RoutineMemory]
@@ -666,6 +676,11 @@ class FinishedPayload(_Model):
     weekday_short: list[str]
     # Celebrate on arrival, not on every later visit from Verlauf.
     just_finished: bool
+    # The update prompt's diff, both halves: the template's current list, and
+    # what updating it would write -- computed by the same function the route
+    # writes with, so the preview cannot drift. Both None for freeform.
+    template_exercises: list[str] | None
+    template_next_exercises: list[str] | None
 
 
 # ---------------------------------------------------------------------------

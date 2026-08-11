@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deleteSet, setExerciseMeta, toggleSet, toggleSkip, updateSet } from './optimistic'
+import { deleteSet, reorderExercises, setExerciseMeta, toggleSet, toggleSkip, updateSet } from './optimistic'
 import { payload } from './types.test-d'
 
 const live = payload.visible_exercises.find((se) => se.id === payload.live_id)!
@@ -114,12 +114,34 @@ describe('optimistic setExerciseMeta', () => {
 
 describe('what deliberately has no optimistic path', () => {
   it('does not guess at anything that moves which exercise is live', async () => {
-    // Adding, replacing and reordering all change the live-exercise decision,
-    // and that rule lives in _live_context precisely because three surfaces
-    // have to agree on it. Guessing locally would show a screen that is
-    // briefly a lie.
+    // Adding and replacing change the live-exercise decision, and that rule
+    // lives in _live_context precisely because three surfaces have to agree
+    // on it. Guessing locally would show a screen that is briefly a lie.
+    // Reordering is IN the list on purpose: the row order is the user's
+    // explicit intent, so it is honest -- reorderExercises leaves live_id
+    // untouched and the server's answer still replaces it wholesale.
     const module = await import('./optimistic')
     expect(Object.keys(module).sort()).toEqual(
-      ['deleteSet', 'setExerciseMeta', 'toggleSet', 'toggleSkip', 'updateSet'])
+      ['deleteSet', 'reorderExercises', 'setExerciseMeta', 'toggleSet',
+        'toggleSkip', 'updateSet'])
+  })
+})
+
+describe('reorderExercises', () => {
+  it('reorders the rows, renumbers positions, and leaves live_id alone', () => {
+    const ids = payload.visible_exercises.map((se) => se.id)
+    const flipped = [...ids].reverse()
+    const next = reorderExercises(payload, flipped)
+    expect(next.visible_exercises.map((se) => se.id)).toEqual(flipped)
+    expect(next.visible_exercises.map((se) => se.position))
+      .toEqual(flipped.map((_, i) => i + 1))
+    expect(next.live_id).toBe(payload.live_id)
+  })
+
+  it('keeps a row the order list missed instead of dropping it', () => {
+    const ids = payload.visible_exercises.map((se) => se.id)
+    const next = reorderExercises(payload, ids.slice(1))
+    expect(next.visible_exercises.map((se) => se.id))
+      .toEqual([...ids.slice(1), ids[0]])
   })
 })

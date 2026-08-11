@@ -90,4 +90,9 @@ export interface FinishedPayload {
   rest_taken_seconds: number | null
   weekday_short: string[]
   just_finished: boolean
+  /** The update prompt's diff, both halves: the template's current list, and
+   *  what updating it would write (server-computed by the same function the
+   *  route writes with). Both null for a freeform session. */
+  template_exercises: string[] | null
+  template_next_exercises: string[] | null
 }

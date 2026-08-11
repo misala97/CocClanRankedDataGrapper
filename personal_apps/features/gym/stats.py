@@ -729,27 +729,6 @@ def session_report(current, history, comparable_session_volumes=()):
         entry['verdict'] = None if is_deload else _verdict(entry, since)
         exercises.append(entry)
 
-        # One record per exercise, strongest kind first -- three badges on one
-        # lift is noise, and a weight PR already implies the others matter less.
-        if entry['is_weight_pr']:
-            previous_row = max(past, key=best_weight)
-            records.append({'kind': 'weight', 'name': row.name, 'position': row.position,
-                            'exercise_id': row.exercise_id,
-                            'value': weight, 'previous': best_weight(previous_row),
-                            'previous_at': previous_row.started_at})
-        elif entry['is_e1rm_pr']:
-            previous_row = max(past, key=best_e1rm)
-            records.append({'kind': 'e1rm', 'name': row.name, 'position': row.position,
-                            'exercise_id': row.exercise_id,
-                            'value': round(e1rm, 1), 'previous': round(best_e1rm(previous_row), 1),
-                            'previous_at': previous_row.started_at})
-        elif entry['is_volume_pr']:
-            previous_row = max(past, key=row_volume)
-            records.append({'kind': 'volume', 'name': row.name, 'position': row.position,
-                            'exercise_id': row.exercise_id,
-                            'value': round(volume, 1), 'previous': round(row_volume(previous_row), 1),
-                            'previous_at': previous_row.started_at})
-
         if entry['verdict'] == 'stagniert':
             suggested_weight = snap_to_stack(
                 _next_weight(weight, resolve_increment(row.weight_increment, row.is_unilateral)),
@@ -770,6 +749,59 @@ def session_report(current, history, comparable_session_volumes=()):
                     'sessions': since,
                     'suggested_weight': suggested_weight,
                 })
+
+    # One record per exercise, strongest kind first -- three badges on one
+    # lift is noise, and a weight PR already implies the others matter less.
+    #
+    # Grouped per EXERCISE, not per row: a session that (rarely) logs the same
+    # exercise in two slots is one performance of that lift, and
+    # session_record_counts() already judges it that way for Heute and Verlauf.
+    # Counting each slot separately here is how the same session read
+    # "6 Rekorde" in every list and "7 neue Rekorde" as its own headline. The
+    # volume bar is per past SESSION (summed across its slots) for the same
+    # reason, matching session_record_counts' session_values exactly.
+    if not is_deload:
+        current_by_exercise = {}
+        for row in current:
+            current_by_exercise.setdefault(row.exercise_id, []).append(row)
+
+        for exercise_id, rows in current_by_exercise.items():
+            past = by_exercise.get(exercise_id, [])
+            if not past:
+                continue
+            weight = max(best_weight(r) for r in rows)
+            e1rm = max(best_e1rm(r) for r in rows)
+            volume = sum(row_volume(r) for r in rows)
+
+            past_by_session = {}
+            for p in past:
+                past_by_session.setdefault(p.session_id, []).append(p)
+            past_session_volumes = {
+                session_id: sum(row_volume(p) for p in session_rows)
+                for session_id, session_rows in past_by_session.items()
+            }
+
+            if weight > max(best_weight(p) for p in past):
+                lead = max(rows, key=best_weight)
+                previous_row = max(past, key=best_weight)
+                records.append({'kind': 'weight', 'name': lead.name, 'position': lead.position,
+                                'exercise_id': exercise_id,
+                                'value': weight, 'previous': best_weight(previous_row),
+                                'previous_at': previous_row.started_at})
+            elif e1rm > max(best_e1rm(p) for p in past):
+                lead = max(rows, key=best_e1rm)
+                previous_row = max(past, key=best_e1rm)
+                records.append({'kind': 'e1rm', 'name': lead.name, 'position': lead.position,
+                                'exercise_id': exercise_id,
+                                'value': round(e1rm, 1), 'previous': round(best_e1rm(previous_row), 1),
+                                'previous_at': previous_row.started_at})
+            elif volume > max(past_session_volumes.values()):
+                best_session_id = max(past_session_volumes, key=lambda s: past_session_volumes[s])
+                records.append({'kind': 'volume', 'name': rows[0].name, 'position': rows[0].position,
+                                'exercise_id': exercise_id,
+                                'value': round(volume, 1),
+                                'previous': round(past_session_volumes[best_session_id], 1),
+                                'previous_at': max(p.started_at for p in past_by_session[best_session_id])})
 
     # NOT by raw value: `value` is kilograms-lifted for a weight record and
     # kilograms-of-volume for a volume one, and a session total is two orders of

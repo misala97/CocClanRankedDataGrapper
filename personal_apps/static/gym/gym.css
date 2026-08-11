@@ -1485,7 +1485,10 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
    already use, not a repurposed state hue -- selection isn't one of the
    five states. */
 .exercise-detail__positions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
-.position-pill.is-active { color:  var(--live-ink); border-color: var(--live); background: transparent; box-shadow: var(--glow-live); }
+/* Same rule as Statistik's .pill.is-on: selection is ink, not orange. With a
+   resume ribbon on screen this pill was a second NOW (the One-Now rule names
+   exactly this failure). */
+.position-pill.is-active { color: var(--chassis); border-color: var(--ink); background: var(--ink); box-shadow: none; }
 @media (min-width: 900px) {
   .exercise-detail__chart-wrap { block-size: 420px; }
 }
@@ -1808,6 +1811,11 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   letter-spacing: var(--track-num); line-height: 1; font-variant-numeric: tabular-nums;
   /* It is a button now, so it has to be told not to look like one. */
   background: none; border: 0; padding: 0; color: inherit; cursor: pointer;
+  /* Tapped mid-workout, so it obeys the 44px floor like everything else on
+     this screen -- it measured 20x34 as a bare text button. Centred so the
+     bigger hit area doesn't move the readout. */
+  min-inline-size: var(--tap); min-block-size: var(--tap);
+  display: inline-grid; place-items: center;
 }
 /* Replaces the readout in place, so it inherits the same metrics -- swapping to
    a field must not move anything else in the panel. */
@@ -1817,6 +1825,8 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   inline-size: 100%; min-inline-size: 0; text-align: center;
   background: none; border: 0; padding: 0; color: var(--live);
   outline: none;
+  /* Matches the button's 44px block size, or the panel jumps on swap. */
+  min-block-size: var(--tap);
 }
 .field-num__lbl { font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit); margin-top: 2px; }
 .field-num__keys { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); inline-size: 100%; }
@@ -1906,8 +1916,9 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   transition: color var(--dur-3) var(--ease);
 }
 /* The number counts up rather than cutting (4.1: the accumulation is the
-   reward). refreshBody tweens it; this only lights the digits while it runs,
-   so the movement has a reason attached instead of looking like a glitch. */
+   reward). SessionTotals' useCountUp tweens it; this only lights the digits
+   while it runs, so the movement has a reason attached instead of looking
+   like a glitch. */
 .grew__num.is-counting { color: var(--live-ink); }
 .grew__unit { font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim); padding-bottom: 2px; }
 .grew__sp { flex: 1; }
@@ -1984,7 +1995,7 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
    lifted back above it while reorder mode is on. */
 .queue__row { position: relative; }
 .queue__row .row__main::after { content: ""; position: absolute; inset: 0; }
-body.is-reordering .drag-handle { position: relative; z-index: 1; }
+.queue.is-reordering .drag-handle { position: relative; z-index: 1; }
 /* A press has to answer across the whole row now, not just under the name. */
 .queue__row .row__main:active .row__name { color: var(--live-ink); }
 .queue__row:has(.row__main:active) { background: var(--raised); }
@@ -2012,27 +2023,40 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
 .session-view { max-inline-size: 560px; margin-inline: auto; }
 
 @media (min-width: 900px) {
-  .session-view { max-inline-size: 1080px; }
-  #session-body {
+  /* The Jinja era wrapped the workspace in #session-body; the island mounts
+     everything as direct children of .session-view, so this grid moved up a
+     level. The old selector matched nothing after the port -- desktop
+     rendered the phone column stretched to 1080px, confirm button and all.
+     Scoped safely: only the live page's mount node carries .session-view. */
+  .session-view {
+    max-inline-size: 1080px;
     display: grid; align-items: start;
     grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
     grid-template-areas:
+      "top   top"
+      "note  note"
+      "bar   bar"
       "rail  rail"
       "cap   cap"
       "live  grew"
       "live  ticks"
-      "live  queue";
+      "live  queue"
+      "foot  foot";
     column-gap: var(--sp-6);
     padding-inline: var(--sp-4);
   }
   /* the children carry their own phone gutters; the grid supplies them here */
-  #session-body > * { margin-inline: 0; }
-  #session-body > .rail { grid-area: rail; }
-  #session-body > .rail__cap { grid-area: cap; }
-  #session-body > .live { grid-area: live; }
-  #session-body > .grew { grid-area: grew; margin-block-start: 0; }
-  #session-body > .ticks { grid-area: ticks; }
-  #session-body > .queue { grid-area: queue; }
+  .session-view > * { margin-inline: 0; }
+  .session-view > .session-top { grid-area: top; }
+  .session-view > .note-save { grid-area: note; }
+  .session-view > .reorder-bar { grid-area: bar; }
+  .session-view > .rail { grid-area: rail; }
+  .session-view > .rail__cap { grid-area: cap; }
+  .session-view > .live { grid-area: live; }
+  .session-view > .grew { grid-area: grew; margin-block-start: 0; }
+  .session-view > .ticks { grid-area: ticks; }
+  .session-view > .queue { grid-area: queue; }
+  .session-view > .session-foot { grid-area: foot; }
   /* the finish action belongs under the workspace, not across the whole page */
   .session-foot { max-inline-size: calc(440px + var(--sp-4) * 2); }
   .session-view .note-save, .reorder-bar { max-inline-size: 640px; }
@@ -2208,6 +2232,29 @@ body.is-reordering .drag-handle { position: relative; z-index: 1; }
 }
 @starting-style { .sheet[open] { opacity: 0; transform: translateY(14px); } }
 
+/* The finish sheet: the pre-debrief beat. What the session became, then one
+   decision -- replacing the native confirm() that rendered the app's peak
+   moment in browser chrome (and, being a GET navigation to a POST route,
+   never actually finished anything). */
+.finish-sum { display: grid; gap: var(--sp-2); padding-block: var(--sp-2) var(--sp-4); }
+.finish-sum__vol {
+  font-size: var(--num-md); font-weight: var(--w-num, 800);
+  letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
+  color: var(--ink); line-height: 1;
+}
+.finish-sum__vol small {
+  font-size: var(--t-sm); font-weight: var(--w-semi);
+  letter-spacing: 0; color: var(--dim); margin-inline-start: 2px;
+}
+.finish-sum__meta { font-size: var(--t-sm); color: var(--dim); }
+/* The word carries the warning -- ink and weight, no hue: an unfinished set
+   is not an error. */
+.finish-sum__open { font-size: var(--t-sm); color: var(--ink); font-weight: var(--w-semi); margin: 0; }
+.finish-sum__none { font-size: var(--t-sm); color: var(--dim); margin: 0; }
+/* The template-update prompt's rendered diff: what would actually change,
+   stated, instead of a blind confirm(). */
+.prompt__diff { font-size: var(--t-sm); color: var(--dim); margin: 0; }
+
 .sheet::backdrop {
   background: rgba(0, 0, 0, 0);
   transition: background var(--dur-2) var(--ease),
@@ -2366,8 +2413,10 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 }
 .sheet__pick.is-active { background: var(--live); color: var(--on-live); box-shadow: none; }
 
-/* reorder mode: a visible state, not a lock icon to decode */
-body.is-reordering .queue__row { background: var(--raised); border-radius: var(--r-inset); }
+/* reorder mode: a visible state, not a lock icon to decode. Keyed off a class
+   the Queue component itself writes from the store -- the old body.is-reordering
+   contract had no writer after the React port and shipped the mode dead. */
+.queue.is-reordering .queue__row { background: var(--raised); border-radius: var(--r-inset); }
 
 /* The queue's one action row. Reads as an action rather than as an exercise --
    accent ink, no load in the trail, no position number -- while keeping the
@@ -2381,20 +2430,21 @@ body.is-reordering .queue__row { background: var(--raised); border-radius: var(-
 .queue__add .row__lead { color: var(--live-ink); display: inline-flex; align-items: center; }
 .queue__add .row__name { color: var(--live-ink); font-weight: var(--w-semi); }
 .queue__add .row__main:hover .row__name { color: var(--live); }
-body.is-reordering .queue__add { display: none; }
+.queue.is-reordering .queue__add { display: none; }
 /* --dim, not --live-ink: reorder lights every handle at once, and the NOW hue
    is reserved for the single thing happening right now (4.2). */
-body.is-reordering .drag-handle { color: var(--dim); }
+.queue.is-reordering .drag-handle { color: var(--dim); }
 /* The mode itself needs a surface. It was announced only by the rows changing
    colour and could only be left by re-opening the ⋯ sheet -- and for a
    keyboard user it did not exist at all, because the handles were
    aria-hidden spans. */
+/* No mode gate here: React only renders the bar while the mode is on, so the
+   bar's presence IS the state. */
 .reorder-bar {
-  display: none; align-items: center; gap: var(--sp-3);
+  display: flex; align-items: center; gap: var(--sp-3);
   margin: var(--sp-3) var(--sp-4) 0; padding: var(--sp-3) var(--sp-4);
   background: var(--chassis); border-radius: var(--r-control); box-shadow: var(--lift);
 }
-body.is-reordering .reorder-bar { display: flex; }
 .reorder-bar__txt { flex: 1; font-size: var(--t-meta); color: var(--dim); line-height: 1.4; }
 .reorder-bar__done {
   flex: none; min-block-size: var(--tap); padding-inline: var(--sp-4);
@@ -2402,9 +2452,8 @@ body.is-reordering .reorder-bar { display: flex; }
   font-size: var(--t-sm); font-weight: var(--w-bold);
 }
 /* A real control in reorder mode, an inert mark outside it: the handle is what
-   a keyboard user moves a row with (ArrowUp / ArrowDown, see
-   session_reorder.js), so it has to be focusable exactly when it does
-   something. */
+   a keyboard user moves a row with (ArrowUp / ArrowDown, see Queue.tsx), so
+   it has to be focusable exactly when it does something. */
 .drag-handle { border-radius: var(--r-inset); }
 /* display is in the transition so the handles fade instead of blinking: with
    allow-discrete the box appears on the first frame going in and is held until
@@ -2414,8 +2463,8 @@ body.is-reordering .reorder-bar { display: flex; }
   display: none; opacity: 0;
   transition: opacity var(--dur-2) var(--ease), display var(--dur-2) allow-discrete;
 }
-body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
-@starting-style { body.is-reordering .drag-handle { opacity: 0; } }
+.queue.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
+@starting-style { .queue.is-reordering .drag-handle { opacity: 0; } }
 .queue__row.is-dragging { opacity: 0.4; }
 .drag-ghost { z-index: var(--z-bar); box-shadow: var(--lift); opacity: 0.96; background: var(--chassis); border-radius: var(--r-inset); padding-inline: var(--sp-3); user-select: none; -webkit-user-select: none; }
 
@@ -2540,7 +2589,9 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
   padding: var(--sp-5) var(--sp-4) 0;
   font-family: var(--font-display);
   font-size: 1.75rem; font-weight: var(--w-max);
-  letter-spacing: -0.03em; line-height: 1.12; text-wrap: balance;
+  /* 1.2, not 1.12: this is a two-to-three-line German sentence, and at 1.12
+     the lines touched. Display leading, but a readable one. */
+  letter-spacing: -0.03em; line-height: 1.2; text-wrap: balance;
 }
 .verdict--record { color: var(--record-ink); }
 
@@ -2651,10 +2702,25 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
   letter-spacing: 0.04em; text-transform: none;
   padding: 4px 9px; border-radius: var(--r-chip); border: 0;
 }
+/* Chip grammar (DESIGN.md): FILLED carries a fact (record gold, logged rose);
+   OUTLINE carries a state to note (stall) or a tendency (up) -- the hue as
+   text, so state reads by shape as well as colour. The build shipped stall
+   and up as fills, which flattened that distinction. */
 .vtag--record { background: var(--record); color: var(--on-record); }
-.vtag--stall  { background: var(--stall);  color: var(--on-stall); }
-.vtag--up     { background: var(--done);   color: var(--on-done); }
+.vtag--stall  { background: transparent; color: var(--stall-ink); box-shadow: inset 0 0 0 1px currentColor; }
+.vtag--up     { background: transparent; color: var(--done-ink); box-shadow: inset 0 0 0 1px currentColor; }
 .vtag--neu    { background: var(--raised); color: var(--dim); }
+/* Deload is a label, not a state (4.2): no hue, --edge border, the word. Its
+   own class -- it borrowed .vtag--neu, so restyling "Neu" would have silently
+   recoloured Deload. */
+.vtag--deload { background: transparent; color: var(--dim); box-shadow: inset 0 0 0 1px var(--edge); }
+
+/* The all-records case: one gold sentence instead of a column of identical
+   gold chips. */
+.finished__allpr {
+  margin: 0 var(--sp-4) var(--sp-1); font-size: var(--t-sm);
+  font-weight: var(--w-semi); color: var(--record-ink);
+}
 
 /* the debrief's exercise list: name in ink so it leads, loads tabular so the
    set columns line up down the list */
@@ -2796,6 +2862,9 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
 .lead__top { display: flex; align-items: flex-start; gap: var(--sp-3); }
 .lead__main { flex: 1; min-inline-size: 0; }
 .lead__due { font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--live-ink); }
+/* The running card's "what you were on": content, not a call to action --
+   the clock line keeps the live ink, this stays quiet. */
+.lead__ex { font-size: var(--t-meta); font-weight: var(--w-med); color: var(--dim); }
 .lead__name {
   font-family: var(--font-display); font-size: var(--t-name); font-weight: var(--w-bold);
   letter-spacing: var(--track-name); line-height: 1.16; margin-top: 2px;
@@ -3016,7 +3085,9 @@ body.is-reordering .drag-handle { display: inline-grid; opacity: 1; }
    the supporting figures. */
 .month__sum {
   flex-basis: 100%;
-  font-size: var(--t-micro); color: var(--unlit);
+  /* --t-meta, not --t-micro: quiet is the colour's job; 11px was below the
+     app's own readable floor for content. */
+  font-size: var(--t-meta); color: var(--unlit);
   font-variant-numeric: tabular-nums; letter-spacing: 0;
 }
 
@@ -3324,7 +3395,9 @@ body.is-exporting .verlauf__row .pick {
   font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--dim);
   box-shadow: inset 0 0 0 1px var(--edge-hi);
 }
-.pill.is-on { background: var(--live); color: var(--on-live); box-shadow: none; }
+/* Selection is ink, not orange: a chosen filter is not the thing happening
+   right now. Inverse ink is unmistakable without spending the NOW hue. */
+.pill.is-on { background: var(--ink); color: var(--chassis); box-shadow: none; }
 
 /* Two columns: a kg gutter and the drawing. The x axis and the legend sit
    under the drawing only, so the gutter's width never shifts them. */
@@ -3333,7 +3406,14 @@ body.is-exporting .verlauf__row .pick {
   border-radius: var(--r-panel); padding: var(--sp-5) var(--sp-4) var(--sp-4);
   display: grid; grid-template-columns: auto minmax(0, 1fr);
   column-gap: var(--sp-3);
+  /* The position pills swap the payload in place inside a view transition;
+     naming the panel crossfades the drawing between filters instead of
+     cutting. One chart per page, so the name cannot collide. */
+  view-transition-name: exercise-chart;
 }
+/* Horizontal drags scrub the readout along the line; vertical stays the
+   page's scroll. */
+.chart svg { touch-action: pan-y; }
 .chart svg { display: block; inline-size: 100%; block-size: auto; }
 /* All three labels share one grid cell, so the gutter is as wide as the widest
    of them and no wider -- absolute positioning collapsed it to zero and dropped
@@ -3424,17 +3504,25 @@ body.is-exporting .verlauf__row .pick {
 /* ---- the answer, then the numbers that make it ---- */
 .lede { display: flex; align-items: flex-end; gap: var(--sp-8); }
 .lede__main { flex: 1; min-inline-size: 0; }
-.lede__kick { display: block; font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--live-ink); }
+/* --dim, not --live-ink: this is a date range, and the NOW hue is reserved
+   for the single thing happening right now (4.2). Statistik spent it seven
+   times over -- at which point it stops meaning NOW and becomes the brand
+   colour, the exact failure 4.0 records Athletik being rejected for. */
+.lede__kick { display: block; font-size: var(--t-sm); font-weight: var(--w-bold); color: var(--dim); }
 .lede__h {
   font-family: var(--font-display); font-size: 2.75rem; font-weight: var(--w-max);
   letter-spacing: -0.04em; line-height: 1.06; margin-top: 6px;
   text-wrap: balance; max-inline-size: 22ch;
 }
-.lede__h em { font-style: normal; color: var(--live-ink); }
+/* Emphasis on a reading page is a settled fact, not a NOW: --done-ink (the
+   LOGGED family as text) carries it. Same rule as .read__a em below. */
+.lede__h em { font-style: normal; color: var(--done-ink); }
 .lede__aside {
   flex: none; text-align: end; font-size: var(--t-sm); color: var(--unlit);
   line-height: 1.6; padding-bottom: 6px;
 }
+/* The one link in the aside measured 65x24 -- under the app's own floor. */
+.lede__aside a { display: inline-flex; align-items: center; min-block-size: var(--tap); }
 .lede__aside b { color: var(--dim); font-weight: var(--w-bold); }
 /* "Größtes Workout" is a link to that session and measured 62x17. Padding it
    out to the 24px minimum without disturbing the line it sits in. */
@@ -3461,8 +3549,15 @@ body.is-exporting .verlauf__row .pick {
 /* ---- the career strip: one bar per month since the first workout ---- */
 .career { margin-top: var(--sp-8); }
 .career__body { background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-5) var(--sp-5) var(--sp-4); }
-.months { display: flex; align-items: flex-end; gap: 3px; block-size: 132px; }
-.mo { position: relative; flex: 1; border-radius: 3px 3px 1px 1px; background: var(--done); min-block-size: 2px; }
+/* pan-y: a horizontal drag brushes a month range, vertical stays the page's
+   scroll. */
+.months { display: flex; align-items: flex-end; gap: 3px; block-size: 132px; touch-action: pan-y; }
+/* The bars are real <button>s now (keyboard + focus for free), so the UA
+   button chrome has to go. */
+.mo {
+  position: relative; flex: 1; border-radius: 3px 3px 1px 1px; background: var(--done); min-block-size: 2px;
+  appearance: none; border: 0; padding: 0; margin: 0; font: inherit;
+}
 /* A record month is a gold TICK above an ordinary bar, not a gold bar.
    Swapping the whole fill made colour the sole carrier -- which the
    Accessibility section forbids, and which measured 1.03:1 against a normal
@@ -3484,6 +3579,10 @@ body.is-exporting .verlauf__row .pick {
    measured 1.55:1 against the panel in light and 1.24:1 in dark, which is a
    hole: the stub the comment promises was never actually visible. */
 .mo.is-gap { background: var(--edge-hi); }
+/* The running month is an outline, not a fill: its bar is still filling, and
+   a solid stub at the strip's right edge read as a collapse to zero. */
+.mo.is-current { background: transparent; box-shadow: inset 0 0 0 1.5px var(--done); }
+.key__dot--current { background: transparent; box-shadow: inset 0 0 0 1.5px var(--done); }
 .months__axis {
   display: flex; margin-top: var(--sp-3); border-top: 1px solid var(--edge); padding-top: var(--sp-2);
 }
@@ -3544,6 +3643,11 @@ body.is-exporting .verlauf__row .pick {
 /* effort: one stacked bar, then the exercises that fill it */
 .stack-bar { display: flex; block-size: 44px; border-radius: 10px; overflow: hidden; gap: 2px; margin-top: var(--sp-1); }
 .stack-bar span { display: block; }
+/* The second carrier beside the opacity ramp -- same hatch the deload bars
+   use, so it reads as texture, not as a new colour. */
+.stack-bar .is-hatched, .key__dot--sq.is-hatched {
+  background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--ground) 3px 6px);
+}
 .stack-key { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-5); margin-top: var(--sp-3); margin-bottom: var(--sp-4); }
 
 /* behaviour readouts: a question, an answer, and the evidence under it */
@@ -3556,7 +3660,7 @@ body.is-exporting .verlauf__row .pick {
   font-family: var(--font-display); font-size: 1.25rem; font-weight: var(--w-max);
   letter-spacing: -0.025em; margin-top: 4px; line-height: 1.2;
 }
-.read__a em { font-style: normal; color: var(--live-ink); }
+.read__a em { font-style: normal; color: var(--done-ink); }
 .read__bars { display: flex; gap: 5px; margin-top: var(--sp-3); }
 .rb { flex: 1; min-inline-size: 0; }
 /* --edge, not --raised: the track is the 100% reference the fills are read
@@ -3564,7 +3668,10 @@ body.is-exporting .verlauf__row .pick {
    short bar had nothing to be short against. */
 .rb__track { block-size: 36px; border-radius: 6px; background: var(--edge); display: flex; align-items: flex-end; overflow: hidden; }
 .rb__fill { inline-size: 100%; background: var(--done); border-radius: 6px 6px 0 0; }
-.rb__fill.is-top { background: var(--live); }
+/* No hue for the dominant bucket: dominant means tallest, so the height
+   already says it, and the answer sentence above names it in words. The
+   orange fill here was another decorative NOW. */
+.rb__fill.is-top { background: var(--done); }
 .rb__lbl { display: block; text-align: center; margin-top: 5px; font-size: var(--t-micro); color: var(--unlit); }
 .read__silent { font-size: var(--t-meta); color: var(--unlit); margin-top: var(--sp-2); line-height: 1.5; }
 
@@ -3692,6 +3799,12 @@ body.is-exporting .verlauf__row .pick {
 .chart__hits circle { cursor: pointer; }
 .months .mo { cursor: pointer; }
 .months .mo.is-picked { outline: 2px solid var(--ink); outline-offset: 1px; }
+/* A record row inside the brushed range: a wash, not a stripe. */
+.rec.is-hit { background: var(--raised); border-radius: var(--r-field); padding-inline: var(--sp-2); }
+
+/* A search hit in Verlauf's clipped roster: weight carries it, not a hue --
+   and never the UA's yellow. */
+.row__hit { background: transparent; color: var(--ink); font-weight: var(--w-semi); }
 
 /* Undo toast: the destructive tap's answer. Above the thumb zone, never over
    it -- the confirm target and the tab bar keep their ground. */

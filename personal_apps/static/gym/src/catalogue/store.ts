@@ -28,6 +28,20 @@ function writeOpen(open: string[]): void {
   }
 }
 
+const SORT_KEY = 'gym.uebungen.sort'
+
+/** The sort IS a preference (a power user who lives in "Ohne PR" re-tapped it
+ *  every visit), so localStorage, not session. Unknown stored values fall
+ *  back rather than crash a renamed mode. */
+function readSort(): SortMode {
+  try {
+    const raw = localStorage.getItem(SORT_KEY)
+    return raw === 'muscle' || raw === 'stall' || raw === 'recent' ? raw : 'muscle'
+  } catch {
+    return 'muscle'
+  }
+}
+
 interface CatalogueUi {
   query: string
   sort: SortMode
@@ -42,11 +56,14 @@ interface CatalogueUi {
 
 export const useCatalogueUi = create<CatalogueUi>((set, get) => ({
   query: '',
-  sort: 'muscle',
+  sort: readSort(),
   open: readOpen(),
 
   setQuery: (query) => set({ query }),
-  setSort: (sort) => set({ sort }),
+  setSort: (sort) => {
+    try { localStorage.setItem(SORT_KEY, sort) } catch { /* private mode */ }
+    set({ sort })
+  },
 
   isOpen: (name, openByDefault) => {
     const open = get().open

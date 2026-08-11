@@ -197,10 +197,22 @@ def _heute_payload():
             SharedSession.ended_at.is_(None)).all()
     ]
 
+    # The card's "what was I on" line reuses the session screen's own
+    # live-exercise rule rather than restating it -- one rule, three surfaces.
+    active_exercise = None
+    if active_session:
+        live_ctx = _live_context(active_session)
+        live_se = next((se for se in live_ctx['visible_exercises']
+                        if se.id == live_ctx['live_id']), None)
+        active_exercise = live_se.exercise.name if live_se else None
+
     return HeutePayload.model_validate({
             'now': now,
             'active_session_id': active_session.id if active_session else None,
             'active_session_name': active_session.name if active_session else None,
+            'active_session_started_at': active_session.started_at if active_session else None,
+            'active_session_exercise': active_exercise,
+            'active_session_rest_ends_at': active_session.rest_ends_at if active_session else None,
             # Start offers push activation to a device that has none -- only
             # the browser knows whether THIS device is subscribed.
             'vapid_public_key': current_app.config.get('VAPID_PUBLIC_KEY'),
@@ -797,6 +809,21 @@ def _finished_payload(session_):
     # the flare only fires on arrival. A query argument, not state -- the
     # redirect that lands here is the only thing that sets it.
     data['just_finished'] = request.args.get('just_finished') is not None
+    # The update prompt's diff, both halves server-computed. "Before" is the
+    # template's current list; "after" comes from the SAME function
+    # gym_update_template writes with, so the preview cannot drift from the
+    # write -- and it is NOT the performed list: skipped and zero-set slots
+    # go into a template, substitutes never do.
+    if session_.template:
+        data['template_exercises'] = [
+            te.exercise.name for te in session_.template.exercises]
+        names_by_id = {se.exercise_id: se.exercise.name for se in session_.exercises}
+        data['template_next_exercises'] = [
+            names_by_id[te.exercise_id]
+            for te in _template_exercises_from_session(session_)]
+    else:
+        data['template_exercises'] = None
+        data['template_next_exercises'] = None
     data['session'] = {
         'id': session_.id, 'name': session_.name,
         'started_at': session_.started_at, 'finished_at': session_.finished_at,
@@ -1345,7 +1372,12 @@ def gym_update_set(set_id):
 def gym_reorder_session_exercises(session_id):
     session_ = owned_session(session_id)
     data = request.get_json(silent=True) or {}
-    order = data.get('order') or []
+    order = data.get('order')
+    if order is None:
+        # The React island posts through the shared form path (postForm), so
+        # the order arrives as one comma-joined field; the JSON body shape the
+        # old inline script used stays accepted.
+        order = [x for x in request.form.get('order', '').split(',') if x]
     session_exercises_by_id = {se.id: se for se in session_.exercises}
     position = 1
     for raw_id in order:

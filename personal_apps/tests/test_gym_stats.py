@@ -587,6 +587,27 @@ def test_session_record_counts_combines_a_sessions_own_duplicate_rows_for_one_ex
     assert counts.get(1, 0) == 0
 
 
+def test_session_report_counts_a_duplicate_slot_session_like_the_bulk_does():
+    # The 6-vs-7 bug (found 2026-08-11): a session logging one exercise in
+    # TWO slots, both beating every other session, earned two records from
+    # session_report (one per row) but one from session_record_counts
+    # (slots combined) -- so the debrief said "7 neue Rekorde" while Heute
+    # and Verlauf said "6 Rekorde" for the same session. One exercise is one
+    # performance: both must say one.
+    rows = [
+        perf([(70.0, 8)], started_at=day(0), session_id=1, position=1),
+        perf([(80.0, 8)], started_at=day(7), session_id=2, position=1),
+        perf([(95.0, 8)], started_at=day(7), session_id=2, position=4),
+    ]
+    bulk = stats.session_record_counts(rows)
+    report = stats.session_report(
+        [row for row in rows if row.session_id == 2],
+        [row for row in rows if row.session_id != 2])
+
+    assert bulk.get(2, 0) == 1
+    assert report['record_count'] == 1
+
+
 def test_session_record_counts_agrees_with_session_report_for_every_session():
     # Belt-and-suspenders: independently recompute what session_report()
     # would say for every session in a nontrivial multi-session,

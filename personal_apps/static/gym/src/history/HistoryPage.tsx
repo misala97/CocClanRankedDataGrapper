@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import type { HistoryEntry, HistoryPayload } from './types'
 import { useHistoryUi } from './store'
 import { Icon } from '../components/Icon'
@@ -16,6 +16,7 @@ function Row({ entry, weekdayShort }: {
   const exporting = useHistoryUi((s) => s.exporting)
   const selected = useHistoryUi((s) => s.selected.includes(entry.session_id))
   const toggle = useHistoryUi((s) => s.toggle)
+  const needle = useHistoryUi((s) => s.query).trim().toLowerCase()
 
   const started = local(entry.started_at)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -45,11 +46,24 @@ function Row({ entry, weekdayShort }: {
         <span className="row__meta">
           {`${weekday} · ${pad(started.getDate())}.${pad(started.getMonth() + 1)}. · ${pad(started.getHours())}:${pad(started.getMinutes())} · ${minutes < 1 ? '< 1' : minutes} min`}
         </span>
-        {/* The roster is clipped on essentially every row, so the clip is
-            stated rather than left to be discovered -- a search hit whose
-            matching exercise fell past the ellipsis looked like a false
-            positive. */}
-        <span className="row__sub">{entry.exercises.join(' · ')}</span>
+        {/* The roster is clipped on essentially every row. While a search
+            runs, matching exercises float to the FRONT of the line (stable
+            sort, so the rest keeps its order) and carry weight -- a hit that
+            fell past the ellipsis looked like a false positive. */}
+        <span className="row__sub">
+          {(needle === '' ? entry.exercises
+            : [...entry.exercises].sort((a, b) =>
+              Number(b.toLowerCase().includes(needle))
+              - Number(a.toLowerCase().includes(needle)))
+          ).map((exerciseName, i) => (
+            <Fragment key={`${exerciseName}-${i}`}>
+              {i > 0 && ' · '}
+              {needle !== '' && exerciseName.toLowerCase().includes(needle)
+                ? <mark className="row__hit">{exerciseName}</mark>
+                : exerciseName}
+            </Fragment>
+          ))}
+        </span>
       </a>
       <span className="row__trail row__trail--stack">
         {/* .vol--none existed for this and was never applied: a session with
@@ -62,7 +76,9 @@ function Row({ entry, weekdayShort }: {
             {`${entry.record_count} ${entry.record_count === 1 ? 'Rekord' : 'Rekorde'}`}
           </span>
         )}
-        {entry.is_deload && <span className="vtag vtag--neu">Deload</span>}
+        {/* Its own class: it borrowed vtag--neu, so restyling "Neu" would
+            have silently recoloured Deload -- which must never carry a hue. */}
+        {entry.is_deload && <span className="vtag vtag--deload">Deload</span>}
       </span>
     </div>
   )

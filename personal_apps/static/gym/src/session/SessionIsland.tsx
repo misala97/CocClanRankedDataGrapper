@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import type { SessionDetailPayload } from './types'
 import { api, fetchSession } from './api'
+import { postNavigate } from '../api'
 import { csrfToken } from '../csrf'
 import { sessionKey, useSessionMutation } from './useSessionMutation'
 import * as optimistic from './optimistic'
@@ -69,6 +70,13 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       api.setExerciseMeta(seId, meta),
     optimistic.setExerciseMeta)
 
+  // Reordering is optimistic for the row order alone -- that IS the user's
+  // intent -- while live_id waits for the server like every other live-moving
+  // write below.
+  const reorder = useSessionMutation(sessionId,
+    (order: number[]) => api.reorder(sessionId, order),
+    optimistic.reorderExercises)
+
   // No optimistic entry: each of these moves which exercise is live, and that
   // decision belongs to the server.
   const addExercise = useSessionMutation(sessionId,
@@ -123,36 +131,23 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       if (target === undefined) return
       toggleSet.mutate([setId, completed, target.weight, target.reps])
     },
-    onFinish: () => { window.location.href = `/gym/session/${sessionId}/finish` },
+    // A POST that redirects to the debrief. This was `window.location.href`
+    // -- a GET to a POST-only route, a 405 for everyone -- until 2026-08-11.
+    onFinish: () => postNavigate(`/gym/session/${sessionId}/finish`),
+    onReorder: (order) => reorder.mutate([order]),
     onSessionMetaSave: (meta) => { sessionMeta.mutate([meta]); close() },
     onSkipRest: () => { skipRest.mutate([]); close() },
-    onInvite: (partnerId) => {
-      // A navigation, not an in-place write: the invite has its own page.
-      const form = document.createElement('form')
-      form.method = 'post'
-      form.action = `/gym/session/${sessionId}/invite`
-      const field = document.createElement('input')
-      field.name = 'partner_id'
-      field.value = String(partnerId)
-      form.append(field)
-      document.body.append(form)
-      form.submit()
-    },
+    // A navigation, not an in-place write: the invite has its own page.
+    // postNavigate carries the csrf_token the hand-built form here forgot,
+    // which the blueprint gate has 403'd since it closed.
+    onInvite: (partnerId) => postNavigate(
+      `/gym/session/${sessionId}/invite`, { partner_id: String(partnerId) }),
     onEnablePush: () => { void enablePush(data.vapid_public_key) },
     onToggleDeload: (on, pct) => { toggleDeload.mutate([on, pct]); close() },
     onAddExercise: (exerciseId) => addExercise.mutate([exerciseId]),
     onCreateExercise: (name) => createExercise.mutate([name]),
-    onSaveTemplate: (name) => {
-      const form = document.createElement('form')
-      form.method = 'post'
-      form.action = `/gym/session/${sessionId}/save_as_template`
-      const field = document.createElement('input')
-      field.name = 'template_name'
-      field.value = name
-      form.append(field)
-      document.body.append(form)
-      form.submit()
-    },
+    onSaveTemplate: (name) => postNavigate(
+      `/gym/session/${sessionId}/save_as_template`, { template_name: name }),
     exerciseActions: (seId: number): ExerciseSheetActions => ({
       onRestChange: (seconds) => setRest.mutate([seId, seconds]),
       onIncrementChange: (kg) => setIncrement.mutate([seId, kg]),

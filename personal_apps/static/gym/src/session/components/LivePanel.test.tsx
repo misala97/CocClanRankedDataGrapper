@@ -169,6 +169,25 @@ describe('LivePanel', () => {
     expect(container.querySelector('.go__clock'))
       .toHaveAttribute('aria-hidden', 'true')
   })
+
+  it('carries the rest countdown into the tab title, and restores it', () => {
+    // Leaving mid-rest is exactly when this screen is not on screen to show
+    // the countdown; the tab title covers the desk.
+    document.title = 'Gym Tracker'
+    const resting: SessionDetailPayload = {
+      ...payload,
+      resting: true,
+      rest_total_seconds: 90,
+      session: {
+        ...payload.session,
+        rest_ends_at: new Date(Date.now() + 90_000).toISOString().replace('Z', ''),
+      },
+    }
+    const { unmount } = render(<LivePanel payload={resting} {...handlers()} />)
+    expect(document.title).toMatch(/^\d:\d{2} Pause · Gym Tracker$/)
+    unmount()
+    expect(document.title).toBe('Gym Tracker')
+  })
 })
 
 describe('Rail', () => {

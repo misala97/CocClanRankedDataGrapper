@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useSaveState } from '../stores'
 
 /**
@@ -11,6 +12,16 @@ import { useSaveState } from '../stores'
 export function SaveErrorBanner() {
   const error = useSaveState((s) => s.error)
   const dismiss = useSaveState((s) => s.dismissError)
+
+  // Gym wifi comes back before anyone finds the retry button: when the
+  // connection returns, the banner retries itself. Safe to fire twice --
+  // toggleSet states its target (idempotent) and addSet is lock-guarded.
+  useEffect(() => {
+    if (error === null) return
+    const retry = () => error.retry()
+    window.addEventListener('online', retry)
+    return () => window.removeEventListener('online', retry)
+  }, [error])
 
   if (error === null) return null
 

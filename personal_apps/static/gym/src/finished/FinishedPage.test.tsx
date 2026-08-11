@@ -47,6 +47,8 @@ const base: FinishedPayload = {
   rest_taken_seconds: null,
   weekday_short: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
   just_finished: false,
+  template_exercises: null,
+  template_next_exercises: null,
 }
 
 const mount = (over: Partial<FinishedPayload> = {}) =>
@@ -293,11 +295,51 @@ describe('FinishedPage', () => {
       mount({
         just_finished: true,
         session: { ...base.session, template_id: 3, template_name: 'Push' },
+        // A real difference -- with none, the prompt (rightly) does not exist.
+        template_exercises: ['Dips'],
+        template_next_exercises: ['Bankdrücken'],
       })
       expect(screen.getByText(/mit dieser Übungsliste und Reihenfolge aktualisieren/))
         .toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Vorlage aktualisieren' }).closest('form'))
         .toHaveAttribute('action', '/gym/session/42/update_template')
+    })
+
+    it('states what the update would change', () => {
+      // The rendered diff that replaced the blind confirm(). Both halves are
+      // server-computed: the "after" is what the update route would actually
+      // write, not the performed list.
+      mount({
+        just_finished: true,
+        session: { ...base.session, template_id: 3, template_name: 'Push' },
+        template_exercises: ['Dips'],
+        template_next_exercises: ['Bankdrücken'],
+      })
+      const diff = document.querySelector('.prompt__diff')!
+      expect(diff.textContent).toContain('Neu: Bankdrücken.')
+      expect(diff.textContent).toContain('Entfällt: Dips.')
+    })
+
+    it('names a pure reorder as such', () => {
+      mount({
+        just_finished: true,
+        session: { ...base.session, template_id: 3, template_name: 'Push' },
+        template_exercises: ['Dips', 'Bankdrücken'],
+        template_next_exercises: ['Bankdrücken', 'Dips'],
+      })
+      expect(document.querySelector('.prompt__diff')!.textContent)
+        .toBe('Nur die Reihenfolge ändert sich.')
+    })
+
+    it('disappears when the update would change nothing', () => {
+      mount({
+        just_finished: true,
+        session: { ...base.session, template_id: 3, template_name: 'Push' },
+        template_exercises: ['Bankdrücken'],
+        template_next_exercises: ['Bankdrücken'],
+      })
+      expect(screen.queryByText(/mit dieser Übungsliste und Reihenfolge aktualisieren/))
+        .not.toBeInTheDocument()
     })
 
     it('is absent on a later visit and on an empty workout', () => {

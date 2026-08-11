@@ -1,6 +1,7 @@
 """The two rollout scripts. They run once each against production, so their
 guards matter more than their happy paths."""
 import datetime as dt
+import re
 
 import pytest
 
@@ -242,9 +243,11 @@ class TestWeeklyDigest:
             payload = _weekly_digest_for(_admin_id(), now)
             assert payload is not None
             assert payload['title'] == 'Deine Trainingswoche'
-            assert '2 Workouts' in payload['body']
-            # 2 sessions x 500 kg -- plus whatever else the dev DB logged this
-            # week, so the number is not pinned, only its presence and format.
+            # At least the two fixture sessions -- the dev DB may add its own
+            # this week, the same reason the kg sum below is not pinned.
+            count = re.search(r'(\d+) Workouts', payload['body'])
+            assert count is not None, payload['body']
+            assert int(count.group(1)) >= 2
             assert ' kg' in payload['body']
         finally:
             with flask_app.app_context():

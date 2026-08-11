@@ -1,6 +1,8 @@
-import { useRef } from 'react'
-import { CsrfField } from '../csrf'
+import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type { ExerciseDetailPayload } from '../types'
+import { getJson, postForm } from '../api'
+import { UndoToast, useUndo } from '../undo'
 import { shortDate } from '../format'
 import { Icon } from '../components/Icon'
 import { ExerciseHeader } from '../components/ExerciseHeader'
@@ -27,10 +29,58 @@ interface Props {
  * the back button keep working.
  */
 export function ExerciseDetailPage({ payload, nameTaken }: Props) {
-  const p = payload
+  // State, not the prop: the position pills swap the whole payload in place
+  // (detail.json honours the filter exactly), so a pill tap is one fetch
+  // instead of a full navigation.
+  const [p, setP] = useState(payload)
+  // A genuinely new server-rendered payload replaces any client-side swap.
+  useEffect(() => { setP(payload) }, [payload])
   const id = p.exercise.id
   const count = p.table.length
   const editSheet = useRef<EditSheetHandle>(null)
+
+  const fetchPosition = (positionParam: string) =>
+    getJson<ExerciseDetailPayload>(
+      `/gym/exercises/${id}/detail.json?position=${positionParam}`)
+
+  // The swap is wrapped in a view transition where the platform has one --
+  // the chart crossfades between filters instead of cutting. flushSync so the
+  // new DOM exists inside the transition's capture window.
+  const applyPayload = (fresh: ExerciseDetailPayload) => {
+    if (document.startViewTransition !== undefined
+      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.startViewTransition(() => { flushSync(() => setP(fresh)) })
+    } else {
+      setP(fresh)
+    }
+  }
+
+  const switchPosition = (positionParam: string) => {
+    fetchPosition(positionParam)
+      .then((fresh) => {
+        applyPayload(fresh)
+        // pushState, so every pill stays a back-button step, the way the
+        // full navigations were.
+        history.pushState(null, '', `/gym/exercises/${id}?position=${positionParam}`)
+      })
+      // The pills are real links underneath; a failed fetch falls back to
+      // exactly the navigation the link always meant.
+      .catch(() => {
+        window.location.href = `/gym/exercises/${id}?position=${positionParam}`
+      })
+  }
+
+  useEffect(() => {
+    const onPop = () => {
+      const positionParam = new URLSearchParams(window.location.search)
+        .get('position') ?? 'all'
+      fetchPosition(positionParam).then(applyPayload)
+        .catch(() => { window.location.reload() })
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   const oldest = p.table[count - 1]
   const newest = p.table[0]
@@ -77,13 +127,18 @@ export function ExerciseDetailPage({ payload, nameTaken }: Props) {
                     <div className="pills">
                       {/* ?position=all, not a bare URL: a bare URL means
                           "decide for me" and lands on the default slot, so the
-                          comparison view needs to say so. */}
+                          comparison view needs to say so. Still real links --
+                          deep links, middle-click and no-JS keep working; a
+                          plain click swaps in place. */}
                       <a className={`pill${p.selected_position === null ? ' is-on' : ''}`}
-                        href={`/gym/exercises/${id}?position=all`}>Alle</a>
+                        href={`/gym/exercises/${id}?position=all`}
+                        onClick={(e) => { e.preventDefault(); switchPosition('all') }}>Alle</a>
                       {p.available_positions.map((pos) => (
                         <a key={pos}
                           className={`pill${p.selected_position === pos ? ' is-on' : ''}`}
-                          href={`/gym/exercises/${id}?position=${pos}`}>Position {pos}</a>
+                          href={`/gym/exercises/${id}?position=${pos}`}
+                          onClick={(e) => { e.preventDefault(); switchPosition(String(pos)) }}>
+                          Position {pos}</a>
                       ))}
                     </div>
                     {/* Arriving on a filtered page with a pill already lit
@@ -134,19 +189,31 @@ export function ExerciseDetailPage({ payload, nameTaken }: Props) {
             Name, Muskelgruppe, Standard-Pause bearbeiten
           </button>
           {p.can_delete && (
-            <form method="post" action={`/gym/exercises/${id}/delete`}
-              onSubmit={(e) => { if (!confirm('Übung löschen?')) e.preventDefault() }}>
-              <CsrfField />
-              <button type="submit" className="quiet-acts__btn quiet-acts__btn--danger">
-                Übung löschen
-              </button>
-            </form>
+            /* Delayed-commit undo instead of confirm(): the toast reports it,
+               five seconds to take it back, then the POST fires and the page
+               moves on to the catalogue. */
+            <button type="button" className="quiet-acts__btn quiet-acts__btn--danger"
+              onClick={() => useUndo.getState().offer({
+                label: `Übung „${p.exercise.name}“ gelöscht.`,
+                commit: (keepalive) => {
+                  postForm<{ deleted: boolean }>(
+                    `/gym/exercises/${id}/delete`, {}, { keepalive })
+                    .then(() => { if (!keepalive) window.location.assign('/gym/uebungen') })
+                    // A failed delete leaves the exercise standing -- staying
+                    // on its page is the honest outcome.
+                    .catch(() => {})
+                },
+                undo: () => {},
+              })}>
+              Übung löschen
+            </button>
           )}
         </section>
       </div>
 
       <EditSheet ref={editSheet} exercise={p.exercise} muscleGroups={p.muscle_groups}
         equipmentLabels={p.equipment_labels} openOnMount={nameTaken} />
+      <UndoToast />
     </>
   )
 }

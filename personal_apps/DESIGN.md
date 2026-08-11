@@ -75,8 +75,9 @@ components:
     textColor: "{colors.on-record}"
     rounded: "{rounded.chip}"
   chip-stall:
-    backgroundColor: "{colors.stall}"
-    textColor: "{colors.on-stall}"
+    backgroundColor: "transparent"
+    textColor: "{colors.stall-ink}"
+    borderColor: "{colors.stall-ink}"
     rounded: "{rounded.chip}"
 ---
 
@@ -221,8 +222,10 @@ its shared primitives. Changing one changes every page — that is the point.
 ### Chips / Tags (`.chip`, `.vtag`)
 - **Style:** full pills, 11–13px semibold, letterspaced uppercase.
 - **States:** filled chips (done rose, record gold) carry dark on-fill text;
-  outline chips (live, stall) carry the hue as text — state reads by shape as
-  well as colour. Deload: transparent, `--edge` border, `--dim` word.
+  outline chips (live, stall, and the "Steigend" tendency) carry the hue as
+  text — state reads by shape as well as colour: FILLED is a fact, OUTLINE is
+  a state to note. Deload: transparent, `--edge` border, `--dim` word
+  (`.vtag--deload`, its own class so restyling "Neu" can never recolour it).
 
 ### Rows (`.row` — the one list grammar)
 - **Anatomy:** `__lead?` · `__main` (name + meta, optional sub) · `__trail?`;

@@ -66,6 +66,13 @@ export interface HeutePayload {
   now: string
   active_session_id: number | null
   active_session_name: string | null
+  /** The clock's anchor: session start, not page render. */
+  active_session_started_at: string | null
+  /** The resume heuristic's "what was I on", for the card's second line. */
+  active_session_exercise: string | null
+  /** Display target for the rest countdown; stale values past the cap are
+   *  ignored client-side, same as the Jinja resume strip. */
+  active_session_rest_ends_at: string | null
   vapid_public_key: string | null
   consistency: Consistency
   routines: RoutineMemory[]

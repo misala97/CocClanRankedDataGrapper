@@ -263,5 +263,9 @@ def gym_delete_exercise(exercise_id):
     name = exercise.name
     db.session.delete(exercise)
     db.session.commit()
+    # The detail island's delayed-commit undo posts this via fetch and
+    # navigates itself afterwards.
+    if _wants_json():
+        return jsonify({'deleted': True})
     flash(f'Übung „{name}“ gelöscht.', 'success')
     return redirect(url_for('gym.gym_uebungen'))

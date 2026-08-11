@@ -60,6 +60,17 @@ export function LivePanel({
     payload.rest_total_seconds,
     { onOver: onRestOver })
 
+  // The countdown follows the lifter into another tab: leaving mid-rest is
+  // exactly when this screen is not on screen to show it. The phone has the
+  // wake lock and the push notification; the tab title covers the desk.
+  useEffect(() => {
+    if (!rest.running) return
+    const base = document.title
+    document.title =
+      `${Math.floor(rest.remaining / 60)}:${String(rest.remaining % 60).padStart(2, '0')} Pause · ${base}`
+    return () => { document.title = base }
+  }, [rest.running, rest.remaining])
+
   if (live === null) {
     return (
       /* A workout started without a template has no exercises at all, and the
@@ -183,8 +194,14 @@ export function LivePanel({
           at "Satz geschafft": a name that rewrote itself every second would be
           worse than no countdown, and the announcement lives in the live
           region, which speaks twice per rest rather than ninety times. */}
+      {/* Disabled for the length of the round trip: a sweaty double-tap on a
+          64px thumb target is normal use, and the second press must not race
+          the first one's answer. The optimistic path keeps this window to a
+          few hundred ms, so there is no visual disabled treatment -- styling
+          a flash would be noise. */}
       <button type="button" className={rest.running ? 'go is-resting' : 'go'}
-        id="set-confirm" onClick={() => onConfirm(weight, reps)}>
+        id="set-confirm" disabled={busySetId !== null}
+        onClick={() => onConfirm(weight, reps)}>
         <span className="go__lbl">
           <Icon name="check" />
           Satz geschafft

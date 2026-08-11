@@ -11,6 +11,8 @@ interface Props {
    *  (false on a name collision). The page swaps its payload either way --
    *  added_id highlights the new row, name_taken raises the banner. */
   onCreate: (fields: FormData) => Promise<boolean>
+  /** Preselects the Muskelgruppe when an empty group band opened the sheet. */
+  presetGroup?: string | null
 }
 
 /**
@@ -23,7 +25,7 @@ interface Props {
  * every value but one.
  */
 export function NewExerciseSheet({
-  muscleGroups, equipmentLabels, defaultRestSeconds, onCreate,
+  muscleGroups, equipmentLabels, defaultRestSeconds, onCreate, presetGroup = null,
 }: Props) {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -50,7 +52,10 @@ export function NewExerciseSheet({
 
         <div className="field grow">
           <label className="label" htmlFor="uebungen-add-group">Muskelgruppe</label>
-          <select id="uebungen-add-group" name="muscle_group" className="select">
+          {/* key remounts the uncontrolled select when an empty group band
+              opened the sheet, so ITS group arrives preselected. */}
+          <select id="uebungen-add-group" name="muscle_group" className="select"
+            key={presetGroup ?? 'none'} defaultValue={presetGroup ?? ''}>
             <option value="">— optional —</option>
             {muscleGroups.map((mg) => <option value={mg} key={mg}>{mg}</option>)}
           </select>

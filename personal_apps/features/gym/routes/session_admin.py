@@ -171,6 +171,10 @@ def gym_delete_session(session_id):
                 synchronize_session=False)
         db.session.delete(session_)
         db.session.commit()
+    # The island's delayed-commit undo posts this via fetch; it needs an
+    # answer, not a redirect it would have to parse HTML out of.
+    if _wants_json():
+        return jsonify({'deleted': True})
     return redirect(url_for('gym.gym_verlauf'))
 
 

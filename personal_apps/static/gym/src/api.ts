@@ -25,12 +25,18 @@ const writeHeaders = () => ({ ...JSON_HEADERS, 'X-CSRF-Token': csrfToken() })
 const TIMEOUT_MS = 8000
 
 export class MutationFailed extends Error {
-  constructor(readonly reason: 'timeout' | 'network') {
+  constructor(readonly reason: 'timeout' | 'network' | 'forbidden') {
     super(reason)
   }
 
   /** The message the banner shows. German, because the banner is German. */
   get germanMessage(): string {
+    // 'forbidden' is its own message: a CSRF token gone stale after a
+    // long-idle PWA session used to read as "Verbindung fehlgeschlagen" with
+    // a retry that could never succeed.
+    if (this.reason === 'forbidden') {
+      return 'Sitzung abgelaufen — bitte Seite neu laden.'
+    }
     return this.reason === 'timeout'
       ? 'Keine Antwort vom Server — deine letzte Änderung wurde nicht gespeichert.'
       : 'Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.'
@@ -66,7 +72,9 @@ export async function postFormData<T>(
       // answered; keepalive lets the request outlive the document.
       keepalive: opts.keepalive ?? false,
     })
-    if (!response.ok) throw new MutationFailed('network')
+    if (!response.ok) {
+      throw new MutationFailed(response.status === 403 ? 'forbidden' : 'network')
+    }
     return await response.json() as T
   } catch (error) {
     if (error instanceof MutationFailed) throw error
@@ -75,6 +83,29 @@ export async function postFormData<T>(
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** POST-and-navigate, for routes that answer with a redirect to a NEW page
+ *  (finish -> debrief, invite -> partner confirm, save-as-template). A real
+ *  form submit, so the browser follows the redirect; it carries the same
+ *  csrf_token field every native form embeds. This exists because the port
+ *  shipped both failure modes at once: `window.location.href` was a GET to a
+ *  POST-only route (405), and the hand-built forms carried no token (403
+ *  once the blueprint's CSRF gate closed). */
+export function postNavigate(url: string, fields: Record<string, string> = {}): void {
+  const form = document.createElement('form')
+  form.method = 'post'
+  form.action = url
+  const all: Record<string, string> = { csrf_token: csrfToken(), ...fields }
+  for (const [name, value] of Object.entries(all)) {
+    const input = document.createElement('input')
+    input.type = 'hidden'
+    input.name = name
+    input.value = value
+    form.append(input)
+  }
+  document.body.append(form)
+  form.submit()
 }
 
 export async function getJson<T>(url: string): Promise<T> {

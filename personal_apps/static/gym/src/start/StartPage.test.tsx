@@ -26,6 +26,9 @@ const base: HeutePayload = {
   now: '2026-08-10T18:00:00',
   active_session_id: null,
   active_session_name: null,
+  active_session_started_at: null,
+  active_session_exercise: null,
+  active_session_rest_ends_at: null,
   vapid_public_key: null,
   consistency: { sessions: 8, per_week: 2.5, days_since_last: 2, window_days: 28 },
   routines: [routine()],
@@ -114,13 +117,48 @@ describe('StartPage', () => {
   })
 
   describe('while a workout is running', () => {
-    const running = { active_session_id: 42, active_session_name: 'Leg Day' }
+    const running = {
+      active_session_id: 42,
+      active_session_name: 'Leg Day',
+      // An hour before the payload's `now`, and much longer before any
+      // Date.now() the test runs at.
+      active_session_started_at: '2026-08-10T17:00:00',
+      active_session_exercise: 'Bench Press (Dumbbell)',
+    }
 
     it('leads with getting back into it', () => {
       mount(running)
       expect(screen.getByRole('heading', { name: 'Läuft gerade' })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /Weiter/ }))
         .toHaveAttribute('href', '/gym/session/42')
+    })
+
+    it('measures the clock from the session start, not the page render', () => {
+      // The bug this pins: useElapsed(payload.now) showed "00:00:01 läuft"
+      // twenty minutes into a workout -- the one live datum on the page,
+      // false at the exact glance the card exists for.
+      mount(running)
+      const clock = document.getElementById('heute-elapsed')!
+      expect(clock.textContent).toMatch(/^\d{2,}:\d{2}:\d{2}$/)
+      expect(clock.textContent).not.toBe('00:00:00')
+      expect(clock.textContent).not.toBe('00:00:01')
+    })
+
+    it('says what you were on', () => {
+      mount(running)
+      expect(screen.getByText('Bench Press (Dumbbell)')).toBeInTheDocument()
+    })
+
+    it('shows no rest countdown without a running rest', () => {
+      mount(running)
+      expect(screen.queryByText(/Pause/)).not.toBeInTheDocument()
+    })
+
+    it('ignores a stale rest stamp past the ceiling', () => {
+      // Same 900s cap as the Jinja resume strip: a stale rest_ends_at must
+      // not strand the card on a garbage countdown.
+      mount({ ...running, active_session_rest_ends_at: '2030-01-01T00:00:00' })
+      expect(screen.queryByText(/Pause/)).not.toBeInTheDocument()
     })
 
     it('offers no way to start another one', () => {

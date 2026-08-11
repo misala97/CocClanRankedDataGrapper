@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import type { ChartGeometry, ChartPoint, ChartProjection } from '../types'
 import { kg1, shortDate } from '../format'
 
@@ -32,10 +32,37 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
   // and skip the internals, and focusable children inside it would contradict
   // that. See the a11y note on the readout below.
   const [picked, setPicked] = useState<{ position: number; index: number } | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   const width = Math.trunc(chart.width)
   const height = Math.trunc(chart.height)
   const mid = Math.trunc(chart.height / 2)
   const bottom = height - 10
+
+  // Scrubbing: hover (mouse) or drag (touch/pen, vertical scroll untouched
+  // via pan-y) walks the readout along the line -- the nearest point wins,
+  // weighted toward x because a scrub is a horizontal gesture. The reserved
+  // readout row below was built for exactly this: updating it costs no
+  // layout.
+  const scrub = (clientX: number, clientY: number) => {
+    const svg = svgRef.current
+    if (svg === null) return
+    const box = svg.getBoundingClientRect()
+    if (box.width === 0 || box.height === 0) return
+    const x = ((clientX - box.left) / box.width) * width
+    const y = ((clientY - box.top) / box.height) * height
+    let best: { position: number; index: number } | null = null
+    let bestDistance = Infinity
+    for (const entry of chart.series) {
+      entry.points.forEach((point, i) => {
+        const d = (point.x - x) ** 2 + 0.25 * (point.y - y) ** 2
+        if (d < bestDistance) {
+          bestDistance = d
+          best = { position: entry.position, index: i }
+        }
+      })
+    }
+    if (best !== null) setPicked(best)
+  }
 
   const description =
     `Verlauf des e1RM über ${sessionCount} Einheiten, ` +
@@ -57,7 +84,12 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
         ))}
       </div>
 
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description}>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description}
+        ref={svgRef}
+        onPointerDown={(e) => scrub(e.clientX, e.clientY)}
+        onPointerMove={(e) => {
+          if (e.pointerType === 'mouse' || e.buttons > 0) scrub(e.clientX, e.clientY)
+        }}>
         <g stroke="var(--edge)" strokeWidth="1">
           <line x1="0" y1="10" x2={width} y2="10" />
           <line x1="0" y1={mid} x2={width} y2={mid} />
@@ -155,16 +187,9 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
                 fill="none" stroke="var(--ink)" strokeWidth="1.5" />
             )
           })()}
-          {chart.series.map((entry) => entry.points.map((point, i) => (
-            <circle
-              key={`hit-${entry.position}-${i}`}
-              cx={point.x} cy={point.y} r="14" fill="transparent"
-              onClick={() => setPicked(
-                picked?.position === entry.position && picked.index === i
-                  ? null
-                  : { position: entry.position, index: i })}
-            />
-          )))}
+          {/* The per-point hit circles are gone: the svg-level scrub handler
+              picks the nearest point for any tap or drag, which covers every
+              radius the circles did and the space between them too. */}
         </g>
       </svg>
 
@@ -185,7 +210,7 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
               {' · '}<b>{kg1(point.e1rm)} kg</b> e1RM
               {chart.series.length > 1 && ` · P${picked!.position}`}
               {point.is_best && <span className="chart__read-tag vtag vtag--record">Rekord</span>}
-              {point.is_deload && <span className="chart__read-tag vtag vtag--neu">Deload</span>}
+              {point.is_deload && <span className="chart__read-tag vtag vtag--deload">Deload</span>}
             </>
           )
         })()}

@@ -33,6 +33,48 @@ function useElapsed(startedAt: string): string {
   return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`
 }
 
+/* A rest window is minutes, not hours: past this, a stale rest_ends_at is
+ * treated as "no rest" -- the same ceiling the Jinja resume strip applies. */
+const MAX_REST_MS = 900 * 1000
+
+/* A PWA left open overnight re-surfaces showing yesterday's "Zuletzt vor N
+ * Tagen" and tonnage. Everything here renders from a server-embedded payload,
+ * so past this much time hidden the honest fix is a fresh page. */
+const STALE_AFTER_MS = 30 * 60_000
+
+function useReloadWhenStale() {
+  useEffect(() => {
+    let hiddenAt: number | null = null
+    const onVisibility = () => {
+      if (document.hidden) { hiddenAt = Date.now(); return }
+      if (hiddenAt !== null && Date.now() - hiddenAt > STALE_AFTER_MS) {
+        window.location.reload()
+      }
+      hiddenAt = null
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
+}
+
+/** m:ss until the running rest ends, or null when there is none (or the
+ *  stamp is stale/expired). Leaving the session mid-rest is exactly when the
+ *  countdown matters most and exactly when the session screen is not on
+ *  screen to show it. */
+function useRestCountdown(restEndsAt: string | null): string | null {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (restEndsAt === null) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [restEndsAt])
+  if (restEndsAt === null) return null
+  const left = local(restEndsAt).getTime() - now
+  if (left <= 0 || left > MAX_REST_MS) return null
+  const total = Math.ceil(left / 1000)
+  return `${Math.floor(total / 60)}:${pad(total % 60)}`
+}
+
 function StallRow({ item }: { item: Stall }) {
   return (
     <a className="row row--top" href={`/gym/exercises/${item.exercise_id}`}
@@ -163,7 +205,11 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
       .catch(() => setSubscribed(false))
   }, [pushSupported, setSubscribed])
 
-  const elapsed = useElapsed(payload.now)
+  // Anchored to the session's start, not the page render: `payload.now` here
+  // was the bug that made the card read "00:00:01 läuft" twenty minutes in.
+  const elapsed = useElapsed(payload.active_session_started_at ?? payload.now)
+  const restLeft = useRestCountdown(payload.active_session_rest_ends_at)
+  useReloadWhenStale()
   const lead = payload.routines[0]
   const rest = payload.routines.slice(canStart ? 1 : 0)
   const lastWeek = payload.tonnage[payload.tonnage.length - 1]
@@ -192,11 +238,36 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
         </p>
       </header>
 
+      {running && (
+        // A workout is already running: nothing else on this page competes
+        // with getting back into it.
+        <section className="sec" aria-labelledby="sec-laeuft">
+          <div className="sec__head"><h2 className="label" id="sec-laeuft">Läuft gerade</h2></div>
+          <div className="lead">
+            <span className="lead__main stack">
+              <span className="lead__name">{payload.active_session_name ?? 'Workout'}</span>
+              {payload.active_session_exercise !== null && (
+                <span className="lead__ex">{payload.active_session_exercise}</span>
+              )}
+              <span className="lead__due">
+                <b id="heute-elapsed">{elapsed}</b> läuft
+                {restLeft !== null && <>{' · Pause '}<b>{restLeft}</b></>}
+              </span>
+            </span>
+            <a href={`/gym/session/${payload.active_session_id}`} className="lead__go">
+              <Icon name="skip" />
+              Weiter
+            </a>
+          </div>
+        </section>
+      )}
+
       {/* Enabling rest-timer notifications lived only in the options sheet
           during a live workout -- a menu that does not exist until you are
           mid-set, which is neither where you look nor when you would think of
           it. Shown once on a device without a subscription, gone for good
-          after the tap. */}
+          after the tap. BELOW the running card: a one-time setup prompt must
+          not outrank the workout that is happening right now. */}
       {pushSupported && subscribed === false && (
         <section className="sec notify-prompt" id="notify-start">
           <button type="button" className="notify-prompt__btn"
@@ -207,24 +278,6 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
               <small>Auf diesem Gerät. Installiere die App zuerst über „Zum Home-Bildschirm“.</small>
             </span>
           </button>
-        </section>
-      )}
-
-      {running && (
-        // A workout is already running: nothing else on this page competes
-        // with getting back into it.
-        <section className="sec" aria-labelledby="sec-laeuft">
-          <div className="sec__head"><h2 className="label" id="sec-laeuft">Läuft gerade</h2></div>
-          <div className="lead">
-            <span className="lead__main stack">
-              <span className="lead__name">{payload.active_session_name ?? 'Workout'}</span>
-              <span className="lead__due"><b id="heute-elapsed">{elapsed}</b> läuft</span>
-            </span>
-            <a href={`/gym/session/${payload.active_session_id}`} className="lead__go">
-              <Icon name="skip" />
-              Weiter
-            </a>
-          </div>
         </section>
       )}
 
@@ -430,19 +483,41 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
               <span className="sec__sp" />
               <span className="label">Letzte 4 Wochen</span>
             </div>
-            {payload.balance.length > 0 ? payload.balance.map((bucket) => (
-              <div className="hbar" key={bucket.group}>
-                <span className="hbar__name">{bucket.group}</span>
-                <span className="hbar__track">
-                  <span className={bucket.under_trained ? 'hbar__fill is-stall' : 'hbar__fill'}
-                    style={{ inlineSize: `${Math.round(bucket.share * 1000) / 10}%` }} />
-                </span>
-                <span className="hbar__val">
-                  {bucket.sets}
-                  {bucket.under_trained && <small>zu wenig</small>}
-                </span>
-              </div>
-            )) : (
+            {payload.balance.length > 0 ? (() => {
+              // Six identical "0 · zu wenig" rows drowned the one
+              // under-trained group that mattered -- and "Ohne Muskelgruppe ·
+              // zu wenig" attached advice to a data-hygiene artifact. Trained
+              // groups keep their bars; the untouched ones collapse into one
+              // stated line.
+              const NO_GROUP = 'Ohne Muskelgruppe'
+              const trained = payload.balance.filter((bucket) => bucket.sets > 0)
+              // An untouched no-group bucket is a catalogue artifact, not a
+              // training gap -- it appears nowhere rather than in the line.
+              const zero = payload.balance.filter(
+                (bucket) => bucket.sets === 0 && bucket.group !== NO_GROUP)
+              return (
+                <>
+                  {trained.map((bucket) => (
+                    <div className="hbar" key={bucket.group}>
+                      <span className="hbar__name">{bucket.group}</span>
+                      <span className="hbar__track">
+                        <span className={bucket.under_trained ? 'hbar__fill is-stall' : 'hbar__fill'}
+                          style={{ inlineSize: `${Math.round(bucket.share * 1000) / 10}%` }} />
+                      </span>
+                      <span className="hbar__val">
+                        {bucket.sets}
+                        {bucket.under_trained && <small>zu wenig</small>}
+                      </span>
+                    </div>
+                  ))}
+                  {zero.length > 0 && (
+                    <p className="start__note">
+                      {`Ohne Sätze: ${zero.map((bucket) => bucket.group).join(', ')}.`}
+                    </p>
+                  )}
+                </>
+              )
+            })() : (
               <p className="empty">Noch keine Übungen im Katalog.</p>
             )}
           </section>
@@ -462,7 +537,9 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                   <span className="row__main stack">
                     <span className="row__name row__name--strong">{s.name ?? 'Workout'}</span>
                     <span className="row__meta">
-                      {`${dmy(s.started_at)} · ${minutes} min${s.is_deload ? ' · Deload' : ''}`}
+                      {/* Sub-minute sessions printed "0 min" -- same guard as
+                          Verlauf's rows. */}
+                      {`${dmy(s.started_at)} · ${minutes < 1 ? '< 1' : minutes} min${s.is_deload ? ' · Deload' : ''}`}
                     </span>
                   </span>
                   <span className="row__trail row__trail--stack">

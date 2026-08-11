@@ -1,7 +1,22 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { ExerciseChart } from './ExerciseChart'
 import type { ChartGeometry, ChartPoint } from '../types'
+
+/** Tap/scrub at viewBox coordinates: the svg's rect is mocked 1:1 to the
+ *  viewBox, so clientX/Y map straight onto point coordinates. */
+function tapAt(container: HTMLElement, geom: ChartGeometry, x: number, y: number) {
+  const svg = container.querySelector('svg')!
+  vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({
+    left: 0, top: 0, x: 0, y: 0,
+    width: geom.width, height: geom.height,
+    right: geom.width, bottom: geom.height,
+    toJSON: () => ({}),
+  } as DOMRect)
+  // MouseEvent, not fireEvent.pointerDown: jsdom has no PointerEvent, and the
+  // fallback drops clientX/Y -- the one thing the scrub reads.
+  fireEvent(svg, new MouseEvent('pointerdown', { clientX: x, clientY: y, bubbles: true }))
+}
 
 function point(over: Partial<ChartPoint> & Pick<ChartPoint, 'x' | 'y'>): ChartPoint {
   return {
@@ -128,18 +143,15 @@ describe('ExerciseChart', () => {
 })
 
 describe('tap to inspect', () => {
-  const user = () => import('@testing-library/user-event').then((m) => m.default.setup())
-
   it('hints before anything is tapped, in reserved space', () => {
     const { container } = render(<ExerciseChart chart={chart} {...labels} />)
     expect(screen.getByText('Punkt antippen für Details')).toBeInTheDocument()
     expect(container.querySelector('.chart__picked')).toBeNull()
   })
 
-  it('states the tapped point and rings it', async () => {
+  it('states the tapped point and rings it', () => {
     const { container } = render(<ExerciseChart chart={chart} {...labels} />)
-    const hits = container.querySelectorAll('.chart__hits circle[r="14"]')
-    await (await user()).click(hits[2]!)
+    tapAt(container, chart, 310, 20)
     const read = container.querySelector('.chart__read')!
     expect(read).toHaveTextContent('01.06.2026 · 100,0 kg e1RM')
     expect(read).toHaveTextContent('Rekord')
@@ -148,22 +160,26 @@ describe('tap to inspect', () => {
     expect(container.querySelector('.chart__picked')).not.toBeNull()
   })
 
-  it('tags a deload point and names the slot with two series', async () => {
-    const { container } = render(<ExerciseChart chart={twoSeries()} {...labels} />)
-    const hits = container.querySelectorAll('.chart__hits circle[r="14"]')
-    await (await user()).click(hits[1]!)
+  it('tags a deload point and names the slot with two series', () => {
+    const geom = twoSeries()
+    const { container } = render(<ExerciseChart chart={geom} {...labels} />)
+    tapAt(container, geom, 160, 80)
     const read = container.querySelector('.chart__read')!
     expect(read).toHaveTextContent('Deload')
     expect(read).toHaveTextContent('P2')
   })
 
-  it('taps off again', async () => {
+  it('scrubs: a tap between points snaps to the nearest, a second moves on', () => {
+    // No toggle-off any more: the readout row is reserved-height, so keeping
+    // the last point costs nothing, and a scrub that could "un-pick" fought
+    // its own gesture.
     const { container } = render(<ExerciseChart chart={chart} {...labels} />)
-    const hit = container.querySelectorAll('.chart__hits circle[r="14"]')[0]!
-    const u = await user()
-    await u.click(hit)
-    await u.click(hit)
-    expect(screen.getByText('Punkt antippen für Details')).toBeInTheDocument()
+    tapAt(container, chart, 40, 130)   // nearest is the first point (10,140)
+    const read = container.querySelector('.chart__read')!
+    expect(read).not.toHaveTextContent('Punkt antippen')
+    expect(read).not.toHaveTextContent('Deload')
+    tapAt(container, chart, 170, 90)   // nearest is the deload point (160,80)
+    expect(read).toHaveTextContent('Deload')
   })
 
   it('keeps the hit overlay out of the ink and out of the accessibility tree', () => {

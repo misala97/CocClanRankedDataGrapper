@@ -1,5 +1,6 @@
 import type { SessionDetailPayload } from './types'
-import { useAnnouncer } from './stores'
+import { useAnnouncer, useSheets } from './stores'
+import { FinishSheet } from './components/FinishSheet'
 import { SessionHeader } from './components/SessionHeader'
 import { SaveErrorBanner } from './components/SaveErrorBanner'
 import { ReorderBar } from './components/ReorderBar'
@@ -25,6 +26,7 @@ export interface SessionActions {
   onConfirmSet(weight: number, reps: number): void
   onToggleSet(setId: number, completed: boolean): void
   onFinish(): void
+  onReorder(order: number[]): void
   onSessionMetaSave(meta: { bodyweightKg: number | null; notes: string }): void
   onSkipRest(): void
   onInvite(partnerId: number): void
@@ -56,6 +58,7 @@ interface Props {
  */
 export function SessionPage({ payload, actions, pushSupported, busySetId = null }: Props) {
   const announce = useAnnouncer((s) => s.announce)
+  const openSheet = useSheets((s) => s.open)
 
   return (
     // No wrapper element: the mount node in session_detail.html already IS
@@ -86,13 +89,14 @@ export function SessionPage({ payload, actions, pushSupported, busySetId = null 
       <TickStrip states={payload.tick_states}
         done={payload.sets_done} total={payload.sets_total} />
 
-      <Queue exercises={payload.visible_exercises} liveId={payload.live_id} />
+      <Queue exercises={payload.visible_exercises} liveId={payload.live_id}
+        onReorder={actions.onReorder} />
 
       <div className="session-foot">
+        {/* Opens the finish sheet -- the pre-debrief beat -- instead of a
+            native confirm() the design cannot style. */}
         <button type="button" className="btn btn--ghost btn--block"
-          onClick={() => {
-            if (confirm('Workout beenden?')) actions.onFinish()
-          }}>Workout beenden</button>
+          onClick={() => openSheet('sheet-finish')}>Workout beenden</button>
       </div>
       {/* Inside .session-view now rather than beside it. A modal <dialog> is
           promoted to the top layer and is not laid out by its DOM ancestors,
@@ -119,6 +123,11 @@ export function SessionPage({ payload, actions, pushSupported, busySetId = null 
         onCreate={actions.onCreateExercise} />
 
       <TemplateSheet onSave={actions.onSaveTemplate} />
+
+      <FinishSheet volume={payload.session_volume}
+        setsDone={payload.sets_done} setsTotal={payload.sets_total}
+        startedAt={payload.session.started_at}
+        onFinish={actions.onFinish} />
 
       {payload.visible_exercises.map((se) => (
         <ExerciseSheet key={se.id} exercise={se}

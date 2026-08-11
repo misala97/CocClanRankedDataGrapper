@@ -5,6 +5,7 @@ import type {
 } from './types'
 import { postForm, MutationFailed } from '../api'
 import { kg1, volume as de } from '../format'
+import { UndoToast, useUndo } from '../undo'
 import { useSheets } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
@@ -301,16 +302,32 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         <div className="sec__head"><h2 className="label" id="sec-byex">Nach Übung</h2></div>
         {payload.exercises.length > 0 ? (
           <>
-            {payload.exercises.map((entry) => (
-              <div className="row row--top" key={entry.position}>
-                <span className="row__lead">{entry.position}</span>
-                <a className="row__main stack" href={`/gym/exercises/${entry.exercise_id}`}>
-                  <span className="row__name row__name--wrap">{entry.name}</span>
-                  <span className="row__meta">{entry.sets_display}</span>
-                </a>
-                <span className="row__trail"><Tag entry={entry} /></span>
-              </div>
-            ))}
+            {(() => {
+              // A fresh lifter's every exercise records at once -- seven
+              // identical gold chips is "rare by construction" failing
+              // visibly. One gold sentence keeps the currency.
+              const allRecords = payload.exercises.length >= 3
+                && payload.exercises.every((entry) => entry.verdict === 'rekord')
+              return (
+                <>
+                  {allRecords && (
+                    <p className="finished__allpr">
+                      {`Alle ${payload.exercises.length} Übungen mit Rekord.`}
+                    </p>
+                  )}
+                  {payload.exercises.map((entry) => (
+                    <div className="row row--top" key={entry.position}>
+                      <span className="row__lead">{entry.position}</span>
+                      <a className="row__main stack" href={`/gym/exercises/${entry.exercise_id}`}>
+                        <span className="row__name row__name--wrap">{entry.name}</span>
+                        <span className="row__meta">{entry.sets_display}</span>
+                      </a>
+                      {!allRecords && <span className="row__trail"><Tag entry={entry} /></span>}
+                    </div>
+                  ))}
+                </>
+              )
+            })()}
             <button type="button" className="finished__correct"
               aria-haspopup="dialog" aria-controls="sheet-correct"
               onClick={() => openSheet('sheet-correct')}>
@@ -323,26 +340,23 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         )}
       </section>
 
-      {/* "und", not "&", in German prose. The confirm is not decoration: this
-          replaces the routine's whole exercise list and order with no diff, no
-          undo and -- since the app has no flash region -- no sign afterwards
-          that anything happened. */}
+      {/* "und", not "&", in German prose. The rendered diff replaces the old
+          blind confirm(): the prompt now states exactly what the update would
+          change, and disappears entirely when it would change nothing. */}
       {payload.just_finished && payload.total_sets > 0 && (
         session.template_id !== null ? (
-          <section className="prompt">
-            Vorlage <b>{session.template_name}</b> mit dieser Übungsliste und Reihenfolge aktualisieren?
-            <form method="post" action={`/gym/session/${session.id}/update_template`}
-              onSubmit={(e) => {
-                if (!confirm(`Vorlage „${session.template_name}“ überschreiben? Die bisherige Übungsliste und Reihenfolge gehen verloren.`)) {
-                  e.preventDefault()
-                }
-              }}>
-              <CsrfField />
-              <button type="submit" className="btn btn--ghost btn--block">
-                Vorlage aktualisieren
-              </button>
-            </form>
-          </section>
+          templateDiff(payload) !== null && (
+            <section className="prompt">
+              Vorlage <b>{session.template_name}</b> mit dieser Übungsliste und Reihenfolge aktualisieren?
+              <p className="prompt__diff">{templateDiff(payload)}</p>
+              <form method="post" action={`/gym/session/${session.id}/update_template`}>
+                <CsrfField />
+                <button type="submit" className="btn btn--ghost btn--block">
+                  Vorlage aktualisieren
+                </button>
+              </form>
+            </section>
+          )
         ) : (
           /* A freeform session had nothing offered at the end, though every
              routine on Start comes from a template and this is the one moment
@@ -392,13 +406,24 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             {session.is_deload ? 'Deload-Markierung entfernen' : 'War ein Deload'}
           </button>
         </form>
-        <form method="post" action={`/gym/session/${session.id}/delete`}
-          onSubmit={(e) => { if (!confirm('Workout unwiderruflich löschen?')) e.preventDefault() }}>
-          <CsrfField />
-          <button type="submit" className="quiet-acts__btn quiet-acts__btn--danger">
-            Workout löschen
-          </button>
-        </form>
+        {/* Delayed-commit undo instead of "unwiderruflich" + confirm(): five
+            seconds to take it back, then the POST fires and the page moves on
+            to Verlauf. */}
+        <button type="button" className="quiet-acts__btn quiet-acts__btn--danger"
+          onClick={() => useUndo.getState().offer({
+            label: 'Workout gelöscht.',
+            commit: (keepalive) => {
+              postForm<{ deleted: boolean }>(
+                `/gym/session/${session.id}/delete`, {}, { keepalive })
+                .then(() => { if (!keepalive) window.location.assign('/gym/verlauf') })
+                .catch((error) => setSaveError(error instanceof MutationFailed
+                  ? error.germanMessage
+                  : 'Löschen fehlgeschlagen.'))
+            },
+            undo: () => {},
+          })}>
+          Workout löschen
+        </button>
       </div>
 
       {/* Bodyweight and the session note: editable "at any point during or
@@ -490,6 +515,30 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           </div>
         ))}
       </Sheet>
+      <UndoToast />
     </>
   )
+}
+
+/**
+ * What updating the template would actually change, as one sentence -- or
+ * null when it would change nothing, in which case the prompt has no reason
+ * to exist. Both halves come from the server: the "after" list is NOT the
+ * performed list (skipped and zero-set slots go into a template, substitutes
+ * never do), so it is computed by the same function the route writes with.
+ */
+function templateDiff(payload: FinishedPayload): string | null {
+  const current = payload.template_exercises ?? []
+  const next = payload.template_next_exercises ?? []
+  const added = next.filter((name) => !current.includes(name))
+  const removed = current.filter((name) => !next.includes(name))
+  const reordered = added.length === 0 && removed.length === 0 &&
+    current.join(' ') !== next.join(' ')
+
+  if (added.length === 0 && removed.length === 0 && !reordered) return null
+  const parts: string[] = []
+  if (added.length > 0) parts.push(`Neu: ${added.join(', ')}.`)
+  if (removed.length > 0) parts.push(`Entfällt: ${removed.join(', ')}.`)
+  if (reordered) parts.push('Nur die Reihenfolge ändert sich.')
+  return parts.join(' ')
 }

@@ -91,6 +91,29 @@ def test_every_in_place_mutation_negotiates(client, live_session):
     assert not problems, 'routes that did not answer in JSON:\n' + '\n'.join(problems)
 
 
+def test_reordering_via_form_csv_actually_reorders(client, live_session):
+    """The React island posts `order` as one comma-joined form field through
+    its shared form path. Until 2026-08-11 the route read only a JSON body, so
+    that post parsed to an empty order and reordered nothing -- and the
+    negotiation case above kept passing because it never checked effect. This
+    checks effect.
+    """
+    # The same exercise a second time: a second slot, but no new Exercise row
+    # to leak past live_session's teardown into later tests.
+    added = client.post(
+        f"/gym/session/{live_session['session']}/exercises/add",
+        data={'exercise_id': str(live_session['exercise'])}, headers=JSON).get_json()
+    ids = [se['id'] for se in added['visible_exercises']]
+    assert len(ids) == 2
+
+    flipped = list(reversed(ids))
+    after = client.post(
+        f"/gym/session/{live_session['session']}/exercises/reorder",
+        data={'order': ','.join(str(i) for i in flipped)}, headers=JSON).get_json()
+    assert [se['id'] for se in after['visible_exercises']] == flipped
+    assert [se['position'] for se in after['visible_exercises']] == [1, 2]
+
+
 def test_deleting_a_set_answers_with_the_surviving_session(client, live_session):
     """A route that destroys part of the payload still answers with the
     payload of what survives -- that is exactly what the client re-renders

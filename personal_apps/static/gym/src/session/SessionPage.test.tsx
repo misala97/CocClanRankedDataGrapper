@@ -15,7 +15,7 @@ beforeEach(() => {
 })
 
 const actions = (): SessionActions => ({
-  onConfirmSet: vi.fn(), onToggleSet: vi.fn(), onFinish: vi.fn(),
+  onConfirmSet: vi.fn(), onToggleSet: vi.fn(), onFinish: vi.fn(), onReorder: vi.fn(),
   onSessionMetaSave: vi.fn(), onSkipRest: vi.fn(), onInvite: vi.fn(),
   onEnablePush: vi.fn(), onToggleDeload: vi.fn(), onAddExercise: vi.fn(),
   onCreateExercise: vi.fn(), onSaveTemplate: vi.fn(),
@@ -79,20 +79,43 @@ describe('SessionPage', () => {
     expect(document.querySelector('#sheet-deload')).toHaveAttribute('open')
   })
 
-  it('confirms before finishing the workout', async () => {
+  it('opens the finish sheet instead of a native confirm', async () => {
+    // The pre-debrief beat: what the session became, then one decision --
+    // in the app's own dialog vocabulary, not browser chrome.
     const user = userEvent.setup()
     const { actions: a } = mount()
-    await user.click(screen.getByText('Workout beenden'))
-    expect(window.confirm).toHaveBeenCalledWith('Workout beenden?')
+    await user.click(screen.getByRole('button', { name: 'Workout beenden' }))
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(document.querySelector('#sheet-finish')).toHaveAttribute('open')
+    expect(a.onFinish).not.toHaveBeenCalled()
+
+    const sheet = within(document.querySelector('#sheet-finish') as HTMLElement)
+    await user.click(sheet.getByRole('button', { name: 'Beenden' }))
     expect(a.onFinish).toHaveBeenCalled()
   })
 
-  it('does not finish when the confirm is declined', async () => {
-    vi.mocked(window.confirm).mockReturnValue(false)
+  it('does not finish when the sheet is dismissed', async () => {
     const user = userEvent.setup()
     const { actions: a } = mount()
-    await user.click(screen.getByText('Workout beenden'))
+    await user.click(screen.getByRole('button', { name: 'Workout beenden' }))
+    const sheet = within(document.querySelector('#sheet-finish') as HTMLElement)
+    await user.click(sheet.getByRole('button', { name: 'Abbrechen' }))
+    expect(document.querySelector('#sheet-finish')).not.toHaveAttribute('open')
     expect(a.onFinish).not.toHaveBeenCalled()
+  })
+
+  it('states what the session became and what is still open', async () => {
+    const user = userEvent.setup()
+    mount()
+    await user.click(screen.getByRole('button', { name: 'Workout beenden' }))
+    const sheet = within(document.querySelector('#sheet-finish') as HTMLElement)
+    // The fixture: sets_done of sets_total, session_volume.
+    expect(sheet.getByText(new RegExp(
+      `${payload.sets_done} von ${payload.sets_total} Sätzen erledigt`))).toBeInTheDocument()
+    expect(sheet.getByText(/kg bewegt/)).toBeInTheDocument()
+    if (payload.sets_total - payload.sets_done > 0) {
+      expect(sheet.getByText(/offen\./)).toBeInTheDocument()
+    }
   })
 
   it('shows the reorder bar without re-rendering from the server', () => {
@@ -111,6 +134,15 @@ describe('SessionPage', () => {
     act(() => { useSaveState.getState().fail('Verbindung fehlgeschlagen', vi.fn()) })
     expect(screen.getByRole('alert'))
       .toHaveTextContent('Verbindung fehlgeschlagen')
+  })
+
+  it('retries a failed save by itself when the connection returns', () => {
+    // Gym wifi comes back before anyone finds the retry button.
+    mount()
+    const retry = vi.fn()
+    act(() => { useSaveState.getState().fail('Verbindung fehlgeschlagen', retry) })
+    act(() => { window.dispatchEvent(new Event('online')) })
+    expect(retry).toHaveBeenCalledOnce()
   })
 
   it('keeps client state across a new payload from the server', async () => {

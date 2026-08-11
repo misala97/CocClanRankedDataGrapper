@@ -255,10 +255,13 @@ def test_the_first_run_of_a_new_template_gets_the_default_plan(client, virgin_se
     live_id, exercise_id = virgin_session
 
     with flask_app.app_context():
-        # The fixture's session is in the way: gym_start redirects to the
+        # Any running workout is in the way -- the fixture's, or one left in
+        # the dev database by local testing: gym_start redirects to the
         # running workout instead of starting a second one.
-        running = db.session.get(WorkoutSession, live_id)
-        running.finished_at = dt.datetime.utcnow()
+        for running in (WorkoutSession.query
+                        .filter_by(user_id=_admin_id())
+                        .filter(WorkoutSession.finished_at.is_(None))):
+            running.finished_at = dt.datetime.utcnow()
 
         template = WorkoutTemplate(name='pytest brand new template',
                                    user_id=_admin_id())

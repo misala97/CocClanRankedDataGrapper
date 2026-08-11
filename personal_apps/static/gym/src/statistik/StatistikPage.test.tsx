@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { StatistikPage } from './StatistikPage'
 import type { StatistikPayload, TimelineRecord } from './types'
 
@@ -110,7 +110,9 @@ describe('StatistikPage', () => {
     mount()
     expect(screen.getByRole('heading', { level: 1 }))
       .toHaveTextContent('Du hast 177 Tonnen bewegt und dabei nie länger als 7 Tage pausiert.')
-    expect(screen.getByText('Seit 14.06.2026 · 1 Monat')).toBeInTheDocument()
+    // 57 days ROUNDS to two months: it read "1 Monat" beside a career strip
+    // visibly spanning two.
+    expect(screen.getByText('Seit 14.06.2026 · 2 Monate')).toBeInTheDocument()
     // Tonnage is a number nobody can feel.
     expect(screen.getByText(/ausgewachsene Elefanten/)).toHaveTextContent('≈ 29')
   })
@@ -167,7 +169,7 @@ describe('StatistikPage', () => {
       // The touch path to what aria-label already tells assistive tech and
       // title tells the mouse.
       const { container } = mount()
-      expect(screen.getByText('Balken antippen für Details')).toBeInTheDocument()
+      expect(screen.getByText(/Balken antippen/)).toBeInTheDocument()
       const bars = container.querySelectorAll('.mo')
       const user = userEvent.setup()
       await user.click(bars[0]!)
@@ -176,7 +178,29 @@ describe('StatistikPage', () => {
       expect(read).toHaveTextContent('Rekordmonat')
       expect(bars[0]).toHaveClass('is-picked')
       await user.click(bars[0]!)
-      expect(screen.getByText('Balken antippen für Details')).toBeInTheDocument()
+      expect(screen.getByText(/Balken antippen/)).toBeInTheDocument()
+    })
+
+    it('brushes a range and re-aggregates it', () => {
+      // Drag across the bars: the readout re-states what the strip encodes
+      // for the stretch -- months, summed tonnage, record months.
+      const { container } = mount()
+      const strip = container.querySelector('.months') as HTMLElement
+      vi.spyOn(strip, 'getBoundingClientRect').mockReturnValue({
+        left: 0, top: 0, x: 0, y: 0, width: 300, height: 132,
+        right: 300, bottom: 132, toJSON: () => ({}),
+      } as DOMRect)
+      // 3 months -> thirds of 300px: 50 = month 0, 250 = month 2. MouseEvent,
+      // not fireEvent.pointerDown: jsdom has no PointerEvent and the fallback
+      // drops clientX.
+      fireEvent(strip, new MouseEvent('pointerdown', { clientX: 50, clientY: 60, bubbles: true }))
+      fireEvent(strip, new MouseEvent('pointermove', { clientX: 250, clientY: 60, bubbles: true }))
+      fireEvent(strip, new MouseEvent('pointerup', { bubbles: true }))
+
+      const read = container.querySelector('.chart__read')!
+      expect(read).toHaveTextContent('3 Monate')
+      expect(read).toHaveTextContent('Rekordmonat')
+      expect(container.querySelectorAll('.mo.is-picked')).toHaveLength(3)
     })
 
     it('names a gap month as one', async () => {

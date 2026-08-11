@@ -1,14 +1,17 @@
-import type { SessionDetailPayload } from './types'
+import type { LiveExercise, SessionDetailPayload } from './types'
 
 /**
  * Local guesses at what a write will do, applied before the server answers.
  *
  * Only for writes whose effect is computable honestly and completely. The ones
- * that are not -- adding or replacing an exercise, reordering, anything that
- * changes which exercise is live -- have no entry here and wait for the
- * server. A screen that is briefly a lie is worse than one that is briefly
- * slow, and `_live_context` deliberately owns the live-exercise rule because
- * three surfaces have to agree on it.
+ * that are not -- adding or replacing an exercise, anything that changes which
+ * exercise is live -- have no entry here and wait for the server. A screen
+ * that is briefly a lie is worse than one that is briefly slow, and
+ * `_live_context` deliberately owns the live-exercise rule because three
+ * surfaces have to agree on it. (Reordering is the one write that LOOKS like
+ * it belongs in that group but does not: the row order is the user's explicit
+ * intent, so it is honest -- only `live_id` stays the server's and is left
+ * untouched below.)
  */
 
 /** Recompute the tallies a set change moves. Kept together because they are
@@ -120,6 +123,28 @@ export function toggleSkip(
     ...payload,
     visible_exercises: payload.visible_exercises.map((se) =>
       se.id === sessionExerciseId ? { ...se, skipped: !se.skipped } : se),
+  })
+}
+
+/** The rows in the order the user just chose. Positions renumber to match,
+ *  and retally keeps the tick strip reading in queue order; which exercise is
+ *  live is not guessed at -- the server's answer replaces this wholesale. */
+export function reorderExercises(
+  payload: SessionDetailPayload,
+  order: number[],
+): SessionDetailPayload {
+  const byId = new Map(payload.visible_exercises.map((se) => [se.id, se]))
+  const reordered = order
+    .map((id) => byId.get(id))
+    .filter((se): se is LiveExercise => se !== undefined)
+  // Anything the order list missed keeps its place at the end rather than
+  // vanishing from the screen until the server answers.
+  for (const se of payload.visible_exercises) {
+    if (!order.includes(se.id)) reordered.push(se)
+  }
+  return retally({
+    ...payload,
+    visible_exercises: reordered.map((se, i) => ({ ...se, position: i + 1 })),
   })
 }
 
