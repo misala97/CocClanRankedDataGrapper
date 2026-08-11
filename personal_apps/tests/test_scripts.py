@@ -201,6 +201,58 @@ def test_copy_templates_forks_the_exercises_into_the_destination(throwaway_user)
             db.session.commit()
 
 
+class TestPendingPushes:
+    """run_gym_notifier's rest-timer queue."""
+
+    def test_a_finished_sessions_pending_push_is_retired_not_fired(self, monkeypatch):
+        # Every route that ends a session cancels its pending rows, so this
+        # only happens when a session is finished some other way -- a manual
+        # database edit, a restore. Before 2026-08-11 the daemon fired those
+        # regardless: the phone buzzed "Rest complete" for a workout that had
+        # ended hours earlier.
+        from extensions import db
+        from models import PendingPush, WorkoutSession
+        import run_gym_notifier
+
+        sent = []
+        monkeypatch.setattr(run_gym_notifier, 'send_push_to_user',
+                            lambda user_id, payload: sent.append(user_id))
+
+        session_id = push_id = None
+        try:
+            with flask_app.app_context():
+                started = dt.datetime.utcnow() - dt.timedelta(hours=3)
+                session_ = WorkoutSession(name='ZZ orphan push', user_id=_admin_id(),
+                                          started_at=started,
+                                          finished_at=started + dt.timedelta(hours=1))
+                db.session.add(session_)
+                db.session.flush()
+                pending = PendingPush(
+                    session_id=session_.id,
+                    fire_at=dt.datetime.utcnow() - dt.timedelta(minutes=5))
+                db.session.add(pending)
+                db.session.commit()
+                session_id, push_id = session_.id, pending.id
+
+            run_gym_notifier.check_pending_pushes()
+
+            with flask_app.app_context():
+                assert sent == [], 'a finished session must not buzz the phone'
+                # Retired, so it stops being scanned every 20 seconds forever.
+                assert db.session.get(PendingPush, push_id).sent is True
+        finally:
+            with flask_app.app_context():
+                if push_id is not None:
+                    doomed = db.session.get(PendingPush, push_id)
+                    if doomed is not None:
+                        db.session.delete(doomed)
+                if session_id is not None:
+                    doomed = db.session.get(WorkoutSession, session_id)
+                    if doomed is not None:
+                        db.session.delete(doomed)
+                db.session.commit()
+
+
 class TestWeeklyDigest:
     """run_gym_notifier's Sunday summary."""
 

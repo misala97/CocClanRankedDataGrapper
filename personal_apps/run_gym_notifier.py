@@ -18,6 +18,16 @@ def check_pending_pushes():
             .filter(
                 PendingPush.sent == False,  # noqa: E712 (SQLAlchemy comparison, not a real bool check)
                 PendingPush.fire_at <= dt.datetime.utcnow(),
+                # A rest push for a workout that is over is never right. Every
+                # route that ends a session cancels its pending rows
+                # (_cancel_pending_push), but that only covers rows the app
+                # itself retires -- a session finished any other way (a manual
+                # database edit, a restore) leaves them behind, and without
+                # this the daemon buzzed the phone for a workout that ended
+                # hours ago. Marked sent rather than deleted: the row is
+                # evidence of a rest that was scheduled, and swallowing it
+                # silently would hide the state it came from.
+                WorkoutSession.finished_at.is_(None),
             )
             .add_columns(WorkoutSession.user_id)
             .all()
@@ -26,7 +36,22 @@ def check_pending_pushes():
             # A rest timer belongs to whoever started the session it came from.
             send_push_to_user(user_id, {'title': 'Rest complete', 'body': 'Time for your next set.'})
             pending.sent = True
-        if due:
+
+        # Retire the orphans in the same pass, so they stop being scanned
+        # every 20 seconds for the life of the database.
+        orphaned = (
+            PendingPush.query
+            .join(WorkoutSession, PendingPush.session_id == WorkoutSession.id)
+            .filter(
+                PendingPush.sent == False,  # noqa: E712
+                WorkoutSession.finished_at.isnot(None),
+            )
+            .all()
+        )
+        for pending in orphaned:
+            pending.sent = True
+
+        if due or orphaned:
             db.session.commit()
 
 
