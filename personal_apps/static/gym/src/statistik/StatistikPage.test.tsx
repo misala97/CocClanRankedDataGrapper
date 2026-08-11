@@ -154,7 +154,7 @@ describe('StatistikPage', () => {
       const bars = screen.getAllByRole('listitem')
       expect(bars[0]).toHaveAccessibleName('Juni 2026: 51.247 kg, Rekordmonat')
       expect(bars[1]).toHaveAccessibleName('Juli 2026: 102.494 kg, Deload')
-      expect(bars[2]).toHaveAccessibleName('August 2026: 0 kg, keine Einheit')
+      expect(bars[2]).toHaveAccessibleName('August 2026: 0 kg, kein Workout')
     })
 
     it('draws a gap as a break rather than as a zero', () => {
@@ -179,6 +179,42 @@ describe('StatistikPage', () => {
       expect(bars[0]).toHaveClass('is-picked')
       await user.click(bars[0]!)
       expect(screen.getByText(/Balken antippen/)).toBeInTheDocument()
+    })
+
+    it('picks a month from the press alone, without a click', () => {
+      // What a MOUSE actually delivers: the strip captures the pointer on
+      // pointerdown, and a captured pointer's click is retargeted to the
+      // capture element -- the bar's own onClick never runs. Selection has to
+      // come out of the pointer sequence, or the strip is dead on desktop
+      // while touch (whose click keeps the bar as its target) still works.
+      const { container } = mount()
+      const bars = container.querySelectorAll('.mo')
+      fireEvent(bars[1]!, new MouseEvent('pointerdown', { clientX: 150, clientY: 60, bubbles: true }))
+      fireEvent(bars[1]!, new MouseEvent('pointerup', { bubbles: true }))
+
+      expect(container.querySelector('.chart__read')).toHaveTextContent('Juli 2026 · 102.494 kg')
+      expect(bars[1]).toHaveClass('is-picked')
+    })
+
+    it('does not toggle a picked month back off with the click that follows', () => {
+      // Touch DOES deliver a click to the bar after the same sequence. Acting
+      // on both would select and immediately deselect.
+      const { container } = mount()
+      const bars = container.querySelectorAll('.mo')
+      fireEvent(bars[1]!, new MouseEvent('pointerdown', { clientX: 150, clientY: 60, bubbles: true }))
+      fireEvent(bars[1]!, new MouseEvent('pointerup', { bubbles: true }))
+      fireEvent(bars[1]!, new MouseEvent('click', { bubbles: true, detail: 1 }))
+
+      expect(bars[1]).toHaveClass('is-picked')
+    })
+
+    it('picks a month from the keyboard, which raises no pointer', async () => {
+      const { container } = mount()
+      const bars = container.querySelectorAll('.mo')
+      ;(bars[1] as HTMLElement).focus()
+      await userEvent.setup().keyboard('{Enter}')
+
+      expect(bars[1]).toHaveClass('is-picked')
     })
 
     it('brushes a range and re-aggregates it', () => {
@@ -207,7 +243,7 @@ describe('StatistikPage', () => {
       const { container } = mount()
       await userEvent.setup().click(container.querySelectorAll('.mo')[2]!)
       expect(container.querySelector('.chart__read'))
-        .toHaveTextContent('August 2026 · 0 kg · keine Einheit')
+        .toHaveTextContent('August 2026 · 0 kg · kein Workout')
     })
 
     it('dedupes its ticks by index, not by text', () => {
@@ -306,7 +342,7 @@ describe('StatistikPage', () => {
         .toBeInTheDocument()
       expect(screen.getByText('Noch nicht genug Workouts, um ein Muster zu behaupten.'))
         .toBeInTheDocument()
-      expect(screen.getByText(/mehrere Workouts je Abstand/)).toBeInTheDocument()
+      expect(screen.getByText(/mehrere Workouts pro Abstand/)).toBeInTheDocument()
       // Every question is still ASKED -- that is the whole rule.
       expect(screen.getByText('In welchem Wiederholungsbereich?')).toBeInTheDocument()
       expect(screen.getByText('Wann trainierst du?')).toBeInTheDocument()
@@ -317,14 +353,17 @@ describe('StatistikPage', () => {
       // rule and a gap from the div's mere presence, so an empty one still
       // looked like a broken section.
       const { container } = mount({ rest_habit: null })
-      expect(screen.queryByText('Wie lange pausierst du?')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Wie lange pausierst du/)).not.toBeInTheDocument()
       expect(container.querySelectorAll('.read')).toHaveLength(4)
     })
 
     it('states planned against actual rest as mm:ss', () => {
       mount()
-      expect(screen.getByText(/Du planst/))
-        .toHaveTextContent('Du planst 2:30, nimmst dir 3:30.')
+      // The question names the unit, so the answer does not have to: this card
+      // is seconds between sets, the one above it is days between workouts.
+      expect(screen.getByText('Wie lange pausierst du zwischen zwei Sätzen?')).toBeInTheDocument()
+      expect(screen.getByText(/Geplant/))
+        .toHaveTextContent('Geplant 2:30, genommen 3:30.')
     })
   })
 

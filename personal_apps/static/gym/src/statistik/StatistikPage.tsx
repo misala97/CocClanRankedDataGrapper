@@ -89,8 +89,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
   // re-aggregates what the bars encode for it. Real buttons, so the keyboard
   // can do the tap half too.
   const [sel, setSel] = useState<[number, number] | null>(null)
-  const brush = useRef<{ start: number; moved: boolean; had: boolean } | null>(null)
-  const justBrushed = useRef(false)
+  const brush = useRef<{ start: number; moved: boolean } | null>(null)
   const monthsRef = useRef<HTMLDivElement>(null)
   const {
     totals, months, progression, effort, rep_range: reps, fatigue,
@@ -128,6 +127,23 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
     const i = Math.floor(((clientX - box.left) / box.width) * months.length)
     return Math.max(0, Math.min(months.length - 1, i))
   }
+
+  // The bar actually pressed, when the press landed on one. Preferred over the
+  // x-arithmetic above because it cannot disagree with what the finger or
+  // cursor was on: the bars carry gaps between them, and a press in a gap
+  // should belong to the bar it hit, not to the slice of the strip's width it
+  // fell in. Null for a press on the strip's own background, which the drag
+  // path resolves by x.
+  const monthIndexFromTarget = (target: EventTarget | null) => {
+    const strip = monthsRef.current
+    const bar = target instanceof Element ? target.closest('.mo') : null
+    if (strip === null || bar === null) return null
+    const i = [...strip.children].indexOf(bar)
+    return i < 0 ? null : i
+  }
+
+  const toggleMonth = (i: number) =>
+    setSel(sel !== null && sel[0] === i && sel[1] === i ? null : [i, i])
 
   if (totals.sessions === 0) {
     return (
@@ -232,7 +248,10 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             <div className="months" role="list" ref={monthsRef}
               aria-label={`Monatliche Tonnage seit ${payload.month_names[months[0]!.month - 1]} ${months[0]!.year}`}
               onPointerDown={(e) => {
-                brush.current = { start: monthIndexFromX(e.clientX), moved: false, had: false }
+                brush.current = {
+                  start: monthIndexFromTarget(e.target) ?? monthIndexFromX(e.clientX),
+                  moved: false,
+                }
                 try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* jsdom */ }
               }}
               onPointerMove={(e) => {
@@ -245,9 +264,14 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
               onPointerUp={() => {
                 const b = brush.current
                 brush.current = null
-                // The click that follows a finished drag must not toggle a
-                // single month on top of the range it just brushed.
-                if (b?.moved) justBrushed.current = true
+                // A press that never moved is a tap, and it is answered HERE
+                // rather than by the bar's onClick: setPointerCapture above
+                // retargets a captured pointer's click to this container, so
+                // with a mouse the bar's own click never fires. Touch delivers
+                // it to the bar anyway -- which is why this was invisible on a
+                // phone and dead on a desktop. The click, whichever way it is
+                // targeted, is ignored below.
+                if (b !== null && !b.moved) toggleMonth(b.start)
               }}
               onPointerCancel={() => { brush.current = null }}>
               {months.map((m, i) => {
@@ -260,20 +284,22 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 const label = `${payload.month_names[m.month - 1]} ${m.year}: ${de(m.volume)} kg`
                   + (m.has_record ? ', Rekordmonat' : '')
                   + (m.has_deload ? ', Deload' : '')
-                  + (m.is_gap ? ', keine Einheit' : '')
+                  + (m.is_gap ? ', kein Workout' : '')
                   + (isCurrent ? ', läuft noch' : '')
                 const key = `${m.year}-${m.month}`
                 return (
                   /* A real button (keyboard + focus), inside the pointer-brush
-                     container: pointer selection is handled above, so the
-                     button's own click only acts for the keyboard (detail 0). */
+                     container: every pointer selection is handled above, so
+                     the button's own click only acts for the keyboard, which
+                     is the one caller that raises no pointer at all (detail 0
+                     -- Enter and Space synthesise a clickless click). */
                   <button type="button" key={key} role="listitem"
                     className={`mo${m.has_record ? ' is-record' : ''}${m.has_deload ? ' is-deload' : ''}${m.is_gap ? ' is-gap' : ''}${isCurrent ? ' is-current' : ''}${selKeys.has(key) ? ' is-picked' : ''}`}
                     aria-label={label} title={label}
                     aria-pressed={selKeys.has(key)}
-                    onClick={() => {
-                      if (justBrushed.current) { justBrushed.current = false; return }
-                      setSel(sel !== null && sel[0] === i && sel[1] === i ? null : [i, i])
+                    onClick={(e) => {
+                      if (e.detail !== 0) return
+                      toggleMonth(i)
                     }}
                     style={{ blockSize: `${m.is_gap ? 2 : roundTo((m.volume / peak) * 100, 1)}%` }} />
                 )
@@ -302,7 +328,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                       <b>{`${de(m.volume)} kg`}</b>
                       {m.has_record && <span className="chart__read-tag vtag vtag--record">Rekordmonat</span>}
                       {m.has_deload && <span className="chart__read-tag vtag vtag--deload">Deload</span>}
-                      {m.is_gap && ' · keine Einheit'}
+                      {m.is_gap && ' · kein Workout'}
                     </>
                   )
                 }
@@ -335,7 +361,9 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 <span className="key__dot key__dot--sq key__dot--deload" />Deload-Monat
               </span>
               <span className="key">
-                <span className="key__dot key__dot--sq key__dot--gap" />Pause
+                {/* Not "Pause": on this page that word is already the gap
+                    between workouts and the rest between sets. */}
+                <span className="key__dot key__dot--sq key__dot--gap" />Monat ohne Workout
               </span>
               <span className="key">
                 <span className="key__dot key__dot--sq key__dot--current" />Läuft noch
@@ -491,14 +519,19 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             )}
           </div>
 
+          {/* "Pause" means two different things on this page -- the days
+              between two workouts, and the seconds between two sets. Both
+              questions used to open with the bare word, so which one was being
+              answered depended on reading the caption. Each now names its own
+              unit in the question itself. */}
           <div className="read">
-            <p className="read__q">Bringt mehr Pause mehr Leistung?</p>
+            <p className="read__q">Bringt mehr Zeit zwischen zwei Workouts mehr Leistung?</p>
             {restGap.statable ? (
               <>
                 <div className="read__bars" role="list">
                   {restGap.buckets.map((bucket) => (
                     <span className="rb" role="listitem" key={bucket.label}
-                      aria-label={`${bucket.label} Tage Abstand: Ø ${de(bucket.avg_volume)} kg`}>
+                      aria-label={`${bucket.label} Tage seit dem letzten Workout: Ø ${de(bucket.avg_volume)} kg`}>
                       <span className="rb__track">
                         <span className="rb__fill"
                           style={{ blockSize: `${peakGap ? roundTo((bucket.avg_volume / peakGap) * 100, 1) : 0}%` }} />
@@ -507,11 +540,11 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                     </span>
                   ))}
                 </div>
-                <p className="read__silent">Ø Volumen je Abstand in Tagen.</p>
+                <p className="read__silent">Ø Volumen eines Workouts, nach Tagen seit dem letzten.</p>
               </>
             ) : (
               <p className="read__silent">
-                Noch nicht genug Daten — dafür braucht es mehrere Workouts je
+                Noch nicht genug Daten — dafür braucht es mehrere Workouts pro
                 Abstand. Die Frage bleibt offen, statt geraten zu werden.
               </p>
             )}
@@ -524,10 +557,10 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
               gap from the div's mere presence. */}
           {restHabit !== null && (
             <div className="read">
-              <p className="read__q">Wie lange pausierst du?</p>
+              <p className="read__q">Wie lange pausierst du zwischen zwei Sätzen?</p>
               <p className="read__a">
-                Du planst <em>{mmss(restHabit[0])}</em>,
-                nimmst dir <em>{mmss(restHabit[1])}</em>.
+                Geplant <em>{mmss(restHabit[0])}</em>,
+                genommen <em>{mmss(restHabit[1])}</em>.
               </p>
             </div>
           )}
