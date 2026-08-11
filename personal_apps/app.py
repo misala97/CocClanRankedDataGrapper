@@ -1,3 +1,4 @@
+import datetime as dt
 import os
 import secrets
 
@@ -32,6 +33,10 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE']   = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+# Without a lifetime Flask issues a browser-session cookie, which a phone drops as soon as it
+# evicts the browser — the gym tracker then asks for a password mid-workout. Login opts into
+# this window (see auth.py); Flask re-stamps the cookie per request, so only idle time counts.
+app.config['PERMANENT_SESSION_LIFETIME'] = dt.timedelta(days=30)
 
 app.config['VAPID_PUBLIC_KEY']   = os.getenv("VAPID_PUBLIC_KEY")
 app.config['VAPID_PRIVATE_KEY']  = os.getenv("VAPID_PRIVATE_KEY")

@@ -114,6 +114,7 @@ def login():
         # Always hash, even on a missing username -- see _DUMMY_PASSWORD_HASH.
         if check_password_hash(user.password_hash if user else _DUMMY_PASSWORD_HASH, password) and user:
             session.clear()
+            session.permanent = True   # PERMANENT_SESSION_LIFETIME, else the cookie dies with the browser
             session['user_id'] = user.id
             return _post_login_redirect()
         error = 'Invalid username or password.'
