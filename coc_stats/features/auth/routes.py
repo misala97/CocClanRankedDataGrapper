@@ -140,6 +140,7 @@ def login():
                   and secrets.compare_digest(password.encode(), ADMIN_PASS.encode()))
         if env_ok:
             session.clear()
+            session.permanent = True   # PERMANENT_SESSION_LIFETIME, else the cookie dies with the browser
             session['env_admin_logged_in'] = True
             return redirect(url_for('index'))
         u = AppUser.query.filter_by(username=username).first()
@@ -152,6 +153,7 @@ def login():
                 error = 'Your account is pending approval.'
             else:
                 session.clear()
+                session.permanent = True
                 session['user_id'] = u.id
                 return redirect(url_for('index'))
         else:

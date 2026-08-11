@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 import os
 import secrets
@@ -39,6 +40,11 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE']   = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+# Without a lifetime Flask issues a browser-session cookie, so closing the browser — or a
+# phone evicting it from memory — logs you out. Logins opt into this window (see the auth
+# blueprint); Flask re-stamps the cookie on each request, so it only runs out after 30 idle
+# days. The cookie is signed, not server-side: revoking early means rotating COC_SECRET_KEY.
+app.config['PERMANENT_SESSION_LIFETIME'] = dt.timedelta(days=30)
 
 db.init_app(app)
 migrate = Migrate(app, db)
