@@ -1202,6 +1202,93 @@ def test_the_followers_session_carries_no_template_link(leader_with_partner):
             WorkoutSession, shared.follower_session_id).template_id is None
 
 
+def _accept_with_template(fixture, template_id):
+    """Invite, then accept posting a routine id. Returns the follower's
+    session id."""
+    from extensions import db
+    from models import SharedSession
+
+    _client_for(fixture['leader']).post(
+        f"/gym/session/{fixture['session']}/invite",
+        data={'partner_id': fixture['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=fixture['session']).first().id
+
+    _client_for(fixture['partner']).post(
+        f'/gym/shared/{shared_id}/accept',
+        data={f"match_{fixture['exercise']}": 'new',
+              'template_id': str(template_id)})
+
+    with flask_app.app_context():
+        return db.session.get(SharedSession, shared_id).follower_session_id
+
+
+def test_accepting_books_the_session_under_the_chosen_routine(leader_with_partner):
+    from extensions import db
+    from models import WorkoutSession, WorkoutTemplate
+
+    with flask_app.app_context():
+        mine = WorkoutTemplate(name='pytest partner push',
+                               user_id=leader_with_partner['partner'])
+        db.session.add(mine)
+        db.session.commit()
+        template_id = mine.id
+
+    follower_session = _accept_with_template(leader_with_partner, template_id)
+
+    with flask_app.app_context():
+        assert db.session.get(
+            WorkoutSession, follower_session).template_id == template_id
+
+
+def test_accepting_refuses_a_routine_the_follower_does_not_own(leader_with_partner):
+    """Attacker-chosen, like every other id arriving from this form: posting
+    the LEADER's routine must not book the workout under it."""
+    from extensions import db
+    from models import WorkoutSession, WorkoutTemplate
+
+    with flask_app.app_context():
+        theirs = WorkoutTemplate(name='pytest leader push',
+                                 user_id=leader_with_partner['leader'])
+        db.session.add(theirs)
+        db.session.commit()
+        template_id = theirs.id
+
+    follower_session = _accept_with_template(leader_with_partner, template_id)
+
+    with flask_app.app_context():
+        assert db.session.get(
+            WorkoutSession, follower_session).template_id is None
+
+
+def test_the_booked_session_counts_as_that_routines_last_performance(leader_with_partner):
+    """The point of the whole feature, asserted as an effect rather than as a
+    column: routine_memory() is what Heute reads, and before this it skipped
+    every shared session."""
+    import datetime as dt
+    from extensions import db
+    from features.gym import stats
+    from models import WorkoutSession, WorkoutTemplate
+
+    with flask_app.app_context():
+        mine = WorkoutTemplate(name='pytest partner push',
+                               user_id=leader_with_partner['partner'])
+        db.session.add(mine)
+        db.session.commit()
+        template_id = mine.id
+
+    _accept_with_template(leader_with_partner, template_id)
+
+    with flask_app.app_context():
+        template = db.session.get(WorkoutTemplate, template_id)
+        sessions = WorkoutSession.query.filter_by(
+            user_id=leader_with_partner['partner']).all()
+        memory = stats.routine_memory([template], sessions, dt.datetime.utcnow())
+        assert memory[0]['last_done'] is not None
+        assert memory[0]['days_ago'] == 0
+
+
 def test_confirm_offers_the_followers_own_routines(leader_with_partner):
     """The follower's routines, with the exercise ids the island compares
     against the selected matches. The LEADER's routines must never appear:

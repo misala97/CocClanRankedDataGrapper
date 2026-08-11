@@ -200,16 +200,28 @@ def gym_shared_accept(shared_id):
 
     leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
 
+    # The routine THIS lifter books the workout under, if they picked one on
+    # the confirm page. Resolved through my_templates(), so a posted id that
+    # belongs to somebody else -- the leader's own routine, most obviously --
+    # resolves to None rather than claiming it.
+    chosen_template = None
+    posted_template_id = _to_int(request.form.get('template_id', ''))
+    if posted_template_id:
+        chosen_template = my_templates().filter_by(id=posted_template_id).first()
+
     follower_session = WorkoutSession(
         # The name is copied once so the workout reads as the same one. It is
         # not synced afterwards: from here the session is theirs.
         name=leader_session.name,
         started_at=dt.datetime.utcnow(),
         user_id=current_user_id(),
-        # Deliberately no template_id: the routine belongs to the leader's
-        # catalogue, and claiming it would tell routine_memory() this lifter
-        # has done a routine they have never owned.
-        template_id=None,
+        # The leader's routine is never inherited: it is named in a catalogue
+        # this lifter does not own, and claiming it would tell
+        # routine_memory() they had performed a routine that is not theirs.
+        # One of their OWN routines is a different matter -- that is what the
+        # confirm page's picker posts, and booking it there is the only way a
+        # shared workout ever reaches their routine bookkeeping.
+        template_id=chosen_template.id if chosen_template else None,
     )
     db.session.add(follower_session)
     db.session.flush()
