@@ -1,0 +1,24 @@
+{% extends 'gym/_base.html' %}
+
+{# Start (Puls): what to do next, then four reading sections.
+
+   The page body is a React island -- see static/gym/src/start/. This shell
+   only mounts it.
+
+   Every figure comes from gym_heute()'s single load_performed() call. This
+   page must never issue one query per session, however long the history gets.
+
+   The mount node IS .start, not a wrapper around it: an extra layer between
+   #gym-main and the page root changes the page height, because #gym-main is
+   flex: 1 in a column-flex body. #}
+
+{% block title %}Start · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="start" id="gym-root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
+<script type="module" src="{{ vite_asset('start') }}"></script>
+{% endblock %}

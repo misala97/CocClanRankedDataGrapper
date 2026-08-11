@@ -4,8 +4,8 @@
   "start_url": "/gym/",
   "scope": "/gym/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#241132",
+  "theme_color": "#241132",
   "icons": [
     {
       "src": "/static/gym/icons/icon-192.png",

@@ -1,0 +1,134 @@
+{# Shared shell for every gym page: doctype/meta/PWA tags, the self-hosted
+   Figtree webfont (see static/gym/figtree.css for why it is vendored rather
+   than linked from Google, and gym.css's header for the type roles it carries),
+   gym.css, gym.js, the nav include, and the three blocks a page fills in. See
+   personal_apps/PRODUCT.md for the "Puls" design brief this all serves.
+
+   This paragraph described Saira and its width axis until Puls replaced it --
+   the font was deleted, the comment was not. If the face changes again, the
+   places that name it are here, figtree.css, and gym.css's header.
+
+   gym.js is loaded here (not deferred) so window.GymClock already exists by
+   the time any inline <script> later in the body runs -- in particular
+   _nav.html's own inline script for the resume strip's clock. GymClock is all
+   that is left in it: every gym page below the nav is a React island now.
+
+   <body> gets a `has-resume` class exactly when _nav.html is about to render
+   the resume strip -- same gym_active_session + endpoint condition, kept in
+   sync with the `{% if %}` there. gym.css uses that class to reserve extra
+   bottom padding on mobile so the fixed strip never sits on top of page
+   content (see body.has-resume in gym.css).
+
+   The endpoint list is duplicated rather than shared because there are exactly
+   two of them and a context variable for it would hide the coupling instead of
+   documenting it. If you change one, change the other -- _nav.html carries the
+   reasoning for why Start is on the list. #}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Gym Tracker{% endblock %}</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/static/gym/icons/icon-192.png">
+    {# The browser chrome follows the theme too, or the phone frames a pale plum
+       app in a near-black bar. Both values are --ground for their theme. #}
+    <meta name="theme-color" content="#F3EAF7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#241132" media="(prefers-color-scheme: dark)">
+    {# Figtree is served from this app, not linked from Google -- see the header
+       of static/gym/figtree.css for why. Preloading the latin face (the one the
+       German UI actually hits on nearly every glyph) means it starts
+       downloading with the stylesheet rather than after it. latin-ext is not
+       preloaded: it only carries the long tail, and preloading a file most
+       page views never need costs more than it saves. #}
+    <link rel="preload" href="{{ url_for('static', filename='gym/fonts/figtree-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='gym/figtree.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='gym/gym.css') }}">
+    {# The CSRF token the islands read: src/api.ts sends it as X-CSRF-Token on
+       every fetch, <CsrfField/> embeds it in every native form. Minted per
+       session by auth._get_csrf_token (the same token the auth forms use). #}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='gym/gym.js') }}"></script>
+    {# Registered on every page load, not only when push is enabled -- the
+       worker also serves the hashed bundles cache-first (sw.js), and a cache
+       that only exists for push users is not a cache. Idempotent; same
+       scope the push path registers with.
+
+       Scope '/gym', NOT '/gym/': a scope is a URL prefix, and the Start page
+       lives at /gym itself -- with the slash, every page was controlled
+       except the one the app opens on. #}
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/gym' });
+    }
+    </script>
+    {# Speculation rules: the next page starts downloading on touch-down (and
+       on hover, on desktop), so the navigation itself feels instant. PREFETCH,
+       not prerender -- prefetch only pulls the HTML into cache, while
+       prerender would run the page's JavaScript early, and a live clock or a
+       push registration executing in a hidden renderer is not worth the
+       marginal win over prefetch + service-worker-cached bundles.
+
+       Scoped to /gym/* on purpose: /logout is a GET with a side effect, and a
+       prefetch that fires it would silently end the session on hover. The
+       export is excluded too -- prefetching a file download wastes exactly
+       the bytes it claims to save. Browsers without the API ignore the
+       script type wholesale. #}
+    <script type="speculationrules">
+    {
+      "prefetch": [{
+        "where": {
+          "and": [
+            { "href_matches": "/gym/*" },
+            { "not": { "href_matches": "/gym/export*" } }
+          ]
+        },
+        "eagerness": "moderate"
+      }]
+    }
+    </script>
+</head>
+{# `body_class` lets a page opt into a shell mode. Only session_detail.html uses
+   it today, for `is-focus` (no tab bar, one way out). It is the template's call
+   rather than a route check, because the active and the finished workout share
+   one endpoint and only the active one is a focus mode. #}
+<body class="{% block body_class %}{% endblock %}{% if gym_active_session and request.endpoint not in ('gym.session_detail', 'gym.gym_heute') %} has-resume{% endif %}">
+
+{# Skip link: the tab bar / top bar puts several nav links before the content
+   on every page, so a keyboard or screen-reader user had to walk the whole
+   nav on every navigation. Visually hidden until focused. #}
+<a class="skip-link" href="#gym-main">Zum Inhalt springen</a>
+
+{% include 'gym/_nav.html' %}
+
+{# The app had no <main> landmark on any page -- assistive tech had no way to
+   jump past the chrome to the actual page content. #}
+<main id="gym-main" tabindex="-1">
+{# Every gym mutation is a POST followed by a redirect, so until now the only
+   way to tell a save from a silent no-op was to go and look. Two bugs shipped
+   behind that: a form posting a field its route did not read, and a routine
+   saved from a workout that then claimed never to have been done -- both
+   redirected exactly as a success does.
+
+   flash() was already in this app (features/tips), just never used here.
+   role="status" rather than role="alert" for the success case; the error
+   variant carries alert. #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="flashes">
+  {% for category, message in messages %}
+  <p class="flash flash--{{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">{{ message }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+{% block content %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

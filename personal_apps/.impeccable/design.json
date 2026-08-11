@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-11T14:10:00+02:00",
+  "title": "Design System: Gym Tracker — Puls",
+  "extensions": {
+    "colorMeta": {
+      "ground":  {"role": "neutral", "displayName": "Plum Field", "canonical": "#F3EAF7", "dark": "#241132",
+                  "tonalRamp": ["#1A0B24", "#241132", "#3A2150", "#573B6E", "#7A5C90", "#A487B4", "#CDB4D8", "#F3EAF7"]},
+      "chassis": {"role": "neutral", "displayName": "Chassis", "canonical": "#FFFFFF", "dark": "#371B49"},
+      "raised":  {"role": "neutral", "displayName": "Raised Cell", "canonical": "#EEE5F3", "dark": "#1B0B26"},
+      "ink":     {"role": "neutral", "displayName": "Aubergine Ink", "canonical": "#291238", "dark": "#F8F1FB"},
+      "dim":     {"role": "neutral", "displayName": "Dim", "canonical": "#634674", "dark": "#C5ACD2"},
+      "live":    {"role": "primary", "displayName": "Hot Orange — NOW", "canonical": "#C2410C", "dark": "#FF7A4D",
+                  "tonalRamp": ["#3A1303", "#5E1F05", "#8E2C07", "#C2410C", "#D4551D", "#E8794A", "#F5A57E", "#FDD9C4"]},
+      "done":    {"role": "tertiary", "displayName": "Pale Rose — LOGGED", "canonical": "#8B3A62", "dark": "#F1C8DD",
+                  "tonalRamp": ["#2A0F1E", "#4A1C36", "#6B2A4C", "#8B3A62", "#A75B80", "#C384A2", "#DBAEC4", "#F1C8DD"]},
+      "record":  {"role": "secondary", "displayName": "Gold — RECORD", "canonical": "#F0B429", "dark": "#FFC861",
+                  "tonalRamp": ["#3A2600", "#6B4400", "#9C6710", "#C68C1C", "#F0B429", "#F6C554", "#FBD98A", "#FFEDC2"]},
+      "stall":   {"role": "secondary", "displayName": "Cold Cyan — ATTENTION", "canonical": "#0C7382", "dark": "#5FDDEC",
+                  "tonalRamp": ["#04262C", "#0A4650", "#0C7382", "#1B96A6", "#3BB6C6", "#5FDDEC", "#93E9F3", "#CCF6FA"]}
+    },
+    "typographyMeta": {
+      "numeral": {"displayName": "Numerals", "purpose": "Tabular figures, largest thing in their container; 22/34/40/52px ladder."},
+      "name":    {"displayName": "Name", "purpose": "Exercise and panel names. Sentence case, never uppercase, never italic."},
+      "label":   {"displayName": "Label", "purpose": "Tiny uppercase panel captions (≤12px) — the only uppercase in the system."}
+    },
+    "shadows": [
+      {"name": "lift", "value": "0 1px 2px rgba(41,18,56,.05), 0 10px 30px -16px rgba(41,18,56,.32)", "purpose": "The one lifted plane per screen."},
+      {"name": "glow-live", "value": "0 10px 26px -14px rgba(194,65,12,.75)", "purpose": "Coloured seat under the NOW control — a seat, not a halo."},
+      {"name": "glow-record", "value": "0 10px 26px -14px rgba(240,180,41,.70)", "purpose": "Seat under the record flare."}
+    ],
+    "motion": [
+      {"name": "dur-1", "value": "90ms", "purpose": "Presses and state snaps."},
+      {"name": "dur-2", "value": "150ms", "purpose": "Standard transitions."},
+      {"name": "dur-3", "value": "220ms", "purpose": "The largest movement allowed; no bounce, no elastic."},
+      {"name": "ease", "value": "cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "ease-out-quart, the default."},
+      {"name": "ease-out", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Entrances (sheets, toasts)."}
+    ],
+    "breakpoints": [
+      {"name": "mobile-first", "value": "390px", "purpose": "Primary design viewport (390×844)."},
+      {"name": "desktop", "value": "900px", "purpose": "Multi-column compositions (Statistik, Start read columns)."}
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Confirm (Satz geschafft)",
+      "kind": "button",
+      "refersTo": "button-live",
+      "description": "The thumb-zone confirm: ≥64px, hot orange, one per screen.",
+      "html": "<button class=\"ds-btn-live\">Satz geschafft</button>",
+      "css": ".ds-btn-live { background: #C2410C; color: #FFF4EE; min-height: 64px; padding: 0 32px; border: none; border-radius: 16px; font: 700 1rem Figtree, system-ui, sans-serif; letter-spacing: -0.01em; box-shadow: 0 10px 26px -14px rgba(194,65,12,.75); transition: transform 90ms cubic-bezier(0.25,1,0.5,1), background 90ms; } .ds-btn-live:hover { background: #D4551D; } .ds-btn-live:active { transform: translateY(1px); background: #8E2C07; } .ds-btn-live:focus-visible { outline: 2px solid #291238; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary actions: raised fill, ink text.",
+      "html": "<button class=\"ds-btn-ghost\">Speichern</button>",
+      "css": ".ds-btn-ghost { background: #EEE5F3; color: #291238; min-height: 44px; padding: 0 20px; border: none; border-radius: 16px; font: 600 0.875rem Figtree, system-ui, sans-serif; transition: background 90ms; } .ds-btn-ghost:hover { background: #E4D7EB; } .ds-btn-ghost:focus-visible { outline: 2px solid #291238; outline-offset: 2px; }"
+    },
+    {
+      "name": "State Chips",
+      "kind": "chip",
+      "refersTo": "chip-record",
+      "description": "The state model as badges: filled carries dark on-fill text, outline carries the hue as text.",
+      "html": "<span class=\"ds-chip ds-chip--record\">Rekord</span> <span class=\"ds-chip ds-chip--stall\">4 ohne PR</span> <span class=\"ds-chip ds-chip--done\">Erledigt</span> <span class=\"ds-chip ds-chip--deload\">Deload</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: .35em; font: 700 0.8125rem Figtree, system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.3em 0.7em; border-radius: 999px; border: 1px solid transparent; margin-right: 6px; } .ds-chip--record { background: #F0B429; color: #3A2600; } .ds-chip--stall { background: transparent; border-color: #0C7382; color: #0F6B78; } .ds-chip--done { background: #8B3A62; color: #FFF0F6; } .ds-chip--deload { background: transparent; border-color: #DACAE3; color: #634674; }"
+    },
+    {
+      "name": "List Row",
+      "kind": "card",
+      "refersTo": "",
+      "description": "The one list grammar: name over quiet meta, optional trail. Rows divide with hairlines, never card grids.",
+      "html": "<a class=\"ds-row\" href=\"#\"><span class=\"ds-row__main\"><span class=\"ds-row__name\">Bankdrücken</span><span class=\"ds-row__meta\">vor 5 Tagen · 62,5 kg</span></span><span class=\"ds-row__trail\">3 × 8</span></a>",
+      "css": ".ds-row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 12px 0; border-top: 1px solid #DACAE3; text-decoration: none; } .ds-row__main { flex: 1; min-width: 0; } .ds-row__name { display: block; font: 600 1rem Figtree, system-ui, sans-serif; color: #291238; } .ds-row__meta { display: block; font: 400 0.8125rem Figtree, system-ui, sans-serif; color: #634674; margin-top: 1px; } .ds-row__trail { font: 700 0.875rem Figtree, system-ui, sans-serif; color: #291238; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Sheet Menu Row",
+      "kind": "nav",
+      "refersTo": "",
+      "description": "Bottom-sheet action: raised icon tile, strong name, meta line answering the open question.",
+      "html": "<button class=\"ds-sheet-row\"><span class=\"ds-sheet-row__lead\"><svg viewBox=\"0 0 16 16\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8 2.6v6.2\"/><path d=\"M5.4 6.2L8 8.8l2.6-2.6\"/><path d=\"M2.8 13.2h10.4\"/></svg></span><span class=\"ds-sheet-row__main\"><span class=\"ds-sheet-row__name\">Als Deload markieren</span><span class=\"ds-sheet-row__meta\">Bewusst leichter — zählt nicht gegen deinen Schnitt.</span></span></button>",
+      "css": ".ds-sheet-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 0; background: none; border: none; text-align: left; cursor: pointer; } .ds-sheet-row__lead { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 16px; background: #EEE5F3; color: #634674; } .ds-sheet-row__main { flex: 1; min-width: 0; } .ds-sheet-row__name { display: block; font: 600 1rem Figtree, system-ui, sans-serif; color: #291238; } .ds-sheet-row__meta { display: block; font: 400 0.8125rem Figtree, system-ui, sans-serif; color: #634674; margin-top: 1px; } .ds-sheet-row:active { background: #EEE5F3; }"
+    },
+    {
+      "name": "Number Cell",
+      "kind": "input",
+      "refersTo": "",
+      "description": "An editable value: inset raised cell, bold tabular numeral. Inset means editable, not elevated.",
+      "html": "<input class=\"ds-num\" type=\"number\" value=\"62.5\" aria-label=\"Gewicht in kg\">",
+      "css": ".ds-num { width: 5.2rem; min-height: 44px; text-align: center; background: #EEE5F3; border: none; border-radius: 16px; font: 700 1.375rem Figtree, system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -0.04em; color: #291238; } .ds-num:focus-visible { outline: 2px solid #291238; outline-offset: 2px; }"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "",
+      "description": "Label above input, everywhere a form exists.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-field__label\" for=\"ds-f1\">Notiz</label><input class=\"ds-field__input\" id=\"ds-f1\" type=\"text\" placeholder=\"z. B. nach 8h Schicht\"></div>",
+      "css": ".ds-field__label { display: block; font: 600 0.75rem Figtree, system-ui, sans-serif; letter-spacing: 0.11em; text-transform: uppercase; color: #634674; margin-bottom: 4px; } .ds-field__input { width: 100%; min-height: 44px; padding: 0 14px; background: #FFFFFF; border: 1px solid #C2ABCF; border-radius: 12px; font: 400 1rem Figtree, system-ui, sans-serif; color: #291238; } .ds-field__input::placeholder { color: #6C537E; } .ds-field__input:focus-visible { outline: 2px solid #291238; outline-offset: 1px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The workout fills up.",
+    "overview": "Puls is an instrument you operate, not a dashboard you consult: standing up, one-handed, between sets. Every logged set advances something visible — a tick on the session strip, a chip going solid, the kilogram total counting up — and that accumulation stays on screen the whole time. Colour is committed, not accented: the page field is pale plum in light and deep aubergine in dark, with exactly three semantic hues (hot orange NOW, gold RECORD, cold cyan ATTENTION) plus pale rose for LOGGED.",
+    "keyCharacteristics": [
+      "One committed page colour per theme; every pairing AA in both themes",
+      "Four states plus a label, inherited by every surface",
+      "One lifted plane per screen; hairline-divided rows elsewhere",
+      "Tabular numerals, largest thing in their container",
+      "90–220ms ease-out motion; accumulation is the choreography"
+    ],
+    "rules": [
+      {"name": "The One-Now Rule", "body": "Only ever one thing on screen is NOW. Destructive actions are not orange.", "section": "colors"},
+      {"name": "The Word-Plus-Colour Rule", "body": "Every state carries a shape or a word as well as a colour.", "section": "colors"},
+      {"name": "The Deload-Is-A-Label Rule", "body": "Deload carries no hue: dim ink plus the literal word. Never promote it to a colour.", "section": "colors"},
+      {"name": "The Sentence-Case Rule", "body": "Exercise names are content: sentence case, body face, never caps, never italic.", "section": "typography"},
+      {"name": "The Numerals-Lead Rule", "body": "In any container that shows a number, the number is the biggest thing in it.", "section": "typography"},
+      {"name": "The One-Lifted-Plane Rule", "body": "If two panels float, one of them is wrong. Repeated identical cards are banned outright.", "section": "elevation"}
+    ],
+    "dos": [
+      "Do validate every new colour pairing AA in both themes; light is usually the binding one",
+      "Do give every state a word or shape alongside its colour",
+      "Do put numerals in tabular figures at the top of their container's scale",
+      "Do compose new lists from .row and new menus from .sheet-row",
+      "Do keep the confirm target ≥64px in the thumb zone, everything else ≥44px",
+      "Do prefer silence: an unanswerable figure is absent, never a confident 0"
+    ],
+    "donts": [
+      "Don't use the amber-on-near-black instrument panel or the electric-blue sport broadcast — both built and rejected",
+      "Don't use lime/acid-green on near-black, violet-to-teal fitness gradients, or any near-black page background",
+      "Don't use italic anywhere, or uppercase exercise names",
+      "Don't spend colour decoratively — three semantic hues plus rose is the whole budget",
+      "Don't use emoji as icons; the inline-SVG set is Icon.tsx",
+      "Don't reach for Inter, Space Grotesk or Outfit — the face is Figtree, vendored",
+      "Don't nest cards, repeat identical cards, or float a second plane",
+      "Don't promote Deload to a colour"
+    ]
+  }
+}

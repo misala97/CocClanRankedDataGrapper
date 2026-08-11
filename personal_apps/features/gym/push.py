@@ -42,9 +42,14 @@ def is_valid_push_endpoint(url):
     return host in _ALLOWED_PUSH_HOSTS or bool(_WNS_HOST_RE.match(host))
 
 
-def send_push_to_all(payload: dict):
-    """payload e.g. {'title': 'Rest complete', 'body': 'Time for your next set.'}"""
-    for sub in PushSubscription.query.all():
+def send_push_to_user(user_id: int, payload: dict):
+    """payload e.g. {'title': 'Rest complete', 'body': 'Time for your next set.'}
+
+    Scoped to one user: this used to fan out to every subscription row, which
+    with more than one lifter means one person's rest timer buzzing another
+    person's phone.
+    """
+    for sub in PushSubscription.query.filter_by(user_id=user_id).all():
         try:
             webpush(
                 subscription_info={

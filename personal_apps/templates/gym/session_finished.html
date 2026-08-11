@@ -1,0 +1,27 @@
+{% extends 'gym/_base.html' %}
+
+{# The finished workout (Puls). The last thing seen after every session, so it
+   answers "war das ein gutes Workout?" before it shows a single raw number.
+
+   The page body is a React island -- see static/gym/src/finished/. This shell
+   only mounts it.
+
+   The mount node IS .finished, not a wrapper around it -- an extra layer
+   between #gym-main and the page root changes the page height, because
+   #gym-main is flex: 1 in a column-flex body.
+
+   `session` is still passed separately: the <title> block below reads its name
+   before any JavaScript runs.
+
+   `tojson` escapes <, > and & for embedding in HTML, so no |safe here. #}
+
+{% block title %}{{ session.name or 'Workout' }} · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="finished" id="gym-root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
+<script type="module" src="{{ vite_asset('finished') }}"></script>
+{% endblock %}

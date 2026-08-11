@@ -1,0 +1,21 @@
+{% extends 'gym/_base.html' %}
+
+{# The confirm screen: matches the leader's exercises against your own
+   catalogue, once, before the workout starts.
+
+   The page body is a React island -- see static/gym/src/shared/. This shell
+   only mounts it. The mount node is a bare div because this page's root IS a
+   .sec, which the island renders.
+
+   `tojson` escapes <, > and & for embedding in HTML, so no |safe here. #}
+
+{% block title %}Mit {{ leader_name }} trainieren · Gym Tracker{% endblock %}
+
+{% block content %}
+<div id="gym-root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
+<script type="module" src="{{ vite_asset('shared') }}"></script>
+{% endblock %}

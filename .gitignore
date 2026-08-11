@@ -10,3 +10,8 @@ personal_apps/static/quizbank_uploads/
 .playwright-mcp/
 coc_stats/.impeccable/live/
 .claude/skills/
+
+# Gym frontend build. dist/ is rebuilt on the VPS after `git reset --hard`,
+# which is why it is not committed -- see personal_apps/DEPLOY_FRONTEND.md.
+node_modules/
+personal_apps/static/gym/dist/

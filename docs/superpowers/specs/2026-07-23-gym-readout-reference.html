@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  SKETCH — the artefact the owner chose a visual direction from.
+  Companion to 2026-07-23-gym-readout-redesign-design.md; read its section 4.0
+  before using anything here.
+
+  This is EVIDENCE OF AN APPROVED FEEL, not a specification of execution.
+  Built in one pass. The fonts are Windows system stand-ins. The hex values
+  were invented, not derived, and were never contrast-tested. The spacing,
+  radii and component layouts are sketch decisions, not design decisions.
+
+  Do not port values out of this file. Not source, not served, not imported.
+-->
+<title>Gym Tracker — Readout (visual reference)</title>
+</head>
+<body>
+
+<style>
+/* ==========================================================
+   PAGE CHROME — neutral, gets out of the way.
+   ========================================================== */
+:root{--pg:#f5f5f6;--pgp:#fff;--pi:#16181c;--pis:#585c64;--pif:#8a8f98;--pr:#e1e2e6;--prh:#c8cad0}
+@media (prefers-color-scheme:dark){:root{--pg:#16181c;--pgp:#1d1f24;--pi:#eceef2;--pis:#a3a8b2;--pif:#70757e;--pr:#2b2e35;--prh:#3a3e46}}
+:root[data-theme="dark"]{--pg:#16181c;--pgp:#1d1f24;--pi:#eceef2;--pis:#a3a8b2;--pif:#70757e;--pr:#2b2e35;--prh:#3a3e46}
+:root[data-theme="light"]{--pg:#f5f5f6;--pgp:#fff;--pi:#16181c;--pis:#585c64;--pif:#8a8f98;--pr:#e1e2e6;--prh:#c8cad0}
+
+.pg{background:var(--pg);color:var(--pi);font-family:system-ui,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.55;padding:40px 24px 72px;min-height:100vh}
+.in{max-width:1240px;margin:0 auto}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--pif)}
+.pg h1{font-size:clamp(28px,4vw,42px);font-weight:700;letter-spacing:-.025em;margin:6px 0 12px;text-wrap:balance}
+.lede{color:var(--pis);max-width:64ch}
+.pg h2{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--pif);margin:0 0 14px}
+.rule{height:1px;background:var(--pr);border:0;margin:34px 0}
+.sec{margin-top:38px}
+.cap{font-size:13px;color:var(--pis);max-width:60ch;margin-top:10px}
+.cap b{color:var(--pi);font-weight:650}
+
+/* ==========================================================
+   READOUT — the direction itself.
+   Ground is unlit bezel. Colour = emitted light, never paint.
+   ========================================================== */
+.rd{
+  --ground:#08090b; --chassis:#121418; --raised:#1a1d22;
+  --edge:#24272e; --edge-hi:#343943;
+  --ink:#eef1f5; --dim:#98a0ac; --unlit:#5c646f;
+  --live:#ff6a1a; --live-deep:#a03c07;
+  --record:#35e0ff; --record-deep:#0a6b80;
+  --stall:#ff3b5c;
+  --disp:Bahnschrift,"DIN Alternate","Archivo Narrow","Arial Narrow",system-ui,sans-serif;
+  --body:"Segoe UI",system-ui,sans-serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+
+/* --- state legend --- */
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px}
+.lg{background:var(--chassis);border:1px solid var(--edge);border-top-color:var(--edge-hi);border-radius:3px;padding:14px}
+.lg-lab{font-family:var(--body);font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+.lg-demo{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.lg-num{font-family:var(--disp);font-size:26px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;color:var(--unlit)}
+.lg-note{font-family:var(--body);font-size:11px;line-height:1.45;color:var(--dim)}
+.dot{width:22px;height:22px;border-radius:2px;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;
+  background:transparent;border:1px solid var(--edge-hi);color:transparent}
+.lg.s-live .lg-num{color:var(--live);text-shadow:0 0 18px rgba(255,106,26,.55)}
+.lg.s-live .dot{border-color:var(--live);box-shadow:0 0 12px -2px rgba(255,106,26,.8);color:var(--live)}
+.lg.s-done .lg-num{color:var(--ink)}
+.lg.s-done .dot{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+.lg.s-rec .lg-num{color:var(--record);text-shadow:0 0 20px rgba(53,224,255,.6)}
+.lg.s-rec .dot{background:var(--record);border-color:var(--record);color:var(--ground);box-shadow:0 0 16px -2px rgba(53,224,255,.9)}
+.lg.s-stall .lg-num{color:var(--ink)}
+.lg.s-stall .dot{border-color:var(--stall);color:var(--stall)}
+
+/* --- shared device chrome --- */
+.stage{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.phone{width:328px;flex:none;border-radius:26px;padding:7px;background:#0b0c0e;border:1px solid var(--prh);box-shadow:0 20px 44px -22px rgba(0,0,0,.6)}
+.scr{border-radius:20px;overflow:hidden;background:var(--ground);color:var(--ink);font-family:var(--body);display:flex;flex-direction:column;height:600px}
+.scr-b{flex:1;padding:14px;display:flex;flex-direction:column;gap:11px;overflow:hidden}
+
+.bar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;padding-bottom:11px;border-bottom:1px solid var(--edge)}
+.bar-name{font-family:var(--disp);font-size:20px;font-weight:700;letter-spacing:.045em;text-transform:uppercase}
+.bar-sub{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.04em;margin-top:1px}
+.clock{font-family:var(--disp);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.02em;color:var(--live);text-shadow:0 0 16px rgba(255,106,26,.45)}
+.livedot{display:inline-block;width:6px;height:6px;border-radius:99px;background:var(--live);box-shadow:0 0 8px var(--live);margin-right:5px;vertical-align:2px}
+
+.panel{background:var(--chassis);border:1px solid var(--edge);border-top-color:var(--edge-hi);border-radius:3px;padding:11px;display:flex;flex-direction:column;gap:9px}
+.panel.unlit{background:transparent;border-color:var(--edge);opacity:.7}
+.p-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.p-name{font-family:var(--disp);font-size:16px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.tags{display:flex;gap:5px;flex:none;align-items:center}
+.tag{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:2px 5px;border-radius:2px;background:var(--raised);color:var(--dim);border:1px solid var(--edge)}
+.tag.on{background:var(--live);color:var(--ground);border-color:var(--live)}
+.tag.rec{background:var(--record);color:var(--ground);border-color:var(--record)}
+.tag.stall{background:transparent;color:var(--stall);border-color:var(--stall)}
+
+/* --- set rows --- */
+.rows{display:flex;flex-direction:column;gap:3px}
+.row{display:grid;grid-template-columns:13px 1fr 26px;align-items:center;gap:9px;padding:6px 8px;border-radius:2px;background:#0d0f11;border:1px solid #1b1e23}
+.r-i{font-family:var(--mono);font-size:10px;color:var(--unlit)}
+.load{display:flex;align-items:baseline;gap:3px;font-family:var(--disp);font-variant-numeric:tabular-nums}
+.kg{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.u{font-size:10px;color:var(--dim);letter-spacing:.06em}
+.x{font-size:12px;color:var(--unlit);padding:0 3px}
+.reps{font-size:21px;font-weight:700}
+.ck{width:26px;height:26px;border-radius:2px;display:grid;place-items:center;font-size:12px;font-weight:700;border:1px solid var(--edge-hi);background:transparent;color:transparent}
+
+.row.done .kg,.row.done .reps{color:var(--ink)}
+.row.done .ck{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+.row.next{border-color:var(--live);background:#140d08}
+.row.next .kg,.row.next .reps{color:var(--live);text-shadow:0 0 14px rgba(255,106,26,.5)}
+.row.next .ck{border-color:var(--live);box-shadow:0 0 10px -2px rgba(255,106,26,.75)}
+.row.unlit .kg,.row.unlit .reps{color:var(--unlit)}
+.row.pr{border-color:var(--record);background:#03171c}
+.row.pr .kg,.row.pr .reps{color:var(--record);text-shadow:0 0 16px rgba(53,224,255,.55)}
+.row.pr .ck{background:var(--record);border-color:var(--record);color:var(--ground);box-shadow:0 0 14px -2px rgba(53,224,255,.85)}
+
+/* --- rest --- */
+.rest{display:flex;flex-direction:column;gap:5px}
+.rest-t{display:flex;justify-content:space-between;align-items:baseline}
+.rest-l{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.rest-v{font-family:var(--disp);font-size:16px;font-weight:700;color:var(--live);font-variant-numeric:tabular-nums;text-shadow:0 0 12px rgba(255,106,26,.5)}
+.rest-tr{height:6px;background:#1b1e23;border-radius:1px;overflow:hidden}
+.rest-f{height:100%;width:44%;background:var(--live);box-shadow:0 0 12px -1px var(--live)}
+
+/* --- primary action / chassis button --- */
+.cta{margin-top:auto;font-family:var(--disp);font-size:16px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;text-align:center;
+  padding:13px;border-radius:3px;background:var(--live);color:#100600;border:0;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 3px 0 var(--live-deep)}
+.cta.ghost{background:transparent;color:var(--ink);border:1px solid var(--edge-hi);box-shadow:0 2px 0 #0d0f11}
+
+/* --- tabs --- */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--edge);background:#0a0b0d;padding:8px 0 11px}
+.tab{text-align:center;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--unlit);font-weight:600}
+.tab i{display:block;height:2px;width:18px;margin:0 auto 6px;border-radius:99px;background:transparent}
+.tab.on{color:var(--live)}
+.tab.on i{background:var(--live);box-shadow:0 0 8px var(--live)}
+
+/* --- receipt bits --- */
+.flare{border:1px solid var(--record);border-radius:3px;padding:11px;background:linear-gradient(180deg,#04191f,#0a0c0e);
+  box-shadow:0 0 26px -12px rgba(53,224,255,.8)}
+.flare-l{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--record);margin-bottom:5px}
+.flare-n{font-family:var(--disp);font-size:15px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink)}
+.flare-v{font-family:var(--disp);font-size:38px;font-weight:700;line-height:1;color:var(--record);font-variant-numeric:tabular-nums;text-shadow:0 0 26px rgba(53,224,255,.6);margin-top:3px}
+.flare-s{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat{background:var(--chassis);border:1px solid var(--edge);border-top-color:var(--edge-hi);border-radius:3px;padding:9px}
+.stat-l{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.stat-v{font-family:var(--disp);font-size:23px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1.1}
+.stat-d{font-family:var(--mono);font-size:9px;color:var(--record);margin-top:2px}
+
+.exline{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #1b1e23}
+.exline:last-child{border-bottom:0}
+.exline-n{font-family:var(--disp);font-size:13px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
+.exline-s{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:1px}
+.verdict{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid var(--edge-hi);color:var(--dim);white-space:nowrap}
+.verdict.rec{color:var(--ground);background:var(--record);border-color:var(--record)}
+.verdict.stall{color:var(--stall);border-color:var(--stall)}
+.verdict.up{color:var(--ink)}
+
+.advice{border-left:2px solid var(--stall);padding:7px 0 7px 10px;background:#140609}
+.advice-l{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--stall);margin-bottom:3px}
+.advice-t{font-size:12px;color:var(--dim);line-height:1.45}
+.advice-t b{color:var(--ink);font-weight:600}
+
+/* --- desktop cockpit slice --- */
+.desk{background:var(--ground);border-radius:6px;border:1px solid var(--prh);padding:20px;color:var(--ink);font-family:var(--body);
+  box-shadow:0 20px 44px -24px rgba(0,0,0,.6);width:100%}
+.desk-bar{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding-bottom:14px;border-bottom:1px solid var(--edge);margin-bottom:16px;flex-wrap:wrap}
+.desk-h{font-family:var(--disp);font-size:24px;font-weight:700;letter-spacing:.045em;text-transform:uppercase}
+.desk-sub{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.05em;margin-top:2px}
+.desk-cta{font-family:var(--disp);font-size:14px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:10px 20px;border-radius:3px;background:var(--live);color:#100600;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 3px 0 var(--live-deep)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.col{background:var(--chassis);border:1px solid var(--edge);border-top-color:var(--edge-hi);border-radius:3px;padding:14px;display:flex;flex-direction:column;gap:11px}
+.col-h{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+
+.stalls{display:flex;flex-direction:column;gap:8px}
+.stall-r{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.stall-n{font-family:var(--disp);font-size:14px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
+.stall-m{font-family:var(--mono);font-size:9px;color:var(--unlit)}
+.stall-c{font-family:var(--disp);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--stall)}
+.stall-c small{font-family:var(--mono);font-size:8px;color:var(--unlit);display:block;letter-spacing:.08em;text-align:right;font-weight:600}
+
+.bal{display:flex;flex-direction:column;gap:7px}
+.bal-r{display:grid;grid-template-columns:66px 1fr 30px;gap:8px;align-items:center}
+.bal-n{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.04em}
+.bal-t{display:block;height:9px;background:#1b1e23;border-radius:1px;overflow:hidden}
+.bal-f{display:block;height:100%;background:var(--ink);opacity:.85}
+.bal-f.low{background:var(--stall)}
+.bal-v{font-family:var(--disp);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right;color:var(--dim)}
+
+.ton{display:flex;align-items:flex-end;gap:5px;height:104px}
+.ton-b{flex:1;background:var(--edge-hi);border-radius:1px 1px 0 0}
+.ton-b.now{background:var(--live);box-shadow:0 0 14px -3px var(--live)}
+.ton-x{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--unlit);letter-spacing:.06em}
+
+.foot{margin-top:40px;padding-top:22px;border-top:1px solid var(--pr);color:var(--pis);font-size:14px;max-width:70ch}
+.foot b{color:var(--pi);font-weight:650}
+.foot ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="pg"><div class="in">
+
+  <div class="eyebrow">Gym Tracker · Richtung</div>
+  <h1>Readout</h1>
+  <p class="lede">Direction 02 gave the chassis: condensed industrial type, oversized numerals, machined edges, real press depth. Direction 03 gave the language: colour that means something, and a record that lands as a moment. What is honestly both is the display on a serious piece of equipment — a rowing monitor, a timing system, a scoreboard. The numbers glow because they are <em>lit</em>, not because a gradient was applied.</p>
+
+  <hr class="rule">
+
+  <div class="sec rd">
+    <h2>One metaphor, every state in the app</h2>
+    <div class="legend">
+      <div class="lg s-unlit">
+        <div class="lg-lab">Unlit</div>
+        <div class="lg-demo"><span class="lg-num">82,5</span><span class="dot">✓</span></div>
+        <div class="lg-note">Not yet done. Prefilled from last time, outline only, dimmed. Present but inert.</div>
+      </div>
+      <div class="lg s-live">
+        <div class="lg-lab">Live</div>
+        <div class="lg-demo"><span class="lg-num">82,5</span><span class="dot">✓</span></div>
+        <div class="lg-note">Happening now. The set you're on, the running rest timer, the primary action. Amber, and only ever one thing at a time.</div>
+      </div>
+      <div class="lg s-done">
+        <div class="lg-lab">Done</div>
+        <div class="lg-demo"><span class="lg-num">82,5</span><span class="dot">✓</span></div>
+        <div class="lg-note">Logged and settled. Full-brightness white, solid tick. Reads as fact, not as achievement.</div>
+      </div>
+      <div class="lg s-rec">
+        <div class="lg-lab">Rekord</div>
+        <div class="lg-demo"><span class="lg-num">82,5</span><span class="dot">✓</span></div>
+        <div class="lg-note">Beat something. Cyan, one sharp flare then settles. Rare by construction — that's what makes it land.</div>
+      </div>
+      <div class="lg s-stall">
+        <div class="lg-lab">Stagniert</div>
+        <div class="lg-demo"><span class="lg-num">82,5</span><span class="dot">!</span></div>
+        <div class="lg-note">Needs attention. Red outline plus the word — never colour alone, so it survives daylight and colourblindness.</div>
+      </div>
+    </div>
+    <p class="cap"><b>Why this matters more than the palette:</b> five states, one rule, and every surface in the app inherits it — set rows, exercise cards, rest bar, tabs, dashboard tiles, verdict chips. That is what makes it an app instead of five screens.</p>
+  </div>
+
+  <hr class="rule">
+
+  <div class="sec rd">
+    <h2>Phone · logging and finishing</h2>
+    <div class="stage">
+
+      <!-- LIVE WORKOUT -->
+      <div class="phone"><div class="scr">
+        <div class="scr-b">
+          <div class="bar">
+            <div><div class="bar-name">Push Day</div><div class="bar-sub"><span class="livedot"></span>ÜBUNG 2 VON 5</div></div>
+            <div class="clock">42:15</div>
+          </div>
+
+          <div class="panel">
+            <div class="p-top"><div class="p-name">Bankdrücken</div>
+              <div class="tags"><span class="tag">Pos 2</span><span class="tag on">3/4</span></div></div>
+            <div class="rows">
+              <div class="row done"><span class="r-i">1</span><span class="load"><span class="kg">80</span><span class="u">KG</span><span class="x">×</span><span class="reps">8</span></span><span class="ck">✓</span></div>
+              <div class="row done"><span class="r-i">2</span><span class="load"><span class="kg">80</span><span class="u">KG</span><span class="x">×</span><span class="reps">8</span></span><span class="ck">✓</span></div>
+              <div class="row done"><span class="r-i">3</span><span class="load"><span class="kg">82,5</span><span class="u">KG</span><span class="x">×</span><span class="reps">6</span></span><span class="ck">✓</span></div>
+              <div class="row next"><span class="r-i">4</span><span class="load"><span class="kg">82,5</span><span class="u">KG</span><span class="x">×</span><span class="reps">6</span></span><span class="ck">✓</span></div>
+            </div>
+            <div class="rest">
+              <div class="rest-t"><span class="rest-l">Pause läuft</span><span class="rest-v">1:12</span></div>
+              <div class="rest-tr"><div class="rest-f"></div></div>
+            </div>
+          </div>
+
+          <div class="panel unlit">
+            <div class="p-top"><div class="p-name">Schrägbank KH</div>
+              <div class="tags"><span class="tag">Pos 3</span><span class="tag">0/3</span></div></div>
+            <div class="rows">
+              <div class="row unlit"><span class="r-i">1</span><span class="load"><span class="kg">22,5</span><span class="u">KG</span><span class="x">×</span><span class="reps">10</span></span><span class="ck">✓</span></div>
+            </div>
+          </div>
+
+          <div class="cta">Workout beenden</div>
+        </div>
+        <div class="tabs"><div class="tab on"><i></i>Heute</div><div class="tab"><i></i>Übungen</div><div class="tab"><i></i>Verlauf</div></div>
+      </div></div>
+
+      <!-- FINISHED RECEIPT -->
+      <div class="phone"><div class="scr">
+        <div class="scr-b">
+          <div class="bar">
+            <div><div class="bar-name">Push Day</div><div class="bar-sub">FR 18.07. · 1:04 STD</div></div>
+          </div>
+
+          <div class="flare">
+            <div class="flare-l">Neuer Gewichts-Rekord</div>
+            <div class="flare-n">Bankdrücken</div>
+            <div class="flare-v">82,5<span style="font-size:15px"> KG</span></div>
+            <div class="flare-s">vorher 80,0 kg · 12.06. · Position 2</div>
+          </div>
+
+          <div class="stats">
+            <div class="stat"><div class="stat-l">Volumen</div><div class="stat-v">6.240</div><div class="stat-d">+8 % ggü. Ø</div></div>
+            <div class="stat"><div class="stat-l">Sätze</div><div class="stat-v">18</div></div>
+            <div class="stat"><div class="stat-l">Rekorde</div><div class="stat-v" style="color:var(--record)">2</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="p-top"><div class="p-name">Nach Übung</div></div>
+            <div>
+              <div class="exline"><div><div class="exline-n">Bankdrücken</div><div class="exline-s">Pos 2 · 80×8, 80×8, 82,5×6, 82,5×6</div></div><span class="verdict rec">Rekord</span></div>
+              <div class="exline"><div><div class="exline-n">Schrägbank KH</div><div class="exline-s">Pos 3 · 20×10, 20×9, 20×8</div></div><span class="verdict stall">4 ohne PR</span></div>
+              <div class="exline"><div><div class="exline-n">Seitheben</div><div class="exline-s">Pos 4 · 12,5×12, 12,5×12, 12,5×10</div></div><span class="verdict up">+6 % Vol.</span></div>
+            </div>
+          </div>
+
+          <div class="advice">
+            <div class="advice-l">Nächstes Mal</div>
+            <div class="advice-t"><b>Schrägbank KH</b> steht seit 4 Workouts auf 20 kg — auf <b>22,5 kg</b> gehen, notfalls 2 Wdh. weniger.</div>
+          </div>
+
+          <div class="cta ghost">Zur Übersicht</div>
+        </div>
+        <div class="tabs"><div class="tab"><i></i>Heute</div><div class="tab"><i></i>Übungen</div><div class="tab on"><i></i>Verlauf</div></div>
+      </div></div>
+
+    </div>
+    <p class="cap">Left: mid-set. Exactly one thing is amber — the set you're about to do. Everything logged has settled to white; everything not yet reached is outline only. Right: the finish. The record gets the top of the screen and the only cyan on the page, then the debrief closes with the one thing worth changing.</p>
+  </div>
+
+  <hr class="rule">
+
+  <div class="sec rd">
+    <h2>Desktop · the same language, more room</h2>
+    <div class="desk">
+      <div class="desk-bar">
+        <div><div class="desk-h">Letzte 4 Wochen</div><div class="desk-sub">11 WORKOUTS · 2,8 / WOCHE · ZULETZT VOR 2 TAGEN</div></div>
+        <div class="desk-cta">Workout starten</div>
+      </div>
+      <div class="cols">
+
+        <div class="col">
+          <div class="col-h">Steht still</div>
+          <div class="stalls">
+            <div class="stall-r"><div><div class="stall-n">Schrägbank KH</div><div class="stall-m">Pos 3 · 20,0 kg seit 12.06.</div></div><div class="stall-c">4<small>Workouts</small></div></div>
+            <div class="stall-r"><div><div class="stall-n">Rudern Kabel</div><div class="stall-m">Pos 2 · 65,0 kg seit 20.06.</div></div><div class="stall-c">3<small>Workouts</small></div></div>
+            <div class="stall-r"><div><div class="stall-n">Beinpresse</div><div class="stall-m">Pos 1 · 180,0 kg seit 28.06.</div></div><div class="stall-c">3<small>Workouts</small></div></div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="col-h">Sätze pro Muskelgruppe</div>
+          <div class="bal">
+            <div class="bal-r"><span class="bal-n">Brust</span><span class="bal-t"><span class="bal-f" style="width:88%"></span></span><span class="bal-v">38</span></div>
+            <div class="bal-r"><span class="bal-n">Rücken</span><span class="bal-t"><span class="bal-f" style="width:76%"></span></span><span class="bal-v">33</span></div>
+            <div class="bal-r"><span class="bal-n">Beine</span><span class="bal-t"><span class="bal-f" style="width:62%"></span></span><span class="bal-v">27</span></div>
+            <div class="bal-r"><span class="bal-n">Schultern</span><span class="bal-t"><span class="bal-f" style="width:47%"></span></span><span class="bal-v">20</span></div>
+            <div class="bal-r"><span class="bal-n">Bizeps</span><span class="bal-t"><span class="bal-f" style="width:33%"></span></span><span class="bal-v">14</span></div>
+            <div class="bal-r"><span class="bal-n">Waden</span><span class="bal-t"><span class="bal-f low" style="width:9%"></span></span><span class="bal-v">4</span></div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="col-h">Tonnage pro Woche</div>
+          <div class="ton">
+            <div class="ton-b" style="height:44%"></div><div class="ton-b" style="height:58%"></div>
+            <div class="ton-b" style="height:52%"></div><div class="ton-b" style="height:71%"></div>
+            <div class="ton-b" style="height:66%"></div><div class="ton-b" style="height:83%"></div>
+            <div class="ton-b now" style="height:94%"></div>
+          </div>
+          <div class="ton-x"><span>KW 22</span><span>KW 28</span></div>
+        </div>
+
+      </div>
+    </div>
+    <p class="cap">Desktop is not the phone stretched. It is a board: what has stopped moving, what is under-trained, whether total load is still climbing — the three things you actually plan from. Same type, same states, same edges.</p>
+  </div>
+
+  <div class="foot">
+    <p><b>What gets locked if you approve this:</b></p>
+    <ul>
+      <li>Ground is near-black; surfaces are chassis panels with a lit top edge and a hard bottom edge. Radii stay small — machined, not soft.</li>
+      <li>Amber is <em>now</em>. Cyan is <em>record</em>. Red is <em>attention</em>. White is <em>fact</em>. No colour is decorative, and nothing else gets a hue.</li>
+      <li>Numerals are condensed, tabular, and the largest thing in any container. Labels are small, uppercase, and quiet.</li>
+      <li>Every state carries a shape or a word as well as a colour.</li>
+      <li>Motion is mechanical: bars fill linearly, counters tick, the record flares once and settles. No bounce.</li>
+    </ul>
+    <p style="margin-top:14px">Type here is a Windows stand-in. The real build uses one engineered family across three roles — condensed for display and numerals, regular for body, mono for dense tabular data — picked and tuned during implementation.</p>
+  </div>
+
+</div></div>
+
+</body>
+</html>

@@ -1,0 +1,127 @@
+/* ============================================================================
+   GYM TRACKER  ·  "PULS"  ·  token sheet + primitives
+   ----------------------------------------------------------------------------
+   Values are the ones measured by personal_apps/scratchpad/palette_puls.py:
+   25/25 pairings pass WCAG AA in each theme, and the three accent fills stay
+   separable under protanopia and deuteranopia.
+
+   Light is the base; prefers-color-scheme: dark overrides it; an explicit
+   html[data-theme] beats both, so the app can offer a manual switch later
+   without restructuring anything.
+   ============================================================================ */
+
+:root {
+  --ground:#F3EAF7; --chassis:#FFFFFF; --raised:#EEE5F3;
+  --edge:#DACAE3; --edge-hi:#C2ABCF;
+  --ink:#291238; --dim:#634674; --unlit:#6C537E;
+  --live:#C2410C; --live-ink:#A83409; --live-deep:#8E2C07; --on-live:#FFF4EE;
+  --done:#8B3A62; --done-ink:#7A3256; --on-done:#FFF0F6;
+  --record:#F0B429; --record-ink:#6B4400; --on-record:#3A2600;
+  --stall:#0C7382; --stall-ink:#0F6B78; --on-stall:#ECFBFD;
+
+  --lift: 0 1px 2px rgba(41,18,56,.05), 0 10px 30px -16px rgba(41,18,56,.32);
+  --lift-live: 0 10px 26px -14px rgba(194,65,12,.75);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground:#241132; --chassis:#371B49; --raised:#1B0B26;
+    --edge:#472B5A; --edge-hi:#634077;
+    --ink:#F8F1FB; --dim:#C5ACD2; --unlit:#9E86AD;
+    --live:#FF7A4D; --live-ink:#FF7A4D; --live-deep:#D2411A; --on-live:#2A0A00;
+    --done:#F1C8DD; --done-ink:#F1C8DD; --on-done:#2A1233;
+    --record:#FFC861; --record-ink:#FFC861; --on-record:#2A1D00;
+    --stall:#5FDDEC; --stall-ink:#5FDDEC; --on-stall:#04262C;
+
+    --lift: 0 2px 4px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.85);
+    --lift-live: 0 10px 26px -14px rgba(255,122,77,.6);
+  }
+}
+html[data-theme="light"] {
+  --ground:#F3EAF7; --chassis:#FFFFFF; --raised:#EEE5F3;
+  --edge:#DACAE3; --edge-hi:#C2ABCF;
+  --ink:#291238; --dim:#634674; --unlit:#6C537E;
+  --live:#C2410C; --live-ink:#A83409; --live-deep:#8E2C07; --on-live:#FFF4EE;
+  --done:#8B3A62; --done-ink:#7A3256; --on-done:#FFF0F6;
+  --record:#F0B429; --record-ink:#6B4400; --on-record:#3A2600;
+  --stall:#0C7382; --stall-ink:#0F6B78; --on-stall:#ECFBFD;
+  --lift: 0 1px 2px rgba(41,18,56,.05), 0 10px 30px -16px rgba(41,18,56,.32);
+  --lift-live: 0 10px 26px -14px rgba(194,65,12,.75);
+}
+html[data-theme="dark"] {
+  --ground:#241132; --chassis:#371B49; --raised:#1B0B26;
+  --edge:#472B5A; --edge-hi:#634077;
+  --ink:#F8F1FB; --dim:#C5ACD2; --unlit:#9E86AD;
+  --live:#FF7A4D; --live-ink:#FF7A4D; --live-deep:#D2411A; --on-live:#2A0A00;
+  --done:#F1C8DD; --done-ink:#F1C8DD; --on-done:#2A1233;
+  --record:#FFC861; --record-ink:#FFC861; --on-record:#2A1D00;
+  --stall:#5FDDEC; --stall-ink:#5FDDEC; --on-stall:#04262C;
+  --lift: 0 2px 4px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.85);
+  --lift-live: 0 10px 26px -14px rgba(255,122,77,.6);
+}
+
+:root {
+  /* type: one family, no italic, ever */
+  --font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --t-micro:.6875rem; --t-label:.75rem; --t-meta:.8125rem; --t-sm:.875rem;
+  --t-body:1rem; --t-name:1.375rem;
+  --num-sm:1.375rem; --num-md:2.125rem; --num-lg:2.5rem; --num-xl:3.25rem;
+  --w-reg:400; --w-med:500; --w-semi:600; --w-bold:700; --w-max:800;
+
+  --sp-1:.25rem; --sp-2:.5rem; --sp-3:.75rem; --sp-4:1rem;
+  --sp-5:1.25rem; --sp-6:1.5rem; --sp-8:2rem;
+
+  --r-inset:12px; --r-panel:22px; --r-control:16px; --r-chip:999px;
+  --tap:44px; --tap-primary:64px;
+
+  --dur-1:90ms; --dur-2:150ms; --dur-3:220ms;
+  --ease:cubic-bezier(.25,1,.5,1);
+
+  --z-bar:90; --z-sheet:200; --z-toast:300;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font); background:var(--ground); color:var(--ink);
+  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased;
+  font-style:normal;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;font-style:normal}
+:focus-visible{outline:2px solid var(--live);outline-offset:2px}
+
+/* small quiet meta label -- the ONLY place uppercase is allowed */
+.lbl{
+  font-size:var(--t-micro); font-weight:var(--w-semi); letter-spacing:.11em;
+  text-transform:uppercase; color:var(--unlit);
+}
+
+/* Any element holding a stack of lines. Spans are inline by default, so a
+   "label above a name" built from two spans renders as one run, and
+   text-overflow on a child silently does nothing. This bit three separate
+   surfaces during the mockups; the utility exists so it stops happening. */
+.stack{display:block}
+.stack > *{display:block}
+
+/* the one list primitive: divided rows in a shared surface, never cards */
+.row{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) 0}
+.row--top{align-items:flex-start}
+.row + .row{border-top:1px solid var(--edge)}
+.row__lead{flex:none;width:20px;text-align:center;font-size:var(--t-meta);
+  font-weight:var(--w-bold);color:var(--unlit)}
+.row__main{flex:1;min-width:0}
+/* name and meta are stacked lines, not inline runs -- as inline spans they
+   flow into each other and wrap underneath __trail, which reads as overlap */
+.row__name{display:block;font-size:var(--t-body);font-weight:var(--w-med);color:var(--dim);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row__name--wrap{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.row__meta{display:block;font-size:var(--t-meta);color:var(--unlit);margin-top:1px}
+/* one line, ellipsised -- only works because __meta is block; on an inline
+   span text-overflow silently does nothing and the text runs off-viewport */
+.row__meta--clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row__trail{flex:none;font-size:var(--t-meta);font-weight:var(--w-semi);color:var(--unlit)}
+.row.is-done .row__name{color:var(--ink)}
+.row.is-done .row__lead{color:var(--done-ink)}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}

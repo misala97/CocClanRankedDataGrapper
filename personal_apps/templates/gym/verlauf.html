@@ -1,0 +1,28 @@
+{% extends 'gym/_base.html' %}
+
+{# Verlauf (Puls): the whole training history.
+
+   The page body is a React island -- see static/gym/src/history/. This shell
+   only mounts it.
+
+   Search and the export selection are client-side over the rows the payload
+   carries: this is the one surface that sees the entire history, and
+   re-querying per keystroke would be absurd. An export selection therefore
+   survives filtering untouched.
+
+   The mount node IS .verlauf, not a wrapper around it -- an extra layer
+   between #gym-main and the page root changes the page height, because
+   #gym-main is flex: 1 in a column-flex body.
+
+   `tojson` escapes <, > and & for embedding in HTML, so no |safe here. #}
+
+{% block title %}Verlauf · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="verlauf" id="gym-root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
+<script type="module" src="{{ vite_asset('history') }}"></script>
+{% endblock %}

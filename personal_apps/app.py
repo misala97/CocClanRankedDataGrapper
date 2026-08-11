@@ -2,7 +2,7 @@ import os
 import secrets
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, abort, render_template, request, redirect, url_for
 from flask_migrate import Migrate
 
 from extensions import db
@@ -43,7 +43,7 @@ migrate = Migrate(app, db)
 from models import *
 db.configure_mappers()
 
-from auth import auth_bp, _is_logged_in, login_required
+from auth import auth_bp, _is_logged_in, login_required, is_admin
 from features.pubquiz.routes import pubquiz_bp
 from features.tips.routes import tips_bp
 from features.quizbank.routes import quizbank_bp
@@ -55,20 +55,55 @@ app.register_blueprint(tips_bp)
 app.register_blueprint(quizbank_bp)
 app.register_blueprint(gym_bp)
 
+# Gym templates call {{ vite_asset('exercise') }} for the content-hashed bundle
+# built by `npm run build`. Raises rather than returning an empty src when the
+# build has not run -- see vite_assets.py and DEPLOY_FRONTEND.md.
+from vite_assets import resolve_asset
+app.jinja_env.globals['vite_asset'] = resolve_asset
+
+
+@app.after_request
+def _immutable_hashed_assets(response):
+    # The dist bundles carry their content hash in the filename, so a URL can
+    # never mean different bytes -- a rebuild changes the name, not the file.
+    # Flask's default (no-cache) made the browser revalidate every bundle on
+    # every navigation for nothing. Scoped to dist/assets/: gym.css and sw.js
+    # DO change in place and must keep revalidating.
+    if request.path.startswith('/static/gym/dist/assets/'):
+        # Werkzeug's static handler has already written no-cache; clear it
+        # rather than appending after it.
+        response.cache_control.no_cache = None
+        response.cache_control.public = True
+        response.cache_control.max_age = 31536000
+        response.cache_control.immutable = True
+    return response
+
 # Hostname that should require login for every page (the "full access" domain).
 # Other hostnames (e.g. the public pubquiz-only domain) are unaffected and keep
 # whatever per-route protection each blueprint already defines.
 FULL_ACCESS_HOST = os.getenv("PERSONAL_FULL_ACCESS_HOST", "mgemmel.viewdns.net")
 
 
+# Blueprints a non-admin may reach. Everything else on the full-access host is
+# the author's: the other three apps hold no per-user data and are not
+# partitioned (see the multi-user design spec, decision 1).
+_MEMBER_BLUEPRINTS = {'gym', 'auth'}
+
+
 @app.before_request
 def _require_login_on_full_access_host():
     if request.host.split(':')[0] != FULL_ACCESS_HOST:
         return
-    if request.endpoint in ('auth.login', 'auth.logout', 'static'):
+    if request.endpoint in ('auth.login', 'auth.logout', 'static', 'gym.gym_service_worker'):
         return
     if not _is_logged_in():
         return redirect(url_for('auth.login'))
+    # `request.blueprint is None` for routes registered on the app itself --
+    # which here is only `/`, and that route filters its own contents by
+    # permission. Blocking it at the gate would 403 the overview page for the
+    # very user it is being filtered for.
+    if not is_admin() and request.blueprint is not None and request.blueprint not in _MEMBER_BLUEPRINTS:
+        abort(403)
 
 
 APPS = [
@@ -102,8 +137,18 @@ APPS = [
 @app.route('/')
 @login_required
 def index():
-    return render_template('overview.html', apps=APPS)
+    # A non-admin's landing page lists the one app they can open, rather than
+    # four tiles of which three would 403.
+    visible = APPS if is_admin() else [a for a in APPS if a['url'] == '/gym']
+    return render_template('overview.html', apps=visible)
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, use_reloader=False, port=5000)
+    # The reloader is on: without it, a Python edit is silently served by the
+    # old process, which produces the worst possible symptom -- the browser
+    # 500s or renders stale markup while the test suite passes, because the
+    # tests import the current module and the server does not.
+    #
+    # Nothing here starts work at import time (the notifier is its own process,
+    # run_gym_notifier.py), so the reloader's double-start is harmless.
+    app.run(host='0.0.0.0', debug=True, use_reloader=True, port=5000)

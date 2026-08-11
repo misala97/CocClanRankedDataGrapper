@@ -1,0 +1,27 @@
+{% extends 'gym/_base.html' %}
+
+{# The exercise catalogue.
+
+   The page body is a React island -- see static/gym/src/catalogue/. This shell
+   only mounts it.
+
+   Its three sorts and its search are client-side re-orderings of the SAME rows
+   the payload carries, never a second round trip: a lifter's catalogue is tens
+   of rows, and a request per keystroke would be worse than useless.
+
+   `tojson` escapes <, > and & for embedding in HTML, so no |safe here. #}
+
+{% block title %}Übungen · Gym Tracker{% endblock %}
+
+{# The mount node IS .uebungen, not a wrapper around it: an extra layer
+   between #gym-main and the page root measurably changes the page height --
+   #gym-main is flex: 1 in a column-flex body, so an added level moves where
+   the slack lands. Same lesson as session_detail. #}
+{% block content %}
+<div class="uebungen" id="gym-root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
+<script type="module" src="{{ vite_asset('catalogue') }}"></script>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends 'gym/_base.html' %}
+
+{# Statistik (Puls): all-time analytics over the whole training history.
+
+   The division against Start is by TIME HORIZON, not by metric: Start is
+   windowed (28-day balance, 8 weeks of tonnage, last five workouts, what is
+   stalling now), this page has no window at all. Any future figure belongs
+   here if it answers "about everything" and on Start if it answers "about now".
+
+   The page body is a React island -- see static/gym/src/statistik/. This shell
+   only mounts it.
+
+   The mount node IS .stat-page, not a wrapper around it -- an extra layer
+   between #gym-main and the page root changes the page height, because
+   #gym-main is flex: 1 in a column-flex body.
+
+   `tojson` escapes <, > and & for embedding in HTML, so no |safe here. #}
+
+{% block title %}Statistik · Gym Tracker{% endblock %}
+
+{% block content %}
+<div class="stat-page" id="gym-root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="gym-data">{{ payload_json | tojson }}</script>
+<script type="module" src="{{ vite_asset('statistik') }}"></script>
+{% endblock %}

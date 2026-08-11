@@ -91,6 +91,8 @@
             <span>Personal Apps</span>
         </div>
         <div class="nav-links">
+            <a href="/account">Konto</a>
+            {% if is_admin %}<a href="/admin/users">Benutzer</a>{% endif %}
             <a href="/logout">Logout</a>
         </div>
     </div>
