@@ -54,7 +54,7 @@ after it. Replace that block:
 ```
 
 Tests no longer need to set `made['template']`; leave the existing
-`test_accepting_does_not_claim_the_leaders_routine` line that does, since it is
+`test_the_followers_session_carries_no_template_link` line that does, since it is
 now harmless and removing it is unrelated churn.
 
 Run: `python -m pytest tests/test_gym_sharing.py -q`
@@ -63,7 +63,7 @@ Expected: unchanged — all pass. This step refactors cleanup only.
 - [ ] **Step 1: Write the failing test**
 
 Add to `personal_apps/tests/test_gym_sharing.py`, after the existing
-`test_accepting_does_not_claim_the_leaders_routine` block:
+`test_the_followers_session_carries_no_template_link` block:
 
 ```python
 def test_confirm_offers_the_followers_own_routines(leader_with_partner):
@@ -172,7 +172,7 @@ Expected: PASS.
 - [ ] **Step 6: Run the whole sharing suite**
 
 Run: `python -m pytest tests/test_gym_sharing.py -q`
-Expected: all pass. `test_accepting_does_not_claim_the_leaders_routine` must
+Expected: all pass. `test_the_followers_session_carries_no_template_link` must
 stay green — it is the guard that the leader's routine is never inherited.
 
 - [ ] **Step 7: Commit**
@@ -335,7 +335,7 @@ Expected: 3 passed.
 
 Run: `python -m pytest tests -q`
 Expected: all pass, including
-`test_accepting_does_not_claim_the_leaders_routine`.
+`test_the_followers_session_carries_no_template_link`.
 
 - [ ] **Step 6: Commit**
 
