@@ -195,7 +195,7 @@
                 <span class="ov-alert-num">{{ _bonus }}</span>
                 <div class="ov-alert-body">
                     <div class="ov-alert-title">CWL bonus{{ 'es' if _bonus != 1 }} to assign</div>
-                    <div class="ov-alert-sub">{{ cwl_bonus.season_label }} · unassigned slot{{ 's' if _bonus != 1 }}</div>
+                    <div class="ov-alert-sub">{{ cwl_bonus.season_label }} · unassigned slot{{ 's' if _bonus != 1 }}{{ ' · season finished' if cwl_bonus.ended }}</div>
                 </div>
                 <span class="ov-alert-go">Assign <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg></span>
             </a>

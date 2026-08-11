@@ -214,22 +214,43 @@ def _shift_month(m, delta):
     return f'{y}-{mo:02d}'
 
 
-def _resolve_active_month(months, season_states, current_month, seasons_by_cal_month):
+def _resolve_active_month(months, season_states, current_month, seasons_by_cal_month,
+                          open_slots=None):
     """Which season key the ledger treats as "current".
 
-    Most recent season that isn't finished yet; once everything has ended, fall
-    back to the current calendar month — but the result must always be a key of
-    `months`, because the client indexes every player's by_month with it. A season
-    keyed long-form (e.g. '2026-08-03') replaces the bare 'YYYY-MM' entry in
-    `months`, so after it ends the bare fallback would point at a column that
-    doesn't exist; use that month's newest real season key instead."""
+    A running season first. Otherwise the most recent finished season that still
+    owes bonuses — assigning those is the whole job, and it doesn't stop being
+    the job the day the season ends. Only when every season is settled does the
+    console fall back to the current calendar month.
+
+    The result must always be a key of `months`, because the client indexes every
+    player's by_month with it. A season keyed long-form (e.g. '2026-08-03')
+    replaces the bare 'YYYY-MM' entry in `months`, so the bare fallback would
+    point at a column that doesn't exist; use that month's real season key."""
     for m in reversed(months):
         if season_states.get(m) and season_states[m] != 'ended':
+            return m
+    for m in reversed(months):
+        if (open_slots or {}).get(m):
             return m
     if current_month in months:
         return current_month
     keys = seasons_by_cal_month.get(current_month)
     return sorted(keys)[-1] if keys else months[-1]
+
+
+def _match_season_key(month, known_keys):
+    """Resolve a month the client sent to a season key that actually exists.
+
+    A client holding a cached payload (or any older build) sends the bare
+    calendar month, which matches no season row once CoC keys the season
+    long-form — the request then reads as "no CWL season found for this month"
+    even though the season is sitting right there. Upgrade it; leave months with
+    no season of their own (pure bonus history) exactly as they came in."""
+    if not month or month in known_keys:
+        return month
+    same_month = sorted(k for k in known_keys if k[:7] == month[:7])
+    return same_month[-1] if same_month else month
 
 
 @admin_bp.route('/admin/cwl-bonus', methods=['GET'])
@@ -271,6 +292,7 @@ def admin_cwl_bonus_list():
     season_states = {}   # month -> CWLSeason.state
     month_war_ids = {}   # month -> [war_id, ...]
     month_total_wars = {}   # month -> total wars in the season (for "flawless" = full participation)
+    month_open_slots = {}   # month -> bonuses still owed for that season
     for month in months:
         season = CWLSeason.query.filter_by(season=month).first()
         if not season:
@@ -282,6 +304,9 @@ def admin_cwl_bonus_list():
             continue
         war_ids = [w.id for w in season_wars]
         month_war_ids[month] = war_ids
+        slot_total = _cwl_slot_math(season.league_name, season_wars, CLAN_TAG)['total']
+        month_open_slots[month] = (slot_total is not None
+                                   and sum(1 for b in all_bonuses if b.month == month) < slot_total)
         # "Flawless" requires attacking every war that's actually happened so far — a future war
         # still in 'preparation' hasn't given anyone a chance to attack yet, so it must not count.
         month_total_wars[month] = sum(1 for w in season_wars if w.state in ('inWar', 'warEnded'))
@@ -315,7 +340,7 @@ def admin_cwl_bonus_list():
         }
 
     active_month = _resolve_active_month(months, season_states, current_month,
-                                         seasons_by_cal_month)
+                                         seasons_by_cal_month, month_open_slots)
 
     # Map positions from the active month's CWL (min across war days = consistent position)
     cwl_pos_map = {}
@@ -376,52 +401,91 @@ def _normalize_war_size(team_size):
     return 30
 
 
+def _cwl_wins(wars, clan_tag):
+    """War days our clan won — stars, destruction as tiebreak. Unfinished days don't count."""
+    wins = 0
+    for w in wars:
+        if w.state != 'warEnded':
+            continue
+        if w.clan_tag == clan_tag:
+            our_s, opp_s = w.clan_stars or 0, w.opp_stars or 0
+            our_p, opp_p = float(w.clan_destruction_pct or 0), float(w.opp_destruction_pct or 0)
+        else:
+            our_s, opp_s = w.opp_stars or 0, w.clan_stars or 0
+            our_p, opp_p = float(w.opp_destruction_pct or 0), float(w.clan_destruction_pct or 0)
+        if our_s > opp_s or (our_s == opp_s and our_p > opp_p):
+            wins += 1
+    return wins
+
+
+def _cwl_slot_math(season_league, wars, clan_tag):
+    """How many bonus medals one CWL season is worth: guaranteed by league/size, plus one
+    per war won. 'total' is None when the league/size combination has no guaranteed figure
+    (or the season has no wars yet) — there is nothing to hand out and nothing to suggest."""
+    war_size    = _normalize_war_size(wars[0].team_size) if wars else 0
+    league_name = season_league
+    if not league_name and wars:
+        our_war = next((w for w in wars if w.clan_tag == clan_tag), None) or wars[0]
+        league_name = (our_war.clan_cwl_league if our_war.clan_tag == clan_tag
+                       else our_war.opp_cwl_league) or ''
+    guaranteed = _GUARANTEED_BONUSES.get(_cwl_league_group(league_name), {}).get(war_size) if wars else None
+    wins       = _cwl_wins(wars, clan_tag)
+    return {
+        'total':       None if guaranteed is None else guaranteed + wins,
+        'guaranteed':  guaranteed,
+        'wins':        wins,
+        'war_size':    war_size,
+        'league_name': league_name,
+    }
+
+
+def _rank_bonus_candidates(participants, available):
+    """Fill the remaining bonus slots, best first.
+
+    Full attendance still leads, ordered by longest wait since a bonus. Once
+    those run out the rest of the roster fills what's left — most attacks first,
+    then longest wait — so a finished season's slots can always be handed out
+    instead of the console going quiet on a roster where nobody went perfect.
+    Every pick carries `missed`, the attacks it skipped, for the UI to flag.
+    A player who never attacked is not a candidate at any depth."""
+    pool  = [p for p in participants if not p['has_bonus'] and p['attacks'] > 0]
+    full  = [p for p in pool if p['max_attacks'] and p['attacks'] >= p['max_attacks']]
+    rest  = [p for p in pool if not (p['max_attacks'] and p['attacks'] >= p['max_attacks'])]
+    full.sort(key=lambda p: (p['last_bonus'] or '', -p['stars'], -p['destruction']))
+    rest.sort(key=lambda p: (-p['attacks'], p['last_bonus'] or '', -p['stars'], -p['destruction']))
+    picked = (full + rest)[:max(0, available)]
+    for p in picked:
+        p['missed'] = max(0, (p['max_attacks'] or 0) - p['attacks'])
+    return picked
+
+
 def _cwl_bonus_available():
-    """Overview alert tile: how many bonus slots remain unassigned in the active CWL season.
-    available = (guaranteed-by-league/size + wins) − already-assigned. Needs no per-player
-    data. Returns {'count', 'season_label'} or None when there is no active season / N/A league."""
+    """Overview alert tile: how many bonus slots are still unassigned, and for which season.
+    available = (guaranteed-by-league/size + wins) − already-assigned. Needs no per-player data.
+
+    Checks the running season first, then finished ones newest-first: bonuses outlive the
+    season they were earned in, and the tile is the only place that says they're still owed.
+    Returns {'count', 'season_label', 'ended'} or None when nothing is outstanding."""
     try:
         from models import CWLSeason, CWLWar
         from app import CLAN_TAG
 
-        # Active season = most recent season that hasn't ended yet (matches admin_cwl_bonus_list).
         recent = CWLSeason.query.order_by(CWLSeason.season.desc()).limit(8).all()
-        season = next((s for s in recent if s.state and s.state != 'ended'), None)
-        if not season:
-            return None
+        ordered = ([s for s in recent if s.state and s.state != 'ended']
+                   + [s for s in recent if not (s.state and s.state != 'ended')])
 
-        wars = [w for w in CWLWar.query.filter_by(season_id=season.id).all()
-                if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
-        if not wars:
-            return None
-
-        war_size = _normalize_war_size(wars[0].team_size)
-        league_name = season.league_name
-        if not league_name:
-            our_war = next((w for w in wars if w.clan_tag == CLAN_TAG), None) or wars[0]
-            league_name = (our_war.clan_cwl_league if our_war.clan_tag == CLAN_TAG
-                           else our_war.opp_cwl_league) or ''
-
-        guaranteed = _GUARANTEED_BONUSES.get(_cwl_league_group(league_name), {}).get(war_size)
-        if guaranteed is None:
-            return None
-
-        wins = 0
-        for w in wars:
-            if w.state != 'warEnded':
+        for season in ordered:
+            wars = [w for w in CWLWar.query.filter_by(season_id=season.id).all()
+                    if w.clan_tag == CLAN_TAG or w.opp_tag == CLAN_TAG]
+            math = _cwl_slot_math(season.league_name, wars, CLAN_TAG)
+            if math['total'] is None:
                 continue
-            if w.clan_tag == CLAN_TAG:
-                our_s, opp_s = w.clan_stars or 0, w.opp_stars or 0
-                our_p, opp_p = float(w.clan_destruction_pct or 0), float(w.opp_destruction_pct or 0)
-            else:
-                our_s, opp_s = w.opp_stars or 0, w.clan_stars or 0
-                our_p, opp_p = float(w.opp_destruction_pct or 0), float(w.clan_destruction_pct or 0)
-            if our_s > opp_s or (our_s == opp_s and our_p > opp_p):
-                wins += 1
-
-        already   = CWLBonus.query.filter_by(month=season.season).count()
-        available = max(0, (guaranteed + wins) - already)
-        return {'count': available, 'season_label': season.season}
+            already   = CWLBonus.query.filter_by(month=season.season).count()
+            available = max(0, math['total'] - already)
+            if available:
+                return {'count': available, 'season_label': season.season,
+                        'ended': season.state == 'ended'}
+        return None
     except Exception:
         return None
 
@@ -443,6 +507,7 @@ def admin_cwl_bonus_suggest():
 def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN_TAG):
     data  = request.get_json() or {}
     month = data.get('month', dt.date.today().strftime('%Y-%m'))
+    month = _match_season_key(month, [s for (s,) in db.session.query(CWLSeason.season).all()])
 
     season = CWLSeason.query.filter_by(season=month).first()
     if not season:
@@ -453,36 +518,14 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
     if not wars:
         return jsonify(ok=False, error='No CWL wars found for this clan this month.'), 404
 
-    war_ids  = [w.id for w in wars]
-    war_size = _normalize_war_size(wars[0].team_size)
-
-    # League name: prefer season record, fall back to our clan's war record
-    league_name = season.league_name
-    if not league_name:
-        our_war = next((w for w in wars if w.clan_tag == CLAN_TAG), None) or wars[0]
-        league_name = (our_war.clan_cwl_league if our_war.clan_tag == CLAN_TAG
-                       else our_war.opp_cwl_league) or ''
-
-    league_grp = _cwl_league_group(league_name)
-    guaranteed = _GUARANTEED_BONUSES.get(league_grp, {}).get(war_size)
+    war_ids = [w.id for w in wars]
+    math    = _cwl_slot_math(season.league_name, wars, CLAN_TAG)
+    war_size, league_name, guaranteed, wins = (math['war_size'], math['league_name'],
+                                               math['guaranteed'], math['wins'])
     if guaranteed is None:
         return jsonify(ok=False, error=f'Guaranteed bonus is N/A for {league_name or "unknown league"} {war_size}v{war_size}.'), 400
 
-    # Count wins
-    wins = 0
-    for w in wars:
-        if w.state != 'warEnded':
-            continue
-        if w.clan_tag == CLAN_TAG:
-            our_s, opp_s = w.clan_stars or 0, w.opp_stars or 0
-            our_p, opp_p = float(w.clan_destruction_pct or 0), float(w.opp_destruction_pct or 0)
-        else:
-            our_s, opp_s = w.opp_stars or 0, w.clan_stars or 0
-            our_p, opp_p = float(w.opp_destruction_pct or 0), float(w.clan_destruction_pct or 0)
-        if our_s > opp_s or (our_s == opp_s and our_p > opp_p):
-            wins += 1
-
-    total_bonuses = guaranteed + wins
+    total_bonuses = math['total']
 
     # Participants
     max_rows = (db.session.query(CWLMember.player_tag, func.count(CWLMember.id))
@@ -560,18 +603,9 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
         'months_ago':  _months_ago(last_bonus_map.get(tag)),
     } for tag in participants]
 
-    # Sort: eligible first, then by longest without bonus (None = never → oldest date → newest)
-    # Tiebreak: more stars first
-    eligible = [p for p in participant_list if not p['has_bonus'] and p['attacks'] >= p['max_attacks']]
-    eligible.sort(key=lambda p: (
-        p['last_bonus'] or '',   # '' sorts before any YYYY-MM → never bonused first
-        -p['stars'],
-        -p['destruction'],
-    ))
-
     already   = len(current_bonuses)
     available = max(0, total_bonuses - already)
-    selected  = eligible[:available]
+    selected  = _rank_bonus_candidates(participant_list, available)
 
     def _reason(p):
         if p['last_bonus'] is None:
@@ -584,11 +618,14 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
     suggested_tags    = [p['tag'] for p in selected]
     suggested_details = [{'tag': p['tag'], 'name': p['name'], 'stars': p['stars'],
                           'attacks': p['attacks'], 'max_attacks': p['max_attacks'],
-                          'total_wars': p['total_wars'], 'reason': _reason(p)}
+                          'total_wars': p['total_wars'], 'missed': p['missed'],
+                          'reason': _reason(p)}
                          for p in selected]
 
     return jsonify(
         ok=True,
+        month=month,
+        season_ended=season.state == 'ended',
         wins=wins,
         guaranteed=guaranteed,
         total_bonuses=total_bonuses,
@@ -605,18 +642,23 @@ def _cwl_bonus_suggest_inner(func, CWLSeason, CWLWar, CWLMember, CWLAttack, CLAN
 @admin_bp.route('/admin/cwl-bonus/apply', methods=['POST'])
 @require_super_admin
 def admin_cwl_bonus_apply():
+    from models import CWLSeason
+
     data  = request.get_json() or {}
     month = data.get('month', '')
     tags  = data.get('tags', [])
     if not month or not tags:
         return jsonify(ok=False, error='Missing month or tags'), 400
+    # Same upgrade the suggestion did — a bare 'YYYY-MM' from a stale client must
+    # not park bonuses under a key no ledger column reads back.
+    month = _match_season_key(month, [s for (s,) in db.session.query(CWLSeason.season).all()])
     added = 0
     for tag in tags:
         if not CWLBonus.query.filter_by(player_tag=tag, month=month).first():
             db.session.add(CWLBonus(player_tag=tag, month=month))
             added += 1
     db.session.commit()
-    return jsonify(ok=True, added=added)
+    return jsonify(ok=True, added=added, month=month)
 
 
 @admin_bp.route('/admin/cwl-bonus/toggle', methods=['POST'])

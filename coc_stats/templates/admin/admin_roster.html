@@ -174,6 +174,14 @@
         .sug-why { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
         .sug-perf { display: flex; align-items: center; gap: 12px; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12.5px; flex-shrink: 0; }
         .sug-stars { color: var(--yellow); white-space: nowrap; }
+        /* Filling a finished season's leftover slots reaches past full attendance — say so on the row. */
+        .sug-flag {
+            font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .6px; white-space: nowrap;
+            padding: 3px 7px; border-radius: 5px; color: var(--yellow);
+            background: color-mix(in oklch, var(--yellow) 12%, transparent);
+            border: 1px solid color-mix(in oklch, var(--yellow) 30%, transparent);
+        }
         .cwl-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
         .cwl-apply {
             display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; cursor: pointer;
@@ -597,7 +605,9 @@ function _fmtMonthLong(m) {
 window._cwl = {};   // { month, ledger, suggest }
 
 function loadCWL() {
-    fetch('/admin/cwl-bonus')
+    // no-store: a cached ledger would pin the console to a season key that has since
+    // moved on, and every later call (suggest, apply, toggle) inherits that key.
+    fetch('/admin/cwl-bonus', { cache: 'no-store' })
         .then(r => r.json())
         .then(data => {
             window._cwl.month = data.current_month;
@@ -612,7 +622,13 @@ function loadCWL() {
         })
         .then(res => {
             document.getElementById('cwlLoading').style.display = 'none';
-            if (res && res.j && res.j.ok) { window._cwl.suggest = res.j; renderCWLLead(res.j); }
+            if (res && res.j && res.j.ok) {
+                // The server may have resolved a bare month to the real season key; follow it,
+                // so apply/report/toggles all write against the season actually on screen.
+                if (res.j.month) window._cwl.month = res.j.month;
+                window._cwl.suggest = res.j;
+                renderCWLLead(res.j);
+            }
             else renderCWLNoSeason(res && res.j ? res.j.error : null);
         })
         .catch(() => {
@@ -645,7 +661,8 @@ function renderCWLVerdict(d) {
     cv.style.display = 'flex';
     replay(cv);
     document.getElementById('cwlContext').innerHTML =
-        `<span class="ctx">${_fmtMonth(window._cwl.month)}</span> · ${d.league} ${d.war_size}v${d.war_size} · won ${d.wins} + ${d.guaranteed} guaranteed`;
+        `<span class="ctx">${_fmtMonth(window._cwl.month)}</span>${d.season_ended ? ' · finished' : ''}`
+        + ` · ${d.league} ${d.war_size}v${d.war_size} · won ${d.wins} + ${d.guaranteed} guaranteed`;
 }
 
 function _cwlAtkColor(done, max) {
@@ -661,12 +678,13 @@ function renderCWLLead(d) {
     const details = d.suggested_details || [];
 
     if (!details.length) {
-        // Slots all filled, or nobody eligible.
+        // Slots all filled, or nobody left who attacked at all.
+        const open = `<strong>${d.available}</strong> slot${d.available !== 1 ? 's' : ''} still open`;
         const msg = d.available <= 0
-            ? `All <strong>${d.total_bonuses}</strong> bonus slot${d.total_bonuses !== 1 ? 's' : ''} for ${_fmtMonth(window._cwl.month)} are assigned.`
-            : `No eligible players to suggest right now (all remaining participants missed an attack or already hold a bonus).`;
+            ? `All <strong>${d.total_bonuses}</strong> bonus slot${d.total_bonuses !== 1 ? 's' : ''} for ${_fmtMonth(window._cwl.month)} ${d.total_bonuses !== 1 ? 'are' : 'is'} assigned.`
+            : `${open} for ${_fmtMonth(window._cwl.month)}, but nobody left to suggest — every remaining participant already holds a bonus or never attacked. Assign by hand in the ledger below.`;
         lead.innerHTML = `
-            <div class="rc-block-label reveal">This month</div>
+            <div class="rc-block-label reveal">${d.season_ended ? 'Finished season' : 'This month'}</div>
             <div class="cwl-allgiven reveal"><span class="cwl-dot"></span><span>${msg}</span></div>
             <div class="cwl-actions reveal"><button class="cwl-copy" onclick="openReport()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy report</button></div>`;
         return;
@@ -681,6 +699,7 @@ function renderCWLLead(d) {
                 <div class="sug-why">${p.reason}</div>
             </div>
             <div class="sug-perf">
+                ${p.missed ? `<span class="sug-flag">Missed ${p.missed}</span>` : ''}
                 <span class="sug-stars">${p.stars}★${flawless ? ' ✨' : ''}</span>
                 <span style="color:${_cwlAtkColor(p.attacks, p.max_attacks)};">${p.attacks}/${p.max_attacks}</span>
             </div>
