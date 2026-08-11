@@ -1,6 +1,28 @@
 import { useState } from 'react'
-import type { SharedConfirmPayload } from './types'
+import type { MatchProposal, SharedConfirmPayload } from './types'
 import { CsrfField } from '../csrf'
+
+/**
+ * The follower exercise id `gym_shared_accept` will file this proposal's sets
+ * under, or null if none exists yet. Mirrors partners.py's two branches
+ * exactly:
+ *  - an explicit match posts that candidate's id straight through
+ *    (`owned_exercise(value)`);
+ *  - "Neu anlegen" is NOT a guaranteed miss -- the server's `'new'` branch
+ *    first reuses an owned exercise of the same name
+ *    (`my_exercises().filter_by(name=leader_exercise.name)`) and only
+ *    creates a fresh row if none exists. `candidates` is documented as
+ *    always the full catalogue, so the same name lookup here reproduces
+ *    that reuse. Raw equality on purpose: normalising on only one side
+ *    would drift from the server's exact `filter_by(name=...)`.
+ */
+function resolveFollowerExerciseId(proposal: MatchProposal, matchValue: string): number | null {
+  if (matchValue !== 'new') {
+    return Number(matchValue)
+  }
+  const reused = proposal.candidates.find(([, name]) => name === proposal.name)
+  return reused ? reused[0] : null
+}
 
 /**
  * Reuses the shared form primitives -- `.field` > `label.label` + `.select`,
@@ -23,20 +45,36 @@ export function SharedConfirmPage({ payload }: { payload: SharedConfirmPayload }
   // preselection keep following the matches until they do.
   const [routine, setRoutine] = useState<string | null>(null)
 
-  // A proposal left on "Neu anlegen" has no id in this catalogue yet, so no
-  // routine can contain it: it counts toward the total and can never be
-  // covered. That is the honest reading -- the routine really does not have
-  // that lift.
-  const chosen = new Set(Object.values(matches)
-    .filter((value) => value !== 'new').map(Number))
-  const total = payload.proposals.length
-  const ranked = payload.templates
+  // number | null per proposal, in payload order. The `!` is safe: `matches`
+  // is seeded from these same proposals above and every change to it keys
+  // off a `leader_exercise_id` that already exists there, so a lookup can
+  // never miss.
+  const resolved = payload.proposals.map((proposal) =>
+    resolveFollowerExerciseId(proposal, matches[proposal.leader_exercise_id]!))
+  const chosen = new Set(resolved.filter((id): id is number => id !== null))
+  // The denominator has to count distinct exercises, like the numerator,
+  // not proposal rows: if two leader exercises resolve to the SAME one of
+  // the follower's own, counting both rows makes `covered === total`
+  // unreachable for a routine that genuinely covers everything the
+  // follower will perform. Two genuinely-new (null) proposals can't
+  // collide -- Exercise is unique per (user_id, name) -- so each null is
+  // still one more thing the workout contains.
+  const total = chosen.size + resolved.filter((id) => id === null).length
+  const rankedAll = payload.templates
     .map((template) => ({
       ...template,
       covered: template.exercise_ids.filter((id) => chosen.has(id)).length,
     }))
-    .filter((template) => template.covered > 0)
     .sort((a, b) => b.covered - a.covered || a.name.localeCompare(b.name, 'de'))
+  // Coverage can drop after the reader has already committed to a routine
+  // (they change an earlier match, which recomputes `chosen`). Dropping
+  // their pick from the list here would leave the controlled <select>
+  // holding a value with no matching <option>; the browser silently
+  // resets it to the first one, booking the workout under a routine
+  // nobody chose. Keeping the explicit pick makes a real zero-coverage
+  // state ("0 von 2 Übungen") visible instead of silently swapping it out.
+  const ranked = rankedAll
+    .filter((template) => template.covered > 0 || String(template.id) === routine)
 
   const perfect = ranked.filter((template) => template.covered === total)
   const autoPick = perfect.length === 1 ? String(perfect[0]!.id) : ''

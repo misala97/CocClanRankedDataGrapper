@@ -1180,7 +1180,6 @@ def test_the_followers_session_carries_no_template_link(leader_with_partner):
                                    user_id=leader_with_partner['leader'])
         db.session.add(template)
         db.session.flush()
-        leader_with_partner['template'] = template.id
         db.session.get(
             WorkoutSession, leader_with_partner['session']).template_id = template.id
         db.session.commit()
@@ -1265,7 +1264,15 @@ def test_accepting_refuses_a_routine_the_follower_does_not_own(leader_with_partn
 def test_the_booked_session_counts_as_that_routines_last_performance(leader_with_partner):
     """The point of the whole feature, asserted as an effect rather than as a
     column: routine_memory() is what Heute reads, and before this it skipped
-    every shared session."""
+    every shared session.
+
+    Reproduces _heute_payload's actual query (workout.py) rather than a
+    looser one of its own: that caller only ever hands routine_memory()
+    sessions with finished_at set. A test that fed it every session --
+    finished or not -- would pass even if the booked session could never
+    reach the real page, since an unfinished session is exactly the state
+    the confirm page leaves it in.
+    """
     import datetime as dt
     from extensions import db
     from features.gym import stats
@@ -1278,12 +1285,17 @@ def test_the_booked_session_counts_as_that_routines_last_performance(leader_with
         db.session.commit()
         template_id = mine.id
 
-    _accept_with_template(leader_with_partner, template_id)
+    follower_session_id = _accept_with_template(leader_with_partner, template_id)
 
     with flask_app.app_context():
+        db.session.get(WorkoutSession, follower_session_id).finished_at = (
+            dt.datetime.utcnow())
+        db.session.commit()
+
         template = db.session.get(WorkoutTemplate, template_id)
-        sessions = WorkoutSession.query.filter_by(
-            user_id=leader_with_partner['partner']).all()
+        sessions = WorkoutSession.query.filter(
+            WorkoutSession.user_id == leader_with_partner['partner'],
+            WorkoutSession.finished_at.isnot(None)).all()
         memory = stats.routine_memory([template], sessions, dt.datetime.utcnow())
         assert memory[0]['last_done'] is not None
         assert memory[0]['days_ago'] == 0

@@ -141,4 +141,53 @@ describe('the routine picker', () => {
       .querySelectorAll('option')].map((o) => o.textContent)
     expect(options).toContain('Push — 1 von 2 Übungen')
   })
+
+  it('counts a "Neu anlegen" proposal as covered when its name matches an owned exercise', () => {
+    // gym_shared_accept's 'new' branch (partners.py) reuses an owned
+    // exercise of the same name before creating one -- "Neu anlegen" is not
+    // a guaranteed miss. If the client didn't reproduce that reuse, this
+    // routine would read 1 von 2 and never preselect, even though the
+    // session the server actually creates holds both its exercises.
+    mount({
+      proposals: [
+        {
+          name: 'Bankdrücken', leader_exercise_id: 10, exact_id: null,
+          candidates: [[55, 'Bankdrücken']] as [number, string][],
+        },
+        {
+          name: 'Butterfly', leader_exercise_id: 11, exact_id: 57,
+          candidates: [[57, 'Reverse Fly (Machine)']] as [number, string][],
+        },
+      ],
+      templates: [{ id: 1, name: 'Push', exercise_ids: [55, 57] }],
+    })
+    expect(screen.getByLabelText('Bankdrücken')).toHaveValue('new')
+    const options = [...screen.getByLabelText('Zählt bei dir als')
+      .querySelectorAll('option')].map((o) => o.textContent)
+    expect(options).toContain('Push — 2 von 2 Übungen')
+    expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('1')
+  })
+
+  it('counts two proposals that resolve to the same exercise once, not twice', () => {
+    // The numerator already dedupes matches into a Set of ids; the
+    // denominator has to match or a routine that covers everything the
+    // follower will actually perform can never read as fully covered.
+    mount({
+      proposals: [
+        {
+          name: 'Kniebeuge', leader_exercise_id: 10, exact_id: 55,
+          candidates: [[55, 'Kniebeuge']] as [number, string][],
+        },
+        {
+          name: 'Squat', leader_exercise_id: 11, exact_id: 55,
+          candidates: [[55, 'Kniebeuge']] as [number, string][],
+        },
+      ],
+      templates: [{ id: 1, name: 'Beine', exercise_ids: [55] }],
+    })
+    const options = [...screen.getByLabelText('Zählt bei dir als')
+      .querySelectorAll('option')].map((o) => o.textContent)
+    expect(options).toContain('Beine — 1 von 1 Übungen')
+    expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('1')
+  })
 })

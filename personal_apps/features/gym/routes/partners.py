@@ -191,6 +191,11 @@ def gym_shared_accept(shared_id):
     current_user_id(), which inside reconcile_follower's normal caller
     (a leader's mid-workout structural change) would otherwise name the
     leader.
+
+    Also reads a posted `template_id`: one of YOUR OWN routines to book this
+    session under, resolved through my_templates() so an id belonging to
+    somebody else -- the leader's routine, most obviously -- resolves to no
+    routine rather than being claimed.
     """
     shared = _invite_for_recipient(shared_id)
     refusal = _invite_refusal(shared)
