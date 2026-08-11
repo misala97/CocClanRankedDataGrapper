@@ -748,7 +748,7 @@ function renderLedger(data) {
     if (!members.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:16px 0;">No active members.</div>'; return; }
 
     const sorted = [...members].sort((a, b) => {
-        const am = a.by_month[current_month], bm = b.by_month[current_month];
+        const am = a.by_month[current_month] || {}, bm = b.by_month[current_month] || {};
         if ((bm.in_cwl ? 1 : 0) !== (am.in_cwl ? 1 : 0)) return (bm.in_cwl ? 1 : 0) - (am.in_cwl ? 1 : 0);
         if ((bm.stars || 0) !== (am.stars || 0)) return (bm.stars || 0) - (am.stars || 0);
         return a.name.localeCompare(b.name);

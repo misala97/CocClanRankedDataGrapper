@@ -214,6 +214,24 @@ def _shift_month(m, delta):
     return f'{y}-{mo:02d}'
 
 
+def _resolve_active_month(months, season_states, current_month, seasons_by_cal_month):
+    """Which season key the ledger treats as "current".
+
+    Most recent season that isn't finished yet; once everything has ended, fall
+    back to the current calendar month — but the result must always be a key of
+    `months`, because the client indexes every player's by_month with it. A season
+    keyed long-form (e.g. '2026-08-03') replaces the bare 'YYYY-MM' entry in
+    `months`, so after it ends the bare fallback would point at a column that
+    doesn't exist; use that month's newest real season key instead."""
+    for m in reversed(months):
+        if season_states.get(m) and season_states[m] != 'ended':
+            return m
+    if current_month in months:
+        return current_month
+    keys = seasons_by_cal_month.get(current_month)
+    return sorted(keys)[-1] if keys else months[-1]
+
+
 @admin_bp.route('/admin/cwl-bonus', methods=['GET'])
 @require_super_admin
 def admin_cwl_bonus_list():
@@ -296,13 +314,8 @@ def admin_cwl_bonus_list():
             } for tag in max_atk_map
         }
 
-    # Active CWL period = most recent season that isn't finished yet; falls back to the
-    # literal calendar month (even with no data) so the UI behaves as before in normal months.
-    active_month = current_month
-    for m in reversed(months):
-        if season_states.get(m) and season_states[m] != 'ended':
-            active_month = m
-            break
+    active_month = _resolve_active_month(months, season_states, current_month,
+                                         seasons_by_cal_month)
 
     # Map positions from the active month's CWL (min across war days = consistent position)
     cwl_pos_map = {}
