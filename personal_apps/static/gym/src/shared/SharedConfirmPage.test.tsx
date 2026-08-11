@@ -190,4 +190,68 @@ describe('the routine picker', () => {
     expect(options).toContain('Beine — 1 von 1 Übungen')
     expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('1')
   })
+
+  it('does not treat a near-miss name as the same exercise', () => {
+    // The server matches on filter_by(name=...) -- byte equality, no
+    // case-folding. Normalising here would silently claim coverage the
+    // accept route will not deliver, and every other test in this block
+    // uses byte-identical names, so nothing else would notice.
+    mount({
+      proposals: [{
+        name: 'Bankdrücken', leader_exercise_id: 10, exact_id: null,
+        candidates: [[55, 'bankdrücken ']] as [number, string][],
+      }],
+      templates: [{ id: 1, name: 'Push', exercise_ids: [55] }],
+    })
+    expect(screen.queryByLabelText('Zählt bei dir als')).not.toBeInTheDocument()
+  })
+
+  it('counts two genuinely new exercises as two, not as one', () => {
+    // Both resolve to null, and null === null: deduping the resolved list
+    // itself rather than only its ids would collapse them into a single
+    // missing exercise. One covered exercise is in the fixture on purpose --
+    // with none, the picker is absent either way and the denominator's bug
+    // would be invisible.
+    mount({
+      proposals: [
+        {
+          name: 'Kniebeuge', leader_exercise_id: 10, exact_id: 55,
+          candidates: [[55, 'Kniebeuge']] as [number, string][],
+        },
+        {
+          name: 'Zercher Squat', leader_exercise_id: 11, exact_id: null,
+          candidates: [[55, 'Kniebeuge']] as [number, string][],
+        },
+        {
+          name: 'Jefferson Curl', leader_exercise_id: 12, exact_id: null,
+          candidates: [[55, 'Kniebeuge']] as [number, string][],
+        },
+      ],
+      templates: [{ id: 1, name: 'Beine', exercise_ids: [55] }],
+    })
+    expect([...screen.getByLabelText('Zählt bei dir als')
+      .querySelectorAll('option')].map((o) => o.textContent))
+      .toContain('Beine — 1 von 3 Übungen')
+  })
+
+  it('keeps a routine the reader picked even after its coverage drops to zero', async () => {
+    // Filtering it out would leave the controlled select with no matching
+    // option, so the browser resets it to the first one and the workout is
+    // booked under nothing -- silently, mid-decision.
+    const user = userEvent.setup()
+    mount({
+      proposals,
+      templates: [
+        { id: 1, name: 'Nur Butterfly', exercise_ids: [57] },
+        { id: 2, name: 'Nur Bank', exercise_ids: [55] },
+      ],
+    })
+    const picker = screen.getByLabelText('Zählt bei dir als')
+    await user.selectOptions(picker, '1')
+    await user.selectOptions(screen.getByLabelText('Butterfly'), 'new')
+
+    expect(picker).toHaveValue('1')
+    expect([...picker.querySelectorAll('option')].map((o) => o.textContent))
+      .toContain('Nur Butterfly — 0 von 2 Übungen')
+  })
 })
