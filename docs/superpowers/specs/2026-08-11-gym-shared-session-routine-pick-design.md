@@ -99,16 +99,28 @@ matched in the dropdowns — appear in it. Offer every routine with at least one
 sorted by count descending, then by name. Preselect only when exactly one
 routine covers all of them.
 
-The denominator is every proposal on the page, one per distinct exercise the
-leader is doing. A proposal left on **Neu anlegen** has no id in the follower's
-catalogue yet, so no routine can contain it: it counts toward the total and can
-never be covered. That is the honest reading — the routine genuinely does not
-have that lift — and it means switching such a dropdown to an existing exercise
-can turn `6 von 7` into `7 von 7` in place, which is exactly why the count is
-computed from the live selection rather than once on the server.
+Coverage counts the exercises the session will *actually* contain, so the page
+has to resolve each proposal the way the accept route will. **Neu anlegen does
+not mean "no exercise yet":** the route's `'new'` branch first reuses an owned
+exercise of the same name and only creates one when none exists. A page that
+treated every `'new'` as uncoverable would therefore say `1 von 2` and then
+create a session holding exactly the routine's two exercises — and on a
+one-exercise workout it would hide the picker entirely while the routine
+covered the session perfectly.
 
-Two proposals resolving to the same exercise count once: coverage is a
-comparison of sets, not of rows.
+So the client mirrors that rule: a proposal on `Neu anlegen` resolves to the
+owned exercise whose name matches, and only a genuinely new one — no name
+match in the catalogue — is uncoverable. It counts toward the total and never
+toward the covered set.
+
+The denominator is the number of *distinct* exercises the session will hold:
+two proposals pointing at the same exercise count once, because coverage
+compares sets, not rows. Otherwise a leader doing two variants the follower
+performs as one lift could never reach a full match.
+
+*(This paragraph originally recorded the opposite rule for `Neu anlegen`, on
+the false premise that it always creates a row. The final review caught the
+contradiction against `partners.py`; the behaviour above is what shipped.)*
 
 ### Interface
 
