@@ -994,18 +994,24 @@ def leader_with_partner():
                 db.session.commit()
                 db.session.delete(row)
             db.session.commit()
+        # Every routine either lifter's test created. This was a single id in
+        # a mutated dict slot, which could hold only one -- and a routine left
+        # behind blocks the AppUser delete below on its foreign key. Sessions
+        # pointing at one are already gone by now (WorkoutSession.template_id
+        # would else block this the same way); this in turn must run before
+        # the Exercise loop below, since a TemplateExercise row's exercise_id
+        # is NOT NULL with no delete cascade of its own -- only deleting its
+        # template first (WorkoutTemplate.exercises is delete-orphan) clears
+        # it before the exercise it points at goes away.
+        from models import WorkoutTemplate
+        for user_id in (made['leader'], made['partner']):
+            for row in WorkoutTemplate.query.filter_by(user_id=user_id).all():
+                db.session.delete(row)
+        db.session.commit()
+        for user_id in (made['leader'], made['partner']):
             for row in Exercise.query.filter_by(user_id=user_id).all():
                 db.session.delete(row)
             db.session.commit()
-        # Only present when a test (e.g. the template-link test) mutated the
-        # yielded dict to add one; every session pointing at it is already
-        # gone by now, and this must run before the AppUser it belongs to.
-        if made.get('template'):
-            from models import WorkoutTemplate
-            doomed = db.session.get(WorkoutTemplate, made['template'])
-            if doomed is not None:
-                db.session.delete(doomed)
-                db.session.commit()
         for user_id in (made['leader'], made['partner']):
             doomed = db.session.get(AppUser, user_id)
             if doomed is not None:
@@ -1194,6 +1200,44 @@ def test_the_followers_session_carries_no_template_link(leader_with_partner):
         shared = db.session.get(SharedSession, shared_id)
         assert db.session.get(
             WorkoutSession, shared.follower_session_id).template_id is None
+
+
+def test_confirm_offers_the_followers_own_routines(leader_with_partner):
+    """The follower's routines, with the exercise ids the island compares
+    against the selected matches. The LEADER's routines must never appear:
+    they are named in a catalogue this lifter does not own."""
+    from extensions import db
+    from models import (Exercise, SharedSession, TemplateExercise,
+                        WorkoutTemplate)
+
+    with flask_app.app_context():
+        own_bench = Exercise(name='pytest invite bench',
+                             user_id=leader_with_partner['partner'])
+        db.session.add(own_bench)
+        db.session.flush()
+        mine = WorkoutTemplate(name='pytest partner push',
+                               user_id=leader_with_partner['partner'])
+        mine.exercises.append(
+            TemplateExercise(exercise_id=own_bench.id, position=1))
+        theirs = WorkoutTemplate(name='pytest leader push',
+                                 user_id=leader_with_partner['leader'])
+        db.session.add_all([mine, theirs])
+        db.session.commit()
+        expected = {'id': mine.id, 'name': 'pytest partner push',
+                    'exercise_ids': [own_bench.id]}
+
+    _client_for(leader_with_partner['leader']).post(
+        f"/gym/session/{leader_with_partner['session']}/invite",
+        data={'partner_id': leader_with_partner['partner']})
+    with flask_app.app_context():
+        shared_id = SharedSession.query.filter_by(
+            leader_session_id=leader_with_partner['session']).first().id
+
+    response = _client_for(leader_with_partner['partner']).get(
+        f'/gym/shared/{shared_id}/confirm')
+    payload = embedded_payload(response.get_data(as_text=True))
+
+    assert payload['templates'] == [expected]
 
 
 def test_accepting_seeds_from_the_leaders_current_structure(leader_with_partner):

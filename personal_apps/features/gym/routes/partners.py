@@ -10,17 +10,19 @@ import datetime as dt
 from flask import (
     abort, flash, redirect, render_template, request, url_for,
 )
+from sqlalchemy.orm import joinedload
 from extensions import (
     db,
 )
 from models import (
     AppUser, Exercise, SharedSession, SharedSessionExercise, WorkoutSession,
+    WorkoutTemplate,
 )
 from auth import (
     login_required,
 )
 from features.gym.scope import (
-    current_user_id, my_exercises, owned_exercise, owned_session,
+    current_user_id, my_exercises, my_templates, owned_exercise, owned_session,
 )
 from .helpers import (
     _get_active_session, _to_int, _username,
@@ -131,6 +133,7 @@ def gym_shared_confirm(shared_id):
     refusal = _invite_refusal(shared)
 
     proposals = []
+    templates = []
     if refusal is None:
         leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
         leader_rows = sorted(leader_session.exercises, key=lambda se: se.position)
@@ -148,11 +151,24 @@ def gym_shared_confirm(shared_id):
                 matching.propose_matches([e.name for e in leader_exercises], catalogue))
         ]
 
+        # The follower's own routines. joinedload because each one's exercise
+        # ids are read below: without it this is a query per routine, the
+        # N+1 this codebase refuses to create.
+        templates = [
+            {'id': template.id, 'name': template.name,
+             'exercise_ids': [te.exercise_id for te in template.exercises]}
+            for template in (my_templates()
+                             .options(joinedload(WorkoutTemplate.exercises))
+                             .order_by(WorkoutTemplate.name)
+                             .all())
+        ]
+
     payload = SharedConfirmPayload(
         shared_id=shared.id,
         leader_name=_username(shared.leader_user_id),
         refusal=refusal,
         proposals=proposals,
+        templates=templates,
     )
     # `leader_name` is passed separately too: the shell's <title> block reads
     # it before any JavaScript runs.

@@ -891,6 +891,19 @@ class MatchProposal(_Model):
     candidates: list[tuple[int, str]]
 
 
+class ConfirmTemplate(_Model):
+    """One of the FOLLOWER's own routines, offered as what this shared
+    workout counts as on their side.
+
+    exercise_ids are theirs, not the leader's: the island compares them
+    against the matches selected on the page, which resolve to this
+    lifter's catalogue.
+    """
+    id: int
+    name: str
+    exercise_ids: list[int]
+
+
 class SharedConfirmPayload(_Model):
     shared_id: int
     leader_name: str
@@ -898,3 +911,6 @@ class SharedConfirmPayload(_Model):
     #: replaced by the reason -- there is nothing to confirm.
     refusal: str | None
     proposals: list[MatchProposal]
+    #: The follower's routines, for booking this workout under one of them.
+    #: Empty when the invite carries a refusal -- there is nothing to book.
+    templates: list[ConfirmTemplate]
