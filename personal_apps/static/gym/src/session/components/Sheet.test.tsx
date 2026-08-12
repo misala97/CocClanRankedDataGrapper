@@ -21,6 +21,20 @@ describe('Sheet', () => {
     expect(document.querySelector('#sheet-a')).not.toHaveAttribute('open')
   })
 
+  it('does not render its contents while it is closed', () => {
+    // A closed <dialog> still renders its children, which froze every editor
+    // inside a sheet at the values of the last full page load: the set editors
+    // on the live screen then showed -- and posted back -- numbers that had
+    // since been overwritten. Contents exist only while the sheet is open, so
+    // they mount from current state every time it opens.
+    render(<Fixture />)
+    expect(screen.queryByText('a-body')).not.toBeInTheDocument()
+    act(() => { useSheets.getState().open('sheet-a') })
+    expect(screen.getByText('a-body')).toBeInTheDocument()
+    act(() => { useSheets.getState().close() })
+    expect(screen.queryByText('a-body')).not.toBeInTheDocument()
+  })
+
   it('opens the one the store names', () => {
     render(<Fixture />)
     act(() => { useSheets.getState().open('sheet-a') })

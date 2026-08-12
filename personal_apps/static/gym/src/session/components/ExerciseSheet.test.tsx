@@ -92,6 +92,51 @@ describe('ExerciseSheet', () => {
     expect(a.onSetDelete).toHaveBeenCalledWith(first.id)
   })
 
+  it('shows what a set is worth now, not what it was at page load', async () => {
+    // The bug this pins: the sheet's editors seeded their state once, when the
+    // page mounted, and a closed <dialog> renders its children -- so every set
+    // logged through the live panel afterwards left the editors showing the
+    // opening numbers. Saving then posted those stale numbers back over the
+    // real ones (typing 62,5 on a set logged at 60x5 stored 62,5x8).
+    const user = userEvent.setup()
+    const a = actions()
+    const first = exercise.sets[0]!
+    const logged: LiveExercise = {
+      ...exercise,
+      sets: exercise.sets.map((s, i) =>
+        i === 0 ? { ...s, weight: 60, reps: 5, completed: true } : s),
+    }
+    const view = render(
+      <ExerciseSheet exercise={exercise} catalogue={catalogue}
+        suggestion={{ weight: 60, reps: 8 }} {...a} />)
+    view.rerender(
+      <ExerciseSheet exercise={logged} catalogue={catalogue}
+        suggestion={{ weight: 60, reps: 8 }} {...a} />)
+    act(() => { useSheets.getState().open(`sheet-ex-${exercise.id}`) })
+
+    expect(screen.getByLabelText('Satz 1, Gewicht in kg')).toHaveValue(60)
+    expect(screen.getByLabelText('Satz 1, Wiederholungen')).toHaveValue(5)
+    await user.click(screen.getByLabelText('Satz 1 speichern'))
+    expect(a.onSetUpdate).toHaveBeenCalledWith(first.id, 60, 5)
+  })
+
+  it('follows a set that changes while the sheet is open', async () => {
+    // A shared workout writes into these rows from the other phone, and a
+    // deload rewrites them from this one. An editor left showing the previous
+    // number would post it back the next time it is saved.
+    const { rerender } = open()
+    expect(screen.getByLabelText('Satz 1, Gewicht in kg'))
+      .toHaveValue(exercise.sets[0]!.weight)
+
+    const changed: LiveExercise = {
+      ...exercise,
+      sets: exercise.sets.map((s, i) => (i === 0 ? { ...s, weight: 42.5 } : s)),
+    }
+    rerender(<ExerciseSheet exercise={changed} catalogue={catalogue}
+      suggestion={{ weight: 60, reps: 8 }} {...actions()} />)
+    expect(screen.getByLabelText('Satz 1, Gewicht in kg')).toHaveValue(42.5)
+  })
+
   it('undo brings a deleted set back without any server call', async () => {
     const user = userEvent.setup()
     const { actions: a } = open()

@@ -41,7 +41,12 @@ export function NewExerciseSheet({
   const [equipment, setEquipment] = useState('stack')
 
   return (
-    <Sheet id="sheet-new-exercise" title="Neue Übung" closeLabel="Abbrechen">
+    // keepMounted: a name collision CLOSES this sheet and the banner sends the
+    // lifter back into it to fix the name -- everything already typed has to
+    // still be there. Nothing in this form displays a stored value, so it has
+    // none of the staleness that mounting on open exists to prevent.
+    <Sheet id="sheet-new-exercise" title="Neue Übung" closeLabel="Abbrechen"
+      keepMounted>
       <form method="post" action="/gym/exercises/add" onSubmit={submit}>
         <CsrfField />
         <div className="field grow">

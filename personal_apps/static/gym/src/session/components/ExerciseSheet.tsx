@@ -129,7 +129,13 @@ export function ExerciseSheet({
           <span className="label">Sätze</span>
         </div>
         {exercise.sets.filter((s) => !hiddenSetIds.includes(s.id)).map((s, i) => (
-          <SetEditor set={s} ordinal={i + 1} key={s.id}
+          // Keyed on the stored numbers, not on the id alone: an editor holds
+          // its fields in local state, so a set rewritten while the sheet is
+          // open -- by the partner's phone in a shared workout, or by the
+          // deload toggle -- would otherwise keep showing the old value and
+          // post it back on the next save. The key only moves when the SERVER
+          // value moves; typing in the field does not touch it.
+          <SetEditor set={s} ordinal={i + 1} key={`${s.id}-${s.weight}-${s.reps}`}
             onSave={onSetUpdate} onDelete={deleteSet} />
         ))}
         <AddSetRow suggestion={suggestion} onAdd={onAddSet} />
