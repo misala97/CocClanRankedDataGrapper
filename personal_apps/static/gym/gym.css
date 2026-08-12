@@ -3130,11 +3130,13 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 }
 .verlauf__row[hidden] { display: none; }
 
-/* The checkbox only exists in export mode. The visual box is 22px and the
+/* The checkbox only exists in export mode -- the row renders it only while
+   export mode is open, so this must NOT be gated on a body class as well: the
+   Jinja page set `body.is-exporting`, the React island does not, and the gate
+   hid every checkbox that did get rendered. The visual box is 22px and the
    target is the full 44 around it -- this is tapped once per row while
    selecting, so it cannot be the size it looks. */
-.verlauf__row .pick { display: none; }
-body.is-exporting .verlauf__row .pick {
+.verlauf__row .pick {
   display: grid; place-items: center; flex: none;
   inline-size: var(--tap); block-size: var(--tap);
   margin-inline-start: calc(var(--sp-3) * -1);
