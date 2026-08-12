@@ -10,6 +10,12 @@ interface Props {
   inSession: LiveExercise[]
   onAdd(exerciseId: number): void
   onCreate(name: string): void
+  /** The row whose write is in flight -- an exercise id, or 'new' for the
+   *  create row. Adding waits for the server (it recomputes which exercise is
+   *  live, so there is no honest local guess) and this sheet stays open, so
+   *  without a mark a slow add reads as a tap that did nothing and gets
+   *  tapped again. */
+  busyExerciseId?: number | 'new' | null
 }
 
 /**
@@ -24,7 +30,9 @@ interface Props {
  * The sheet also stays open. It used to close and full-page-render on every
  * add, so building a six-exercise workout was six round trips.
  */
-export function AddExerciseSheet({ catalogue, inSession, onAdd, onCreate }: Props) {
+export function AddExerciseSheet({
+  catalogue, inSession, onAdd, onCreate, busyExerciseId = null,
+}: Props) {
   const query = useSheets((s) => s.addQuery)
   const setQuery = useSheets((s) => s.setAddQuery)
 
@@ -51,7 +59,9 @@ export function AddExerciseSheet({ catalogue, inSession, onAdd, onCreate }: Prop
         {matches.map((e) => {
           const already = countIn(e.id)
           return (
-            <button type="button" className="exadd__row" key={e.id}
+            <button type="button" key={e.id}
+              className={busyExerciseId === e.id ? 'exadd__row is-busy' : 'exadd__row'}
+              disabled={busyExerciseId === e.id}
               onClick={() => onAdd(e.id)}>
               <span className="exadd__name">{e.name}</span>
               {e.muscle_group !== null && (
@@ -69,8 +79,12 @@ export function AddExerciseSheet({ catalogue, inSession, onAdd, onCreate }: Prop
             exists, because "Anlegen: Bankdrücken" under a Bankdrücken row is
             an offer to make a duplicate. */}
         {needle !== '' && !exact && (
-          <button type="button" className="exadd__row exadd__row--new"
-            id="exadd-create" onClick={() => onCreate(query.trim())}>
+          <button type="button" id="exadd-create"
+            className={busyExerciseId === 'new'
+              ? 'exadd__row exadd__row--new is-busy'
+              : 'exadd__row exadd__row--new'}
+            disabled={busyExerciseId === 'new'}
+            onClick={() => onCreate(query.trim())}>
             <span className="exadd__name">Anlegen: <b>{query.trim()}</b></span>
             <span className="exadd__group">neue Übung</span>
           </button>

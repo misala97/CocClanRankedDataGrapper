@@ -7,6 +7,10 @@ import { kg1 } from '../../format'
 import { SetRow } from './SetRow'
 import { Stepper } from './Stepper'
 
+/** Length of the go-ready keyframes in gym.css. The class comes off after it,
+ *  so the ring is an event and not a state the button gets stuck in. */
+const READY_RING_MS = 320
+
 interface Props {
   payload: SessionDetailPayload
   /** Confirms the pending set, or appends one when nothing is pending --
@@ -55,10 +59,22 @@ export function LivePanel({
     setReps(seedReps)
   }, [seedWeight, seedReps])
 
+  // One ring when the countdown lands, then settle. The rest hitting zero is
+  // the cue to start the next set and it arrives with the phone face-down on a
+  // bench, so the control announces itself rather than quietly stopping.
+  // .go.is-ready has existed in the stylesheet since the Jinja screen; nothing
+  // in the port applied it, so the end of a rest was visually silent.
+  const [ringing, setRinging] = useState(false)
+  useEffect(() => {
+    if (!ringing) return
+    const timer = setTimeout(() => setRinging(false), READY_RING_MS)
+    return () => clearTimeout(timer)
+  }, [ringing])
+
   const rest = useRestTick(
     payload.resting ? payload.session.rest_ends_at : null,
     payload.rest_total_seconds,
-    { onOver: onRestOver })
+    { onOver: () => { setRinging(true); onRestOver() } })
 
   // The countdown follows the lifter into another tab: leaving mid-rest is
   // exactly when this screen is not on screen to show it. The phone has the
@@ -199,7 +215,8 @@ export function LivePanel({
           the first one's answer. The optimistic path keeps this window to a
           few hundred ms, so there is no visual disabled treatment -- styling
           a flash would be noise. */}
-      <button type="button" className={rest.running ? 'go is-resting' : 'go'}
+      <button type="button"
+        className={`go${rest.running ? ' is-resting' : ''}${ringing ? ' is-ready' : ''}`}
         id="set-confirm" disabled={busySetId !== null}
         onClick={() => onConfirm(weight, reps)}>
         <span className="go__lbl">

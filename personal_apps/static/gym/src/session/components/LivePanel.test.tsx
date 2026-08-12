@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { kg1 } from '../../format'
@@ -168,6 +168,34 @@ describe('LivePanel', () => {
     expect(screen.getByText('Satz geschafft')).toBeInTheDocument()
     expect(container.querySelector('.go__clock'))
       .toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('rings the confirm button when the rest hits zero', () => {
+    // The cue to start the next set arrives while the phone is face-down on a
+    // bench, so the button announces itself once. .go.is-ready is the last
+    // frame of the charge that ran underneath it -- the CSS was written for
+    // the Jinja screen and no React code applied it, so the rest ending was
+    // visually silent.
+    vi.useFakeTimers()
+    const nearlyOver: SessionDetailPayload = {
+      ...payload,
+      resting: true,
+      rest_total_seconds: 90,
+      session: {
+        ...payload.session,
+        rest_ends_at: new Date(Date.now() + 900).toISOString().replace('Z', ''),
+      },
+    }
+    const { container } = render(<LivePanel payload={nearlyOver} {...handlers()} />)
+    expect(container.querySelector('#set-confirm')).not.toHaveClass('is-ready')
+
+    act(() => { vi.advanceTimersByTime(1200) })
+    expect(container.querySelector('#set-confirm')).toHaveClass('is-ready')
+
+    // One ring, not a permanent state: the class comes off with the animation.
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(container.querySelector('#set-confirm')).not.toHaveClass('is-ready')
+    vi.useRealTimers()
   })
 
   it('carries the rest countdown into the tab title, and restores it', () => {

@@ -44,6 +44,8 @@ interface Props {
   actions: SessionActions
   pushSupported: boolean
   busySetId?: number | null
+  /** Which add-exercise row is waiting on the server -- see AddExerciseSheet. */
+  busyExerciseId?: number | 'new' | null
 }
 
 /**
@@ -57,7 +59,9 @@ interface Props {
  * Which exercise is live is decided by the server, not here: three surfaces
  * have to agree on it, and a rule expressed three times is a rule that drifts.
  */
-export function SessionPage({ payload, actions, pushSupported, busySetId = null }: Props) {
+export function SessionPage({
+  payload, actions, pushSupported, busySetId = null, busyExerciseId = null,
+}: Props) {
   const announce = useAnnouncer((s) => s.announce)
   const openSheet = useSheets((s) => s.open)
 
@@ -121,6 +125,7 @@ export function SessionPage({ payload, actions, pushSupported, busySetId = null 
 
       <AddExerciseSheet catalogue={payload.exercises}
         inSession={payload.visible_exercises}
+        busyExerciseId={busyExerciseId}
         onAdd={actions.onAddExercise}
         onCreate={actions.onCreateExercise} />
 

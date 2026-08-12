@@ -177,7 +177,13 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
 
   return (
     <SessionPage payload={data} actions={actions} pushSupported={pushSupported}
-      busySetId={toggleSet.isPending ? (nextSet?.id ?? null) : null} />
+      busySetId={toggleSet.isPending ? (nextSet?.id ?? null) : null}
+      // Neither add has an optimistic path, so the row is the only place that
+      // can say the tap landed. `variables` is the argument tuple of the write
+      // still in flight.
+      busyExerciseId={createExercise.isPending
+        ? 'new'
+        : (addExercise.isPending ? addExercise.variables?.[0] ?? null : null)} />
   )
 }
 

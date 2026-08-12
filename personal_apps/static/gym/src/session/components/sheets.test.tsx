@@ -150,6 +150,33 @@ describe('AddExerciseSheet', () => {
     expect(screen.getByLabelText('Übung suchen oder anlegen')).toHaveValue('klimm')
   })
 
+  it('marks the row it is adding and refuses a second tap on it', async () => {
+    // Adding an exercise has no optimistic path -- it waits for the server,
+    // which recomputes which exercise is live -- and the sheet stays open, so
+    // without this a slow add looks like a tap that did nothing. Tapping again
+    // adds the exercise twice. .exadd__row.is-busy was written for exactly
+    // this and nothing ever applied it.
+    const user = userEvent.setup()
+    const onAdd = vi.fn()
+    const { container } = render(
+      <AddExerciseSheet {...props} onAdd={onAdd} busyExerciseId={1} />)
+    open('sheet-add-exercise')
+
+    const row = screen.getByText('Bankdrücken').closest('button')!
+    expect(row).toHaveClass('is-busy')
+    expect(container.querySelectorAll('.is-busy')).toHaveLength(1)
+
+    await user.click(row)
+    expect(onAdd).not.toHaveBeenCalled()
+  })
+
+  it('marks the create row while the new exercise is being created', () => {
+    render(<AddExerciseSheet {...props} busyExerciseId="new" />)
+    open('sheet-add-exercise')
+    act(() => { useSheets.getState().setAddQuery('Nackenzieher') })
+    expect(screen.getByText(/Anlegen:/).closest('button')).toHaveClass('is-busy')
+  })
+
   it('adds without closing, so six exercises is not six round trips', async () => {
     const user = userEvent.setup()
     const onAdd = vi.fn()
