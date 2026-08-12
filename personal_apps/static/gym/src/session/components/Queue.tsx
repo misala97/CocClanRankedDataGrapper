@@ -41,6 +41,8 @@ interface DragState {
   ghost: HTMLElement | null
   rafId: number | null
   order: number[]
+  /** Removes the window listeners this drag installed. See onPointerDown. */
+  detach: (() => void) | null
 }
 
 /**
@@ -125,6 +127,9 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
     const row = rowRefs.current.get(d.seId)
     if (row === undefined) return
     d.active = true
+    // Capture is still asked for -- it keeps hover and text selection off the
+    // rows the ghost passes over -- but nothing depends on it surviving; the
+    // window listeners in onPointerDown are what carry the gesture.
     try { handle.setPointerCapture(d.pointerId) } catch { /* not fatal */ }
 
     const rect = row.getBoundingClientRect()
@@ -206,6 +211,7 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
     const d = drag.current
     if (d === null) return
     const wasActive = d.active
+    d.detach?.()
     if (d.rafId !== null) cancelAnimationFrame(d.rafId)
     d.ghost?.remove()
     const handle = handleRefs.current.get(d.seId)
@@ -221,11 +227,46 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
     }
   }
 
+  /**
+   * The rest of the gesture is watched on `window`, not on the handle.
+   *
+   * setPointerCapture is not enough here and cannot be: the first swap moves
+   * the handle's DOM node, and a captured element that leaves the document --
+   * even for a moment, even to be reinserted two rows down -- loses the
+   * capture. From that point the events go to whatever happens to be under
+   * the cursor, so the pointerup that COMMITS the drag was landing on the
+   * finish button and `endDrag` never ran: nothing was saved, and the ghost
+   * clone and the dimmed row stayed on screen until a reload. Touch never
+   * showed it, because a touch pointer is implicitly captured by its target.
+   */
   function onPointerDown(se: LiveExercise, e: React.PointerEvent<HTMLButtonElement>) {
     if (!reordering) return
+    const handle = e.currentTarget
+    const pointerId = e.pointerId
+
+    const onMove = (ev: PointerEvent) => {
+      const d = drag.current
+      if (d === null || ev.pointerId !== pointerId) return
+      d.lastY = ev.clientY
+      if (!d.active) {
+        if (Math.abs(ev.clientY - d.startY) < DRAG_THRESHOLD) return
+        beginDrag(handle)
+      }
+      ev.preventDefault()
+      moveDrag(ev.clientY)
+    }
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return
+      endDrag(true)
+    }
+    const onCancel = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return
+      endDrag(false)
+    }
+
     drag.current = {
       seId: se.id,
-      pointerId: e.pointerId,
+      pointerId,
       startY: e.clientY,
       lastY: e.clientY,
       baseY: 0,
@@ -233,20 +274,18 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
       ghost: null,
       rafId: null,
       order: ordered.map((x) => x.id),
+      detach: () => {
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('pointercancel', onCancel)
+      },
     }
+    // passive: false -- onMove calls preventDefault to keep the page from
+    // scrolling under an in-progress drag.
+    window.addEventListener('pointermove', onMove, { passive: false })
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
     e.preventDefault()
-  }
-
-  function onPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
-    const d = drag.current
-    if (d === null) return
-    d.lastY = e.clientY
-    if (!d.active) {
-      if (Math.abs(e.clientY - d.startY) < DRAG_THRESHOLD) return
-      beginDrag(e.currentTarget)
-    }
-    e.preventDefault()
-    moveDrag(e.clientY)
   }
 
   return (
@@ -287,9 +326,6 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
               tabIndex={reordering ? 0 : -1}
               aria-label={`${se.name} verschieben`}
               onPointerDown={(e) => onPointerDown(se, e)}
-              onPointerMove={onPointerMove}
-              onPointerUp={() => endDrag(true)}
-              onPointerCancel={() => endDrag(false)}
               onKeyDown={(e) => {
                 if (!reordering) return
                 if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return

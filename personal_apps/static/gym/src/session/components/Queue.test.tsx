@@ -149,6 +149,31 @@ describe('Queue', () => {
       .toBe(`${exercises[0]!.name}, Position 2 von ${ids.length}.`)
   })
 
+  it('finishes a drag whose pointerup lands somewhere else', () => {
+    // Reordering the list moves the handle's DOM node, and Chrome drops
+    // pointer capture when the capturing element is detached -- so from the
+    // first swap onwards the events go to whatever is under the cursor. With
+    // the listeners on the handle, the mouse drag never committed and left
+    // the ghost clone and the dimmed row on screen; touch was fine, because
+    // touch pointers get implicit capture. Hence: move and release AWAY from
+    // the handle, which is what the browser actually delivers.
+    const onReorder = vi.fn()
+    useWorkoutUi.getState().setReorder(true)
+    const { container } = render(
+      <Queue exercises={exercises} liveId={liveId} onReorder={onReorder} />)
+    const first = container.querySelectorAll<HTMLButtonElement>('.drag-handle')[0]!
+    const rows = container.querySelectorAll('.queue__row')
+    // Row 2 sits below row 1; jsdom reports every rect as zero, so the swap
+    // itself is not what this asserts -- the commit is.
+    fireEvent.pointerDown(first, { pointerId: 1, clientY: 0 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 40 })
+    fireEvent.pointerUp(document.body, { pointerId: 1, clientY: 40 })
+
+    expect(onReorder).toHaveBeenCalled()
+    expect(document.querySelector('.drag-ghost')).toBeNull()
+    expect(rows[0]).not.toHaveClass('is-dragging')
+  })
+
   it('ignores the arrow keys outside reorder mode', () => {
     const onReorder = vi.fn()
     const { container } = render(
