@@ -3,6 +3,7 @@ import { useAnnouncer, useSheets } from './stores'
 import { FinishSheet } from './components/FinishSheet'
 import { SessionHeader } from './components/SessionHeader'
 import { SaveErrorBanner } from './components/SaveErrorBanner'
+import { SavingSweep } from './components/SavingSweep'
 import { ReorderBar } from './components/ReorderBar'
 import { LiveRegion } from './components/LiveRegion'
 import { Rail } from './components/Rail'
@@ -70,6 +71,7 @@ export function SessionPage({ payload, actions, pushSupported, busySetId = null 
           deloadDefaultPct={payload.deload_default_pct} />
 
       <SaveErrorBanner />
+      <SavingSweep />
       <ReorderBar />
       <LiveRegion />
 

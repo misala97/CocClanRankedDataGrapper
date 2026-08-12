@@ -1580,7 +1580,7 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   .go__charge, .hbar__fill { transition: none !important; }
   .flare { animation: none !important; }
   .set__check::after { clip-path: none !important; }
-  #session-body.is-saving::before {
+  .saving-sweep__bar {
     animation: none !important; transform: none !important; opacity: 1 !important;
   }
 }
@@ -2176,16 +2176,25 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 /* The screen is waiting on the network. A 2px sweep under the header, and only
    after 300ms -- a save that lands inside that window never shows it, so the
    indicator means "this is taking a moment", not "something happened". */
-/* overflow-x only: the sweep below ends at translateX(100%) and would otherwise
-   hand the page 483px of horizontal scroll at a 390px viewport for the whole
-   time a save is in flight -- i.e. exactly on the connection it exists to
-   report. `clip` rather than `hidden` so this never becomes a scroll container,
-   and the y axis stays visible so the record ring and the panel's own shadow
-   are not cut. */
-#session-body { position: relative; overflow-x: clip; }
-#session-body.is-saving::before {
-  content: ""; position: absolute; inset-block-start: 0; inset-inline: var(--sp-4);
-  block-size: 2px; border-radius: 2px; background: var(--live);
+/* Docked to the viewport, not to a workspace element. The Jinja page hung this
+   off `#session-body.is-saving::before`; the island mounts as .session-view and
+   there is no #session-body any more, so the rule matched nothing and the
+   indicator has been dead since the port -- while the store went on counting
+   in-flight writes for it. .session-view is also a grid at >=900px, so a child
+   in the flow would need a grid-area; fixed keeps it out of that entirely.
+
+   The track clips its own bar: the bar ends at translateX(100%) and would
+   otherwise hand the page 483px of horizontal scroll at a 390px viewport for
+   the whole time a save is in flight -- i.e. exactly on the connection it
+   exists to report. `clip` rather than `hidden` so this never becomes a
+   scroll container. */
+.saving-sweep {
+  position: fixed; inset-block-start: 0; inset-inline: 0; block-size: 2px;
+  overflow-x: clip; pointer-events: none; z-index: calc(var(--z-bar) + 2);
+}
+.saving-sweep__bar {
+  display: block; block-size: 100%; inline-size: 100%;
+  border-radius: 2px; background: var(--live);
   transform-origin: left; animation: saving-sweep 1.1s var(--ease-out) infinite;
 }
 @keyframes saving-sweep {
