@@ -90,6 +90,7 @@ interface SaveStateStore {
   locked: Record<string, true>
   begin(): void
   end(): void
+  succeed(): void
   fail(message: string, retry: () => void): void
   dismissError(): void
   lock(formId: string): void
@@ -106,12 +107,15 @@ export const useSaveState = create<SaveStateStore>((set, get) => ({
    *  would clear the sweep on the first while a second write was still out. */
   begin: () => set((state) => ({ pending: state.pending + 1 })),
 
-  end: () => set((state) => ({
-    pending: Math.max(0, state.pending - 1),
-    // A completed write means the last failure is no longer the current
-    // truth, so the banner goes with it.
-    error: null,
-  })),
+  /** Settle only. This runs from onSettled, which fires straight after
+   *  onError -- clearing the error here took the banner down in the same tick
+   *  it went up, so every lost write reverted the screen in silence. A write
+   *  that FINISHED is not a write that WORKED. */
+  end: () => set((state) => ({ pending: Math.max(0, state.pending - 1) })),
+
+  /** A real answer from the server: the last failure is no longer the current
+   *  truth, so the banner goes with it. */
+  succeed: () => set({ error: null }),
 
   fail: (message, retry) => set({ error: { message, retry } }),
   dismissError: () => set({ error: null }),

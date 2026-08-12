@@ -30,6 +30,7 @@ export function useSessionMutation<Args extends unknown[]>(
   const key = sessionKey(sessionId)
   const begin = useSaveState((s) => s.begin)
   const end = useSaveState((s) => s.end)
+  const succeed = useSaveState((s) => s.succeed)
   const fail = useSaveState((s) => s.fail)
 
   const mutation = useMutation<
@@ -53,6 +54,9 @@ export function useSessionMutation<Args extends unknown[]>(
       // The server recomputes which exercise is live on every write, so its
       // answer replaces the local guess wholesale rather than merging into it.
       client.setQueryData(key, fresh)
+      // Here, not in onSettled: onSettled also runs after a FAILURE, so
+      // clearing there erased the banner the failure had just raised.
+      succeed()
     },
 
     onError: (error, args, context) => {

@@ -104,14 +104,22 @@ describe('useSaveState', () => {
     expect(retry).toHaveBeenCalledOnce()
   })
 
-  it('clears the error on dismiss and on the next success', () => {
+  it('clears the error on dismiss and on the next success -- NOT on settle', () => {
     useSaveState.getState().fail('x', () => {})
     useSaveState.getState().dismissError()
     expect(useSaveState.getState().error).toBeNull()
 
+    // A write that FINISHES is not a write that WORKED. end() runs from
+    // onSettled, which fires straight after onError -- when end() also
+    // cleared the error, the banner for a lost write was removed in the same
+    // tick it appeared, so a failed save reverted in silence. Only a real
+    // answer from the server clears it.
     useSaveState.getState().fail('y', () => {})
     useSaveState.getState().begin()
     useSaveState.getState().end()
+    expect(useSaveState.getState().error?.message).toBe('y')
+
+    useSaveState.getState().succeed()
     expect(useSaveState.getState().error).toBeNull()
   })
 

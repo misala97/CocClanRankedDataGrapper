@@ -22,7 +22,7 @@ from .helpers import (
     _to_int, _wants_json,
 )
 from .workout import (
-    _heute_payload, _template_exercises_from_session,
+    _heute_payload, _mutation_response, _template_exercises_from_session,
 )
 from ._blueprint import (
     gym_bp,
@@ -123,10 +123,19 @@ def gym_toggle_deload(session_id):
                         s.base_reps = None
 
     db.session.commit()
-    # Same reason as gym_update_set: marking a finished workout as a deload
-    # dropped ?just_finished and took the template offer with it.
-    return redirect(url_for('gym.session_detail', session_id=session_.id,
-                            **request.args.to_dict()))
+    # _mutation_response, like every other write the live screen posts: this
+    # route answered with a bare redirect, so the island's fetch followed it,
+    # got HTML where it expected the payload, and treated a write that had
+    # already committed as a failure. The lifter marked a deload, the server
+    # rewrote every prescribed weight, and the screen went on showing the old
+    # numbers until a manual reload.
+    #
+    # Same reason as gym_update_set for carrying request.args: marking a
+    # finished workout as a deload dropped ?just_finished and took the
+    # template offer with it.
+    return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_.id,
+        **request.args.to_dict())
 
 
 @gym_bp.route('/gym/session/<int:session_id>/summary')

@@ -82,6 +82,14 @@ def test_every_in_place_mutation_negotiates(client, live_session):
         (f"/gym/session-exercise/{ids['se']}/skip", {}),
         (f"/gym/session/{ids['session']}/exercises/reorder", {'order': str(ids['se'])}),
         (f"/gym/session/{ids['session']}/rest/skip", {}),
+        # The one this table was missing. It lives in session_admin.py rather
+        # than workout.py and answered with a bare redirect, so the island's
+        # fetch followed it into HTML and read a committed write as a failure:
+        # the deload rewrote every prescribed weight and the screen kept
+        # showing the old ones until a reload. Toggled back off in the same
+        # case so the fixture's weights are what the later cases expect.
+        (f"/gym/session/{ids['session']}/deload", {'on': '1', 'pct': '70'}),
+        (f"/gym/session/{ids['session']}/deload", {'on': '0'}),
     ]
     problems = []
     for url, data in cases:
