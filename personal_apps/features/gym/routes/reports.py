@@ -195,7 +195,17 @@ SPARK_W = 74.0
 SPARK_H = 24.0
 
 
-def _progression_view(ranking, limit=8):
+# The windows the Fortschritt section offers. Plain day counts rather than
+# calendar months: a month here is a rough span, and no consumer needs it to
+# land on the same day of the month. None is all time.
+#
+# All four are precomputed rather than served per request: the client switches
+# between them with no round trip, and every figure still comes from one Python
+# function instead of a second implementation of "progress" in TypeScript.
+PROGRESSION_WINDOWS = (('all', None), ('6m', 182), ('3m', 91), ('30d', 30))
+
+
+def _progression_view(ranking):
     """Progression rows with their sparkline drawn and their bar sized.
 
     Geometry in Python for the same reason the exercise chart's is: Jinja doing
@@ -207,14 +217,19 @@ def _progression_view(ranking, limit=8):
     absolute change on the page -- against a fixed 100 % a typical +40 % lift
     would draw as a stub, and the ranking would look flat when it is not.
 
-    Both ends are kept: the biggest movers AND the biggest losers, because a
-    page that only shows what went up is a highlight reel, not a report.
+    Every ranked exercise is returned. There used to be a top-eight cap with
+    an exception that kept every loser below it -- the exception existed only
+    so truncation could not turn the section into a highlight reel, and with
+    nothing truncated it has nothing left to protect. The cap also made the
+    section grow only when things went wrong: bounded upward, unbounded down.
+
+    `widest` is per call, so each window scales against its own biggest move
+    rather than against the all-time one, which would draw a narrow window as
+    a row of stubs.
     """
     if not ranking:
         return []
-    head = ranking[:limit]
-    tail = [entry for entry in ranking[limit:] if entry['change_pct'] < 0]
-    shown = head + [entry for entry in tail if entry not in head]
+    shown = list(ranking)
 
     widest = max((abs(entry['change_pct']) for entry in shown), default=1.0) or 1.0
     out = []
@@ -332,7 +347,13 @@ def gym_statistik():
         daypart_names=dict(DAYPART_NAMES),
         weekday_names=list(WEEKDAY_NAMES),
         totals=analytics.totals(performed, now),
-        progression=_progression_view(analytics.progression_ranking(performed)),
+        progression=[
+            {'key': key,
+             'entries': _progression_view(analytics.progression_ranking(
+                 performed,
+                 since=None if days is None else now - dt.timedelta(days=days)))}
+            for key, days in PROGRESSION_WINDOWS
+        ],
         rep_range=analytics.rep_range_distribution(performed),
         fatigue=analytics.fatigue_curve(performed),
         daypart=analytics.daypart_volume(performed),

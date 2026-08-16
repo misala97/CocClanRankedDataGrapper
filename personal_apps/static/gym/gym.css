@@ -2981,6 +2981,22 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 }
 
 .sec__sp { flex: 1; }
+
+/* The Fortschritt window picker. Sits in the section head where a static
+   caption used to, so it inherits that row's alignment; the pressed state is
+   a fill, because a control with four options has to say which one is live
+   without relying on colour alone. */
+.winsel { display: flex; gap: 2px; }
+.winsel__b {
+  border: 0; background: transparent; cursor: pointer;
+  font: inherit; font-size: var(--t-micro); font-weight: var(--w-semi);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--unlit); padding: var(--sp-1) var(--sp-2);
+  border-radius: 999px; min-block-size: var(--tap);
+}
+.winsel__b:hover { color: var(--ink); }
+.winsel__b[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
+.winsel__b:focus-visible { outline: 2px solid var(--live); outline-offset: 2px; }
 .sec__more {
   font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
   display: inline-flex; align-items: center; min-block-size: var(--tap);

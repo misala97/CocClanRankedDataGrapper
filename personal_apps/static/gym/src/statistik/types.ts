@@ -39,9 +39,15 @@ export interface ProgressionRow {
   points: number[]
   /** SVG polyline points, computed server-side. */
   spark: string
-  /** Half-width of the diverging bar, scaled against the page's widest move. */
+  /** Half-width of the diverging bar, scaled against its own window's widest move. */
   bar_pct: number
   is_up: boolean
+}
+
+export interface ProgressionWindow {
+  /** 'all' | '6m' | '3m' | '30d' -- an identifier; the component owns the label. */
+  key: string
+  entries: ProgressionRow[]
 }
 
 export interface RepBucket {
@@ -209,7 +215,7 @@ export interface StatistikPayload {
   totals: Totals
   longest_gap: number
   months: TonnageMonth[]
-  progression: ProgressionRow[]
+  progression: ProgressionWindow[]
   rep_range: RepRange
   min_sets_for_rep_range: number
   fatigue: Fatigue

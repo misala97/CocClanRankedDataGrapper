@@ -22,11 +22,33 @@ const base: StatistikPayload = {
     { year: 2026, month: 7, volume: 102494, is_gap: false, has_deload: true, has_record: false },
     { year: 2026, month: 8, volume: 0, is_gap: true, has_deload: false, has_record: false },
   ],
-  progression: [{
-    exercise_id: 9, name: 'Bench Press (Dumbbell)', sessions: 10,
-    first_e1rm: 27.1, current_e1rm: 76, change_pct: 180.1, best_weight: 60,
-    points: [27.1, 76], spark: '0.0,22.0 74.0,2.0', bar_pct: 50, is_up: true,
-  }],
+  progression: [
+    {
+      key: 'all',
+      entries: [{
+        exercise_id: 9, name: 'Bench Press (Dumbbell)', sessions: 10,
+        first_e1rm: 27.1, current_e1rm: 76, change_pct: 180.1, best_weight: 60,
+        points: [27.1, 76], spark: '0.0,22.0 74.0,2.0', bar_pct: 50, is_up: true,
+      }],
+    },
+    {
+      key: '6m',
+      entries: [{
+        exercise_id: 9, name: 'Bench Press (Dumbbell)', sessions: 8,
+        first_e1rm: 40, current_e1rm: 76, change_pct: 90, best_weight: 60,
+        points: [40, 76], spark: '0.0,22.0 74.0,2.0', bar_pct: 50, is_up: true,
+      }],
+    },
+    {
+      key: '3m',
+      entries: [{
+        exercise_id: 7, name: 'Hammer Curl', sessions: 4,
+        first_e1rm: 20, current_e1rm: 22, change_pct: 10, best_weight: 22,
+        points: [20, 22], spark: '0.0,22.0 74.0,2.0', bar_pct: 50, is_up: true,
+      }],
+    },
+    { key: '30d', entries: [] },
+  ],
   rep_range: {
     buckets: [
       { label: '1-5', sets: 0, share: 0 },
@@ -327,11 +349,63 @@ describe('StatistikPage', () => {
 
     it('marks a loss as a direction, not as a second list', () => {
       const { container } = mount({
-        progression: [{ ...base.progression[0]!, change_pct: -12.4, is_up: false }],
+        progression: [
+          {
+            key: 'all',
+            entries: [{ ...base.progression[0]!.entries[0]!, change_pct: -12.4, is_up: false }],
+          },
+          ...base.progression.slice(1),
+        ],
       })
       expect(screen.getByText('-12 %')).toHaveClass('is-down')
       expect(container.querySelector('.prog__bar')).toHaveClass('prog__bar--down')
       expect(container.querySelector('polyline')).toHaveAttribute('stroke', 'var(--stall)')
+    })
+
+    it('opens on the whole history', () => {
+      mount()
+      expect(screen.getByText('Fortschritt seit dem ersten Mal')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Alles' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByText('Bench Press (Dumbbell)')).toBeInTheDocument()
+    })
+
+    it('re-ranks from the window the reader picked', async () => {
+      // The whole point of precomputing four blocks: the click swaps which one
+      // renders, with no fetch. Scoped to this section -- 'Hammer Curl' is
+      // also a row in the ladder ranking further down the page.
+      const { container } = mount()
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: '3 Monate' }))
+      const section = container.querySelector('[aria-labelledby="prog-h"]')!
+      expect(section).toHaveTextContent('Hammer Curl')
+      expect(section).not.toHaveTextContent('Bench Press (Dumbbell)')
+    })
+
+    it('moves the heading with the window, so label and number agree', async () => {
+      mount()
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: '6 Monate' }))
+      expect(screen.getByText('Fortschritt in 6 Monaten')).toBeInTheDocument()
+      expect(screen.queryByText('Fortschritt seit dem ersten Mal')).not.toBeInTheDocument()
+    })
+
+    it('says a window is empty rather than showing a headed void', async () => {
+      mount()
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: '30 Tage' }))
+      expect(screen.getByText('Keine Übung mit zwei Einheiten in diesem Zeitraum.'))
+        .toBeInTheDocument()
+    })
+
+    it('keeps the no-history copy when every window is empty', () => {
+      // A brand-new account still gets all four blocks -- they are just all
+      // empty. Blaming the WINDOW for a history that does not exist yet would
+      // be the wrong silence, and a picker over four empty windows is a
+      // control with nothing to control.
+      mount({ progression: base.progression.map((b) => ({ ...b, entries: [] })) })
+      expect(screen.getByText('Noch zu wenig Historie, um Fortschritt zu messen.'))
+        .toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '3 Monate' })).not.toBeInTheDocument()
     })
 
     it('says so with too little history', () => {

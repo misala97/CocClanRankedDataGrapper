@@ -15,6 +15,16 @@ const dmy = (iso: string) => {
 const signed1 = (n: number) => `${n >= 0 ? '+' : '-'}${kg1(Math.abs(n))}`
 const mmss = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${pad(seconds % 60)}`
+/** The windows the Fortschritt section offers, and what each one calls itself.
+ *  Keys match routes/reports.py's PROGRESSION_WINDOWS; the German lives here
+ *  because analytics.py holds no user-visible copy. */
+const PROGRESSION_WINDOWS = [
+  { key: 'all', label: 'Alles', heading: 'Fortschritt seit dem ersten Mal' },
+  { key: '6m', label: '6 Monate', heading: 'Fortschritt in 6 Monaten' },
+  { key: '3m', label: '3 Monate', heading: 'Fortschritt in 3 Monaten' },
+  { key: '30d', label: '30 Tage', heading: 'Fortschritt in 30 Tagen' },
+]
+
 /** "3", "3 und 4+", "2, 3 und 4+" -- German lists take no serial comma. */
 const joinAnd = (parts: string[]) => (parts.length < 2
   ? parts.join('')
@@ -93,6 +103,9 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
   // re-aggregates what the bars encode for it. Real buttons, so the keyboard
   // can do the tap half too.
   const [sel, setSel] = useState<[number, number] | null>(null)
+  // Which window the Fortschritt section is answering. All four arrived in the
+  // payload, so this is a choice of array, not a fetch.
+  const [progWindow, setProgWindow] = useState('all')
   const brush = useRef<{ start: number; moved: boolean } | null>(null)
   const monthsRef = useRef<HTMLDivElement>(null)
   const {
@@ -172,6 +185,12 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
   const fade = effort.groups.length > 1 ? 0.3 / effort.groups.length : 0
   const topExercises = effort.exercises.slice(0, 5)
   const widest = topExercises[0]?.volume ?? 1
+
+  const shownProgression = (progression.find((block) => block.key === progWindow)
+    ?? progression[0])?.entries ?? []
+  // Whether ANY window has something. A brand-new account gets all four blocks
+  // too, just empty -- and then the silence is about the log, not the window.
+  const hasProgression = progression.some((block) => block.entries.length > 0)
 
   const topShare = Math.max(...reps.buckets.map((b) => b.share), 0)
   // Only the drawn buckets, and the ceiling comes from them too: a bucket that
@@ -416,16 +435,39 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
         <div className="stat-col">
           <section aria-labelledby="prog-h">
             <div className="sec__head">
-              <h2 className="label" id="prog-h">Fortschritt seit dem ersten Mal</h2>
+              <h2 className="label" id="prog-h">
+                {PROGRESSION_WINDOWS.find((w) => w.key === progWindow)?.heading
+                  ?? PROGRESSION_WINDOWS[0]!.heading}
+              </h2>
               <span className="sec__sp" />
-              <span className="label">e1RM, erste gegen aktuelle Einheit</span>
+              {/* Only offered when some window has something to show. A new
+                  account gets all four blocks too, just empty, and a picker
+                  over four empty windows is a control with nothing to
+                  control. */}
+              {hasProgression && (
+                <span className="winsel" role="group" aria-label="Zeitraum">
+                  {PROGRESSION_WINDOWS.map((w) => (
+                    <button type="button" key={w.key} className="winsel__b"
+                      aria-pressed={w.key === progWindow}
+                      onClick={() => setProgWindow(w.key)}>
+                      {w.label}
+                    </button>
+                  ))}
+                </span>
+              )}
             </div>
-            {progression.length > 0 ? (
-              progression.map((entry) => (
+            {shownProgression.length > 0 ? (
+              shownProgression.map((entry) => (
                 <Progression entry={entry} key={entry.exercise_id} />
               ))
             ) : (
-              <p className="empty">Noch zu wenig Historie, um Fortschritt zu messen.</p>
+              /* Which silence this is matters: an empty WINDOW is a fact about
+                 the window, an empty history is a fact about the log. */
+              <p className="empty">
+                {hasProgression
+                  ? 'Keine Übung mit zwei Einheiten in diesem Zeitraum.'
+                  : 'Noch zu wenig Historie, um Fortschritt zu messen.'}
+              </p>
             )}
           </section>
 
@@ -483,45 +525,33 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             )}
           </section>
 
-          {/* The split above is all-time, which is exactly why it cannot show
-              this: a muscle group neglected for a month still carries its
-              lifetime share. Shares on both sides, never tonnage -- a lighter
-              month would otherwise read as abandoning every group at once. */}
-          <section aria-labelledby="drift-h">
-            <div className="sec__head">
-              <h2 className="label" id="drift-h">Was sich zuletzt verschoben hat</h2>
-              <span className="sec__sp" />
-              <span className="label">{`Letzte ${drift.window_days} Tage gegen davor`}</span>
-            </div>
-            {drift.statable && topDrift !== null && bottomDrift !== null ? (
-              <>
-                {drift.groups.map((group) => (
-                  <div className="prog prog--plain" key={group.label ?? 'ohne'}>
-                    <span className="prog__name">{group.label ?? 'Ohne Gruppe'}</span>
-                    <span className="prog__axis">
-                      <span className="prog__bar prog__bar--flat"
-                        style={{
-                          inlineSize: `${roundTo((Math.abs(group.delta)
-                            / Math.max(Math.abs(topDrift.delta), Math.abs(bottomDrift.delta), 1)) * 100, 1)}%`,
-                        }} />
-                    </span>
-                    <span className="prog__pct"
-                      title={`${whole(group.earlier_share)} % → ${whole(group.recent_share)} %`}>
-                      {`${signed1(group.delta)} %`}
-                    </span>
-                  </div>
-                ))}
-                <p className="sec__note">
-                  {`Aus ${drift.recent_sessions} Workouts zuletzt gegen ${drift.earlier_sessions} davor.`}
-                </p>
-              </>
-            ) : (
-              <p className="empty">
-                Noch kein Davor zum Vergleichen — dafür braucht es Workouts vor
-                den letzten {drift.window_days} Tagen.
-              </p>
-            )}
-          </section>
+          {/* Progress in the units the gym actually offers. A percentage is the
+              honest general answer; the next pin hole is the one you can act on,
+              and on an uneven stack the two are not the same fact. */}
+          {topRungs.length > 0 && (
+            <section aria-labelledby="ladder-h">
+              <div className="sec__head">
+                <h2 className="label" id="ladder-h">Stufen erklommen</h2>
+                <span className="sec__sp" />
+                <span className="label">{`${ladder.total_notches} insgesamt`}</span>
+              </div>
+              {topRungs.map((rung) => (
+                <div className="prog prog--plain prog--count" key={rung.exercise_id}>
+                  <span className="prog__name">{rung.name}</span>
+                  <span className="prog__axis">
+                    <span className="prog__bar prog__bar--flat"
+                      style={{ inlineSize: `${roundTo((rung.notches / widestRung) * 100, 1)}%` }} />
+                  </span>
+                  <span className="prog__pct"
+                    title={`${de(rung.from_weight)} → ${de(rung.to_weight)} kg`}>
+                    {`${rung.notches}×`}
+                  </span>
+                </div>
+              ))}
+              <p className="sec__note">In Schritten dieser Geräte, nicht in Prozent.</p>
+            </section>
+          )}
+
         </div>
 
         {/* The narrow column: prose answers first, then the two rankings that
@@ -683,32 +713,45 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
           )}
         </section>
 
-        {/* Progress in the units the gym actually offers. A percentage is the
-            honest general answer; the next pin hole is the one you can act on,
-            and on an uneven stack the two are not the same fact. */}
-        {topRungs.length > 0 && (
-          <section aria-labelledby="ladder-h">
-            <div className="sec__head">
-              <h2 className="label" id="ladder-h">Stufen erklommen</h2>
-              <span className="sec__sp" />
-              <span className="label">{`${ladder.total_notches} insgesamt`}</span>
-            </div>
-            {topRungs.map((rung) => (
-              <div className="prog prog--plain prog--count" key={rung.exercise_id}>
-                <span className="prog__name">{rung.name}</span>
-                <span className="prog__axis">
-                  <span className="prog__bar prog__bar--flat"
-                    style={{ inlineSize: `${roundTo((rung.notches / widestRung) * 100, 1)}%` }} />
-                </span>
-                <span className="prog__pct"
-                  title={`${de(rung.from_weight)} → ${de(rung.to_weight)} kg`}>
-                  {`${rung.notches}×`}
-                </span>
-              </div>
-            ))}
-            <p className="sec__note">In Schritten dieser Geräte, nicht in Prozent.</p>
-          </section>
-        )}
+        {/* The split above is all-time, which is exactly why it cannot show
+            this: a muscle group neglected for a month still carries its
+            lifetime share. Shares on both sides, never tonnage -- a lighter
+            month would otherwise read as abandoning every group at once. */}
+        <section aria-labelledby="drift-h">
+          <div className="sec__head">
+            <h2 className="label" id="drift-h">Was sich zuletzt verschoben hat</h2>
+            <span className="sec__sp" />
+            <span className="label">{`Letzte ${drift.window_days} Tage gegen davor`}</span>
+          </div>
+          {drift.statable && topDrift !== null && bottomDrift !== null ? (
+            <>
+              {drift.groups.map((group) => (
+                <div className="prog prog--plain" key={group.label ?? 'ohne'}>
+                  <span className="prog__name">{group.label ?? 'Ohne Gruppe'}</span>
+                  <span className="prog__axis">
+                    <span className="prog__bar prog__bar--flat"
+                      style={{
+                        inlineSize: `${roundTo((Math.abs(group.delta)
+                          / Math.max(Math.abs(topDrift.delta), Math.abs(bottomDrift.delta), 1)) * 100, 1)}%`,
+                      }} />
+                  </span>
+                  <span className="prog__pct"
+                    title={`${whole(group.earlier_share)} % → ${whole(group.recent_share)} %`}>
+                    {`${signed1(group.delta)} %`}
+                  </span>
+                </div>
+              ))}
+              <p className="sec__note">
+                {`Aus ${drift.recent_sessions} Workouts zuletzt gegen ${drift.earlier_sessions} davor.`}
+              </p>
+            </>
+          ) : (
+            <p className="empty">
+              Noch kein Davor zum Vergleichen — dafür braucht es Workouts vor
+              den letzten {drift.window_days} Tagen.
+            </p>
+          )}
+        </section>
 
         {/* The other half of the progression ranking in the wide column: which
             lift has gone longest without beating itself. Counted in sessions,

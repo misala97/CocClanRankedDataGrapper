@@ -513,6 +513,50 @@ def test_rest_gap_effect_names_thin_buckets_but_not_empty_ones():
     assert [b['sessions'] for b in result['thin']] == [1]
 
 
+def test_progression_ranking_measures_from_the_first_session_inside_the_window():
+    """A window moves BOTH ends. The baseline is the first qualifying session
+    in the window, not the all-time first -- otherwise '3 Monate' would report
+    a change earned before it started."""
+    rows = [
+        perf([(60.0, 10)], started_at=day(0), session_id=1),
+        perf([(80.0, 10)], started_at=day(40), session_id=2),
+        perf([(90.0, 10)], started_at=day(50), session_id=3),
+    ]
+    windowed = analytics.progression_ranking(rows, since=day(30))
+    assert len(windowed) == 1
+    assert windowed[0]['first_e1rm'] == round(stats.epley_1rm(80.0, 10), 1)
+    assert windowed[0]['sessions'] == 2
+
+
+def test_progression_ranking_drops_an_exercise_with_one_session_in_the_window():
+    """One session inside the window has no first-versus-current, exactly as
+    one session all-time does not."""
+    rows = [
+        perf([(60.0, 10)], started_at=day(0), session_id=1),
+        perf([(80.0, 10)], started_at=day(50), session_id=2),
+    ]
+    assert analytics.progression_ranking(rows, since=day(30)) == []
+
+
+def test_progression_ranking_without_a_window_is_unchanged():
+    rows = [
+        perf([(60.0, 10)], started_at=day(0), session_id=1),
+        perf([(90.0, 10)], started_at=day(50), session_id=2),
+    ]
+    assert (analytics.progression_ranking(rows, since=None)
+            == analytics.progression_ranking(rows))
+
+
+def test_progression_ranking_still_ignores_deloads_inside_a_window():
+    rows = [
+        perf([(80.0, 10)], started_at=day(40), session_id=1),
+        perf([(90.0, 10)], started_at=day(50), session_id=2),
+        perf([(20.0, 10)], started_at=day(55), session_id=3, is_deload=True),
+    ]
+    windowed = analytics.progression_ranking(rows, since=day(30))
+    assert windowed[0]['sessions'] == 2
+
+
 def timed(minutes, day_offset, session_id, sets=((100.0, 10),)):
     return perf(list(sets), started_at=day(day_offset), session_id=session_id, minutes=minutes)
 

@@ -739,9 +739,17 @@ class ProgressionRow(_Model):
     #: SVG polyline points, from routes._progression_view.
     spark: str
     #: Half-width of the diverging bar, scaled against the largest absolute
-    #: change on the page rather than against a fixed 100 %.
+    #: change in its own window rather than against a fixed 100 %.
     bar_pct: float
     is_up: bool
+
+
+class ProgressionWindow(_Model):
+    """One window's ranking. `key` is one of 'all', '6m', '3m', '30d' -- an
+    identifier, not a label: the component owns the German, exactly as it does
+    for month and weekday names."""
+    key: str
+    entries: list[ProgressionRow]
 
 
 class RepBucket(_Model):
@@ -914,7 +922,9 @@ class StatistikPayload(_Model):
     #: reading.
     longest_gap: int
     months: list[TonnageMonth]
-    progression: list[ProgressionRow]
+    #: All four windows, precomputed. The client swaps between them without a
+    #: round trip, so they travel together.
+    progression: list[ProgressionWindow]
     rep_range: RepRange
     min_sets_for_rep_range: int
     fatigue: Fatigue

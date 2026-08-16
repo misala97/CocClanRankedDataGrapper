@@ -152,8 +152,14 @@ def monthly_tonnage(rows, now):
     return out
 
 
-def progression_ranking(rows):
-    """Fortschritt: every exercise ranked by all-time change in estimated 1RM.
+def progression_ranking(rows, since=None):
+    """Fortschritt: every exercise ranked by its change in estimated 1RM.
+
+    `since` narrows the question to a window, and moves BOTH ends of the
+    comparison: an exercise is measured from its first qualifying session
+    inside the window to its most recent one. Anything else would print a
+    change earned outside the span the caller asked about. None is the whole
+    history, which is the page's default.
 
     A judgement, so deload rows are dropped via stats.progression_rows() --
     a deliberately light session is not an attempt at a heavier one, and a
@@ -168,6 +174,8 @@ def progression_ranking(rows):
     """
     by_exercise = defaultdict(list)
     for row in stats.progression_rows(rows):
+        if since is not None and row.started_at < since:
+            continue
         by_exercise[row.exercise_id].append(row)
 
     ranking = []
