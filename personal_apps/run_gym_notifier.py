@@ -6,7 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app import app
 from extensions import db
 from models import AppUser, PendingPush, WorkoutSession
-from features.gym import stats
+from features.gym import push, stats
 from features.gym.push import send_push_to_user
 
 
@@ -53,6 +53,13 @@ def check_pending_pushes():
 
         if due or orphaned:
             db.session.commit()
+
+
+def prune_subscriptions():
+    with app.app_context():
+        dropped = push.prune_stale_subscriptions(dt.datetime.utcnow())
+        if dropped:
+            print(f'pruned {dropped} stale push subscription(s)', flush=True)
 
 
 def _weekly_digest_for(user_id, now):
@@ -118,6 +125,13 @@ if __name__ == '__main__':
     # the week.
     scheduler.add_job(send_weekly_digests, trigger="cron",
                       day_of_week="sun", hour=17, minute=0,
+                      max_instances=1, misfire_grace_time=3600)
+    # Daily, because the thing it removes accumulates silently: a browser that
+    # replaces its own endpoint leaves a row nothing else can invalidate, and
+    # every notification is then sent twice to the same phone. Here rather
+    # than in the web app because this is the one process that runs on a
+    # schedule regardless of traffic.
+    scheduler.add_job(prune_subscriptions, trigger="cron", hour=4, minute=30,
                       max_instances=1, misfire_grace_time=3600)
     scheduler.start()
 

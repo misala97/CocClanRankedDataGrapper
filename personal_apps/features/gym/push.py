@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 import re
 from urllib.parse import urlparse
@@ -40,6 +41,35 @@ def is_valid_push_endpoint(url):
     if not host:
         return False
     return host in _ALLOWED_PUSH_HOSTS or bool(_WNS_HOST_RE.match(host))
+
+
+# How long a subscription survives without the device confirming it. Both gym
+# pages post whatever subscription the browser already holds on every load, so
+# a device in use refreshes this constantly and a device that has genuinely
+# stopped being used simply re-registers itself the next time it is opened --
+# the row is rebuilt by the same POST that would have refreshed it. What does
+# NOT come back is an endpoint no browser holds any more, which is exactly the
+# row that was buzzing a phone a second time.
+#
+# Thirty days rather than a week: the only things a dormant device misses are
+# rest timers (which require using the app anyway) and the weekly digest.
+STALE_SUBSCRIPTION_DAYS = 30
+
+
+def prune_stale_subscriptions(now):
+    """Drop subscriptions no device has confirmed inside the window.
+
+    Returns the number deleted. Called daily from the notifier daemon rather
+    than from the send path: a send is the wrong moment to be reasoning about
+    which rows deserve to exist, and the daemon is already the one process
+    that runs on a schedule regardless of traffic.
+    """
+    cutoff = now - dt.timedelta(days=STALE_SUBSCRIPTION_DAYS)
+    deleted = (PushSubscription.query
+               .filter(PushSubscription.last_seen_at < cutoff)
+               .delete(synchronize_session=False))
+    db.session.commit()
+    return deleted
 
 
 def send_push_to_user(user_id: int, payload: dict):

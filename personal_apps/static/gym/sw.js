@@ -59,6 +59,40 @@ self.addEventListener('push', (event) => {
     );
 });
 
+// The browser replacing this device's endpoint, which is the moment a
+// duplicate row is born: the server has no way to tell the new endpoint from
+// a second device, and the old one stays valid at the push service, so both
+// keep delivering to the same phone. `replaces` is what lets the server
+// retire the row instead of guessing.
+//
+// Belt and braces with the daily pruning on the server: this event is not
+// reliably delivered on every platform, and a rotation that happens while the
+// worker is asleep is simply never reported. Pruning catches what this misses;
+// this spares the user up to a month of double buzzing when it does fire.
+self.addEventListener('pushsubscriptionchange', (event) => {
+    event.waitUntil((async () => {
+        const previous = event.oldSubscription || null;
+        // Re-subscribe with the SAME key the old subscription carried rather
+        // than a hardcoded one: the worker has no access to the page's VAPID
+        // config, and the key is the one thing the expiring subscription can
+        // still tell us.
+        const key = previous && previous.options && previous.options.applicationServerKey;
+        const fresh = event.newSubscription || (key
+            ? await self.registration.pushManager.subscribe({
+                userVisibleOnly: true, applicationServerKey: key,
+            })
+            : null);
+        if (!fresh) return;
+        const body = fresh.toJSON();
+        if (previous) body.replaces = previous.endpoint;
+        await fetch('/gym/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    })());
+});
+
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     event.waitUntil(

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import type { HeutePayload, RoutineMemory, Stall } from './types'
 import { postForm, MutationFailed } from '../api'
 import { csrfToken, CsrfField } from '../csrf'
+import { heartbeatSubscription } from '../push'
 import { UndoToast, useUndo } from '../undo'
 import { recency, sincePr } from '../catalogue/format'
 import { useSheets, usePush } from '../session/stores'
@@ -201,7 +202,10 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
     if (!pushSupported) { setSubscribed(false); return }
     navigator.serviceWorker.getRegistration('/gym')
       .then((reg) => reg?.pushManager.getSubscription() ?? null)
-      .then((sub) => setSubscribed(sub !== null))
+      .then((sub) => {
+        setSubscribed(sub !== null)
+        heartbeatSubscription(sub)
+      })
       .catch(() => setSubscribed(false))
   }, [pushSupported, setSubscribed])
 

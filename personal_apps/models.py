@@ -449,6 +449,19 @@ class PushSubscription(db.Model):
     p256dh_key = db.Column(db.String(255), nullable=False)
     auth_key   = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+    # The last time the device holding this endpoint said it still holds it --
+    # refreshed by the subscribe route, which both pages post to on load with
+    # whatever subscription the browser already has.
+    #
+    # This exists because a browser can replace its own endpoint (a reinstall,
+    # cleared site data, a rotation) and the row for the old one stays behind
+    # with nothing to invalidate it: the endpoint is still valid as far as the
+    # push service is concerned, so it never 404s into the pruning in push.py.
+    # Every notification fans out to every row, so a lifter with one phone was
+    # getting two buzzes -- measured in production at four rows for one
+    # account, two per device. Silence is the only signal an orphan gives off,
+    # so silence is what it is judged on.
+    last_seen_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
 
 
 class PendingPush(db.Model):

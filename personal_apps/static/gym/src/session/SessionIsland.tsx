@@ -4,6 +4,7 @@ import type { SessionDetailPayload } from './types'
 import { api, fetchSession } from './api'
 import { postNavigate } from '../api'
 import { csrfToken } from '../csrf'
+import { heartbeatSubscription } from '../push'
 import { sessionKey, useSessionMutation } from './useSessionMutation'
 import * as optimistic from './optimistic'
 import { usePush, useSaveState, useSheets } from './stores'
@@ -57,7 +58,12 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     if (!pushSupported) { setSubscribed(false); return }
     navigator.serviceWorker.getRegistration('/gym')
       .then((registration) => registration?.pushManager.getSubscription() ?? null)
-      .then((subscription) => setSubscribed(subscription !== null))
+      .then((subscription) => {
+        setSubscribed(subscription !== null)
+        // The same probe doubles as the heartbeat: this device is the only
+        // thing that can say its endpoint is still the current one.
+        heartbeatSubscription(subscription)
+      })
       .catch(() => setSubscribed(false))
   }, [setSubscribed])
 

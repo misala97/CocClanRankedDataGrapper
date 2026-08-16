@@ -1,6 +1,7 @@
 """Web-push subscribe and unsubscribe for this device, and the service
 worker itself -- served from the site root so its default scope covers /gym/."""
 
+import datetime as dt
 import os
 
 from flask import (
@@ -61,13 +62,31 @@ def gym_push_subscribe():
     # constraint and 500. Re-pointing the row is the correct answer anyway --
     # the subscription belongs to whoever is logged in on that device now.
     sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    now = dt.datetime.utcnow()
     if sub:
         sub.p256dh_key = p256dh
         sub.auth_key = auth_key
         sub.user_id = current_user_id()
+        # Doubles as the heartbeat: both pages post the subscription the
+        # browser already holds on load, so an unchanged POST is a device
+        # saying it still exists. Nothing else can say that -- an endpoint
+        # stays valid at the push service long after its browser forgot it.
+        sub.last_seen_at = now
     else:
         db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh,
-                                        auth_key=auth_key, user_id=current_user_id()))
+                                        auth_key=auth_key, user_id=current_user_id(),
+                                        last_seen_at=now))
+
+    # The endpoint this one rotated away from, when the service worker's
+    # pushsubscriptionchange told the client about it. Scoped to the caller:
+    # it is a client-supplied endpoint, so unscoped it would be a way to
+    # delete anyone's subscription by naming it.
+    replaces = data.get('replaces')
+    if replaces and replaces != endpoint:
+        (PushSubscription.query
+         .filter_by(endpoint=replaces, user_id=current_user_id())
+         .delete(synchronize_session=False))
+
     db.session.commit()
     return jsonify({'status': 'ok'})
 
