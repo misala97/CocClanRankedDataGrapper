@@ -15,6 +15,10 @@ const dmy = (iso: string) => {
 const signed1 = (n: number) => `${n >= 0 ? '+' : '-'}${kg1(Math.abs(n))}`
 const mmss = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${pad(seconds % 60)}`
+/** "3", "3 und 4+", "2, 3 und 4+" -- German lists take no serial comma. */
+const joinAnd = (parts: string[]) => (parts.length < 2
+  ? parts.join('')
+  : `${parts.slice(0, -1).join(', ')} und ${parts[parts.length - 1]}`)
 
 /** The training span in years and months, or in days below a month. Months
  *  ROUND rather than floor: 58 days read "1 Monat" next to a career strip
@@ -94,6 +98,8 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
   const {
     totals, months, progression, effort, rep_range: reps, fatigue,
     daypart, weekday, rest_gap: restGap, rest_habit: restHabit,
+    session_length: length, consistency, balance_drift: drift,
+    increment_ladder: ladder, record_drought: drought,
   } = payload
 
   const selRange: [number, number] | null = sel === null
@@ -168,10 +174,24 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
   const widest = topExercises[0]?.volume ?? 1
 
   const topShare = Math.max(...reps.buckets.map((b) => b.share), 0)
-  const peakGap = Math.max(...restGap.buckets.map((b) => b.avg_volume), 0)
+  // Only the drawn buckets, and the ceiling comes from them too: a bucket that
+  // is hidden for having too few workouts must not set the scale every visible
+  // bar is measured against.
+  const shownGaps = restGap.buckets.filter((b) => b.shown)
+  const peakGap = Math.max(...shownGaps.map((b) => b.avg_volume), 0)
   const bestPart = daypart.statable
     ? daypart.parts.reduce((a, b) => (b.volume >= a.volume ? b : a))
     : null
+  // The most PRODUCTIVE day, which is only worth naming when it is not also
+  // the most frequent one -- otherwise the sentence says the same thing twice.
+  const heaviestDay = weekday.statable
+    ? weekday.days.reduce((a, b) => (b.avg_volume >= a.avg_volume ? b : a))
+    : null
+  const topDrift = drift.groups[0] ?? null
+  const bottomDrift = drift.groups[drift.groups.length - 1] ?? null
+  const topRungs = ladder.exercises.filter((e) => e.notches > 0).slice(0, 5)
+  const widestRung = topRungs[0]?.notches ?? 1
+  const stalest = drought.exercises.slice(0, 4)
   const bestDay = weekday.statable
     ? weekday.days.reduce((a, b) => (b.share >= a.share ? b : a))
     : null
@@ -231,6 +251,15 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
           <span className="total__v">{perWeek}<small>/Wo.</small></span>
           <span className="label">Schnitt</span>
         </span>
+        {/* Regularity, which every other tile here is blind to: five tonnage
+            figures cannot tell a steady month from a heavy fortnight followed
+            by nothing. */}
+        {consistency.statable && (
+          <span className="total">
+            <span className="total__v">{consistency.current_streak}<small>Wo.</small></span>
+            <span className="label">Serie</span>
+          </span>
+        )}
       </div>
 
       {months.length > 0 && (
@@ -369,6 +398,16 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 <span className="key__dot key__dot--sq key__dot--current" />Läuft noch
               </span>
             </div>
+            {/* The strip is months of tonnage; this is the same span counted
+                in weeks that held a workout at all. A quiet line rather than
+                a figure of its own: it qualifies the strip above it. */}
+            {consistency.statable && (
+              <p className="label">
+                {`In ${consistency.weeks_trained} von ${consistency.weeks_total} Wochen trainiert`}
+                {consistency.longest_streak > consistency.current_streak
+                  && ` · längste Serie ${consistency.longest_streak} Wochen`}
+              </p>
+            )}
           </div>
         </section>
       )}
@@ -390,7 +429,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             )}
           </section>
 
-          <section style={{ marginTop: 'var(--sp-8)' }} aria-labelledby="effort-h">
+          <section aria-labelledby="effort-h">
             <div className="sec__head">
               <h2 className="label" id="effort-h">Wohin die Arbeit geht</h2>
               <span className="sec__sp" />
@@ -443,12 +482,55 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
               <p className="empty">Noch keine Sätze protokolliert.</p>
             )}
           </section>
+
+          {/* The split above is all-time, which is exactly why it cannot show
+              this: a muscle group neglected for a month still carries its
+              lifetime share. Shares on both sides, never tonnage -- a lighter
+              month would otherwise read as abandoning every group at once. */}
+          <section aria-labelledby="drift-h">
+            <div className="sec__head">
+              <h2 className="label" id="drift-h">Was sich zuletzt verschoben hat</h2>
+              <span className="sec__sp" />
+              <span className="label">{`Letzte ${drift.window_days} Tage gegen davor`}</span>
+            </div>
+            {drift.statable && topDrift !== null && bottomDrift !== null ? (
+              <>
+                {drift.groups.map((group) => (
+                  <div className="prog prog--plain" key={group.label ?? 'ohne'}>
+                    <span className="prog__name">{group.label ?? 'Ohne Gruppe'}</span>
+                    <span className="prog__axis">
+                      <span className="prog__bar prog__bar--flat"
+                        style={{
+                          inlineSize: `${roundTo((Math.abs(group.delta)
+                            / Math.max(Math.abs(topDrift.delta), Math.abs(bottomDrift.delta), 1)) * 100, 1)}%`,
+                        }} />
+                    </span>
+                    <span className="prog__pct"
+                      title={`${whole(group.earlier_share)} % → ${whole(group.recent_share)} %`}>
+                      {`${signed1(group.delta)} %`}
+                    </span>
+                  </div>
+                ))}
+                <p className="sec__note">
+                  {`Aus ${drift.recent_sessions} Workouts zuletzt gegen ${drift.earlier_sessions} davor.`}
+                </p>
+              </>
+            ) : (
+              <p className="empty">
+                Noch kein Davor zum Vergleichen — dafür braucht es Workouts vor
+                den letzten {drift.window_days} Tagen.
+              </p>
+            )}
+          </section>
         </div>
 
-        {/* Every zone that cannot answer says so. The silence rule is the
-            point: a question shown as open is information, a question quietly
-            dropped is not. */}
-        <section className="stat-col" aria-labelledby="read-h">
+        {/* The narrow column: prose answers first, then the two rankings that
+            are a name and a number. They sit here rather than beside the wide
+            figures because of what they ARE, not to balance the height -- a
+            list of "Bankdrücken · 5" needs no width, while the bar charts to
+            the left are unreadable without it. */}
+        <div className="stat-col">
+        <section aria-labelledby="read-h">
           <div className="sec__head"><h2 className="label" id="read-h">Wie du trainierst</h2></div>
 
           <div className="read">
@@ -511,11 +593,42 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 <p className="read__silent">
                   {bestDay !== null
                     && `${payload.weekday_names[bestDay.weekday]} ist mit ${whole(bestDay.share)} % der häufigste Tag. `}
+                  {/* Frequency and productivity are different questions, and
+                      the answer is only worth a sentence when they disagree. */}
+                  {heaviestDay !== null && bestDay !== null
+                    && heaviestDay.weekday !== bestDay.weekday
+                    && `Am meisten bewegst du ${payload.weekday_names[heaviestDay.weekday]}s, im Schnitt ${de(heaviestDay.avg_volume)} kg. `}
                   {weekday.statable && `Aus ${weekday.sample} Workouts.`}
                 </p>
               </>
             ) : (
               <p className="read__silent">Noch nicht genug Workouts, um ein Muster zu behaupten.</p>
+            )}
+          </div>
+
+          {/* The one question the page could never answer: the strip counts
+              months, the gap card counts days off, and nothing counted the
+              hour itself. Median, because the stamps are written by a human
+              pressing a button and the tail is made of forgetting. */}
+          <div className="read">
+            <p className="read__q">Wie lange dauert ein Workout?</p>
+            {length.statable ? (
+              <>
+                <p className="read__a">
+                  <em>{`${length.median_minutes} Minuten`}</em>
+                  {length.volume_per_minute !== null
+                    && <>, rund <em>{`${de(length.volume_per_minute)} kg`}</em> pro Minute</>}
+                </p>
+                <p className="read__silent">
+                  {`Aus ${length.sample} gestoppten Workouts.`}
+                  {length.untimed > 0
+                    && ` ${length.untimed} weitere liefen ohne Schlusszeit und zählen hier nicht mit.`}
+                </p>
+              </>
+            ) : (
+              <p className="read__silent">
+                Noch zu wenige Workouts mit Start- und Schlusszeit.
+              </p>
             )}
           </div>
 
@@ -529,7 +642,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             {restGap.statable ? (
               <>
                 <div className="read__bars" role="list">
-                  {restGap.buckets.map((bucket) => (
+                  {shownGaps.map((bucket) => (
                     <span className="rb" role="listitem" key={bucket.label}
                       aria-label={`${bucket.label} Tage seit dem letzten Workout: Ø ${de(bucket.avg_volume)} kg`}>
                       <span className="rb__track">
@@ -540,7 +653,11 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                     </span>
                   ))}
                 </div>
-                <p className="read__silent">Ø Volumen eines Workouts, nach Tagen seit dem letzten.</p>
+                <p className="read__silent">
+                  {'Ø Volumen eines Workouts, nach Tagen seit dem letzten.'}
+                  {restGap.thin.length > 0
+                    && ` Für ${joinAnd(restGap.thin.map((b) => b.label))} Tage fehlen noch Workouts.`}
+                </p>
               </>
             ) : (
               <p className="read__silent">
@@ -565,6 +682,65 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             </div>
           )}
         </section>
+
+        {/* Progress in the units the gym actually offers. A percentage is the
+            honest general answer; the next pin hole is the one you can act on,
+            and on an uneven stack the two are not the same fact. */}
+        {topRungs.length > 0 && (
+          <section aria-labelledby="ladder-h">
+            <div className="sec__head">
+              <h2 className="label" id="ladder-h">Stufen erklommen</h2>
+              <span className="sec__sp" />
+              <span className="label">{`${ladder.total_notches} insgesamt`}</span>
+            </div>
+            {topRungs.map((rung) => (
+              <div className="prog prog--plain prog--count" key={rung.exercise_id}>
+                <span className="prog__name">{rung.name}</span>
+                <span className="prog__axis">
+                  <span className="prog__bar prog__bar--flat"
+                    style={{ inlineSize: `${roundTo((rung.notches / widestRung) * 100, 1)}%` }} />
+                </span>
+                <span className="prog__pct"
+                  title={`${de(rung.from_weight)} → ${de(rung.to_weight)} kg`}>
+                  {`${rung.notches}×`}
+                </span>
+              </div>
+            ))}
+            <p className="sec__note">In Schritten dieser Geräte, nicht in Prozent.</p>
+          </section>
+        )}
+
+        {/* The other half of the progression ranking in the wide column: which
+            lift has gone longest without beating itself. Counted in sessions,
+            not days -- a lift trained twice a month has not stalled as hard as
+            one trained twice a week after the same four weeks. */}
+        {stalest.length > 0 && (
+          <section aria-labelledby="drought-h">
+            <div className="sec__head">
+              <h2 className="label" id="drought-h">Am längsten ohne Bestwert</h2>
+              <span className="sec__sp" />
+              <span className="label">Einheiten</span>
+            </div>
+            {stalest.map((row) => (
+              <div className="prog prog--plain prog--count" key={row.exercise_id}>
+                <span className="prog__name">{row.name}</span>
+                <span className="prog__axis">
+                  <span className="prog__bar prog__bar--flat"
+                    style={{
+                      inlineSize: `${roundTo((row.sessions_since / (stalest[0]!.sessions_since || 1)) * 100, 1)}%`,
+                    }} />
+                </span>
+                <span className="prog__pct"
+                  title={row.last_record_at === null
+                    ? 'Noch nie über die erste Einheit hinaus'
+                    : `Letzter Rekord: ${dmy(row.last_record_at)}`}>
+                  {`${row.sessions_since}`}
+                </span>
+              </div>
+            ))}
+          </section>
+        )}
+        </div>
       </div>
 
       {/* One row per exercise-day, carrying whichever bests it set. The recent

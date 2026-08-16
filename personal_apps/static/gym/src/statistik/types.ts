@@ -84,6 +84,8 @@ export interface WeekdayBucket {
   weekday: number
   sessions: number
   share: number
+  /** Per session, so the most-trained day cannot win by arithmetic. */
+  avg_volume: number
 }
 
 export interface Weekday {
@@ -96,10 +98,14 @@ export interface RestGapBucket {
   label: string
   sessions: number
   avg_volume: number
+  /** Enough workouts behind it to be drawn at all. */
+  shown: boolean
 }
 
 export interface RestGap {
   buckets: RestGapBucket[]
+  /** Populated but not yet drawable -- named in the caption, not dropped. */
+  thin: RestGapBucket[]
   statable: boolean
 }
 
@@ -114,6 +120,69 @@ export interface Effort {
   groups: EffortSlice[]
   exercises: EffortSlice[]
   total_volume: number
+}
+
+export interface SessionLength {
+  /** Timed sessions only. */
+  sample: number
+  /** Sessions with no usable finish stamp -- not zero-minute workouts. */
+  untimed: number
+  statable: boolean
+  median_minutes: number | null
+  volume_per_minute: number | null
+}
+
+export interface Consistency {
+  weeks_trained: number
+  weeks_total: number
+  share: number
+  current_streak: number
+  longest_streak: number
+  statable: boolean
+}
+
+export interface DriftGroup {
+  label: string | null
+  recent_share: number
+  earlier_share: number
+  delta: number
+}
+
+export interface BalanceDrift {
+  window_days: number
+  groups: DriftGroup[]
+  recent_sessions: number
+  earlier_sessions: number
+  statable: boolean
+}
+
+export interface LadderRung {
+  exercise_id: number
+  name: string
+  notches: number
+  from_weight: number
+  to_weight: number
+  sessions: number
+}
+
+export interface IncrementLadder {
+  exercises: LadderRung[]
+  total_notches: number
+  statable: boolean
+}
+
+export interface DroughtRow {
+  exercise_id: number
+  name: string
+  sessions: number
+  sessions_since: number
+  /** null when the lift has never beaten its own debut. */
+  last_record_at: string | null
+}
+
+export interface RecordDrought {
+  exercises: DroughtRow[]
+  statable: boolean
 }
 
 export interface RecordMove {
@@ -147,6 +216,11 @@ export interface StatistikPayload {
   daypart: Daypart
   weekday: Weekday
   rest_gap: RestGap
+  session_length: SessionLength
+  consistency: Consistency
+  balance_drift: BalanceDrift
+  increment_ladder: IncrementLadder
+  record_drought: RecordDrought
   effort: Effort
   /** [planned, actual] medians in seconds, or null when there is nothing to
    *  report -- so the section says so instead of a confident 0:00. */

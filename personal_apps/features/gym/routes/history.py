@@ -82,6 +82,7 @@ def _to_performed(session_exercise, completed_sets):
         position=session_exercise.position,
         session_id=session_exercise.session_id,
         started_at=session_exercise.session.started_at,
+        finished_at=session_exercise.session.finished_at,
         sets=completed_sets,
         # session is already joinedload()ed by load_performed(), so this costs
         # no extra query.

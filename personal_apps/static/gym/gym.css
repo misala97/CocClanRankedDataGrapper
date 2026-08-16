@@ -3550,8 +3550,12 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   padding-inline: 2px; margin-inline: -2px; border-radius: var(--r-inset);
 }
 
+/* Auto-flow rather than a hardcoded column count: the streak tile only exists
+   once there are enough weeks to claim one, so the strip legitimately holds
+   five figures or six. Pinned at repeat(5, 1fr) the sixth silently wrapped
+   under the first and read as a broken tile. */
 .totals {
-  display: grid; grid-template-columns: repeat(5, 1fr); margin-top: var(--sp-6);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; margin-top: var(--sp-6);
   background: var(--chassis); border-radius: var(--r-panel); padding: var(--sp-5) 0;
 }
 .total { display: flex; flex-direction: column; align-items: center; gap: 3px; min-inline-size: 0; }
@@ -3623,7 +3627,20 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 
 /* ---- two columns: the long readings left, the short answers right ---- */
 .stat-cols { display: grid; grid-template-columns: 2fr 1fr; gap: var(--sp-8); margin-top: var(--sp-8); }
-.stat-col { min-inline-size: 0; }
+/* A container, so the row grammar below can answer the COLUMN's width instead
+   of the viewport's. The narrow column is 361px at this page's 1180px cap
+   while the viewport is 1200 -- a viewport query cannot tell those apart, and
+   a .prog row squeezed into 361px has a 15rem name plus a 5rem value, leaving
+   its bar exactly nothing. */
+.stat-col { min-inline-size: 0; container-type: inline-size; }
+/* Rhythm rather than a uniform stack: rows inside a section stay tight (see
+   .prog's --sp-3), sections separate generously. Was four inline
+   marginTop:var(--sp-8) styles in the component, one per section added. */
+.stat-col > section + section { margin-block-start: var(--sp-10); }
+/* A quiet note under a section, the same voice .read__silent has inside a
+   reading card -- named for the section so a ranking does not have to borrow
+   the reading column's class to get it. */
+.sec__note { font-size: var(--t-meta); color: var(--unlit); margin-top: var(--sp-2); line-height: 1.5; }
 
 /* progression: sparkline, diverging bar, the numbers */
 .prog { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; }
@@ -3659,6 +3676,30 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .prog__meta { flex: none; inline-size: 8rem; text-align: end; font-size: var(--t-micro); color: var(--unlit); }
 .prog--plain .prog__name { inline-size: 15rem; font-weight: var(--w-med); color: var(--dim); }
 
+/* The row, once its column is too narrow to hold name + bar + value on one
+   line: the name takes the full width and the bar drops beneath it, keeping
+   its whole length instead of being crushed to a stub between two fixed
+   columns. Keyed on the container, so it fires for the narrow column of the
+   desktop layout AND for the single column a phone collapses to -- one rule
+   for the same problem, which used to be a viewport media query that could
+   only see the second case. */
+@container (max-width: 560px) {
+  .prog { flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
+  .prog__name { inline-size: 100%; }
+  .prog__spark { display: none; }
+  .prog__axis { order: 3; flex-basis: 100%; }
+  .prog__meta { inline-size: auto; flex: 1; text-align: start; }
+  /* A wrapped bar spans the whole column, and nine of them stacked read as a
+     louder chart than the wide ones they sit beside. Dropped here only where
+     the value is a single digit -- "3x" and "5" ARE the magnitude, stated
+     exactly, so the bar was restating them. Tonnage rows keep theirs: 27 t
+     against 24 t is a comparison the numbers alone make you do arithmetic
+     for. */
+  .prog--count .prog__axis { display: none; }
+  .prog--count { padding-block: var(--sp-2); }
+  .prog--count .prog__name { inline-size: auto; flex: 1; }
+}
+
 /* effort: one stacked bar, then the exercises that fill it */
 .stack-bar { display: flex; block-size: 44px; border-radius: 10px; overflow: hidden; gap: 2px; margin-top: var(--sp-1); }
 .stack-bar span { display: block; }
@@ -3680,8 +3721,14 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   letter-spacing: -0.025em; margin-top: 4px; line-height: 1.2;
 }
 .read__a em { font-style: normal; color: var(--done-ink); }
-.read__bars { display: flex; gap: 5px; margin-top: var(--sp-3); }
-.rb { flex: 1; min-inline-size: 0; }
+.read__bars { display: flex; gap: 5px; margin-top: var(--sp-3); justify-content: start; }
+/* Capped, not purely fluid. The gap chart draws only the buckets with enough
+   workouts behind them, so it can come back with two -- and two `flex: 1` bars
+   are 178px slabs that read as a different, louder chart than the four-bar one
+   directly above them. The cap is the width a full row already gives a bar
+   (87px measured at the reading column's 361px), so fewer bars now look like
+   the same chart with bars missing, which is what they are. */
+.rb { flex: 1; min-inline-size: 0; max-inline-size: 88px; }
 /* --edge, not --raised: the track is the 100% reference the fills are read
    against, and --raised sat at 1.05:1 on the panel -- invisible, so a
    short bar had nothing to be short against. */
@@ -3743,10 +3790,13 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   .lede { flex-direction: column; align-items: flex-start; gap: var(--sp-4); }
   .lede__h { font-size: 1.75rem; max-inline-size: none; }
   .lede__aside { text-align: start; padding-bottom: 0; }
-  .totals { grid-template-columns: 1fr 1fr; row-gap: var(--sp-4); }
+  .totals { grid-auto-flow: row; grid-template-columns: 1fr 1fr; row-gap: var(--sp-4); }
   .total + .total { border-inline-start: 0; }
   .total:nth-child(2n) { border-inline-start: 1px solid var(--edge); }
-  .total:last-child { grid-column: 1 / -1; }
+  /* Only an ODD tile count leaves a lonely last one to span the full width.
+     With the streak tile present there are six, they pair off evenly, and
+     spanning the last would strand the fifth beside an empty half. */
+  .total:last-child:nth-child(odd) { grid-column: 1 / -1; }
   /* The strip keeps a minimum width and scrolls inside its own panel rather
      than compressing 120 months into 358px. It has to SAY it scrolls, though:
      46% of it sits off-screen at 390 with no edge, so a reader who never drags
@@ -3761,11 +3811,8 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   }
   .months, .months__axis { min-inline-size: 620px; }
   .stat-cols { grid-template-columns: 1fr; gap: var(--sp-8); }
-  .prog { flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
-  .prog__name { inline-size: 100%; }
-  .prog__spark { display: none; }
-  .prog__axis { order: 3; flex-basis: 100%; }
-  .prog__meta { inline-size: auto; flex: 1; text-align: start; }
+  /* .prog's own narrow treatment is a container query now (see above): the
+     single column here is ~358px, so it fires on its own. */
   .rec { flex-wrap: wrap; }
   .rec__name { flex: 1; }
   .rec__kind { margin-inline-end: 0; }

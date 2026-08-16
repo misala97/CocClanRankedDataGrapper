@@ -786,6 +786,8 @@ class WeekdayBucket(_Model):
     weekday: int
     sessions: int
     share: float
+    #: Per session, so the most-trained day does not win by arithmetic.
+    avg_volume: float
 
 
 class Weekday(_Model):
@@ -798,10 +800,76 @@ class RestGapBucket(_Model):
     label: str
     sessions: int
     avg_volume: float
+    shown: bool
 
 
 class RestGap(_Model):
     buckets: list[RestGapBucket]
+    thin: list[RestGapBucket]
+    statable: bool
+
+
+class SessionLength(_Model):
+    #: Timed sessions only. `untimed` counts the rest -- missing finish stamps
+    #: and workouts left running -- so the page can say what the median is
+    #: built from instead of implying it covers everything.
+    sample: int
+    untimed: int
+    statable: bool
+    median_minutes: int | None
+    volume_per_minute: float | None
+
+
+class Consistency(_Model):
+    weeks_trained: int
+    weeks_total: int
+    share: float
+    current_streak: int
+    longest_streak: int
+    statable: bool
+
+
+class DriftGroup(_Model):
+    label: str | None
+    recent_share: float
+    earlier_share: float
+    delta: float
+
+
+class BalanceDrift(_Model):
+    window_days: int
+    groups: list[DriftGroup]
+    recent_sessions: int
+    earlier_sessions: int
+    statable: bool
+
+
+class LadderRung(_Model):
+    exercise_id: int
+    name: str
+    notches: int
+    from_weight: float
+    to_weight: float
+    sessions: int
+
+
+class IncrementLadder(_Model):
+    exercises: list[LadderRung]
+    total_notches: int
+    statable: bool
+
+
+class DroughtRow(_Model):
+    exercise_id: int
+    name: str
+    sessions: int
+    sessions_since: int
+    #: None when the lift has never beaten its own debut.
+    last_record_at: datetime | None
+
+
+class RecordDrought(_Model):
+    exercises: list[DroughtRow]
     statable: bool
 
 
@@ -853,6 +921,11 @@ class StatistikPayload(_Model):
     daypart: Daypart
     weekday: Weekday
     rest_gap: RestGap
+    session_length: SessionLength
+    consistency: Consistency
+    balance_drift: BalanceDrift
+    increment_ladder: IncrementLadder
+    record_drought: RecordDrought
     effort: Effort
     #: (planned, actual) medians in seconds, or None when there is nothing to
     #: report -- so the page says "noch keine Daten" instead of a confident 0.

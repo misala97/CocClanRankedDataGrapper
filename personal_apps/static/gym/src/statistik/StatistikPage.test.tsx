@@ -52,22 +52,58 @@ const base: StatistikPayload = {
   },
   weekday: {
     days: [
-      { weekday: 0, sessions: 3, share: 11.5 },
-      { weekday: 1, sessions: 8, share: 30.8 },
-      { weekday: 2, sessions: 3, share: 11.5 },
-      { weekday: 3, sessions: 3, share: 11.5 },
-      { weekday: 4, sessions: 3, share: 11.5 },
-      { weekday: 5, sessions: 3, share: 11.5 },
-      { weekday: 6, sessions: 3, share: 11.7 },
+      { weekday: 0, sessions: 3, share: 11.5, avg_volume: 7000 },
+      { weekday: 1, sessions: 8, share: 30.8, avg_volume: 7500 },
+      { weekday: 2, sessions: 3, share: 11.5, avg_volume: 7000 },
+      { weekday: 3, sessions: 3, share: 11.5, avg_volume: 9100.4 },
+      { weekday: 4, sessions: 3, share: 11.5, avg_volume: 7000 },
+      { weekday: 5, sessions: 3, share: 11.5, avg_volume: 7000 },
+      { weekday: 6, sessions: 3, share: 11.7, avg_volume: 7000 },
     ],
     sample: 26, statable: true,
   },
+  session_length: {
+    sample: 21, untimed: 8, statable: true,
+    median_minutes: 90, volume_per_minute: 99.2,
+  },
+  consistency: {
+    weeks_trained: 9, weeks_total: 10, share: 90,
+    current_streak: 4, longest_streak: 6, statable: true,
+  },
+  balance_drift: {
+    window_days: 28,
+    groups: [
+      { label: 'Brust', recent_share: 24.4, earlier_share: 20.3, delta: 4.1 },
+      { label: 'Schultern', recent_share: 19.1, earlier_share: 17.8, delta: 1.3 },
+      { label: 'Rücken', recent_share: 24.8, earlier_share: 29.4, delta: -4.6 },
+    ],
+    recent_sessions: 12, earlier_sessions: 17, statable: true,
+  },
+  increment_ladder: {
+    exercises: [
+      { exercise_id: 7, name: 'Hammer Curl', notches: 3, from_weight: 16, to_weight: 22, sessions: 13 },
+      { exercise_id: 2, name: 'Seated Row', notches: 2, from_weight: 53, to_weight: 77, sessions: 13 },
+      { exercise_id: 9, name: 'Bench Press', notches: 0, from_weight: 60, to_weight: 60, sessions: 13 },
+    ],
+    total_notches: 5, statable: true,
+  },
+  record_drought: {
+    exercises: [
+      { exercise_id: 9, name: 'Bench Press', sessions: 13, sessions_since: 5, last_record_at: '2026-07-17T08:50:38' },
+      { exercise_id: 6, name: 'Biceps Curl', sessions: 13, sessions_since: 2, last_record_at: null },
+    ],
+    statable: true,
+  },
   rest_gap: {
     buckets: [
-      { label: '0-1', sessions: 15, avg_volume: 7302.1 },
-      { label: '2', sessions: 6, avg_volume: 8000 },
-      { label: '3', sessions: 3, avg_volume: 6000 },
-      { label: '4+', sessions: 2, avg_volume: 4000 },
+      { label: '0-1', sessions: 15, avg_volume: 7302.1, shown: true },
+      { label: '2', sessions: 6, avg_volume: 8000, shown: true },
+      { label: '3', sessions: 3, avg_volume: 6000, shown: false },
+      { label: '4+', sessions: 2, avg_volume: 4000, shown: false },
+    ],
+    thin: [
+      { label: '3', sessions: 3, avg_volume: 6000, shown: false },
+      { label: '4+', sessions: 2, avg_volume: 4000, shown: false },
     ],
     statable: true,
   },
@@ -102,6 +138,11 @@ const nothing: Partial<StatistikPayload> = {
   daypart: { ...base.daypart, statable: false },
   weekday: { ...base.weekday, statable: false },
   rest_gap: { ...base.rest_gap, statable: false },
+  session_length: { sample: 0, untimed: 3, statable: false, median_minutes: null, volume_per_minute: null },
+  consistency: { ...base.consistency, statable: false },
+  balance_drift: { ...base.balance_drift, groups: [], statable: false },
+  increment_ladder: { exercises: [], total_notches: 0, statable: false },
+  record_drought: { exercises: [], statable: false },
   rest_habit: null,
 }
 
@@ -155,6 +196,25 @@ describe('StatistikPage', () => {
       expect(bars[0]).toHaveAccessibleName('Juni 2026: 51.247 kg, Rekordmonat')
       expect(bars[1]).toHaveAccessibleName('Juli 2026: 102.494 kg, Deload')
       expect(bars[2]).toHaveAccessibleName('August 2026: 0 kg, kein Workout')
+    })
+
+    it('counts the weeks that held a workout, which tonnage cannot show', () => {
+      mount()
+      expect(screen.getByText(/In 9 von 10 Wochen/))
+        .toHaveTextContent('In 9 von 10 Wochen trainiert · längste Serie 6 Wochen')
+    })
+
+    it('carries the running streak into the totals strip', () => {
+      const { container } = mount()
+      const tiles = [...container.querySelectorAll('.total')].map((n) => n.textContent)
+      expect(tiles[tiles.length - 1]).toContain('Serie')
+      expect(tiles[tiles.length - 1]).toContain('4')
+    })
+
+    it('says nothing about weeks before there are enough of them', () => {
+      mount(nothing)
+      expect(screen.queryByText(/Wochen trainiert/)).not.toBeInTheDocument()
+      expect(screen.queryByText('Serie')).not.toBeInTheDocument()
     })
 
     it('draws a gap as a break rather than as a zero', () => {
@@ -292,8 +352,12 @@ describe('StatistikPage', () => {
     })
 
     it('ranks the top exercises against the biggest of them', () => {
+      // Scoped to this section: the ladder, drought and drift lists reuse
+      // .prog--plain, so an unscoped query reads whichever section happens to
+      // come first in the DOM.
       const { container } = mount()
-      const bars = container.querySelectorAll('.prog--plain .prog__bar')
+      const bars = container.querySelector('[aria-labelledby="effort-h"]')!
+        .querySelectorAll('.prog--plain .prog__bar')
       expect(bars[0]).toHaveStyle({ inlineSize: '100%' })
       expect(bars[1]).toHaveStyle({ inlineSize: '50.5%' })
       expect(screen.getByText('24 t')).toBeInTheDocument()
@@ -302,6 +366,66 @@ describe('StatistikPage', () => {
     it('says so with nothing logged', () => {
       mount({ effort: { groups: [], exercises: [], total_volume: 0 } })
       expect(screen.getByText('Noch keine Sätze protokolliert.')).toBeInTheDocument()
+    })
+
+    it('shows what the all-time split cannot: what shifted lately', () => {
+      const { container } = mount()
+      const rows = container.querySelector('[aria-labelledby="drift-h"]')!
+      expect(rows).toHaveTextContent('Brust')
+      expect(rows).toHaveTextContent('+4,1 %')
+      expect(rows).toHaveTextContent('-4,6 %')
+      expect(rows).toHaveTextContent('Aus 12 Workouts zuletzt gegen 17 davor.')
+    })
+
+    it('scales drift bars by size, so a fall is as long as an equal rise', () => {
+      const { container } = mount()
+      const bars = container.querySelector('[aria-labelledby="drift-h"]')!
+        .querySelectorAll('.prog__bar')
+      expect(bars[0]).toHaveStyle({ inlineSize: '89.1%' })   // +4.1 against 4.6
+      expect(bars[2]).toHaveStyle({ inlineSize: '100%' })    // -4.6, the biggest move
+    })
+
+    it('says there is no before to compare against, rather than drifting by zero', () => {
+      mount(nothing)
+      expect(screen.getByText(/Noch kein Davor/)).toBeInTheDocument()
+    })
+  })
+
+  describe('the two halves of progress', () => {
+    it('counts progress in this equipment\'s own steps', () => {
+      const { container } = mount()
+      const section = container.querySelector('[aria-labelledby="ladder-h"]')!
+      expect(section).toHaveTextContent('5 insgesamt')
+      expect(section).toHaveTextContent('Hammer Curl')
+      expect(section).toHaveTextContent('3×')
+    })
+
+    it('leaves out the lifts that never climbed a step', () => {
+      const { container } = mount()
+      const section = container.querySelector('[aria-labelledby="ladder-h"]')!
+      expect(section).not.toHaveTextContent('Bench Press')
+    })
+
+    it('ranks the stalest lift first and dates its last record', () => {
+      const { container } = mount()
+      const section = container.querySelector('[aria-labelledby="drought-h"]')!
+      const names = [...section.querySelectorAll('.prog__name')].map((n) => n.textContent)
+      expect(names).toEqual(['Bench Press', 'Biceps Curl'])
+      expect(section.querySelectorAll('.prog__pct')[0])
+        .toHaveAttribute('title', 'Letzter Rekord: 17.07.2026')
+    })
+
+    it('says plainly when a lift never beat its debut', () => {
+      const { container } = mount()
+      const section = container.querySelector('[aria-labelledby="drought-h"]')!
+      expect(section.querySelectorAll('.prog__pct')[1])
+        .toHaveAttribute('title', 'Noch nie über die erste Einheit hinaus')
+    })
+
+    it('drops both sections rather than showing empty rankings', () => {
+      const { container } = mount(nothing)
+      expect(container.querySelector('[aria-labelledby="ladder-h"]')).toBeNull()
+      expect(container.querySelector('[aria-labelledby="drought-h"]')).toBeNull()
     })
   })
 
@@ -332,7 +456,8 @@ describe('StatistikPage', () => {
       mount()
       expect(screen.getByText(/Abends/)).toHaveTextContent('Abends, am liebsten Dienstags')
       expect(screen.getByText(/häufigste Tag/))
-        .toHaveTextContent('Dienstag ist mit 31 % der häufigste Tag. Aus 26 Workouts.')
+        .toHaveTextContent('Dienstag ist mit 31 % der häufigste Tag.')
+      expect(screen.getByText(/häufigste Tag/)).toHaveTextContent('Aus 26 Workouts.')
     })
 
     it('leaves every unanswerable question open rather than guessing', () => {
@@ -348,13 +473,86 @@ describe('StatistikPage', () => {
       expect(screen.getByText('Wann trainierst du?')).toBeInTheDocument()
     })
 
+    it('draws only the gap buckets that have enough workouts behind them', () => {
+      mount()
+      const bars = screen.getAllByRole('listitem').filter(
+        (n) => n.getAttribute('aria-label')?.includes('seit dem letzten Workout'),
+      )
+      expect(bars.map((n) => n.textContent)).toEqual(['0-1 T.', '2 T.'])
+    })
+
+    it('names the gaps that are still short instead of dropping them silently', () => {
+      mount()
+      expect(screen.getByText(/Ø Volumen eines Workouts/))
+        .toHaveTextContent('Für 3 und 4+ Tage fehlen noch Workouts.')
+    })
+
+    it('says nothing about missing gaps when every bucket is drawn', () => {
+      mount({
+        rest_gap: {
+          statable: true, thin: [],
+          buckets: base.rest_gap.buckets.map((b) => ({ ...b, sessions: 9, shown: true })),
+        },
+      })
+      expect(screen.getByText(/Ø Volumen eines Workouts/))
+        .not.toHaveTextContent('fehlen noch')
+    })
+
+    it('scales the gap bars against the tallest DRAWN bucket', () => {
+      // A hidden bucket must not set the ceiling: it would flatten every bar
+      // that is actually on screen against a bar that is not.
+      const { container } = mount({
+        rest_gap: {
+          ...base.rest_gap,
+          buckets: [
+            { label: '0-1', sessions: 15, avg_volume: 4000, shown: true },
+            { label: '2', sessions: 6, avg_volume: 8000, shown: true },
+            { label: '3', sessions: 3, avg_volume: 20000, shown: false },
+          ],
+          thin: [{ label: '3', sessions: 3, avg_volume: 20000, shown: false }],
+        },
+      })
+      const bars = [...container.querySelectorAll('.read__bars')].at(-1)!
+      const fills = [...bars.querySelectorAll<HTMLElement>('.rb__fill')]
+      expect(fills).toHaveLength(2)
+      expect(fills[0]!.style.blockSize).toBe('50%')
+      expect(fills[1]!.style.blockSize).toBe('100%')
+    })
+
+    it('states how long a workout takes and how dense it is', () => {
+      mount()
+      expect(screen.getByText('Wie lange dauert ein Workout?').parentElement)
+        .toHaveTextContent('90 Minuten, rund 99 kg pro Minute')
+    })
+
+    it('says what the median is built from, and what it left out', () => {
+      // The eight untimed sessions are not zero-minute workouts. Saying so is
+      // what stops the median reading as if it covered the whole history.
+      mount()
+      expect(screen.getByText(/gestoppten Workouts/))
+        .toHaveTextContent('Aus 21 gestoppten Workouts. 8 weitere liefen ohne Schlusszeit und zählen hier nicht mit.')
+    })
+
+    it('names the most productive day when it is not the most frequent one', () => {
+      mount()
+      expect(screen.getByText(/häufigste Tag/))
+        .toHaveTextContent('Am meisten bewegst du Donnerstags, im Schnitt 9.100 kg.')
+    })
+
+    it('stays quiet about the best day when it is already the favourite', () => {
+      const days = base.weekday.days.map((d) => (
+        d.weekday === 1 ? { ...d, avg_volume: 99999 } : d))
+      mount({ weekday: { ...base.weekday, days } })
+      expect(screen.getByText(/häufigste Tag/)).not.toHaveTextContent('Am meisten bewegst du')
+    })
+
     it('drops the rest question entirely without timestamps', () => {
       // The whole block including its wrapping div: `.read + .read` paints a
       // rule and a gap from the div's mere presence, so an empty one still
       // looked like a broken section.
       const { container } = mount({ rest_habit: null })
       expect(screen.queryByText(/Wie lange pausierst du/)).not.toBeInTheDocument()
-      expect(container.querySelectorAll('.read')).toHaveLength(4)
+      expect(container.querySelectorAll('.read')).toHaveLength(5)
     })
 
     it('states planned against actual rest as mm:ss', () => {

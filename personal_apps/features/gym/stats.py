@@ -151,6 +151,13 @@ class PerformedExercise:
     # The machine's real stops, when they are uneven enough to be worth
     # recording. None on everything that steps evenly -- see snap_to_stack.
     stack_kg: Optional[Tuple] = None
+    # When the session this row belongs to was finished, or None while it is
+    # still running -- and None on every session logged before the app started
+    # writing the stamp at all, which is why anything reading it must treat a
+    # missing value as "not timed" rather than as a zero-length workout.
+    # Carried per row for the same reason started_at is: this module never
+    # touches the ORM, and every row of one session repeats the session's value.
+    finished_at: Optional[dt.datetime] = None
 
 
 def epley_1rm(weight, reps):

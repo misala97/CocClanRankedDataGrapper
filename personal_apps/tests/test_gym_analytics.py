@@ -6,13 +6,18 @@ from features.gym import analytics, stats
 
 
 def perf(sets, started_at=None, session_id=1, exercise_id=1, name='Bankdruecken',
-         muscle_group='Brust', is_unilateral=False, position=1, is_deload=False):
-    """Build one PerformedExercise. `sets` is [(weight, reps), ...]."""
+         muscle_group='Brust', is_unilateral=False, position=1, is_deload=False,
+         minutes=None, weight_increment=None, stack_kg=None):
+    """Build one PerformedExercise. `sets` is [(weight, reps), ...]. `minutes`
+    is how long the session ran; None leaves it untimed, like every session
+    logged before the app wrote finish stamps."""
+    started = started_at or dt.datetime(2026, 6, 1, 18, 0)
     return stats.PerformedExercise(
         exercise_id=exercise_id, name=name, muscle_group=muscle_group,
         is_unilateral=is_unilateral, position=position, session_id=session_id,
-        started_at=started_at or dt.datetime(2026, 6, 1, 18, 0),
-        sets=tuple(sets), is_deload=is_deload,
+        started_at=started, sets=tuple(sets), is_deload=is_deload,
+        weight_increment=weight_increment, stack_kg=stack_kg,
+        finished_at=None if minutes is None else started + dt.timedelta(minutes=minutes),
     )
 
 
@@ -464,7 +469,255 @@ def test_rest_gap_effect_is_not_statable_on_tiny_buckets():
 def test_rest_gap_effect_on_no_history_is_empty_not_broken():
     result = analytics.rest_gap_effect([])
     assert result['statable'] is False
+    assert len(result['buckets']) == len(analytics.GAP_BUCKETS)
     assert all(b['sessions'] == 0 for b in result['buckets'])
+    assert all(b['shown'] is False for b in result['buckets'])
+    assert result['thin'] == []
+
+
+def gap_rows(gaps):
+    """One session per gap, plus the first session -- which has no gap and is
+    therefore not counted by any bucket."""
+    days, total = [0], 0
+    for gap in gaps:
+        total += gap
+        days.append(total)
+    return [at(9, days=d, session_id=i) for i, d in enumerate(days)]
+
+
+def test_rest_gap_effect_shows_only_the_buckets_that_reach_the_threshold():
+    result = analytics.rest_gap_effect(gap_rows([1] * 5 + [2] * 5 + [3]))
+    shown = {b['label']: b['shown'] for b in result['buckets']}
+    assert shown == {'0-1': True, '2': True, '3': False, '4+': False}
+
+
+def test_rest_gap_effect_is_statable_when_two_buckets_reach_it_despite_a_thin_one():
+    """The whole point: a bucket you have barely trained must not silence the
+    two you have. Before this, one 3-day gap among fifteen sessions killed the
+    card outright."""
+    result = analytics.rest_gap_effect(gap_rows([1] * 5 + [2] * 5 + [3]))
+    assert result['statable'] is True
+
+
+def test_rest_gap_effect_needs_two_shown_buckets_not_just_one():
+    """One bar is a number, not a relationship."""
+    result = analytics.rest_gap_effect(gap_rows([1] * 5 + [3]))
+    assert result['statable'] is False
+
+
+def test_rest_gap_effect_names_thin_buckets_but_not_empty_ones():
+    """The caption tells you WHICH gap is still short, so a missing bar reads
+    as 'not yet' instead of as a bar that was never designed."""
+    result = analytics.rest_gap_effect(gap_rows([1] * 5 + [2] * 5 + [3]))
+    assert [b['label'] for b in result['thin']] == ['3']
+    assert [b['sessions'] for b in result['thin']] == [1]
+
+
+def timed(minutes, day_offset, session_id, sets=((100.0, 10),)):
+    return perf(list(sets), started_at=day(day_offset), session_id=session_id, minutes=minutes)
+
+
+def test_session_length_reports_the_median_workout():
+    rows = [timed(m, i, i) for i, m in enumerate([60, 80, 100, 120, 140])]
+    result = analytics.session_length(rows)
+    assert result['median_minutes'] == 100
+    assert result['sample'] == 5
+
+
+def test_session_length_ignores_sessions_that_were_never_stamped():
+    """Eight of this log's first sessions predate finish stamps entirely. They
+    are not zero-minute workouts, and averaging them in would halve the
+    median."""
+    rows = [timed(90, i, i) for i in range(5)] + [
+        perf([(100.0, 10)], started_at=day(9), session_id=9),
+        perf([(100.0, 10)], started_at=day(10), session_id=10),
+    ]
+    result = analytics.session_length(rows)
+    assert result['median_minutes'] == 90
+    assert result['sample'] == 5
+    assert result['untimed'] == 2
+
+
+def test_session_length_drops_a_workout_left_running_overnight():
+    """A session finished the next morning measures the forgetting, not the
+    training."""
+    rows = [timed(90, i, i) for i in range(5)] + [timed(700, 9, 9)]
+    result = analytics.session_length(rows)
+    assert result['sample'] == 5
+    assert result['untimed'] == 1
+
+
+def test_session_length_reports_volume_per_minute():
+    # 100 kg x 10 reps = 1000 kg in 50 minutes
+    rows = [timed(50, i, i, sets=((100.0, 10),)) for i in range(5)]
+    assert analytics.session_length(rows)['volume_per_minute'] == 20.0
+
+
+def test_session_length_is_not_statable_on_a_handful_of_stamps():
+    rows = [timed(90, i, i) for i in range(analytics.MIN_TIMED_SESSIONS - 1)]
+    assert analytics.session_length(rows)['statable'] is False
+
+
+def test_session_length_without_a_single_stamp_is_empty_not_broken():
+    result = analytics.session_length([perf([(100.0, 10)])])
+    assert result['statable'] is False
+    assert result['median_minutes'] is None
+    assert result['volume_per_minute'] is None
+
+
+def week(n, weekday=0):
+    """Monday of the n-th week after the first session's week."""
+    base = dt.datetime(2026, 6, 1, 18, 0)          # a Monday
+    return base + dt.timedelta(weeks=n, days=weekday)
+
+
+def test_consistency_counts_the_weeks_that_held_a_workout():
+    rows = [perf([(100.0, 10)], started_at=week(n), session_id=n) for n in (0, 1, 3)]
+    result = analytics.consistency(rows, week(3, 6))
+    assert result['weeks_trained'] == 3
+    assert result['weeks_total'] == 4
+    assert result['share'] == 75.0
+
+
+def test_consistency_reports_the_current_and_the_longest_streak():
+    # weeks 0,1,2 trained, week 3 missed, weeks 4,5 trained
+    rows = [perf([(100.0, 10)], started_at=week(n), session_id=n) for n in (0, 1, 2, 4, 5)]
+    result = analytics.consistency(rows, week(5, 6))
+    assert result['longest_streak'] == 3
+    assert result['current_streak'] == 2
+
+
+def test_consistency_keeps_the_streak_alive_during_an_unfinished_week():
+    """Monday is not a broken streak. The current week has not had its chance
+    yet, so it only ever extends a streak, never ends one."""
+    rows = [perf([(100.0, 10)], started_at=week(n), session_id=n) for n in (0, 1, 2)]
+    result = analytics.consistency(rows, week(3, 0))
+    assert result['current_streak'] == 3
+
+
+def test_consistency_breaks_the_streak_once_a_whole_week_was_missed():
+    rows = [perf([(100.0, 10)], started_at=week(n), session_id=n) for n in (0, 1, 2)]
+    result = analytics.consistency(rows, week(4, 3))
+    assert result['current_streak'] == 0
+    assert result['longest_streak'] == 3
+
+
+def test_consistency_on_no_history_is_empty_not_broken():
+    result = analytics.consistency([], NOW)
+    assert result['statable'] is False
+    assert result['weeks_trained'] == 0
+    assert result['current_streak'] == 0
+
+
+def test_weekday_distribution_reports_volume_per_day_not_only_frequency():
+    """The card names the most FREQUENT day; whether it is also the most
+    PRODUCTIVE one is a different question the same rows can answer."""
+    rows = [
+        perf([(100.0, 10)], started_at=day(0), session_id=1),   # Monday, 1000
+        perf([(100.0, 10)], started_at=day(7), session_id=2),   # Monday, 1000
+        perf([(100.0, 20)], started_at=day(1), session_id=3),   # Tuesday, 2000
+    ]
+    days = {d['weekday']: d for d in analytics.weekday_distribution(rows)['days']}
+    assert days[0]['avg_volume'] == 1000.0
+    assert days[1]['avg_volume'] == 2000.0
+    assert days[2]['avg_volume'] == 0.0
+
+
+def test_balance_drift_compares_the_recent_window_against_everything_before():
+    old = [perf([(100.0, 10)], started_at=day(i), session_id=i, muscle_group='Brust')
+           for i in range(4)]
+    recent = [perf([(100.0, 10)], started_at=day(40 + i), session_id=40 + i,
+                   muscle_group='Ruecken', exercise_id=2, name='Rudern')
+              for i in range(4)]
+    result = analytics.balance_drift(old + recent, day(44))
+    groups = {g['label']: g for g in result['groups']}
+    assert groups['Ruecken']['recent_share'] == 100.0
+    assert groups['Ruecken']['earlier_share'] == 0.0
+    assert groups['Ruecken']['delta'] == 100.0
+    assert groups['Brust']['delta'] == -100.0
+
+
+def test_balance_drift_needs_both_periods_to_hold_workouts():
+    """A lifter three weeks in has no 'before' to have drifted from."""
+    rows = [perf([(100.0, 10)], started_at=day(i), session_id=i) for i in range(6)]
+    assert analytics.balance_drift(rows, day(6))['statable'] is False
+
+
+def test_balance_drift_on_no_history_is_empty_not_broken():
+    result = analytics.balance_drift([], NOW)
+    assert result['statable'] is False
+    assert result['groups'] == []
+
+
+def climb(weights, exercise_id=1, name='Bankdruecken', **kwargs):
+    """One session per weight, in order."""
+    return [perf([(weight, 10)], started_at=day(i * 2), session_id=100 + i,
+                 exercise_id=exercise_id, name=name, **kwargs)
+            for i, weight in enumerate(weights)]
+
+
+def test_increment_ladder_counts_the_steps_of_the_default_stack():
+    result = analytics.increment_ladder(climb([60.0, 65.0, 70.0]))
+    assert result['exercises'][0]['notches'] == 4          # 10 kg at 2.5 a step
+    assert result['exercises'][0]['from_weight'] == 60.0
+    assert result['exercises'][0]['to_weight'] == 70.0
+
+
+def test_increment_ladder_counts_the_steps_of_this_machine_not_a_generic_one():
+    result = analytics.increment_ladder(climb([60.0, 70.0], weight_increment=5.0))
+    assert result['exercises'][0]['notches'] == 2
+
+
+def test_increment_ladder_counts_real_stops_on_an_uneven_stack():
+    rows = climb([5.0, 21.0], stack_kg=(5.0, 13.0, 21.0, 30.0))
+    assert analytics.increment_ladder(rows)['exercises'][0]['notches'] == 2
+
+
+def test_increment_ladder_sums_every_exercise_into_one_figure():
+    rows = climb([60.0, 70.0]) + climb([20.0, 25.0], exercise_id=2, name='Curls')
+    result = analytics.increment_ladder(rows)
+    assert result['total_notches'] == 4 + 2
+    assert [e['name'] for e in result['exercises']] == ['Bankdruecken', 'Curls']
+
+
+def test_increment_ladder_ignores_a_deload_week_it_never_climbed():
+    rows = climb([60.0, 70.0]) + [perf([(42.0, 10)], started_at=day(9), session_id=9,
+                                       is_deload=True)]
+    assert analytics.increment_ladder(rows)['exercises'][0]['from_weight'] == 60.0
+
+
+def test_increment_ladder_on_no_history_is_empty_not_broken():
+    result = analytics.increment_ladder([])
+    assert result['statable'] is False
+    assert result['exercises'] == []
+
+
+def test_record_drought_counts_the_sessions_since_the_last_personal_best():
+    # PB in session 3 (65 kg), then three sessions that never beat it
+    rows = climb([60.0, 65.0, 60.0, 60.0, 60.0])
+    entry = analytics.record_drought(rows)['exercises'][0]
+    assert entry['sessions_since'] == 3
+    assert entry['sessions'] == 5
+
+
+def test_record_drought_counts_from_the_debut_when_nothing_ever_beat_it():
+    """The first session is not a record -- but it is the last time the number
+    moved, so the drought runs from there rather than being unanswerable."""
+    rows = climb([60.0, 60.0, 60.0])
+    entry = analytics.record_drought(rows)['exercises'][0]
+    assert entry['sessions_since'] == 2
+    assert entry['last_record_at'] is None
+
+
+def test_record_drought_ranks_the_stalest_lift_first():
+    rows = climb([60.0, 60.0, 60.0, 60.0]) + climb([20.0, 25.0], exercise_id=2, name='Curls')
+    names = [e['name'] for e in analytics.record_drought(rows)['exercises']]
+    assert names[0] == 'Bankdruecken'
+
+
+def test_record_drought_ignores_a_lift_with_too_little_history():
+    rows = climb([60.0, 65.0])
+    assert analytics.record_drought(rows)['exercises'] == []
 
 
 def test_effort_distribution_splits_tonnage_by_muscle_group():
