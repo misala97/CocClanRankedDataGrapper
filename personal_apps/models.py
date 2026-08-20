@@ -616,21 +616,56 @@ class RadarBucket(db.Model):
     sentiment_mean            = db.Column(db.Float, nullable=True)
     sentiment_stdev           = db.Column(db.Float, nullable=True)
 
-    count_reddit              = db.Column(db.Integer, nullable=False, default=0)
-    count_stocktwits          = db.Column(db.Integer, nullable=False, default=0)
+    # Bare mentions nothing corroborated. Stored, never scored (spec 4.2).
+    low_count                 = db.Column(db.Integer, nullable=False, default=0)
 
-    status_reddit             = db.Column(
-        db.Enum('ok', 'missing', 'truncated', name='radar_source_status'),
-        nullable=False, default='missing')
-    status_stocktwits         = db.Column(
-        db.Enum('ok', 'missing', 'truncated', name='radar_source_status'),
-        nullable=False, default='missing')
     sources_ok                = db.Column(db.SmallInteger, nullable=False, default=0)
-
     source_config_version     = db.Column(db.String(16), nullable=False)
 
+
+class RadarBucketSource(db.Model):
+    """(ticker x bucket x source). What makes the source set open.
+
+    Per-source data lived in columns named after specific sources until three
+    sources and a UI selector made that untenable: a user-chosen subset has to
+    be pooled at query time, and `count_stocktwits` cannot participate in that.
+
+    expected and variance sit here beside mention_z because pooling a subset
+    means summing components -- a weighted mean of z-scores is not a z-score
+    (spec 6.2). Both are written by Plan 2 and are NULL until then.
+
+    No foreign key to radar_buckets: InnoDB does not support foreign keys on
+    partitioned tables and radar_buckets is partitioned monthly. This table is
+    partitioned identically and joined on (ticker, bucket_start), which means
+    retention and partition maintenance must treat the pair as one unit --
+    nothing enforces that for us.
+    """
+    __tablename__ = 'radar_bucket_sources'
+    __table_args__ = (
+        db.Index('ix_radar_bucket_sources_start', 'bucket_start', 'source'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    ticker                    = db.Column(db.String(12, collation='utf8mb4_bin'),
+                                          primary_key=True)
+    bucket_start              = db.Column(MYSQL_DATETIME(fsp=6), primary_key=True)
+    source                    = db.Column(db.String(24), primary_key=True)
+
+    mention_count             = db.Column(db.Integer, nullable=False, default=0)
+    high_confidence_count     = db.Column(db.Integer, nullable=False, default=0)
+    low_count                 = db.Column(db.Integer, nullable=False, default=0)
+    distinct_authors          = db.Column(db.Integer, nullable=False, default=0)
+    distinct_text_ratio       = db.Column(db.Float, nullable=False, default=1.0)
+    engagement_weighted_count = db.Column(db.Float, nullable=False, default=0.0)
+    sentiment_mean            = db.Column(db.Float, nullable=True)
+    sentiment_stdev           = db.Column(db.Float, nullable=True)
+
+    status                    = db.Column(
+        db.Enum('ok', 'missing', 'truncated', name='radar_source_status'),
+        nullable=False, default='missing')
+
     # Written by Plan 2.
-    mention_z_reddit          = db.Column(db.Float, nullable=True)
-    mention_z_stocktwits      = db.Column(db.Float, nullable=True)
-    baseline_days_reddit      = db.Column(db.SmallInteger, nullable=True)
-    baseline_days_stocktwits  = db.Column(db.SmallInteger, nullable=True)
+    expected                  = db.Column(db.Float, nullable=True)
+    variance                  = db.Column(db.Float, nullable=True)
+    mention_z                 = db.Column(db.Float, nullable=True)
+    baseline_days             = db.Column(db.SmallInteger, nullable=True)
