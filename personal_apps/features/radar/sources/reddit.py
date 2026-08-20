@@ -95,7 +95,12 @@ def _to_raw_post(child):
         external_id=data.get('name') or '%s_%s' % (kind, data['id']),
         channel=data.get('subreddit') or '',
         author=_clean(data.get('author')),
-        created_utc=dt.datetime.utcfromtimestamp(float(data['created_utc'])),
+        # Naive UTC, matching every other datetime in this codebase.
+        # utcfromtimestamp() would be the direct spelling but is deprecated in
+        # 3.12 and slated for removal, so this converts explicitly and drops
+        # the tzinfo rather than relying on it.
+        created_utc=dt.datetime.fromtimestamp(
+            float(data['created_utc']), dt.timezone.utc).replace(tzinfo=None),
         title=_clean(data.get('title')) if kind == 't3' else None,
         body=body,
         score=int(data.get('score') or 0),
