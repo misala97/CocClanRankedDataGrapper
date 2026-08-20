@@ -98,3 +98,42 @@ def test_lowercase_prose_is_not_a_ticker():
 def test_empty_input_is_safe():
     assert extract_tickers(None, None, LOOKUP) == []
     assert extract_tickers('', '', LOOKUP) == []
+
+
+def test_a_symbol_does_not_promote_itself_via_its_own_company_name():
+    """AMC bare, in a universe where the company is 'AMC Entertainment'.
+
+    Promotion means "the company name appears nearby, so this is unambiguous".
+    A symbol matching its own name is circular and is evidence of nothing --
+    without this guard every ticker whose symbol sits inside its own company
+    name promotes itself on a bare mention, and the confidence tier stops
+    separating anything.
+    """
+    lookup = {'AMC': {'name': 'AMC Entertainment Holdings', 'exchange': 'NYSE'}}
+    assert extract_tickers(None, 'AMC ripping today', lookup) == [('AMC', 'medium')]
+
+
+def test_a_real_company_name_still_promotes():
+    """The guard must not break the case promotion exists for."""
+    lookup = {'AMC': {'name': 'AMC Entertainment Holdings', 'exchange': 'NYSE'}}
+    result = extract_tickers(None, 'AMC entertainment earnings tonight', lookup)
+    assert result == [('AMC', 'high')]
+
+
+def test_common_english_words_that_are_tickers_are_rejected():
+    """WSB writes titles in caps, so these appear as prose constantly."""
+    lookup = {
+        'BE': {'name': 'Bloom Energy Corp', 'exchange': 'NYSE'},
+        'OR': {'name': 'Osisko Gold Royalties', 'exchange': 'NYSE'},
+        'AI': {'name': 'C3.ai Inc', 'exchange': 'NYSE'},
+        'OPEN': {'name': 'Opendoor Technologies', 'exchange': 'NASDAQ'},
+    }
+    assert extract_tickers(None, 'I AM GOING TO BE RICH OR LOSE IT ALL', lookup) == []
+    assert extract_tickers(None, 'OPEN interest is insane', lookup) == []
+    assert extract_tickers(None, 'AI will change everything', lookup) == []
+
+
+def test_those_words_still_match_as_cashtags():
+    """Rejecting the bare token must not cost the ticker its explicit form."""
+    lookup = {'BE': {'name': 'Bloom Energy Corp', 'exchange': 'NYSE'}}
+    assert extract_tickers(None, 'long $BE into earnings', lookup) == [('BE', 'high')]

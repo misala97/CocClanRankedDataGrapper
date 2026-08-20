@@ -24,12 +24,21 @@ _NAME_NOISE = {'inc', 'inc.', 'corp', 'corp.', 'corporation', 'co', 'co.',
 _CONFIDENCE_RANK = {'medium': 0, 'high': 1}
 
 
-def _company_tokens(name):
-    """The words of a company name worth looking for in a post body."""
+def _company_tokens(name, symbol):
+    """The words of a company name worth looking for in a post body.
+
+    The symbol itself is excluded. Promotion exists to distinguish an
+    ambiguous bare `AAPL` from an unambiguous `AAPL ... Apple`, and a symbol
+    matching its own company name is circular -- it adds no evidence. Without
+    this, every ticker whose symbol appears in its own name (AMC Entertainment,
+    and a long tail like it) would promote itself to high on a bare mention and
+    quietly hollow out the confidence tier.
+    """
     if not name:
         return set()
     words = re.findall(r"[A-Za-z']+", name.lower())
-    return {w for w in words if w not in _NAME_NOISE and len(w) > 2}
+    return {w for w in words
+            if w not in _NAME_NOISE and len(w) > 2 and w != symbol.lower()}
 
 
 def extract_tickers(title, body, lookup):
@@ -63,7 +72,7 @@ def extract_tickers(title, body, lookup):
         symbol = raw.upper()
         if symbol in STOPWORDS or symbol not in lookup:
             continue
-        name_tokens = _company_tokens(lookup[symbol].get('name'))
+        name_tokens = _company_tokens(lookup[symbol].get('name'), symbol)
         confidence = 'high' if name_tokens & lowered_words else 'medium'
         record(symbol, confidence)
 
