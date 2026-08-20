@@ -566,8 +566,14 @@ class RadarMention(db.Model):
                                  db.ForeignKey('radar_posts.id', ondelete='CASCADE'),
                                  nullable=False)
     ticker           = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
-    confidence       = db.Column(db.Enum('high', 'medium', name='radar_confidence'),
-                                 nullable=False)
+    # `low` is a bare token nothing has corroborated. Stored but never scored
+    # (spec 4.2) -- keeping it is what lets the extractor's own false-positive
+    # rate be measured against real data instead of argued about. `medium` is
+    # awarded at rollup, when another author cashtags the same ticker in the
+    # same window.
+    confidence       = db.Column(
+        db.Enum('high', 'medium', 'low', name='radar_confidence'),
+        nullable=False)
     lexicon_sentiment = db.Column(db.Float, nullable=True)
     llm_sentiment     = db.Column(db.String(16), nullable=True)
 

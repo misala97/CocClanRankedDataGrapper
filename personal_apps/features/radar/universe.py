@@ -5,8 +5,31 @@ reassignment: a symbol that was delisted and later reappears under a different
 company name is a different instrument, and continuing its baseline would make
 every subsequent spike wrong with nothing to show for it in the logs.
 """
+import collections
+import re
+
 from extensions import db
 from models import TickerUniverse
+
+# A name token is only evidence for its ticker if it is rare across the whole
+# universe. Nasdaq security names all end in boilerplate -- "Common Stock",
+# "Class A Ordinary Share", "ETF" -- so `stock` appears in 4219 of 12596 names
+# and `etf` in 5196. Treating those as corroboration meant any post containing
+# the word "stock" promoted every bare token in it, which on a stock message
+# board is every post.
+#
+# Rather than maintain a boilerplate blacklist that each new listing convention
+# defeats, distinctiveness is measured from the universe itself.
+# The threshold is both absolute and proportional. Absolute alone does not
+# scale down: in a four-symbol universe where every name ends "Common Stock",
+# `stock` has a document frequency of four and would qualify as distinctive.
+# Proportional alone does not scale up: a quarter of 12596 names is 3149, which
+# would admit plenty of boilerplate. Whichever is stricter wins.
+MAX_NAME_TOKEN_DF = 3
+MAX_NAME_TOKEN_RATIO = 0.25
+MIN_NAME_TOKEN_LEN = 4
+
+_NAME_WORD_RE = re.compile(r"[a-z']+")
 
 
 def _significant(name):
@@ -88,10 +111,48 @@ def mark_delisted(symbols, now):
     return marked
 
 
+def annotate_distinctive(lookup):
+    """Add a `distinctive` token set to every entry, in place.
+
+    A token qualifies when it appears in at most MAX_NAME_TOKEN_DF names across
+    the whole lookup, is long enough to be a real word, and is not the symbol
+    echoing itself. Measured against the passed lookup rather than a constant,
+    so it calibrates to whatever universe it is given -- including the small
+    ones in tests.
+
+    Symbols left with an empty set can never be promoted from a bare mention.
+    That is the intended outcome for tickers like HR or DYOR, whose names carry
+    nothing but boilerplate.
+    """
+    frequency = collections.Counter()
+    tokens_by_symbol = {}
+    for symbol, entry in lookup.items():
+        tokens = set(_NAME_WORD_RE.findall((entry.get('name') or '').lower()))
+        tokens_by_symbol[symbol] = tokens
+        for token in tokens:
+            frequency[token] += 1
+
+    ceiling = min(MAX_NAME_TOKEN_DF,
+                  max(1, int(MAX_NAME_TOKEN_RATIO * len(lookup))))
+
+    for symbol, tokens in tokens_by_symbol.items():
+        lookup[symbol]['distinctive'] = {
+            token for token in tokens
+            if frequency[token] <= ceiling
+            and len(token) >= MIN_NAME_TOKEN_LEN
+            and token != symbol.lower()
+        }
+    return lookup
+
+
 def load_lookup():
-    """Every symbol, keyed uppercase. Extraction uppercases candidates before
-    it gets here -- the column is utf8mb4_bin and will not do it for us."""
-    return {
+    """Every symbol, keyed uppercase, with its distinctive name tokens.
+
+    Extraction uppercases candidates before it gets here -- the column is
+    utf8mb4_bin and will not fold case for us.
+    """
+    lookup = {
         row.symbol: {'name': row.name, 'exchange': row.exchange}
         for row in TickerUniverse.query.all()
     }
+    return annotate_distinctive(lookup)

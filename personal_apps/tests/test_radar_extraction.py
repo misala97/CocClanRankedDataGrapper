@@ -8,8 +8,11 @@ must yield tickers, and posts full of symbol-shaped tokens that must yield
 none.
 """
 from features.radar.extraction import extract_tickers
+from features.radar.universe import annotate_distinctive
 
-LOOKUP = {
+# Run through the same annotation production uses, so these tests exercise the
+# real corroboration path rather than a hand-built approximation of it.
+LOOKUP = annotate_distinctive({
     'GME': {'name': 'GameStop Corp', 'exchange': 'NYSE'},
     'AAPL': {'name': 'Apple Inc', 'exchange': 'NASDAQ'},
     'IT': {'name': 'Gartner Inc', 'exchange': 'NYSE'},
@@ -17,7 +20,7 @@ LOOKUP = {
     'DD': {'name': 'DuPont de Nemours Inc', 'exchange': 'NYSE'},
     'F': {'name': 'Ford Motor Company', 'exchange': 'NYSE'},
     'TSLA': {'name': 'Tesla Inc', 'exchange': 'NASDAQ'},
-}
+})
 
 
 def symbols(title, body):
@@ -32,8 +35,12 @@ def test_cashtag_is_matched_case_insensitively_but_stored_upper():
     assert extract_tickers(None, 'buying $gme today', LOOKUP) == [('GME', 'high')]
 
 
-def test_bare_symbol_is_medium_confidence():
-    assert extract_tickers(None, 'AAPL looks strong here', LOOKUP) == [('AAPL', 'medium')]
+def test_an_uncorroborated_bare_symbol_is_low_confidence():
+    """Low is stored but never scored. Against the real 12596-symbol universe
+    these were roughly 85% false positives, so a bare token has to earn its
+    way up -- either a distinctive company word in the same post, or another
+    author cashtagging it in the same window (promotion happens at rollup)."""
+    assert extract_tickers(None, 'AAPL looks strong here', LOOKUP) == [('AAPL', 'low')]
 
 
 def test_bare_symbol_with_company_name_is_promoted():
@@ -72,7 +79,7 @@ def test_title_and_body_are_both_scanned():
 
 
 def test_duplicate_mentions_collapse_to_one():
-    assert extract_tickers(None, 'GME GME GME', LOOKUP) == [('GME', 'medium')]
+    assert extract_tickers(None, 'GME GME GME', LOOKUP) == [('GME', 'low')]
 
 
 def test_highest_confidence_wins_for_one_symbol():
@@ -109,25 +116,27 @@ def test_a_symbol_does_not_promote_itself_via_its_own_company_name():
     name promotes itself on a bare mention, and the confidence tier stops
     separating anything.
     """
-    lookup = {'AMC': {'name': 'AMC Entertainment Holdings', 'exchange': 'NYSE'}}
-    assert extract_tickers(None, 'AMC ripping today', lookup) == [('AMC', 'medium')]
+    lookup = annotate_distinctive(
+        {'AMC': {'name': 'AMC Entertainment Holdings', 'exchange': 'NYSE'}})
+    assert extract_tickers(None, 'AMC ripping today', lookup) == [('AMC', 'low')]
 
 
 def test_a_real_company_name_still_promotes():
     """The guard must not break the case promotion exists for."""
-    lookup = {'AMC': {'name': 'AMC Entertainment Holdings', 'exchange': 'NYSE'}}
+    lookup = annotate_distinctive(
+        {'AMC': {'name': 'AMC Entertainment Holdings', 'exchange': 'NYSE'}})
     result = extract_tickers(None, 'AMC entertainment earnings tonight', lookup)
     assert result == [('AMC', 'high')]
 
 
 def test_common_english_words_that_are_tickers_are_rejected():
     """WSB writes titles in caps, so these appear as prose constantly."""
-    lookup = {
+    lookup = annotate_distinctive({
         'BE': {'name': 'Bloom Energy Corp', 'exchange': 'NYSE'},
         'OR': {'name': 'Osisko Gold Royalties', 'exchange': 'NYSE'},
         'AI': {'name': 'C3.ai Inc', 'exchange': 'NYSE'},
         'OPEN': {'name': 'Opendoor Technologies', 'exchange': 'NASDAQ'},
-    }
+    })
     assert extract_tickers(None, 'I AM GOING TO BE RICH OR LOSE IT ALL', lookup) == []
     assert extract_tickers(None, 'OPEN interest is insane', lookup) == []
     assert extract_tickers(None, 'AI will change everything', lookup) == []
@@ -135,5 +144,46 @@ def test_common_english_words_that_are_tickers_are_rejected():
 
 def test_those_words_still_match_as_cashtags():
     """Rejecting the bare token must not cost the ticker its explicit form."""
-    lookup = {'BE': {'name': 'Bloom Energy Corp', 'exchange': 'NYSE'}}
+    lookup = annotate_distinctive(
+        {'BE': {'name': 'Bloom Energy Corp', 'exchange': 'NYSE'}})
     assert extract_tickers(None, 'long $BE into earnings', lookup) == [('BE', 'high')]
+
+
+def test_boilerplate_in_a_security_name_is_not_corroboration():
+    """The bug this whole tier exists because of.
+
+    Nasdaq security names all end in "Common Stock", so `stock` appears in 4219
+    of 12596 names. Treating it as corroboration meant any post containing the
+    word "stock" promoted every bare token in it to high -- which, on a stock
+    message board, is every post.
+    """
+    lookup = annotate_distinctive({
+        'DRS': {'name': 'Leonardo DRS, Inc. - Common Stock', 'exchange': 'NASDAQ'},
+        'RC': {'name': 'Ready Capital Corporation Common Stock', 'exchange': 'NYSE'},
+        'GME': {'name': 'GameStop Corporation Common Stock', 'exchange': 'NYSE'},
+    })
+    result = dict(extract_tickers(None, 'my favourite stock is DRS and RC', lookup))
+    assert result.get('DRS') == 'low'
+    assert result.get('RC') == 'low'
+
+    # The distinctive word still works.
+    promoted = dict(extract_tickers(None, 'GME is gamestop', lookup))
+    assert promoted['GME'] == 'high'
+
+
+def test_a_word_common_across_the_universe_is_not_corroboration():
+    """`healthcare` appears in every name here, so it carries no information
+    about which ticker is meant. A genuinely rare word in the same names still
+    does -- the rule is about how much a word narrows things down, not about
+    any hand-picked list."""
+    lookup = annotate_distinctive({
+        'HR': {'name': 'Healthcare Realty Trust Common Stock', 'exchange': 'NYSE'},
+        'HCA': {'name': 'HCA Healthcare Inc Common Stock', 'exchange': 'NYSE'},
+        'CTRE': {'name': 'CareTrust Healthcare Common Stock', 'exchange': 'NYSE'},
+        'DOC': {'name': 'Healthpeak Healthcare Common Stock', 'exchange': 'NYSE'},
+    })
+    assert 'healthcare' not in lookup['HR']['distinctive']
+    assert 'stock' not in lookup['HR']['distinctive']
+    assert extract_tickers(None, 'healthcare stocks like HR', lookup) == [('HR', 'low')]
+    # `realty` is unique to HR in this universe, so it does corroborate.
+    assert extract_tickers(None, 'realty play: HR', lookup) == [('HR', 'high')]

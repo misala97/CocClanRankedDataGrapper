@@ -155,3 +155,20 @@ def test_a_full_range_simhash_round_trips(ctx):
     assert post.simhash == big
     db.session.delete(post)
     db.session.commit()
+
+
+def test_the_low_confidence_tier_is_storable(ctx):
+    """Extraction emits `low` for an uncorroborated bare token. Every mention
+    fixture elsewhere uses cashtags, which resolve to `high`, so nothing else
+    in the suite would notice the enum missing this value -- and under
+    STRICT_TRANS_TABLES the first real bare mention would fail its insert."""
+    post = _make_post()
+    db.session.add(post)
+    db.session.commit()
+    for tier in ('high', 'medium', 'low'):
+        db.session.add(RadarMention(post_id=post.id, ticker='ZZT',
+                                    confidence=tier, lexicon_sentiment=0.0))
+    db.session.commit()
+    assert RadarMention.query.filter_by(post_id=post.id).count() == 3
+    db.session.delete(post)
+    db.session.commit()

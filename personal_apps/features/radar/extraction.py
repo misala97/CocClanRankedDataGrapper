@@ -17,36 +17,18 @@ from .config import STOPWORDS
 _CASHTAG_RE = re.compile(r'\$([A-Za-z]{1,5})\b')
 _BARE_RE = re.compile(r'\b([A-Z]{2,5})\b')
 
-_NAME_NOISE = {'inc', 'inc.', 'corp', 'corp.', 'corporation', 'co', 'co.',
-               'ltd', 'ltd.', 'limited', 'plc', 'holdings', 'group', 'the',
-               'company', 'motor', 'de'}
-
-_CONFIDENCE_RANK = {'medium': 0, 'high': 1}
-
-
-def _company_tokens(name, symbol):
-    """The words of a company name worth looking for in a post body.
-
-    The symbol itself is excluded. Promotion exists to distinguish an
-    ambiguous bare `AAPL` from an unambiguous `AAPL ... Apple`, and a symbol
-    matching its own company name is circular -- it adds no evidence. Without
-    this, every ticker whose symbol appears in its own name (AMC Entertainment,
-    and a long tail like it) would promote itself to high on a bare mention and
-    quietly hollow out the confidence tier.
-    """
-    if not name:
-        return set()
-    words = re.findall(r"[A-Za-z']+", name.lower())
-    return {w for w in words
-            if w not in _NAME_NOISE and len(w) > 2 and w != symbol.lower()}
+_CONFIDENCE_RANK = {'low': 0, 'medium': 1, 'high': 2}
 
 
 def extract_tickers(title, body, lookup):
     """Return sorted (symbol, confidence) pairs for one post.
 
     lookup is universe.load_lookup()'s shape: uppercase symbol -> {'name',
-    'exchange'}. Candidates are uppercased before lookup because the symbol
-    column is utf8mb4_bin and will not fold case.
+    'exchange', 'distinctive'}. Candidates are uppercased before lookup because
+    the symbol column is utf8mb4_bin and will not fold case.
+
+    Returns `high` and `low` only. `medium` is awarded at rollup and appears in
+    the ranking order here so the two stages compose.
     """
     text = ' '.join(part for part in (title, body) if part)
     if not text.strip():
@@ -66,14 +48,18 @@ def extract_tickers(title, body, lookup):
         if symbol in lookup:
             record(symbol, 'high')
 
-    # Bare uppercase tokens: rejected if blacklisted, promoted if the company
-    # name is nearby in the same post.
+    # Bare uppercase tokens. Measured against the real 12596-symbol universe,
+    # counting these on their own produced roughly 85% false positives, so a
+    # bare token stays `low` unless a distinctive word from its company name is
+    # in the same post. `low` is stored but never scored; promotion to `medium`
+    # happens at rollup, when a different author cashtags the same ticker in
+    # the same window.
     for raw in _BARE_RE.findall(text):
         symbol = raw.upper()
         if symbol in STOPWORDS or symbol not in lookup:
             continue
-        name_tokens = _company_tokens(lookup[symbol].get('name'), symbol)
-        confidence = 'high' if name_tokens & lowered_words else 'medium'
+        distinctive = lookup[symbol].get('distinctive') or set()
+        confidence = 'high' if distinctive & lowered_words else 'low'
         record(symbol, confidence)
 
     return sorted(found.items())
