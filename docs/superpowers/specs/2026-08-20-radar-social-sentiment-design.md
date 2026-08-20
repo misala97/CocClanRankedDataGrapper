@@ -40,7 +40,7 @@ what was observed, not advice.
 | Decision | Choice |
 |---|---|
 | Core job | Discovery radar — surface unknown tickers spiking now |
-| Sources v1 | StockTwits + 4chan /biz/ (+ Bluesky pending measurement); all peers, user-selectable per §8.6 |
+| Sources v1 | StockTwits + Bluesky + 4chan /biz/ — peers, user-selectable per §8.6 |
 | Ranking | Divergence — bounded transform of mention_z minus bounded transform of \|price_move_z\| |
 | Price data | Daily close + intraday quote, radar top-N only |
 | Sentiment | Lexicon on everything, Claude Haiku re-read on radar top-N |
@@ -82,7 +82,7 @@ question that matters: does the source clear the §6.3 eligibility floor.
 |---|---|---|
 | StockTwits | 30 trending symbols; median 23.4 msgs/hr; 20–27 distinct authors per 30 messages; ~50% carry native bull/bear | **In** |
 | 4chan /biz/ | 22.7 posts/hr; 171 mentions over 1450 posts; 89 distinct tickers; 5 clear the floor; every post carries a poster id | **In** — thin for equities, crypto-dominant |
-| Bluesky | Public search returns 403; needs a self-serve app password (no approval gate) | Pending measurement |
+| Bluesky | 144k posts/hr network-wide; ~340 high-confidence mentions/hr scattered market-wide; open firehose, no credentials | **In** — discovery |
 
 ### What this costs
 
@@ -197,16 +197,54 @@ filtering it leaves that source contributing very little. The board earns its
 place as corroboration and as an early-warning surface for equity manias, not
 as a volume contributor.
 
-### 3.8 Bluesky — pending measurement
+### 3.8 Bluesky
 
-Public search endpoints return 403 unauthenticated, but Bluesky issues **app
-passwords self-serve** — generated in account settings, no approval, no review.
-That is a credentialed path, not a circumvention, and it is the difference
-between Bluesky and Reddit.
+**In.** Measured on 7213 live posts over 180 seconds: 144,000 posts/hour
+network-wide, yielding 17 high-confidence ticker mentions across 15 tickers —
+roughly 340 scored mentions/hour spread across the entire market.
 
-Its role would be the one StockTwits cannot fill: broad, non-finance-native
-discovery, where an unknown ticker surfaces before it trends anywhere. It is not
-built until measured against the same floor that rejected 4chan.
+That density is far below StockTwits, and it is the point. StockTwits gives ~23
+messages/hour concentrated on one of 30 trending symbols; Bluesky gives a thin
+scatter across everything. **Sparse baselines are what make a real spike
+enormous**: a ticker sitting at 0.1 mentions/hour that jumps to 20 is a colossal
+z-score, and §6.1's negative-binomial variance exists for exactly that regime.
+It is the only one of the three sources that can surface a ticker before anyone
+else has noticed it.
+
+The three are complementary rather than redundant:
+
+| Source | Sees | Density | Role |
+|---|---|---|---|
+| StockTwits | 30 trending + polled set | high | depth on what is already hot |
+| Bluesky | the entire network | very low | discovery before it trends |
+| /biz/ | one board | low, crypto-heavy | corroboration |
+
+**No credentials.** Jetstream — `wss://jetstream2.us-east.bsky.network/subscribe`
+— is open. Only `app.bsky.feed.searchPosts` requires auth, and it is not needed:
+search returns a ranked sample, the firehose returns everything.
+
+**It is drained in batches, not held open.** Jetstream accepts a `cursor` in
+microseconds, so the daemon reconnects from its last processed timestamp, drains
+to live, and disconnects. Same schedule and same `FetchResult` contract as the
+polling sources — no second process, no persistent connection to supervise.
+
+**Replay is ~36 hours, and the clamp is silent.** Measured: cursors of 3
+minutes, 1 hour and 6 hours replay exactly; a 48-hour cursor returns events from
+36 hours ago with no error and no warning. A daemon that trusted the connection
+would carry a 12-hour hole it believed was complete — which §4.5 exists to
+prevent. The source module must compare the first event's `time_us` against the
+requested cursor and mark the shortfall `missing`, never assume catch-up
+succeeded.
+
+Downtime under 36 hours therefore self-heals. Anything longer is a genuine gap
+and must be recorded as one.
+
+**Intent ambiguity is not solved here and should not be.** `NYT` promoted by
+`times` really is the New York Times Company; the post is just discussing the
+newspaper. No per-post rule fixes that. The aggregate does: one mention is
+noise, fifty in an hour is signal regardless of why. This is what the §6.3
+eligibility floor is for, and every n=1 ticker in the measurement would be
+filtered by it.
 
 ### 3.4 Prices
 
