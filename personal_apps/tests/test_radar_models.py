@@ -140,3 +140,18 @@ def test_mention_cascades_when_its_post_is_deleted(ctx):
     db.session.delete(post)
     db.session.commit()
     assert RadarMention.query.filter_by(post_id=post_id).count() == 0
+
+
+def test_a_full_range_simhash_round_trips(ctx):
+    """simhash64() fills all 64 bits. A signed BIGINT stops at 2**63-1, so a
+    post whose text happens to hash high is rejected outright -- roughly half
+    of them, decided purely by wording, which presents as an intermittent
+    fault rather than the systematic one it is."""
+    big = 2 ** 64 - 1
+    post = _make_post(simhash=big)
+    db.session.add(post)
+    db.session.commit()
+    db.session.expire(post)
+    assert post.simhash == big
+    db.session.delete(post)
+    db.session.commit()

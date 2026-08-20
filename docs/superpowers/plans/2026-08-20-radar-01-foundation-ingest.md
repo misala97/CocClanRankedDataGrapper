@@ -577,6 +577,21 @@ def test_bucket_unique_key_rejects_a_duplicate(ctx):
     db.session.commit()
 
 
+def test_a_full_range_simhash_round_trips(ctx):
+    """simhash64() fills all 64 bits. A signed BIGINT stops at 2**63-1, so a
+    post whose text happens to hash high is rejected outright -- roughly half
+    of them, decided purely by wording, which presents as an intermittent
+    fault rather than the systematic one it is."""
+    big = 2 ** 64 - 1
+    post = _make_post(simhash=big)
+    db.session.add(post)
+    db.session.commit()
+    db.session.expire(post)
+    assert post.simhash == big
+    db.session.delete(post)
+    db.session.commit()
+
+
 def test_scoring_columns_start_null(ctx):
     """Plan 1 writes no scores. These columns exist so Plan 2 does not need a
     second migration, and they must be nullable until then."""
@@ -666,7 +681,12 @@ class RadarPost(db.Model):
     score        = db.Column(db.Integer, nullable=False, default=0)
     num_comments = db.Column(db.Integer, nullable=False, default=0)
     url          = db.Column(db.String(512), nullable=True)
-    simhash      = db.Column(db.BigInteger, nullable=False, default=0)
+    # UNSIGNED, because simhash64() fills all 64 bits and a signed BIGINT
+    # tops out at 2**63-1. Signed, roughly half of real posts would be
+    # rejected outright -- decided entirely by their text, which makes it
+    # look intermittent rather than systematic.
+    simhash      = db.Column(MYSQL_BIGINT(unsigned=True),
+                             nullable=False, default=0)
     first_seen   = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
     last_seen    = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
 
@@ -755,7 +775,8 @@ class RadarBucket(db.Model):
 `MEDIUMTEXT` and `MYSQL_DATETIME` both need importing. Add this to the existing import block at the top of `personal_apps/models.py`, above the model definitions:
 
 ```python
-from sqlalchemy.dialects.mysql import DATETIME as MYSQL_DATETIME, MEDIUMTEXT
+from sqlalchemy.dialects.mysql import (
+    BIGINT as MYSQL_BIGINT, DATETIME as MYSQL_DATETIME, MEDIUMTEXT)
 ```
 
 The dialect `DATETIME` is required rather than `db.DateTime`: fractional-second precision is a MySQL feature, and SQLAlchemy's generic `DateTime` takes no `fsp` argument — passing one raises `TypeError` at import and breaks the entire suite, since `conftest.py` imports `app` which imports `models`. The precision itself is not optional (spec §5.4.4).
@@ -795,7 +816,7 @@ cd personal_apps && python -m flask --app app db upgrade
 ```
 
 Run: `cd personal_apps && python -m pytest tests/test_radar_models.py -v`
-Expected: 6 passed
+Expected: 7 passed
 
 If `test_four_byte_characters_round_trip` fails with a truncation or encoding error, the table was created without `utf8mb4` — fix the migration, downgrade, re-upgrade. Do not work around it in Python.
 
