@@ -669,3 +669,22 @@ class RadarBucketSource(db.Model):
     variance                  = db.Column(db.Float, nullable=True)
     mention_z                 = db.Column(db.Float, nullable=True)
     baseline_days             = db.Column(db.SmallInteger, nullable=True)
+
+
+class RadarPollState(db.Model):
+    """When each symbol was last polled, and when it is next due.
+
+    Per source, because the same symbol has a different message rate on each.
+    """
+    __tablename__ = 'radar_poll_state'
+    __table_args__ = (
+        db.Index('ix_radar_poll_state_due', 'source', 'next_due_at'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    source          = db.Column(db.String(24), primary_key=True)
+    symbol          = db.Column(db.String(12, collation='utf8mb4_bin'),
+                                primary_key=True)
+    last_polled_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    next_due_at     = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    observed_rate   = db.Column(db.Float, nullable=True)   # messages per hour
