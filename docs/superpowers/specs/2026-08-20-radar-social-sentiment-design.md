@@ -40,7 +40,7 @@ what was observed, not advice.
 | Decision | Choice |
 |---|---|
 | Core job | Discovery radar — surface unknown tickers spiking now |
-| Sources v1 | Reddit + StockTwits |
+| Sources v1 | StockTwits + 4chan /biz/ (+ Bluesky pending measurement); all peers, user-selectable per §8.6 |
 | Ranking | Divergence — bounded transform of mention_z minus bounded transform of \|price_move_z\| |
 | Price data | Daily close + intraday quote, radar top-N only |
 | Sentiment | Lexicon on everything, Claude Haiku re-read on radar top-N |
@@ -80,8 +80,8 @@ question that matters: does the source clear the §6.3 eligibility floor.
 
 | Source | Result | Decision |
 |---|---|---|
-| StockTwits | 30 trending symbols; median 23.4 msgs/hr; 20–27 distinct authors per 30 messages; ~50% carry native bull/bear | **Primary source** |
-| 4chan /biz/ | **Zero** cashtags across 201 catalog threads — crypto culture, not equities, and no `$TICKER` notation | **Rejected** |
+| StockTwits | 30 trending symbols; median 23.4 msgs/hr; 20–27 distinct authors per 30 messages; ~50% carry native bull/bear | **In** |
+| 4chan /biz/ | 22.7 posts/hr; 171 mentions over 1450 posts; 89 distinct tickers; 5 clear the floor; every post carries a poster id | **In** — thin for equities, crypto-dominant |
 | Bluesky | Public search returns 403; needs a self-serve app password (no approval gate) | Pending measurement |
 
 ### What this costs
@@ -111,7 +111,7 @@ can be added later as one new module without touching anything downstream.
 See §2.2. Retained in this document only so the decision is not relitigated.
 The `sources/` interface still accepts it if access is ever granted.
 
-### 3.3 StockTwits — primary source
+### 3.3 StockTwits
 
 Free, unauthenticated, and reachable: `trending/symbols.json` and
 `streams/symbol/{SYMBOL}.json` both return 200 with no credentials. Twenty
@@ -125,12 +125,8 @@ Two properties beyond raw volume:
 2. Roughly half carry a native bull/bear label — free sentiment ground truth
    to calibrate the lexicon (§6.11) against.
 
-**Crypto is filtered out.** Roughly a third of trending is crypto (`BTC.X`,
-`XRP.X`, `ETH`). Symbols ending `.X` or otherwise flagged crypto are dropped at
-ingest: crypto trades 24/7, which breaks the session-tiered cadence (§4.3), the
-market-clock forward returns (§7.3) and the SPY baseline (§7.3) simultaneously.
-Supporting it properly means a parallel set of rules, and that is not this
-version.
+See §3.7 for the crypto rule, which applies to every source rather than to this
+one.
 
 ### 3.5 Poll cadence is per symbol, driven by message rate
 
@@ -166,7 +162,41 @@ messages/hour, so the 1h window (§6.9) is marginal for them and the 4h/24h
 windows carry the signal. 15-minute buckets remain the storage grain; the
 eligibility floor is judged per window, not per bucket.
 
-### 3.6 Bluesky — pending measurement
+### 3.6 4chan /biz/
+
+Public JSON API, no auth, no approval — `catalog.json` plus
+`thread/{no}.json`, at the documented 1 request/second.
+
+Measured on 1450 posts across the 25 most recently active threads, spanning
+64 hours: **22.7 posts/hour, 171 ticker mentions, 89 distinct tickers**, five of
+which clear the §6.3 floor. Every post carries a poster id, so the
+distinct-author gate works here — it is anonymous, not identity-free.
+
+It is **thin for equities and dominated by crypto** (XRP, LINK, BTC lead). Its
+one strong equity signal in the sample was GME at 13 mentions from 10 posters —
+concentrated in a *single thread*, which is exactly what the source-spread
+column exists to expose.
+
+Include it as a peer source, expect it to contribute little on its own, and
+read it mainly as corroboration: a ticker loud on both StockTwits and /biz/ is
+a different object from one loud on either alone.
+
+### 3.7 Crypto
+
+Crypto is **excluded from the equity radar** across all sources — `.X` suffixed
+symbols on StockTwits, and the crypto names that dominate /biz/.
+
+It trades 24/7, which breaks the session-tiered cadence (§4.3), the
+market-clock forward returns (§7.3) and the SPY excess baseline (§7.3)
+simultaneously. Supporting it means a parallel set of rules for all three, and
+that is not this version.
+
+**This has a cost worth stating:** crypto is /biz/'s dominant output, so
+filtering it leaves that source contributing very little. The board earns its
+place as corroboration and as an early-warning surface for equity manias, not
+as a volume contributor.
+
+### 3.8 Bluesky — pending measurement
 
 Public search endpoints return 403 unauthenticated, but Bluesky issues **app
 passwords self-serve** — generated in account settings, no approval, no review.
