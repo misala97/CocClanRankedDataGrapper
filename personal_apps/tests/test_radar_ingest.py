@@ -12,11 +12,25 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from models import RadarBucket, RadarMention, RadarPost, TickerUniverse
+from models import (RadarBucket, RadarMention, RadarPost,
+                    RadarSourceCursor, TickerUniverse)
 from features.radar import ingest
 from features.radar.sources import FetchResult, RawPost
 
 NOW = dt.datetime(2026, 4, 15, 14, 20, 0)
+
+
+def _wipe():
+    from models import RadarBucketSource
+    RadarPost.query.filter(RadarPost.channel == 'testsub').delete(
+        synchronize_session=False)
+    RadarBucketSource.query.filter(
+        RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+    RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
+        synchronize_session=False)
+    TickerUniverse.query.filter(TickerUniverse.symbol.like('ZZ%')).delete(
+        synchronize_session=False)
+    RadarSourceCursor.query.delete(synchronize_session=False)
 
 
 @pytest.fixture()
@@ -32,36 +46,26 @@ def seeded(clean_radar):
 @pytest.fixture()
 def clean_radar():
     with flask_app.app_context():
-        RadarPost.query.filter(RadarPost.channel == 'testsub').delete(
-            synchronize_session=False)
-        RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
-            synchronize_session=False)
-        TickerUniverse.query.filter(TickerUniverse.symbol.like('ZZ%')).delete(
-            synchronize_session=False)
+        _wipe()
         db.session.commit()
         yield
-        RadarPost.query.filter(RadarPost.channel == 'testsub').delete(
-            synchronize_session=False)
-        RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
-            synchronize_session=False)
-        TickerUniverse.query.filter(TickerUniverse.symbol.like('ZZ%')).delete(
-            synchronize_session=False)
+        _wipe()
         db.session.commit()
 
 
 def post(ident='t3_1', body='$ZZG is ripping', score=5, author='u1',
          minute=10, title=None):
-    return RawPost(source='reddit', external_id=ident, channel='testsub',
+    return RawPost(source='stocktwits', external_id=ident, channel='testsub',
                    author=author,
                    created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
                    title=title, body=body, score=score, num_comments=0,
                    url='https://example.invalid/%s' % ident)
 
 
-def fetcher_for(result):
+def fetcher_for(result, source='stocktwits'):
     def fetcher(since):
         return result
-    return fetcher
+    return {source: fetcher}
 
 
 def test_a_post_becomes_a_mention_and_a_bucket(seeded):
@@ -111,7 +115,7 @@ def test_a_missing_source_writes_nothing_at_all(seeded):
     result = ingest.run_cycle(
         NOW, fetcher_for(FetchResult(posts=[], status='missing')))
 
-    assert result['status'] == 'missing'
+    assert result['per_source'] == {'stocktwits': 'missing'}
     assert result['buckets_written'] == 0
     with flask_app.app_context():
         assert RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).count() == 0
@@ -122,34 +126,108 @@ def test_a_truncated_cycle_still_stores_its_mentions(seeded):
         NOW, fetcher_for(FetchResult(posts=[post()], status='truncated',
                                      catchup_depth=10)))
 
-    assert result['status'] == 'truncated'
-    assert result['catchup_depth'] == 10
+    assert result['per_source'] == {'stocktwits': 'truncated'}
+    assert result['catchup_depth'] == {'stocktwits': 10}
     with flask_app.app_context():
         bucket = RadarBucket.query.filter_by(ticker='ZZG').one()
         assert bucket.mention_count == 1
-        assert bucket.status_reddit == 'truncated'
+        from models import RadarBucketSource
+        assert RadarBucketSource.query.filter_by(
+            ticker='ZZG', source='stocktwits').one().status == 'truncated'
 
 
-def test_posts_with_no_recognizable_ticker_are_stored_but_bucket_nothing(seeded):
-    """Storing them is what makes the next cycle's `since` correct."""
+def test_posts_with_no_recognizable_ticker_are_not_stored_at_all(seeded):
+    """Bluesky is 144k posts/hour and almost none are about stocks. Storing
+    everything and extracting later would be 100 million rows a month to find
+    the quarter-million that matter, so extraction runs first and a post that
+    mentions nothing is never written."""
     result = ingest.run_cycle(
         NOW,
         fetcher_for(FetchResult(posts=[post(body='market feels weird today')],
                                 status='ok')))
 
-    assert result['posts_new'] == 1
+    assert result['posts_seen'] == 1
+    assert result['posts_new'] == 0
     assert result['mentions'] == 0
     with flask_app.app_context():
-        assert RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).count() == 0
+        assert RadarPost.query.filter_by(channel='testsub').count() == 0
 
 
-def test_since_advances_to_the_newest_stored_post(seeded):
+def test_the_cursor_advances_even_when_nothing_was_stored(seeded):
+    """The cursor tracks what was SEEN, not what was KEPT. Inferring it from
+    stored rows would rewind every cycle and refetch the same window forever."""
+    ingest.run_cycle(
+        NOW,
+        fetcher_for(FetchResult(posts=[post(body='no tickers here', minute=12)],
+                                status='ok')))
+    with flask_app.app_context():
+        cursor = RadarSourceCursor.query.filter_by(source='stocktwits').one()
+        assert cursor.cursor_utc == dt.datetime(2026, 4, 15, 14, 12, 0)
+
+
+def test_since_advances_to_the_newest_post_seen(seeded):
     captured = {}
 
     def fetcher(since):
         captured['since'] = since
         return FetchResult(posts=[post(minute=10)], status='ok')
 
-    ingest.run_cycle(NOW, fetcher)
-    ingest.run_cycle(NOW, fetcher)
+    ingest.run_cycle(NOW, {'stocktwits': fetcher})
+    ingest.run_cycle(NOW, {'stocktwits': fetcher})
     assert captured['since'] == dt.datetime(2026, 4, 15, 14, 10, 0)
+
+
+def test_two_sources_ingest_in_one_cycle(seeded):
+    def st(since):
+        return FetchResult(posts=[post(ident='st1', body='$ZZG up')], status='ok')
+
+    def bs(since):
+        p = post(ident='bs1', body='$ZZG up')
+        p.source = 'bluesky'
+        return FetchResult(posts=[p], status='ok')
+
+    result = ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
+    assert result['posts_new'] == 2
+    assert result['per_source'] == {'stocktwits': 'ok', 'bluesky': 'ok'}
+    with flask_app.app_context():
+        from models import RadarBucketSource
+        sources = {r.source for r in
+                   RadarBucketSource.query.filter_by(ticker='ZZG').all()}
+        assert sources == {'stocktwits', 'bluesky'}
+
+
+def test_one_source_failing_does_not_stop_the_other(seeded):
+    """The entire reason status is per source. A dead Bluesky must not cost a
+    healthy StockTwits cycle, and must not write a zero for itself."""
+    def st(since):
+        return FetchResult(posts=[post(ident='st1', body='$ZZG up')], status='ok')
+
+    def bs(since):
+        return FetchResult(posts=[], status='missing')
+
+    result = ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
+    assert result['per_source'] == {'stocktwits': 'ok', 'bluesky': 'missing'}
+    with flask_app.app_context():
+        from models import RadarBucketSource
+        rows = {r.source: r.status for r in
+                RadarBucketSource.query.filter_by(ticker='ZZG').all()}
+        assert rows == {'stocktwits': 'ok'}
+
+
+def test_each_source_keeps_its_own_cursor(seeded):
+    """One source catching up must not drag the others back over ground they
+    already covered."""
+    def st(since):
+        return FetchResult(posts=[post(ident='st1', body='$ZZG', minute=10)],
+                           status='ok')
+
+    def bs(since):
+        p = post(ident='bs1', body='$ZZG', minute=18)
+        p.source = 'bluesky'
+        return FetchResult(posts=[p], status='ok')
+
+    ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
+    with flask_app.app_context():
+        cursors = {c.source: c.cursor_utc for c in RadarSourceCursor.query.all()}
+    assert cursors['stocktwits'] == dt.datetime(2026, 4, 15, 14, 10, 0)
+    assert cursors['bluesky'] == dt.datetime(2026, 4, 15, 14, 18, 0)

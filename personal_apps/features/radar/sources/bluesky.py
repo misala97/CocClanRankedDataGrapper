@@ -28,7 +28,7 @@ JETSTREAM_URL = ('wss://jetstream2.us-east.bsky.network/subscribe'
 # only samples the stream, so short gaps between what a cycle happens to catch
 # are routine. Real clamps run for hours, not minutes, so this stays far below
 # them.
-CLAMP_TOLERANCE = dt.timedelta(minutes=15)
+CLAMP_TOLERANCE = dt.timedelta(minutes=5)
 
 
 class JetstreamUnavailable(Exception):

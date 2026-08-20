@@ -688,3 +688,22 @@ class RadarPollState(db.Model):
     last_polled_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
     next_due_at     = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
     observed_rate   = db.Column(db.Float, nullable=True)   # messages per hour
+
+
+class RadarSourceCursor(db.Model):
+    """How far each source has been read.
+
+    Explicit state rather than max(radar_posts.created_utc), because posts that
+    mention no ticker are not stored at all. Bluesky's firehose is 144k
+    posts/hour and roughly none of them are about stocks -- keeping them would
+    be 100 million rows a month of text nothing ever reads.
+
+    Inferring the cursor from stored posts would then rewind it to the last
+    post that happened to mention something, and the next cycle would refetch
+    everything since. The cursor has to be what we SAW, not what we KEPT.
+    """
+    __tablename__ = 'radar_source_cursors'
+    __table_args__ = {'mysql_charset': 'utf8mb4'}
+
+    source     = db.Column(db.String(24), primary_key=True)
+    cursor_utc = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)

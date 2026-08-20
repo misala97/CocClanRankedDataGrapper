@@ -42,7 +42,10 @@ def drain_returning(events):
 
 
 def test_events_become_rawposts():
-    result = bluesky.fetch(BASE - dt.timedelta(minutes=10),
+    # One minute, not ten: at ~40 posts/second a ten-minute gap between the
+    # requested cursor and the first delivered event is itself clamp evidence,
+    # and this test is about normalization rather than coverage.
+    result = bluesky.fetch(BASE - dt.timedelta(minutes=1),
                            drain_returning([_event(BASE)]))
     assert isinstance(result, FetchResult)
     assert result.status == 'ok'
