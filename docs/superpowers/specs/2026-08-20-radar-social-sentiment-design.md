@@ -183,8 +183,9 @@ a different object from one loud on either alone.
 
 ### 3.7 Crypto
 
-Crypto is **excluded from the equity radar** across all sources — `.X` suffixed
-symbols on StockTwits, and the crypto names that dominate /biz/.
+Crypto is **excluded entirely**. Not a segment, not a tab, not a parallel rule
+set — dropped at ingest. `.X` suffixed symbols on StockTwits, and the crypto
+names that dominate /biz/.
 
 It trades 24/7, which breaks the session-tiered cadence (§4.3), the
 market-clock forward returns (§7.3) and the SPY excess baseline (§7.3)
@@ -280,23 +281,44 @@ Every candidate token must be uppercased before it is looked up.** Without that
 normalization, any lowercase-derived match misses silently — no error, just a
 mention that never gets counted.
 
-Matching, in confidence order:
+**Bare tokens require corroboration.** Measured against the real 12,596-symbol
+universe, uncorroborated bare matching produced roughly 85% false positives —
+`USD`, `UK`, `TV`, `IP`, `HR`, `HYSA`, `GOLD`, `BOOM`, plus board-specific
+jargon like `DRS` and `RC` (direct registration, Ryan Cohen) that no blacklist
+could have anticipated. A blacklist is a treadmill: every community invents new
+collisions. Corroboration is not.
+
+Extraction runs per post and can only see that post, so it emits two tiers:
 
 | Pattern | Confidence |
 |---|---|
-| `$AAPL` cashtag | high |
-| Bare `AAPL` with company name elsewhere in the same post | high |
-| Bare `AAPL` matching universe, not in stopword blacklist | medium |
+| `$AAPL` cashtag | **high** |
+| Bare `AAPL` with the company name elsewhere in the same post | **high** |
+| Bare `AAPL` matching universe, not blacklisted | **low** |
 | Bare token in stopword blacklist | rejected |
+
+**The middle tier is awarded at rollup, not at extraction.** A `low` mention is
+promoted to `medium` when the same ticker has a `high`-confidence mention **from
+a different author** in the same window. Someone writing `$GME` corroborates
+someone else writing `GME`; the same person doing both does not, which is why
+the author must differ.
+
+Counting rule: **`high` and `medium` count toward the scored mention count.
+`low` is stored but excluded from scoring.** Storing it matters — it is what
+lets the extractor's own false-positive rate be measured later against real
+data, rather than argued about.
+
+The stopword blacklist stays as a cheap first filter for the most common
+collisions, but it is no longer load-bearing.
 
 The stopword blacklist covers English words and trading slang that collide with
 real symbols: `IT ON ALL FOR ARE CAN NOW ONE OUT NEW DD CEO CFO EPS ATH IMO
 USA GDP PM AM EOD OTM ITM FD YOLO PUMP HOLD BUY SELL PUT CALL` and similar. It
 is data, not code, and is expected to grow.
 
-Only `high` and `medium` mentions are counted. Confidence is stored per mention
-so the leaderboard can require high-confidence support before a ticker is
-eligible.
+Confidence is stored per mention, so the leaderboard can require
+high-confidence support before a ticker is eligible, and so the `low` tier
+remains available for measuring extractor quality.
 
 **Symbol reuse.** A delisted symbol later reassigned to a different company
 inherits the old company's baseline — rare, and silent when it happens.
