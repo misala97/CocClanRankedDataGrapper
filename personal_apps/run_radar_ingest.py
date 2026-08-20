@@ -1,24 +1,28 @@
-# personal_apps/run_radar_ingest.py
 """Radar ingest daemon.
 
-Mirrors run_gym_notifier.py: an APScheduler process holding a Flask app context,
-deployed as its own systemd unit and restarted by the VPS deploy script.
+Mirrors run_gym_notifier.py: an APScheduler process holding a Flask app
+context, deployed as its own systemd unit and restarted by the VPS deploy
+script.
 
 Cadence is chosen per cycle from the NYSE session rather than fixed, because
 chatter volume follows the session and polling overnight at session rates is
 wasted work. The state comes from the exchange calendar, never from local time
 -- see the DST note in features/radar/market_calendar.py.
+
+Three sources run behind one contract. Nothing here branches on which source is
+which beyond building its fetcher; a fourth would be a module in sources/ plus
+an entry in config.SOURCES.
 """
 import datetime as dt
 import logging
-import os
+import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app import app
-from features.radar import ingest, market_calendar, retention
-from features.radar.config import SUBREDDITS
-from features.radar.sources import reddit
+from features.radar import ingest, market_calendar, retention, scheduling
+from features.radar.config import SOURCES, STOCKTWITS_REQUESTS_PER_HOUR
+from features.radar.sources import bluesky, fourchan, stocktwits
 
 logger = logging.getLogger('radar.ingest')
 
@@ -28,9 +32,13 @@ INTERVALS = {
     'afterhours': 600,
     'closed': 1800,
 }
-# An unrecognized state polls at the slowest rate. Failing towards fewer API
-# calls is the safe direction when the alternative is hammering Reddit.
+# An unrecognized state polls at the slowest rate. Failing towards fewer
+# requests is the safe direction when the alternative is hammering an API.
 FALLBACK_INTERVAL = 1800
+
+# Cycles per hour at the fastest cadence, used to divide the hourly budget.
+_CYCLES_PER_HOUR = 20
+SYMBOL_BUDGET_PER_CYCLE = max(1, STOCKTWITS_REQUESTS_PER_HOUR // _CYCLES_PER_HOUR)
 
 
 def interval_for(state):
@@ -41,54 +49,74 @@ def current_state(now_utc):
     return market_calendar.session_state(now_utc)
 
 
-def build_fetcher(client):
-    """Bind the Reddit client into the one-argument fetcher ingest expects."""
-    def fetcher(since):
-        return reddit.fetch(since, client, subreddits=SUBREDDITS)
-    return fetcher
+def _stocktwits_fetcher(client):
+    """Trending is both the discovery surface and how the polled set grows.
+
+    Symbols accumulate: every symbol that has ever trended stays tracked, so
+    the standing set builds itself rather than waiting on a market-cap source
+    the free tier does not provide.
+    """
+    def fetch(since):
+        now = dt.datetime.utcnow()
+        try:
+            hot = stocktwits.trending(client)
+            scheduling.ensure_tracked('stocktwits', hot, now)
+        except stocktwits.StockTwitsUnavailable:
+            # One bad trending call must not cost the cycle its polled set.
+            logger.warning('stocktwits trending unavailable this cycle')
+
+        symbols = scheduling.due_symbols('stocktwits', now,
+                                         limit=SYMBOL_BUDGET_PER_CYCLE)
+        result = stocktwits.fetch(since, client, symbols)
+        for symbol in symbols:
+            scheduling.record_poll('stocktwits', symbol, now,
+                                   result.rates.get(symbol))
+        return result
+    return fetch
 
 
-def build_client():
-    return reddit.RedditClient(
-        client_id=os.getenv('REDDIT_CLIENT_ID'),
-        client_secret=os.getenv('REDDIT_CLIENT_SECRET'),
-        username=os.getenv('REDDIT_USERNAME'),
-        password=os.getenv('REDDIT_PASSWORD'),
-        user_agent=os.getenv('REDDIT_USER_AGENT', reddit.USER_AGENT_DEFAULT),
-    )
+def build_fetchers():
+    """One callable per active source, each taking `since`."""
+    st_client = stocktwits.StockTwitsClient()
+    fc_client = fourchan.FourChanClient()
+
+    return {
+        'stocktwits': _stocktwits_fetcher(st_client),
+        'bluesky': lambda since: bluesky.fetch(since, bluesky.live_drain),
+        'fourchan': lambda since: fourchan.fetch(
+            since, fc_client, pause=fourchan.REQUEST_INTERVAL_SECONDS),
+    }
 
 
-def tick(now_utc, fetcher):
-    """One cycle, with failures contained.
+def tick(now_utc, fetchers):
+    """One cycle across every source, with failures contained.
 
     APScheduler drops a job whose function raises, so an unhandled error here
     would silently end ingest until the next restart -- losing far more than
     the cycle that failed.
     """
     try:
-        summary = ingest.run_cycle(now_utc.replace(tzinfo=None), fetcher)
+        summary = ingest.run_cycle(now_utc.replace(tzinfo=None), fetchers)
     except Exception:
         logger.exception('radar ingest cycle failed')
         return {'status': 'error', 'posts_seen': 0, 'posts_new': 0,
-                'mentions': 0, 'buckets_written': 0, 'catchup_depth': 0}
+                'mentions': 0, 'buckets_written': 0, 'per_source': {}}
 
-    logger.info('radar cycle status=%s posts=%d new=%d mentions=%d '
-                'buckets=%d catchup_depth=%d',
-                summary['status'], summary['posts_seen'], summary['posts_new'],
+    logger.info('radar cycle posts=%d new=%d mentions=%d buckets=%d sources=%s',
+                summary['posts_seen'], summary['posts_new'],
                 summary['mentions'], summary['buckets_written'],
-                summary['catchup_depth'])
+                summary['per_source'])
     return summary
 
 
-def _scheduled_cycle(scheduler, fetcher):
+def _scheduled_cycle(scheduler, fetchers):
     """Run a cycle, then reschedule at the interval the session now calls for."""
     now = dt.datetime.now(dt.timezone.utc)
     with app.app_context():
-        tick(now, fetcher)
+        tick(now, fetchers)
 
-    state = current_state(now)
     scheduler.reschedule_job('radar_cycle', trigger='interval',
-                             seconds=interval_for(state))
+                             seconds=interval_for(current_state(now)))
 
 
 def _scheduled_prune():
@@ -100,20 +128,19 @@ def _scheduled_prune():
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    fetcher = build_fetcher(build_client())
+    fetchers = build_fetchers()
 
     scheduler = BackgroundScheduler(timezone='UTC')
     scheduler.add_job(_scheduled_cycle, 'interval', seconds=180,
-                      id='radar_cycle', args=[scheduler, fetcher],
+                      id='radar_cycle', args=[scheduler, fetchers],
                       max_instances=1, coalesce=True)
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
     scheduler.start()
-    logger.info('radar ingest daemon started')
+    logger.info('radar ingest daemon started, sources=%s', ','.join(SOURCES))
 
     try:
         while True:
-            import time
             time.sleep(60)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()

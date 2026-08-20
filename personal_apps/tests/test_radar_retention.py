@@ -68,9 +68,8 @@ def test_buckets_survive_their_posts(aged_posts):
     db.session.add(RadarBucket(
         ticker='ZZR', bucket_start=old, mention_count=3,
         high_confidence_count=3, distinct_authors=3, distinct_text_ratio=1.0,
-        engagement_weighted_count=9.0, count_reddit=3, count_stocktwits=0,
-        status_reddit='ok', status_stocktwits='missing', sources_ok=1,
-        source_config_version='deadbeefdeadbeef'))
+        engagement_weighted_count=9.0,
+        sources_ok=1, source_config_version='deadbeefdeadbeef'))
     db.session.commit()
 
     retention.prune_posts(NOW)

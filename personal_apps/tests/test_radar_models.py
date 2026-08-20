@@ -86,9 +86,7 @@ def test_bucket_unique_key_rejects_a_duplicate(ctx):
     first = RadarBucket(ticker='ZZTOP', bucket_start=start, mention_count=1,
                         high_confidence_count=1, distinct_authors=1,
                         distinct_text_ratio=1.0, engagement_weighted_count=1.0,
-                        count_reddit=1, count_stocktwits=0,
-                        status_reddit='ok', status_stocktwits='missing',
-                        sources_ok=1, source_config_version='deadbeefdeadbeef')
+        sources_ok=1, source_config_version='deadbeefdeadbeef')
     db.session.add(first)
     db.session.commit()
 
@@ -96,10 +94,7 @@ def test_bucket_unique_key_rejects_a_duplicate(ctx):
                             high_confidence_count=2, distinct_authors=2,
                             distinct_text_ratio=1.0,
                             engagement_weighted_count=2.0,
-                            count_reddit=2, count_stocktwits=0,
-                            status_reddit='ok', status_stocktwits='missing',
-                            sources_ok=1,
-                            source_config_version='deadbeefdeadbeef')
+        sources_ok=1, source_config_version='deadbeefdeadbeef')
     db.session.add(duplicate)
     with pytest.raises(sa.exc.IntegrityError):
         db.session.commit()
@@ -116,15 +111,14 @@ def test_scoring_columns_start_null(ctx):
     bucket = RadarBucket(ticker='ZZTOP', bucket_start=start, mention_count=1,
                          high_confidence_count=1, distinct_authors=1,
                          distinct_text_ratio=1.0, engagement_weighted_count=1.0,
-                         count_reddit=1, count_stocktwits=0,
-                         status_reddit='ok', status_stocktwits='missing',
-                         sources_ok=1, source_config_version='deadbeefdeadbeef')
+        sources_ok=1, source_config_version='deadbeefdeadbeef')
     db.session.add(bucket)
     db.session.commit()
     db.session.expire(bucket)
-    assert bucket.mention_z_reddit is None
-    assert bucket.mention_z_stocktwits is None
-    assert bucket.baseline_days_reddit is None
+    # Per-source scoring columns live on RadarBucketSource now; the parent
+    # keeps only the all-sources totals.
+    assert bucket.low_count == 0
+    assert not hasattr(bucket, 'mention_z_reddit')
     db.session.delete(bucket)
     db.session.commit()
 

@@ -4,28 +4,26 @@
 Everything here is configuration in the sense that changing it changes what
 gets ingested -- which is exactly why SUBREDDITS is hashed into a version
 stamped onto every bucket. Baselines are computed only over buckets sharing the
-current version, so adding a subreddit starts a warm-up instead of reading
+current version, so adding a source starts a warm-up instead of reading
 straight through the discontinuity (spec 6.6).
 """
 import hashlib
 import json
 
-SUBREDDITS = (
-    'wallstreetbets',
-    'stocks',
-    'options',
-    'pennystocks',
-    'shortsqueeze',
-    'Daytrading',
-    'smallstreetbets',
-    'SPACs',
-)
+# Active sources. Adding one is a module in sources/ plus an entry here --
+# nothing else in the pipeline names a source (spec 8.6).
+SOURCES = ('stocktwits', 'bluesky', 'fourchan')
+
+# StockTwits publishes no rate-limit headers and twenty consecutive requests
+# drew no 429, so this is a conservative budget rather than a documented
+# ceiling. The daemon backs off on 429 regardless.
+STOCKTWITS_REQUESTS_PER_HOUR = 150
 
 # 15-minute grain. Fine enough for the 1h window in spec 6.9, coarse enough
 # that a forever-retained table stays small.
 BUCKET_MINUTES = 15
 
-# Pages of 100 items to walk per subreddit per cycle before giving up and
+# Pages to walk per channel per cycle before giving up and
 # marking the affected buckets `truncated` (spec 4.3).
 PAGE_CAP = 10
 
@@ -59,6 +57,10 @@ def source_config_version():
 
     Sorted before hashing so reordering the list is not a config change --
     only membership is. Stamped onto every bucket; see spec 6.6.
+
+    This versions what is INGESTED. The UI source selector is a read-time
+    filter and must never touch it, or every toggle of a checkbox would look
+    like a market-wide spike.
     """
-    payload = json.dumps(sorted(SUBREDDITS), separators=(',', ':'))
+    payload = json.dumps(sorted(SOURCES), separators=(',', ':'))
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
