@@ -1,7 +1,8 @@
 import datetime as dt
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.mysql import DATETIME as MYSQL_DATETIME, MEDIUMTEXT
+from sqlalchemy.dialects.mysql import (
+    BIGINT as MYSQL_BIGINT, DATETIME as MYSQL_DATETIME, MEDIUMTEXT)
 from extensions import db
 
 
@@ -538,7 +539,12 @@ class RadarPost(db.Model):
     score        = db.Column(db.Integer, nullable=False, default=0)
     num_comments = db.Column(db.Integer, nullable=False, default=0)
     url          = db.Column(db.String(512), nullable=True)
-    simhash      = db.Column(db.BigInteger, nullable=False, default=0)
+    # UNSIGNED, because simhash64() fills all 64 bits and a signed
+    # BIGINT tops out at 2**63-1. Signed, roughly half of real posts
+    # would be rejected outright -- decided entirely by their text,
+    # which makes it look intermittent rather than systematic.
+    simhash      = db.Column(MYSQL_BIGINT(unsigned=True),
+                             nullable=False, default=0)
     first_seen   = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
     last_seen    = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
 
