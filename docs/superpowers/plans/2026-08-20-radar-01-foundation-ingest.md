@@ -638,8 +638,8 @@ class TickerUniverse(db.Model):
                             nullable=False, unique=True, index=True)
     name        = db.Column(db.String(255), nullable=True)
     exchange    = db.Column(db.String(32), nullable=True)
-    first_seen  = db.Column(db.DateTime(fsp=6), nullable=False)
-    delisted_at = db.Column(db.DateTime(fsp=6), nullable=True)
+    first_seen  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    delisted_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
 
 
 class RadarPost(db.Model):
@@ -660,15 +660,15 @@ class RadarPost(db.Model):
     external_id  = db.Column(db.String(32), nullable=False)
     channel      = db.Column(db.String(64), nullable=False)
     author       = db.Column(db.String(64), nullable=True)
-    created_utc  = db.Column(db.DateTime(fsp=6), nullable=False)
+    created_utc  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
     title        = db.Column(db.String(512), nullable=True)
     body         = db.Column(MEDIUMTEXT, nullable=True)
     score        = db.Column(db.Integer, nullable=False, default=0)
     num_comments = db.Column(db.Integer, nullable=False, default=0)
     url          = db.Column(db.String(512), nullable=True)
     simhash      = db.Column(db.BigInteger, nullable=False, default=0)
-    first_seen   = db.Column(db.DateTime(fsp=6), nullable=False)
-    last_seen    = db.Column(db.DateTime(fsp=6), nullable=False)
+    first_seen   = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    last_seen    = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
 
     mentions = db.relationship('RadarMention', back_populates='post',
                                cascade='all, delete-orphan', lazy=True)
@@ -722,7 +722,7 @@ class RadarBucket(db.Model):
     # can still carry AUTO_INCREMENT.
     id                        = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     ticker                    = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
-    bucket_start              = db.Column(db.DateTime(fsp=6), primary_key=True, nullable=False)
+    bucket_start              = db.Column(MYSQL_DATETIME(fsp=6), primary_key=True, nullable=False)
 
     mention_count             = db.Column(db.Integer, nullable=False, default=0)
     high_confidence_count     = db.Column(db.Integer, nullable=False, default=0)
@@ -752,11 +752,13 @@ class RadarBucket(db.Model):
     baseline_days_stocktwits  = db.Column(db.SmallInteger, nullable=True)
 ```
 
-`MEDIUMTEXT` needs an import. Add it to the existing import block at the top of `personal_apps/models.py`, above the model definitions:
+`MEDIUMTEXT` and `MYSQL_DATETIME` both need importing. Add this to the existing import block at the top of `personal_apps/models.py`, above the model definitions:
 
 ```python
-from sqlalchemy.dialects.mysql import MEDIUMTEXT
+from sqlalchemy.dialects.mysql import DATETIME as MYSQL_DATETIME, MEDIUMTEXT
 ```
+
+The dialect `DATETIME` is required rather than `db.DateTime`: fractional-second precision is a MySQL feature, and SQLAlchemy's generic `DateTime` takes no `fsp` argument — passing one raises `TypeError` at import and breaks the entire suite, since `conftest.py` imports `app` which imports `models`. The precision itself is not optional (spec §5.4.4).
 
 Generate the migration:
 
