@@ -4,7 +4,7 @@
 **App:** `personal_apps`
 **Branch:** `dev_personal`
 **Database:** MariaDB / InnoDB (production), MySQL 8 (dev)
-**Status:** design approved, revision 2 (change list folded in), not yet planned
+**Status:** design approved, revision 3 (Reddit closed; sources re-measured)
 
 ---
 
@@ -61,6 +61,39 @@ place below can land after v1 is running.
 
 ---
 
+## 2.2 Revision 3 — the source layer was rebuilt on measurement
+
+Reddit closed self-serve API access in November 2025 under its Responsible
+Builder Policy. Confirmed three ways: app creation returns a policy pointer
+instead of an app; the public JSON endpoints return 403 to every client that is
+not a browser, including one sending a full Chrome user-agent; and the public
+support form has no Data API category at all. Getting past that would mean
+defeating bot detection, which is circumventing an access control and is out of
+scope permanently.
+
+**Reddit is removed as a source.** Only `sources/reddit.py` was Reddit-specific
+— extraction, fingerprinting, sentiment, rollup, retention, the market calendar
+and the daemon never knew where posts came from, and all of it stands.
+
+Replacements were then **measured rather than argued about**, against the one
+question that matters: does the source clear the §6.3 eligibility floor.
+
+| Source | Result | Decision |
+|---|---|---|
+| StockTwits | 30 trending symbols; median 23.4 msgs/hr; 20–27 distinct authors per 30 messages; ~50% carry native bull/bear | **Primary source** |
+| 4chan /biz/ | **Zero** cashtags across 201 catalog threads — crypto culture, not equities, and no `$TICKER` notation | **Rejected** |
+| Bluesky | Public search returns 403; needs a self-serve app password (no approval gate) | Pending measurement |
+
+### What this costs
+
+StockTwits' discovery surface is its trending list — **30 symbols someone else
+already ranked**. A StockTwits-only radar is therefore closer to "of the things
+being discussed, which have not moved yet" than to "surface something nobody has
+noticed". The divergence metric (§6.4) is unaffected and remains the product's
+core; the discovery half narrows. §3.5's standing set is what widens it back.
+
+---
+
 ## 3. Data sources
 
 ### 3.1 Why not X/Twitter
@@ -73,49 +106,76 @@ $3,000/month. X is therefore out of v1.
 The source interface (§4.1) is built so X — or a third-party X data reseller —
 can be added later as one new module without touching anything downstream.
 
-### 3.2 Reddit
+### 3.2 Reddit — closed
 
-Free for non-commercial use at **100 queries/minute per OAuth client**. Personal
-use qualifies. Each listing request returns up to 100 items.
+See §2.2. Retained in this document only so the decision is not relitigated.
+The `sources/` interface still accepts it if access is ever granted.
 
-Subreddits: `wallstreetbets`, `stocks`, `options`, `pennystocks`,
-`shortsqueeze`, `Daytrading`, `smallstreetbets`, `SPACs`.
+### 3.3 StockTwits — primary source
 
-Both posts and comments are ingested — a large share of ticker mentions live in
-comment threads, and ingesting only posts would systematically undercount any
-ticker that gets discussed rather than announced.
+Free, unauthenticated, and reachable: `trending/symbols.json` and
+`streams/symbol/{SYMBOL}.json` both return 200 with no credentials. Twenty
+consecutive requests drew no 429, so the ceiling is well above burst size;
+ingest budgets **150 requests/hour** against an undocumented limit and backs off
+adaptively on 429 rather than assuming a number.
 
-**The subreddit list is configuration, but it is versioned configuration.**
-Adding a subreddit shifts every ticker's trailing mean overnight and would
-manufacture a market-wide spike the next morning. See §6.6.
+Two properties beyond raw volume:
 
-### 3.3 StockTwits
+1. Messages are already `$TICKER`-tagged, so no extraction guesswork.
+2. Roughly half carry a native bull/bear label — free sentiment ground truth
+   to calibrate the lexicon (§6.11) against.
 
-Free public endpoints. Two properties make it valuable beyond raw volume:
+**Crypto is filtered out.** Roughly a third of trending is crypto (`BTC.X`,
+`XRP.X`, `ETH`). Symbols ending `.X` or otherwise flagged crypto are dropped at
+ingest: crypto trades 24/7, which breaks the session-tiered cadence (§4.3), the
+market-clock forward returns (§7.3) and the SPY baseline (§7.3) simultaneously.
+Supporting it properly means a parallel set of rules, and that is not this
+version.
 
-1. Posts are already `$TICKER`-tagged, so no extraction guesswork.
-2. Messages carry a native bull/bear label.
+### 3.5 Poll cadence is per symbol, driven by message rate
 
-Because its tickers are unambiguous, StockTwits doubles as ground truth for
-calibrating the Reddit extractor (§4.2).
+The API returns **30 messages regardless of timespan**, so a fixed interval is
+wrong in both directions at once. At 5.8 msgs/hr, MSFT's 30 messages cover five
+hours and polling every 15 minutes refetches the same data twenty times. At 63
+msgs/hr, BTC.X burns through 30 messages in 28 minutes and an hourly poll loses
+data permanently.
 
-**StockTwits is an enrichment source, not a discovery source.** Free access
-covers `trending/symbols.json` and per-symbol streams — there is no firehose, so
-a symbol must already be known before it can be polled. Its ingest set is
-therefore trending symbols plus tickers Reddit has already surfaced.
+```
+coverage_hours = 30 / observed_msgs_per_hour
+poll_interval  = clamp(coverage_hours * 0.5, 15min, 4h)
+```
 
-This has a consequence for scoring: a ticker's StockTwits history begins only
-when that ticker enters the poll set, so its baseline is conditional in a way
-Reddit's is not. A newly polled symbol has no StockTwits baseline and must not
-contribute to the combined z until it has one of its own — per-source
-`baseline_days`, not one figure per bucket (§6.2, §6.8).
+The rate is measured per symbol from its own returned messages and stored, so
+the schedule self-corrects: a symbol that heats up is automatically polled
+faster before anything is missed. This is what makes a standing set of several
+hundred symbols fit inside the request budget.
 
-**Open items:** current terms of service must be confirmed to permit this use,
-and the access tier for the endpoints above verified — some now require
-approval. Until both are settled, **v1 ships Reddit-only** and the extractor is
-calibrated against a hand-labelled corpus instead of against StockTwits
-cashtags. The source interface (§4.1) and the per-source columns (§4.5) are
-built for two sources regardless, so adding it later is additive.
+Three tiers share that budget:
+
+| Tier | Membership | Purpose |
+|---|---|---|
+| Trending | the 30 from `trending/symbols.json` | discovery |
+| Active | anything that trended recently, or is currently spiking | the working set |
+| Standing | a few hundred by market cap, round-robin | baseline history for the long tail |
+
+The standing set exists because a z-score needs history. A symbol first seen the
+day it spikes has no baseline and can only ever be `provisional` (§6.8).
+
+**Volume reality:** outside the trending set most symbols produce fewer than 10
+messages/hour, so the 1h window (§6.9) is marginal for them and the 4h/24h
+windows carry the signal. 15-minute buckets remain the storage grain; the
+eligibility floor is judged per window, not per bucket.
+
+### 3.6 Bluesky — pending measurement
+
+Public search endpoints return 403 unauthenticated, but Bluesky issues **app
+passwords self-serve** — generated in account settings, no approval, no review.
+That is a credentialed path, not a circumvention, and it is the difference
+between Bluesky and Reddit.
+
+Its role would be the one StockTwits cannot fill: broad, non-finance-native
+discovery, where an unknown ticker surfaces before it trends anywhere. It is not
+built until measured against the same floor that rejected 4chan.
 
 ### 3.4 Prices
 
@@ -170,7 +230,7 @@ that returns rows is not automatically `ok` — hitting the page cap makes it
 
 Dedup on a unique index over `(source, external_id)`. Re-fetching an already
 stored post updates its score and comment count, since engagement grows after
-first sight (§5.4.10 for the upsert).
+first sight (§5.5.10 for the upsert).
 
 **Deleted posts.** On refetch, if a post is deleted or removed upstream, blank
 `body` and `title` but keep the mention rows and bucket counts. The aggregate
@@ -185,7 +245,7 @@ constantly, and every false positive becomes a fake spike.
 A `ticker_universe` table holds symbol, company name, exchange, and the profile
 fields from §3.4, seeded from a free symbol listing and refreshed weekly.
 
-**Symbols are stored `utf8mb4_bin` (§5.4.6), so lookups are case-sensitive.
+**Symbols are stored `utf8mb4_bin` (§5.5.6), so lookups are case-sensitive.
 Every candidate token must be uppercased before it is looked up.** Without that
 normalization, any lowercase-derived match misses silently — no error, just a
 mention that never gets counted.
@@ -250,7 +310,7 @@ ingest cadence during exactly those weeks. Session state derives from the NY
 exchange calendar, including holidays and early closes; display converts at the
 last moment.
 
-Datetime storage rules are in §5.4.4 — `DATETIME(6)` holding UTC, connection
+Datetime storage rules are in §5.5.4 — `DATETIME(6)` holding UTC, connection
 time zone pinned to `+00:00`. `TIMESTAMP` is prohibited here precisely because
 it converts against the session time zone and would break this rule the moment a
 connection opened with a different setting.
@@ -266,9 +326,16 @@ the bucket `missing` (discarding good Reddit data) and marking it `ok` (silently
 halving the count) — the second being exactly the baseline poisoning this
 section exists to prevent.
 
-So `radar_bucket` carries `status_reddit` and `status_stocktwits`, each
-`ENUM('ok','missing','truncated')`, and scoring is per source before it is
-combined (§6.2).
+Fixed per-source columns cannot express this once sources are a *set* rather
+than a pair. Two sources meant eight columns (`count_`, `status_`, `mention_z_`,
+`baseline_days_` each); a third makes twelve, every new source is a migration,
+and — decisively — a **user-selectable subset of sources (§8.6) has to be pooled
+at query time**, which fixed columns cannot do.
+
+So per-source data lives in its own row, in `radar_bucket_sources` (§5.4), keyed
+`(ticker, bucket_start, source)`. Scoring is per source before it is combined
+(§6.2), and combining an arbitrary subset is then a `GROUP BY` rather than a
+schema change.
 
 | Status | Counted live? | In baseline? |
 |---|---|---|
@@ -292,9 +359,9 @@ One row per ingested post or comment: the `RawPost` fields plus first-seen and
 last-updated timestamps, plus a **64-bit simhash of the normalized body**
 (§6.7).
 
-`body` is `MEDIUMTEXT` — see §5.4.2.
+`body` is `MEDIUMTEXT` — see §5.5.2.
 
-**Retention: 30 days rolling**, deleted in chunks (§5.4.9).
+**Retention: 30 days rolling**, deleted in chunks (§5.5.9).
 
 ### 5.2 `radar_mention`
 
@@ -312,18 +379,39 @@ The queryable layer. One row per (ticker × 15-minute bucket):
 - `distinct_text_ratio` — distinct simhashes / mention count (§6.7)
 - `engagement_weighted_count`
 - `sentiment_mean`, `sentiment_stdev`
-- per-source counts
-- `status_reddit`, `status_stocktwits` — `ENUM('ok','missing','truncated')`
-- `mention_z_reddit`, `mention_z_stocktwits`, `sources_ok`
+- `sources_ok` — how many sources reported `ok` for this bucket
 - `source_config_version` (§6.6)
-- `baseline_days_reddit`, `baseline_days_stocktwits` (§6.8) — per source, since
-  StockTwits history starts when a ticker enters its poll set (§3.3)
 
-**Retention: forever**, partitioned monthly (§5.4.8). Rows are small and this is
+These are the **all-sources** totals: the fast path for the default view. The
+per-source breakdown lives in `radar_bucket_sources` and is what a selected
+subset reads (§8.6). The redundancy is deliberate — the default view is hit
+constantly and should not pay for a join.
+
+**Retention: forever**, partitioned monthly (§5.5.8). Rows are small and this is
 what every score, chart and baseline reads. Raw text ageing out does not damage
 history.
 
-### 5.4 MariaDB specifics
+### 5.4 `radar_bucket_sources`
+
+One row per (ticker × bucket × source). This is what makes the source set open
+rather than fixed, and what a UI-selected subset (§8.6) aggregates over.
+
+Key `(ticker, bucket_start, source)`. Columns: `mention_count`,
+`distinct_authors`, `distinct_text_ratio`, `engagement_weighted_count`,
+`sentiment_mean`, `status` (`ENUM('ok','missing','truncated')`), and — written
+by the scoring layer — `expected`, `variance`, `mention_z`, `baseline_days`.
+
+Storing `expected` and `variance` alongside `mention_z` is what lets §6.2 pool
+any subset correctly. A weighted mean of z-scores would be wrong; summing the
+components is not.
+
+**No foreign key to `radar_buckets`.** InnoDB does not support foreign keys on
+partitioned tables, and `radar_buckets` is partitioned monthly. This table is
+partitioned on `bucket_start` identically and joined on `(ticker,
+bucket_start)`. Retention and partition maintenance must therefore treat the two
+tables as one unit — nothing enforces that relationship for us.
+
+### 5.5 MariaDB specifics
 
 Production is MariaDB; dev is MySQL 8. Each item below is a failure that shows
 up in production rather than in tests.
@@ -424,8 +512,9 @@ dropped.
 
 ### 6.2 Combining sources
 
-Each source is scored against **its own** baseline, producing
-`mention_z_reddit` and `mention_z_stocktwits` for display.
+Each source is scored against **its own** baseline, producing a `mention_z` per
+source in `radar_bucket_sources` (§5.4) for display. Nothing enumerates sources
+by name — the set is open, and a new source is a config entry plus one module.
 
 The combined figure pools the underlying counts rather than averaging the
 z-scores — z-scores are not additive, and a weighted mean of them has no clean
@@ -739,6 +828,36 @@ matched by company name.
 
 Past spikes with their forward returns, plus the §7.4 aggregates, grouped by
 `threshold_version`.
+
+### 8.6 Source selector
+
+The leaderboard carries a source selector: which sources feed the ranking is
+chosen in the UI, not fixed at build time.
+
+**It is a read-time filter, and never anything more.** The distinction matters
+enough to state twice:
+
+- `source_config_version` (§6.6) versions what is **ingested**. Changing it
+  starts a baseline warm-up, because the population being measured changed.
+- The source selector changes what is **displayed** from data already ingested.
+  It must never touch baselines, never start a warm-up, and never write
+  anything.
+
+Conflating the two would make every toggle of a checkbox look like a
+market-wide spike, which is precisely the failure §6.6 exists to prevent.
+
+Selecting a subset re-pools the per-source components from
+`radar_bucket_sources` (§5.4) over the chosen sources only:
+
+```
+z = (Σ observed − Σ expected) / sqrt(Σ variance)   over selected sources
+```
+
+Rows are marked with which sources actually contributed, since the same
+divergence backed by two independent sources is stronger evidence than one
+backed by a single source. A ticker no selected source has data for drops out
+of the list rather than rendering as a zero — the §4.5 rule, applied at read
+time.
 
 ### 8.5 Auth
 
