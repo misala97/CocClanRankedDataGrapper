@@ -99,10 +99,23 @@ Free public endpoints. Two properties make it valuable beyond raw volume:
 Because its tickers are unambiguous, StockTwits doubles as ground truth for
 calibrating the Reddit extractor (§4.2).
 
-**Open item:** StockTwits' current terms of service must be confirmed to permit
-this use before the source module is built. If they do not, v1 ships
-Reddit-only and the extractor is calibrated against a hand-labelled corpus
-instead.
+**StockTwits is an enrichment source, not a discovery source.** Free access
+covers `trending/symbols.json` and per-symbol streams — there is no firehose, so
+a symbol must already be known before it can be polled. Its ingest set is
+therefore trending symbols plus tickers Reddit has already surfaced.
+
+This has a consequence for scoring: a ticker's StockTwits history begins only
+when that ticker enters the poll set, so its baseline is conditional in a way
+Reddit's is not. A newly polled symbol has no StockTwits baseline and must not
+contribute to the combined z until it has one of its own — per-source
+`baseline_days`, not one figure per bucket (§6.2, §6.8).
+
+**Open items:** current terms of service must be confirmed to permit this use,
+and the access tier for the endpoints above verified — some now require
+approval. Until both are settled, **v1 ships Reddit-only** and the extractor is
+calibrated against a hand-labelled corpus instead of against StockTwits
+cashtags. The source interface (§4.1) and the per-source columns (§4.5) are
+built for two sources regardless, so adding it later is additive.
 
 ### 3.4 Prices
 
@@ -217,8 +230,10 @@ cadence is comfortable at rest; r/wallstreetbets during a squeeze produces more
 comments than that per cycle. Without catch-up, ingest silently truncates
 exactly when the signal is real, and the truncation leaves no trace in the data.
 
-- Paginate backwards on the `before` fullname until the newest already-stored
-  item is reached, with a hard page cap per cycle.
+- Paginate backwards using the **`after`** fullname until an already-stored item
+  is reached, with a hard page cap per cycle. `after` walks a `/new` listing
+  towards older items; `before` returns items *newer* than the given fullname
+  and would loop on an empty page instead of catching up.
 - Hitting the cap marks the affected buckets `truncated` (§4.5).
 - Log per-cycle `catchup_depth`. Sustained deep catch-up means the cadence needs
   raising, and that must be visible without querying the database.
@@ -301,7 +316,8 @@ The queryable layer. One row per (ticker × 15-minute bucket):
 - `status_reddit`, `status_stocktwits` — `ENUM('ok','missing','truncated')`
 - `mention_z_reddit`, `mention_z_stocktwits`, `sources_ok`
 - `source_config_version` (§6.6)
-- `baseline_days` (§6.8)
+- `baseline_days_reddit`, `baseline_days_stocktwits` (§6.8) — per source, since
+  StockTwits history starts when a ticker enters its poll set (§3.3)
 
 **Retention: forever**, partitioned monthly (§5.4.8). Rows are small and this is
 what every score, chart and baseline reads. Raw text ageing out does not damage
