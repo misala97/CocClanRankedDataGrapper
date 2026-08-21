@@ -134,9 +134,15 @@ def main():
     fetchers = build_fetchers()
 
     scheduler = BackgroundScheduler(timezone='UTC')
+    # next_run_time is not a nicety. An interval trigger otherwise fires only
+    # after the first interval has elapsed, so starting the service overnight
+    # means thirty minutes of silence before any evidence it works -- and the
+    # same wait after every deploy restart. Catch-up is cursor-driven, so an
+    # immediate first cycle costs nothing and collects the gap.
     scheduler.add_job(_scheduled_cycle, 'interval', seconds=180,
                       id='radar_cycle', args=[scheduler, fetchers],
-                      max_instances=1, coalesce=True)
+                      max_instances=1, coalesce=True,
+                      next_run_time=dt.datetime.now(dt.timezone.utc))
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
     scheduler.start()
