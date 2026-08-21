@@ -363,6 +363,57 @@ inherits the old company's baseline — rare, and silent when it happens.
 `ticker_universe` carries `first_seen` and `delisted_at`; a reassignment resets
 the baseline rather than continuing it.
 
+### 4.2.1 Bare tokens are allowed per source
+
+Whether a bare uppercase token may be read as a ticker depends on the source,
+because it depends on who is talking.
+
+Measured on one live cycle with the identical extractor: StockTwits returned
+MRNA, DJT, AVGO and IOVA. Bluesky returned **IA** (Iowa), **GOP** (the party),
+**AP** (the news agency) and **BTC** (the coin). Every one of those is a
+genuinely listed ticker. None of those posts was about a stock.
+
+Neither guard helped, and both worked correctly:
+
+- **Corroboration passed.** GOP's fund is named "Subversive Congressional
+  Republicans Trading", so a political post corroborates it exactly.
+- **The distinct-author gate passed.** Thirty separate people wrote "IA".
+
+The problem is not detectable inside a single post, or inside a single
+ticker's statistics. It is a property of the population.
+
+| Source | Bare tokens | Why |
+|---|---|---|
+| StockTwits | allowed | finance-only by construction |
+| 4chan /biz/ | allowed | a finance board |
+| Bluesky | **cashtags only** | general population |
+| anything new | **cashtags only** | until measured |
+
+Live effect: mentions fell from 4886 to 92 in one cycle, and the false
+positives went with them.
+
+Unknown sources default to cashtags-only deliberately. A missed mention costs
+one row; a false one costs a fake spike that looks exactly like a real one
+several layers downstream.
+
+### 4.2.2 Crypto exclusion works on names, never on symbols
+
+§3.7 excludes crypto everywhere, but only StockTwits offers an
+`instrument_class` field to do it cleanly. Elsewhere the security's own name is
+the signal: BTC is Grayscale Bitcoin Mini Trust, ETH is Grayscale Ethereum, XRP
+is the Bitwise XRP ETF. Matching crypto terms in names removes 173 securities
+from a 12,596-symbol universe.
+
+**Matched on the name and never on the symbol.** `BCH` is Banco de Chile and
+`LINK` is Interlink Electronics — real companies whose tickers happen to spell
+coins. Excluding them by symbol would delete genuine coverage to resolve an
+ambiguity that only exists on crypto-heavy sources.
+
+That residual ambiguity is accepted rather than solved: a `$BCH` cashtag on
+Bluesky probably means Bitcoin Cash, and on StockTwits it means the bank.
+Source spread is what exposes it — a ticker loud on Bluesky and silent on
+StockTwits is a different object from one loud on both.
+
 ### 4.3 Cadence and catch-up
 
 An APScheduler daemon, `run_radar_ingest.py`, mirroring the deployed
