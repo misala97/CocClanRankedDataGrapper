@@ -282,8 +282,12 @@ def test_a_quote_is_normalized():
     assert quote.price == decimal.Decimal('123.45')
     assert quote.prev_close == decimal.Decimal('120.0')
     assert quote.volume == 900000
-    assert quote.quote_ts == dt.datetime.utcfromtimestamp(1786000000).replace(
-        microsecond=0)
+    # Timezone-aware conversion, then dropped to naive UTC -- the convention
+    # every datetime in this codebase is stored in. utcfromtimestamp() would
+    # read more naturally and is deprecated, which the suite's
+    # -W error::DeprecationWarning gate turns into a failure.
+    assert quote.quote_ts == dt.datetime.fromtimestamp(
+        1786000000, dt.timezone.utc).replace(tzinfo=None, microsecond=0)
 
 
 def test_prices_arrive_as_decimal_not_float():
@@ -590,7 +594,7 @@ class TwelveDataProvider:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_radar_prices.py -v`
-Expected: 9 passed
+Expected: 10 passed
 
 - [ ] **Step 5: Commit**
 
