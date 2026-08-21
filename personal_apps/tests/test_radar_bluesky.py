@@ -113,3 +113,21 @@ def test_no_events_at_all_is_missing_not_a_quiet_network():
     """144k posts/hour means silence is a broken connection, never calm."""
     result = bluesky.fetch(BASE - dt.timedelta(hours=1), drain_returning([]))
     assert result.status == 'missing'
+
+
+def test_the_drain_stops_once_it_reaches_live():
+    """A fixed budget captured a 45-second window out of every 180-second
+    cycle and quietly dropped the rest -- quietly because the shortfall was
+    smaller than the clamp tolerance, so nothing marked it truncated.
+
+    Verified against live traffic: a three-minute gap went from 1848 posts in
+    45 seconds to 5399 in 12.
+    """
+    import inspect
+    source = inspect.getsource(bluesky.live_drain)
+    assert 'CAUGHT_UP_MARGIN' in source, 'drain would burn its whole budget'
+
+
+def test_caught_up_margin_is_tight_enough_to_mean_live():
+    """At ~30 posts/second, a few seconds behind is the front of the queue."""
+    assert bluesky.CAUGHT_UP_MARGIN <= dt.timedelta(seconds=10)

@@ -30,6 +30,10 @@ JETSTREAM_URL = ('wss://jetstream2.us-east.bsky.network/subscribe'
 # them.
 CLAMP_TOLERANCE = dt.timedelta(minutes=5)
 
+# How close to real time counts as caught up. The firehose runs about 40 posts
+# a second, so a couple of seconds behind is the front of the queue.
+CAUGHT_UP_MARGIN = dt.timedelta(seconds=3)
+
 
 class JetstreamUnavailable(Exception):
     """The firehose did not deliver. Never becomes a zero count."""
@@ -110,6 +114,13 @@ def live_drain(cursor_us, budget_seconds):
         collected = []
         url = '%s&cursor=%d' % (JETSTREAM_URL, cursor_us)
         started = time.time()
+        # Stop once the replay reaches live rather than burning the whole
+        # budget. A fixed budget captured a 45-second window out of every
+        # 180-second cycle and left the rest uncollected -- silently, because
+        # the shortfall was smaller than the clamp tolerance, so it never
+        # showed up as truncated. Jetstream replays far faster than real time,
+        # so catching up usually takes a fraction of the budget.
+        caught_up_us = CAUGHT_UP_MARGIN.total_seconds() * 1_000_000
 
         # websockets resolves through asyncio, so the urllib3-level IPv4
         # preference in config.prefer_ipv4_if_configured() does not reach it.
@@ -127,9 +138,14 @@ def live_drain(cursor_us, budget_seconds):
                     except asyncio.TimeoutError:
                         break
                     try:
-                        collected.append(json.loads(raw))
+                        event = json.loads(raw)
                     except ValueError:
                         continue
+                    collected.append(event)
+
+                    stamp = event.get('time_us')
+                    if stamp and (time.time() * 1_000_000 - stamp) < caught_up_us:
+                        break
         except Exception as exc:
             raise JetstreamUnavailable(str(exc)) from exc
         return collected
