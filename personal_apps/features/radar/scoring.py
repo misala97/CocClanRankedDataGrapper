@@ -17,7 +17,10 @@ from extensions import db
 from models import RadarBucketSource
 
 from . import baselines, profile
-from .config import VARIANCE_FLOOR, source_config_version
+from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_TEXT_RATIO,
+                     MIN_MENTIONS, SUSTAINED_HOURS_CONSIDERED,
+                     SUSTAINED_HOURS_REQUIRED, VARIANCE_FLOOR,
+                     source_config_version)
 
 # Weight of the cold-start prior, in units of observed mass. 0.05 of a week is
 # about eight hours: enough to dominate on day one and vanish by week two.
@@ -125,3 +128,61 @@ def pooled_z(ticker, bucket_start, sources):
     variance = sum(r.variance for r in rows)
 
     return (observed - expected) / max(variance, VARIANCE_FLOOR) ** 0.5, len(rows)
+
+
+def is_eligible(mentions, authors, text_ratio):
+    """Whether a reading is worth ranking at all.
+
+    Three gates, because each is blind to what the others catch: raw volume
+    means nothing at low counts, one determined account can supply any volume,
+    and fifty accounts pasting one message defeat the author gate completely.
+    """
+    return (mentions >= MIN_MENTIONS
+            and authors >= MIN_DISTINCT_AUTHORS
+            and text_ratio >= MIN_DISTINCT_TEXT_RATIO)
+
+
+def window_z(ticker, sources, end, hours):
+    """Pooled z over a time window. Returns (z, component parts).
+
+    Components are summed across both time and sources for the same reason
+    pooled_z sums them: the sum of independent counts has the sum of their
+    expectations and variances, and no other combination is a z-score.
+    """
+    start = end - dt.timedelta(hours=hours)
+    rows = (RadarBucketSource.query
+            .filter(RadarBucketSource.ticker == ticker,
+                    RadarBucketSource.source.in_(list(sources)),
+                    RadarBucketSource.bucket_start >= start,
+                    RadarBucketSource.bucket_start < end,
+                    RadarBucketSource.mention_z.isnot(None))
+            .all())
+    if not rows:
+        return None, {}
+
+    parts = {
+        'mentions': sum(r.mention_count for r in rows),
+        'expected': sum(r.expected for r in rows),
+        'variance': sum(r.variance for r in rows),
+        'authors': max((r.distinct_authors for r in rows), default=0),
+        'text_ratio': min((r.distinct_text_ratio for r in rows), default=1.0),
+        'buckets': len(rows),
+    }
+    z = ((parts['mentions'] - parts['expected'])
+         / max(parts['variance'], VARIANCE_FLOOR) ** 0.5)
+    return z, parts
+
+
+def is_sustained(ticker, sources, end):
+    """Elevated across most of the last four separate hours.
+
+    Not "elevated in the 1h, 4h and 24h windows" -- those are nested, so one
+    loud hour lifts all three and their agreement means nothing. Consecutive
+    non-overlapping hours are independent evidence (spec 6.9).
+    """
+    elevated = 0
+    for step in range(SUSTAINED_HOURS_CONSIDERED):
+        z, _ = window_z(ticker, sources, end - dt.timedelta(hours=step), hours=1)
+        if z is not None and z >= ELEVATED_Z:
+            elevated += 1
+    return elevated >= SUSTAINED_HOURS_REQUIRED

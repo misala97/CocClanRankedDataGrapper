@@ -170,3 +170,18 @@ def prefer_ipv4_if_configured():
     import urllib3.util.connection as urllib3_connection
     urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
     return True
+
+
+# Eligibility floor (spec 6.3). Three gates, each closing a hole the others
+# cannot see: volume alone is meaningless at low counts, one account can supply
+# any volume, and fifty accounts can paste one message.
+MIN_MENTIONS = 5
+MIN_DISTINCT_AUTHORS = 3
+MIN_DISTINCT_TEXT_RATIO = 0.35
+
+# A window counts as elevated at or above this z.
+ELEVATED_Z = 2.0
+
+# Sustained: this many of the last four non-overlapping hours elevated.
+SUSTAINED_HOURS_REQUIRED = 3
+SUSTAINED_HOURS_CONSIDERED = 4

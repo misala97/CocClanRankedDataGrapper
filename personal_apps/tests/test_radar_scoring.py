@@ -212,3 +212,62 @@ def test_a_missing_source_drops_out_rather_than_contributing_zero(rows):
 
 def test_pooling_nothing_returns_none(rows):
     assert scoring.pooled_z('SSNOPE', MONDAY, ['stocktwits']) == (None, 0)
+
+
+def test_eligibility_needs_volume_authors_and_variety():
+    assert scoring.is_eligible(mentions=10, authors=6, text_ratio=0.9) is True
+    assert scoring.is_eligible(mentions=2, authors=2, text_ratio=1.0) is False
+    assert scoring.is_eligible(mentions=10, authors=1, text_ratio=1.0) is False
+    assert scoring.is_eligible(mentions=40, authors=40, text_ratio=0.05) is False
+
+
+def test_the_author_gate_stops_one_person_shouting():
+    assert scoring.is_eligible(mentions=50, authors=1, text_ratio=1.0) is False
+
+
+def test_the_text_gate_stops_fifty_people_pasting_one_thing():
+    """Distinct authors cannot see a brigade; distinct text can."""
+    assert scoring.is_eligible(mentions=50, authors=50, text_ratio=0.02) is False
+
+
+def test_a_window_aggregates_its_buckets(rows):
+    steady_history()
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+    end = MONDAY + dt.timedelta(days=20)
+
+    _, parts_1h = scoring.window_z('SSA', ['stocktwits'], end, hours=1)
+    _, parts_4h = scoring.window_z('SSA', ['stocktwits'], end, hours=4)
+    assert parts_4h['mentions'] > parts_1h['mentions']
+    assert parts_4h['expected'] > parts_1h['expected']
+
+
+def test_a_window_with_no_scored_buckets_is_none(rows):
+    assert scoring.window_z('SSNOPE', ['stocktwits'], NOW, hours=1) == (None, {})
+
+
+def test_sustained_needs_several_non_overlapping_hours(rows):
+    """1h, 4h and 24h are nested, so one loud hour lifts all three and
+    "elevated in all three" would just restate it. Sustained is measured over
+    consecutive separate hours instead (spec 6.9)."""
+    steady_history()
+    end = MONDAY + dt.timedelta(days=20)
+    db.session.commit()
+
+    for step in range(4):                      # one loud hour only
+        RadarBucketSource.query.filter_by(
+            ticker='SSA',
+            bucket_start=end - dt.timedelta(minutes=15 * (step + 1))).update(
+            {'mention_count': 40})
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+    assert scoring.is_sustained('SSA', ['stocktwits'], end) is False
+
+    for step in range(12):                     # three of the last four hours
+        RadarBucketSource.query.filter_by(
+            ticker='SSA',
+            bucket_start=end - dt.timedelta(minutes=15 * (step + 1))).update(
+            {'mention_count': 40})
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+    assert scoring.is_sustained('SSA', ['stocktwits'], end) is True
