@@ -88,3 +88,12 @@ def test_the_request_budget_is_a_sane_fraction_of_the_hourly_one():
     """StockTwits publishes no limit; this is a conservative guess with
     adaptive backoff, not a documented ceiling."""
     assert 1 <= daemon.SYMBOL_BUDGET_PER_CYCLE <= 40
+
+
+def test_the_first_cycle_is_scheduled_immediately():
+    """An interval trigger fires only after the interval elapses. Overnight
+    that is thirty minutes of silence after starting the service, which reads
+    as a dead daemon."""
+    import inspect
+    source = inspect.getsource(daemon.main)
+    assert 'next_run_time' in source, 'first cycle would wait a full interval'
