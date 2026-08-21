@@ -14,8 +14,14 @@ from .config import STOPWORDS
 # Cashtags accept 1-5 letters. Bare tokens require 2-5: single uppercase
 # letters are far more often sentence fragments, initials or profanity than
 # they are Ford.
-_CASHTAG_RE = re.compile(r'\$([A-Za-z]{1,5})\b')
-_BARE_RE = re.compile(r'\b([A-Z]{2,5})\b')
+# The left boundary is not decoration: without it, "A$AP Rocky" yields a
+# cashtag for AP (Ampco-Pittsburgh), which is how a Selena Gomez track
+# became a high-confidence stock mention in live data.
+_CASHTAG_RE = re.compile(r'(?<![A-Za-z0-9])\$([A-Za-z]{1,5})\b')
+# Guarded on the left too. A token sitting after a '$' that the cashtag
+# pattern already rejected -- the AP in "A$AP" -- must not slip back in as
+# a bare match.
+_BARE_RE = re.compile(r'(?<![$A-Za-z0-9])([A-Z]{2,5})\b')
 
 _CONFIDENCE_RANK = {'low': 0, 'medium': 1, 'high': 2}
 

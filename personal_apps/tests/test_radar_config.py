@@ -34,3 +34,22 @@ def test_stopwords_are_uppercase():
     lowercase entry here would never match and would silently let a false
     positive through."""
     assert all(word == word.upper() for word in config.STOPWORDS)
+
+
+def test_ipv4_preference_is_off_unless_asked_for(monkeypatch):
+    """A host with working IPv6 should use it. This exists for one broken
+    machine, not as a default."""
+    monkeypatch.delenv('RADAR_FORCE_IPV4', raising=False)
+    assert config.prefer_ipv4_if_configured() is False
+
+
+def test_ipv4_preference_applies_when_set(monkeypatch):
+    import socket
+    import urllib3.util.connection as urllib3_connection
+    original = urllib3_connection.allowed_gai_family
+    monkeypatch.setenv('RADAR_FORCE_IPV4', '1')
+    try:
+        assert config.prefer_ipv4_if_configured() is True
+        assert urllib3_connection.allowed_gai_family() == socket.AF_INET
+    finally:
+        urllib3_connection.allowed_gai_family = original

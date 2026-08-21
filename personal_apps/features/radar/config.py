@@ -64,3 +64,27 @@ def source_config_version():
     """
     payload = json.dumps(sorted(SOURCES), separators=(',', ':'))
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
+
+
+def prefer_ipv4_if_configured():
+    """Opt-in workaround for a host that advertises IPv6 but cannot route it.
+
+    Set RADAR_FORCE_IPV4=1 to make outbound HTTP skip AAAA records.
+
+    Measured on one such machine: DNS returned both records, IPv4 connected in
+    10 milliseconds, and IPv6 hung until the OS gave up around 43 seconds --
+    which every request paid before falling back. Forcing IPv4 took a
+    StockTwits call from 42.6s to 0.53s.
+
+    Off by default and deliberately not automatic. A host with working IPv6
+    should use it, and silently disabling half the internet's addressing to
+    paper over one broken machine is the wrong default for the VPS.
+    """
+    import os
+    if os.getenv('RADAR_FORCE_IPV4', '').strip() not in ('1', 'true', 'True'):
+        return False
+
+    import socket
+    import urllib3.util.connection as urllib3_connection
+    urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
+    return True

@@ -187,3 +187,16 @@ def test_a_word_common_across_the_universe_is_not_corroboration():
     assert extract_tickers(None, 'healthcare stocks like HR', lookup) == [('HR', 'low')]
     # `realty` is unique to HR in this universe, so it does corroborate.
     assert extract_tickers(None, 'realty play: HR', lookup) == [('HR', 'high')]
+
+
+def test_a_dollar_sign_inside_a_word_is_not_a_cashtag():
+    """Found in live data: "A$AP Rocky" scored a high-confidence mention of
+    Ampco-Pittsburgh. Stylised names put dollar signs mid-word and the pattern
+    has to require a boundary on the left as well as the right."""
+    lookup = annotate_distinctive({'AP': {'name': 'Ampco-Pittsburgh Corporation',
+                                          'exchange': 'NYSE'}})
+    assert extract_tickers(None, 'now playing A$AP Rocky', lookup) == []
+    assert extract_tickers(None, 'ke$ha and A$AP', lookup) == []
+    # A real cashtag still works.
+    assert extract_tickers(None, 'bought $AP today', lookup) == [('AP', 'high')]
+    assert extract_tickers(None, '($AP)', lookup) == [('AP', 'high')]

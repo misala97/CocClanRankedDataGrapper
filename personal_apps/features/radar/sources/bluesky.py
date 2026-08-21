@@ -100,6 +100,8 @@ def live_drain(cursor_us, budget_seconds):
     """Connect, replay from the cursor, stop at the budget. Real network."""
     import asyncio
     import json
+    import os
+    import socket as socket_module
     import time
 
     import websockets
@@ -108,8 +110,17 @@ def live_drain(cursor_us, budget_seconds):
         collected = []
         url = '%s&cursor=%d' % (JETSTREAM_URL, cursor_us)
         started = time.time()
+
+        # websockets resolves through asyncio, so the urllib3-level IPv4
+        # preference in config.prefer_ipv4_if_configured() does not reach it.
+        # On a host that advertises IPv6 without routing it, the connect hangs
+        # for the full OS timeout before falling back.
+        extra = {}
+        if os.getenv('RADAR_FORCE_IPV4', '').strip() in ('1', 'true', 'True'):
+            extra['family'] = socket_module.AF_INET
+
         try:
-            async with websockets.connect(url, max_size=None) as socket:
+            async with websockets.connect(url, max_size=None, **extra) as socket:
                 while time.time() - started < budget_seconds:
                     try:
                         raw = await asyncio.wait_for(socket.recv(), timeout=15)
