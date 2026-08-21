@@ -282,3 +282,24 @@ def test_a_low_is_still_promoted_by_a_stored_high(seeded):
         bucket = RadarBucket.query.filter_by(ticker='ZZG').one()
         assert bucket.mention_count == 2     # both scored
         assert bucket.low_count == 0
+
+
+def test_an_unexpected_source_error_does_not_kill_the_cycle(seeded):
+    """A missing dependency once took down a whole live cycle -- StockTwits and
+    4chan included -- because ModuleNotFoundError is not the exception type the
+    Bluesky module declares. Sources fail in ways they never anticipated, so
+    the isolation has to be broad."""
+    def exploding(since):
+        raise ModuleNotFoundError("No module named 'websockets'")
+
+    def healthy(since):
+        return FetchResult(posts=[post(ident='ok1', body='$ZZG up')], status='ok')
+
+    result = ingest.run_cycle(NOW, {'bluesky': exploding, 'stocktwits': healthy})
+
+    assert result['per_source'] == {'bluesky': 'missing', 'stocktwits': 'ok'}
+    assert result['mentions'] == 1
+    with flask_app.app_context():
+        from models import RadarBucketSource
+        rows = {r.source for r in RadarBucketSource.query.filter_by(ticker='ZZG')}
+        assert rows == {'stocktwits'}   # no bluesky row, and no zero
