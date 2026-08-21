@@ -24,7 +24,7 @@ class FakeClient:
         for number, payload in self.threads.items():
             if path.endswith('/%d.json' % number):
                 return payload
-        raise fourchan.FourChanUnavailable('404 %s' % path)
+        raise fourchan.FourChanGone(path)
 
 
 BASE = dt.datetime(2026, 8, 21, 14, 0, 0)
@@ -108,15 +108,18 @@ def test_an_unreachable_catalog_is_missing():
     assert result.posts == []
 
 
-def test_one_dead_thread_does_not_lose_the_others():
-    """Threads get pruned constantly; a 404 mid-cycle is routine."""
+def test_a_pruned_thread_is_routine_and_not_truncation():
+    """Threads are pruned constantly, so one listed in the catalog can be gone
+    a second later. That is attrition, not coverage we failed to collect --
+    and marking it truncated made every single live cycle truncated, which
+    excludes the source from baselines permanently."""
     client = FakeClient(
         _catalog([{'no': 100, 'last_modified': _epoch(BASE)},
                   {'no': 999, 'last_modified': _epoch(BASE)}]),
         {100: {'posts': [_post(100, BASE)]}})
     result = fourchan.fetch(BASE - dt.timedelta(hours=1), client)
     assert len(result.posts) == 1
-    assert result.status == 'truncated'
+    assert result.status == 'ok'
 
 
 def test_a_post_without_a_poster_id_falls_back_to_its_thread():
@@ -127,3 +130,26 @@ def test_a_post_without_a_poster_id_falls_back_to_its_thread():
         {100: {'posts': [{'no': 101, 'time': _epoch(BASE), 'com': '$ZZA'}]}})
     assert fourchan.fetch(BASE - dt.timedelta(hours=1), client).posts[0].author == \
         'thread:100'
+
+
+def test_a_thread_that_errors_for_real_is_truncation():
+    """A 500 is different from a 404: the thread exists and we could not read
+    it, so this cycle genuinely undercounted."""
+    class Flaky(FakeClient):
+        def get_json(self, path):
+            if '/999.json' in path:
+                raise fourchan.FourChanUnavailable('500 server error')
+            return super().get_json(path)
+
+    client = Flaky(
+        _catalog([{'no': 100, 'last_modified': _epoch(BASE)},
+                  {'no': 999, 'last_modified': _epoch(BASE)}]),
+        {100: {'posts': [_post(100, BASE)]}})
+    result = fourchan.fetch(BASE - dt.timedelta(hours=1), client)
+    assert result.status == 'truncated'
+    assert len(result.posts) == 1
+
+
+def test_gone_is_a_kind_of_unavailable():
+    """Callers that only care that a request failed still catch one type."""
+    assert issubclass(fourchan.FourChanGone, fourchan.FourChanUnavailable)
