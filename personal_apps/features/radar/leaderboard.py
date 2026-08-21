@@ -10,7 +10,10 @@ import collections
 import dataclasses
 import datetime as dt
 
-from models import RadarBucketSource, TickerUniverse
+import sqlalchemy as sa
+
+from extensions import db
+from models import RadarBucketSource, RadarMention, RadarPost, TickerUniverse
 
 from . import divergence as divergence_mod
 from . import quotes as quotes_mod
@@ -36,6 +39,37 @@ class Row:
     price_status: str
     baseline_days: int | None
     marks: list
+
+
+def _distinct_authors(tickers, sources, since, now):
+    """True distinct authors per ticker across the whole window.
+
+    Buckets store distinct_authors as a COUNT, so aggregating them can only
+    take a maximum -- and a maximum systematically undercounts. Two buckets
+    holding {x, y} and {z, w} have four distinct authors between them and
+    report two.
+
+    Measured on live data the gap was severe: NVDA showed 26 real authors
+    against a bucket maximum of 2, and SPY 21 against 2. The eligibility floor
+    needs three, so the maximum was rejecting almost every ticker on the board
+    -- including the ones with the broadest genuine participation.
+
+    Counted from the mention rows instead, where the authors themselves are
+    still available.
+    """
+    if not tickers:
+        return {}
+
+    rows = (db.session.query(RadarMention.ticker,
+                             sa.func.count(sa.distinct(RadarPost.author)))
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+            .filter(RadarMention.ticker.in_(list(tickers)),
+                    RadarPost.source.in_(list(sources)),
+                    RadarPost.created_utc >= since,
+                    RadarPost.created_utc < now,
+                    RadarMention.confidence.in_(('high', 'medium')))
+            .group_by(RadarMention.ticker).all())
+    return {ticker: count for ticker, count in rows}
 
 
 def _universe_rows(tickers):
@@ -66,6 +100,7 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50):
         grouped[row.ticker].append(row)
 
     profiles = _universe_rows(grouped.keys())
+    author_counts = _distinct_authors(grouped.keys(), sources, since, now)
     today = now.date()
     rows = []
 
@@ -73,7 +108,12 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50):
         mentions = sum(b.mention_count for b in buckets)
         expected = sum(b.expected or 0.0 for b in buckets)
         variance = sum(b.variance or 0.0 for b in buckets)
-        authors = max(b.distinct_authors for b in buckets)
+        # True count where the posts are still retained; the bucket maximum
+        # only as a fallback once they have aged out. The fallback undercounts,
+        # which is the safe direction -- it can hide a ticker but never invent
+        # breadth that was not there.
+        authors = author_counts.get(
+            ticker, max(b.distinct_authors for b in buckets))
         text_ratio = min(b.distinct_text_ratio for b in buckets)
 
         # Below the floor there is nothing to rank. Showing it low would imply
@@ -105,10 +145,9 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50):
         # row carries the mark and no score rather than a flattering number.
         value = None
         if status == 'ok' and move is not None and mention_z is not None:
-            closes_sigma = None
-            if profile is not None and profile.market_cap is not None:
-                closes_sigma = None      # filled by the volatility job
-            move_z = divergence_mod.price_move_z(move, closes_sigma)
+            sigma = profile.daily_sigma if profile else None
+            move_z = divergence_mod.price_move_z(
+                move, quotes_mod.scale_sigma(sigma, window_hours))
             if move_z is not None:
                 value = divergence_mod.divergence(mention_z, move_z)
 

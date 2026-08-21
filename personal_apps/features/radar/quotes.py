@@ -103,3 +103,30 @@ def scale_sigma(sigma, hours):
     if sigma is None:
         return None
     return sigma * ((hours / SESSION_HOURS) ** 0.5)
+
+
+def refresh_sigma(provider, tickers, now):
+    """Recompute and store daily volatility. Returns how many were updated.
+
+    A ticker whose provider returns no history keeps whatever it had. No
+    history is not a volatility of zero, and a zero sigma downstream turns
+    every price move into an infinite z.
+    """
+    from models import TickerUniverse
+
+    updated = 0
+    for ticker in tickers:
+        closes = provider.daily_closes(ticker, days=35)
+        sigma = daily_sigma(closes)
+        if sigma is None:
+            continue
+
+        row = TickerUniverse.query.filter_by(symbol=ticker).one_or_none()
+        if row is None:
+            continue
+        row.daily_sigma = sigma
+        row.sigma_refreshed_at = now
+        updated += 1
+
+    db.session.commit()
+    return updated

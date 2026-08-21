@@ -21,20 +21,26 @@ NOW = dt.datetime(2026, 8, 21, 15, 0, 0)
 
 @pytest.fixture()
 def board():
+    # Clears every table these tests write to. A run that fails before its own
+    # cleanup otherwise leaves rows that collide with the next one -- which is
+    # exactly how this suite first broke.
+    def wipe():
+        from models import RadarMention, RadarPost
+        RadarMention.query.filter(
+            RadarMention.ticker.like('LB%')).delete(synchronize_session=False)
+        RadarPost.query.filter(
+            RadarPost.external_id.like('LB%')).delete(synchronize_session=False)
+        for model in (RadarBucketSource, RadarQuote):
+            model.query.filter(model.ticker.like('LB%')).delete(
+                synchronize_session=False)
+        TickerUniverse.query.filter(TickerUniverse.symbol.like('LB%')).delete(
+            synchronize_session=False)
+        db.session.commit()
+
     with flask_app.app_context():
-        for model in (RadarBucketSource, RadarQuote):
-            model.query.filter(model.ticker.like('LB%')).delete(
-                synchronize_session=False)
-        TickerUniverse.query.filter(TickerUniverse.symbol.like('LB%')).delete(
-            synchronize_session=False)
-        db.session.commit()
+        wipe()
         yield
-        for model in (RadarBucketSource, RadarQuote):
-            model.query.filter(model.ticker.like('LB%')).delete(
-                synchronize_session=False)
-        TickerUniverse.query.filter(TickerUniverse.symbol.like('LB%')).delete(
-            synchronize_session=False)
-        db.session.commit()
+        wipe()
 
 
 def universe_row(ticker, cap='50000000000', name='Test Corp'):
@@ -205,3 +211,62 @@ def test_the_limit_is_respected(board):
         scored(ticker, z=float(index))
     db.session.commit()
     assert len(leaderboard.build_rows(['bluesky'], NOW, limit=3)) == 3
+
+
+_mention_seq = [0]
+
+
+def _mention(ticker, author, minutes_ago, source='bluesky'):
+    """A stored post and its mention, so the author is countable."""
+    from models import RadarMention, RadarPost
+    _mention_seq[0] += 1
+    when = NOW - dt.timedelta(minutes=minutes_ago)
+    post = RadarPost(source=source,
+                     external_id='%s-%s-%d-%d' % (ticker, author, minutes_ago,
+                                                  _mention_seq[0]),
+                     channel='firehose', author=author, created_utc=when,
+                     title=None, body='$%s' % ticker, score=0, num_comments=0,
+                     url='https://example.invalid/', simhash=1,
+                     first_seen=when, last_seen=when)
+    db.session.add(post)
+    db.session.flush()
+    db.session.add(RadarMention(post_id=post.id, ticker=ticker,
+                                confidence='high', lexicon_sentiment=0.0))
+
+
+def test_authors_are_counted_across_the_window_not_per_bucket(board):
+    """Buckets store a COUNT, so aggregating them can only take a maximum --
+    and a maximum undercounts badly. Measured live: NVDA had 26 real authors
+    against a bucket maximum of 2, and the floor needs three, so the maximum
+    was rejecting nearly the whole board."""
+    universe_row('LBW')
+    # Four buckets, two distinct authors each, but eight distinct in total.
+    for index in range(4):
+        scored('LBW', minutes_ago=30 + index * 15, mentions=2, authors=2)
+        _mention('LBW', 'author%d' % (index * 2), 30 + index * 15)
+        _mention('LBW', 'author%d' % (index * 2 + 1), 30 + index * 15)
+    db.session.commit()
+
+    row = leaderboard.build_rows(['bluesky'], NOW)[0]
+    assert row.authors == 8, 'window union, not the per-bucket maximum'
+
+
+def test_the_bucket_maximum_is_the_fallback(board):
+    """Once posts age out of retention the authors are gone, and the bucket
+    count is all that remains. It undercounts, which can hide a ticker but can
+    never invent breadth that was not there."""
+    universe_row('LBX')
+    scored('LBX', mentions=10, authors=7)
+    db.session.commit()
+    assert leaderboard.build_rows(['bluesky'], NOW)[0].authors == 7
+
+
+def test_a_genuinely_concentrated_ticker_is_still_rejected(board):
+    """The gate must keep working after the fix. Live data had PH at 14
+    mentions from one author -- exactly what it exists to catch."""
+    universe_row('LBY')
+    scored('LBY', mentions=14, authors=1)
+    for index in range(14):
+        _mention('LBY', 'onlyvoice', 30)
+    db.session.commit()
+    assert leaderboard.build_rows(['bluesky'], NOW) == []
