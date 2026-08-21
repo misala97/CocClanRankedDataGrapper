@@ -41,8 +41,21 @@ def test_a_rising_and_falling_move_are_penalised_equally():
 
 
 def test_divergence_is_bounded():
-    assert -1.0 <= div.divergence(1000.0, 0.0) <= 1.0
-    assert -1.0 <= div.divergence(0.0, 1000.0) <= 1.0
+    """(-2, 1), not (-1, 1). The mention term spans (-1, 1) because a ticker
+    can be quieter than usual, while the price term spans (0, 1) because it
+    takes a magnitude -- so the floor is twice as far away as the ceiling.
+
+    The original assertion checked only the two corners that happen to land
+    inside (-1, 1) and missed it. Live data reached -1.055 on the first real
+    board, and a UI scaled to -1..1 would have clipped it."""
+    assert div.divergence(1000.0, 0.0) == pytest.approx(1.0, abs=1e-6)
+    assert div.divergence(0.0, 1000.0) == pytest.approx(-1.0, abs=1e-6)
+    # The actual extreme: quiet AND moved.
+    worst = div.divergence(-1000.0, 1000.0)
+    assert worst == pytest.approx(-2.0, abs=1e-6)
+    assert all(-2.0 <= div.divergence(m, p) <= 1.0
+               for m in (-50.0, -5.0, 0.0, 5.0, 50.0)
+               for p in (-50.0, -5.0, 0.0, 5.0, 50.0))
 
 
 def test_quiet_and_moving_scores_low():
