@@ -53,12 +53,14 @@ from features.pubquiz.routes import pubquiz_bp
 from features.tips.routes import tips_bp
 from features.quizbank.routes import quizbank_bp
 from features.gym.routes import gym_bp
+from features.radar.routes import radar_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(pubquiz_bp)
 app.register_blueprint(tips_bp)
 app.register_blueprint(quizbank_bp)
 app.register_blueprint(gym_bp)
+app.register_blueprint(radar_bp)
 
 # Gym templates call {{ vite_asset('exercise') }} for the content-hashed bundle
 # built by `npm run build`. Raises rather than returning an empty src when the
