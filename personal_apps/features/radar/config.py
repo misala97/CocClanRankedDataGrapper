@@ -185,3 +185,41 @@ ELEVATED_Z = 2.0
 # Sustained: this many of the last four non-overlapping hours elevated.
 SUSTAINED_HOURS_REQUIRED = 3
 SUSTAINED_HOURS_CONSIDERED = 4
+
+# Bounded-transform scales for divergence (spec 6.4). K_M is larger because
+# mention z-scores run far hotter than price ones -- the whole point of the
+# transform is that neither term can swamp the other.
+DIVERGENCE_K_MENTION = 4.0
+DIVERGENCE_K_PRICE = 2.0
+
+# Below this fractional move, a price counts as flat for the direction mark.
+FLAT_MOVE = 0.005
+
+# Floor under volatility, so a never-moving stock cannot divide to infinity.
+MIN_SIGMA = 0.001
+
+
+# Consecutive polls with an identical (quote_ts, volume) pair before a tape
+# counts as frozen. Two could be one slow second; three is a pattern.
+#
+# On the current provider volume is always null, so in practice this compares
+# quote_ts alone -- Finnhub's free quote carries no `v` field, measured.
+STALE_QUOTE_POLLS = 3
+
+# Daily closes needed before a volatility estimate means anything.
+MIN_CLOSES_FOR_SIGMA = 10
+
+# Trading hours in a session, for scaling a daily sigma to a shorter window.
+SESSION_HOURS = 6.5
+
+# Segment boundaries (spec 8.1), in dollars.
+LARGE_CAP_FLOOR = 10_000_000_000
+MID_CAP_FLOOR = 300_000_000
+
+# A share price below this is treated as micro regardless of reported cap: a
+# stale or wrong cap should not put a three-dollar stock in Large.
+PENNY_PRICE = 5.00
+
+# A listing younger than this has no baseline worth the name, which is a
+# property of the data rather than of the company's size.
+RECENT_IPO_DAYS = 365

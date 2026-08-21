@@ -157,3 +157,44 @@ def test_one_source_failing_to_score_does_not_stop_the_others(monkeypatch):
     result = daemon.score_all(_utc(2026, 8, 21, 14))
     assert result['bluesky'] == 0
     assert result['stocktwits'] == 3
+
+
+def test_quote_polling_targets_the_loudest_tickers(monkeypatch):
+    """The free tier is 60 calls a minute, so quotes go to the tickers actually
+    on the board rather than to all 12,000 in the universe."""
+    asked = {}
+
+    class FakeProvider:
+        def quotes(self, symbols):
+            asked['symbols'] = list(symbols)
+            return {}
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
+    monkeypatch.setattr(daemon.quotes, 'record_quotes', lambda q, now: 0)
+    daemon.poll_quotes(_utc(2026, 8, 21, 14), FakeProvider(), limit=50)
+    assert asked['symbols'] == ['AAA', 'BBB']
+
+
+def test_a_dead_provider_does_not_kill_the_job(monkeypatch):
+    class Dead:
+        def quotes(self, symbols):
+            raise RuntimeError('provider down')
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
+    result = daemon.poll_quotes(_utc(2026, 8, 21, 14), Dead())
+    assert result['stored'] == 0
+    assert result['error'] is True
+
+
+def test_nothing_loud_means_no_provider_call(monkeypatch):
+    """An empty board must not burn rate limit on a call with no symbols."""
+    called = {'n': 0}
+
+    class Counting:
+        def quotes(self, symbols):
+            called['n'] += 1
+            return {}
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: [])
+    daemon.poll_quotes(_utc(2026, 8, 21, 14), Counting())
+    assert called['n'] == 0

@@ -6,10 +6,14 @@ company name is a different instrument, and continuing its baseline would make
 every subsequent spike wrong with nothing to show for it in the logs.
 """
 import collections
+import datetime as dt
 import re
 
 from extensions import db
 from models import TickerUniverse
+
+from .config import (LARGE_CAP_FLOOR, MID_CAP_FLOOR, PENNY_PRICE,
+                     RECENT_IPO_DAYS)
 
 # A name token is only evidence for its ticker if it is rare across the whole
 # universe. Nasdaq security names all end in boilerplate -- "Common Stock",
@@ -176,3 +180,58 @@ def load_lookup():
         if not is_crypto_name(row.name)
     }
     return annotate_distinctive(lookup)
+
+
+def segment_for(market_cap, ipo_date, last_price, today):
+    """Which segment tab a ticker belongs to.
+
+    Order matters. A recent listing is its own segment whatever its size,
+    because the distinguishing fact is that it has no history rather than that
+    it is small. And a penny price overrides the reported cap, since a stale or
+    wrong cap should not put a three-dollar stock in Large.
+    """
+    if ipo_date is not None and (today - ipo_date).days <= RECENT_IPO_DAYS:
+        return 'recent_ipo'
+
+    if last_price is not None and float(last_price) < PENNY_PRICE:
+        return 'micro'
+
+    # Unknown rather than micro. It is a first-class tab and frequently the
+    # most interesting one; defaulting to micro would bury the names worth
+    # surfacing among genuinely tiny companies.
+    if market_cap is None:
+        return 'unknown'
+
+    if market_cap >= LARGE_CAP_FLOOR:
+        return 'large'
+    if market_cap >= MID_CAP_FLOOR:
+        return 'mid'
+    return 'micro'
+
+
+def refresh_profiles(provider, symbols, now):
+    """Pull profiles and store what came back. Returns how many were updated.
+
+    A provider returning nothing leaves the existing row untouched: erasing a
+    cap we already had would move the ticker into Unknown until the next
+    refresh, which is worse than a slightly stale number.
+    """
+    updated = 0
+    for symbol in symbols:
+        profile = provider.profile(symbol)
+        if profile is None:
+            continue
+
+        row = TickerUniverse.query.filter_by(symbol=symbol).one_or_none()
+        if row is None:
+            continue
+
+        if profile.market_cap is not None:
+            row.market_cap = profile.market_cap
+        if profile.ipo_date is not None:
+            row.ipo_date = profile.ipo_date
+        row.profile_refreshed_at = now
+        updated += 1
+
+    db.session.commit()
+    return updated

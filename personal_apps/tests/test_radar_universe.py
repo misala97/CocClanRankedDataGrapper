@@ -139,3 +139,82 @@ def test_the_crypto_rule_reads_names_not_symbols(clean_universe):
     assert universe.is_crypto_name('iShares Bitcoin Trust ETF') is True
     assert universe.is_crypto_name('Banco De Chile ADS') is False
     assert universe.is_crypto_name(None) is False
+
+
+import decimal
+
+
+def test_segments_split_on_market_cap():
+    big = decimal.Decimal('50000000000')
+    mid = decimal.Decimal('2000000000')
+    small = decimal.Decimal('100000000')
+    today = dt.date(2026, 8, 21)
+    assert universe.segment_for(big, None, None, today) == 'large'
+    assert universe.segment_for(mid, None, None, today) == 'mid'
+    assert universe.segment_for(small, None, None, today) == 'micro'
+
+
+def test_a_cheap_share_price_is_micro_whatever_the_cap():
+    """Penny stocks behave like micro caps regardless of what the cap says,
+    and a stale or wrong cap should not put one in Large."""
+    assert universe.segment_for(decimal.Decimal('20000000000'), None,
+                                decimal.Decimal('3.00'),
+                                dt.date(2026, 8, 21)) == 'micro'
+
+
+def test_a_recent_listing_is_its_own_segment():
+    """Recent IPOs have no baseline worth the name, which is a property of the
+    data rather than of the company's size."""
+    assert universe.segment_for(decimal.Decimal('5000000000'),
+                                dt.date(2026, 3, 1), None,
+                                dt.date(2026, 8, 21)) == 'recent_ipo'
+
+
+def test_an_old_listing_is_not_recent():
+    assert universe.segment_for(decimal.Decimal('5000000000'),
+                                dt.date(2010, 3, 1), None,
+                                dt.date(2026, 8, 21)) == 'mid'
+
+
+def test_no_market_cap_is_unknown_not_micro():
+    """Unknown is a first-class tab, and the most interesting one. Defaulting
+    it to micro would bury exactly the names worth surfacing among genuinely
+    tiny companies."""
+    assert universe.segment_for(None, None, None, dt.date(2026, 8, 21)) == 'unknown'
+
+
+def test_refresh_profiles_stores_what_the_provider_returns(clean_universe):
+    from features.radar.prices import Profile
+
+    class FakeProvider:
+        def profile(self, symbol):
+            return Profile(ticker=symbol,
+                           market_cap=decimal.Decimal('7500000000'),
+                           ipo_date=dt.date(2015, 5, 5), exchange='NASDAQ')
+
+    universe.upsert_symbols(
+        [{'symbol': 'ZZP', 'name': 'Profile Corp', 'exchange': 'NASDAQ'}], NOW)
+    assert universe.refresh_profiles(FakeProvider(), ['ZZP'], NOW) == 1
+
+    row = TickerUniverse.query.filter_by(symbol='ZZP').one()
+    assert row.market_cap == decimal.Decimal('7500000000')
+    assert row.ipo_date == dt.date(2015, 5, 5)
+    assert row.profile_refreshed_at == NOW
+
+
+def test_a_provider_returning_nothing_leaves_the_row_alone(clean_universe):
+    """A failed lookup must not erase a cap we already had -- that would move
+    the ticker into Unknown until the next refresh."""
+    class Empty:
+        def profile(self, symbol):
+            return None
+
+    universe.upsert_symbols(
+        [{'symbol': 'ZZQ', 'name': 'Quiet Corp', 'exchange': 'NYSE'}], NOW)
+    TickerUniverse.query.filter_by(symbol='ZZQ').update(
+        {'market_cap': decimal.Decimal('1000000000')})
+    db.session.commit()
+
+    universe.refresh_profiles(Empty(), ['ZZQ'], NOW)
+    assert TickerUniverse.query.filter_by(symbol='ZZQ').one().market_cap == \
+        decimal.Decimal('1000000000')

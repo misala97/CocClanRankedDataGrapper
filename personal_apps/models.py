@@ -514,6 +514,17 @@ class TickerUniverse(db.Model):
     first_seen  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
     delisted_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
 
+    # From the provider's profile call, refreshed weekly. Market cap drives the
+    # segment tabs; the earnings date drives the proximity slice, since a large
+    # share of mention spikes are simply scheduled.
+    #
+    # Numeric(20, 2) because mega caps run into the trillions -- Apple reports
+    # 4543167.94 million, which is 4.5e12 and overflows an INTEGER.
+    market_cap           = db.Column(db.Numeric(20, 2), nullable=True)
+    ipo_date             = db.Column(db.Date, nullable=True)
+    next_earnings_date   = db.Column(db.Date, nullable=True)
+    profile_refreshed_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+
 
 class RadarPost(db.Model):
     """One ingested post or comment. 30-day rolling retention.
@@ -718,3 +729,37 @@ class RadarSourceCursor(db.Model):
 
     source     = db.Column(db.String(24), primary_key=True)
     cursor_utc = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+
+class RadarQuote(db.Model):
+    """One price snapshot for one ticker.
+
+    Snapshots rather than a single current price, because no-print detection
+    compares consecutive polls: a frozen tape is one whose quote_ts has not
+    advanced since last time, and that comparison needs last time to still be
+    here.
+
+    DECIMAL rather than float throughout (spec 5.5.5). Forward returns compound
+    these, and drift in a history log is the one place it cannot be tolerated.
+
+    Volume is nullable and, on the current provider, always null: Finnhub's
+    free quote carries no `v` field. No-print detection degrades to comparing
+    quote_ts alone, which still catches a frozen tape.
+    """
+    __tablename__ = 'radar_quotes'
+    __table_args__ = (
+        db.UniqueConstraint('ticker', 'fetched_at', name='uq_radar_quote'),
+        db.Index('ix_radar_quotes_ticker_fetched', 'ticker', 'fetched_at'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id          = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    ticker      = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
+    fetched_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+    # The exchange's timestamp for the print, not ours. A tape that has not
+    # moved reuses the same one, which is what makes it detectable.
+    quote_ts    = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    price       = db.Column(db.Numeric(18, 6), nullable=False)
+    prev_close  = db.Column(db.Numeric(18, 6), nullable=True)
+    volume      = db.Column(db.BigInteger, nullable=True)

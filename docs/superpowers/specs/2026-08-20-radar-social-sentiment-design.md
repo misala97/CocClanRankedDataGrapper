@@ -248,7 +248,28 @@ filtered by it.
 
 ### 3.4 Prices
 
-A free-tier market data provider (Finnhub-class, ~60 calls/min):
+**Two providers, each used where its weakness does not bite.** Measured
+against live free-tier keys rather than assumed:
+
+| Endpoint | Finnhub free | Twelve Data free |
+|---|---|---|
+| Intraday quote | **200** — price, prev close, timestamp | 4-hour delay, unusable |
+| Volume on quote | **absent** — no `v` field | — |
+| Company profile / market cap | **200** — reported in MILLIONS | — |
+| Daily closes | **403 — restricted** | **available**, 800 req/day |
+
+Finnhub carries quotes and profiles. Twelve Data carries the daily closes
+behind the volatility estimate: its four-hour delay rules it out for "has the
+price moved yet" and is irrelevant for a daily bar, which is the same bar four
+hours later. Volatility uses 30 closes refreshed weekly, roughly 50 requests a
+week against an 800/day allowance.
+
+**Finnhub's quote carries no volume**, so no-print detection (§6.5) compares
+`quote_ts` alone. That still catches a frozen tape; it just has one signal
+instead of two, and a provider that quotes a stale timestamp while volume
+climbs would be missed.
+
+Between them they supply:
 
 - intraday quote for radar top-N tickers, 2-minute cache
 - daily close for all tickers with recorded mentions
