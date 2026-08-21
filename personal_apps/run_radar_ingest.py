@@ -24,6 +24,7 @@ from features.radar import ingest, market_calendar, retention, scheduling
 from features.radar.config import (
     SOURCES, STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured)
 from features.radar.sources import bluesky, fourchan, stocktwits
+from features.radar.sources import FetchResult
 
 logger = logging.getLogger('radar.ingest')
 
@@ -59,6 +60,7 @@ def _stocktwits_fetcher(client):
     """
     def fetch(since):
         now = dt.datetime.utcnow()
+        discovery_failed = False
         try:
             hot = stocktwits.trending(client)
             scheduling.ensure_tracked('stocktwits', hot, now)
@@ -66,10 +68,20 @@ def _stocktwits_fetcher(client):
             # One bad trending call must not cost the cycle its polled set.
             # The reason is logged: "unavailable" alone is not diagnosable, and
             # a blocked IP looks identical to a rate limit without it.
+            discovery_failed = True
             logger.warning('stocktwits trending unavailable this cycle: %s', exc)
 
         symbols = scheduling.due_symbols('stocktwits', now,
                                          limit=SYMBOL_BUDGET_PER_CYCLE)
+
+        if discovery_failed and not symbols:
+            # Nothing reached us and nothing was left to try, so this source
+            # saw nothing -- which is `missing`, not a quiet period. Reporting
+            # `ok` here wrote zero-count buckets for a source that was 403 on
+            # every request, and thirty days of those would make any later
+            # StockTwits data read as an enormous spike.
+            return FetchResult(posts=[], status='missing')
+
         result = stocktwits.fetch(since, client, symbols)
         for symbol in symbols:
             scheduling.record_poll('stocktwits', symbol, now,

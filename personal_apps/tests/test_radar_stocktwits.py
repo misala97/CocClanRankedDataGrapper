@@ -165,7 +165,14 @@ def test_concurrency_never_exceeds_the_cap():
 
 
 def test_no_symbols_is_ok_and_costs_nothing():
-    """A cycle where nothing is due must not look like a failure."""
+    """A cycle where nothing is DUE must not look like a failure.
+
+    Narrow on purpose. This function cannot tell "nothing was scheduled" from
+    "the source is dead", because both arrive as an empty symbol list -- and
+    reading the second as `ok` wrote zero-count buckets for a source that was
+    403 on every request. The caller knows which it is and decides; see
+    run_radar_ingest._stocktwits_fetcher.
+    """
     result = stocktwits.fetch(BASE, FakeClient({}), [])
     assert result.status == 'ok'
     assert result.posts == []
