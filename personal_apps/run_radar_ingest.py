@@ -21,7 +21,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app import app
 from features.radar import ingest, market_calendar, retention, scheduling
-from features.radar.config import SOURCES, STOCKTWITS_REQUESTS_PER_HOUR
+from features.radar.config import (
+    SOURCES, STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured)
 from features.radar.sources import bluesky, fourchan, stocktwits
 
 logger = logging.getLogger('radar.ingest')
@@ -128,6 +129,8 @@ def _scheduled_prune():
 
 def main():
     logging.basicConfig(level=logging.INFO)
+    if prefer_ipv4_if_configured():
+        logger.info('RADAR_FORCE_IPV4 set -- outbound HTTP will skip AAAA records')
     fetchers = build_fetchers()
 
     scheduler = BackgroundScheduler(timezone='UTC')
