@@ -81,10 +81,16 @@ def _store_mentioning_posts(raw_posts, lookup, now):
         tickers = extraction.extract_tickers(raw.title, raw.body, lookup)
 
         if row is None:
-            # New, and only worth keeping if it mentions something. At 144k
-            # posts/hour, storing the rest would be 100 million rows a month
-            # of text nothing reads.
-            if not tickers:
+            # New, and only worth keeping if something scorable was found.
+            #
+            # `low` is an uncorroborated bare token -- ROM in "dinosaur fossils
+            # at the ROM", and about 12000 an hour of its kind on the firehose.
+            # Those are counted in the bucket but never scored, and there is no
+            # reason to keep the text: it would be seven million rows a month
+            # to store posts the leaderboard can never surface. Their mentions
+            # still reach the rollup in memory, so counts and promotion are
+            # unaffected.
+            if not any(conf == 'high' for _, conf in tickers):
                 continue
             row = RadarPost(source=raw.source, external_id=raw.external_id,
                             channel=raw.channel, created_utc=raw.created_utc,
@@ -113,7 +119,24 @@ def _store_mentioning_posts(raw_posts, lookup, now):
 
     db.session.flush()
 
+    # Every extraction reaches the rollup, stored or not -- bucket counts and
+    # corroboration are computed in memory from these rows.
     mention_rows = []
+    for raw in raw_posts:
+        if raw.external_id in {r.external_id for r, _, _ in fresh}:
+            continue
+        tickers = extraction.extract_tickers(raw.title, raw.body, lookup)
+        if not tickers:
+            continue
+        score = sentiment.lexicon_score('%s %s' % (raw.title or '', raw.body))
+        for symbol, confidence in tickers:
+            mention_rows.append(buckets.MentionRow(
+                ticker=symbol, created_utc=raw.created_utc, source=raw.source,
+                author=raw.author, simhash=fingerprint.simhash64(
+                    '%s %s' % (raw.title or '', raw.body)),
+                confidence=confidence, sentiment=score,
+                engagement=float(raw.score + raw.num_comments)))
+
     for raw, row, tickers in fresh:
         score = sentiment.lexicon_score('%s %s' % (raw.title or '', raw.body))
         for symbol, confidence in tickers:

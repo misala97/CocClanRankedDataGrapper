@@ -247,3 +247,38 @@ def test_the_same_post_twice_in_one_batch_is_stored_once(seeded):
     with flask_app.app_context():
         assert RadarPost.query.filter_by(external_id='dup1').count() == 1
         assert RadarBucket.query.filter_by(ticker='ZZG').one().mention_count == 1
+
+
+def test_a_low_only_post_is_counted_but_never_stored(seeded):
+    """ROM in "dinosaur fossils at the ROM" is a real ticker and a real bare
+    match, and about 12000 an hour of its kind cross the firehose. It is
+    counted so the extractor's false-positive rate stays measurable, but the
+    text is never kept -- seven million rows a month for posts the leaderboard
+    can never surface."""
+    result = ingest.run_cycle(
+        NOW,
+        fetcher_for(FetchResult(posts=[post(ident='low1', body='ZZG rumours')],
+                                status='ok')))
+
+    assert result['posts_new'] == 0
+    assert result['mentions'] == 1
+    with flask_app.app_context():
+        assert RadarPost.query.filter_by(external_id='low1').count() == 0
+        bucket = RadarBucket.query.filter_by(ticker='ZZG').one()
+        assert bucket.mention_count == 0
+        assert bucket.low_count == 1
+
+
+def test_a_low_is_still_promoted_by_a_stored_high(seeded):
+    """Promotion happens in memory before storage, so an unstored low can still
+    be vouched for by a stored high from another author."""
+    bare = post(ident='bare1', body='ZZG rumours', author='u1')
+    tagged = post(ident='tag1', body='$ZZG confirmed', author='u2')
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[bare, tagged], status='ok')))
+
+    assert result['posts_new'] == 1          # only the cashtagged one stored
+    with flask_app.app_context():
+        bucket = RadarBucket.query.filter_by(ticker='ZZG').one()
+        assert bucket.mention_count == 2     # both scored
+        assert bucket.low_count == 0

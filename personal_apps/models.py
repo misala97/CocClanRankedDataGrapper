@@ -530,7 +530,9 @@ class RadarPost(db.Model):
 
     id           = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     source       = db.Column(db.String(16), nullable=False)
-    external_id  = db.Column(db.String(32), nullable=False)
+    # 128, not 32: a Bluesky id is 'bluesky:<did>:<rkey>' and a DID alone is
+    # 32 characters. The original width was sized for Reddit fullnames.
+    external_id  = db.Column(db.String(128), nullable=False)
     channel      = db.Column(db.String(64), nullable=False)
     author       = db.Column(db.String(64), nullable=True)
     created_utc  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
