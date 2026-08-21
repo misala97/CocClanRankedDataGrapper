@@ -32,6 +32,20 @@ class FourChanUnavailable(Exception):
     """This request did not arrive. Never becomes a zero count."""
 
 
+class FourChanGone(FourChanUnavailable):
+    """A thread that no longer exists.
+
+    Distinct from unavailable, and the distinction decides whether a cycle is
+    `truncated`. Threads are pruned off the board constantly, so one listed in
+    the catalog can be gone a second later -- that is normal attrition, not
+    coverage we failed to collect, and its posts are gone from the board too.
+
+    Treating it as a failure marked every single cycle truncated, and
+    truncated buckets are excluded from baselines, so the source would have
+    collected data forever without ever becoming scoreable.
+    """
+
+
 class FourChanClient:
     def __init__(self, user_agent=USER_AGENT_DEFAULT, timeout=25):
         self._headers = {'User-Agent': user_agent}
@@ -41,6 +55,8 @@ class FourChanClient:
         try:
             response = requests.get(API_BASE + path, headers=self._headers,
                                     timeout=self._timeout)
+            if response.status_code == 404:
+                raise FourChanGone(path)
             response.raise_for_status()
             return response.json()
         except (requests.RequestException, ValueError) as exc:
@@ -88,13 +104,18 @@ def fetch(since, client, board='biz', thread_cap=THREAD_CAP, pause=0.0):
     active.sort(key=lambda t: t.get('last_modified', 0), reverse=True)
 
     capped = len(active) > thread_cap
-    posts, failures = [], 0
+    posts, failures, pruned = [], 0, 0
 
     for entry in active[:thread_cap]:
         try:
             thread = client.get_json('/%s/thread/%d.json' % (board, entry['no']))
+        except FourChanGone:
+            # Pruned between the catalog and now. Routine, and not an
+            # undercount -- those posts are gone from the board as well.
+            pruned += 1
+            continue
         except FourChanUnavailable:
-            # Threads are pruned constantly; a 404 mid-cycle is routine.
+            # A real failure: the thread exists and we could not read it.
             failures += 1
             continue
         for post in thread.get('posts', []):
