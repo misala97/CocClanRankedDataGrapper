@@ -28,6 +28,14 @@ THREAD_CAP = 30
 _TAG_RE = re.compile(r'<[^>]+>')
 
 
+def _naive_utc_from_epoch(seconds):
+    """Naive UTC from an epoch timestamp.
+
+    utcfromtimestamp() is deprecated; converting through timezone.utc and
+    dropping the tzinfo keeps the stored value identical.
+    """
+    return dt.datetime.fromtimestamp(seconds, dt.timezone.utc).replace(tzinfo=None)
+
 class FourChanUnavailable(Exception):
     """This request did not arrive. Never becomes a zero count."""
 
@@ -71,7 +79,7 @@ def _clean(comment):
 
 
 def _to_raw_post(post, thread_no, board):
-    when = dt.datetime.utcfromtimestamp(post['time'])
+    when = _naive_utc_from_epoch(post['time'])
     body = '%s %s' % (_clean(post.get('sub')), _clean(post.get('com')))
 
     return RawPost(

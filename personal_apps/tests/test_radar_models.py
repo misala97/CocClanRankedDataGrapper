@@ -25,7 +25,7 @@ def ctx():
 def _make_post(**overrides):
     fields = dict(
         source='reddit',
-        external_id='t3_test_%s' % dt.datetime.utcnow().timestamp(),
+        external_id='t3_test_%s' % dt.datetime.now(dt.timezone.utc).replace(tzinfo=None).timestamp(),
         channel='wallstreetbets',
         author='someone',
         created_utc=dt.datetime(2026, 4, 15, 14, 0, 0),

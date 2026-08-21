@@ -35,6 +35,14 @@ CLAMP_TOLERANCE = dt.timedelta(minutes=5)
 CAUGHT_UP_MARGIN = dt.timedelta(seconds=3)
 
 
+def _naive_utc_from_epoch(seconds):
+    """Naive UTC from an epoch timestamp.
+
+    utcfromtimestamp() is deprecated; converting through timezone.utc and
+    dropping the tzinfo keeps the stored value identical.
+    """
+    return dt.datetime.fromtimestamp(seconds, dt.timezone.utc).replace(tzinfo=None)
+
 class JetstreamUnavailable(Exception):
     """The firehose did not deliver. Never becomes a zero count."""
 
@@ -46,7 +54,7 @@ def _to_raw_post(event):
     if not text:
         return None
 
-    when = dt.datetime.utcfromtimestamp(event['time_us'] / 1_000_000)
+    when = _naive_utc_from_epoch(event['time_us'] / 1_000_000)
     did = event.get('did') or ''
     rkey = commit.get('rkey') or ''
 
@@ -90,7 +98,7 @@ def fetch(since, drain, budget_seconds=45):
         if post is not None:
             posts.append(post)
 
-    earliest = min(dt.datetime.utcfromtimestamp(e['time_us'] / 1_000_000)
+    earliest = min(_naive_utc_from_epoch(e['time_us'] / 1_000_000)
                    for e in events)
 
     if earliest - since > CLAMP_TOLERANCE:
