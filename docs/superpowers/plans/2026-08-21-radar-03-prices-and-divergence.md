@@ -9,6 +9,13 @@
 **Tech Stack:** Python 3.12, SQLAlchemy, MySQL 8 (dev) / MariaDB (prod), `requests`, pytest. No new dependencies.
 
 **Spec:** `docs/superpowers/specs/2026-08-20-radar-social-sentiment-design.md` §3.4, §6.4, §6.5, §8.1
+
+**Measured before planning, not assumed.** Finnhub free returns 200 for
+`/quote` and `/stock/profile2` but **403 for `/stock/candle`**, and its quote
+carries no volume field. No daily closes means no volatility, which means
+`price_move_z` is always None and divergence cannot rank at all — so daily
+bars come from Twelve Data, whose four-hour delay disqualified it for quotes
+and is meaningless for a daily bar.
 **Predecessors:** Plans 1, 1b and 2 complete. 228 radar tests green; `mention_z` is being written per source.
 
 ## Global Constraints
@@ -37,7 +44,8 @@
 | Path | Responsibility |
 |---|---|
 | `features/radar/prices/__init__.py` | `Quote`, `Profile` dataclasses and the adapter contract |
-| `features/radar/prices/finnhub.py` | The one Finnhub-shaped module |
+| `features/radar/prices/finnhub.py` | Quotes and profiles |
+| `features/radar/prices/twelvedata.py` | Daily closes, for volatility |
 | `features/radar/quotes.py` | Quote storage, no-print detection, volatility |
 | `features/radar/divergence.py` | Price-move normalization and the divergence metric |
 | `tests/test_radar_prices.py`, `tests/test_radar_quotes.py`, `tests/test_radar_divergence.py` | |
@@ -230,7 +238,8 @@ git commit -m "feat(radar): store price snapshots, not just the latest price"
   - `Quote` — `ticker`, `price`, `prev_close`, `quote_ts`, `volume`
   - `Profile` — `ticker`, `market_cap`, `ipo_date`, `exchange`
   - `PriceUnavailable`
-  - `finnhub.FinnhubProvider` — `.quotes(symbols) -> dict[str, Quote]`, `.profile(symbol) -> Profile | None`, `.daily_closes(symbol, days) -> list[tuple[date, Decimal]]`
+  - `finnhub.FinnhubProvider` — `.quotes(symbols) -> dict[str, Quote]`, `.profile(symbol) -> Profile | None`
+  - `twelvedata.TwelveDataProvider` — `.daily_closes(symbol, days) -> list[tuple[date, Decimal]]`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -249,7 +258,7 @@ import decimal
 import pytest
 
 from features.radar.prices import Profile, PriceUnavailable, Quote
-from features.radar.prices import finnhub
+from features.radar.prices import finnhub, twelvedata
 
 
 class FakeHttp:
@@ -328,22 +337,36 @@ def test_an_empty_profile_is_none():
 
 
 def test_daily_closes_come_back_oldest_first():
-    http = FakeHttp({'/stock/candle': {
-        's': 'ok',
-        't': [1785900000, 1785986400, 1786072800],
-        'c': [10.0, 11.0, 12.0]}})
-    closes = finnhub.FinnhubProvider(http).daily_closes('AAA', days=3)
+    """From Twelve Data, not Finnhub: /stock/candle is 403 on Finnhub free,
+    measured. Volatility is the whole reason daily closes exist here, and
+    without it divergence cannot rank anything."""
+    http = FakeHttp({'/time_series': {
+        'status': 'ok',
+        'values': [
+            {'datetime': '2026-08-20', 'close': '12.0'},
+            {'datetime': '2026-08-19', 'close': '11.0'},
+            {'datetime': '2026-08-18', 'close': '10.0'},
+        ]}})
+    closes = twelvedata.TwelveDataProvider(http).daily_closes('AAA', days=3)
+    # Twelve Data returns newest first; volatility wants chronological order.
     assert [c for _, c in closes] == [decimal.Decimal('10.0'),
                                       decimal.Decimal('11.0'),
                                       decimal.Decimal('12.0')]
     assert closes[0][0] < closes[-1][0]
 
 
-def test_a_no_data_candle_response_is_empty_not_an_error():
-    """Finnhub answers s='no_data' for symbols it does not cover. That is an
-    absence of history, not a failure to fetch."""
-    http = FakeHttp({'/stock/candle': {'s': 'no_data'}})
-    assert finnhub.FinnhubProvider(http).daily_closes('AAA', days=30) == []
+def test_an_error_status_is_empty_not_an_exception():
+    """Twelve Data reports an unknown symbol as status='error' with a 200."""
+    http = FakeHttp({'/time_series': {'status': 'error',
+                                      'message': 'symbol not found'}})
+    assert twelvedata.TwelveDataProvider(http).daily_closes('AAA', days=30) == []
+
+
+def test_a_rate_limited_response_is_empty_not_a_crash():
+    """800 requests a day is ample for weekly volatility, but a burst can
+    still trip it, and one tripped call must not take down the job."""
+    http = FakeHttp({'/time_series': {'status': 'error', 'code': 429}})
+    assert twelvedata.TwelveDataProvider(http).daily_closes('AAA', days=30) == []
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -489,30 +512,79 @@ class FinnhubProvider:
             exchange=payload.get('exchange'),
         )
 
-    def daily_closes(self, symbol, days):
-        """(date, close) oldest first. Empty when the provider has no history."""
-        until = dt.datetime.now(dt.timezone.utc)
-        since = until - dt.timedelta(days=days)
+```
+
+```python
+# personal_apps/features/radar/prices/twelvedata.py
+"""Daily closes, for the volatility estimate behind price_move_z.
+
+Here because Finnhub's free tier returns 403 for /stock/candle, measured. That
+matters more than it sounds: no daily closes means no sigma, no sigma means
+price_move_z is always None, and divergence stops ranking anything at all.
+
+Twelve Data's free quotes are four hours delayed, which is why it is not the
+quote provider. A four-hour-old daily bar is the same daily bar.
+"""
+import datetime as dt
+import decimal
+import os
+
+import requests
+
+from . import PriceUnavailable
+
+API_BASE = 'https://api.twelvedata.com'
+
+
+class TwelveDataHttp:
+    """Thin transport, separated so the provider is testable without a network."""
+
+    def __init__(self, api_key=None, timeout=20):
+        self._key = api_key or os.getenv('TWELVEDATA_API_KEY')
+        self._timeout = timeout
+
+    def get(self, path, params):
+        query = dict(params)
+        query['apikey'] = self._key
         try:
-            payload = self._http.get('/stock/candle', {
-                'symbol': symbol, 'resolution': 'D',
-                'from': int(since.timestamp()), 'to': int(until.timestamp())})
+            response = requests.get(API_BASE + path, params=query,
+                                    timeout=self._timeout)
+            response.raise_for_status()
+            return response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise PriceUnavailable('%s: %s' % (path, exc)) from exc
+
+
+class TwelveDataProvider:
+    def __init__(self, http):
+        self._http = http
+
+    def daily_closes(self, symbol, days):
+        """(date, close) oldest first. Empty when there is no usable history.
+
+        Empty rather than raising: an unknown symbol and a tripped rate limit
+        both arrive as status='error' with HTTP 200, and neither is a reason to
+        take down the job that asked.
+        """
+        try:
+            payload = self._http.get('/time_series', {
+                'symbol': symbol, 'interval': '1day', 'outputsize': days})
         except PriceUnavailable:
             return []
 
-        # 's' is 'no_data' for symbols the provider does not cover. That is an
-        # absence of history, not a failure to fetch, and must not be retried
-        # as though it were.
-        if payload.get('s') != 'ok':
+        if payload.get('status') != 'ok':
             return []
 
-        stamps = payload.get('t') or []
-        closes = payload.get('c') or []
-        return [
-            (dt.datetime.fromtimestamp(stamp, dt.timezone.utc).date(),
-             _decimal(close))
-            for stamp, close in zip(stamps, closes)
-        ]
+        closes = []
+        for row in payload.get('values') or []:
+            try:
+                when = dt.date.fromisoformat(row['datetime'][:10])
+                closes.append((when, decimal.Decimal(str(row['close']))))
+            except (KeyError, ValueError, decimal.InvalidOperation):
+                continue
+
+        # Newest first on the wire; volatility wants chronological order.
+        return sorted(closes)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1308,7 +1380,11 @@ Create a free account at https://finnhub.io and add to `personal_apps/.env`:
 
 ```
 FINNHUB_API_KEY=...
+TWELVEDATA_API_KEY=...
 ```
+
+Both are free email signups, no card. The repo-root `.env` is the one
+`find_dotenv()` resolves to from `personal_apps/`, so that is where they go.
 
 - [ ] **Step 2: Check what the free tier actually returns**
 
@@ -1316,7 +1392,7 @@ FINNHUB_API_KEY=...
 cd personal_apps && python -W ignore -c "
 import sys; sys.path.insert(0,'.')
 from dotenv import load_dotenv; load_dotenv()
-from features.radar.prices import finnhub
+from features.radar.prices import finnhub, twelvedata
 p = finnhub.FinnhubProvider(finnhub.FinnhubHttp())
 q = p.quotes(['AAPL','SPY','GME'])
 for s, quote in q.items():
