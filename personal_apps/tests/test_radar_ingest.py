@@ -231,3 +231,19 @@ def test_each_source_keeps_its_own_cursor(seeded):
         cursors = {c.source: c.cursor_utc for c in RadarSourceCursor.query.all()}
     assert cursors['stocktwits'] == dt.datetime(2026, 4, 15, 14, 10, 0)
     assert cursors['bluesky'] == dt.datetime(2026, 4, 15, 14, 18, 0)
+
+
+def test_the_same_post_twice_in_one_batch_is_stored_once(seeded):
+    """A StockTwits message tagged $ZZG and $OTHER is returned by both symbol
+    streams, so one cycle sees the same external_id twice. Found in live data,
+    not in tests -- every fixture until now used distinct ids."""
+    duplicate = [post(ident='dup1', body='$ZZG and more'),
+                 post(ident='dup1', body='$ZZG and more')]
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=duplicate, status='ok')))
+
+    assert result['posts_new'] == 1
+    assert result['mentions'] == 1
+    with flask_app.app_context():
+        assert RadarPost.query.filter_by(external_id='dup1').count() == 1
+        assert RadarBucket.query.filter_by(ticker='ZZG').one().mention_count == 1

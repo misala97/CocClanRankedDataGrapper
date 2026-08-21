@@ -92,6 +92,11 @@ def _store_mentioning_posts(raw_posts, lookup, now):
             db.session.add(row)
             new_count += 1
             fresh.append((raw, row, tickers))
+            # A message tagged with two tickers is returned by both symbol
+            # streams, so the same external_id can arrive twice in one batch.
+            # Without recording it here the second copy also looks new, and
+            # both inserts hit the unique key.
+            existing[raw.external_id] = row
 
         # Engagement grows after first sight, so these always refresh.
         row.score = raw.score

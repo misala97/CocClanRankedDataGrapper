@@ -114,3 +114,58 @@ def test_an_empty_stream_is_ok_not_missing():
     result = stocktwits.fetch(BASE - dt.timedelta(hours=1), client, ['ZZA'])
     assert result.status == 'ok'
     assert result.posts == []
+
+
+def test_symbols_are_fetched_concurrently():
+    """Measured: a stream call takes ~43 seconds, throttled rather than loaded.
+    Serially, a cycle's worth of symbols would not fit inside the cycle."""
+    import threading
+    import time
+
+    peak = {'n': 0, 'now': 0}
+    lock = threading.Lock()
+
+    class SlowClient:
+        def get(self, path, params=None):
+            with lock:
+                peak['now'] += 1
+                peak['n'] = max(peak['n'], peak['now'])
+            time.sleep(0.2)
+            with lock:
+                peak['now'] -= 1
+            return {'messages': [_message(1, BASE)]}
+
+    stocktwits.fetch(BASE - dt.timedelta(hours=1), SlowClient(),
+                     ['A', 'B', 'C', 'D'], max_workers=4)
+    assert peak['n'] > 1, 'requests ran serially'
+
+
+def test_concurrency_never_exceeds_the_cap():
+    """The rate limit is undocumented, so a burst is the wrong thing to guess
+    with."""
+    import threading
+    import time
+
+    peak = {'n': 0, 'now': 0}
+    lock = threading.Lock()
+
+    class SlowClient:
+        def get(self, path, params=None):
+            with lock:
+                peak['now'] += 1
+                peak['n'] = max(peak['n'], peak['now'])
+            time.sleep(0.1)
+            with lock:
+                peak['now'] -= 1
+            return {'messages': []}
+
+    stocktwits.fetch(BASE - dt.timedelta(hours=1), SlowClient(),
+                     ['A', 'B', 'C', 'D', 'E', 'F'], max_workers=2)
+    assert peak['n'] <= 2
+
+
+def test_no_symbols_is_ok_and_costs_nothing():
+    """A cycle where nothing is due must not look like a failure."""
+    result = stocktwits.fetch(BASE, FakeClient({}), [])
+    assert result.status == 'ok'
+    assert result.posts == []
