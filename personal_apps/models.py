@@ -1,6 +1,8 @@
 import datetime as dt
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.mysql import (
+    BIGINT as MYSQL_BIGINT, DATETIME as MYSQL_DATETIME, MEDIUMTEXT)
 from extensions import db
 
 
@@ -489,3 +491,221 @@ class AppUser(db.Model):
     # Gym only. A per-app permission table is the thing to add if a third
     # person ever needs a different slice -- not before.
     is_admin      = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+
+
+class TickerUniverse(db.Model):
+    """Every symbol extraction is allowed to match.
+
+    symbol is utf8mb4_bin so lookups are case-sensitive -- 'it' must not match
+    ticker IT. Extraction uppercases candidates before it gets here.
+
+    first_seen / delisted_at exist for symbol reassignment: a delisted symbol
+    later given to a different company would otherwise inherit the old
+    company's baseline, silently.
+    """
+    __tablename__ = 'radar_ticker_universe'
+    __table_args__ = {'mysql_charset': 'utf8mb4'}
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    symbol      = db.Column(db.String(12, collation='utf8mb4_bin'),
+                            nullable=False, unique=True, index=True)
+    name        = db.Column(db.String(255), nullable=True)
+    exchange    = db.Column(db.String(32), nullable=True)
+    first_seen  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    delisted_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+
+
+class RadarPost(db.Model):
+    """One ingested post or comment. 30-day rolling retention.
+
+    body is MEDIUMTEXT: Reddit self-posts reach 40k characters, which is over
+    the 64KB TEXT limit once utf8mb4 puts up to 4 bytes behind each one.
+    """
+    __tablename__ = 'radar_posts'
+    __table_args__ = (
+        db.UniqueConstraint('source', 'external_id', name='uq_radar_post_source_ext'),
+        db.Index('ix_radar_posts_created_utc', 'created_utc'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id           = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    source       = db.Column(db.String(16), nullable=False)
+    # 128, not 32: a Bluesky id is 'bluesky:<did>:<rkey>' and a DID alone is
+    # 32 characters. The original width was sized for Reddit fullnames.
+    external_id  = db.Column(db.String(128), nullable=False)
+    channel      = db.Column(db.String(64), nullable=False)
+    author       = db.Column(db.String(64), nullable=True)
+    created_utc  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    title        = db.Column(db.String(512), nullable=True)
+    body         = db.Column(MEDIUMTEXT, nullable=True)
+    score        = db.Column(db.Integer, nullable=False, default=0)
+    num_comments = db.Column(db.Integer, nullable=False, default=0)
+    url          = db.Column(db.String(512), nullable=True)
+    # UNSIGNED, because simhash64() fills all 64 bits and a signed
+    # BIGINT tops out at 2**63-1. Signed, roughly half of real posts
+    # would be rejected outright -- decided entirely by their text,
+    # which makes it look intermittent rather than systematic.
+    simhash      = db.Column(MYSQL_BIGINT(unsigned=True),
+                             nullable=False, default=0)
+    first_seen   = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    last_seen    = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+    mentions = db.relationship('RadarMention', back_populates='post',
+                               cascade='all, delete-orphan', lazy=True)
+
+
+class RadarMention(db.Model):
+    """One (post x ticker). Follows its post's retention."""
+    __tablename__ = 'radar_mentions'
+    __table_args__ = (
+        db.Index('ix_radar_mentions_ticker_post', 'ticker', 'post_id'),
+        db.Index('ix_radar_mentions_post', 'post_id'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id               = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    post_id          = db.Column(db.BigInteger,
+                                 db.ForeignKey('radar_posts.id', ondelete='CASCADE'),
+                                 nullable=False)
+    ticker           = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
+    # `low` is a bare token nothing has corroborated. Stored but never scored
+    # (spec 4.2) -- keeping it is what lets the extractor's own false-positive
+    # rate be measured against real data instead of argued about. `medium` is
+    # awarded at rollup, when another author cashtags the same ticker in the
+    # same window.
+    confidence       = db.Column(
+        db.Enum('high', 'medium', 'low', name='radar_confidence'),
+        nullable=False)
+    lexicon_sentiment = db.Column(db.Float, nullable=True)
+    llm_sentiment     = db.Column(db.String(16), nullable=True)
+
+    post = db.relationship('RadarPost', back_populates='mentions')
+
+
+class RadarBucket(db.Model):
+    """(ticker x 15 minutes). Retained forever; this is what scoring reads.
+
+    Status is per source, not per bucket. With one column and two sources,
+    StockTwits dropping while Reddit keeps working forces a choice between
+    discarding good Reddit data and silently halving the count -- the second
+    being exactly the baseline poisoning the status column exists to prevent
+    (spec 4.5).
+
+    The mention_z_* and baseline_days_* columns are written by Plan 2 and are
+    NULL until then.
+    """
+    __tablename__ = 'radar_buckets'
+    __table_args__ = (
+        db.UniqueConstraint('ticker', 'bucket_start', name='uq_radar_bucket'),
+        db.Index('ix_radar_buckets_start_ticker', 'bucket_start', 'ticker'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    # The primary key is composite because this table is partitioned by
+    # bucket_start, and MariaDB requires every unique key -- the primary key
+    # included -- to contain every partitioning column. A bare `id` primary key
+    # makes the partition ALTER fail with errno 1503. `id` stays leftmost so it
+    # can still carry AUTO_INCREMENT.
+    id                        = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    ticker                    = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
+    bucket_start              = db.Column(MYSQL_DATETIME(fsp=6), primary_key=True, nullable=False)
+
+    mention_count             = db.Column(db.Integer, nullable=False, default=0)
+    high_confidence_count     = db.Column(db.Integer, nullable=False, default=0)
+    distinct_authors          = db.Column(db.Integer, nullable=False, default=0)
+    distinct_text_ratio       = db.Column(db.Float, nullable=False, default=1.0)
+    engagement_weighted_count = db.Column(db.Float, nullable=False, default=0.0)
+    sentiment_mean            = db.Column(db.Float, nullable=True)
+    sentiment_stdev           = db.Column(db.Float, nullable=True)
+
+    # Bare mentions nothing corroborated. Stored, never scored (spec 4.2).
+    low_count                 = db.Column(db.Integer, nullable=False, default=0)
+
+    sources_ok                = db.Column(db.SmallInteger, nullable=False, default=0)
+    source_config_version     = db.Column(db.String(16), nullable=False)
+
+
+class RadarBucketSource(db.Model):
+    """(ticker x bucket x source). What makes the source set open.
+
+    Per-source data lived in columns named after specific sources until three
+    sources and a UI selector made that untenable: a user-chosen subset has to
+    be pooled at query time, and `count_stocktwits` cannot participate in that.
+
+    expected and variance sit here beside mention_z because pooling a subset
+    means summing components -- a weighted mean of z-scores is not a z-score
+    (spec 6.2). Both are written by Plan 2 and are NULL until then.
+
+    No foreign key to radar_buckets: InnoDB does not support foreign keys on
+    partitioned tables and radar_buckets is partitioned monthly. This table is
+    partitioned identically and joined on (ticker, bucket_start), which means
+    retention and partition maintenance must treat the pair as one unit --
+    nothing enforces that for us.
+    """
+    __tablename__ = 'radar_bucket_sources'
+    __table_args__ = (
+        db.Index('ix_radar_bucket_sources_start', 'bucket_start', 'source'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    ticker                    = db.Column(db.String(12, collation='utf8mb4_bin'),
+                                          primary_key=True)
+    bucket_start              = db.Column(MYSQL_DATETIME(fsp=6), primary_key=True)
+    source                    = db.Column(db.String(24), primary_key=True)
+
+    mention_count             = db.Column(db.Integer, nullable=False, default=0)
+    high_confidence_count     = db.Column(db.Integer, nullable=False, default=0)
+    low_count                 = db.Column(db.Integer, nullable=False, default=0)
+    distinct_authors          = db.Column(db.Integer, nullable=False, default=0)
+    distinct_text_ratio       = db.Column(db.Float, nullable=False, default=1.0)
+    engagement_weighted_count = db.Column(db.Float, nullable=False, default=0.0)
+    sentiment_mean            = db.Column(db.Float, nullable=True)
+    sentiment_stdev           = db.Column(db.Float, nullable=True)
+
+    status                    = db.Column(
+        db.Enum('ok', 'missing', 'truncated', name='radar_source_status'),
+        nullable=False, default='missing')
+
+    # Written by Plan 2.
+    expected                  = db.Column(db.Float, nullable=True)
+    variance                  = db.Column(db.Float, nullable=True)
+    mention_z                 = db.Column(db.Float, nullable=True)
+    baseline_days             = db.Column(db.SmallInteger, nullable=True)
+
+
+class RadarPollState(db.Model):
+    """When each symbol was last polled, and when it is next due.
+
+    Per source, because the same symbol has a different message rate on each.
+    """
+    __tablename__ = 'radar_poll_state'
+    __table_args__ = (
+        db.Index('ix_radar_poll_state_due', 'source', 'next_due_at'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    source          = db.Column(db.String(24), primary_key=True)
+    symbol          = db.Column(db.String(12, collation='utf8mb4_bin'),
+                                primary_key=True)
+    last_polled_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    next_due_at     = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    observed_rate   = db.Column(db.Float, nullable=True)   # messages per hour
+
+
+class RadarSourceCursor(db.Model):
+    """How far each source has been read.
+
+    Explicit state rather than max(radar_posts.created_utc), because posts that
+    mention no ticker are not stored at all. Bluesky's firehose is 144k
+    posts/hour and roughly none of them are about stocks -- keeping them would
+    be 100 million rows a month of text nothing ever reads.
+
+    Inferring the cursor from stored posts would then rewind it to the last
+    post that happened to mention something, and the next cycle would refetch
+    everything since. The cursor has to be what we SAW, not what we KEPT.
+    """
+    __tablename__ = 'radar_source_cursors'
+    __table_args__ = {'mysql_charset': 'utf8mb4'}
+
+    source     = db.Column(db.String(24), primary_key=True)
+    cursor_utc = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)

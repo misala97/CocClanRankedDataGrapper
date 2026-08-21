@@ -1,0 +1,207 @@
+# personal_apps/tests/test_radar_buckets.py
+"""The rollup is where per-source status becomes durable.
+
+`truncated` is the subtle case: those counts are real but incomplete, so they
+must be visible on the live leaderboard while being barred from any baseline.
+Plan 2 enforces the second half; this suite pins that the status reaches the
+row at all, because a bucket written `ok` when it was truncated is
+indistinguishable from a genuine quiet period forever after.
+"""
+import datetime as dt
+
+import pytest
+
+from app import app as flask_app
+from extensions import db
+from models import RadarBucket, RadarBucketSource
+from features.radar import buckets
+from features.radar.config import source_config_version
+
+
+@pytest.fixture()
+def clean_buckets():
+    with flask_app.app_context():
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
+            synchronize_session=False)
+        db.session.commit()
+        yield
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+
+def row(ticker='ZZA', minute=3, source='stocktwits', author='u1', simhash=111,
+        confidence='high', sentiment=0.5, engagement=10.0):
+    return buckets.MentionRow(
+        ticker=ticker,
+        created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
+        source=source, author=author, simhash=simhash,
+        confidence=confidence, sentiment=sentiment, engagement=engagement)
+
+
+ALL_OK = {'stocktwits': 'ok'}
+
+
+def test_bucket_start_floors_to_fifteen_minutes():
+    assert buckets.bucket_start_for(dt.datetime(2026, 4, 15, 14, 3, 59)) == \
+        dt.datetime(2026, 4, 15, 14, 0, 0)
+    assert buckets.bucket_start_for(dt.datetime(2026, 4, 15, 14, 44, 0)) == \
+        dt.datetime(2026, 4, 15, 14, 30, 0)
+
+
+def test_counts_are_written(clean_buckets):
+    buckets.roll_up([row(author='u1', simhash=1), row(author='u2', simhash=2)],
+                    ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 2
+    assert bucket.distinct_authors == 2
+    assert RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='stocktwits').one().mention_count == 2
+    assert bucket.high_confidence_count == 2
+
+
+def test_distinct_text_ratio_catches_a_copy_paste_brigade(clean_buckets):
+    """Fifty accounts posting one thing. distinct_authors sees nothing wrong;
+    this is the column that does."""
+    rows = [row(author='u%d' % i, simhash=999) for i in range(4)]
+    buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.distinct_authors == 4
+    assert bucket.distinct_text_ratio == pytest.approx(0.25)
+
+
+def test_per_source_status_is_stored_separately(clean_buckets):
+    from models import RadarBucketSource
+    buckets.roll_up([row()], {'stocktwits': 'ok', 'bluesky': 'missing'},
+                    {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    assert RadarBucket.query.filter_by(ticker='ZZA').one().sources_ok == 1
+    rows = {r.source: r.status for r in
+            RadarBucketSource.query.filter_by(ticker='ZZA').all()}
+    # A `missing` source writes no row at all -- that is the rule.
+    assert rows == {'stocktwits': 'ok'}
+
+
+def test_truncated_counts_are_kept_and_marked(clean_buckets):
+    from models import RadarBucketSource
+    buckets.roll_up([row()], {'stocktwits': 'truncated'},
+                    {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 1
+    assert bucket.sources_ok == 0
+    assert RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='stocktwits').one().status == 'truncated'
+
+
+def test_a_missing_source_writes_no_bucket_rather_than_a_zero(clean_buckets):
+    """The single most important rule in the ingest layer. A zero here would
+    poison the baseline and manufacture a spike when ingest resumes."""
+    written = buckets.roll_up([], {'stocktwits': 'missing', 'bluesky': 'missing'},
+                              {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    assert written == 0
+    assert RadarBucket.query.filter_by(ticker='ZZA').count() == 0
+
+
+def test_rerunning_a_cycle_replaces_rather_than_doubles(clean_buckets):
+    start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
+    buckets.roll_up([row(author='u1', simhash=1)], ALL_OK, start)
+    buckets.roll_up([row(author='u1', simhash=1), row(author='u2', simhash=2)],
+                    ALL_OK, start)
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 2
+
+
+def test_mentions_split_across_bucket_boundaries(clean_buckets):
+    touched = {dt.datetime(2026, 4, 15, 14, 0, 0),
+               dt.datetime(2026, 4, 15, 14, 15, 0)}
+    buckets.roll_up([row(minute=3), row(minute=20)], ALL_OK, touched)
+    assert RadarBucket.query.filter_by(ticker='ZZA').count() == 2
+
+
+def test_config_version_is_stamped(clean_buckets):
+    buckets.roll_up([row()], ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.source_config_version == source_config_version()
+
+
+def test_sentiment_mean_is_averaged(clean_buckets):
+    buckets.roll_up([row(sentiment=1.0, author='u1', simhash=1),
+                     row(sentiment=0.0, author='u2', simhash=2)],
+                    ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.sentiment_mean == pytest.approx(0.5)
+
+
+def test_scoring_columns_are_left_untouched(clean_buckets):
+    """Plan 1 writes no scores. A rollup that reset these would silently
+    invalidate Plan 2's work on every cycle."""
+    buckets.roll_up([row()], ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    bucket.mention_z_reddit = 4.2
+    db.session.commit()
+
+    buckets.roll_up([row(), row(author='u2', simhash=2)], ALL_OK,
+                    {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    db.session.expire(bucket)
+    assert bucket.mention_z_reddit == 4.2
+
+
+def test_per_source_rows_are_written(clean_buckets):
+    rows = [row(source='stocktwits', author='u1', simhash=1),
+            row(source='bluesky', author='u2', simhash=2)]
+    buckets.roll_up(rows, {'stocktwits': 'ok', 'bluesky': 'ok'},
+                    {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    per_source = {r.source: r.mention_count for r in
+                  RadarBucketSource.query.filter_by(ticker='ZZA').all()}
+    assert per_source == {'stocktwits': 1, 'bluesky': 1}
+    assert RadarBucket.query.filter_by(ticker='ZZA').one().mention_count == 2
+
+
+def test_an_unknown_source_name_needs_no_schema_change(clean_buckets):
+    """The point of the child table. A source nobody has heard of writes a row
+    like any other -- no migration, no column, no code that knows its name."""
+    buckets.roll_up([row(source='some_new_source')], {'some_new_source': 'ok'},
+                    {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    assert RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='some_new_source').one().mention_count == 1
+
+
+def test_a_low_mention_is_promoted_by_another_authors_cashtag(clean_buckets):
+    """Someone writing $ZZA vouches for someone else writing bare ZZA in the
+    same window, so the bare one becomes scored."""
+    rows = [row(confidence='low', author='u1', simhash=1),
+            row(confidence='high', author='u2', simhash=2)]
+    buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 2
+    assert bucket.low_count == 0
+
+
+def test_the_same_author_cannot_corroborate_themselves(clean_buckets):
+    """One person writing both ZZA and $ZZA is one opinion, not two."""
+    rows = [row(confidence='low', author='u1', simhash=1),
+            row(confidence='high', author='u1', simhash=2)]
+    buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 1
+    assert bucket.low_count == 1
+
+
+def test_uncorroborated_lows_are_stored_but_not_scored(clean_buckets):
+    rows = [row(confidence='low', author='u%d' % i, simhash=i) for i in range(4)]
+    buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 0
+    assert bucket.low_count == 4
+
+
+def test_a_bucket_with_only_lows_still_records_its_source_status(clean_buckets):
+    """The source was healthy and saw nothing scorable. That is a real zero and
+    must stay distinguishable from the source being down."""
+    buckets.roll_up([row(confidence='low')], ALL_OK,
+                    {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    assert RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='stocktwits').one().status == 'ok'

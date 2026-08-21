@@ -1,0 +1,121 @@
+# personal_apps/tests/test_radar_bucket_sources.py
+"""Per-source data in rows, not columns.
+
+Two sources meant eight columns. Three makes twelve, and a UI that lets the
+user pick a subset has to pool whichever ones they chose -- which columns named
+after specific sources cannot express at all (spec 4.5, 8.6).
+"""
+import datetime as dt
+
+import pytest
+import sqlalchemy as sa
+
+from app import app as flask_app
+from extensions import db
+from models import RadarBucket, RadarBucketSource
+
+START = dt.datetime(2026, 8, 21, 14, 0, 0)
+
+
+@pytest.fixture()
+def ctx():
+    with flask_app.app_context():
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        RadarBucket.query.filter(
+            RadarBucket.ticker.like('ZZ%')).delete(synchronize_session=False)
+        db.session.commit()
+        yield
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        RadarBucket.query.filter(
+            RadarBucket.ticker.like('ZZ%')).delete(synchronize_session=False)
+        db.session.commit()
+
+
+def _row(source='stocktwits', ticker='ZZA', count=3, status='ok'):
+    return RadarBucketSource(
+        ticker=ticker, bucket_start=START, source=source,
+        mention_count=count, high_confidence_count=count, low_count=0,
+        distinct_authors=count, distinct_text_ratio=1.0,
+        engagement_weighted_count=float(count), sentiment_mean=0.1,
+        sentiment_stdev=None, status=status)
+
+
+def test_one_row_per_source_for_the_same_bucket(ctx):
+    for source in ('stocktwits', 'bluesky', 'fourchan'):
+        db.session.add(_row(source=source))
+    db.session.commit()
+    assert RadarBucketSource.query.filter_by(ticker='ZZA').count() == 3
+
+
+def test_the_same_source_twice_in_one_bucket_is_rejected(ctx):
+    db.session.add(_row())
+    db.session.commit()
+    db.session.add(_row(count=99))
+    with pytest.raises(sa.exc.IntegrityError):
+        db.session.commit()
+    db.session.rollback()
+
+
+def test_an_arbitrary_subset_pools_by_group_by(ctx):
+    """The whole reason this table exists. The UI selector picks sources and
+    the query sums over exactly those -- no schema knows their names."""
+    db.session.add(_row(source='stocktwits', count=10))
+    db.session.add(_row(source='bluesky', count=4))
+    db.session.add(_row(source='fourchan', count=1))
+    db.session.commit()
+
+    chosen = ['stocktwits', 'bluesky']
+    total = db.session.query(
+        sa.func.sum(RadarBucketSource.mention_count)).filter(
+        RadarBucketSource.ticker == 'ZZA',
+        RadarBucketSource.bucket_start == START,
+        RadarBucketSource.source.in_(chosen)).scalar()
+    assert total == 14
+
+
+def test_a_source_can_be_missing_while_another_is_ok(ctx):
+    db.session.add(_row(source='stocktwits', status='ok'))
+    db.session.add(_row(source='bluesky', status='truncated'))
+    db.session.commit()
+    statuses = {r.source: r.status for r in
+                RadarBucketSource.query.filter_by(ticker='ZZA').all()}
+    assert statuses == {'stocktwits': 'ok', 'bluesky': 'truncated'}
+
+
+def test_low_confidence_is_counted_separately_from_scored(ctx):
+    """low is stored but never scored (spec 4.2). Keeping the count is what
+    lets the extractor's false-positive rate be measured against real data."""
+    row = _row(count=5)
+    row.low_count = 40
+    db.session.add(row)
+    db.session.commit()
+    db.session.expire(row)
+    assert row.mention_count == 5
+    assert row.low_count == 40
+
+
+def test_scoring_columns_start_null(ctx):
+    db.session.add(_row())
+    db.session.commit()
+    row = RadarBucketSource.query.filter_by(ticker='ZZA').one()
+    assert row.expected is None
+    assert row.variance is None
+    assert row.mention_z is None
+    assert row.baseline_days is None
+
+
+def test_the_parent_bucket_no_longer_has_per_source_columns(ctx):
+    """A leftover count_reddit would be dead weight that some query eventually
+    reads and quietly trusts."""
+    for gone in ('count_reddit', 'count_stocktwits', 'status_reddit',
+                 'status_stocktwits', 'mention_z_reddit', 'mention_z_stocktwits',
+                 'baseline_days_reddit', 'baseline_days_stocktwits'):
+        assert not hasattr(RadarBucket, gone), '%s should be gone' % gone
+
+
+def test_the_parent_bucket_keeps_its_totals(ctx):
+    for kept in ('mention_count', 'distinct_authors', 'sources_ok',
+                 'source_config_version'):
+        assert hasattr(RadarBucket, kept)
