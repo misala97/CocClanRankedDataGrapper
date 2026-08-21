@@ -53,7 +53,14 @@ def test_dropping_a_busy_stretch_is_also_unbiased():
     total = sum(prof.values())
     prof = {k: v / total for k, v in prof.items()}
 
-    everything = [obs(i * 0.25, 10 if i < 336 else 1) for i in range(672)]
+    # Counts follow the profile's own 3:1 shape. That is the premise being
+    # tested -- a ticker behaving normally, observed over a biased subset of
+    # the week. Counts of 10:1 against shares of 3:1 would describe a ticker
+    # that is genuinely louder in the busy half than the profile predicts, and
+    # then the quiet subsample really does represent a lower rate: no
+    # mass-based estimator could return the same number, and asking for one
+    # would be asking arithmetic to be false.
+    everything = [obs(i * 0.25, 3 if i < 336 else 1) for i in range(672)]
     quiet_only = [o for i, o in enumerate(everything) if i >= 336]
 
     all_rate, _ = baselines.weekly_rate(everything, prof)
