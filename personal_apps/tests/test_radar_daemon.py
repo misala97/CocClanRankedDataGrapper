@@ -135,3 +135,25 @@ def test_nothing_due_on_a_healthy_source_is_still_ok(monkeypatch):
 
     result = daemon._stocktwits_fetcher(object())(dt.datetime(2026, 8, 21))
     assert result.status == 'ok'
+
+
+def test_scoring_covers_every_configured_source(monkeypatch):
+    seen = []
+    monkeypatch.setattr(daemon.scoring, 'score_source',
+                        lambda source, now, **k: seen.append(source) or 1)
+    daemon.score_all(_utc(2026, 8, 21, 14))
+    assert set(seen) == set(daemon.SOURCES)
+
+
+def test_one_source_failing_to_score_does_not_stop_the_others(monkeypatch):
+    """Same rule as ingest. A bad baseline on one source is not a reason to
+    leave the others unscored."""
+    def flaky(source, now, **k):
+        if source == 'bluesky':
+            raise RuntimeError('bad baseline')
+        return 3
+
+    monkeypatch.setattr(daemon.scoring, 'score_source', flaky)
+    result = daemon.score_all(_utc(2026, 8, 21, 14))
+    assert result['bluesky'] == 0
+    assert result['stocktwits'] == 3
