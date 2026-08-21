@@ -12,7 +12,7 @@ from extensions import db
 from models import RadarMention, RadarPost, RadarSourceCursor
 
 from . import buckets, extraction, fingerprint, sentiment, universe
-from .config import BUCKET_MINUTES
+from .config import BUCKET_MINUTES, bare_tokens_allowed
 
 # How far back a cycle rolls up when there is no stored history yet.
 _COLD_START_WINDOW = dt.timedelta(hours=2)
@@ -78,7 +78,9 @@ def _store_mentioning_posts(raw_posts, lookup, now):
     fresh, new_count = [], 0
     for raw in raw_posts:
         row = existing.get(raw.external_id)
-        tickers = extraction.extract_tickers(raw.title, raw.body, lookup)
+        tickers = extraction.extract_tickers(
+            raw.title, raw.body, lookup,
+            allow_bare=bare_tokens_allowed(raw.source))
 
         if row is None:
             # New, and only worth keeping if something scorable was found.
@@ -125,7 +127,9 @@ def _store_mentioning_posts(raw_posts, lookup, now):
     for raw in raw_posts:
         if raw.external_id in {r.external_id for r, _, _ in fresh}:
             continue
-        tickers = extraction.extract_tickers(raw.title, raw.body, lookup)
+        tickers = extraction.extract_tickers(
+            raw.title, raw.body, lookup,
+            allow_bare=bare_tokens_allowed(raw.source))
         if not tickers:
             continue
         score = sentiment.lexicon_score('%s %s' % (raw.title or '', raw.body))

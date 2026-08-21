@@ -31,6 +31,25 @@ MIN_NAME_TOKEN_LEN = 4
 
 _NAME_WORD_RE = re.compile(r"[a-z']+")
 
+# Crypto is excluded entirely (spec 3.7), and the exclusion has to work on
+# every source rather than only on StockTwits, where an instrument_class field
+# makes it easy. Elsewhere the giveaway is the fund's own name: BTC is
+# Grayscale Bitcoin Mini Trust, ETH is Grayscale Ethereum, XRP is the Bitwise
+# XRP ETF.
+#
+# Matched on the NAME, never on the symbol. BCH is Banco de Chile and LINK is
+# Interlink Electronics -- real companies whose tickers happen to spell coins,
+# and deleting them would cost genuine coverage to fix an ambiguity that only
+# exists on crypto-heavy sources.
+_CRYPTO_NAME_RE = re.compile(
+    r'\b(bitcoin|ethereum|ether|crypto|blockchain|solana|litecoin|dogecoin'
+    r'|ripple|xrp|digital\s+asset|coinbase\s+premium)\b', re.I)
+
+
+def is_crypto_name(name):
+    """True when a security's name marks it as crypto exposure."""
+    return bool(_CRYPTO_NAME_RE.search(name or ''))
+
 
 def _significant(name):
     """A comparable form of a company name.
@@ -154,5 +173,6 @@ def load_lookup():
     lookup = {
         row.symbol: {'name': row.name, 'exchange': row.exchange}
         for row in TickerUniverse.query.all()
+        if not is_crypto_name(row.name)
     }
     return annotate_distinctive(lookup)

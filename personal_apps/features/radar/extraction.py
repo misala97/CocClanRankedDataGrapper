@@ -26,7 +26,7 @@ _BARE_RE = re.compile(r'(?<![$A-Za-z0-9])([A-Z]{2,5})\b')
 _CONFIDENCE_RANK = {'low': 0, 'medium': 1, 'high': 2}
 
 
-def extract_tickers(title, body, lookup):
+def extract_tickers(title, body, lookup, allow_bare=True):
     """Return sorted (symbol, confidence) pairs for one post.
 
     lookup is universe.load_lookup()'s shape: uppercase symbol -> {'name',
@@ -54,13 +54,17 @@ def extract_tickers(title, body, lookup):
         if symbol in lookup:
             record(symbol, 'high')
 
-    # Bare uppercase tokens. Measured against the real 12596-symbol universe,
+    # Bare uppercase tokens, where the source's population makes them
+    # meaningful at all (config.bare_tokens_allowed). On a general network
+    # they are overwhelmingly ordinary words that happen to be listed.
+    #
+    # Measured against the real 12596-symbol universe,
     # counting these on their own produced roughly 85% false positives, so a
     # bare token stays `low` unless a distinctive word from its company name is
     # in the same post. `low` is stored but never scored; promotion to `medium`
     # happens at rollup, when a different author cashtags the same ticker in
     # the same window.
-    for raw in _BARE_RE.findall(text):
+    for raw in (_BARE_RE.findall(text) if allow_bare else ()):
         symbol = raw.upper()
         if symbol in STOPWORDS or symbol not in lookup:
             continue

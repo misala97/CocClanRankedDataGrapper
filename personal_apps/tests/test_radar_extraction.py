@@ -200,3 +200,21 @@ def test_a_dollar_sign_inside_a_word_is_not_a_cashtag():
     # A real cashtag still works.
     assert extract_tickers(None, 'bought $AP today', lookup) == [('AP', 'high')]
     assert extract_tickers(None, '($AP)', lookup) == [('AP', 'high')]
+
+
+def test_bare_tokens_can_be_switched_off_per_source():
+    """On a general-population network a bare token is overwhelmingly an
+    ordinary word that happens to be listed. Live data: Bluesky's top mentions
+    were IA (Iowa), GOP (the party) and AP (the news agency), while the same
+    extractor on StockTwits returned MRNA, DJT and AVGO. Same code, different
+    populations."""
+    assert extract_tickers(None, 'GME to the moon', LOOKUP, allow_bare=False) == []
+    # Cashtags still count -- a dollar sign is a deliberate act of notation
+    # wherever it appears.
+    assert extract_tickers(None, 'buying $GME', LOOKUP, allow_bare=False) == \
+        [('GME', 'high')]
+
+
+def test_bare_matching_is_on_by_default():
+    """Finance-native sources keep it; the parameter exists to turn it off."""
+    assert extract_tickers(None, 'GME to the moon', LOOKUP) == [('GME', 'low')]

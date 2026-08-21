@@ -14,6 +14,32 @@ import json
 # nothing else in the pipeline names a source (spec 8.6).
 SOURCES = ('stocktwits', 'bluesky', 'fourchan')
 
+# Whether a bare uppercase token may be read as a ticker on a given source.
+#
+# Measured on live data with the same extractor: StockTwits' top mentions were
+# MRNA, DJT, AVGO, IOVA -- all real. Bluesky's were IA (Iowa), GOP (the party),
+# AP (the news agency) and BTC (the coin) -- all real tickers, none of them
+# about stocks. The difference is the population, not the code. Where everyone
+# is discussing markets, MRNA means Moderna; on a general network almost nobody
+# is, and three-letter words mean what they usually mean.
+#
+# Corroboration cannot rescue this. GOP's ETF is named "Subversive
+# Congressional Republicans Trading", so a political post corroborates it
+# perfectly, and thirty different people said "IA", so the distinct-author gate
+# passes too.
+#
+# Sources absent from this mapping default to cashtag-only, which is the safe
+# direction for a source nobody has characterised yet.
+BARE_TOKENS_ALLOWED = {
+    'stocktwits': True,    # finance-only by construction
+    'fourchan': True,      # /biz/ is a finance board
+    'bluesky': False,      # general population; cashtags only
+}
+
+
+def bare_tokens_allowed(source):
+    return BARE_TOKENS_ALLOWED.get(source, False)
+
 # StockTwits publishes no rate-limit headers and twenty consecutive requests
 # drew no 429, so this is a conservative budget rather than a documented
 # ceiling. The daemon backs off on 429 regardless.

@@ -104,3 +104,38 @@ def test_delisted_symbols_stay_in_the_lookup(clean_universe):
         [{'symbol': 'ZZF', 'name': 'Foxtrot Corp', 'exchange': 'NYSE'}], NOW)
     universe.mark_delisted(['ZZF'], NOW + dt.timedelta(days=1))
     assert 'ZZF' in universe.load_lookup()
+
+
+def test_crypto_funds_are_excluded_from_the_lookup(clean_universe):
+    """Crypto is excluded entirely (spec 3.7). On StockTwits an
+    instrument_class field makes that easy; everywhere else the fund's own
+    name is the giveaway."""
+    universe.upsert_symbols([
+        {'symbol': 'ZZBT', 'name': 'Grayscale Bitcoin Mini Trust', 'exchange': 'NYSE'},
+        {'symbol': 'ZZET', 'name': 'Grayscale Ethereum Staking ETF Shares', 'exchange': 'NYSE'},
+        {'symbol': 'ZZXR', 'name': 'Bitwise XRP ETF', 'exchange': 'NYSE'},
+    ], NOW)
+    lookup = universe.load_lookup()
+    assert 'ZZBT' not in lookup
+    assert 'ZZET' not in lookup
+    assert 'ZZXR' not in lookup
+
+
+def test_a_real_company_whose_ticker_spells_a_coin_is_kept(clean_universe):
+    """BCH is Banco de Chile and LINK is Interlink Electronics. Deleting real
+    companies to resolve an ambiguity that only exists on crypto-heavy sources
+    would cost genuine coverage."""
+    universe.upsert_symbols([
+        {'symbol': 'ZZBC', 'name': 'Banco De Chile ADS', 'exchange': 'NYSE'},
+        {'symbol': 'ZZLK', 'name': 'Interlink Electronics, Inc.', 'exchange': 'NASDAQ'},
+    ], NOW)
+    lookup = universe.load_lookup()
+    assert 'ZZBC' in lookup
+    assert 'ZZLK' in lookup
+
+
+def test_the_crypto_rule_reads_names_not_symbols(clean_universe):
+    assert universe.is_crypto_name('Grayscale Bitcoin Mini Trust') is True
+    assert universe.is_crypto_name('iShares Bitcoin Trust ETF') is True
+    assert universe.is_crypto_name('Banco De Chile ADS') is False
+    assert universe.is_crypto_name(None) is False

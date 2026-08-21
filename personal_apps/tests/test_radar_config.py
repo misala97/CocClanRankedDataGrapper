@@ -53,3 +53,18 @@ def test_ipv4_preference_applies_when_set(monkeypatch):
         assert urllib3_connection.allowed_gai_family() == socket.AF_INET
     finally:
         urllib3_connection.allowed_gai_family = original
+
+
+def test_finance_native_sources_allow_bare_tokens():
+    assert config.bare_tokens_allowed('stocktwits') is True
+    assert config.bare_tokens_allowed('fourchan') is True
+
+
+def test_general_sources_require_cashtags():
+    assert config.bare_tokens_allowed('bluesky') is False
+
+
+def test_an_uncharacterised_source_defaults_to_cashtags_only():
+    """Safe direction for a source nobody has measured yet: a missed mention
+    costs a row, a false one costs a fake spike."""
+    assert config.bare_tokens_allowed('some_new_network') is False
