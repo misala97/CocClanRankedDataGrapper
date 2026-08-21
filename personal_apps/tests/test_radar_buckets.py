@@ -205,3 +205,17 @@ def test_a_bucket_with_only_lows_still_records_its_source_status(clean_buckets):
                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
     assert RadarBucketSource.query.filter_by(
         ticker='ZZA', source='stocktwits').one().status == 'ok'
+
+
+def test_the_config_version_is_stamped_on_each_source_row(clean_buckets):
+    """Baselines exclude history from before a config change, and that
+    exclusion is per (ticker, source). Reading it off the parent bucket would
+    mean joining a table the baseline query has no other reason to touch."""
+    from features.radar.config import source_config_version
+    buckets.roll_up([row(source='stocktwits'), row(source='bluesky')],
+                    {'stocktwits': 'ok', 'bluesky': 'ok'},
+                    {dt.datetime(2026, 4, 15, 14, 0, 0)})
+    versions = {r.source: r.source_config_version for r in
+                RadarBucketSource.query.filter_by(ticker='ZZA').all()}
+    assert len(versions) == 2
+    assert set(versions.values()) == {source_config_version()}
