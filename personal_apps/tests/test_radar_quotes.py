@@ -83,3 +83,88 @@ def test_market_cap_holds_a_large_number(ctx):
     assert row.market_cap == decimal.Decimal('3500000000000')
     db.session.delete(row)
     db.session.commit()
+
+
+from features.radar import quotes as quotes_mod
+
+
+def test_a_moving_tape_is_ok(ctx):
+    add(NOW, '100.0', volume=1000, quote_ts=NOW)
+    add(NOW + dt.timedelta(minutes=2), '101.0', volume=1200,
+        quote_ts=NOW + dt.timedelta(minutes=2))
+    db.session.commit()
+    assert quotes_mod.price_status('QQA', NOW + dt.timedelta(minutes=3)) == 'ok'
+
+
+def test_an_unchanged_tape_is_stale(ctx):
+    """A halted stock keeps its last price while mentions explode BECAUSE it
+    halted -- maximum divergence produced entirely by an artifact. The same
+    signature comes from a stock too illiquid to trade, which is why the mark
+    says NO PRINT rather than HALT: the data cannot tell them apart, and both
+    are untradeable."""
+    frozen = NOW - dt.timedelta(minutes=5)
+    for step in range(3):
+        add(NOW + dt.timedelta(minutes=2 * step), '100.0', volume=5000,
+            quote_ts=frozen)
+    db.session.commit()
+    assert quotes_mod.price_status('QQA', NOW + dt.timedelta(minutes=5)) == 'stale'
+
+
+def test_one_unchanged_poll_is_not_yet_stale(ctx):
+    """Two identical polls could be one slow second. Three is a pattern."""
+    frozen = NOW - dt.timedelta(minutes=5)
+    add(NOW, '100.0', volume=5000, quote_ts=frozen)
+    db.session.commit()
+    assert quotes_mod.price_status('QQA', NOW + dt.timedelta(minutes=1)) != 'stale'
+
+
+def test_volume_moving_while_the_stamp_sticks_is_still_ok(ctx):
+    """Both have to be frozen. A stale timestamp with rising volume is a
+    provider quirk, not a stopped tape."""
+    frozen = NOW - dt.timedelta(minutes=5)
+    for step in range(3):
+        add(NOW + dt.timedelta(minutes=2 * step), '100.0',
+            volume=5000 + step, quote_ts=frozen)
+    db.session.commit()
+    assert quotes_mod.price_status('QQA', NOW + dt.timedelta(minutes=5)) == 'ok'
+
+
+def test_no_quotes_at_all_is_unknown_not_stale(ctx):
+    """Never quoted is a different fact from quoted and frozen, and only one
+    of them is evidence about the stock."""
+    assert quotes_mod.price_status('QQNONE', NOW) == 'unknown'
+
+
+def test_daily_sigma_of_a_flat_series_is_zero(ctx):
+    closes = [(dt.date(2026, 7, day), decimal.Decimal('100')) for day in range(1, 20)]
+    assert quotes_mod.daily_sigma(closes) == pytest.approx(0.0)
+
+
+def test_daily_sigma_grows_with_volatility(ctx):
+    calm = [(dt.date(2026, 7, d), decimal.Decimal(100 + (d % 2)))
+            for d in range(1, 25)]
+    wild = [(dt.date(2026, 7, d), decimal.Decimal(100 + 20 * (d % 2)))
+            for d in range(1, 25)]
+    assert quotes_mod.daily_sigma(wild) > quotes_mod.daily_sigma(calm) * 5
+
+
+def test_daily_sigma_needs_enough_history(ctx):
+    assert quotes_mod.daily_sigma([]) is None
+    assert quotes_mod.daily_sigma(
+        [(dt.date(2026, 7, 1), decimal.Decimal('100'))]) is None
+
+
+def test_move_since_measures_against_the_oldest_quote_in_the_window(ctx):
+    add(NOW - dt.timedelta(hours=2), '100.0')
+    add(NOW - dt.timedelta(minutes=30), '104.0')
+    add(NOW, '110.0')
+    db.session.commit()
+    move = quotes_mod.move_since('QQA', hours=1, now=NOW + dt.timedelta(minutes=1))
+    # From 104 to 110 is roughly +5.8%; the two-hour-old quote is out of window.
+    assert 0.05 < float(move) < 0.065
+
+
+def test_move_since_is_none_without_two_quotes(ctx):
+    add(NOW, '100.0')
+    db.session.commit()
+    assert quotes_mod.move_since('QQA', hours=1, now=NOW) is None
