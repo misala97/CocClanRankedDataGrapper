@@ -17,11 +17,14 @@ import datetime as dt
 import logging
 import time
 
+import sqlalchemy as sa
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app import app
+from extensions import db
 from features.radar import (
-    ingest, market_calendar, retention, scheduling, scoring)
+    ingest, market_calendar, quotes, retention, scheduling, scoring)
+from features.radar.prices import finnhub as finnhub_provider
 from features.radar.config import (
     SOURCES, STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured)
 from features.radar.sources import bluesky, fourchan, stocktwits
@@ -42,6 +45,12 @@ FALLBACK_INTERVAL = 1800
 # Cycles per hour at the fastest cadence, used to divide the hourly budget.
 _CYCLES_PER_HOUR = 20
 SYMBOL_BUDGET_PER_CYCLE = max(1, STOCKTWITS_REQUESTS_PER_HOUR // _CYCLES_PER_HOUR)
+
+# Finnhub's free tier is 60 calls a minute. Quotes go to the tickers actually
+# on the board, not to all 12,000 in the universe -- a quote for a ticker
+# nobody is discussing answers a question nobody asked.
+QUOTE_LIMIT = 50
+QUOTE_INTERVAL_MINUTES = 5
 
 
 def _utcnow():
@@ -172,6 +181,46 @@ def _scheduled_scoring():
     logger.info('radar scoring wrote %s', written)
 
 
+def _loud_tickers(now, limit):
+    """Tickers worth spending a quote on: the loudest recently scored."""
+    from models import RadarBucketSource
+    since = now.replace(tzinfo=None) - dt.timedelta(hours=4)
+    rows = (db.session.query(RadarBucketSource.ticker,
+                             sa.func.max(RadarBucketSource.mention_z))
+            .filter(RadarBucketSource.bucket_start >= since,
+                    RadarBucketSource.mention_z.isnot(None))
+            .group_by(RadarBucketSource.ticker)
+            .order_by(sa.func.max(RadarBucketSource.mention_z).desc())
+            .limit(limit).all())
+    return [ticker for ticker, _ in rows]
+
+
+def poll_quotes(now_utc, provider, limit=QUOTE_LIMIT):
+    """Fetch and store quotes for the loudest tickers."""
+    symbols = _loud_tickers(now_utc, limit)
+    if not symbols:
+        # No board, so no reason to spend rate limit on an empty request.
+        return {'requested': 0, 'stored': 0, 'error': False}
+
+    try:
+        found = provider.quotes(symbols)
+        stored = quotes.record_quotes(found, now_utc.replace(tzinfo=None))
+    except Exception:
+        logger.exception('radar quote poll failed')
+        return {'requested': len(symbols), 'stored': 0, 'error': True}
+
+    return {'requested': len(symbols), 'stored': stored, 'error': False}
+
+
+def _scheduled_quotes():
+    now = dt.datetime.now(dt.timezone.utc)
+    provider = finnhub_provider.FinnhubProvider(finnhub_provider.FinnhubHttp())
+    with app.app_context():
+        result = poll_quotes(now, provider)
+    logger.info('radar quotes requested=%d stored=%d error=%s',
+                result['requested'], result['stored'], result['error'])
+
+
 def _scheduled_prune():
     with app.app_context():
         deleted = retention.prune_posts(_utcnow())
@@ -201,6 +250,9 @@ def main():
                       id='radar_scoring', max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc)
                       + dt.timedelta(minutes=2))
+    scheduler.add_job(_scheduled_quotes, 'interval',
+                      minutes=QUOTE_INTERVAL_MINUTES, id='radar_quotes',
+                      max_instances=1, coalesce=True)
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
     scheduler.start()
