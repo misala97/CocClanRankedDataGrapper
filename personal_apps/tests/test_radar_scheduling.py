@@ -21,13 +21,19 @@ NOW = dt.datetime(2026, 8, 21, 14, 0, 0)
 
 @pytest.fixture()
 def ctx():
+    # Scoped by SOURCE, not by symbol prefix: a live ingest cycle writes real
+    # symbols into this table under its own source name, and a symbol-prefix
+    # filter would leave them behind for due_symbols to return instead of the
+    # fixtures'.
     with flask_app.app_context():
         RadarPollState.query.filter(
-            RadarPollState.symbol.like('ZZ%')).delete(synchronize_session=False)
+            RadarPollState.source.in_(['testsource', 'othersource2'])).delete(
+            synchronize_session=False)
         db.session.commit()
         yield
         RadarPollState.query.filter(
-            RadarPollState.symbol.like('ZZ%')).delete(synchronize_session=False)
+            RadarPollState.source.in_(['testsource', 'othersource2'])).delete(
+            synchronize_session=False)
         db.session.commit()
 
 
@@ -55,48 +61,48 @@ def test_an_unmeasured_symbol_gets_the_floor():
 
 
 def test_tracking_a_symbol_makes_it_immediately_due(ctx):
-    scheduling.ensure_tracked('stocktwits', ['ZZA'], NOW)
-    assert 'ZZA' in scheduling.due_symbols('stocktwits', NOW, limit=10)
+    scheduling.ensure_tracked('testsource', ['ZZA'], NOW)
+    assert 'ZZA' in scheduling.due_symbols('testsource', NOW, limit=10)
 
 
 def test_a_polled_symbol_is_not_due_again_until_its_interval_passes(ctx):
-    scheduling.ensure_tracked('stocktwits', ['ZZA'], NOW)
-    scheduling.record_poll('stocktwits', 'ZZA', NOW, rate=5.8)
-    assert scheduling.due_symbols('stocktwits', NOW, limit=10) == []
+    scheduling.ensure_tracked('testsource', ['ZZA'], NOW)
+    scheduling.record_poll('testsource', 'ZZA', NOW, rate=5.8)
+    assert scheduling.due_symbols('testsource', NOW, limit=10) == []
     later = NOW + dt.timedelta(hours=3)
-    assert 'ZZA' in scheduling.due_symbols('stocktwits', later, limit=10)
+    assert 'ZZA' in scheduling.due_symbols('testsource', later, limit=10)
 
 
 def test_a_symbol_that_heats_up_is_polled_sooner(ctx):
     """Self-correcting: the schedule tightens before anything is missed."""
-    scheduling.ensure_tracked('stocktwits', ['ZZA'], NOW)
-    scheduling.record_poll('stocktwits', 'ZZA', NOW, rate=0.5)
-    cold_due = RadarPollState.query.filter_by(source='stocktwits', symbol='ZZA').one().next_due_at
+    scheduling.ensure_tracked('testsource', ['ZZA'], NOW)
+    scheduling.record_poll('testsource', 'ZZA', NOW, rate=0.5)
+    cold_due = RadarPollState.query.filter_by(source='testsource', symbol='ZZA').one().next_due_at
 
-    scheduling.record_poll('stocktwits', 'ZZA', NOW, rate=90.0)
-    hot_due = RadarPollState.query.filter_by(source='stocktwits', symbol='ZZA').one().next_due_at
+    scheduling.record_poll('testsource', 'ZZA', NOW, rate=90.0)
+    hot_due = RadarPollState.query.filter_by(source='testsource', symbol='ZZA').one().next_due_at
     assert hot_due < cold_due
 
 
 def test_due_symbols_respects_the_request_budget(ctx):
-    scheduling.ensure_tracked('stocktwits', ['ZZ%02d' % i for i in range(20)], NOW)
-    assert len(scheduling.due_symbols('stocktwits', NOW, limit=6)) == 6
+    scheduling.ensure_tracked('testsource', ['ZZ%02d' % i for i in range(20)], NOW)
+    assert len(scheduling.due_symbols('testsource', NOW, limit=6)) == 6
 
 
 def test_the_most_overdue_symbols_come_first(ctx):
     """With a budget smaller than the backlog, starving one symbol forever
     would leave a permanent hole in its baseline."""
-    scheduling.ensure_tracked('stocktwits', ['ZZA', 'ZZB'], NOW)
-    scheduling.record_poll('stocktwits', 'ZZA', NOW, rate=1.0)
-    scheduling.record_poll('stocktwits', 'ZZB', NOW - dt.timedelta(hours=6), rate=1.0)
-    assert scheduling.due_symbols('stocktwits', NOW + dt.timedelta(hours=5),
+    scheduling.ensure_tracked('testsource', ['ZZA', 'ZZB'], NOW)
+    scheduling.record_poll('testsource', 'ZZA', NOW, rate=1.0)
+    scheduling.record_poll('testsource', 'ZZB', NOW - dt.timedelta(hours=6), rate=1.0)
+    assert scheduling.due_symbols('testsource', NOW + dt.timedelta(hours=5),
                                   limit=1) == ['ZZB']
 
 
 def test_tracking_is_per_source(ctx):
     """The same symbol on two sources has two rates and two schedules."""
-    scheduling.ensure_tracked('stocktwits', ['ZZA'], NOW)
-    scheduling.record_poll('stocktwits', 'ZZA', NOW, rate=60.0)
-    scheduling.ensure_tracked('othersource', ['ZZA'], NOW)
-    assert 'ZZA' in scheduling.due_symbols('othersource', NOW, limit=5)
-    assert scheduling.due_symbols('stocktwits', NOW, limit=5) == []
+    scheduling.ensure_tracked('testsource', ['ZZA'], NOW)
+    scheduling.record_poll('testsource', 'ZZA', NOW, rate=60.0)
+    scheduling.ensure_tracked('othersource2', ['ZZA'], NOW)
+    assert 'ZZA' in scheduling.due_symbols('othersource2', NOW, limit=5)
+    assert scheduling.due_symbols('testsource', NOW, limit=5) == []
