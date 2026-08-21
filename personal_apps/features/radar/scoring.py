@@ -98,3 +98,30 @@ def score_source(source, now, lookback_days=30, excluded=None):
 
     db.session.commit()
     return written
+
+
+def pooled_z(ticker, bucket_start, sources):
+    """Combined z over the selected sources. Returns (z, contributing count).
+
+    Sums the components rather than averaging the z-scores, because a weighted
+    mean of z-scores is not a z-score (spec 6.2). Two sources each two sigma
+    over is stronger evidence than either alone; averaging reports the same two
+    sigma and throws the corroboration away.
+
+    A source with no scored row for this bucket -- down, or truncated -- drops
+    out of all three sums rather than contributing zero.
+    """
+    rows = (RadarBucketSource.query
+            .filter(RadarBucketSource.ticker == ticker,
+                    RadarBucketSource.bucket_start == bucket_start,
+                    RadarBucketSource.source.in_(list(sources)),
+                    RadarBucketSource.mention_z.isnot(None))
+            .all())
+    if not rows:
+        return None, 0
+
+    observed = sum(r.mention_count for r in rows)
+    expected = sum(r.expected for r in rows)
+    variance = sum(r.variance for r in rows)
+
+    return (observed - expected) / max(variance, VARIANCE_FLOOR) ** 0.5, len(rows)
