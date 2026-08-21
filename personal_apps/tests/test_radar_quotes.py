@@ -19,14 +19,20 @@ NOW = dt.datetime(2026, 8, 21, 14, 0, 0)
 
 @pytest.fixture()
 def ctx():
+    # Cleans BOTH tables. Several tests here create universe rows, and a run
+    # that fails before its own cleanup leaves one behind to collide with the
+    # next -- which is how this suite first broke.
+    def wipe():
+        RadarQuote.query.filter(RadarQuote.ticker.like('QQ%')).delete(
+            synchronize_session=False)
+        TickerUniverse.query.filter(TickerUniverse.symbol.like('QQ%')).delete(
+            synchronize_session=False)
+        db.session.commit()
+
     with flask_app.app_context():
-        RadarQuote.query.filter(RadarQuote.ticker.like('QQ%')).delete(
-            synchronize_session=False)
-        db.session.commit()
+        wipe()
         yield
-        RadarQuote.query.filter(RadarQuote.ticker.like('QQ%')).delete(
-            synchronize_session=False)
-        db.session.commit()
+        wipe()
 
 
 def add(when, price, volume=1000, ticker='QQA', quote_ts=None):
@@ -168,3 +174,48 @@ def test_move_since_is_none_without_two_quotes(ctx):
     add(NOW, '100.0')
     db.session.commit()
     assert quotes_mod.move_since('QQA', hours=1, now=NOW) is None
+
+
+def test_sigma_is_stored_on_the_universe_row(ctx):
+    """Fetching 30 daily closes per ticker per page load would be absurd, so
+    volatility lives in a column and is refreshed on its own schedule."""
+    from models import TickerUniverse
+    from features.radar import quotes as quotes_mod
+
+    class FakeProvider:
+        def daily_closes(self, symbol, days):
+            return [(dt.date(2026, 7, 1) + dt.timedelta(days=i),
+                     decimal.Decimal(100 + (i % 3))) for i in range(30)]
+
+    db.session.add(TickerUniverse(symbol='QQS', name='Sigma Corp',
+                                  exchange='NYSE', first_seen=NOW))
+    db.session.commit()
+
+    assert quotes_mod.refresh_sigma(FakeProvider(), ['QQS'], NOW) == 1
+    row = TickerUniverse.query.filter_by(symbol='QQS').one()
+    assert row.daily_sigma > 0
+    assert row.sigma_refreshed_at == NOW
+    TickerUniverse.query.filter_by(symbol='QQS').delete()
+    db.session.commit()
+
+
+def test_a_provider_with_no_history_leaves_sigma_alone(ctx):
+    """No history is not a volatility of zero, and a zero sigma downstream
+    would turn every price move into an infinite z."""
+    from models import TickerUniverse
+    from features.radar import quotes as quotes_mod
+
+    class Empty:
+        def daily_closes(self, symbol, days):
+            return []
+
+    db.session.add(TickerUniverse(symbol='QQT', name='Thin Corp',
+                                  exchange='NYSE', first_seen=NOW,
+                                  daily_sigma=0.02))
+    db.session.commit()
+
+    quotes_mod.refresh_sigma(Empty(), ['QQT'], NOW)
+    assert TickerUniverse.query.filter_by(symbol='QQT').one().daily_sigma == \
+        pytest.approx(0.02)
+    TickerUniverse.query.filter_by(symbol='QQT').delete()
+    db.session.commit()

@@ -35,7 +35,18 @@ def price_move_z(move, sigma):
 
 
 def divergence(mention_z, price_move_z):
-    """Bounded in (-1, 1). Higher means louder relative to how far it moved."""
+    """Higher means louder relative to how far the price moved.
+
+    Bounded in (-2, 1), and the asymmetry is real rather than an oversight.
+    The mention term spans (-1, 1) because a ticker can be quieter than usual;
+    the price term spans (0, 1) because it takes a magnitude. So the best
+    possible score is loud-and-unmoved at +1, while the worst is
+    quiet-and-moved at -2.
+
+    Anything rendering this on a scale must use (-2, 1). Live data reached
+    -1.055 on the first real board -- a stock up 5.94% that nobody was
+    discussing -- which a -1..1 scale would have clipped.
+    """
     mention = math.tanh(mention_z / DIVERGENCE_K_MENTION)
     price = math.tanh(abs(price_move_z) / DIVERGENCE_K_PRICE)
     return mention - price

@@ -223,3 +223,6 @@ PENNY_PRICE = 5.00
 # A listing younger than this has no baseline worth the name, which is a
 # property of the data rather than of the company's size.
 RECENT_IPO_DAYS = 365
+
+# Below this many days of history a reading is marked provisional (spec 6.8).
+PROVISIONAL_BASELINE_DAYS = 14

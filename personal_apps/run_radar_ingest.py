@@ -25,6 +25,7 @@ from extensions import db
 from features.radar import (
     ingest, market_calendar, quotes, retention, scheduling, scoring)
 from features.radar.prices import finnhub as finnhub_provider
+from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
     SOURCES, STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured)
 from features.radar.sources import bluesky, fourchan, stocktwits
@@ -51,6 +52,11 @@ SYMBOL_BUDGET_PER_CYCLE = max(1, STOCKTWITS_REQUESTS_PER_HOUR // _CYCLES_PER_HOU
 # nobody is discussing answers a question nobody asked.
 QUOTE_LIMIT = 50
 QUOTE_INTERVAL_MINUTES = 5
+
+# Twelve Data allows 800 requests a day and volatility moves on the scale of
+# weeks, so this is deliberately slow and small.
+SIGMA_LIMIT = 60
+SIGMA_INTERVAL_HOURS = 12
 
 
 def _utcnow():
@@ -221,6 +227,33 @@ def _scheduled_quotes():
                 result['requested'], result['stored'], result['error'])
 
 
+def refresh_volatility(now_utc, provider, limit=SIGMA_LIMIT):
+    """Recompute daily sigma for the tickers on the board.
+
+    Divergence needs a sigma for every row of every page load, and fetching
+    thirty daily closes per ticker per request would be absurd -- so it is
+    cached, and this is what fills the cache.
+    """
+    tickers = _loud_tickers(now_utc, limit)
+    if not tickers:
+        return 0
+    try:
+        return quotes.refresh_sigma(provider, tickers,
+                                    now_utc.replace(tzinfo=None))
+    except Exception:
+        logger.exception('radar volatility refresh failed')
+        return 0
+
+
+def _scheduled_volatility():
+    now = dt.datetime.now(dt.timezone.utc)
+    provider = twelvedata_provider.TwelveDataProvider(
+        twelvedata_provider.TwelveDataHttp())
+    with app.app_context():
+        updated = refresh_volatility(now, provider)
+    logger.info('radar volatility refreshed %d tickers', updated)
+
+
 def _scheduled_prune():
     with app.app_context():
         deleted = retention.prune_posts(_utcnow())
@@ -253,6 +286,11 @@ def main():
     scheduler.add_job(_scheduled_quotes, 'interval',
                       minutes=QUOTE_INTERVAL_MINUTES, id='radar_quotes',
                       max_instances=1, coalesce=True)
+    scheduler.add_job(_scheduled_volatility, 'interval',
+                      hours=SIGMA_INTERVAL_HOURS, id='radar_volatility',
+                      max_instances=1, coalesce=True,
+                      next_run_time=dt.datetime.now(dt.timezone.utc)
+                      + dt.timedelta(minutes=5))
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
     scheduler.start()

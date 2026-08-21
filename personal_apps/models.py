@@ -521,6 +521,12 @@ class TickerUniverse(db.Model):
     # Numeric(20, 2) because mega caps run into the trillions -- Apple reports
     # 4543167.94 million, which is 4.5e12 and overflows an INTEGER.
     market_cap           = db.Column(db.Numeric(20, 2), nullable=True)
+
+    # Standard deviation of daily returns, from the daily-close provider.
+    # Stored rather than computed on demand: divergence needs it for every row
+    # of every page load, and it moves on the scale of weeks.
+    daily_sigma          = db.Column(db.Float, nullable=True)
+    sigma_refreshed_at   = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
     ipo_date             = db.Column(db.Date, nullable=True)
     next_earnings_date   = db.Column(db.Date, nullable=True)
     profile_refreshed_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
