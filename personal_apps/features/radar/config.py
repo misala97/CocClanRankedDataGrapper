@@ -185,3 +185,15 @@ ELEVATED_Z = 2.0
 # Sustained: this many of the last four non-overlapping hours elevated.
 SUSTAINED_HOURS_REQUIRED = 3
 SUSTAINED_HOURS_CONSIDERED = 4
+
+# Bounded-transform scales for divergence (spec 6.4). K_M is larger because
+# mention z-scores run far hotter than price ones -- the whole point of the
+# transform is that neither term can swamp the other.
+DIVERGENCE_K_MENTION = 4.0
+DIVERGENCE_K_PRICE = 2.0
+
+# Below this fractional move, a price counts as flat for the direction mark.
+FLAT_MOVE = 0.005
+
+# Floor under volatility, so a never-moving stock cannot divide to infinity.
+MIN_SIGMA = 0.001
