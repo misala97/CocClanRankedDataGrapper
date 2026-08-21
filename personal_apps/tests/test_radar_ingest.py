@@ -303,3 +303,32 @@ def test_an_unexpected_source_error_does_not_kill_the_cycle(seeded):
         from models import RadarBucketSource
         rows = {r.source for r in RadarBucketSource.query.filter_by(ticker='ZZG')}
         assert rows == {'stocktwits'}   # no bluesky row, and no zero
+
+
+def test_a_coin_collision_is_dropped_on_a_general_source(seeded, monkeypatch):
+    """$BCH on Bluesky means Bitcoin Cash, not Banco de Chile.
+
+    ZZG stands in for a coin-shaped symbol so the test does not depend on
+    which real tickers happen to collide this year.
+    """
+    from features.radar import config
+    monkeypatch.setattr(config, 'COIN_COLLISION_SYMBOLS', frozenset({'ZZG'}))
+
+    p = post(ident='bs_coin', body='$ZZG pumping')
+    p.source = 'bluesky'
+    result = ingest.run_cycle(
+        NOW, {'bluesky': lambda s: FetchResult(posts=[p], status='ok')})
+    assert result['mentions'] == 0
+
+
+def test_the_same_symbol_still_counts_on_a_finance_source(seeded, monkeypatch):
+    """On StockTwits the population is discussing equities, so the company
+    reading is the right one."""
+    from features.radar import config
+    monkeypatch.setattr(config, 'COIN_COLLISION_SYMBOLS', frozenset({'ZZG'}))
+
+    p = post(ident='st_coin', body='$ZZG pumping')
+    p.source = 'stocktwits'
+    result = ingest.run_cycle(
+        NOW, {'stocktwits': lambda s: FetchResult(posts=[p], status='ok')})
+    assert result['mentions'] == 1

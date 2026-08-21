@@ -68,3 +68,30 @@ def test_an_uncharacterised_source_defaults_to_cashtags_only():
     """Safe direction for a source nobody has measured yet: a missed mention
     costs a row, a false one costs a fake spike."""
     assert config.bare_tokens_allowed('some_new_network') is False
+
+
+def test_coin_shaped_symbols_are_dropped_on_general_sources():
+    """BCH is Banco de Chile and LINK is Interlink Electronics, so the
+    name-based crypto filter cannot see them. On the first live hour four of
+    the ten loudest tickers were coins read as companies, BCH the largest."""
+    assert config.coin_collision_dropped('bluesky', 'BCH') is True
+    assert config.coin_collision_dropped('fourchan', 'LINK') is True
+
+
+def test_finance_native_sources_keep_them():
+    """On StockTwits, $LINK means Interlink -- the population is discussing
+    equities, so the company reading is the right one."""
+    assert config.coin_collision_dropped('stocktwits', 'LINK') is False
+    assert config.coin_collision_dropped('stocktwits', 'BCH') is False
+
+
+def test_ordinary_tickers_are_untouched_everywhere():
+    for source in ('bluesky', 'fourchan', 'stocktwits'):
+        assert config.coin_collision_dropped(source, 'MRNA') is False
+        assert config.coin_collision_dropped(source, 'AAPL') is False
+
+
+def test_an_unknown_source_drops_them():
+    """Same safe default as bare tokens: unmeasured sources get the strict
+    reading."""
+    assert config.coin_collision_dropped('some_new_network', 'BCH') is True
