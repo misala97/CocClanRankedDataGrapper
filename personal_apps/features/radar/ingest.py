@@ -5,6 +5,7 @@ without a network, which spec 10 requires. run_radar_ingest.py supplies the
 real one.
 """
 import datetime as dt
+import logging
 
 import sqlalchemy as sa
 
@@ -13,6 +14,8 @@ from models import RadarMention, RadarPost, RadarSourceCursor
 
 from . import buckets, extraction, fingerprint, sentiment, universe
 from .config import BUCKET_MINUTES, bare_tokens_allowed
+
+logger = logging.getLogger('radar.ingest')
 
 # How far back a cycle rolls up when there is no stored history yet.
 _COLD_START_WINDOW = dt.timedelta(hours=2)
@@ -188,7 +191,20 @@ def run_cycle(now, fetchers):
 
     for source, fetcher in fetchers.items():
         since = _since_for(source)
-        result = fetcher(since)
+        try:
+            result = fetcher(since)
+        except Exception:
+            # Isolated deliberately, and broadly. Each source declares an
+            # exception type for "this fetch did not arrive", but a source can
+            # also fail in ways it never anticipated -- a missing dependency
+            # took down a whole cycle, StockTwits and 4chan included, because
+            # ModuleNotFoundError is not JetstreamUnavailable. One source
+            # failing must never cost the others their data (spec 4.5), and
+            # `missing` is the honest record of it: no row, never a zero.
+            logger.exception('radar source %s failed this cycle', source)
+            statuses[source] = 'missing'
+            depths[source] = 0
+            continue
         statuses[source] = result.status
         depths[source] = result.catchup_depth
 

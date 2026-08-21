@@ -62,9 +62,11 @@ def _stocktwits_fetcher(client):
         try:
             hot = stocktwits.trending(client)
             scheduling.ensure_tracked('stocktwits', hot, now)
-        except stocktwits.StockTwitsUnavailable:
+        except stocktwits.StockTwitsUnavailable as exc:
             # One bad trending call must not cost the cycle its polled set.
-            logger.warning('stocktwits trending unavailable this cycle')
+            # The reason is logged: "unavailable" alone is not diagnosable, and
+            # a blocked IP looks identical to a rate limit without it.
+            logger.warning('stocktwits trending unavailable this cycle: %s', exc)
 
         symbols = scheduling.due_symbols('stocktwits', now,
                                          limit=SYMBOL_BUDGET_PER_CYCLE)
