@@ -145,6 +145,7 @@ def roll_up(rows, statuses, touched):
             for field, value in per.items():
                 setattr(child, field, value)
             child.status = statuses[source]
+            child.source_config_version = version
 
         written += 1
 

@@ -20,7 +20,8 @@ import time
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app import app
-from features.radar import ingest, market_calendar, retention, scheduling
+from features.radar import (
+    ingest, market_calendar, retention, scheduling, scoring)
 from features.radar.config import (
     SOURCES, STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured)
 from features.radar.sources import bluesky, fourchan, stocktwits
@@ -142,6 +143,35 @@ def _scheduled_cycle(scheduler, fetchers):
                              seconds=interval_for(current_state(now)))
 
 
+def score_all(now_utc):
+    """Rescore every source. Returns rows written per source.
+
+    Separate from ingest and slower -- it walks thirty days of buckets per
+    ticker, so it runs on its own schedule rather than inside a three-minute
+    cycle.
+
+    Failures are isolated per source for the same reason ingest isolates them:
+    one source's baseline going wrong is not a reason to leave the rest
+    unscored.
+    """
+    written = {}
+    for source in SOURCES:
+        try:
+            written[source] = scoring.score_source(
+                source, now_utc.replace(tzinfo=None))
+        except Exception:
+            logger.exception('radar scoring failed for %s', source)
+            written[source] = 0
+    return written
+
+
+def _scheduled_scoring():
+    now = dt.datetime.now(dt.timezone.utc)
+    with app.app_context():
+        written = score_all(now)
+    logger.info('radar scoring wrote %s', written)
+
+
 def _scheduled_prune():
     with app.app_context():
         deleted = retention.prune_posts(_utcnow())
@@ -165,6 +195,12 @@ def main():
                       id='radar_cycle', args=[scheduler, fetchers],
                       max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc))
+    # Two minutes behind the first cycle, so there are buckets to read before
+    # the first scoring pass goes looking for them.
+    scheduler.add_job(_scheduled_scoring, 'interval', minutes=15,
+                      id='radar_scoring', max_instances=1, coalesce=True,
+                      next_run_time=dt.datetime.now(dt.timezone.utc)
+                      + dt.timedelta(minutes=2))
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
     scheduler.start()

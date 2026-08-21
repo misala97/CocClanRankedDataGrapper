@@ -666,7 +666,16 @@ class RadarBucketSource(db.Model):
         db.Enum('ok', 'missing', 'truncated', name='radar_source_status'),
         nullable=False, default='missing')
 
-    # Written by Plan 2.
+    # Per source, not inherited from the parent bucket: baselines exclude
+    # history from before a configuration change (spec 6.6), and that decision
+    # is made per (ticker, source).
+    #
+    # Nullable because rows already written have no value, and back-filling a
+    # version they were not collected under would be a lie. baselines.usable
+    # treats a mismatch as unusable, so those rows simply age out of the window.
+    source_config_version     = db.Column(db.String(16), nullable=True)
+
+    # Written by the scoring pass.
     expected                  = db.Column(db.Float, nullable=True)
     variance                  = db.Column(db.Float, nullable=True)
     mention_z                 = db.Column(db.Float, nullable=True)

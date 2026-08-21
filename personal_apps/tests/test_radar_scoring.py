@@ -1,0 +1,273 @@
+# personal_apps/tests/test_radar_scoring.py
+"""Turning counts into surprise.
+
+Everything here reads radar_bucket_sources and writes back onto the same rows.
+No prices and no divergence -- those need a market feed and are Plan 3.
+"""
+import datetime as dt
+
+import pytest
+
+from app import app as flask_app
+from extensions import db
+from models import RadarBucketSource
+from features.radar import scoring
+from features.radar.config import source_config_version
+
+MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
+NOW = MONDAY + dt.timedelta(days=35)
+
+
+@pytest.fixture()
+def rows():
+    with flask_app.app_context():
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker.like('SS%')).delete(synchronize_session=False)
+        db.session.commit()
+        yield
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker.like('SS%')).delete(synchronize_session=False)
+        db.session.commit()
+
+
+def add(when, count, ticker='SSA', source='stocktwits', status='ok',
+        version=None):
+    db.session.add(RadarBucketSource(
+        ticker=ticker, bucket_start=when, source=source,
+        mention_count=count, high_confidence_count=count, low_count=0,
+        distinct_authors=count, distinct_text_ratio=1.0,
+        engagement_weighted_count=float(count), status=status,
+        source_config_version=version or source_config_version()))
+
+
+def steady_history(ticker='SSA', per_bucket=2, days=30, source='stocktwits'):
+    """A boringly consistent ticker, so anything unusual is the test's doing.
+
+    2880 rows at 15-minute grain. Added to the session and committed once by
+    the caller -- committing per row makes this suite take minutes.
+    """
+    for step in range(days * 96):
+        add(MONDAY + dt.timedelta(minutes=15 * step), per_bucket,
+            ticker=ticker, source=source)
+
+
+def test_a_normal_bucket_scores_near_zero(rows):
+    steady_history()
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+
+    row = RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=10)).one()
+    assert row.mention_z is not None
+    assert abs(row.mention_z) < 2
+
+
+def test_a_spike_scores_high(rows):
+    steady_history()
+    loud = MONDAY + dt.timedelta(days=20)
+    db.session.commit()
+    RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=loud).update(
+        {'mention_count': 60})
+    db.session.commit()
+
+    scoring.score_source('stocktwits', NOW)
+    assert RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=loud).one().mention_z > 5
+
+
+def test_expected_and_variance_are_stored_too(rows):
+    """Pooling a user-selected subset means summing components, so the parts
+    have to survive, not just the z (spec 6.2)."""
+    steady_history()
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+
+    row = RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=10)).one()
+    assert row.expected > 0
+    assert row.variance >= row.expected
+
+
+def test_missing_buckets_are_never_scored(rows):
+    """A source that was down has nothing to be surprised about."""
+    steady_history()
+    gap = MONDAY + dt.timedelta(days=12)
+    db.session.commit()
+    RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=gap).update(
+        {'status': 'missing', 'mention_count': 0})
+    db.session.commit()
+
+    scoring.score_source('stocktwits', NOW)
+    assert RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=gap).one().mention_z is None
+
+
+def test_a_gap_does_not_depress_the_baseline(rows):
+    """The observed-mass property, end to end. A week of outage must not make
+    the ticker look like it went quiet, or everything after would spike."""
+    steady_history()
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+    reference = RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=25)).one().mention_z
+
+    outage_start = MONDAY + dt.timedelta(days=5)
+    RadarBucketSource.query.filter(
+        RadarBucketSource.ticker == 'SSA',
+        RadarBucketSource.bucket_start >= outage_start,
+        RadarBucketSource.bucket_start < outage_start + dt.timedelta(days=7)
+    ).update({'status': 'missing', 'mention_count': 0}, synchronize_session=False)
+    db.session.commit()
+
+    scoring.score_source('stocktwits', NOW)
+    after = RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=25)).one().mention_z
+    assert after == pytest.approx(reference, abs=0.5)
+
+
+def test_baseline_days_is_recorded(rows):
+    steady_history(days=30)
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+    row = RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=10)).one()
+    assert row.baseline_days >= 14
+
+
+def test_a_brand_new_ticker_is_provisional(rows):
+    """Two days of history cannot support a z-score anyone should act on."""
+    for step in range(2 * 96):
+        add(NOW - dt.timedelta(days=2) + dt.timedelta(minutes=15 * step), 3,
+            ticker='SSNEW')
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+
+    row = (RadarBucketSource.query.filter_by(ticker='SSNEW')
+           .order_by(RadarBucketSource.bucket_start.desc()).first())
+    assert row.baseline_days < 14
+
+
+def test_scoring_only_touches_its_own_source(rows):
+    steady_history(source='stocktwits')
+    steady_history(ticker='SSB', source='bluesky')
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+
+    assert RadarBucketSource.query.filter_by(
+        ticker='SSB', source='bluesky').first().mention_z is None
+
+
+def test_pooling_sums_components_not_z_scores(rows):
+    """A weighted mean of z-scores is not a z-score. Two sources each two
+    sigma over is stronger evidence than either alone, and averaging would
+    report the same two."""
+    for source in ('stocktwits', 'bluesky'):
+        steady_history(source=source)
+    loud = MONDAY + dt.timedelta(days=20)
+    db.session.commit()
+    RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=loud).update(
+        {'mention_count': 12})
+    db.session.commit()
+
+    for source in ('stocktwits', 'bluesky'):
+        scoring.score_source(source, NOW)
+
+    single, n_single = scoring.pooled_z('SSA', loud, ['stocktwits'])
+    both, n_both = scoring.pooled_z('SSA', loud, ['stocktwits', 'bluesky'])
+    assert n_single == 1 and n_both == 2
+    assert both > single
+
+
+def test_pooling_ignores_unselected_sources(rows):
+    for source in ('stocktwits', 'bluesky'):
+        steady_history(source=source)
+    when = MONDAY + dt.timedelta(days=10)
+    db.session.commit()
+    for source in ('stocktwits', 'bluesky'):
+        scoring.score_source(source, NOW)
+
+    _, n = scoring.pooled_z('SSA', when, ['bluesky'])
+    assert n == 1
+
+
+def test_a_missing_source_drops_out_rather_than_contributing_zero(rows):
+    """The rule, at read time. A source that was down must not drag the pooled
+    reading towards nothing."""
+    for source in ('stocktwits', 'bluesky'):
+        steady_history(source=source)
+    when = MONDAY + dt.timedelta(days=10)
+    db.session.commit()
+    RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=when, source='bluesky').update(
+        {'status': 'missing', 'mention_count': 0})
+    db.session.commit()
+    for source in ('stocktwits', 'bluesky'):
+        scoring.score_source(source, NOW)
+
+    pooled, n = scoring.pooled_z('SSA', when, ['stocktwits', 'bluesky'])
+    only, _ = scoring.pooled_z('SSA', when, ['stocktwits'])
+    assert n == 1
+    assert pooled == pytest.approx(only)
+
+
+def test_pooling_nothing_returns_none(rows):
+    assert scoring.pooled_z('SSNOPE', MONDAY, ['stocktwits']) == (None, 0)
+
+
+def test_eligibility_needs_volume_authors_and_variety():
+    assert scoring.is_eligible(mentions=10, authors=6, text_ratio=0.9) is True
+    assert scoring.is_eligible(mentions=2, authors=2, text_ratio=1.0) is False
+    assert scoring.is_eligible(mentions=10, authors=1, text_ratio=1.0) is False
+    assert scoring.is_eligible(mentions=40, authors=40, text_ratio=0.05) is False
+
+
+def test_the_author_gate_stops_one_person_shouting():
+    assert scoring.is_eligible(mentions=50, authors=1, text_ratio=1.0) is False
+
+
+def test_the_text_gate_stops_fifty_people_pasting_one_thing():
+    """Distinct authors cannot see a brigade; distinct text can."""
+    assert scoring.is_eligible(mentions=50, authors=50, text_ratio=0.02) is False
+
+
+def test_a_window_aggregates_its_buckets(rows):
+    steady_history()
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+    end = MONDAY + dt.timedelta(days=20)
+
+    _, parts_1h = scoring.window_z('SSA', ['stocktwits'], end, hours=1)
+    _, parts_4h = scoring.window_z('SSA', ['stocktwits'], end, hours=4)
+    assert parts_4h['mentions'] > parts_1h['mentions']
+    assert parts_4h['expected'] > parts_1h['expected']
+
+
+def test_a_window_with_no_scored_buckets_is_none(rows):
+    assert scoring.window_z('SSNOPE', ['stocktwits'], NOW, hours=1) == (None, {})
+
+
+def test_sustained_needs_several_non_overlapping_hours(rows):
+    """1h, 4h and 24h are nested, so one loud hour lifts all three and
+    "elevated in all three" would just restate it. Sustained is measured over
+    consecutive separate hours instead (spec 6.9)."""
+    steady_history()
+    end = MONDAY + dt.timedelta(days=20)
+    db.session.commit()
+
+    for step in range(4):                      # one loud hour only
+        RadarBucketSource.query.filter_by(
+            ticker='SSA',
+            bucket_start=end - dt.timedelta(minutes=15 * (step + 1))).update(
+            {'mention_count': 40})
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+    assert scoring.is_sustained('SSA', ['stocktwits'], end) is False
+
+    for step in range(12):                     # three of the last four hours
+        RadarBucketSource.query.filter_by(
+            ticker='SSA',
+            bucket_start=end - dt.timedelta(minutes=15 * (step + 1))).update(
+            {'mention_count': 40})
+    db.session.commit()
+    scoring.score_source('stocktwits', NOW)
+    assert scoring.is_sustained('SSA', ['stocktwits'], end) is True

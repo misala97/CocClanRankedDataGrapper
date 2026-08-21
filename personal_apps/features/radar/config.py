@@ -128,6 +128,26 @@ def source_config_version():
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 
 
+# Negative-binomial dispersion bounds. variance = mu + mu**2 / k, so a large k
+# approaches Poisson and a small k allows heavy bursting.
+#
+# The UPPER bound is the one doing work. Dispersion is estimated over buckets
+# that exclude known spikes, which makes the sample look calmer than the world
+# is and biases k upward -- and a k that is too high shrinks the variance,
+# inflates every z, produces more spikes, excludes more buckets, and biases k
+# further. The clamp keeps that from running away.
+K_MIN = 0.5
+K_MAX = 50.0
+K_DEFAULT = 5.0
+
+# Below this many usable buckets, per-ticker dispersion is noise.
+K_MIN_OBSERVATIONS = 20
+
+# Floor under the variance, so a near-zero expectation cannot divide to
+# infinity.
+VARIANCE_FLOOR = 0.25
+
+
 def prefer_ipv4_if_configured():
     """Opt-in workaround for a host that advertises IPv6 but cannot route it.
 
@@ -150,3 +170,18 @@ def prefer_ipv4_if_configured():
     import urllib3.util.connection as urllib3_connection
     urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
     return True
+
+
+# Eligibility floor (spec 6.3). Three gates, each closing a hole the others
+# cannot see: volume alone is meaningless at low counts, one account can supply
+# any volume, and fifty accounts can paste one message.
+MIN_MENTIONS = 5
+MIN_DISTINCT_AUTHORS = 3
+MIN_DISTINCT_TEXT_RATIO = 0.35
+
+# A window counts as elevated at or above this z.
+ELEVATED_Z = 2.0
+
+# Sustained: this many of the last four non-overlapping hours elevated.
+SUSTAINED_HOURS_REQUIRED = 3
+SUSTAINED_HOURS_CONSIDERED = 4
