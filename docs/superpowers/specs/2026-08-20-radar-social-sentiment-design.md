@@ -181,6 +181,35 @@ Include it as a peer source, expect it to contribute little on its own, and
 read it mainly as corroboration: a ticker loud on both StockTwits and /biz/ is
 a different object from one loud on either alone.
 
+### 3.6.1 Per-account trust was measured and rejected
+
+StockTwits closed new API registrations ("we unfortunately won't be accepting
+new registrations until we have finished our review"), so the obvious next idea
+was to recover density by treating individual Bluesky accounts as finance-native
+and allowing bare tokens from them — the same population argument §4.2.1 makes
+about sources, applied one level down.
+
+**Measured on 175 candidate accounts, and it does not pay.** The high-confidence
+ratio separates real from noise cleanly:
+
+| account | posts | mentions | high-confidence |
+|---|---|---|---|
+| qualitystocks | 60 | 120 | 96 (80%) |
+| ccm-brett | 60 | 48 | 43 (90%) |
+| joeystocks | 59 | 32 | 0 |
+| tradingmasken | 59 | 20 | 2 |
+
+And that is the argument against it. **The accounts worth trusting already use
+cashtags**, so their mentions are already counted — granting bare-token trust
+adds roughly 25% from accounts that work, while admitting exactly the noise the
+cashtag rule exists to stop. `joeystocks` scores `NYC` 28 times (the city);
+`tradingmasken` scores `GM` (good morning) and `USD`. Two of the nine densest
+"finance" accounts sold trading *cards*.
+
+The conclusion worth keeping: **extraction is not the constraint, volume is.**
+No rule change recovers what the closed APIs took, and the eligibility floor
+(§6.3) is what keeps a thin board honest rather than padded.
+
 ### 3.7 Crypto
 
 Crypto is **excluded entirely**. Not a segment, not a tab, not a parallel rule
