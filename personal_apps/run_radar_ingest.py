@@ -43,6 +43,14 @@ _CYCLES_PER_HOUR = 20
 SYMBOL_BUDGET_PER_CYCLE = max(1, STOCKTWITS_REQUESTS_PER_HOUR // _CYCLES_PER_HOUR)
 
 
+def _utcnow():
+    """Naive UTC, the convention every datetime in this codebase is stored in.
+
+    datetime.utcnow() is deprecated and slated for removal, and it printed a
+    warning into the service log on every cycle.
+    """
+    return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
 def interval_for(state):
     return INTERVALS.get(state, FALLBACK_INTERVAL)
 
@@ -59,7 +67,7 @@ def _stocktwits_fetcher(client):
     the free tier does not provide.
     """
     def fetch(since):
-        now = dt.datetime.utcnow()
+        now = _utcnow()
         discovery_failed = False
         try:
             hot = stocktwits.trending(client)
@@ -136,7 +144,7 @@ def _scheduled_cycle(scheduler, fetchers):
 
 def _scheduled_prune():
     with app.app_context():
-        deleted = retention.prune_posts(dt.datetime.utcnow())
+        deleted = retention.prune_posts(_utcnow())
         if deleted:
             logger.info('radar retention pruned %d posts', deleted)
 

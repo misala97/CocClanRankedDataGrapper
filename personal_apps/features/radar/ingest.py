@@ -18,6 +18,14 @@ from .config import (
 
 logger = logging.getLogger('radar.ingest')
 
+def _utcnow():
+    """Naive UTC, the convention every datetime in this codebase is stored in.
+
+    datetime.utcnow() is deprecated and slated for removal, and it printed a
+    warning into the service log on every cycle.
+    """
+    return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
 # How far back a cycle rolls up when there is no stored history yet.
 _COLD_START_WINDOW = dt.timedelta(hours=2)
 
@@ -34,7 +42,7 @@ def _since_for(source):
     row = RadarSourceCursor.query.filter_by(source=source).one_or_none()
     if row is not None:
         return row.cursor_utc
-    return dt.datetime.utcnow() - _COLD_START_WINDOW
+    return _utcnow() - _COLD_START_WINDOW
 
 
 def _advance_cursor(source, newest_seen):
