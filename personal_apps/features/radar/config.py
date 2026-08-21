@@ -37,6 +37,42 @@ BARE_TOKENS_ALLOWED = {
 }
 
 
+# Ticker symbols that are also well-known crypto coins. The listed company is
+# genuinely not crypto -- BCH is Banco de Chile, LINK is Interlink Electronics,
+# ATOM is Atomera -- so the name-based crypto filter cannot see them, and
+# deleting them from the universe would cost real coverage.
+#
+# On StockTwits, $LINK means Interlink: the population is discussing equities.
+# On a general network or a crypto board it means Chainlink. Measured on the
+# first live hour, four of the ten loudest tickers were these -- BCH, LINK,
+# ATOM and LTC -- with BCH the single largest.
+#
+# So they are dropped only where the coin reading dominates, which is the same
+# per-source judgement bare tokens already get.
+COIN_COLLISION_SYMBOLS = frozenset({
+    'BCH', 'LTC', 'LINK', 'ATOM', 'DOT', 'ADA', 'SOL', 'XMR', 'TRX', 'ALGO',
+    'ICP', 'FIL', 'APT', 'ARB', 'OP', 'INJ', 'SUI', 'SEI', 'TIA', 'NEAR',
+    'HBAR', 'VET', 'EOS', 'XLM', 'ETC', 'XTZ', 'AAVE', 'MKR', 'SNX', 'CRV',
+    'RUNE', 'FTM', 'GRT', 'IMX', 'LDO', 'STX', 'KAS', 'TON', 'PEPE', 'SHIB',
+    'DOGE', 'BNB', 'AVAX', 'MATIC', 'UNI', 'CAKE', 'RNDR', 'JUP', 'WIF',
+})
+
+# Sources where a coin-shaped symbol should be read as the coin, not the
+# company. Finance-native populations are the exception.
+COIN_SYMBOLS_MEAN_STOCKS = {
+    'stocktwits': True,
+    'fourchan': False,     # /biz/ is crypto culture first
+    'bluesky': False,
+}
+
+
+def coin_collision_dropped(source, symbol):
+    """True when this symbol should be ignored on this source."""
+    if COIN_SYMBOLS_MEAN_STOCKS.get(source, False):
+        return False
+    return symbol in COIN_COLLISION_SYMBOLS
+
+
 def bare_tokens_allowed(source):
     return BARE_TOKENS_ALLOWED.get(source, False)
 

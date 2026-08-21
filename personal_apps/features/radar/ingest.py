@@ -13,7 +13,8 @@ from extensions import db
 from models import RadarMention, RadarPost, RadarSourceCursor
 
 from . import buckets, extraction, fingerprint, sentiment, universe
-from .config import BUCKET_MINUTES, bare_tokens_allowed
+from .config import (
+    BUCKET_MINUTES, bare_tokens_allowed, coin_collision_dropped)
 
 logger = logging.getLogger('radar.ingest')
 
@@ -52,6 +53,20 @@ def _advance_cursor(source, newest_seen):
         row.cursor_utc = newest_seen
 
 
+def _extract_for(raw, lookup):
+    """Extract under the policy that applies to this post's source.
+
+    Two per-source judgements, both about population rather than code: whether
+    a bare token can be read as a ticker at all, and whether a coin-shaped
+    symbol means the company or the coin.
+    """
+    tickers = extraction.extract_tickers(
+        raw.title, raw.body, lookup,
+        allow_bare=bare_tokens_allowed(raw.source))
+    return [(symbol, confidence) for symbol, confidence in tickers
+            if not coin_collision_dropped(raw.source, symbol)]
+
+
 def _store_mentioning_posts(raw_posts, lookup, now):
     """Store only posts that mention a ticker, and their mentions.
 
@@ -81,9 +96,7 @@ def _store_mentioning_posts(raw_posts, lookup, now):
     fresh, new_count = [], 0
     for raw in raw_posts:
         row = existing.get(raw.external_id)
-        tickers = extraction.extract_tickers(
-            raw.title, raw.body, lookup,
-            allow_bare=bare_tokens_allowed(raw.source))
+        tickers = _extract_for(raw, lookup)
 
         if row is None:
             # New, and only worth keeping if something scorable was found.
@@ -130,9 +143,7 @@ def _store_mentioning_posts(raw_posts, lookup, now):
     for raw in raw_posts:
         if raw.external_id in {r.external_id for r, _, _ in fresh}:
             continue
-        tickers = extraction.extract_tickers(
-            raw.title, raw.body, lookup,
-            allow_bare=bare_tokens_allowed(raw.source))
+        tickers = _extract_for(raw, lookup)
         if not tickers:
             continue
         score = sentiment.lexicon_score('%s %s' % (raw.title or '', raw.body))
