@@ -105,3 +105,48 @@ def test_a_prior_barely_moves_a_thick_estimate():
     shrunk, _ = baselines.weekly_rate(thick, flat_profile(),
                                       prior_rate=10.0, prior_weight=0.05)
     assert shrunk == pytest.approx(alone, rel=0.1)
+
+
+def test_variance_grows_with_the_level():
+    """A Poisson assumption says variance equals the mean. Real chatter is
+    burstier, and treating it as Poisson makes every busy hour significant."""
+    small = baselines.variance_for(1.0, k=5.0)
+    large = baselines.variance_for(100.0, k=5.0)
+    assert large > small * 100
+
+
+def test_a_large_k_approaches_poisson():
+    assert baselines.variance_for(10.0, k=1e6) == pytest.approx(10.0, rel=1e-3)
+
+
+def test_an_overnight_spike_is_not_suppressed():
+    """The failure the count model exists to fix. Expected 0.3, observed 6:
+    under a pooled standard deviation dominated by busy hours this reads
+    z ~ 1.4 and vanishes. Under the count model it is unmistakable."""
+    variance = baselines.variance_for(0.3, k=5.0)
+    assert (6 - 0.3) / (variance ** 0.5) > 6
+
+
+def test_dispersion_is_clamped_at_the_top():
+    """The operative guard. Dispersion is estimated on spike-excluded buckets,
+    which makes the sample look calmer than reality and biases k upward --
+    smaller variance, larger z, more spikes, more exclusions, round again."""
+    quiet = [obs(i * 0.25, 1) for i in range(200)]
+    assert baselines.dispersion(quiet, flat_profile(), rate=672.0) <= baselines.K_MAX
+
+
+def test_dispersion_is_clamped_at_the_bottom():
+    bursty = [obs(i * 0.25, 0 if i % 2 else 500) for i in range(200)]
+    assert baselines.dispersion(bursty, flat_profile(), rate=672.0) >= baselines.K_MIN
+
+
+def test_thin_history_falls_back_to_the_global_default():
+    assert baselines.dispersion([], flat_profile(), rate=1.0) == baselines.K_DEFAULT
+    assert baselines.dispersion([obs(0, 3)], flat_profile(),
+                                rate=1.0) == baselines.K_DEFAULT
+
+
+def test_expected_scales_with_the_share_of_the_week():
+    prof = flat_profile()
+    assert baselines.expected_for(672.0, prof, MONDAY) == pytest.approx(1.0)
+    assert baselines.expected_for(1344.0, prof, MONDAY) == pytest.approx(2.0)

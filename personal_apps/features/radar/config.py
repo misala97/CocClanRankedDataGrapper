@@ -128,6 +128,26 @@ def source_config_version():
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 
 
+# Negative-binomial dispersion bounds. variance = mu + mu**2 / k, so a large k
+# approaches Poisson and a small k allows heavy bursting.
+#
+# The UPPER bound is the one doing work. Dispersion is estimated over buckets
+# that exclude known spikes, which makes the sample look calmer than the world
+# is and biases k upward -- and a k that is too high shrinks the variance,
+# inflates every z, produces more spikes, excludes more buckets, and biases k
+# further. The clamp keeps that from running away.
+K_MIN = 0.5
+K_MAX = 50.0
+K_DEFAULT = 5.0
+
+# Below this many usable buckets, per-ticker dispersion is noise.
+K_MIN_OBSERVATIONS = 20
+
+# Floor under the variance, so a near-zero expectation cannot divide to
+# infinity.
+VARIANCE_FLOOR = 0.25
+
+
 def prefer_ipv4_if_configured():
     """Opt-in workaround for a host that advertises IPv6 but cannot route it.
 

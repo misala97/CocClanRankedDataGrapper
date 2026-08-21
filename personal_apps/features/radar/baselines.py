@@ -15,6 +15,8 @@ having gone quiet.
 import dataclasses
 import datetime as dt
 
+from .config import (K_DEFAULT, K_MAX, K_MIN, K_MIN_OBSERVATIONS,
+                     VARIANCE_FLOOR)
 from .profile import hour_share
 
 
@@ -70,3 +72,47 @@ def weekly_rate(observations, prof, prior_rate=None, prior_weight=0.0):
     # decides, not the number of rows it arrived in.
     blended = (total + prior_rate * prior_weight) / (observed_mass + prior_weight)
     return blended, observed_mass
+
+
+def expected_for(rate, prof, when):
+    """Mentions expected in the bucket containing `when`."""
+    return rate * hour_share(prof, when)
+
+
+def variance_for(expected, k):
+    """Negative-binomial variance: mu + mu**2 / k.
+
+    Poisson (variance = mean) is wrong for chatter in the direction that
+    matters: real volume is bursty, so a Poisson model calls every busy hour
+    significant. This lets variance grow faster than the mean.
+    """
+    return expected + (expected ** 2) / k
+
+
+def dispersion(observations, prof, rate):
+    """Estimate k by method of moments, clamped.
+
+    Falls back to the global default when history is too thin for the estimate
+    to mean anything -- a handful of buckets produces a number, just not one
+    worth trusting.
+    """
+    if len(observations) < K_MIN_OBSERVATIONS:
+        return K_DEFAULT
+
+    total_expected = 0.0
+    total_sq_residual = 0.0
+    for observation in observations:
+        expected = expected_for(rate, prof, observation.bucket_start)
+        total_expected += expected
+        total_sq_residual += (observation.count - expected) ** 2
+
+    n = len(observations)
+    mean_expected = total_expected / n
+    sample_variance = total_sq_residual / n
+
+    # Underdispersed relative to Poisson: nothing to estimate, treat as Poisson.
+    if sample_variance <= mean_expected or mean_expected <= 0:
+        return K_MAX
+
+    k = (mean_expected ** 2) / (sample_variance - mean_expected)
+    return max(K_MIN, min(K_MAX, k))
