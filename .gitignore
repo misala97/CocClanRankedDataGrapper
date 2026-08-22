@@ -11,7 +11,9 @@ personal_apps/static/quizbank_uploads/
 coc_stats/.impeccable/live/
 .claude/skills/
 
-# Gym frontend build. dist/ is rebuilt on the VPS after `git reset --hard`,
-# which is why it is not committed -- see personal_apps/DEPLOY_FRONTEND.md.
+# Frontend builds. Each feature's dist/ is rebuilt on the VPS after
+# `git reset --hard`, which is why none of them are committed --
+# see personal_apps/DEPLOY_FRONTEND.md.
 node_modules/
 personal_apps/static/gym/dist/
+personal_apps/static/radar/dist/

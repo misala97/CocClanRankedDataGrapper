@@ -1,0 +1,590 @@
+/* ============================================================================
+   RADAR  ·  "BRIEFING" VISUAL SYSTEM
+   ----------------------------------------------------------------------------
+   A discovery board for day-trading candidates, read at a desk beside a broker
+   window. See features/radar/PRODUCT.md for the brief; this file is the whole
+   visual system and depends on nothing else in personal_apps. The gym feature
+   has its own ("Puls", static/gym/gym.css) and the two share no tokens on
+   purpose -- they are different products that happen to live in one Flask app.
+
+   THE ONE RULE THAT SHAPES EVERYTHING
+     Green and red mean PRICE DIRECTION and appear nowhere else. Not on a
+     button, not on a badge, not as a brand colour. On a stock tool a green
+     accent reads as a buy signal, and PRODUCT.md's scope boundary forbids the
+     surface implying a recommendation. So the accent that carries selection,
+     focus and chatter is violet: the one hue left that is not already spoken
+     for by the domain (green up, red down, amber caution).
+
+     That constraint turns out to be the design. Chatter is violet, price is
+     green or red, and the product IS the place where they disagree -- violet
+     climbing while the price line stays flat. Every chart on the page draws
+     exactly those two things on one axis.
+
+   THEME
+     Light is the base. The scene is a bright room in the morning, next to a
+     broker terminal that is almost certainly dark; a pale board is legible in
+     that light and stays visually separate from the terminal beside it. Dark
+     ships too, because the same board gets read at 23:00. `prefers-color-
+     scheme` decides, and an explicit html[data-theme] beats it so a manual
+     switch can be added later without restructuring anything.
+
+   TYPE
+     One family, Inter, vendored -- see inter.css. Weight and size carry the
+     whole hierarchy; there is no display face, because every heading here is
+     a label on data rather than a thing to look at. Fixed rem-ish px scale,
+     not clamp(): the viewer is at a consistent desk DPI and a heading that
+     shrinks with the viewport would only make the two tiers harder to tell
+     apart.
+
+   DENSITY
+     Built for the twelve-row board that actually exists, not a hypothetical
+     fifty. Three rows get a full chart, the rest are scan lines. A fifty-row
+     table showing twelve looks broken; this does not.
+   ========================================================================= */
+
+:root {
+  /* ---- ground ---------------------------------------------------------- */
+  /* Chroma sits on the accent's own hue (296-ish), not on a default warmth.
+     A near-white tinted toward violet by 0.002-0.006 reads as neutral paper
+     and keeps the accent from looking like it was dropped in from elsewhere. */
+  --bg:        oklch(0.988 0.002 290);
+  --surface:   oklch(0.970 0.004 290);
+  --raise:     oklch(1 0 0);
+  --rule:      oklch(0.888 0.007 290);
+  --rule-soft: oklch(0.940 0.005 290);
+
+  /* ---- ink ------------------------------------------------------------- */
+  --ink:       oklch(0.230 0.021 285);
+  --ink-2:     oklch(0.395 0.018 285);
+  --muted:     oklch(0.480 0.016 285);
+
+  /* ---- the accent: chatter, selection, focus --------------------------- */
+  --mark:      oklch(0.470 0.185 296);
+  --mark-hi:   oklch(0.560 0.180 296);
+  --mark-soft: oklch(0.470 0.185 296 / 0.13);
+  --mark-wash: oklch(0.470 0.185 296 / 0.07);
+
+  /* ---- reserved: price direction, and nothing else --------------------- */
+  --up:        oklch(0.470 0.130 150);
+  --down:      oklch(0.500 0.175 27);
+
+  /* ---- reserved: a number that cannot be taken at face value ----------- */
+  --warn:      oklch(0.480 0.110 65);
+  --warn-soft: oklch(0.480 0.110 65 / 0.11);
+
+  /* ---- geometry -------------------------------------------------------- */
+  --r:      8px;
+  --r-pill: 100px;
+  --pad:    24px;
+
+  /* Exponential ease-out. Product motion is 150-220ms: the reader is mid-task
+     and a transition they can watch is a transition that is too slow. */
+  --ease:   cubic-bezier(0.22, 1, 0.36, 1);
+  --fast:   140ms;
+  --base:   200ms;
+
+  /* Semantic stack. Nothing on this page needs a modal, but the sticky header
+     and the popovers do need a defined order. */
+  --z-sticky:  10;
+  --z-popover: 30;
+}
+
+/* Dark under the system preference, unless an explicit light theme is set. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        oklch(0.178 0.014 288);
+    --surface:   oklch(0.216 0.016 288);
+    --raise:     oklch(0.248 0.017 288);
+    --rule:      oklch(0.330 0.018 288);
+    --rule-soft: oklch(0.262 0.016 288);
+
+    --ink:       oklch(0.952 0.006 290);
+    --ink-2:     oklch(0.800 0.012 290);
+    --muted:     oklch(0.700 0.014 290);
+
+    --mark:      oklch(0.760 0.150 296);
+    --mark-hi:   oklch(0.830 0.120 296);
+    --mark-soft: oklch(0.760 0.150 296 / 0.20);
+    --mark-wash: oklch(0.760 0.150 296 / 0.11);
+
+    --up:        oklch(0.760 0.150 150);
+    --down:      oklch(0.715 0.165 27);
+
+    --warn:      oklch(0.800 0.115 70);
+    --warn-soft: oklch(0.800 0.115 70 / 0.16);
+  }
+}
+
+/* An explicit choice beats the system preference in both directions. */
+:root[data-theme="dark"] {
+  --bg:        oklch(0.178 0.014 288);
+  --surface:   oklch(0.216 0.016 288);
+  --raise:     oklch(0.248 0.017 288);
+  --rule:      oklch(0.330 0.018 288);
+  --rule-soft: oklch(0.262 0.016 288);
+
+  --ink:       oklch(0.952 0.006 290);
+  --ink-2:     oklch(0.800 0.012 290);
+  --muted:     oklch(0.700 0.014 290);
+
+  --mark:      oklch(0.760 0.150 296);
+  --mark-hi:   oklch(0.830 0.120 296);
+  --mark-soft: oklch(0.760 0.150 296 / 0.20);
+  --mark-wash: oklch(0.760 0.150 296 / 0.11);
+
+  --up:        oklch(0.760 0.150 150);
+  --down:      oklch(0.715 0.165 27);
+
+  --warn:      oklch(0.800 0.115 70);
+  --warn-soft: oklch(0.800 0.115 70 / 0.16);
+}
+
+/* ---------------------------------------------------------------- base ---- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+               Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  /* Every column on this page is a number read against the number above it.
+     Proportional figures make that comparison a re-read instead of a glance. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* The one exception: prose. Tabular figures in a sentence look like a receipt. */
+.prose { font-variant-numeric: normal; }
+
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--mark); color: var(--bg);
+  padding: 10px 16px; border-radius: 0 0 var(--r) 0; font-weight: 600;
+}
+.skip-link:focus { left: 0; }
+
+.wrap { max-width: 1280px; margin: 0 auto; padding: 0 var(--pad) 96px; }
+
+/* --------------------------------------------------------- masthead ------ */
+
+.masthead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap;
+  padding: 34px 0 13px;
+  /* A 2px ink rule, not a hairline. It is the one piece of pure structure on
+     the page and it says "this is a document with a top", which is what makes
+     the two tiers below read as a hierarchy rather than a pile. */
+  border-bottom: 2px solid var(--ink);
+}
+.masthead h1 {
+  margin: 0; font-size: 29px; font-weight: 640; letter-spacing: -0.021em;
+}
+.stamp { color: var(--muted); font-size: 13px; }
+.stamp b { color: var(--ink-2); font-weight: 560; }
+.stamp .sep { opacity: 0.5; margin: 0 2px; }
+
+/* --------------------------------------------------------- controls ------ */
+
+.controls {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
+  padding: 11px 0;
+  background: color-mix(in oklab, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--rule);
+}
+.group { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.group > .lbl { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.seg { display: flex; gap: 2px; flex-wrap: wrap; }
+
+.seg button, .chip {
+  appearance: none; border: 1px solid transparent; background: none;
+  color: var(--ink-2); font: inherit; font-size: 13.5px;
+  padding: 5px 11px; border-radius: 6px; cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--fast) var(--ease),
+              color var(--fast) var(--ease),
+              border-color var(--fast) var(--ease);
+}
+.seg button:hover, .chip:hover { background: var(--rule-soft); color: var(--ink); }
+.seg button:active, .chip:active { background: var(--rule); }
+.seg button[aria-pressed="true"] {
+  background: var(--mark-soft); color: var(--mark); font-weight: 600;
+}
+.seg .n { color: var(--muted); font-size: 12px; margin-left: 5px; }
+.seg button[aria-pressed="true"] .n { color: var(--mark); opacity: 0.75; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-color: var(--rule); border-radius: var(--r-pill);
+  font-size: 13px; padding: 4px 11px 4px 9px;
+}
+.chip .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--rule);
+  transition: background var(--fast) var(--ease);
+}
+.chip[aria-pressed="true"] { border-color: var(--mark); color: var(--ink); }
+.chip[aria-pressed="true"] .dot { background: var(--mark); }
+.chip[aria-pressed="false"] { color: var(--muted); }
+
+/* A source that cannot be reached is not a source you chose to turn off. It
+   stays visible and stays selectable -- turning it on is how you find out it
+   came back -- but it says so. */
+.chip[data-status="down"] .dot { background: var(--warn); }
+.chip[data-status="down"] { border-style: dashed; }
+
+button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--mark); outline-offset: 2px; border-radius: 4px;
+}
+
+/* Every control is disabled while a board is in flight. Not hidden, not
+   replaced by a spinner: the previous board stays readable and simply stops
+   accepting input for the ~200ms it takes to answer. */
+.controls[aria-busy="true"] button { opacity: 0.55; pointer-events: none; }
+
+/* ------------------------------------------------------- section heads --- */
+
+.head {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 30px 0 13px;
+}
+.head h2 { margin: 0; font-size: 16px; font-weight: 620; letter-spacing: -0.01em; }
+.head p { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* ------------------------------------------------------------- leads ----- */
+
+.leads {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+}
+
+.lead {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 17px 18px 15px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.lead-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.lead-sym { font-size: 21px; font-weight: 650; letter-spacing: -0.015em; display: block; }
+.lead-co {
+  display: block; font-size: 12.5px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch;
+}
+.lead-div { text-align: right; flex: none; }
+.lead-div .v {
+  display: block; font-size: 25px; font-weight: 650; color: var(--mark);
+  letter-spacing: -0.02em; line-height: 1.1;
+}
+.lead-div .k {
+  display: block; font-size: 10.5px; color: var(--muted);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.lead-div.none .v { font-size: 15px; font-weight: 560; color: var(--muted); padding-top: 7px; }
+
+/* The sentence is the whole argument in words, for the reader who does not
+   want to decode a chart -- and for the screen reader, which cannot. */
+.sentence { margin: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+.sentence b { color: var(--ink); font-weight: 600; }
+
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: 88px; }
+.legend {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; color: var(--muted); margin-top: 3px;
+}
+.legend .keys { display: flex; gap: 11px; }
+.k-chat { color: var(--mark); font-weight: 560; }
+.k-price { font-weight: 560; }
+.k-price.up { color: var(--up); }
+.k-price.down { color: var(--down); }
+
+.lead-foot {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 12px; color: var(--muted);
+  padding-top: 11px; border-top: 1px solid var(--rule-soft);
+}
+.lead-foot b { color: var(--ink-2); font-weight: 600; }
+
+/* There is deliberately no tone BAR. A green/red split showing bullish
+   against bearish sat two centimetres from a green/red price line meaning
+   something else entirely, which is precisely the collision the colour
+   reservation at the top of this file exists to prevent. The counts are
+   printed as words instead, which is also the only honest way to show that
+   most mentions carry no sentiment wording at all. */
+
+/* -------------------------------------------------------------- scan ----- */
+
+.cols, .row {
+  display: grid;
+  grid-template-columns:
+    minmax(190px, 1.5fr)   /* ticker + name + marks -- see .tick min-width */
+    124px                  /* sparkline            */
+    146px                  /* z triplet            */
+    104px                  /* divergence           */
+    84px                   /* mentions             */
+    84px                   /* authors              */
+    104px;                 /* price move           */
+  align-items: center;
+  gap: 14px;
+}
+
+.cols {
+  font-size: 10.5px; letter-spacing: 0.065em; text-transform: uppercase;
+  color: var(--muted); padding: 0 4px 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.cols .n { text-align: right; }
+
+.row {
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--rule-soft);
+  transition: background var(--fast) var(--ease);
+}
+.row:hover { background: var(--mark-wash); }
+.row:last-child { border-bottom: 1px solid var(--rule); }
+
+.tick {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  /* Without this the flex item refuses to shrink below its content and the
+     grid track grows past the viewport instead. */
+  min-width: 0;
+}
+.sym { font-size: 15.5px; font-weight: 640; letter-spacing: -0.012em; }
+.co {
+  font-size: 12.5px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+
+.spark { position: relative; }
+.spark svg { display: block; width: 100%; height: 26px; }
+
+/* The three windows side by side. A hot 1h against a cool 24h is new; the
+   reverse is fading. One number cannot say that, which is why there are
+   three. The largest is highlighted only when it clears the elevated
+   threshold -- highlighting the largest of three unremarkable numbers would
+   invent a story. */
+.trip { display: flex; gap: 3px; justify-content: flex-end; }
+.trip span {
+  min-width: 42px; text-align: center; font-size: 12.5px; color: var(--ink-2);
+  padding: 2px 5px; border-radius: 5px; background: var(--rule-soft);
+}
+.trip span.hot { background: var(--mark-soft); color: var(--mark); font-weight: 620; }
+.trip span.none { color: var(--muted); background: none; }
+
+.dv { text-align: right; font-size: 17px; font-weight: 620; color: var(--mark); letter-spacing: -0.01em; }
+.dv.neg { color: var(--ink-2); font-weight: 560; }
+.dv.none { font-size: 12.5px; font-weight: 400; color: var(--muted); }
+
+.n { text-align: right; font-size: 14px; color: var(--ink-2); }
+.n .up { color: var(--up); font-weight: 560; }
+.n .down { color: var(--down); font-weight: 560; }
+
+/* An unknown price is an em-dash, never a zero and never a 0.00%. The
+   distinction is load-bearing: no quote is not evidence of no movement. */
+.dash { color: var(--muted); }
+
+/* The mobile-only restatement of the numeric columns. */
+.meta { display: none; }
+
+/* -------------------------------------------------------------- marks ---- */
+
+.mk {
+  font-size: 10.5px; font-weight: 560; letter-spacing: 0.01em;
+  color: var(--muted); background: var(--rule-soft);
+  border: 1px solid transparent;
+  padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+  cursor: help;
+}
+/* `no-print` is not metadata. It says the divergence would be an artifact of a
+   frozen tape, so it is the one mark that gets the caution colour. */
+.mk.hard { color: var(--warn); background: var(--warn-soft); border-color: var(--warn-soft); }
+
+button.mk { cursor: pointer; font-family: inherit; }
+button.mk:hover { background: var(--rule); }
+button.mk.hard:hover { background: color-mix(in oklab, var(--warn) 22%, transparent); }
+
+/* Native popover, not an absolutely-positioned div: the scan rows sit inside a
+   scrolling container on small screens and an in-flow tooltip would be clipped
+   by it. It also opens from the keyboard and from a touch tap, neither of
+   which `title` does.
+
+   One shared element pinned near the top of the viewport rather than anchored
+   to the mark that opened it -- CSS anchor positioning is not available
+   everywhere yet, and a fixed card that always appears in the same place is
+   easier to find than one that moves with the row. */
+.why {
+  position: fixed; inset: auto; margin: 0;
+  top: 15vh; left: 50%; translate: -50% 0;
+  z-index: var(--z-popover);
+  width: max-content; max-width: min(34ch, calc(100vw - 32px));
+  padding: 13px 15px;
+  background: var(--raise); color: var(--ink-2);
+  border: 1px solid var(--rule); border-radius: var(--r);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.05), 0 16px 40px -16px oklch(0 0 0 / 0.35);
+  font-size: 12.5px; line-height: 1.5;
+}
+.why::backdrop { background: none; }
+.why b {
+  display: block; margin-bottom: 5px;
+  color: var(--ink); font-weight: 620; font-size: 13px;
+}
+.why p { margin: 0; }
+/* The popover fades in; it must not fade the layout under it. */
+@starting-style { .why:popover-open { opacity: 0; translate: -50% -6px; } }
+.why:popover-open { opacity: 1; translate: -50% 0; }
+.why { transition: opacity var(--base) var(--ease), translate var(--base) var(--ease),
+                   overlay var(--base) allow-discrete, display var(--base) allow-discrete; }
+
+/* ------------------------------------------------------------- states ---- */
+
+.empty {
+  border: 1px dashed var(--rule); border-radius: var(--r);
+  padding: 40px 28px; text-align: center; margin-top: 20px;
+}
+.empty h3 { margin: 0 0 8px; font-size: 16px; font-weight: 620; }
+.empty p { margin: 0 auto; max-width: 62ch; color: var(--muted); font-size: 13.5px; }
+.empty p + p { margin-top: 10px; }
+
+.oops {
+  border: 1px solid var(--warn); background: var(--warn-soft);
+  border-radius: var(--r); padding: 14px 16px; margin-top: 20px;
+  font-size: 13.5px; color: var(--ink-2);
+}
+.oops b { color: var(--ink); }
+.oops button {
+  appearance: none; margin-left: 10px; font: inherit; font-size: 13px;
+  background: none; border: 1px solid var(--rule); color: var(--ink);
+  padding: 3px 10px; border-radius: 6px; cursor: pointer;
+}
+.oops button:hover { background: var(--rule-soft); }
+
+/* Skeleton, not a spinner: the shape of the answer is known before it
+   arrives, so the page should hold it rather than blink. Only used on the
+   very first paint after a hard reload with no embedded payload -- a control
+   change keeps the previous board on screen instead. */
+.skel { background: var(--rule-soft); border-radius: 5px; height: 1em; }
+.skel-row { padding: 13px 4px; border-bottom: 1px solid var(--rule-soft); }
+@keyframes shimmer { 50% { opacity: 0.55; } }
+.skel { animation: shimmer 1.4s var(--ease) infinite; }
+
+/* --------------------------------------------------------------- foot ---- */
+
+.foot {
+  margin: 34px 0 0; padding-top: 18px; border-top: 1px solid var(--rule-soft);
+  max-width: 74ch; font-size: 12.5px; line-height: 1.6; color: var(--muted);
+}
+.foot code {
+  font-family: inherit; font-weight: 600; color: var(--ink-2);
+  background: var(--rule-soft); padding: 0 4px; border-radius: 3px;
+}
+.foot em { color: var(--ink-2); font-style: normal; font-weight: 600; }
+
+/* -------------------------------------------------------- responsive ----- */
+
+/* Tablet: the triplet is the first thing to go horizontal-scarce, and the
+   company name is the first thing worth losing. */
+@media (max-width: 1080px) {
+  .cols, .row {
+    grid-template-columns:
+      minmax(150px, 1.4fr) 100px 132px 92px 72px 72px 92px;
+    gap: 10px;
+  }
+  .co { display: none; }
+}
+
+/* Phone: the table stops being a table. It becomes one dense divided row per
+   ticker -- ticker and divergence on the first line, sparkline and triplet on
+   the second, the counts restated as a caption. Deliberately NOT a stack of
+   spacious cards: the reason to open this on a phone is to scan twelve
+   tickers, and cards turn twelve rows into twelve screens. */
+@media (max-width: 720px) {
+  :root { --pad: 14px; }
+
+  .masthead { padding-top: 22px; }
+  .masthead h1 { font-size: 24px; }
+
+  .controls {
+    /* nowrap is load-bearing, not tidiness. The base rule wraps, and a WRAPPING
+       column flex container takes its cross size (here the width) from its
+       content and packs lines across it -- so every `min-width: 0` below was
+       ignored and the strip measured 456px inside a 390px viewport. Single-line
+       is what lets align-items: stretch clamp the groups to the page.
+
+       One group per line, each scrolling horizontally inside itself, rather
+       than a wrapped pile of buttons that pushes the board off the screen. */
+    gap: 12px; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+  }
+  .group { gap: 8px; min-width: 0; }
+  /* The scroller only scrolls if it is allowed to be narrower than its
+     content. A flex item's default min-width is auto, so without this the
+     group grew to fit every chip and took the whole page sideways with it --
+     measured at 456px against a 390px viewport. */
+  .group .seg {
+    flex: 1 1 0; min-width: 0;
+    overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .group .seg::-webkit-scrollbar { display: none; }
+  /* 44px minimum target on touch. */
+  .seg button, .chip { padding: 9px 12px; min-height: 40px; }
+
+  .leads { grid-template-columns: 1fr; }
+
+  .cols { display: none; }
+
+  .row {
+    /* minmax(0, 1fr), not 1fr: a plain 1fr floors at min-content, so a row
+       carrying three trust marks pushed the grid wider than the phone and the
+       whole page scrolled sideways. Found by measuring scrollWidth, not by
+       looking -- the overflow is invisible until you drag. */
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'tick  dv'
+      'spark trip'
+      'meta  meta';
+    gap: 6px 12px;
+    padding: 12px 2px;
+  }
+  .tick  { grid-area: tick; min-width: 0; }
+  .dv    { grid-area: dv; }
+  .spark { grid-area: spark; min-width: 0; }
+  .trip  { grid-area: trip; }
+  .co    { display: inline; }
+
+  .row > .n { display: none; }
+  .meta {
+    grid-area: meta; display: flex; gap: 14px; flex-wrap: wrap;
+    font-size: 12px; color: var(--muted);
+  }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+
+  .lead-co { max-width: 100%; }
+}
+
+/* -------------------------------------------------------- reduced motion - */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  /* The skeleton loses its shimmer but must not lose its presence. */
+  .skel { opacity: 0.75; }
+}
+
+/* ------------------------------------------------------------ printing --- */
+
+/* Not decoration: the plausible use is pasting the morning board into a note.
+   Colour survives, chrome does not. */
+@media print {
+  .controls, .skip-link { display: none; }
+  .wrap { max-width: none; padding: 0; }
+  .row, .lead { break-inside: avoid; }
+}

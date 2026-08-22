@@ -1,5 +1,6 @@
 import datetime as dt
 import os
+import re
 import secrets
 
 from dotenv import load_dotenv
@@ -69,14 +70,21 @@ from vite_assets import resolve_asset
 app.jinja_env.globals['vite_asset'] = resolve_asset
 
 
+_HASHED_ASSET_PATH = re.compile(r'^/static/[^/]+/dist/assets/')
+
+
 @app.after_request
 def _immutable_hashed_assets(response):
     # The dist bundles carry their content hash in the filename, so a URL can
     # never mean different bytes -- a rebuild changes the name, not the file.
     # Flask's default (no-cache) made the browser revalidate every bundle on
-    # every navigation for nothing. Scoped to dist/assets/: gym.css and sw.js
-    # DO change in place and must keep revalidating.
-    if request.path.startswith('/static/gym/dist/assets/'):
+    # every navigation for nothing. Scoped to dist/assets/: gym.css, radar.css
+    # and sw.js DO change in place and must keep revalidating.
+    #
+    # Matched by shape rather than by a list of features, so a new feature's
+    # bundles are covered the day it builds instead of the day someone
+    # remembers this line.
+    if _HASHED_ASSET_PATH.match(request.path):
         # Werkzeug's static handler has already written no-cache; clear it
         # rather than appending after it.
         response.cache_control.no_cache = None
@@ -137,6 +145,15 @@ APPS = [
         'description': 'Workouts, Sätze und Fortschritt verfolgen.',
         'icon': '🏋️',
         'url': '/gym',
+    },
+    {
+        # English, unlike its neighbours: every term on that surface is a term
+        # of art with no good German half (ticker, divergence, pre-market), and
+        # half-translating reads worse than either pure option.
+        'name': 'Radar',
+        'description': 'Stocks people have suddenly started talking about.',
+        'icon': '📡',
+        'url': '/radar/',
     },
 ]
 

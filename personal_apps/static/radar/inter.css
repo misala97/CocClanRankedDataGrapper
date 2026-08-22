@@ -1,0 +1,52 @@
+/* ============================================================================
+   INTER  ·  self-hosted, variable, upright only
+   ----------------------------------------------------------------------------
+   Vendored rather than linked from Google, matching what the gym feature does
+   with Figtree, for two reasons that apply here too:
+
+   1. It removes a render-blocking third-party stylesheet from every page load,
+      and with it the privacy hop. This board is read at a desk next to a
+      broker window; the one thing it must not do is arrive late.
+   2. The Google stylesheet is versioned upstream. A face that changes under us
+      would silently re-flow a layout tuned to its metrics.
+
+   Two subsets ship. `latin` carries the entire UI and nearly every company
+   name; `latin-ext` exists because the ticker universe is not American-only
+   and a name like "Ryanair Holdings" is fine while "Ørsted" or "Fomento
+   Económico" is not. Only latin is preloaded -- preloading a file most page
+   views never touch costs more than it saves.
+
+   One variable face, weights 400-700, upright. No italic file is shipped: the
+   board has no use for emphasis-by-slant, and not shipping the file means an
+   accidental `font-style: italic` gets a synthesised slant that looks wrong on
+   sight rather than a real face that looks deliberate.
+
+   Inter is chosen for its figures, not its personality. This surface is almost
+   entirely numbers that must line up in columns and be compared down a page --
+   `tabular-nums` plus a disambiguated 1/l/I is doing more work here than any
+   amount of character would.
+   ========================================================================= */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+                 U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
+                 U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+                 U+FFFD;
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/inter-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+                 U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+                 U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+                 U+2113, U+2C60-2C7F, U+A720-A7FF;
+}

@@ -43,6 +43,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Scoped explicitly now that a second feature has its own suite and its
+    // own setup file. Without this, vitest's default glob sweeps radar's
+    // tests into this run and boots them against gym's setup.
+    include: ['static/gym/src/**/*.test.{ts,tsx}'],
     setupFiles: [resolve(here, 'static/gym/src/test-setup.ts')],
   },
 })

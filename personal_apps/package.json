@@ -1,11 +1,12 @@
 {
-  "name": "personal-apps-gym",
+  "name": "personal-apps-frontend",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite build --watch",
-    "build": "tsc --noEmit && vite build",
-    "test": "vitest run"
+    "dev:radar": "vite build -c vite.radar.config.ts --watch",
+    "build": "tsc --noEmit && vite build && vite build -c vite.radar.config.ts",
+    "test": "vitest run && vitest run -c vite.radar.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",

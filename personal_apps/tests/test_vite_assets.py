@@ -135,3 +135,58 @@ def test_hashed_bundles_are_served_immutable():
     assert hashed.status_code == 200
     assert hashed.headers['Cache-Control'] == 'public, max-age=31536000, immutable'
     assert 'immutable' not in (plain.headers.get('Cache-Control') or '')
+
+
+# Radar builds separately (vite.radar.config.ts, its own outDir and manifest),
+# so the resolver takes a feature. Gym stays the default because every gym
+# template calls vite_asset() unqualified.
+
+def test_a_second_feature_resolves_from_its_own_manifest(tmp_path):
+    _write_manifest(tmp_path, {
+        'static/radar/src/entries/board.tsx': {'file': 'assets/board-99887766.js'},
+    })
+
+    assert resolve_asset('board', dist_dir=tmp_path, feature='radar') == \
+        '/static/radar/dist/assets/board-99887766.js'
+
+
+def test_the_feature_is_part_of_the_manifest_key(tmp_path):
+    """The two builds emit the same entry names in different namespaces, so
+    looking one up under the other's key must miss rather than resolve to the
+    wrong bundle."""
+    _write_manifest(tmp_path, {
+        'static/gym/src/entries/board.tsx': {'file': 'assets/gym-board.js'},
+    })
+
+    with pytest.raises(ViteManifestError, match='radar'):
+        resolve_asset('board', dist_dir=tmp_path, feature='radar')
+
+
+def test_the_radar_page_resolves_against_the_real_build():
+    _skip_without_build()
+    from app import app as flask_app
+
+    rendered = flask_app.jinja_env.from_string(
+        "{{ vite_asset('board', feature='radar') }}").render()
+
+    assert rendered.startswith('/static/radar/dist/assets/board-')
+
+
+def test_radar_bundles_are_served_immutable_too():
+    """The cache rule matches by path shape rather than by a list of features,
+    so a new feature is covered the day it builds."""
+    import glob
+    import os
+    from app import app as flask_app
+
+    matches = glob.glob(os.path.join(
+        flask_app.root_path, 'static', 'radar', 'dist', 'assets', '*.js'))
+    if not matches:
+        pytest.skip('no radar build present; run `npm run build`')
+
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as test_client:
+        response = test_client.get(
+            f'/static/radar/dist/assets/{os.path.basename(matches[0])}')
+
+    assert response.headers['Cache-Control'] == 'public, max-age=31536000, immutable'

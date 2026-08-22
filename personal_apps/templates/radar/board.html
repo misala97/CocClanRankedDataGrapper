@@ -1,0 +1,62 @@
+{# The radar board: a thin shell that mounts one React island.
+
+   Self-contained rather than extending a shared base. There is no shared base
+   in this app -- gym has gym/_base.html for its own pages, and radar's visual
+   system deliberately shares nothing with it (see static/radar/radar.css).
+
+   `tojson` escapes <, > and & for embedding in HTML, so no |safe here. The
+   payload is the same shape /radar/api/board returns, so the island has one
+   type to render and no separate first-paint path.
+
+   No service worker and no manifest: this is a desk tool read next to a broker
+   window, not an installable app used in a basement. The gym's reasons for
+   both do not transfer. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radar</title>
+
+  {# Both values are --bg for their theme, so the browser chrome does not frame
+     a pale board in a dark bar (or the reverse). #}
+  <meta name="theme-color" content="#FBFBFC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111017" media="(prefers-color-scheme: dark)">
+
+  {# Inter is served from this app, not linked from Google -- see the header of
+     static/radar/inter.css. Only the latin subset is preloaded: latin-ext
+     carries the long tail of company names and most page views never touch it,
+     so preloading it would cost more than it saves. #}
+  <link rel="preload" href="{{ url_for('static', filename='radar/fonts/inter-latin.woff2') }}"
+        as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='radar/inter.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='radar/radar.css') }}">
+</head>
+<body>
+
+<a class="skip-link" href="#radar-main">Skip to the board</a>
+
+<main id="radar-main" tabindex="-1">
+  {# The island replaces this. It is not empty on purpose: a bundle that fails
+     to load would otherwise leave a blank white page with nothing to read and
+     nothing to search for. #}
+  <div id="radar-root">
+    <noscript>
+      <div class="wrap">
+        <header class="masthead"><h1>Radar</h1></header>
+        <div class="empty">
+          <h3>The board needs JavaScript</h3>
+          <p>Every row draws a 24-hour chart, and those are built in the
+             browser. The underlying data is available as JSON at
+             <code>/radar/api/board</code>.</p>
+        </div>
+      </div>
+    </noscript>
+  </div>
+</main>
+
+<script type="application/json" id="radar-data">{{ payload | tojson }}</script>
+<script type="module" src="{{ vite_asset('board', feature='radar') }}"></script>
+
+</body>
+</html>
