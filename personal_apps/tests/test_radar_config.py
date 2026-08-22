@@ -95,3 +95,59 @@ def test_an_unknown_source_drops_them():
     """Same safe default as bare tokens: unmeasured sources get the strict
     reading."""
     assert config.coin_collision_dropped('some_new_network', 'BCH') is True
+
+
+# Exchange bots and the version stamp, both added 2026-08-22 after live data
+# showed the board's top rows were crypto liquidation feeds and money
+# shorthand rather than equities.
+
+def test_exchange_bot_output_is_recognised():
+    from features.radar.config import looks_like_exchange_bot
+
+    assert looks_like_exchange_bot(
+        '$485.6K $PUMP LONG liquidated on Binance @ $0.0048')
+    assert looks_like_exchange_bot('$H ARB 5.77% OKX -> BinanceF #arbitrage')
+
+
+def test_a_person_talking_about_selling_is_not_a_bot():
+    """The rule matches exchange vocabulary, not trading vocabulary. Dropping
+    posts because someone wrote 'liquidated' would cost real mentions."""
+    from features.radar.config import looks_like_exchange_bot
+
+    assert not looks_like_exchange_bot('I liquidated my position yesterday')
+    assert not looks_like_exchange_bot('NVDA earnings beat, calls printing')
+
+
+def test_the_version_stamp_covers_the_extraction_rules():
+    """It hashed the source list alone until 2026-08-22, so every extraction
+    change -- bare tokens, coin collisions, the A$AP boundary -- shipped
+    without invalidating the baselines built under the previous rules. That is
+    the exact discontinuity the stamp exists to prevent, so it was giving
+    false assurance rather than protection.
+    """
+    from features.radar import config
+
+    before = config.source_config_version()
+    original = config.STOPWORDS
+    try:
+        config.STOPWORDS = frozenset(original | {'ZZZZ'})
+        assert config.source_config_version() != before
+    finally:
+        config.STOPWORDS = original
+    assert config.source_config_version() == before
+
+
+def test_changing_a_scoring_threshold_does_not_reset_baselines():
+    """Only rules that change WHICH mentions get counted belong in the stamp.
+    Rescoring re-reads the same buckets, so a threshold change has no
+    discontinuity to warm up from -- and resetting thirty days of history for
+    one would be a self-inflicted outage."""
+    from features.radar import config
+
+    before = config.source_config_version()
+    original = config.MIN_MENTIONS
+    try:
+        config.MIN_MENTIONS = original + 1
+        assert config.source_config_version() == before
+    finally:
+        config.MIN_MENTIONS = original

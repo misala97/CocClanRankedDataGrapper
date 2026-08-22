@@ -13,5 +13,8 @@
     "skipLibCheck": true,
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["static/gym/src/**/*.ts", "static/gym/src/**/*.tsx"]
+  "include": [
+    "static/gym/src/**/*.ts", "static/gym/src/**/*.tsx",
+    "static/radar/src/**/*.ts", "static/radar/src/**/*.tsx"
+  ]
 }

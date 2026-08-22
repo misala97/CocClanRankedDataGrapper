@@ -23,7 +23,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app import app
 from extensions import db
 from features.radar import (
-    ingest, market_calendar, quotes, retention, scheduling, scoring)
+    ingest, market_calendar, quotes, retention, scheduling, scoring, universe)
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
@@ -57,6 +57,20 @@ QUOTE_INTERVAL_MINUTES = 5
 # weeks, so this is deliberately slow and small.
 SIGMA_LIMIT = 60
 SIGMA_INTERVAL_HOURS = 12
+
+# Company profiles: market cap and IPO date, which are what the segment tabs
+# are built from. There was no job for this until 2026-08-22, so market_cap
+# was NULL for all 12,595 universe rows and every ticker fell through
+# universe.segment_for() into Unknown -- the segment selector has never
+# actually worked in production. universe.refresh_profiles() existed the whole
+# time; nothing called it.
+#
+# Six-hourly rather than weekly because the board's tickers turn over daily and
+# a new arrival should not sit in Unknown for a week. The staleness filter
+# means a settled board asks for almost nothing.
+PROFILE_LIMIT = 40
+PROFILE_INTERVAL_HOURS = 6
+PROFILE_MAX_AGE_DAYS = 7
 
 
 def _utcnow():
@@ -245,6 +259,53 @@ def refresh_volatility(now_utc, provider, limit=SIGMA_LIMIT):
         return 0
 
 
+def _profiles_due(now, limit):
+    """Board tickers whose profile is missing or has gone stale.
+
+    Drawn from a wider slice of the board than `limit`, then filtered by age,
+    so a settled board spends its calls on the arrivals that need them rather
+    than re-asking about the same forty rows every six hours.
+    """
+    from models import TickerUniverse
+    candidates = _loud_tickers(now, limit * 5)
+    if not candidates:
+        return []
+
+    cutoff = now.replace(tzinfo=None) - dt.timedelta(days=PROFILE_MAX_AGE_DAYS)
+    rows = (db.session.query(TickerUniverse.symbol)
+            .filter(TickerUniverse.symbol.in_(candidates),
+                    sa.or_(TickerUniverse.profile_refreshed_at.is_(None),
+                           TickerUniverse.profile_refreshed_at < cutoff))
+            .limit(limit).all())
+    return [symbol for (symbol,) in rows]
+
+
+def refresh_profiles(now_utc, provider, limit=PROFILE_LIMIT):
+    """Fetch market cap and IPO date for the tickers that need them.
+
+    Returns how many rows were updated. A provider that answers nothing leaves
+    the existing row alone -- erasing a cap we already had would drop the
+    ticker into Unknown until the next pass, which is worse than a stale one.
+    """
+    symbols = _profiles_due(now_utc, limit)
+    if not symbols:
+        return 0
+    try:
+        return universe.refresh_profiles(provider, symbols,
+                                         now_utc.replace(tzinfo=None))
+    except Exception:
+        logger.exception('radar profile refresh failed')
+        return 0
+
+
+def _scheduled_profiles():
+    now = dt.datetime.now(dt.timezone.utc)
+    provider = finnhub_provider.FinnhubProvider(finnhub_provider.FinnhubHttp())
+    with app.app_context():
+        updated = refresh_profiles(now, provider)
+    logger.info('radar profiles refreshed %d tickers', updated)
+
+
 def _scheduled_volatility():
     now = dt.datetime.now(dt.timezone.utc)
     provider = twelvedata_provider.TwelveDataProvider(
@@ -291,6 +352,14 @@ def main():
                       max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc)
                       + dt.timedelta(minutes=5))
+    # Three minutes in, ahead of volatility, because until a profile exists
+    # every row on the board reads as segment Unknown -- and unlike a missing
+    # sigma, that is visible on the very first page load.
+    scheduler.add_job(_scheduled_profiles, 'interval',
+                      hours=PROFILE_INTERVAL_HOURS, id='radar_profiles',
+                      max_instances=1, coalesce=True,
+                      next_run_time=dt.datetime.now(dt.timezone.utc)
+                      + dt.timedelta(minutes=3))
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
     scheduler.start()

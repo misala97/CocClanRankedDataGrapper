@@ -35,12 +35,26 @@ def record_quotes(quotes, now):
     return written
 
 
-def price_status(ticker, now, polls=STALE_QUOTE_POLLS):
-    """'ok', 'stale', or 'unknown'.
+def price_status(ticker, now, polls=STALE_QUOTE_POLLS, session=None):
+    """'ok', 'closed', 'stale', or 'unknown'.
 
-    'unknown' is deliberately distinct from 'stale'. Never quoted is a
-    different fact from quoted-and-frozen, and only the second is evidence
-    about the stock.
+    Each is a different fact and they must not collapse into each other:
+
+    - 'unknown' -- never quoted. Says nothing about the stock.
+    - 'closed'  -- the exchange is shut. Says nothing about the stock either;
+                   it is a property of the clock.
+    - 'stale'   -- the market is open and this tape still is not printing.
+                   THAT is evidence about the stock, and the only one of the
+                   three that earns the no-print mark.
+    - 'ok'      -- a live, moving tape.
+
+    'closed' exists because without it a Saturday marked all 52 tickers
+    no-print, which reads as "every one of these is untradeable" when the real
+    statement is "it is the weekend". Nights and weekends are around 60% of
+    the clock, so this is the common case, not an edge case.
+
+    `session` comes from market_calendar; it is a parameter rather than a
+    lookup so a caller scoring many tickers computes it once.
     """
     recent = (RadarQuote.query
               .filter(RadarQuote.ticker == ticker,
@@ -50,12 +64,25 @@ def price_status(ticker, now, polls=STALE_QUOTE_POLLS):
 
     if not recent:
         return 'unknown'
+    if session == 'closed':
+        # A frozen tape outside trading hours is the exchange being shut, not
+        # this stock failing to trade. Premarket and afterhours are NOT closed:
+        # those tapes are thin but real, and a stock not printing in them is
+        # exactly the illiquidity the mark is for.
+        return 'closed'
     if len(recent) < polls:
         return 'ok'
 
     signatures = {(row.quote_ts, row.volume) for row in recent}
-    # Both frozen, not just one: a stale timestamp with rising volume is a
+    # Two signals rather than one: a stale timestamp with rising volume is a
     # provider quirk rather than a stopped tape.
+    #
+    # HONESTLY, TODAY THERE IS ONE. Finnhub's /quote returns c, d, dp, h, l, o,
+    # pc and t -- no volume field, verified against the live API -- so
+    # RadarQuote.volume is always NULL and this reduces to comparing quote_ts.
+    # The pair is kept because it is the correct rule and a provider that does
+    # send volume restores the second signal for free; what was wrong was the
+    # comment claiming a safeguard that has never been active.
     return 'stale' if len(signatures) == 1 else 'ok'
 
 

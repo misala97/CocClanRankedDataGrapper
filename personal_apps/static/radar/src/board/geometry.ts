@@ -131,6 +131,10 @@ function xAt(index: number, total: number, box: Box): number {
 /** Whether a price series ended higher than it started. */
 export function priceRose(points: PricePoint[]): boolean {
   const values = points.map((p) => p.price).filter((p): p is number => p !== null)
-  if (values.length < 2) return true
-  return values[values.length - 1] >= values[0]
+  const first = values.at(0)
+  const last = values.at(-1)
+  // Not enough data is not a fall. Two quotes are the minimum for a direction,
+  // and below that the caller draws no line at all.
+  if (first === undefined || last === undefined || values.length < 2) return true
+  return last >= first
 }

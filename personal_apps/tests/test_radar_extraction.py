@@ -31,8 +31,58 @@ def test_cashtag_is_high_confidence():
     assert extract_tickers(None, 'loading up on $GME', LOOKUP) == [('GME', 'high')]
 
 
-def test_cashtag_is_matched_case_insensitively_but_stored_upper():
-    assert extract_tickers(None, 'buying $gme today', LOOKUP) == [('GME', 'high')]
+def test_a_lowercase_cashtag_is_not_a_cashtag():
+    """Reversed on 2026-08-22, after measuring it on live data.
+
+    Case-insensitive matching read `$t` out of "full of s%$t", `$m` out of
+    "{ArC@$m}", `$hit` out of "ain't buying your $hit" and `$t` out of
+    "Slayyyter $t." -- 118 of 3304 Bluesky cashtag matches, essentially all
+    noise. Cashtag notation is uppercase by convention and every client that
+    renders it uppercases, so a lowercase one is far likelier to be
+    punctuation than a deliberate act of notation.
+    """
+    assert extract_tickers(None, 'buying $gme today', LOOKUP) == []
+    assert extract_tickers(None, 'buying $GME today', LOOKUP) == [('GME', 'high')]
+
+
+# A lookup containing the symbols the noise actually collides with, so these
+# assertions fail for the right reason. Against the shared LOOKUP above they
+# would pass whatever the rule did, because it holds no F-shaped collisions --
+# an absence proves nothing unless the symbol could have been found.
+NOISE_LOOKUP = annotate_distinctive({
+    'T': {'name': 'AT&T Inc', 'exchange': 'NYSE'},
+    'M': {'name': 'Macys Inc', 'exchange': 'NYSE'},
+    'HIT': {'name': 'Health In Tech Inc', 'exchange': 'NASDAQ'},
+})
+
+
+def test_punctuation_before_a_lowercase_letter_is_not_a_ticker():
+    """The A$AP left-boundary guard does not help here: '%', '@' and ':' all
+    satisfy it, so case is what does the work."""
+    for text in ('full of s%$t', "ain't buying your $hit", 'Slayyyter $t.'):
+        assert extract_tickers(None, text, NOISE_LOOKUP) == [], text
+
+    # Teeth: the same strings uppercased DO resolve, so the empty results
+    # above are the case rule and not a missing lookup entry.
+    assert extract_tickers(None, 'holding $T', NOISE_LOOKUP) == [('T', 'high')]
+    assert extract_tickers(None, 'holding $HIT', NOISE_LOOKUP) == [('HIT', 'high')]
+
+
+def test_a_single_letter_cashtag_is_money_shorthand_off_a_finance_network():
+    """$M and $T are million/trillion far more often than Macy's and AT&T.
+    Allowed where the population is finance-native, rejected where it is not --
+    the same per-source judgement bare tokens already get.
+    """
+    text = 'Tax at 60% for over a $M and it can be $T if we all do it'
+    assert extract_tickers(None, text, NOISE_LOOKUP,
+                           allow_single_letter=False) == []
+    # Teeth: the identical text with the gate open finds both, so the empty
+    # result above is the gate rather than the pattern.
+    assert extract_tickers(None, text, NOISE_LOOKUP,
+                           allow_single_letter=True) == [('M', 'high'), ('T', 'high')]
+    # Multi-letter cashtags are untouched by the gate.
+    assert extract_tickers(None, 'watching $HIT', NOISE_LOOKUP,
+                           allow_single_letter=False) == [('HIT', 'high')]
 
 
 def test_an_uncorroborated_bare_symbol_is_low_confidence():

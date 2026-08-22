@@ -9,6 +9,7 @@ straight through the discontinuity (spec 6.6).
 """
 import hashlib
 import json
+import re
 
 # Active sources. Adding one is a module in sources/ plus an entry here --
 # nothing else in the pipeline names a source (spec 8.6).
@@ -66,6 +67,61 @@ COIN_SYMBOLS_MEAN_STOCKS = {
 }
 
 
+# Single-letter cashtags. `$M`, `$B`, `$T` and `$K` are money shorthand far
+# more often than Macy's, Barnes Group, AT&T and Kellanova -- measured on live
+# Bluesky, 119 of 3302 cashtag matches were single letters and essentially all
+# of them were prose: "Tax @60% for over a $M", "make $B's", "is $B & can be
+# $T if we all do it". A finance-native population is the exception, the same
+# judgement bare tokens and coin collisions already get.
+SINGLE_LETTER_CASHTAGS = {
+    'stocktwits': True,
+    'fourchan': False,
+    'bluesky': False,
+}
+
+# Exchange bots, not people. Crypto liquidation and arbitrage feeds post in a
+# fixed format and are prolific on general networks:
+#
+#   "$485.6K $PUMP LONG liquidated on Binance @ $0.0048"
+#   "$H ARB 5.77% OKX -> BinanceF #arbitrage"
+#
+# They are dropped whole rather than symbol by symbol, because the post is not
+# a person discussing anything -- and the symbols they carry are coins, so
+# per-symbol rules would have to enumerate a list that changes weekly. Matched
+# on the exchange vocabulary itself, which is what stays constant.
+_EXCHANGE_BOT_RE = re.compile(
+    r'liquidated on\b|\bOKX\b|\bBinanceF\b|#arbitrage\b|vs\. Bitcoin\b',
+    re.IGNORECASE)
+
+
+# The two matching patterns. They sit here rather than in extraction.py
+# because changing either changes WHICH mentions get counted, and
+# source_config_version() below has to be able to see them -- extraction
+# imports this module, so the dependency cannot run the other way.
+#
+# Cashtags: 1-5 UPPERCASE letters, with a left boundary so "A$AP Rocky" does
+# not yield AP. Uppercase-only is what stops `$t` matching inside "s%$t".
+CASHTAG_PATTERN = r'(?<![A-Za-z0-9])\$([A-Z]{1,5})\b'
+
+# Bare tokens: 2-5 uppercase, guarded on the left so a token the cashtag
+# pattern already rejected cannot slip back in as a bare match.
+BARE_PATTERN = r'(?<![$A-Za-z0-9])([A-Z]{2,5})\b'
+
+
+def looks_like_exchange_bot(text):
+    """True for machine-generated crypto exchange output.
+
+    Applied on every source. These bots do not post to StockTwits, so the rule
+    costs nothing there, and scoping it per source would only invite the
+    question of which sources are safe.
+    """
+    return bool(_EXCHANGE_BOT_RE.search(text or ''))
+
+
+def single_letter_cashtags_allowed(source):
+    return SINGLE_LETTER_CASHTAGS.get(source, False)
+
+
 def coin_collision_dropped(source, symbol):
     """True when this symbol should be ignored on this source."""
     if COIN_SYMBOLS_MEAN_STOCKS.get(source, False):
@@ -115,16 +171,39 @@ STOPWORDS = frozenset({
 
 
 def source_config_version():
-    """A stable 16-char stamp for the active source configuration.
+    """A stable 16-char stamp for everything that decides what gets counted.
 
-    Sorted before hashing so reordering the list is not a config change --
-    only membership is. Stamped onto every bucket; see spec 6.6.
+    Sorted before hashing so reordering a list is not a config change -- only
+    membership is. Stamped onto every bucket; baselines are computed only over
+    buckets sharing the current stamp, so a change starts a warm-up instead of
+    reading straight through a discontinuity (spec 6.6).
+
+    THE EXTRACTION RULES ARE PART OF THIS, and were not until 2026-08-22. The
+    stamp hashed the source list alone, so the bare-token rule, the coin
+    collisions, the A$AP boundary and the uppercase-cashtag fix all shipped
+    without invalidating baselines built under the previous rules -- silently
+    mixing populations, which is the exact failure the stamp exists to
+    prevent. It was giving false assurance rather than protection.
+
+    What belongs here is anything that changes WHICH mentions get counted.
+    Thresholds that change how a count is SCORED do not: rescoring re-reads
+    the same buckets, so there is no discontinuity to warm up from.
 
     This versions what is INGESTED. The UI source selector is a read-time
     filter and must never touch it, or every toggle of a checkbox would look
     like a market-wide spike.
     """
-    payload = json.dumps(sorted(SOURCES), separators=(',', ':'))
+    payload = json.dumps({
+        'sources': sorted(SOURCES),
+        'bare': dict(sorted(BARE_TOKENS_ALLOWED.items())),
+        'single_letter': dict(sorted(SINGLE_LETTER_CASHTAGS.items())),
+        'coin_symbols': sorted(COIN_COLLISION_SYMBOLS),
+        'coin_means_stocks': dict(sorted(COIN_SYMBOLS_MEAN_STOCKS.items())),
+        'stopwords': sorted(STOPWORDS),
+        'cashtag_re': CASHTAG_PATTERN,
+        'bare_re': BARE_PATTERN,
+        'bot_re': _EXCHANGE_BOT_RE.pattern,
+    }, separators=(',', ':'), sort_keys=True)
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 
 

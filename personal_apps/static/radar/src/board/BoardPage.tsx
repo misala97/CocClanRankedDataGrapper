@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { BoardUnavailable, fetchBoard, queryFor } from '../api'
-import { plural, sourceLabel, stampTime } from '../format'
-import type { BoardPayload, Selection } from '../types'
+import { plural, pricesAreMoving, sessionLabel, sourceLabel, stampTime } from '../format'
+import type { BoardPayload, Mark, Selection } from '../types'
 import { Controls } from './Controls'
 import { LeadCard } from './LeadCard'
 import { MarkExplainer } from './Marks'
@@ -60,6 +60,17 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // One scale across the three lead charts, so a tall bar in the first card
   // means more mentions than a short bar in the third.
   const chatterMax = Math.max(1, ...leads.map((row) => peak(row.series)))
+  // With the exchange shut there is no price movement to diverge from, so the
+  // board ranks on chatter and says so. Presenting the same "Divergence"
+  // heading over what is really a chatter score would be the quiet kind of
+  // wrong -- the number still looks authoritative.
+  const ranked = pricesAreMoving(payload.session) ? 'divergence' : 'chatter'
+  // A mark on every single row is not a mark, it is a property of the board.
+  // Forty-six `provisional` badges down one column is noise the eye learns to
+  // skip, which is the opposite of what a trust mark is for -- and it is the
+  // same mistake as tagging every ticker no-print because it is Saturday.
+  // Lifted to a sentence; the per-row badge stays for anything selective.
+  const universal = universalMarks(payload)
 
   return (
     <MarkExplainer>
@@ -78,6 +89,25 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
           </p>
         </header>
 
+        {/* Not decoration. Nights and weekends are around 60% of the clock,
+            and during them the headline number stops meaning what its label
+            says -- so the label changes and the reason is stated, rather than
+            the reader being left to infer it from a column of zeroes. */}
+        <p className={ranked === 'chatter' ? 'session shut' : 'session'}>
+          <b>{sessionLabel(payload.session)}</b>
+          {ranked === 'chatter'
+            ? ' — no price is moving, so these are ranked by chatter against '
+              + 'each ticker’s own normal. Good for deciding what to watch '
+              + 'when it opens; divergence needs a live tape and returns with one.'
+            : ' — ranked by the gap between chatter and price.'}
+          {universal.length > 0 && (
+            <>
+              {' '}Every row is <b>{universal.join(' and ')}</b>, so it is said
+              once here instead of {payload.rows.length} times down the column.
+            </>
+          )}
+        </p>
+
         <Controls payload={payload} selection={selection} busy={busy}
                   onChange={setSelection} />
 
@@ -91,13 +121,18 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
         {payload.rows.length === 0 ? <Empty payload={payload} /> : (
           <>
             <div className="head">
-              <h2>Talked about, not yet priced</h2>
-              <p>chatter against price, last {payload.series_hours} hours</p>
+              <h2>{ranked === 'chatter'
+                ? 'Loudest against their own normal'
+                : 'Talked about, not yet priced'}</h2>
+              <p>{ranked === 'chatter'
+                ? `chatter over the last ${payload.series_hours} hours`
+                : `chatter against price, last ${payload.series_hours} hours`}</p>
             </div>
             <div className="leads">
               {leads.map((row) => (
                 <LeadCard key={row.ticker} row={row} chatterMax={chatterMax}
-                          windowHours={payload.window_hours} />
+                          windowHours={payload.window_hours} ranked={ranked}
+                          hiddenMarks={universal} />
               ))}
             </div>
 
@@ -113,13 +148,16 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
                   <div className="n">
                     {payload.triplet_hours.map((h) => `${h}h`).join(' · ')}
                   </div>
-                  <div className="n">Divergence</div>
+                  <div className="n">
+                    {ranked === 'chatter' ? 'Chatter z' : 'Divergence'}
+                  </div>
                   <div className="n">Mentions</div>
                   <div className="n">Authors</div>
                   <div className="n">Price {payload.window_hours}h</div>
                 </div>
                 {rest.map((row) => (
-                  <ScanRow key={row.ticker} row={row}
+                  <ScanRow key={row.ticker} row={row} ranked={ranked}
+                           hiddenMarks={universal}
                            triplet={payload.triplet_hours} />
                 ))}
               </>
@@ -138,6 +176,20 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       </div>
     </MarkExplainer>
   )
+}
+
+/** Marks carried by every row on the board.
+ *
+ *  Returned so the surface can state them once instead of badging each row.
+ *  Requires more than one row: on a single-row board "every row" is a
+ *  coincidence, not a property.
+ */
+function universalMarks(payload: BoardPayload): Mark[] {
+  if (payload.rows.length < 2) return []
+  const first = payload.rows[0]
+  if (!first) return []
+  return first.marks.filter(
+    (mark) => payload.rows.every((row) => row.marks.includes(mark)))
 }
 
 /** The empty state teaches the filter rather than announcing a void.

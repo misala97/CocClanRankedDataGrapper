@@ -1,5 +1,5 @@
-import { divergence, move, plural, UNKNOWN } from '../format'
-import type { Row } from '../types'
+import { divergence, move, plural, signed, UNKNOWN } from '../format'
+import type { Mark, Row } from '../types'
 import { chatterBars, priceLine, priceRose, type Box } from './geometry'
 import { Marks } from './Marks'
 
@@ -24,16 +24,26 @@ const BOX: Box = { width: 300, height: 92, pad: 11, barBand: 0.94, priceBand: 0.
  *  one card means more mentions than a short bar in the next. Per-card
  *  auto-scaling made three unrelated charts look identically busy.
  */
-export function LeadCard({ row, chatterMax, windowHours }: {
+export function LeadCard({ row, chatterMax, windowHours, ranked,
+                          hiddenMarks = [] }: {
   row: Row
   chatterMax: number
   windowHours: number
+  /** 'divergence' while prices move, 'chatter' while the exchange is shut. */
+  ranked: 'divergence' | 'chatter'
+  /** Marks every row on the board carries, which the page states once
+   *  instead. A badge repeated on all 46 rows is scenery, not a warning. */
+  hiddenMarks?: Mark[]
 }) {
   const bars = chatterBars(row.series, BOX, chatterMax)
   const line = priceLine(row.price_series, BOX)
   const rose = priceRose(row.price_series)
   const stroke = rose ? 'var(--up)' : 'var(--down)'
-  const scored = row.divergence !== null
+  const byChatter = ranked === 'chatter'
+  const scored = byChatter ? row.mention_z !== null : row.divergence !== null
+  const headline = byChatter
+    ? (row.mention_z === null ? UNKNOWN : signed(row.mention_z, 1))
+    : divergence(row.divergence)
   // A frozen tape has no move to report. Printing the arithmetic difference
   // between two identical prints as "0.00%" would state that the price held
   // steady, when in fact nothing traded.
@@ -48,8 +58,10 @@ export function LeadCard({ row, chatterMax, windowHours }: {
           <span className="lead-co">{row.name ?? 'Name unknown'}</span>
         </div>
         <div className={scored ? 'lead-div' : 'lead-div none'}>
-          <span className="v">{divergence(row.divergence)}</span>
-          {scored && <span className="k">divergence</span>}
+          <span className="v">{headline}</span>
+          {scored && (
+            <span className="k">{byChatter ? 'chatter z' : 'divergence'}</span>
+          )}
         </div>
       </div>
 
@@ -59,9 +71,10 @@ export function LeadCard({ row, chatterMax, windowHours }: {
         <b>{row.authors} {plural(row.authors, 'person', 'people')}</b>.{' '}
         {priced
           ? <>Price <b>{move(row.price_move)}</b>.</>
-          : <>Price <b>{UNKNOWN}</b>{row.price_status === 'stale'
-              ? ' — the tape has not printed.'
-              : ' — no quote in this window.'}</>}
+          : <>Price <b>{UNKNOWN}</b>{
+              row.price_status === 'closed' ? ' — the market is closed.'
+                : row.price_status === 'stale' ? ' — the tape has not printed.'
+                  : ' — no quote in this window.'}</>}
       </p>
 
       <div className="chart">
@@ -110,7 +123,7 @@ export function LeadCard({ row, chatterMax, windowHours }: {
           <b>{row.sources.length}</b>{' '}
           {plural(row.sources.length, 'source', 'sources')}
         </span>
-        <Marks marks={row.marks} />
+        <Marks marks={row.marks.filter((m) => !hiddenMarks.includes(m))} />
       </div>
     </article>
   )

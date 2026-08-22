@@ -25,7 +25,7 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
     generated_at: '2026-08-22T19:00:00Z',
     sources: ['stocktwits', 'bluesky', 'fourchan'],
     all_sources: ['stocktwits', 'bluesky', 'fourchan'],
-    segment: null, window_hours: 4,
+    segment: null, session: 'regular', window_hours: 4,
     segment_counts: { all: 4, large: 4 },
     triplet_hours: [1, 4, 24], series_hours: 24, lead_count: 3,
     rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' }),
@@ -119,7 +119,7 @@ describe('the controls', () => {
     await userEvent.click(screen.getByRole('button', { name: /4chan/ }))
 
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
-    expect(vi.mocked(fetch).mock.calls[0][0])
+    expect(vi.mocked(fetch).mock.calls[0]![0])
       .toBe('/radar/api/board?sources=stocktwits%2Cbluesky&window=4')
     await waitFor(() =>
       expect(window.location.search).toBe('?sources=stocktwits%2Cbluesky&window=4'))
@@ -175,5 +175,114 @@ describe('an empty board', () => {
     // The chip carries the same words, so scope to the empty panel.
     const panel = document.querySelector('.empty') as HTMLElement
     expect(within(panel).getByText(/4chan \/biz\//)).toBeInTheDocument()
+  })
+})
+
+
+describe('when the exchange is shut', () => {
+  // Nights and weekends are around 60% of the clock. Divergence is chatter
+  // measured against price movement, so with no movement it collapses into
+  // "who is loudest" -- the number stays plausible while its meaning changes,
+  // which is the failure mode worth a test.
+  const closed = () => payload({
+    session: 'closed',
+    rows: [row({ ticker: 'AAA', divergence: null, mention_z: 4.2,
+                 price_status: 'closed', price_move: 0 }),
+           row({ ticker: 'BBB', divergence: null, mention_z: 3.1,
+                 price_status: 'closed', price_move: 0 }),
+           row({ ticker: 'CCC', divergence: null, mention_z: 2.0,
+                 price_status: 'closed', price_move: 0 }),
+           row({ ticker: 'DDD', divergence: null, mention_z: 1.5,
+                 price_status: 'closed', price_move: 0 })],
+  })
+
+  it('says so, and says what the ranking now means', () => {
+    render(<BoardPage initial={closed()} />)
+
+    expect(screen.getByText('Market closed')).toBeInTheDocument()
+    expect(screen.getByText(/ranked by chatter against/)).toBeInTheDocument()
+  })
+
+  it('gives the lead cards a chatter headline, not "not scored"', () => {
+    // The regression this pins shipped once: the column heading changed while
+    // the three cards above it still rendered divergence, so the loudest
+    // tickers on the board read "not scored" in the largest type on the page.
+    const { container } = render(<BoardPage initial={closed()} />)
+    const card = container.querySelector('.lead') as HTMLElement
+
+    expect(within(card).getByText('+4.2')).toBeInTheDocument()
+    expect(within(card).getByText('chatter z')).toBeInTheDocument()
+    expect(within(card).queryByText('not scored')).not.toBeInTheDocument()
+  })
+
+  it('renames the column instead of showing divergence over a frozen tape', () => {
+    render(<BoardPage initial={closed()} />)
+
+    expect(screen.getByText('Chatter z')).toBeInTheDocument()
+    expect(screen.queryByText('Divergence')).not.toBeInTheDocument()
+  })
+
+  it('shows the chatter score in the ranking column, not "not scored"', () => {
+    const { container } = render(<BoardPage initial={closed()} />)
+    const scan = container.querySelector('.row') as HTMLElement
+
+    expect(within(scan).getByText('+1.5')).toBeInTheDocument()
+    expect(within(scan).queryByText('not scored')).not.toBeInTheDocument()
+  })
+
+  it('never prints a price move, and never blames the stock for the clock', () => {
+    const { container } = render(<BoardPage initial={closed()} />)
+
+    expect(container.textContent).not.toContain('0.00%')
+    expect(screen.queryByRole('button', { name: /^no-print/ })).not.toBeInTheDocument()
+    // textContent, not getByText: the sentence is split across an <b> and a
+    // text node, which the text matcher will not stitch back together.
+    expect(container.textContent).toContain('the market is closed')
+  })
+
+  it('goes back to divergence once the tape is live', () => {
+    render(<BoardPage initial={payload()} />)
+
+    expect(screen.getByText('Divergence')).toBeInTheDocument()
+    expect(screen.queryByText('Chatter z')).not.toBeInTheDocument()
+    expect(screen.getByText(/gap between chatter and price/)).toBeInTheDocument()
+  })
+})
+
+describe('a mark every row carries', () => {
+  // Same failure as tagging every ticker no-print on a Saturday: a per-row
+  // badge doing the job of a board-wide statement. Forty-six identical badges
+  // train the eye to skip the column the trust marks live in.
+  const allProvisional = () => payload({
+    rows: [row({ ticker: 'AAA', marks: ['provisional'] }),
+           row({ ticker: 'BBB', marks: ['provisional'] }),
+           row({ ticker: 'CCC', marks: ['provisional'] }),
+           row({ ticker: 'DDD', marks: ['provisional'] })],
+  })
+
+  it('is said once by the page instead of badged on each row', () => {
+    render(<BoardPage initial={allProvisional()} />)
+
+    expect(screen.queryByRole('button', { name: /^provisional/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/said once here instead of 4 times/)).toBeInTheDocument()
+  })
+
+  it('stays on the rows when it is selective', () => {
+    const mixed = payload({
+      rows: [row({ ticker: 'AAA', marks: ['provisional'] }),
+             row({ ticker: 'BBB', marks: [] }),
+             row({ ticker: 'CCC', marks: [] }),
+             row({ ticker: 'DDD', marks: ['provisional'] })],
+    })
+    render(<BoardPage initial={mixed} />)
+
+    expect(screen.getAllByRole('button', { name: /^provisional/ })).toHaveLength(2)
+  })
+
+  it('treats a one-row board as a coincidence, not a property', () => {
+    const single = payload({ rows: [row({ ticker: 'AAA', marks: ['no-print'] })] })
+    render(<BoardPage initial={single} />)
+
+    expect(screen.getByRole('button', { name: /^no-print/ })).toBeInTheDocument()
   })
 })

@@ -16,6 +16,7 @@ from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, TickerUniverse
 
 from . import divergence as divergence_mod
+from . import market_calendar
 from . import quotes as quotes_mod
 from . import scoring, universe
 from .config import PROVISIONAL_BASELINE_DAYS
@@ -80,13 +81,25 @@ def _universe_rows(tickers):
     return {row.symbol: row for row in rows}
 
 
-def build_rows(sources, now, window_hours=4, segment=None, limit=50):
+def build_rows(sources, now, window_hours=4, segment=None, limit=50,
+               session=None):
     """Ranked leaderboard rows for the selected sources.
 
     The source list is a read-time filter: it re-pools components that were
     stored per source, and never touches how anything was scored (spec 8.6).
+
+    `session` is the exchange state. With the market shut no row gets a
+    divergence, because there is no price movement to be surprised by -- so
+    the sort falls through to mention_z and the board ranks on chatter alone.
+    That is the useful answer at 23:00 on a Sunday (what is worth looking at
+    on Monday), and it is only honest if the surface says which of the two
+    rankings the reader is looking at. Computed once here rather than per
+    ticker; the caller may pass it in to avoid computing it twice.
     """
     since = now - dt.timedelta(hours=window_hours)
+    if session is None:
+        session = market_calendar.session_state(
+            now.replace(tzinfo=dt.timezone.utc))
 
     scored_rows = (RadarBucketSource.query
                    .filter(RadarBucketSource.source.in_(list(sources)),
@@ -129,7 +142,7 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50):
                              if b.baseline_days is not None), default=None)
 
         profile = profiles.get(ticker)
-        status = quotes_mod.price_status(ticker, now)
+        status = quotes_mod.price_status(ticker, now, session=session)
         move = quotes_mod.move_since(ticker, hours=window_hours, now=now)
 
         latest = None
@@ -143,6 +156,8 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50):
         # A frozen tape reports no movement while mentions explode because it
         # froze. That is maximum divergence produced by an artifact, so the
         # row carries the mark and no score rather than a flattering number.
+        # 'closed' lands here too and for the same reason -- but it earns no
+        # mark, because the exchange being shut says nothing about the stock.
         value = None
         if status == 'ok' and move is not None and mention_z is not None:
             sigma = profile.daily_sigma if profile else None

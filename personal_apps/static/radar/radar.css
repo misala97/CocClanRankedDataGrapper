@@ -187,6 +187,21 @@ body {
 .stamp b { color: var(--ink-2); font-weight: 560; }
 .stamp .sep { opacity: 0.5; margin: 0 2px; }
 
+/* ------------------------------------------------------- session line ---- */
+
+/* What the ranking currently means. Deliberately above the controls and below
+   the masthead rule: it is a statement about the whole board, not a filter. */
+.session {
+  margin: 0; padding: 11px 0 0;
+  font-size: 13px; color: var(--muted);
+}
+.session b { color: var(--ink-2); font-weight: 600; }
+
+/* The market being shut is not an error, so it gets the caution colour and no
+   border -- loud enough that the changed column heading is explained, quiet
+   enough that it is not mistaken for something being broken. */
+.session.shut b { color: var(--warn); }
+
 /* --------------------------------------------------------- controls ------ */
 
 .controls {
@@ -271,6 +286,10 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 }
 
 .lead-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+/* The ticker-and-name column must be allowed to shrink. Its child sets
+   white-space: nowrap, so without this the flex item's min-content is the
+   full untruncated company name and the whole card grows past the phone. */
+.lead-top > div:first-child { min-width: 0; }
 .lead-sym { font-size: 21px; font-weight: 650; letter-spacing: -0.015em; display: block; }
 .lead-co {
   display: block; font-size: 12.5px; color: var(--muted);
@@ -534,7 +553,10 @@ button.mk.hard:hover { background: color-mix(in oklab, var(--warn) 22%, transpar
   /* 44px minimum target on touch. */
   .seg button, .chip { padding: 9px 12px; min-height: 40px; }
 
-  .leads { grid-template-columns: 1fr; }
+  /* minmax(0, 1fr), not 1fr: a plain 1fr floors at min-content, and the card
+     carries a nowrap company name, so the track grew wider than the viewport
+     and took the page with it -- measured at 407px against 390. */
+  .leads { grid-template-columns: minmax(0, 1fr); }
 
   .cols { display: none; }
 

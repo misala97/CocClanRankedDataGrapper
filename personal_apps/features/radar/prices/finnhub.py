@@ -75,6 +75,12 @@ class FinnhubProvider:
                 prev_close=_decimal(payload.get('pc')),
                 quote_ts=(dt.datetime.fromtimestamp(stamp, dt.timezone.utc)
                           .replace(tzinfo=None, microsecond=0) if stamp else None),
+                # Always None in practice: /quote returns c, d, dp, h, l, o,
+                # pc and t, with no volume field. Verified against the live
+                # API rather than inferred. The read is left in place because
+                # it costs nothing and a future provider behind this adapter
+                # may supply it -- see quotes.price_status for what depends on
+                # it, and what currently does not.
                 volume=int(payload['v']) if payload.get('v') is not None else None,
             )
         return found

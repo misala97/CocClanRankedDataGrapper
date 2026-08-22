@@ -89,3 +89,27 @@ export function stampTime(iso: string): string {
 export function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many
 }
+
+
+const SESSION_LABELS: Record<string, string> = {
+  premarket: 'Pre-market',
+  regular: 'Market open',
+  afterhours: 'After hours',
+  closed: 'Market closed',
+}
+
+export function sessionLabel(session: string): string {
+  return SESSION_LABELS[session] ?? session
+}
+
+/** Whether a price is moving at all right now.
+ *
+ *  Divergence is chatter measured against price movement. With the exchange
+ *  shut there is no movement to measure, so the score would silently collapse
+ *  into "who is loudest" while still being labelled divergence. The board
+ *  ranks on chatter instead and renames the column, rather than presenting the
+ *  same heading over a different quantity.
+ */
+export function pricesAreMoving(session: string): boolean {
+  return session !== 'closed'
+}

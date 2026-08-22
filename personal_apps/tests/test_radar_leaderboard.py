@@ -16,7 +16,15 @@ from models import RadarBucketSource, RadarQuote, TickerUniverse
 from features.radar import leaderboard
 from features.radar.config import source_config_version
 
-NOW = dt.datetime(2026, 8, 21, 15, 0, 0)
+# Deliberately far from any window a live dev database holds data for. These
+# tests assert on an exact list of LB* tickers, and the fixture can only clean
+# up rows it created -- so an unrelated ticker sitting in the same window makes
+# them fail on data rather than on behaviour. Found when a production snapshot
+# was loaded locally for debugging and eighteen real tickers joined the board.
+#
+# Still a regular trading session (Thursday, 10:00 ET), which the price-status
+# assertions depend on.
+NOW = dt.datetime(2026, 1, 15, 15, 0, 0)
 
 
 @pytest.fixture()

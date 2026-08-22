@@ -235,3 +235,58 @@ def test_an_empty_board_needs_no_volatility_call(monkeypatch):
     monkeypatch.setattr(daemon.quotes, 'refresh_sigma', counting)
     daemon.refresh_volatility(_utc(2026, 8, 21, 14), object())
     assert called['n'] == 0
+
+
+# Company profiles. There was no job for this until 2026-08-22: market_cap was
+# NULL for every one of the 12,595 universe rows, so universe.segment_for()
+# returned Unknown for every ticker and the segment selector -- an explicit
+# product requirement -- had never worked in production.
+
+def test_profiles_are_refreshed_for_the_board(monkeypatch):
+    seen = {}
+
+    def fake_refresh(provider, symbols, now):
+        seen['symbols'] = list(symbols)
+        return len(symbols)
+
+    monkeypatch.setattr(daemon, '_profiles_due', lambda now, limit: ['AAA', 'BBB'])
+    monkeypatch.setattr(daemon.universe, 'refresh_profiles', fake_refresh)
+
+    assert daemon.refresh_profiles(_utc(2026, 8, 21, 14), object()) == 2
+    assert seen['symbols'] == ['AAA', 'BBB']
+
+
+def test_an_empty_board_spends_no_profile_calls(monkeypatch):
+    called = {'n': 0}
+
+    def counting(provider, symbols, now):
+        called['n'] += 1
+        return 0
+
+    monkeypatch.setattr(daemon, '_profiles_due', lambda now, limit: [])
+    monkeypatch.setattr(daemon.universe, 'refresh_profiles', counting)
+
+    daemon.refresh_profiles(_utc(2026, 8, 21, 14), object())
+    assert called['n'] == 0
+
+
+def test_a_failing_profile_provider_does_not_kill_the_cycle(monkeypatch):
+    """APScheduler drops a job whose function raises, so an unhandled error
+    would silently end profile refreshes until the next restart."""
+    def boom(provider, symbols, now):
+        raise RuntimeError('provider down')
+
+    monkeypatch.setattr(daemon, '_profiles_due', lambda now, limit: ['AAA'])
+    monkeypatch.setattr(daemon.universe, 'refresh_profiles', boom)
+
+    assert daemon.refresh_profiles(_utc(2026, 8, 21, 14), object()) == 0
+
+
+def test_the_daemon_schedules_a_profile_job():
+    """The regression this pins is an omission, not a bug: every other piece
+    of the profile path existed and worked, and nothing called it."""
+    import inspect
+    source = inspect.getsource(daemon.main)
+
+    assert "id='radar_profiles'" in source
+    assert '_scheduled_profiles' in source

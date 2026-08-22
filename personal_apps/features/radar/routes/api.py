@@ -68,6 +68,7 @@ def serialize(board):
         'sources': board.sources,
         'all_sources': list(SOURCES),
         'segment': board.segment,
+        'session': board.session,
         'window_hours': board.window_hours,
         'segment_counts': board.segment_counts,
         'triplet_hours': list(board_mod.TRIPLET_HOURS),

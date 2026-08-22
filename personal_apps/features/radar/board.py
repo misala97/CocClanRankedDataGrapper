@@ -31,7 +31,7 @@ import sqlalchemy as sa
 from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
 
-from . import leaderboard
+from . import leaderboard, market_calendar
 from .config import VARIANCE_FLOOR
 
 # The windows the triplet reports, shortest first. Fixed rather than derived
@@ -89,6 +89,11 @@ class Board:
     window_hours: int
     segment_counts: dict
     rows: list
+    # 'premarket' | 'regular' | 'afterhours' | 'closed'. The surface needs it
+    # because it changes what the ranking MEANS: with the exchange shut there
+    # is no price movement to diverge from, so the board ranks on chatter
+    # alone and has to say so rather than presenting the same column heading.
+    session: str
 
 
 def _hour_floor(when):
@@ -249,8 +254,9 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
     label the filter's own buttons -- computing them after it would report the
     selected segment's size in every slot.
     """
+    session = market_calendar.session_state(now.replace(tzinfo=dt.timezone.utc))
     ranked = leaderboard.build_rows(sources, now, window_hours=window_hours,
-                                    segment=None, limit=None)
+                                    segment=None, limit=None, session=session)
 
     counts = collections.Counter(row.segment for row in ranked)
     segment_counts = dict(counts)
@@ -280,4 +286,4 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
 
     return Board(generated_at=now, sources=list(sources), segment=segment,
                  window_hours=window_hours, segment_counts=segment_counts,
-                 rows=rows)
+                 rows=rows, session=session)

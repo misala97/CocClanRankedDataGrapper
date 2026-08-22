@@ -45,7 +45,10 @@ export interface Row {
   price: number | null
   price_move: number | null
   direction: 'up' | 'down' | 'flat'
-  price_status: 'ok' | 'stale' | 'unknown'
+  /** 'closed' is the exchange being shut; 'stale' is this tape not printing
+   *  while the market is open. Only the second says anything about the stock,
+   *  and only the second earns the no-print mark. */
+  price_status: 'ok' | 'closed' | 'stale' | 'unknown'
   baseline_days: number | null
   marks: Mark[]
   series: Point[]
@@ -56,11 +59,17 @@ export interface Row {
   price_series: PricePoint[]
 }
 
+/** The exchange's state. It changes what the ranking MEANS, not merely how it
+ *  is decorated: with the market shut there is no price movement to diverge
+ *  from, so the board ranks on chatter alone. */
+export type Session = 'premarket' | 'regular' | 'afterhours' | 'closed'
+
 export interface BoardPayload {
   generated_at: string
   sources: string[]
   all_sources: string[]
   segment: Segment | null
+  session: Session
   window_hours: number
   segment_counts: Record<string, number>
   triplet_hours: number[]
