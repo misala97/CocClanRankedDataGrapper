@@ -1,7 +1,14 @@
-# Deploying the gym frontend build
+# Deploying the frontend builds
 
-The gym pages are React islands built by Vite. `static/gym/dist/` is **not
-committed** — it is gitignored and must be built on the VPS after every pull.
+Two features ship React islands built by Vite: the gym pages and the radar
+board. Each has its own config, its own `dist/`, and its own manifest —
+`vite.config.ts` writing `static/gym/dist/`, and `vite.radar.config.ts`
+writing `static/radar/dist/`. Both are **gitignored** and must be built on the
+VPS after every pull.
+
+One `npm run build` covers both (it chains the two configs), so **the deploy
+script does not change when a feature is added** — only this repository does.
+The same is true of `npm test`.
 
 This file documents a change to the deploy script, which lives on the VPS and
 is not in this repository. **Michi runs these steps; they are not automated
@@ -40,7 +47,7 @@ fails instead of silently resolving a different tree.
 
 ### Why the order matters
 
-`git reset --hard` deletes untracked files, and `static/gym/dist/` is
+`git reset --hard` deletes untracked files, and both `dist/` directories are
 untracked. Building before the reset would have the output wiped. Building
 after the restart would leave the service serving a missing bundle in the
 window between.

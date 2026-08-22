@@ -160,7 +160,12 @@ def member_client(temp_user):
         yield test_client
 
 
-@pytest.mark.parametrize('path', ['/tips', '/quizbank', '/pubquiz/admin'])
+# /radar/ is on this list because a new blueprint is denied by default -- it
+# is absent from _MEMBER_BLUEPRINTS, not present-and-blocked. That makes the
+# gate safe but silent, so widening it later would be a one-word change with
+# no failing test unless the deny is asserted somewhere.
+@pytest.mark.parametrize('path', ['/tips', '/quizbank', '/pubquiz/admin',
+                                  '/radar/', '/radar/api/board'])
 def test_a_non_admin_cannot_reach_the_other_apps(member_client, path):
     assert member_client.get(path, base_url=FULL_ACCESS_URL).status_code == 403
 
@@ -180,16 +185,19 @@ def test_an_admin_still_reaches_the_other_apps():
             assert admin_client.get(path, base_url=FULL_ACCESS_URL).status_code == 200
 
 
-def test_the_overview_shows_one_app_to_a_non_admin_and_four_to_an_admin(member_client):
+def test_the_overview_shows_only_the_gym_to_a_non_admin(member_client):
     member_html = member_client.get('/', base_url=FULL_ACCESS_URL).get_data(as_text=True)
     assert 'Gym Tracker' in member_html
     assert 'Pub Quiz' not in member_html
     assert 'Trinkgeld Tracker' not in member_html
+    # Offering a card that 403s on click is worse than not offering it.
+    assert 'Radar' not in member_html
 
     with _client_on_full_access_host(_admin_id()) as admin_client:
         admin_html = admin_client.get('/', base_url=FULL_ACCESS_URL).get_data(as_text=True)
     assert 'Gym Tracker' in admin_html
     assert 'Pub Quiz' in admin_html
+    assert 'Radar' in admin_html
 
 
 def test_only_an_admin_reaches_the_user_admin(member_client):
