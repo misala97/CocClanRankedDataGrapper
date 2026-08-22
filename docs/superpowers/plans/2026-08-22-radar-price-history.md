@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Show a switchable 1M/3M/1Y daily-close line for every ticker on the radar board, so a ticker seen for the first time can be judged against what the stock has been doing.
+**Goal:** Give the radar's existing chatter-vs-price chart a span control (24h / 1M / 3M / 1Y) so a ticker seen for the first time can be judged against what the stock has been doing for a year.
 
-**Architecture:** Daily closes are fetched once per ticker per day by a new daemon job and stored in `radar_daily_closes`. The board payload carries a bare number array per row; the React island slices it client-side for the selected window. Volatility stops calling the provider and reads the same table.
+**Architecture:** Daily closes are fetched once per ticker per day by a new daemon job and stored in `radar_daily_closes`. Daily chatter is aggregated from buckets already stored. The payload carries both as calendar-day-aligned arrays under one start date; the island slices them client-side. Volatility stops calling the provider and reads the same table.
 
 **Tech Stack:** Flask + SQLAlchemy + Flask-Migrate (MySQL 8 dev / MariaDB prod), APScheduler daemon, React 19 + TypeScript + Vite island, pytest + vitest.
 
@@ -14,7 +14,8 @@
 - **This changes nothing about divergence, the eligibility floor, or the ranking.** If a task appears to, stop and re-read the spec's Scope boundary.
 - Every datetime stored is **naive UTC**. `close_date` is a `DATE`, not a datetime.
 - Green and red mean **price direction** and nothing else on this surface. Chatter is violet.
-- **An absence is never a zero.** `price_history` is `null` when nothing is stored; a null renders as a dashed rule, never as a flat line.
+- **An absence is never a zero**, and the two series mean different things by it. `closes[i] = null` is a weekend or holiday — the price line is drawn ACROSS it. `chatter[i] = null` is before ingest began — no bar is drawn at all.
+- **Both series are indexed by calendar day** from one shared `from` date. Never by array index: price has ~252 trading days a year against chatter's 365, and index positioning drifts them over a hundred days apart.
 - Prod is **MariaDB**, dev is MySQL 8. Keep DDL plain — no `CAST(... AS JSON)`, no partitioning on this table.
 - TypeScript runs with `strict` and `noUncheckedIndexedAccess`. Indexed reads are `T | undefined`; use `.at()` or an explicit guard, and never add `any`.
 - `npm run build` runs `tsc --noEmit` over `static/gym/src` **and** `static/radar/src`. It must stay green.
@@ -806,7 +807,8 @@ git commit -m "feat(radar): fetch daily closes, tickers we cannot draw first"
 
 ---
 
-### Task 5: The payload
+
+### Task 5: One aligned series per row
 
 **Files:**
 - Modify: `personal_apps/features/radar/board.py`
@@ -815,132 +817,234 @@ git commit -m "feat(radar): fetch daily closes, tickers we cannot draw first"
 
 **Interfaces:**
 - Consumes: `history.closes_for` (Task 2).
-- Produces: `BoardRow.price_history: tuple[date, list[Decimal]] | None`; JSON `price_history: {"from": "YYYY-MM-DD", "closes": [...]} | null`.
+- Produces: `board.CHART_DAYS = 365`; `board.Chart(start: date, closes: list, chatter: list)`; `BoardRow.chart: Chart | None`; JSON `chart: {"from", "closes", "chatter"} | null`.
 
 - [ ] **Step 1: Write the failing tests**
 
 Append to `personal_apps/tests/test_radar_board.py`:
 
 ```python
-def test_a_row_carries_its_stored_price_history(clean):
+def test_the_chart_aligns_price_and_chatter_on_calendar_days(clean):
+    """Price has ~252 trading days a year, chatter has 365. Positioning both
+    by array index would drift them over a hundred days apart by December."""
     import decimal
     from models import RadarDailyClose
 
     universe(f'{PREFIX}A')
     bucket(f'{PREFIX}A', minutes_ago=30)
-    for offset in range(3):
+    for offset in (0, 1, 2):
         db.session.add(RadarDailyClose(
-            ticker=f'{PREFIX}A',
-            close_date=NOW.date() - dt.timedelta(days=offset),
-            close=decimal.Decimal('10') + decimal.Decimal(offset),
-            fetched_at=NOW))
+            ticker=f'{PREFIX}A', close_date=NOW.date() - dt.timedelta(days=offset),
+            close=decimal.Decimal('10') + decimal.Decimal(offset), fetched_at=NOW))
     db.session.commit()
 
-    entry = only(board.build(['bluesky'], NOW), f'{PREFIX}A')
+    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
 
-    start, closes = entry.price_history
-    assert start == NOW.date() - dt.timedelta(days=2)
-    assert [float(c) for c in closes] == [12.0, 11.0, 10.0]
+    assert len(chart.closes) == len(chart.chatter) == board.CHART_DAYS
+    assert (NOW.date() - chart.start).days == board.CHART_DAYS - 1
+    # Today is the last index of both arrays, so the two line up by date.
+    assert float(chart.closes[-1]) == 10.0
+    assert chart.chatter[-1] == 10
 
 
-def test_a_row_with_no_stored_history_carries_none_not_an_empty_list(clean):
-    """Null and empty are different downstream: null draws a dashed
-    "not known" rule, empty would draw a flat line and assert a steady price.
-    """
+def test_a_day_the_market_did_not_trade_is_null_not_carried_forward(clean):
+    """Null means no trade happened. The client draws the line across it;
+    repeating the previous close here would invent a print."""
+    import decimal
+    from models import RadarDailyClose
+
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    db.session.add(RadarDailyClose(
+        ticker=f'{PREFIX}A', close_date=NOW.date() - dt.timedelta(days=3),
+        close=decimal.Decimal('10'), fetched_at=NOW))
+    db.session.commit()
+
+    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
+
+    assert chart.closes[-1] is None
+    assert float(chart.closes[-4]) == 10.0
+
+
+def test_days_before_ingest_began_have_no_chatter_at_all(clean):
+    """Not zero. We were not watching, and a zero bar would claim a silence we
+    never observed -- the same rule the hourly series already follows."""
     universe(f'{PREFIX}A')
     bucket(f'{PREFIX}A', minutes_ago=30)
     db.session.commit()
 
-    assert only(board.build(['bluesky'], NOW), f'{PREFIX}A').price_history is None
+    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
+
+    assert chart.chatter[0] is None
+    assert chart.chatter[-1] == 10
+
+
+def test_a_ticker_with_no_stored_closes_has_no_chart(clean):
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    db.session.commit()
+
+    assert only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart is None
 ```
 
 Append to `personal_apps/tests/test_radar_api.py`:
 
 ```python
-def test_price_history_serializes_as_a_start_date_and_a_number_array(client):
-    """A bare array keeps a full board near 100KB. Points are positioned by
-    index, so the axis is trading days -- which is also what makes the 1M and
-    3M slices exact."""
+def test_the_chart_serializes_as_two_aligned_arrays(client):
     payload = json.loads(client.get('/radar/api/board').data)
 
     for row in payload['rows']:
-        entry = row['price_history']
-        if entry is None:
+        chart = row['chart']
+        if chart is None:
             continue
-        assert set(entry) == {'from', 'closes'}
-        assert isinstance(entry['closes'], list)
-        assert all(isinstance(value, float) for value in entry['closes'])
-        assert entry['from'].count('-') == 2
+        assert set(chart) == {'from', 'closes', 'chatter'}
+        assert len(chart['closes']) == len(chart['chatter'])
+        assert chart['from'].count('-') == 2
 ```
 
 - [ ] **Step 2: Run and watch them fail**
 
-Run: `python -m pytest tests/test_radar_board.py -k price_history -v`
-Expected: FAIL with `AttributeError: 'BoardRow' object has no attribute 'price_history'`
+Run: `python -m pytest tests/test_radar_board.py -k chart -v`
+Expected: FAIL with `AttributeError: 'BoardRow' object has no attribute 'chart'`
 
-- [ ] **Step 3: Add it to the board**
+- [ ] **Step 3: Build the aligned series**
 
-In `personal_apps/features/radar/board.py`:
+In `personal_apps/features/radar/board.py`, add `history` to the imports
+(`from . import history, leaderboard, market_calendar`) and add near the top:
 
-Add `history` to the imports: `from . import history, leaderboard, market_calendar`
+```python
+# One calendar year -- the chart's widest span.
+CHART_DAYS = 365
+
+
+@dataclasses.dataclass
+class Chart:
+    """Price and chatter over the same calendar days.
+
+    Both arrays are CHART_DAYS long and share `start`, so index i is the same
+    date in each. That alignment is why this is one structure rather than two:
+    a year holds ~252 trading days and 365 calendar days, and positioning each
+    by its own index would drift them apart by over a hundred days.
+
+    `closes[i]` is None where the market did not trade -- weekends, holidays.
+    `chatter[i]` is None where we were not yet watching. Different absences,
+    drawn differently: the price line spans its gaps, the chatter bars do not.
+    """
+    start: dt.date
+    closes: list
+    chatter: list
+```
+
+Add beside `_hourly_counts`:
+
+```python
+def _daily_counts(tickers, sources, start, now):
+    """Pooled mention count per (ticker, calendar day).
+
+    From buckets, which are retained forever -- unlike posts, which prune at
+    30 days. That is what lets the chart's long spans fill in over time with
+    no new collection.
+    """
+    if not tickers:
+        return {}
+
+    rows = (db.session.query(RadarBucketSource.ticker,
+                             sa.func.date(RadarBucketSource.bucket_start),
+                             sa.func.sum(RadarBucketSource.mention_count))
+            .filter(RadarBucketSource.ticker.in_(list(tickers)),
+                    RadarBucketSource.source.in_(list(sources)),
+                    RadarBucketSource.bucket_start >= start,
+                    RadarBucketSource.bucket_start < now)
+            .group_by(RadarBucketSource.ticker,
+                      sa.func.date(RadarBucketSource.bucket_start)).all())
+
+    totals = {}
+    for ticker, day, count in rows:
+        # MySQL returns DATE() as a date object; MariaDB has been seen to
+        # return a string. Normalise rather than trusting the driver.
+        if isinstance(day, str):
+            day = dt.date.fromisoformat(day)
+        totals[(ticker, day)] = int(count or 0)
+    return totals
+
+
+def _first_watched_day(sources, start, now):
+    """Earliest calendar day any bucket exists for. Before it, chatter is
+    unknown rather than zero."""
+    earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
+                .filter(RadarBucketSource.source.in_(list(sources)),
+                        RadarBucketSource.bucket_start >= start).scalar())
+    return earliest.date() if earliest else None
+
+
+def _chart_for(ticker, start, days, closes_by_day, counts, watched_from):
+    """One Chart, both arrays indexed by calendar day from `start`."""
+    closes, chatter = [], []
+    for offset in range(days):
+        day = start + dt.timedelta(days=offset)
+        closes.append(closes_by_day.get(day))
+        if watched_from is None or day < watched_from:
+            chatter.append(None)
+        else:
+            chatter.append(counts.get((ticker, day), 0))
+    return Chart(start=start, closes=closes, chatter=chatter)
+```
 
 Add the field to `BoardRow`, after `price_series`:
 
 ```python
-    # (first trading date, closes oldest first), or None when nothing is
-    # stored. None rather than an empty list: never fetched and no history are
-    # different facts, and the surface draws them differently.
-    price_history: object
+    # Price and chatter over one calendar year, aligned. None when the ticker
+    # has no stored closes at all.
+    chart: object
 ```
 
 In `build()`, after `prices = _price_series(...)`:
 
 ```python
-    stored_history = history.closes_for(tickers, today=now.date())
+    chart_start = now.date() - dt.timedelta(days=CHART_DAYS - 1)
+    chart_from = dt.datetime.combine(chart_start, dt.time.min)
+    stored_closes = history.closes_for(tickers, days=CHART_DAYS,
+                                       today=now.date())
+    daily_counts = _daily_counts(tickers, sources, chart_from, now)
+    watched_from = _first_watched_day(sources, chart_from, now)
 ```
 
 And in the `BoardRow(...)` construction, after `price_series=...`:
 
 ```python
-        price_history=_history_for(stored_history.get(row.ticker)),
-```
-
-Add the helper next to `_price_series`:
-
-```python
-def _history_for(series):
-    """(first date, [closes]) or None. Splits the dates off the values because
-    the payload sends the values alone and names only where they start."""
-    if not series:
-        return None
-    return series[0][0], [close for _, close in series]
+        chart=(_chart_for(row.ticker, chart_start, CHART_DAYS,
+                          dict(stored_closes[row.ticker]), daily_counts,
+                          watched_from)
+               if row.ticker in stored_closes else None),
 ```
 
 - [ ] **Step 4: Serialize it**
 
-In `personal_apps/features/radar/routes/api.py`, inside `_row()`, after the
+In `personal_apps/features/radar/routes/api.py`, add to `_row()` after the
 `price_series` entry:
 
 ```python
-        'price_history': _history(entry.price_history),
+        'chart': _chart(entry.chart),
 ```
 
-And add the helper beside `_decimal_or_none`:
+And beside `_decimal_or_none`:
 
 ```python
-def _history(entry):
-    """{'from': ISO date, 'closes': [...]} or null.
+def _chart(chart):
+    """{'from', 'closes', 'chatter'} or null, both arrays calendar-aligned.
 
-    A bare number array rather than dated objects: 260 values per row across a
-    full board is about 100KB this way and roughly triple that with a date on
-    every point. Nothing reads a date off a 124px sparkline, and slicing by
-    index gives exact trading-day windows.
+    365 entries each, mostly literal nulls -- about 250KB across a full board
+    and roughly 30KB once nginx gzips it (7.8x measured on coc_stats). Sending
+    the year whole is what makes the span switch instant: the client already
+    holds every span it can show.
     """
-    if entry is None:
+    if chart is None:
         return None
-    start, closes = entry
-    return {'from': start.isoformat(),
-            'closes': [float(close) for close in closes]}
+    return {
+        'from': chart.start.isoformat(),
+        'closes': [float(c) if c is not None else None for c in chart.closes],
+        'chatter': chart.chatter,
+    }
 ```
 
 - [ ] **Step 5: Run the tests**
@@ -952,254 +1056,291 @@ Expected: PASS
 
 ```bash
 git add personal_apps/features/radar/board.py personal_apps/features/radar/routes/api.py personal_apps/tests/test_radar_board.py personal_apps/tests/test_radar_api.py
-git commit -m "feat(radar): carry a year of closes in the board payload"
+git commit -m "feat(radar): align a year of price and chatter on one calendar axis"
 ```
 
 ---
 
-### Task 6: Slicing and drawing the price line
+### Task 6: Drawing two series over any span
 
 **Files:**
 - Modify: `personal_apps/static/radar/src/types.ts`
 - Modify: `personal_apps/static/radar/src/board/geometry.ts`
-- Create: `personal_apps/static/radar/src/board/PriceHistory.tsx`
 - Test: `personal_apps/static/radar/src/board/geometry.test.ts`
 
 **Interfaces:**
-- Produces:
-  - `types.ts`: `PriceHistory = { from: string; closes: number[] }`, `HistoryWindow = '1M' | '3M' | '1Y'`, `Row.price_history: PriceHistory | null`
-  - `geometry.ts`: `HISTORY_SPANS: Record<HistoryWindow, number>`, `sliceHistory(closes, window) -> number[]`, `historyPath(closes, box) -> string`, `historyRose(closes) -> boolean`
-  - `PriceHistory.tsx`: `<PriceHistory history={...} window={...} label={...} />`
+- Produces, in `types.ts`: `Chart = { from: string; closes: (number|null)[]; chatter: (number|null)[] }`, `ChartSpan = '24h' | '1M' | '3M' | '1Y'`, `Row.chart: Chart | null`.
+- Produces, in `geometry.ts`: `SPAN_DAYS`, `sliceChart(chart, span) -> Chart`, `pricePath(closes, box) -> string`, `dailyBars(chatter, box, yMax) -> Bar[]`, `chartRose(closes) -> boolean`, `peakOf(values) -> number`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `personal_apps/static/radar/src/board/geometry.test.ts`:
+Append to `personal_apps/static/radar/src/board/geometry.test.ts` (add the new
+names to the existing `./geometry` import):
 
 ```ts
-describe('the price history window', () => {
-  const year = Array.from({ length: 260 }, (_, i) => 100 + i)
+describe('the chart span', () => {
+  const chart = {
+    from: '2025-08-23',
+    closes: Array.from({ length: 365 }, (_, i) => (i % 7 < 5 ? 100 + i : null)),
+    chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
+  }
 
-  it('slices by trading days, which is what the index actually is', () => {
-    expect(sliceHistory(year, '1M')).toHaveLength(21)
-    expect(sliceHistory(year, '3M')).toHaveLength(63)
-    expect(sliceHistory(year, '1Y')).toHaveLength(260)
+  it('slices both series to the same days', () => {
+    const month = sliceChart(chart, '1M')
+
+    expect(month.closes).toHaveLength(30)
+    expect(month.chatter).toHaveLength(30)
   })
 
-  it('takes the most recent end, not the oldest', () => {
-    expect(sliceHistory(year, '1M').at(-1)).toBe(359)
+  it('moves the start date with the slice', () => {
+    // Otherwise every span would claim to begin a year ago.
+    expect(sliceChart(chart, '1Y').from).toBe('2025-08-23')
+    expect(sliceChart(chart, '1M').from).not.toBe('2025-08-23')
   })
 
-  it('returns everything it has when the series is shorter than the window', () => {
-    // A stock that IPO'd last month has six weeks of history, not three
-    // months of it, and padding would invent prices it never traded at.
-    expect(sliceHistory([1, 2, 3], '1Y')).toEqual([1, 2, 3])
-    expect(sliceHistory([1, 2, 3], '3M')).toEqual([1, 2, 3])
+  it('returns everything it has when the series is shorter than the span', () => {
+    const young = { from: '2026-08-01', closes: [1, 2, 3], chatter: [1, 2, 3] }
+
+    expect(sliceChart(young, '1Y').closes).toEqual([1, 2, 3])
+  })
+})
+
+describe('the price line across a closed market', () => {
+  it('draws through a gap rather than breaking at it', () => {
+    // A weekend is not missing data about the price, it is a weekend. The
+    // chatter line breaks at its gaps; this one must not, or a year renders
+    // as 52 fragments.
+    const path = pricePath([10, null, null, 13], BOX)
+
+    expect(path.split('M')).toHaveLength(2)
+    expect(path.match(/L/g) ?? []).toHaveLength(1)
   })
 
-  it('draws nothing from fewer than two points', () => {
-    expect(historyPath([], BOX)).toBe('')
-    expect(historyPath([42], BOX)).toBe('')
+  it('keeps calendar position, not the order of surviving points', () => {
+    const path = pricePath([10, null, null, 13], BOX)
+    const xs = [...path.matchAll(/[ML]([\d.]+),/g)].map((m) => Number(m[1]))
+
+    expect(xs[0]).toBe(0)
+    expect(xs[1]).toBeCloseTo(BOX.width)
   })
 
-  it('scales to its own range rather than to zero', () => {
-    // Unlike the chatter line. A stock's floor is not zero, and the question
-    // here is the shape of the year, not its magnitude.
-    const path = historyPath([100, 150, 200], BOX)
-    const values = [...path.matchAll(/[ML][\d.]+,([\d.]+)/g)].map((m) => Number(m[1]))
-
-    expect(values[0]).toBe(BOX.height)
-    expect(values[2]).toBe(0)
+  it('draws nothing from fewer than two real closes', () => {
+    expect(pricePath([null, null], BOX)).toBe('')
+    expect(pricePath([10, null], BOX)).toBe('')
   })
 
-  it('reads direction across the window, not across the whole year', () => {
-    expect(historyRose([100, 50, 60])).toBe(false)
-    expect(historyRose([100, 200])).toBe(true)
-    expect(historyRose([])).toBe(true)
+  it('stays in its band when one is set, leaving the floor to the bars', () => {
+    const banded = pricePath([100, 110], { ...BOX, priceBand: 0.5 })
+    const ys = [...banded.matchAll(/[ML][\d.]+,([\d.]+)/g)].map((m) => Number(m[1]))
+
+    expect(Math.max(...ys)).toBeLessThanOrEqual(BOX.height * 0.5)
+  })
+
+  it('reads direction across the span, ignoring untraded days', () => {
+    expect(chartRose([100, null, 50])).toBe(false)
+    expect(chartRose([50, null, 100])).toBe(true)
+    expect(chartRose([null, null])).toBe(true)
+  })
+})
+
+describe('daily chatter bars', () => {
+  it('emits nothing for a day nobody was watching', () => {
+    expect(dailyBars([null, null, 4], BOX, 4)).toHaveLength(1)
+  })
+
+  it('emits nothing for a measured zero, and something for a one', () => {
+    const bars = dailyBars([0, 1], BOX, 4)
+
+    expect(bars).toHaveLength(1)
+    expect(bars[0]!.ratio).toBeCloseTo(0.25)
+  })
+
+  it('ignores nulls when finding the peak', () => {
+    expect(peakOf([null, 7, null, 3])).toBe(7)
+    expect(peakOf([null, null])).toBe(0)
   })
 })
 ```
 
-Add `sliceHistory, historyPath, historyRose` to the import at the top of that
-file.
-
 - [ ] **Step 2: Run and watch them fail**
 
 Run: `npx vitest run -c vite.radar.config.ts geometry`
-Expected: FAIL with "sliceHistory is not exported"
+Expected: FAIL with "sliceChart is not exported"
 
 - [ ] **Step 3: Add the types**
 
 In `personal_apps/static/radar/src/types.ts`, before `interface Row`:
 
 ```ts
-/** A year of daily closes, oldest first. Positioned by index: the axis is
- *  trading days, so holidays are not drawn as gaps. Nothing reads a date off
- *  a 124px sparkline, and index slicing gives exact trading-day windows. */
-export interface PriceHistory {
+/** Price and chatter over the same calendar days, sharing `from`.
+ *
+ *  `closes[i]` null means the market did not trade that day -- the line is
+ *  drawn across it. `chatter[i]` null means we were not watching yet -- no bar
+ *  is drawn at all. Two different absences, deliberately not collapsed. */
+export interface Chart {
   from: string
-  closes: number[]
+  closes: (number | null)[]
+  chatter: (number | null)[]
 }
 
-export type HistoryWindow = '1M' | '3M' | '1Y'
+export type ChartSpan = '24h' | '1M' | '3M' | '1Y'
 ```
 
-And inside `Row`, after `price_series`:
+Inside `Row`, after `price_series`:
 
 ```ts
-  /** null when nothing is stored yet -- which is not the same as flat. */
-  price_history: PriceHistory | null
+  /** null when the ticker has no stored closes at all. */
+  chart: Chart | null
 ```
 
 - [ ] **Step 4: Add the geometry**
 
-Append to `personal_apps/static/radar/src/board/geometry.ts`:
+Append to `personal_apps/static/radar/src/board/geometry.ts`, adding `Chart`
+and `ChartSpan` to the type import at the top:
 
 ```ts
-/** Trading days per window. 1Y is the whole series, whatever length it is. */
-export const HISTORY_SPANS: Record<HistoryWindow, number> = {
-  '1M': 21,
-  '3M': 63,
-  '1Y': Number.MAX_SAFE_INTEGER,
+/** Calendar days per span. '24h' is absent on purpose: that span reads the
+ *  hourly `series` the payload already carried, at a resolution the daily
+ *  arrays cannot express. */
+export const SPAN_DAYS: Record<Exclude<ChartSpan, '24h'>, number> = {
+  '1M': 30,
+  '3M': 90,
+  '1Y': 365,
 }
 
-/** The most recent N trading days. Short series come back whole rather than
- *  padded -- a stock that listed last month has six weeks of history, and
- *  inventing the rest would draw prices it never traded at. */
-export function sliceHistory(closes: number[], window: HistoryWindow): number[] {
-  const span = HISTORY_SPANS[window]
-  return closes.length <= span ? closes : closes.slice(closes.length - span)
-}
-
-/** The price line, scaled to its own range across the selected window.
+/** The most recent N calendar days of both series, with `from` moved to match.
  *
- *  Not zero-anchored, unlike the chatter line above it: a stock's floor is not
- *  zero, and the question here is the shape of the move rather than its
- *  magnitude against nothing. */
-export function historyPath(closes: number[], box: Box): string {
-  if (closes.length < 2) return ''
+ *  Slicing both by the same count is what keeps them aligned; moving `from`
+ *  is what stops every span claiming to start a year ago. */
+export function sliceChart(chart: Chart, span: ChartSpan): Chart {
+  const days = span === '24h' ? SPAN_DAYS['1M'] : SPAN_DAYS[span]
+  if (chart.closes.length <= days) return chart
 
-  const low = Math.min(...closes)
-  const high = Math.max(...closes)
-  const span = high - low || 1
-  const plotHeight = box.height - box.pad * 2
+  const cut = chart.closes.length - days
+  const start = new Date(`${chart.from}T00:00:00Z`)
+  start.setUTCDate(start.getUTCDate() + cut)
+  return {
+    from: start.toISOString().slice(0, 10),
+    closes: chart.closes.slice(cut),
+    chatter: chart.chatter.slice(cut),
+  }
+}
 
-  return closes.map((value, index) => {
-    const x = (index / (closes.length - 1)) * box.width
-    const y = box.pad + plotHeight - ((value - low) / span) * plotHeight
-    return `${index ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`
+/** The price line, drawn ACROSS days the market was shut.
+ *
+ *  The chatter line breaks at its gaps because a gap there is an hour nobody
+ *  measured. A gap here is a weekend: the price did not stop existing, and
+ *  breaking at every Saturday would render a year as 52 fragments. Points
+ *  keep their calendar index, so a Monday sits three days after the Friday
+ *  before it whether or not anything traded between. */
+export function pricePath(closes: (number | null)[], box: Box): string {
+  const real = closes
+    .map((value, index) => ({ value, index }))
+    .filter((p): p is { value: number; index: number } => p.value !== null)
+  if (real.length < 2) return ''
+
+  const values = real.map((p) => p.value)
+  const low = Math.min(...values)
+  const span = Math.max(...values) - low || 1
+  // priceBand keeps the line in the upper part of the box so the chatter bars
+  // growing from the floor can cross it rather than hide under it. The scan
+  // cell leaves it unset and uses the full height; the lead card sets 0.5.
+  const plotHeight = (box.height - box.pad * 2) * (box.priceBand ?? 1)
+  const lastIndex = Math.max(closes.length - 1, 1)
+
+  return real.map((point, n) => {
+    const x = (point.index / lastIndex) * box.width
+    const y = box.pad + plotHeight - ((point.value - low) / span) * plotHeight
+    return `${n ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`
   }).join(' ')
 }
 
-/** Whether the window ended higher than it began. Decides the line's colour,
- *  which is why it reads the WINDOW rather than the full year -- a stock down
- *  on the year and up this month is green on the 1M view, correctly. */
-export function historyRose(closes: number[]): boolean {
-  const first = closes.at(0)
-  const last = closes.at(-1)
+/** Highest measured value, ignoring nulls. */
+export function peakOf(values: (number | null)[]): number {
+  return values.reduce<number>(
+    (best, v) => (v !== null && v > best ? v : best), 0)
+}
+
+/** One bar per day of chatter, zero-anchored, nothing for a null day. */
+export function dailyBars(chatter: (number | null)[], box: Box,
+                          yMax: number): Bar[] {
+  const top = Math.max(yMax, 1)
+  const slot = box.width / Math.max(chatter.length, 1)
+  const full = (box.height - box.pad * 2) * (box.barBand ?? 1)
+  const bars: Bar[] = []
+
+  chatter.forEach((count, index) => {
+    if (count === null || count === 0) return
+    const ratio = count / top
+    const height = Math.max(ratio * full, 1.2)
+    bars.push({
+      x: index * slot + slot * 0.15,
+      y: box.height - box.pad - height,
+      width: Math.max(slot * 0.7, 0.6),
+      height,
+      ratio,
+    })
+  })
+  return bars
+}
+
+/** Whether the span ended higher than it began, ignoring untraded days. */
+export function chartRose(closes: (number | null)[]): boolean {
+  const real = closes.filter((v): v is number => v !== null)
+  const first = real.at(0)
+  const last = real.at(-1)
   if (first === undefined || last === undefined) return true
   return last >= first
 }
 ```
 
-Add `HistoryWindow` to the type import at the top of `geometry.ts`:
+- [ ] **Step 5: Run and commit**
 
-```ts
-import type { HistoryWindow, Point, PricePoint } from '../types'
-```
-
-- [ ] **Step 5: Run the geometry tests**
-
-Run: `npx vitest run -c vite.radar.config.ts geometry`
-Expected: PASS
-
-- [ ] **Step 6: Write the component**
-
-Create `personal_apps/static/radar/src/board/PriceHistory.tsx`:
-
-```tsx
-import type { HistoryWindow, PriceHistory as History } from '../types'
-import { historyPath, historyRose, sliceHistory, type Box } from './geometry'
-
-const BOX: Box = { width: 124, height: 26, pad: 3 }
-
-/** A ticker's price over the selected window, as one line.
- *
- *  Sits beside the chatter sparkline deliberately: the pair answers the
- *  question divergence cannot, which is whether a stock exploding in mentions
- *  has been dead all year or has already run.
- *
- *  aria-hidden for the same reason the chatter sparkline is -- it draws no
- *  quantity the row does not already carry as text, and announcing "a line
- *  chart" adds an announcement without adding a fact.
- */
-export function PriceHistory({ history, window, label }: {
-  history: History | null
-  window: HistoryWindow
-  label: string
-}) {
-  const closes = history ? sliceHistory(history.closes, window) : []
-  const path = historyPath(closes, BOX)
-  const rose = historyRose(closes)
-
-  return (
-    <div className="hist">
-      <svg viewBox={`0 0 ${BOX.width} ${BOX.height}`} preserveAspectRatio="none"
-           role="img" aria-hidden="true" focusable="false">
-        <title>{label}</title>
-        {path ? (
-          <path d={path} fill="none" strokeWidth="1.7" strokeLinejoin="round"
-                strokeLinecap="round" vectorEffect="non-scaling-stroke"
-                stroke={rose ? 'var(--up)' : 'var(--down)'} />
-        ) : (
-          // No history stored yet. A dashed rule says that; an empty box would
-          // read as a price that held perfectly steady for a year.
-          <line x1="0" y1={BOX.height / 2} x2={BOX.width} y2={BOX.height / 2}
-                stroke="var(--rule)" strokeWidth="1" strokeDasharray="3 3"
-                vectorEffect="non-scaling-stroke" />
-        )}
-      </svg>
-    </div>
-  )
-}
-```
-
-- [ ] **Step 7: Typecheck and commit**
-
-Run: `npx tsc --noEmit`
-Expected: no output
+Run: `npx vitest run -c vite.radar.config.ts geometry` — PASS
+Run: `npx tsc --noEmit` — no output
 
 ```bash
-git add personal_apps/static/radar/src/types.ts personal_apps/static/radar/src/board/geometry.ts personal_apps/static/radar/src/board/geometry.test.ts personal_apps/static/radar/src/board/PriceHistory.tsx
-git commit -m "feat(radar): slice and draw a ticker's price history"
+git add personal_apps/static/radar/src/types.ts personal_apps/static/radar/src/board/geometry.ts personal_apps/static/radar/src/board/geometry.test.ts
+git commit -m "feat(radar): draw price across closed days, chatter only where measured"
 ```
 
 ---
 
-### Task 7: The scan row trades two columns for two
+### Task 7: One component, both sizes
 
 **Files:**
+- Create: `personal_apps/static/radar/src/board/SpanChart.tsx`
 - Modify: `personal_apps/static/radar/src/board/ScanRow.tsx`
 - Modify: `personal_apps/static/radar/radar.css`
 - Test: `personal_apps/static/radar/src/board/BoardPage.test.tsx`
 
 **Interfaces:**
-- Consumes: `PriceHistory` component, `HistoryWindow` (Task 6).
-- Produces: `<ScanRow ... historyWindow={HistoryWindow} />`.
+- Consumes: Task 6's geometry; the existing `chatterRuns`/`peak` for the 24h span.
+- Produces: `<SpanChart chart={Chart|null} series={Point[]} span={ChartSpan} box={Box} label={string} />`.
 
-**Track count stays at seven.** The price line adds one and merging Mentions
-with Authors removes one; the grid is not getting wider. If you find yourself
-writing an eighth track, something has gone wrong.
+**The track count goes from seven to six.** The chart replaces the existing
+chatter column rather than adding beside it, and Mentions merges with Authors.
+Nothing gets wider; if you find yourself adding a track, re-read this.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `personal_apps/static/radar/src/board/BoardPage.test.tsx`, and add
-`price_history: { from: '2025-08-11', closes: [10, 11, 12] }` to the `row()`
-fixture's defaults:
+Add to the `row()` fixture defaults in
+`personal_apps/static/radar/src/board/BoardPage.test.tsx`:
 
 ```tsx
-describe('price history on a row', () => {
+    chart: {
+      from: '2025-08-23',
+      closes: Array.from({ length: 365 }, (_, i) => (i % 7 < 5 ? 100 + i : null)),
+      chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
+    },
+```
+
+Then append:
+
+```tsx
+describe('the chart on a row', () => {
   it('shows mentions and people as one column', () => {
-    // Merged to make room for the price line. They answer the same question --
+    // Merged to pay for the chart column. They answer the same question --
     // how much talk, from how many mouths -- and the lead cards already say
     // them as one sentence.
     const { container } = render(<BoardPage initial={payload()} />)
@@ -1208,22 +1349,38 @@ describe('price history on a row', () => {
     expect(within(scan).getByText('20 / 9')).toBeInTheDocument()
   })
 
-  it('draws a price line per row', () => {
+  it('draws chatter only at the 24h span', () => {
+    // 24h reads the hourly series. There is no price line at that resolution:
+    // daily closes cannot express a day.
     const { container } = render(<BoardPage initial={payload()} />)
     const scan = container.querySelector('.row') as HTMLElement
 
-    expect(scan.querySelector('.hist path')).not.toBeNull()
+    expect(scan.querySelector('.spark path.chat')).not.toBeNull()
+    expect(scan.querySelector('.spark path.px')).toBeNull()
   })
 
-  it('draws a dashed rule, not a flat line, when there is no history', () => {
+  it('draws both series once a longer span is chosen', async () => {
+    const { container } = render(<BoardPage initial={payload()} />)
+
+    await userEvent.click(within(screen.getByRole('group', { name: 'Chart' }))
+      .getByRole('button', { name: '1Y' }))
+
+    const scan = container.querySelector('.row') as HTMLElement
+    expect(scan.querySelector('.spark path.px')).not.toBeNull()
+  })
+
+  it('draws a dashed rule, not a flat line, for a ticker with no closes', async () => {
     const none = payload({
-      rows: [row(), row(), row(), row({ ticker: 'DDD', price_history: null })],
+      rows: [row(), row(), row(), row({ ticker: 'DDD', chart: null })],
     })
     const { container } = render(<BoardPage initial={none} />)
-    const scan = container.querySelector('.row') as HTMLElement
 
-    expect(scan.querySelector('.hist path')).toBeNull()
-    expect(scan.querySelector('.hist line')).not.toBeNull()
+    await userEvent.click(within(screen.getByRole('group', { name: 'Chart' }))
+      .getByRole('button', { name: '1Y' }))
+
+    const scan = container.querySelector('.row') as HTMLElement
+    expect(scan.querySelector('.spark path.px')).toBeNull()
+    expect(scan.querySelector('.spark line')).not.toBeNull()
   })
 })
 ```
@@ -1233,154 +1390,198 @@ describe('price history on a row', () => {
 Run: `npx vitest run -c vite.radar.config.ts BoardPage`
 Expected: FAIL — "Unable to find an element with the text: 20 / 9"
 
-- [ ] **Step 3: Update ScanRow**
+- [ ] **Step 3: Write the component**
 
-In `personal_apps/static/radar/src/board/ScanRow.tsx`:
-
-Add to the imports:
+Create `personal_apps/static/radar/src/board/SpanChart.tsx`:
 
 ```tsx
-import type { HistoryWindow, Mark, Row } from '../types'
-import { PriceHistory } from './PriceHistory'
+import type { Chart, ChartSpan, Point } from '../types'
+import {
+  chartRose, chatterRuns, dailyBars, peak, peakOf, pricePath, sliceChart,
+  type Box,
+} from './geometry'
+
+/** Chatter against price over the selected span, on one axis.
+ *
+ *  Used at both sizes -- the 124x26 scan cell and the 300x92 lead card --
+ *  because they draw the same thing, and a second implementation is a second
+ *  place for the two to disagree.
+ *
+ *  At 24h the source is the hourly `series`, which the daily arrays cannot
+ *  express; at every longer span it is the calendar-aligned `chart`. Two code
+ *  paths for one component, and an honest split: they are genuinely different
+ *  resolutions of different data.
+ */
+export function SpanChart({ chart, series, span, box, label }: {
+  chart: Chart | null
+  series: Point[]
+  span: ChartSpan
+  box: Box
+  label: string
+}) {
+  const hourly = span === '24h'
+  const sliced = chart && !hourly ? sliceChart(chart, span) : null
+
+  const runs = hourly ? chatterRuns(series, box, peak(series)) : []
+  const bars = sliced ? dailyBars(sliced.chatter, box, peakOf(sliced.chatter)) : []
+  const path = sliced ? pricePath(sliced.closes, box) : ''
+  const rose = sliced ? chartRose(sliced.closes) : true
+  const blank = hourly ? runs.length === 0 : !path && bars.length === 0
+
+  return (
+    <div className="spark">
+      <svg viewBox={`0 0 ${box.width} ${box.height}`} preserveAspectRatio="none"
+           role="img" aria-hidden="true" focusable="false">
+        <title>{label}</title>
+        {runs.map((d, index) => (
+          <path key={index} className="chat" d={d} fill="none"
+                stroke="var(--mark)" strokeWidth="1.7" strokeLinejoin="round"
+                strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        ))}
+        {bars.map((bar, index) => (
+          <rect key={index} x={bar.x} y={bar.y} width={bar.width}
+                height={bar.height} fill="var(--mark)"
+                opacity={(0.34 + 0.66 * bar.ratio).toFixed(2)} />
+        ))}
+        {path && (
+          <path className="px" d={path} fill="none" strokeWidth="1.7"
+                strokeLinejoin="round" strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+                stroke={rose ? 'var(--up)' : 'var(--down)'} />
+        )}
+        {blank && (
+          // Nothing measured across the whole span. A dashed rule says so; an
+          // empty box would read as a price and a silence that held steady.
+          <line x1="0" y1={box.height / 2} x2={box.width} y2={box.height / 2}
+                stroke="var(--rule)" strokeWidth="1" strokeDasharray="3 3"
+                vectorEffect="non-scaling-stroke" />
+        )}
+      </svg>
+    </div>
+  )
+}
 ```
 
-Add `historyWindow` to the props (after `ranked`):
+- [ ] **Step 4: Use it in the scan row**
+
+In `personal_apps/static/radar/src/board/ScanRow.tsx`: import `SpanChart` and
+the `ChartSpan` type, drop the `Sparkline` import, add a `span: ChartSpan`
+prop, and replace the `<Sparkline .../>` element with:
 
 ```tsx
-  /** Which slice of the stored year the price line draws. */
-  historyWindow: HistoryWindow
+      <SpanChart chart={row.chart} series={row.series} span={span}
+                 box={{ width: 124, height: 26, pad: 3 }}
+                 label={`${row.ticker}, ${span}`} />
 ```
 
-Replace the two separate count cells:
-
-```tsx
-      <div className="n">{row.mentions}</div>
-      <div className="n">{row.authors}</div>
-```
-
-with the merged one plus the price line, placed directly after the `.trip`
-block so the two sparklines sit side by side:
+Replace the two count cells with one:
 
 ```tsx
       <div className="n">{row.mentions} / {row.authors}</div>
 ```
 
-and immediately after the `<Sparkline .../>` element:
+and change the mobile caption's second span to read `people`:
 
 ```tsx
-      <PriceHistory history={row.price_history} window={historyWindow}
-                    label={`${row.ticker} price, ${historyWindow}`} />
-```
-
-Update the mobile caption to match:
-
-```tsx
-      <div className="meta">
-        <span><b>{row.mentions}</b> mentions</span>
         <span><b>{row.authors}</b> people</span>
-        <span>{priceCell(row)}</span>
-      </div>
 ```
 
-- [ ] **Step 4: Update the grid**
+`Sparkline.tsx` now has no consumer. Delete the file — a component nobody
+renders is one the next person has to work out is dead.
 
-In `personal_apps/static/radar/radar.css`, replace the `.cols, .row`
-declaration's `grid-template-columns` with:
+- [ ] **Step 5: Update the grid**
+
+In `personal_apps/static/radar/radar.css`, replace `.cols, .row`'s
+`grid-template-columns` with six tracks:
 
 ```css
   grid-template-columns:
-    minmax(170px, 1.4fr)   /* ticker + name + marks */
-    112px                  /* 24h chatter           */
-    112px                  /* price history         */
-    136px                  /* z triplet             */
-    100px                  /* divergence            */
-    92px                   /* mentions / people     */
-    100px;                 /* price move            */
+    minmax(190px, 1.5fr)   /* ticker + name + marks */
+    150px                  /* chatter + price chart */
+    146px                  /* z triplet             */
+    104px                  /* divergence            */
+    104px                  /* mentions / people     */
+    104px;                 /* price move            */
 ```
 
-Add beside the `.spark` rule:
-
-```css
-.hist { position: relative; min-width: 0; }
-.hist svg { display: block; width: 100%; height: 26px; }
-```
-
-In the `@media (max-width: 1080px)` block, replace the columns with:
+In `@media (max-width: 1080px)`:
 
 ```css
     grid-template-columns:
-      minmax(140px, 1.3fr) 92px 92px 124px 88px 80px 88px;
+      minmax(150px, 1.4fr) 120px 132px 92px 92px 92px;
 ```
 
-In the `@media (max-width: 720px)` block, add `hist` to the grid areas so the
-two lines share the second row:
+The 720px block needs no change: it already places `.spark` by grid area, and
+the chart reuses that class.
 
-```css
-    grid-template-areas:
-      'tick  dv'
-      'spark trip'
-      'hist  hist'
-      'meta  meta';
-```
+- [ ] **Step 6: Run and commit**
 
-and add `.hist { grid-area: hist; min-width: 0; }` beside the `.spark` rule in
-that block.
-
-- [ ] **Step 5: Run the tests**
-
-Run: `npx vitest run -c vite.radar.config.ts`
-Expected: PASS
-
-- [ ] **Step 6: Commit**
+Run: `npx vitest run -c vite.radar.config.ts` — PASS
+Run: `npx tsc --noEmit` — no output
 
 ```bash
-git add personal_apps/static/radar/src/board/ScanRow.tsx personal_apps/static/radar/radar.css personal_apps/static/radar/src/board/BoardPage.test.tsx
-git commit -m "feat(radar): put a price line on every row"
+git add personal_apps/static/radar/src personal_apps/static/radar/radar.css
+git commit -m "feat(radar): one chart component, chatter and price on one axis"
 ```
 
 ---
 
-### Task 8: The control, the cards, and the header
+### Task 8: The span control, and the cards
 
 **Files:**
 - Modify: `personal_apps/static/radar/src/board/BoardPage.tsx`
 - Modify: `personal_apps/static/radar/src/board/Controls.tsx`
 - Modify: `personal_apps/static/radar/src/board/LeadCard.tsx`
+- Modify: `personal_apps/features/radar/board.py`, `personal_apps/features/radar/routes/api.py` (drop `price_series`)
 - Test: `personal_apps/static/radar/src/board/BoardPage.test.tsx`
 
 **Interfaces:**
-- Consumes: everything from Tasks 6 and 7.
-- Produces: board-level `historyWindow` state, default `'1Y'`.
+- Produces: board-level `span` state, default `'24h'`.
 
 - [ ] **Step 1: Write the failing tests**
 
 Append to `personal_apps/static/radar/src/board/BoardPage.test.tsx`:
 
 ```tsx
-describe('the history window control', () => {
-  it('defaults to a year', () => {
+describe('the two time controls', () => {
+  it('labels them Score and Chart, because they are different questions', () => {
+    // One decides what gets ranked, the other what gets drawn. Both called
+    // "Window" they would read as one setting that had been split in half.
     render(<BoardPage initial={payload()} />)
 
-    expect(screen.getByRole('button', { name: '1Y' }))
+    expect(screen.getByText('Score')).toBeInTheDocument()
+    expect(screen.getByText('Chart')).toBeInTheDocument()
+  })
+
+  it('defaults the chart to 24h, the operational view', () => {
+    // Both groups render a 24h button -- Score's longest window and Chart's
+    // shortest span -- so this must be scoped or it matches two and throws.
+    render(<BoardPage initial={payload()} />)
+    const chart = screen.getByRole('group', { name: 'Chart' })
+
+    expect(within(chart).getByRole('button', { name: '24h' }))
       .toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('re-slices without refetching the board', async () => {
-    // The whole year is already in the payload. Asking the server again for
+  it('re-slices the chart without refetching the board', async () => {
+    // The whole year is already in the payload; asking the server again for
     // data the client is holding would be a round trip for nothing.
     render(<BoardPage initial={payload()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: '3M' }))
+    await userEvent.click(within(screen.getByRole('group', { name: 'Chart' }))
+      .getByRole('button', { name: '3M' }))
 
     expect(fetch).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: '3M' }))
-      .toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('labels the column with the window in force', () => {
+  it('still refetches when the SCORE window changes', async () => {
+    // The opposite case, and the reason the two controls stay separate: the
+    // score window changes what the server ranks.
     render(<BoardPage initial={payload()} />)
 
-    expect(screen.getByText('1Y price')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '1h' }))
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
   })
 })
 ```
@@ -1388,91 +1589,57 @@ describe('the history window control', () => {
 - [ ] **Step 2: Run and watch them fail**
 
 Run: `npx vitest run -c vite.radar.config.ts BoardPage`
-Expected: FAIL — no button named "1Y"
+Expected: FAIL — no text "Score"
 
 - [ ] **Step 3: Add the control**
 
-In `personal_apps/static/radar/src/board/Controls.tsx`, add to the imports:
-
-```tsx
-import type { BoardPayload, HistoryWindow, Segment, Selection } from '../types'
-```
-
-Add the constant beside `WINDOWS`:
-
-```tsx
-const HISTORY_WINDOWS: HistoryWindow[] = ['1M', '3M', '1Y']
-```
-
-Add two props to the component signature:
-
-```tsx
-  historyWindow: HistoryWindow
-  onHistoryWindow: (next: HistoryWindow) => void
-```
-
-And add the group after the existing Window group:
+In `Controls.tsx`: import the `ChartSpan` type, add
+`const SPANS: ChartSpan[] = ['24h', '1M', '3M', '1Y']`, add props
+`span: ChartSpan` and `onSpan: (next: ChartSpan) => void`, rename the existing
+Window group's label text to `Score` (and its id to `score-lbl`), and add
+after that group:
 
 ```tsx
       <div className="group">
-        <span className="lbl" id="hist-lbl">History</span>
-        <div className="seg" role="group" aria-labelledby="hist-lbl">
-          {HISTORY_WINDOWS.map((span) => (
-            <button key={span} type="button"
-                    aria-pressed={historyWindow === span}
-                    onClick={() => onHistoryWindow(span)}>
-              {span}
+        <span className="lbl" id="span-lbl">Chart</span>
+        <div className="seg" role="group" aria-labelledby="span-lbl">
+          {SPANS.map((option) => (
+            <button key={option} type="button"
+                    aria-pressed={span === option}
+                    onClick={() => onSpan(option)}>
+              {option}
             </button>
           ))}
         </div>
       </div>
 ```
 
-- [ ] **Step 4: Wire it into the page**
+Note the `Score` group already renders a `24h` button. Both groups now contain
+one, which is why the tests above address them via `aria-pressed` and the
+`Score` group's own buttons are asserted by their distinct labels (`1h`).
 
-In `personal_apps/static/radar/src/board/BoardPage.tsx`:
+- [ ] **Step 4: Wire the page**
 
-Add to the type import: `import type { BoardPayload, HistoryWindow, Mark, Selection } from '../types'`
-
-Add the state beside `busy`:
-
-```tsx
-  // Board-level, not per row, so every line on screen shares a window and the
-  // rows stay comparable. Purely client-side: the payload already holds the
-  // whole year, so switching costs no request.
-  const [historyWindow, setHistoryWindow] = useState<HistoryWindow>('1Y')
-```
-
-Pass both to `Controls`:
+In `BoardPage.tsx`, add beside `busy`:
 
 ```tsx
-        <Controls payload={payload} selection={selection} busy={busy}
-                  onChange={setSelection} historyWindow={historyWindow}
-                  onHistoryWindow={setHistoryWindow} />
+  // Client-side only: the payload holds the whole year, so switching span
+  // costs no request. Defaults to 24h -- the operational "is this spiking
+  // now" view, and the only span with a meaningful amount of chatter today.
+  const [span, setSpan] = useState<ChartSpan>('24h')
 ```
 
-Pass the window to both children:
+Pass `span={span} onSpan={setSpan}` to `Controls`, and `span={span}` to both
+`ScanRow` and `LeadCard`.
 
-```tsx
-                <LeadCard key={row.ticker} row={row} chatterMax={chatterMax}
-                          windowHours={payload.window_hours} ranked={ranked}
-                          hiddenMarks={universal} historyWindow={historyWindow} />
-```
-
-```tsx
-                  <ScanRow key={row.ticker} row={row} ranked={ranked}
-                           hiddenMarks={universal} historyWindow={historyWindow}
-                           triplet={payload.triplet_hours} />
-```
-
-Update the column headings — the price-line heading names the window, and the
-merged counts get one label:
+The heading row must now have **six** cells to match the six grid tracks --
+the chatter heading becomes the chart heading, and the two count headings
+become one. A seventh would silently shift every column right of it:
 
 ```tsx
                 <div className="cols" aria-hidden="true">
                   <div>Ticker</div>
-                  <div>{payload.series_hours}h chatter</div>
-                  <div>{historyWindow} price</div>
+                  <div>{span} chart</div>
                   <div className="n">
                     {payload.triplet_hours.map((h) => `${h}h`).join(' · ')}
                   </div>
@@ -1484,81 +1651,60 @@ merged counts get one label:
                 </div>
 ```
 
-- [ ] **Step 5: Add the strip to the lead cards**
+- [ ] **Step 5: Use the same component on the cards, and delete what it replaces**
 
-In `personal_apps/static/radar/src/board/LeadCard.tsx`, add the imports:
-
-```tsx
-import type { HistoryWindow, Mark, Row } from '../types'
-import { PriceHistory } from './PriceHistory'
-```
-
-Add the prop after `hiddenMarks`:
+In `LeadCard.tsx`, replace the hand-rolled `<svg>` block inside `.chart` with:
 
 ```tsx
-  historyWindow: HistoryWindow
+        <SpanChart chart={row.chart} series={row.series} span={span}
+                   box={{ width: 300, height: 92, pad: 11, barBand: 0.94,
+                          priceBand: 0.5 }}
+                   label={`${row.ticker}, ${span}`} />
 ```
 
-And insert the strip between the `.chart` div and `.lead-foot`:
+and change the legend's trailing span from `peak {peakHour}/h · 24h` to
+`{span}`.
 
-```tsx
-      {/* A separate strip rather than a third series on the chart above. That
-          chart exists to show 24h chatter against 24h price on one axis, and
-          a year-long line sharing those axes would destroy the comparison. */}
-      <div className="lead-hist">
-        <PriceHistory history={row.price_history} window={historyWindow}
-                      label={`${row.ticker} price, ${historyWindow}`} />
-        <span className="lead-hist-k">{historyWindow} price</span>
-      </div>
-```
+The card's intraday price line came from `price_series`, which the shared
+component does not read. That payload field, `board._price_series`, and
+`geometry.priceLine`/`priceRose` now have no consumer. **Delete all four.** An
+unused payload field is one the next person has to prove is dead; deleting it
+also drops a per-row quote query from every board build.
 
-Add to `personal_apps/static/radar/radar.css`, after the `.legend` rule:
+- [ ] **Step 6: Run everything**
 
-```css
-.lead-hist {
-  display: flex; align-items: center; gap: 10px;
-  padding-top: 9px; border-top: 1px solid var(--rule-soft);
-}
-.lead-hist .hist { flex: 1 1 0; min-width: 0; }
-.lead-hist-k { font-size: 11px; color: var(--muted); flex: none; }
-```
+Run: `npx tsc --noEmit` — no output
+Run: `npx vitest run -c vite.radar.config.ts` — PASS
+Run: `npm run build` — two "built in" lines
+Run: `python -m pytest tests/ -q -k "radar or vite or auth"` — PASS
 
-- [ ] **Step 6: Run everything and build**
+- [ ] **Step 7: Verify in a browser**
 
-Run: `npx tsc --noEmit`
-Expected: no output
-
-Run: `npx vitest run -c vite.radar.config.ts`
-Expected: PASS
-
-Run: `npm run build`
-Expected: two "built in" lines, no errors
-
-- [ ] **Step 7: Verify in a browser at three widths**
-
-Start the dev server (`.claude/launch.json` entry `personal_apps`, port 5001)
-and screenshot `/radar/?window=24` at 1440, 1080 and 390 wide with
-python-playwright. Assert programmatically, not by eye:
+Screenshot `/radar/?window=24` at 1440, 1080 and 390 with python-playwright, at
+spans `24h` and `1Y`. Assert programmatically rather than by eye:
 
 ```python
 info = page.evaluate("""() => ({
   rows: document.querySelectorAll('.row').length,
-  histLines: document.querySelectorAll('.row .hist path').length,
-  histDashed: document.querySelectorAll('.row .hist line').length,
+  chatter: document.querySelectorAll('.row .spark path.chat, .row .spark rect').length,
+  price: document.querySelectorAll('.row .spark path.px').length,
   overflow: document.documentElement.scrollWidth > window.innerWidth,
 })""")
 ```
 
-`overflow` must be `false` at every width. Grid tracks that floor at
-min-content have caused horizontal overflow twice on this page already — if it
-returns true, the fix is `minmax(0, 1fr)` on the offending track, not a wider
-page.
+`overflow` must be false at every width and span. Grid tracks that floor at
+min-content have caused horizontal overflow twice on this page already; the fix
+is `minmax(0, 1fr)` on the offending track, never a wider page.
+
+Read the PNGs back and look at them. At `1Y` expect a price line spanning the
+width with chatter bars only in the last few days — that is correct today and
+fills in as buckets accumulate.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add personal_apps/static/radar/src personal_apps/static/radar/radar.css
-git commit -m "feat(radar): switch the price line between one month, three, and a year"
+git add personal_apps
+git commit -m "feat(radar): switch the chart between a day, a month, a quarter and a year"
 ```
 
 ---
@@ -1571,8 +1717,8 @@ git commit -m "feat(radar): switch the price line between one month, three, and 
 - [ ] **Step 1: Record what the deploy needs**
 
 The deploy script needs no change — `radar_history` runs inside the existing
-`radar_ingest` service, and `npm run build` already chains both Vite configs.
-But the migration does run, and the first hours after deploy look unusual.
+`radar_ingest` unit, and `npm run build` already chains both Vite configs. But
+the migration runs, and the first hour looks unusual.
 
 Append to `personal_apps/DEPLOY_FRONTEND.md`:
 
@@ -1582,11 +1728,15 @@ Append to `personal_apps/DEPLOY_FRONTEND.md`:
 `flask db upgrade` creates `radar_daily_closes`. No deploy-script change: the
 fetch job runs inside the existing `radar_ingest` unit.
 
-Expect the price column to be dashed rules for the first while. The job fetches
-20 tickers per five-minute cycle against Twelve Data's eight-per-minute limit,
-so a full board of ~50 takes roughly fifteen minutes to fill, and tickers that
+Expect the chart's longer spans to be dashed rules at first. The job fetches 20
+tickers per five-minute cycle against Twelve Data's eight-per-minute limit, so
+a full board of ~50 takes roughly fifteen minutes to fill, and tickers that
 join later fill on the cycle after they arrive. That is the rate limit, not a
 failure.
+
+Expect the 1Y span to be price-only for months. Chatter history starts at
+2026-08-21 and grows one day per day; `radar_buckets` is never pruned, so it
+fills in on its own.
 
 Watch it with:
 
