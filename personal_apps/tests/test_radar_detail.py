@@ -18,7 +18,7 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from features.radar import detail
+from features.radar import detail, detail_panel
 from features.radar.config import source_config_version
 from models import (RadarBucketSource, RadarDailyClose, TickerUniverse)
 
@@ -157,3 +157,231 @@ def test_a_span_shorter_than_a_year_takes_the_recent_end(clean):
     assert len(month.closes) == 30
     assert float(month.closes[-1]) == 99.0
     assert all(c is None for c in month.closes[:-1])
+
+
+# --------------------------------------------------------------- the panel ---
+
+def post_for(ticker, minutes_ago, author, text, source='bluesky', ext=None):
+    """One post carrying one scored mention of `ticker`."""
+    from models import RadarMention, RadarPost
+
+    when = NOW - dt.timedelta(minutes=minutes_ago)
+    post = RadarPost(
+        source=source, external_id=ext or f'{PREFIX}-{author}-{minutes_ago}',
+        channel='feed', author=author, created_utc=when, title=None,
+        body=text, score=0, num_comments=0,
+        url=f'https://example.invalid/{author}/{minutes_ago}',
+        simhash=abs(hash(text)) % (2 ** 63), first_seen=when, last_seen=when)
+    db.session.add(post)
+    db.session.flush()
+    db.session.add(RadarMention(
+        post_id=post.id, ticker=ticker, confidence='high',
+        lexicon_sentiment=0.4 if 'moon' in text else 0.0))
+
+
+@pytest.fixture()
+def panel_ticker(clean):
+    from models import RadarMention, RadarPost
+
+    RadarMention.query.filter(RadarMention.ticker.like(f'{PREFIX}%')).delete(
+        synchronize_session=False)
+    RadarPost.query.filter(
+        RadarPost.external_id.like(f'{PREFIX}%')).delete(
+            synchronize_session=False)
+    db.session.add(TickerUniverse(
+        symbol=f'{PREFIX}A', name='Detail Corp - Common Stock',
+        exchange='NASDAQ', first_seen=dt.datetime(2020, 1, 1),
+        market_cap=decimal.Decimal('110000000')))
+    bucket(f'{PREFIX}A')
+    close_on(f'{PREFIX}A', 0, '12.34')
+    for minutes, who, text in ((10, 'alice', 'to the moon'),
+                               (20, 'bob', 'looks weak here'),
+                               (30, 'alice', 'still holding')):
+        post_for(f'{PREFIX}A', minutes, who, text)
+    db.session.commit()
+    yield
+    RadarMention.query.filter(RadarMention.ticker.like(f'{PREFIX}%')).delete(
+        synchronize_session=False)
+    RadarPost.query.filter(
+        RadarPost.external_id.like(f'{PREFIX}%')).delete(
+            synchronize_session=False)
+    db.session.commit()
+
+
+def test_an_unknown_ticker_raises_rather_than_inventing_a_panel(clean):
+    with pytest.raises(detail.UnknownTicker):
+        detail_panel.build(f'{PREFIX}NOPE', ['bluesky'], NOW)
+
+
+def test_a_bad_span_is_refused(panel_ticker):
+    with pytest.raises(ValueError):
+        detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW, span='5Y')
+
+
+def test_the_panel_counts_voices_not_posts(panel_ticker):
+    """Three posts from two people is two voices. Counting posts would make
+    one determined account look like a crowd -- which is the whole thing the
+    breakdown exists to expose."""
+    built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
+
+    assert built.breakdown.mentions == 3
+    assert built.breakdown.voices == 2
+
+
+def test_the_panel_exposes_how_concentrated_the_talk_is(panel_ticker):
+    """Alice posted two of three. No other figure on the surface shows that."""
+    built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
+
+    assert abs(built.breakdown.top_author_share - 2 / 3) < 0.01
+
+
+def test_the_panel_returns_the_posts_themselves(panel_ticker):
+    """Newest first, with the link out. This is the zone that lets a reader
+    form their own view instead of trusting the score."""
+    built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
+
+    assert built.post_total == 3
+    assert built.posts[0].body == 'to the moon'
+    assert built.posts[0].url
+
+
+def test_the_panel_describes_a_ticker_the_board_filtered_out(clean):
+    """Reachable by URL for anything in the universe. Refusing to describe a
+    ticker because it did not rank is the wrong answer to "tell me about
+    this"."""
+    db.session.add(TickerUniverse(
+        symbol=f'{PREFIX}Q', name='Quiet Corp', exchange='NASDAQ',
+        first_seen=dt.datetime(2020, 1, 1)))
+    db.session.commit()
+
+    built = detail_panel.build(f'{PREFIX}Q', ['bluesky'], NOW)
+
+    assert built.ticker == f'{PREFIX}Q'
+    assert built.breakdown.mentions == 0
+    assert built.posts == []
+
+
+def test_neutral_is_everything_the_lexicon_did_not_score(panel_ticker):
+    """Most mentions carry no sentiment word at all. Folding them into one
+    percentage would turn a handful of scored posts into a confident-looking
+    reading."""
+    b = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW).breakdown
+
+    assert b.bullish + b.neutral + b.bearish == b.mentions
+    assert b.neutral == 2
+
+
+@pytest.fixture()
+def panel_live(clean):
+    """The same ticker, but anchored to real wall-clock time.
+
+    The route reads `now` from the clock, deliberately -- a time parameter on
+    a production endpoint is a way to ask the server for a board that never
+    existed. So the fixed-NOW fixture above cannot reach it, and the HTTP
+    tests get posts placed minutes before the actual present instead.
+    """
+    from models import RadarMention, RadarPost
+
+    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
+    def wipe():
+        RadarMention.query.filter(
+            RadarMention.ticker.like(f'{PREFIX}%')).delete(
+                synchronize_session=False)
+        RadarPost.query.filter(
+            RadarPost.external_id.like(f'{PREFIX}%')).delete(
+                synchronize_session=False)
+        for model in (RadarBucketSource, RadarDailyClose):
+            model.query.filter(model.ticker.like(f'{PREFIX}%')).delete(
+                synchronize_session=False)
+        TickerUniverse.query.filter(
+            TickerUniverse.symbol.like(f'{PREFIX}%')).delete(
+                synchronize_session=False)
+        db.session.commit()
+
+    wipe()
+    db.session.add(TickerUniverse(
+        symbol=f'{PREFIX}A', name='Detail Corp - Common Stock',
+        exchange='NASDAQ', first_seen=dt.datetime(2020, 1, 1),
+        market_cap=decimal.Decimal('110000000')))
+    db.session.add(RadarBucketSource(
+        ticker=f'{PREFIX}A', bucket_start=now - dt.timedelta(minutes=30),
+        source='bluesky', mention_count=3, high_confidence_count=3,
+        low_count=0, distinct_authors=2, distinct_text_ratio=0.9,
+        engagement_weighted_count=3.0, status='ok',
+        source_config_version=source_config_version(),
+        expected=1.0, variance=2.0, mention_z=5.0, baseline_days=30))
+    db.session.add(RadarDailyClose(
+        ticker=f'{PREFIX}A', close_date=now.date(),
+        close=decimal.Decimal('12.34'), fetched_at=now))
+    for minutes, who, text in ((10, 'alice', 'to the moon'),
+                               (20, 'bob', 'looks weak here'),
+                               (30, 'alice', 'still holding')):
+        when = now - dt.timedelta(minutes=minutes)
+        post = RadarPost(
+            source='bluesky', external_id=f'{PREFIX}-live-{minutes}',
+            channel='feed', author=who, created_utc=when, title=None,
+            body=text, score=0, num_comments=0,
+            url=f'https://example.invalid/{who}/{minutes}',
+            simhash=abs(hash(text)) % (2 ** 63), first_seen=when,
+            last_seen=when)
+        db.session.add(post)
+        db.session.flush()
+        db.session.add(RadarMention(
+            post_id=post.id, ticker=f'{PREFIX}A', confidence='high',
+            lexicon_sentiment=0.4 if 'moon' in text else 0.0))
+    db.session.commit()
+    yield
+    wipe()
+
+
+# ------------------------------------------------------------ the endpoint ---
+
+def test_the_endpoint_requires_login(anon_client):
+    assert anon_client.get('/radar/api/ticker/AAPL').status_code in (302, 401, 403)
+
+
+def test_the_endpoint_404s_on_a_ticker_that_does_not_exist(client):
+    """A URL can name anything. That is a 404, not a 500."""
+    assert client.get(f'/radar/api/ticker/{PREFIX}NOPE').status_code == 404
+
+
+def test_a_bad_span_is_rejected(client, panel_live):
+    assert client.get(
+        f'/radar/api/ticker/{PREFIX}A?span=nonsense').status_code == 400
+
+
+def test_the_endpoint_answers_with_every_zone(client, panel_live):
+    """Five zones. A missing key here is a blank section of the panel rather
+    than an error, which is how the board's chart serializer went missing for
+    a day without a single test noticing."""
+    import json
+
+    body = json.loads(client.get(f'/radar/api/ticker/{PREFIX}A').data)
+
+    for key in ('identity', 'read', 'chart', 'breakdown', 'posts',
+                'post_total'):
+        assert key in body, key
+    assert body['identity']['ticker'] == f'{PREFIX}A'
+    assert body['read'], 'the written read is empty'
+    assert all({'kind', 'text'} == set(c) for c in body['read'])
+    assert len(body['chart']['closes']) == len(body['chart']['chatter'])
+    assert body['posts'][0]['url']
+
+
+def test_the_span_reaches_the_chart_through_the_url(client, panel_live):
+    import json
+
+    month = json.loads(
+        client.get(f'/radar/api/ticker/{PREFIX}A?span=1M').data)
+    longest = json.loads(
+        client.get(f'/radar/api/ticker/{PREFIX}A?span=3Y').data)
+
+    assert len(month['chart']['closes']) == detail.SPAN_DAYS['1M']
+    assert len(longest['chart']['closes']) == detail.SPAN_DAYS['3Y']
+
+
+def test_the_ticker_is_matched_case_insensitively(client, panel_live):
+    """A bookmarked ?t=howl should not 404 because of its case."""
+    assert client.get(
+        f'/radar/api/ticker/{PREFIX.lower()}a').status_code == 200

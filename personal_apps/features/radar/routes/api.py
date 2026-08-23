@@ -7,6 +7,8 @@ from flask import jsonify, request
 from auth import login_required
 
 from .. import board as board_mod
+from .. import detail as detail_mod
+from .. import detail_panel, phrasing
 from ..config import DEFAULT_SEGMENT, SOURCES
 from ._blueprint import radar_bp
 
@@ -158,3 +160,91 @@ def board():
         return jsonify(build_payload(request.args))
     except BadQuery as exc:
         return jsonify({'error': str(exc)}), 400
+
+
+def serialize_detail(d):
+    """One ticker's panel.
+
+    Five zones, in the order the reader meets them: who this is, what we
+    found, what the stock has done, how the chatter breaks down, and what
+    people actually said.
+    """
+    b = d.breakdown
+    return {
+        'identity': {
+            'ticker': d.ticker,
+            'name': d.name,
+            'exchange': d.exchange,
+            'segment': d.segment,
+            'market_cap': _decimal_or_none(d.market_cap),
+            'ipo_date': d.ipo_date.isoformat() if d.ipo_date else None,
+            'price': _decimal_or_none(d.price),
+            'price_move': _decimal_or_none(d.price_move),
+            'price_status': d.price_status,
+            'session': d.session,
+        },
+        'read': [{'kind': c.kind, 'text': c.text}
+                 for c in phrasing.read_clauses(
+                     d, d.mentions, d.expected, b.voices, d.session,
+                     baseline_days=d.baseline_days,
+                     venues=len(b.venues))],
+        'chart': {
+            'from': d.chart.start.isoformat(),
+            'span': d.span,
+            'closes': [_decimal_or_none(c) for c in d.chart.closes],
+            # null where nobody was watching, never a zero.
+            'chatter': d.chart.chatter,
+            'watched_from': (d.chart.watched_from.isoformat()
+                             if d.chart.watched_from else None),
+        },
+        'breakdown': {
+            'venues': [{'source': v.source, 'mentions': v.mentions,
+                        'voices': v.voices} for v in b.venues],
+            'bullish': b.bullish,
+            'neutral': b.neutral,
+            'bearish': b.bearish,
+            'top_author_share': b.top_author_share,
+            'top_two_share': b.top_two_share,
+            'peak_hour': b.peak_hour.isoformat() + 'Z' if b.peak_hour else None,
+            'peak_count': b.peak_count,
+            'first_seen': b.first_seen.isoformat() if b.first_seen else None,
+            'mentions': b.mentions,
+            'voices': b.voices,
+        },
+        'posts': [{
+            'source': p.source,
+            'author': p.author,
+            'channel': p.channel,
+            'created': p.created_utc.isoformat() + 'Z',
+            'title': p.title,
+            'body': p.body,
+            'url': p.url,
+        } for p in d.posts],
+        'post_total': d.post_total,
+    }
+
+
+@radar_bp.route('/api/ticker/<ticker>')
+@login_required
+def ticker_detail(ticker):
+    """One ticker, in depth.
+
+    Its own endpoint rather than a field on the board payload: three years is
+    ~780 closes, so carrying it per row would have a twenty-row board ship
+    sixteen thousand numbers to draw twenty sparklines.
+    """
+    span = request.args.get('span', detail_mod.DEFAULT_SPAN)
+    if span not in detail_mod.SPAN_DAYS:
+        return jsonify({'error': 'unknown span'}), 400
+    try:
+        query = parse_query(request.args)
+    except BadQuery as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    try:
+        built = detail_panel.build(ticker.upper(), query.sources, now,
+                                   window_hours=query.window, span=span)
+    except detail_mod.UnknownTicker:
+        return jsonify({'error': 'unknown ticker'}), 404
+    return jsonify(serialize_detail(built))

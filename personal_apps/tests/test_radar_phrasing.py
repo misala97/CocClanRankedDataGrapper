@@ -124,3 +124,81 @@ def test_a_falling_price_is_its_own_kind():
 
     assert 'price-down' in kinds(clauses)
     assert '-7%' in text(clauses).replace('−', '-')
+
+
+# ---------------------------------------------------------------- the read ---
+
+class FakeChart:
+    closes = [1.0, 2.0]
+    watched_from = None
+
+
+@dataclasses.dataclass
+class FakeDetail:
+    ticker: str = 'ZZZ'
+    price_move: float | None = 0.182
+    price_status: str = 'ok'
+    chart: object = dataclasses.field(default_factory=FakeChart)
+
+
+def test_the_read_leads_with_the_finding():
+    clauses = phrasing.read_clauses(
+        FakeDetail(), mentions=284, expected=7.0, voices=11,
+        session='regular')
+
+    assert '284' in clauses[0].text
+
+
+def test_the_read_names_its_own_weak_baseline():
+    """A 40x reading off two days of history is not the same claim as one off
+    thirty, and the page has to say which claim it is making."""
+    clauses = phrasing.read_clauses(
+        FakeDetail(), mentions=284, expected=7.0, voices=11,
+        session='regular', baseline_days=2)
+
+    assert any(c.kind == 'warn' and 'baseline' in c.text for c in clauses)
+
+
+def test_a_full_baseline_earns_no_caveat():
+    clauses = phrasing.read_clauses(
+        FakeDetail(), mentions=284, expected=7.0, voices=11,
+        session='regular', baseline_days=30)
+
+    assert not any('baseline' in c.text for c in clauses)
+
+
+def test_the_read_does_not_paraphrase_what_people_said():
+    """Cut during mockup review. The page cannot summarise content it never
+    understood, and the posts are directly below it."""
+    joined = ' '.join(c.text for c in phrasing.read_clauses(
+        FakeDetail(), mentions=284, expected=7.0, voices=11,
+        session='regular')).lower()
+
+    for word in ('filing', 'squeeze', 'announced', 'news about'):
+        assert word not in joined
+
+
+def test_a_closed_market_says_there_is_nothing_to_compare_against():
+    clauses = phrasing.read_clauses(
+        FakeDetail(price_status='closed', price_move=None), mentions=26,
+        expected=3.0, voices=6, session='closed')
+
+    joined = ' '.join(c.text for c in clauses)
+    assert 'market is shut' in joined
+    assert 'divergence' in joined
+
+
+def test_the_read_warns_when_too_few_voices_carry_it():
+    clauses = phrasing.read_clauses(
+        FakeDetail(), mentions=284, expected=7.0, voices=2, session='regular')
+
+    assert any(c.kind == 'warn' and 'one account' in c.text for c in clauses)
+
+
+def test_the_read_has_no_baseline_sentence_when_there_is_no_baseline():
+    """Same rule as the row phrase: an expected of zero is not a ratio."""
+    joined = ' '.join(c.text for c in phrasing.read_clauses(
+        FakeDetail(), mentions=209, expected=0.0, voices=7, session='regular'))
+
+    assert 'no baseline yet' in joined
+    assert '0 typical' not in joined

@@ -11,6 +11,8 @@ implementation of the same judgement, free to disagree with this one.
 """
 import dataclasses
 
+from .config import PROVISIONAL_BASELINE_DAYS
+
 # Below this, "n x its normal" is arithmetic on noise wearing the clothes of a
 # finding. An expected of 0.2 mentions makes forty of them "200x normal",
 # which is true and useless.
@@ -116,3 +118,66 @@ def _price_clauses(row, session):
     kind = 'price-up' if pct > 0 else 'price-down'
     return [Clause(kind, f'price {pct:+.0f}%')]
 
+
+def read_clauses(detail, mentions, expected, voices, session,
+                 baseline_days=None, venues=0):
+    """The panel's written read: two or three sentences of finding.
+
+    Confined to facts the pipeline computes. It does NOT paraphrase what the
+    posts say -- the page cannot summarise content it never understood, and
+    the posts sit directly beneath it. An earlier draft wrote "the talk is
+    about a shelf registration", which the page had no way to know; it was cut
+    during mockup review and should stay cut.
+    """
+    out = []
+
+    if not expected or expected < MIN_RATIO_BASELINE:
+        out.append(Clause('plain',
+                          f'{mentions} mentions in this window. This ticker '
+                          f'has no baseline yet, so there is nothing to say '
+                          f'how unusual that is.'))
+    else:
+        out.append(Clause('plain',
+                          f'{mentions} mentions in this window, about '
+                          f'{_ratio(mentions, expected)} the normal for this '
+                          f'ticker, which is {expected:.0f}.'))
+
+    if voices >= NARROW_VOICES:
+        where = f' across {venues} venues' if venues > 1 else ''
+        out.append(Clause('plain',
+                          f'{voices} distinct voices{where}, so this is not '
+                          f'one account repeating itself.'))
+    else:
+        out.append(Clause('warn',
+                          f'Only {voices} distinct voices — one account can '
+                          f'produce this much on its own.'))
+
+    out.extend(_read_price(detail, session))
+
+    if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
+        out.append(Clause('warn',
+                          f'The baseline is {baseline_days} days old, not 30, '
+                          f'so this rests on very little history.'))
+    return out
+
+
+def _read_price(detail, session):
+    """What the tape did, or why there is nothing to say about it."""
+    if session == 'closed' or detail.price_status == 'closed':
+        return [Clause('plain',
+                       'The market is shut, so there is no price move to '
+                       'compare this against — divergence needs a live tape '
+                       'and returns with one.')]
+    if detail.price_status == 'stale':
+        return [Clause('warn',
+                       'The tape has not printed in this window, so the price '
+                       'cannot be taken at face value.')]
+    if detail.price_move is None:
+        return []
+
+    pct = detail.price_move * 100
+    verb = ('the talk and the tape agree' if abs(pct) >= 1
+            else 'the talk has moved and the price has not')
+    return [Clause('plain',
+                   f'The price moved {pct:+.1f}% over the same window, so '
+                   f'{verb}.')]
