@@ -27,7 +27,11 @@ export function queryFor(selection: Selection): string {
   const params = new URLSearchParams()
   params.set('sources', selection.sources.join(','))
   params.set('window', String(selection.window))
-  if (selection.segment) params.set('segment', selection.segment)
+  // Always sent, empty for All. Omitting it would hand the server its own
+  // default, which is Small -- so the All chip would silently do nothing.
+  params.set('segment', selection.segment ?? '')
+  // Omitted at 1 so the default board keeps a clean URL.
+  if (selection.minVenues > 1) params.set('venues', String(selection.minVenues))
   return params.toString()
 }
 

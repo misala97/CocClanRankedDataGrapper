@@ -1,5 +1,5 @@
 import { SEGMENT_ORDER, segmentLabel, sourceLabel } from '../format'
-import type { BoardPayload, ChartSpan, Segment, Selection } from '../types'
+import type { BoardPayload, ChartSpan, SegmentFilter, Selection } from '../types'
 
 const WINDOWS = [1, 4, 24]
 const SPANS: ChartSpan[] = ['24h', '1M', '3M', '1Y']
@@ -50,7 +50,7 @@ export function Controls({ payload, selection, busy, onChange, span, onSpan }: {
               emptied it, which is how a filter becomes a bug report. */}
           {SEGMENT_ORDER.filter((key) => key === 'all' || counts[key]
                                 || key === selection.segment).map((key) => {
-            const value = key === 'all' ? null : (key as Segment)
+            const value = key === 'all' ? null : (key as SegmentFilter)
             const active = selection.segment === value
             return (
               <button key={key} type="button" aria-pressed={active}
@@ -86,6 +86,22 @@ export function Controls({ payload, selection, busy, onChange, span, onSpan }: {
           called Window. Score changes what the SERVER ranks and refetches;
           Chart changes what is DRAWN and costs no request, because the whole
           year is already in the payload. */}
+      {/* Breadth. Server-side, unlike Chart -- it changes which rows exist,
+          not how they are drawn, so it refetches like Segment does. */}
+      <div className="group">
+        <span className="lbl" id="venues-lbl">Venues</span>
+        <div className="seg" role="group" aria-labelledby="venues-lbl">
+          <button type="button" aria-pressed={selection.minVenues === 1}
+                  onClick={() => onChange({ ...selection, minVenues: 1 })}>
+            any <span className="n">{payload.venue_counts.any ?? 0}</span>
+          </button>
+          <button type="button" aria-pressed={selection.minVenues === 2}
+                  onClick={() => onChange({ ...selection, minVenues: 2 })}>
+            2+ <span className="n">{payload.venue_counts.multi ?? 0}</span>
+          </button>
+        </div>
+      </div>
+
       <div className="group">
         <span className="lbl" id="score-lbl">Score</span>
         <div className="seg" role="group" aria-labelledby="score-lbl">

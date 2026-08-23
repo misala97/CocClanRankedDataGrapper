@@ -218,3 +218,78 @@ def test_a_provider_returning_nothing_leaves_the_row_alone(clean_universe):
     universe.refresh_profiles(Empty(), ['ZZQ'], NOW)
     assert TickerUniverse.query.filter_by(symbol='ZZQ').one().market_cap == \
         decimal.Decimal('1000000000')
+
+
+# Distinctiveness counts ISSUERS, not listings. Counting listings made a
+# company compete with its own derivatives.
+
+def test_a_company_and_its_own_etfs_count_once():
+    """`tesla` had a document frequency of 4 against a ceiling of 3 -- Tesla
+    plus three leveraged ETFs tracking it -- so a bare TSLA mention could
+    never be promoted. Measured on the live 12,359-symbol universe."""
+    lookup = universe.annotate_distinctive({
+        'TSLA': {'name': 'Tesla, Inc. - Common Stock'},
+        'TSLL': {'name': 'Direxion Daily TSLA Bull 2X Shares'},
+        'TSLQ': {'name': 'T-Rex 2X Inverse Tesla Daily Target ETF'},
+        'TSLR': {'name': 'T-Rex 2X Long Tesla Daily Target ETF'},
+    })
+
+    assert 'tesla' in lookup['TSLA']['distinctive']
+
+
+def test_share_classes_of_one_issuer_count_once():
+    lookup = universe.annotate_distinctive({
+        'GOOGL': {'name': 'Alphabet Inc. - Class A Common Stock'},
+        'GOOG': {'name': 'Alphabet Inc. - Class C Capital Stock'},
+        'GOOGP': {'name': 'Alphabet Inc. - Depositary Shares Series A'},
+        'GOOGQ': {'name': 'Alphabet Inc. - Depositary Shares Series B'},
+    })
+
+    assert 'alphabet' in lookup['GOOGL']['distinctive']
+
+
+def test_a_spac_listing_four_ways_counts_once():
+    """The small-cap version of the same bug, and the one that matters here:
+    a recent IPO lists as Common Stock plus Units plus Warrants plus Rights."""
+    lookup = universe.annotate_distinctive({
+        'IPEX': {'name': 'Inflection Point Acquisition Corp. - Common Stock'},
+        'IPEXU': {'name': 'Inflection Point Acquisition Corp. - Unit'},
+        'IPEXW': {'name': 'Inflection Point Acquisition Corp. - Warrant'},
+        'IPEXR': {'name': 'Inflection Point Acquisition Corp. - Right'},
+    })
+
+    assert 'inflection' in lookup['IPEX']['distinctive']
+
+
+def test_boilerplate_is_still_not_distinctive():
+    """The guard on the whole change. Four DIFFERENT issuers sharing a word
+    means the word is common, and no amount of deduping should rescue it."""
+    lookup = universe.annotate_distinctive({
+        'AAA': {'name': 'Alpha Bancorp Inc. - Common Stock'},
+        'BBB': {'name': 'Beta Bancorp Inc. - Common Stock'},
+        'CCC': {'name': 'Gamma Bancorp Inc. - Common Stock'},
+        'DDD': {'name': 'Delta Bancorp Inc. - Common Stock'},
+    })
+
+    for symbol in lookup:
+        assert 'bancorp' not in lookup[symbol]['distinctive']
+        assert 'common' not in lookup[symbol]['distinctive']
+
+
+def test_an_ordinary_word_can_become_distinctive_and_that_is_accepted():
+    """The known cost of counting issuers. `peace` goes from 4 listings to 1
+    issuer because three of the four are Peace Acquisition's warrant, unit and
+    right -- so an ordinary English word qualifies.
+
+    Recorded rather than fixed. Promotion still needs the BARE TICKER in the
+    same post, so this only misfires on a post containing both PEACE and the
+    word "peace". If that trade ever stops being worth it, this test is where
+    the decision was made.
+    """
+    lookup = universe.annotate_distinctive({
+        'PECE': {'name': 'Peace Acquisition Corp - Common Stock'},
+        'PECEU': {'name': 'Peace Acquisition Corp - Unit'},
+        'PECEW': {'name': 'Peace Acquisition Corp - Warrant'},
+    })
+
+    assert 'peace' in lookup['PECE']['distinctive']

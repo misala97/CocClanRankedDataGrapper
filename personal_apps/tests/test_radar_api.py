@@ -43,10 +43,22 @@ def test_the_window_is_bounded(client):
     assert client.get('/radar/api/board?window=99999').status_code == 400
 
 
-def test_defaults_are_every_source_and_no_segment_filter(client):
+def test_defaults_are_every_source_and_the_small_segment(client):
+    """Every source, because none is primary. But not every segment: the
+    board is for the stuff nobody has heard of, and megacap chatter is not
+    news. Changed 2026-08-23; this asserted `segment is None`."""
     payload = json.loads(client.get('/radar/api/board').data)
-    from features.radar.config import SOURCES
+    from features.radar.config import DEFAULT_SEGMENT, SOURCES
     assert set(payload['sources']) == set(SOURCES)
+    assert payload['segment'] == DEFAULT_SEGMENT
+
+
+def test_an_empty_segment_still_asks_for_everything(client):
+    """All has to stay reachable now that the default is not None. The
+    surface sends `?segment=` for it, so an empty value cannot fall back to
+    the default or the chip would be dead."""
+    payload = json.loads(client.get('/radar/api/board?segment=').data)
+
     assert payload['segment'] is None
 
 
@@ -195,3 +207,27 @@ def test_the_row_serializer_actually_runs(client):
     assert len(row['chart']['closes']) == len(row['chart']['chatter'])
     # Serializable end to end -- the 500 was a NameError inside _row.
     _json.dumps(payload)
+
+
+def test_an_unsupported_venue_filter_is_rejected(client):
+    assert client.get('/radar/api/board?venues=7').status_code == 400
+    assert client.get('/radar/api/board?venues=2').status_code == 200
+
+
+def test_the_payload_carries_the_venue_filter_and_its_counts(client):
+    payload = json.loads(client.get('/radar/api/board').data)
+
+    assert payload['min_venues'] == 1
+    assert set(payload['venue_counts']) == {'any', 'multi'}
+
+
+def test_small_is_an_accepted_segment(client):
+    assert client.get('/radar/api/board?segment=small').status_code == 200
+
+
+def test_the_board_opens_on_the_small_stuff(client):
+    """It is a discovery radar for penny stocks. Opening on All means reading
+    megacaps and micro-caps in one list."""
+    payload = json.loads(client.get('/radar/api/board').data)
+
+    assert payload['segment'] == 'small'

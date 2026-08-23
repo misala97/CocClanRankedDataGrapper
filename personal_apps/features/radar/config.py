@@ -34,7 +34,19 @@ SOURCES = ('stocktwits', 'bluesky', 'fourchan')
 BARE_TOKENS_ALLOWED = {
     'stocktwits': True,    # finance-only by construction
     'fourchan': True,      # /biz/ is a finance board
-    'bluesky': False,      # general population; cashtags only
+    # Was False, set after the first live pass found IA (Iowa), GOP and AP
+    # among the top bare tokens. Re-enabled 2026-08-23: an uncorroborated bare
+    # token is stored `low` and never scored, so the junk that measurement
+    # found now costs a row in a table and nothing on the board. What it buys
+    # is the promotion path -- a distinctive company name in the same post, or
+    # a different author cashtagging the same ticker in the same bucket --
+    # which needs many independent authors and is therefore exactly this
+    # source. Verified on Telegram, where channels whose bare tokens were RSI,
+    # ROE, DMA and GROW produced zero high-confidence hits.
+    #
+    # See scripts/measure_bare_tokens.py. Revert if the top twenty scored
+    # tickers stop looking like equities.
+    'bluesky': True,
 }
 
 
@@ -65,6 +77,31 @@ COIN_SYMBOLS_MEAN_STOCKS = {
     'fourchan': False,     # /biz/ is crypto culture first
     'bluesky': False,
 }
+
+
+# What kind of venue each source is, which decides how its independent voices
+# get counted.
+#
+# The author gate is a proxy for one question -- how many independent voices
+# are saying this. On a forum that is distinct authors. On a BROADCAST network
+# one admin posts and thousands read, so every bucket has exactly one author
+# and the author gate can never be cleared however loud the ticker is. There
+# the independent unit is the CHANNEL: three channels carrying the same symbol
+# is corroboration, one channel posting it forty times is not.
+SOURCE_KIND = {
+    'stocktwits': 'forum',
+    'bluesky': 'forum',
+    'fourchan': 'forum',
+}
+
+
+def source_kind(source):
+    """'forum' or 'broadcast'. Unknown sources are treated as forums.
+
+    The strict direction: forum is the tighter gate, so a source nobody has
+    characterised is judged by the harder standard rather than waved through.
+    """
+    return SOURCE_KIND.get(source, 'forum')
 
 
 # Single-letter cashtags. `$M`, `$B`, `$T` and `$K` are money shorthand far
@@ -106,6 +143,43 @@ CASHTAG_PATTERN = r'(?<![A-Za-z0-9])\$([A-Z]{1,5})\b'
 # Bare tokens: 2-5 uppercase, guarded on the left so a token the cashtag
 # pattern already rejected cannot slip back in as a bare match.
 BARE_PATTERN = r'(?<![$A-Za-z0-9])([A-Z]{2,5})\b'
+
+
+# A name token is only evidence for its ticker if it is rare across the whole
+# universe. Nasdaq security names all end in boilerplate -- "Common Stock",
+# "Class A Ordinary Share", "ETF" -- so `stock` appears in 4219 of 12596 names
+# and `etf` in 5196. Treating those as corroboration meant any post containing
+# the word "stock" promoted every bare token in it, which on a stock message
+# board is every post.
+#
+# Rather than maintain a boilerplate blacklist that each new listing convention
+# defeats, distinctiveness is measured from the universe itself.
+# The threshold is both absolute and proportional. Absolute alone does not
+# scale down: in a four-symbol universe where every name ends "Common Stock",
+# `stock` has a document frequency of four and would qualify as distinctive.
+# Proportional alone does not scale up: a quarter of 12596 names is 3149, which
+# would admit plenty of boilerplate. Whichever is stricter wins.
+#
+# These live here rather than in universe.py for the same reason the two match
+# patterns above do: changing any of them changes WHICH mentions get counted,
+# and source_config_version() has to see it. universe imports config, so the
+# dependency cannot run the other way.
+MAX_NAME_TOKEN_DF = 3
+MAX_NAME_TOKEN_RATIO = 0.25
+MIN_NAME_TOKEN_LEN = 4
+
+NAME_WORD_PATTERN = r"[a-z']+"
+
+# Names that are derivatives rather than issuers. A leveraged ETF, a warrant
+# or a share class naming its underlying is not independent evidence that the
+# name is common -- counting them is why `tesla` scored a document frequency
+# of 4 against a ceiling of 3, and TSLA could never be promoted from a bare
+# mention.
+FUND_NAME_PATTERN = (
+    r'\b(etf|etn|fund|trust|index|portfolio|inverse|bull|bear|\d+x'
+    r'|daily target|yield premium|covered call|leveraged|warrant|rights?'
+    r'|units?|notes due|preferred|depositary)\b'
+)
 
 
 def looks_like_exchange_bot(text):
@@ -203,6 +277,9 @@ def source_config_version():
         'cashtag_re': CASHTAG_PATTERN,
         'bare_re': BARE_PATTERN,
         'bot_re': _EXCHANGE_BOT_RE.pattern,
+        'name_df': [MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO,
+                    MIN_NAME_TOKEN_LEN],
+        'fund_re': FUND_NAME_PATTERN,
     }, separators=(',', ':'), sort_keys=True)
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 
@@ -256,6 +333,37 @@ def prefer_ipv4_if_configured():
 # any volume, and fifty accounts can paste one message.
 MIN_MENTIONS = 5
 MIN_DISTINCT_AUTHORS = 3
+
+# Distinct CHANNELS a broadcast source needs, against MIN_DISTINCT_AUTHORS for
+# a forum. Two rather than three because there are orders of magnitude fewer
+# channels than authors, and a symbol reaching two independent channels is
+# already the rarer event.
+MIN_DISTINCT_CHANNELS = 2
+
+
+# Segment groups. `Small` is what "penny stocks and unknown stuff" means in
+# the segment vocabulary -- anything that is not large or mid.
+#
+# A GROUP, not a sixth segment: universe.segment_for still returns exactly one
+# of the five and every row still reports its own, so the counts keep summing
+# to the total. `unknown` is folded in on an assumption worth naming -- it
+# means no market cap is known, not that the cap is small -- and it holds
+# because a ticker no provider has profiled is overwhelmingly a tiny one. If
+# `unknown` ever stops being dominated by small names, this is what to revisit.
+SEGMENT_GROUPS = {
+    'small': ('micro', 'unknown', 'recent_ipo'),
+}
+
+# What the board opens on. It is a discovery radar for the things nobody has
+# heard of; opening on everything buries them under megacap chatter.
+DEFAULT_SEGMENT = 'small'
+
+
+def segments_in(selection):
+    """The concrete segments a selection covers, or () for everything."""
+    if selection is None:
+        return ()
+    return SEGMENT_GROUPS.get(selection, (selection,))
 MIN_DISTINCT_TEXT_RATIO = 0.35
 
 # A window counts as elevated at or above this z.

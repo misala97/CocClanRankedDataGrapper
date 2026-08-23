@@ -342,3 +342,68 @@ def test_a_ticker_with_no_stored_closes_has_no_chart(clean):
     db.session.commit()
 
     assert only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart is None
+
+
+# ----------------------------------------------------------------- venues ---
+#
+# Breadth as a filter, not as a score. What more than one venue is talking
+# about at the same time is a different question from what is loudest.
+
+def test_the_venue_filter_keeps_only_corroborated_rows(clean):
+    universe(f'{PREFIX}A')
+    universe(f'{PREFIX}B')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='bluesky')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='bluesky')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='fourchan')
+    db.session.commit()
+
+    built = board.build(['bluesky', 'fourchan'], NOW, min_venues=2)
+
+    assert [e.rank.ticker for e in built.rows] == [f'{PREFIX}B']
+
+
+def test_venue_counts_are_taken_before_the_venue_filter(clean):
+    """Same rule the segment counts follow: the counts label the control, so
+    computing them after the filter would report the filtered size in both
+    slots."""
+    universe(f'{PREFIX}A')
+    universe(f'{PREFIX}B')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='bluesky')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='bluesky')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='fourchan')
+    db.session.commit()
+
+    built = board.build(['bluesky', 'fourchan'], NOW, min_venues=2)
+
+    assert built.venue_counts['any'] == 2
+    assert built.venue_counts['multi'] == 1
+
+
+# ---------------------------------------------------------------- segments ---
+
+def test_small_unions_the_three_segments_below_mid(clean):
+    """The tool is for penny stocks and unknowns. `Small` is what that means
+    in the segment vocabulary: anything not large and not mid."""
+    universe(f'{PREFIX}A', cap='50000000000')      # large
+    universe(f'{PREFIX}B', cap='100000000')        # micro
+    universe(f'{PREFIX}C', cap=None)               # unknown
+    for suffix in 'ABC':
+        bucket(f'{PREFIX}{suffix}', minutes_ago=30)
+    db.session.commit()
+
+    built = board.build(['bluesky'], NOW, segment='small')
+    got = {entry.rank.ticker for entry in built.rows}
+
+    assert got == {f'{PREFIX}B', f'{PREFIX}C'}
+
+
+def test_a_row_in_small_still_reports_its_own_segment(clean):
+    """`Small` is a filter, not a sixth segment. A micro-cap is still micro,
+    or the segment counts would stop summing to the total."""
+    universe(f'{PREFIX}B', cap='100000000')
+    bucket(f'{PREFIX}B', minutes_ago=30)
+    db.session.commit()
+
+    built = board.build(['bluesky'], NOW, segment='small')
+
+    assert built.rows[0].rank.segment == 'micro'

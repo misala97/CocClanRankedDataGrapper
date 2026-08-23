@@ -2,6 +2,7 @@ import { divergence, move, signed, UNKNOWN, zscore } from '../format'
 import type { ChartSpan, Mark, Row } from '../types'
 import { Marks } from './Marks'
 import { SpanChart } from './SpanChart'
+import { Venues } from './Venues'
 
 // The z at which a window is worth calling out. Matches config.ELEVATED_Z on
 // the server; duplicated rather than shipped in the payload because it is a
@@ -9,7 +10,8 @@ import { SpanChart } from './SpanChart'
 // ever drift.
 const ELEVATED = 2.0
 
-export function ScanRow({ row, triplet, ranked, hiddenMarks = [], span }: {
+export function ScanRow({ row, triplet, ranked, hiddenMarks = [], span,
+                         allSources }: {
   row: Row
   triplet: number[]
   /** 'divergence' while prices move, 'chatter' while the exchange is shut. */
@@ -19,6 +21,8 @@ export function ScanRow({ row, triplet, ranked, hiddenMarks = [], span }: {
   hiddenMarks?: Mark[]
   /** Which slice of the stored year the chart draws. */
   span: ChartSpan
+  /** Every configured source, so the quiet ones still get a slot. */
+  allSources: string[]
 }) {
   const scores = triplet.map((hours) => row.triplet[String(hours)] ?? null)
   const hottest = scores.reduce<number | null>(
@@ -63,7 +67,10 @@ export function ScanRow({ row, triplet, ranked, hiddenMarks = [], span }: {
       {/* Merged to pay for the chart column. They answer the same question --
           how much talk, from how many mouths -- and the lead cards already
           say them as one sentence. */}
-      <div className="n">{row.mentions} / {row.authors}</div>
+      <div className="n">
+        {row.mentions} / {row.authors}
+        <Venues all={allSources} lit={row.sources} />
+      </div>
       <div className="n">{priceCell(row)}</div>
 
       {/* Mobile restates the three numeric columns as a caption, because the
@@ -71,6 +78,7 @@ export function ScanRow({ row, triplet, ranked, hiddenMarks = [], span }: {
       <div className="meta">
         <span><b>{row.mentions}</b> mentions</span>
         <span><b>{row.authors}</b> people</span>
+        <span><Venues all={allSources} lit={row.sources} /></span>
         <span>{priceCell(row)}</span>
       </div>
     </div>

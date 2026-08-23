@@ -60,8 +60,18 @@ def test_finance_native_sources_allow_bare_tokens():
     assert config.bare_tokens_allowed('fourchan') is True
 
 
-def test_general_sources_require_cashtags():
-    assert config.bare_tokens_allowed('bluesky') is False
+def test_bluesky_reads_bare_tokens_since_the_tiering_changed():
+    """Reversed 2026-08-23. This asserted False, set after the first live pass
+    found IA (Iowa), GOP and AP among Bluesky's top bare tokens.
+
+    What changed is not the noise but what it costs: an uncorroborated bare
+    token is stored `low` and never scored, so those three now occupy table
+    rows and nothing else. Meanwhile the promotion path -- a distinctive
+    company name in the post, or a different author cashtagging the same
+    ticker in the same bucket -- needs many independent authors, which is
+    exactly what this source has.
+    """
+    assert config.bare_tokens_allowed('bluesky') is True
 
 
 def test_an_uncharacterised_source_defaults_to_cashtags_only():
@@ -151,3 +161,43 @@ def test_changing_a_scoring_threshold_does_not_reset_baselines():
         assert config.source_config_version() == before
     finally:
         config.MIN_MENTIONS = original
+
+
+# Source kinds. The author gate is a proxy for "how many independent voices",
+# and on a broadcast network that unit is the channel, not the author.
+
+def test_every_configured_source_has_a_kind():
+    """A source with no kind still works -- it gets the forum gate -- but the
+    map going stale silently is how a broadcast venue would end up judged by
+    an author count it can never reach."""
+    from features.radar import config
+
+    for source in config.SOURCES:
+        assert source in config.SOURCE_KIND, source
+
+
+def test_an_unknown_source_gets_the_stricter_gate():
+    """Forum is the tighter of the two. A source nobody has characterised
+    should be judged strictly, not leniently."""
+    from features.radar.config import source_kind
+
+    assert source_kind('something-new') == 'forum'
+
+
+def test_the_version_stamp_covers_the_distinctiveness_rule():
+    """Distinctiveness decides whether a bare mention is promoted to `high`,
+    so changing it changes WHICH mentions get counted -- the exact
+    discontinuity the stamp warms up from. It hashed the source list and the
+    extraction patterns but not this, which is the same omission that shipped
+    three extraction fixes over stale baselines on 2026-08-22.
+    """
+    from features.radar import config
+
+    before = config.source_config_version()
+    original = config.MAX_NAME_TOKEN_DF
+    try:
+        config.MAX_NAME_TOKEN_DF = original + 5
+        assert config.source_config_version() != before
+    finally:
+        config.MAX_NAME_TOKEN_DF = original
+    assert config.source_config_version() == before

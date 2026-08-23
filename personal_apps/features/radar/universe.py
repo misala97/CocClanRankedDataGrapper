@@ -12,28 +12,15 @@ import re
 from extensions import db
 from models import TickerUniverse
 
-from .config import (LARGE_CAP_FLOOR, MID_CAP_FLOOR, PENNY_PRICE,
-                     RECENT_IPO_DAYS)
+from .config import (FUND_NAME_PATTERN, LARGE_CAP_FLOOR, MAX_NAME_TOKEN_DF,
+                     MAX_NAME_TOKEN_RATIO, MID_CAP_FLOOR, MIN_NAME_TOKEN_LEN,
+                     NAME_WORD_PATTERN, PENNY_PRICE, RECENT_IPO_DAYS)
 
-# A name token is only evidence for its ticker if it is rare across the whole
-# universe. Nasdaq security names all end in boilerplate -- "Common Stock",
-# "Class A Ordinary Share", "ETF" -- so `stock` appears in 4219 of 12596 names
-# and `etf` in 5196. Treating those as corroboration meant any post containing
-# the word "stock" promoted every bare token in it, which on a stock message
-# board is every post.
-#
-# Rather than maintain a boilerplate blacklist that each new listing convention
-# defeats, distinctiveness is measured from the universe itself.
-# The threshold is both absolute and proportional. Absolute alone does not
-# scale down: in a four-symbol universe where every name ends "Common Stock",
-# `stock` has a document frequency of four and would qualify as distinctive.
-# Proportional alone does not scale up: a quarter of 12596 names is 3149, which
-# would admit plenty of boilerplate. Whichever is stricter wins.
-MAX_NAME_TOKEN_DF = 3
-MAX_NAME_TOKEN_RATIO = 0.25
-MIN_NAME_TOKEN_LEN = 4
-
-_NAME_WORD_RE = re.compile(r"[a-z']+")
+# The distinctiveness tunables now live in config, so source_config_version
+# can hash them -- changing any of them changes which mentions get promoted,
+# and therefore which get counted.
+_NAME_WORD_RE = re.compile(NAME_WORD_PATTERN)
+_FUND_NAME_RE = re.compile(FUND_NAME_PATTERN, re.IGNORECASE)
 
 # Crypto is excluded entirely (spec 3.7), and the exclusion has to work on
 # every source rather than only on StockTwits, where an instrument_class field
@@ -134,26 +121,57 @@ def mark_delisted(symbols, now):
     return marked
 
 
+def _issuer_of(name):
+    """The issuer a listing belongs to.
+
+    Everything before the first comma or ' - ', so every share class, unit,
+    warrant and right of one company collapses to a single key. Crude, and it
+    only has to be good enough to stop one company counting as four.
+    """
+    return re.split(r',| - ', name or '', maxsplit=1)[0].strip().lower()
+
+
 def annotate_distinctive(lookup):
     """Add a `distinctive` token set to every entry, in place.
 
-    A token qualifies when it appears in at most MAX_NAME_TOKEN_DF names across
-    the whole lookup, is long enough to be a real word, and is not the symbol
-    echoing itself. Measured against the passed lookup rather than a constant,
-    so it calibrates to whatever universe it is given -- including the small
-    ones in tests.
+    A token qualifies when at most MAX_NAME_TOKEN_DF distinct ISSUERS use it,
+    it is long enough to be a real word, and it is not the symbol echoing
+    itself. Measured against the passed lookup rather than a constant, so it
+    calibrates to whatever universe it is given -- including the small ones in
+    tests.
+
+    ISSUERS, not listings, and funds excluded from the count. Counting
+    listings made a company compete with its own derivatives: `tesla` appeared
+    in four names -- Tesla plus three leveraged ETFs -- against a ceiling of
+    three, so TSLA could never be promoted from a bare mention. The same shape
+    hits small caps harder, because a recent IPO lists as Common Stock plus
+    Units plus Warrants plus Rights. Both exclusions are needed: dropping
+    funds alone leaves Alphabet's five share classes, and issuer-deduping
+    alone leaves Tesla's three ETFs.
+
+    A token appearing only in fund names has no issuers at all and so passes
+    the ceiling. That is deliberate -- an ETF's own name should be able to
+    promote its own ticker.
+
+    The cost is that some ordinary words qualify: `peace` drops from four
+    listings to one issuer because three of the four are Peace Acquisition's
+    unit, warrant and right. Accepted, because promotion still requires the
+    bare ticker in the same post.
 
     Symbols left with an empty set can never be promoted from a bare mention.
-    That is the intended outcome for tickers like HR or DYOR, whose names carry
-    nothing but boilerplate.
+    That remains the intended outcome for tickers like HR or DYOR, whose names
+    carry nothing but boilerplate.
     """
-    frequency = collections.Counter()
+    issuers = collections.defaultdict(set)
     tokens_by_symbol = {}
     for symbol, entry in lookup.items():
-        tokens = set(_NAME_WORD_RE.findall((entry.get('name') or '').lower()))
+        name = entry.get('name') or ''
+        tokens = set(_NAME_WORD_RE.findall(name.lower()))
         tokens_by_symbol[symbol] = tokens
+        if _FUND_NAME_RE.search(name):
+            continue
         for token in tokens:
-            frequency[token] += 1
+            issuers[token].add(_issuer_of(name))
 
     ceiling = min(MAX_NAME_TOKEN_DF,
                   max(1, int(MAX_NAME_TOKEN_RATIO * len(lookup))))
@@ -161,7 +179,7 @@ def annotate_distinctive(lookup):
     for symbol, tokens in tokens_by_symbol.items():
         lookup[symbol]['distinctive'] = {
             token for token in tokens
-            if frequency[token] <= ceiling
+            if len(issuers.get(token, ())) <= ceiling
             and len(token) >= MIN_NAME_TOKEN_LEN
             and token != symbol.lower()
         }
