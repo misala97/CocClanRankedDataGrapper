@@ -166,3 +166,32 @@ def test_the_low_confidence_tier_is_storable(ctx):
     assert RadarMention.query.filter_by(post_id=post.id).count() == 3
     db.session.delete(post)
     db.session.commit()
+
+
+def test_a_daily_close_is_unique_per_ticker_and_date():
+    """One close per ticker per trading day. A second write for the same day
+    replaces it rather than accumulating -- the provider restates recent bars,
+    and duplicates would silently double the history a sparkline draws."""
+    import datetime as dt
+    import decimal
+    from app import app as flask_app
+    from extensions import db
+    from models import RadarDailyClose
+
+    with flask_app.app_context():
+        RadarDailyClose.query.filter(
+            RadarDailyClose.ticker == 'MDLZZ').delete(synchronize_session=False)
+        db.session.commit()
+
+        db.session.add(RadarDailyClose(
+            ticker='MDLZZ', close_date=dt.date(2026, 8, 21),
+            close=decimal.Decimal('12.3400'), fetched_at=dt.datetime(2026, 8, 22)))
+        db.session.commit()
+
+        stored = RadarDailyClose.query.filter_by(ticker='MDLZZ').one()
+        assert stored.close_date == dt.date(2026, 8, 21)
+        assert float(stored.close) == 12.34
+
+        RadarDailyClose.query.filter(
+            RadarDailyClose.ticker == 'MDLZZ').delete(synchronize_session=False)
+        db.session.commit()

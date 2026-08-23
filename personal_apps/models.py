@@ -769,3 +769,24 @@ class RadarQuote(db.Model):
     price       = db.Column(db.Numeric(18, 6), nullable=False)
     prev_close  = db.Column(db.Numeric(18, 6), nullable=True)
     volume      = db.Column(db.BigInteger, nullable=True)
+
+
+class RadarDailyClose(db.Model):
+    """One daily close per ticker. What the board's price history draws.
+
+    Separate from RadarQuote, which is an intraday snapshot taken every five
+    minutes and pruned at thirty days. This is one row per trading day, kept
+    for a year, and it answers a different question: not "did the price move
+    while people were talking" but "what state is this stock in".
+
+    Not partitioned, unlike radar_buckets. A year of closes for a few thousand
+    tickers is small, and rows are replaced by date rather than accumulated.
+    """
+    __tablename__ = 'radar_daily_closes'
+    __table_args__ = {'mysql_charset': 'utf8mb4'}
+
+    ticker     = db.Column(db.String(12, collation='utf8mb4_bin'),
+                           primary_key=True)
+    close_date = db.Column(db.Date, primary_key=True)
+    close      = db.Column(db.Numeric(18, 4), nullable=False)
+    fetched_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
