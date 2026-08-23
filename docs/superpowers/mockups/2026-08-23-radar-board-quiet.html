@@ -1,0 +1,324 @@
+<title>Radar quiet state — mockup</title>
+<style>
+:root {
+  --bg: oklch(0.988 0.002 290); --surface: oklch(0.970 0.004 290);
+  --raise: oklch(1 0 0); --rule: oklch(0.888 0.007 290);
+  --rule-soft: oklch(0.940 0.005 290);
+  --ink: oklch(0.230 0.021 285); --ink-2: oklch(0.395 0.018 285);
+  --muted: oklch(0.480 0.016 285);
+  --mark: oklch(0.470 0.185 296); --mark-soft: oklch(0.470 0.185 296/0.13);
+  --mark-wash: oklch(0.470 0.185 296/0.07);
+  --up: oklch(0.470 0.130 150); --down: oklch(0.500 0.175 27);
+  --warn: oklch(0.480 0.110 65); --warn-soft: oklch(0.480 0.110 65/0.11);
+  --r: 8px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased; }
+.page { display: grid; grid-template-columns: 404px minmax(0, 1fr);
+  min-height: 100vh; }
+.list { border-right: 1px solid var(--rule); background: var(--surface);
+  display: flex; flex-direction: column; min-width: 0; }
+.detail { min-width: 0; padding: 22px 28px 60px; }
+
+.lhead { padding: 18px 20px 14px; border-bottom: 1px solid var(--rule); }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font: 700 19px/1 Inter, sans-serif; margin: 0;
+  letter-spacing: -0.01em; }
+.state { font-size: 12px; color: var(--warn); font-weight: 600; }
+.finding { margin-top: 9px; font-size: 13px; color: var(--ink-2); }
+.finding b { font-weight: 600; color: var(--ink); }
+
+.ctl { padding: 12px 20px 13px; border-bottom: 1px solid var(--rule);
+  display: flex; flex-direction: column; gap: 9px; }
+.grp { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.lbl { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); width: 100%; margin-bottom: 2px; }
+.chip { font: inherit; font-size: 12.5px; color: var(--ink-2);
+  background: transparent; border: 1px solid transparent; cursor: pointer;
+  border-radius: 100px; padding: 3px 9px; display: inline-flex; gap: 5px;
+  align-items: baseline; }
+.chip .n { font-size: 11px; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.chip.on { background: var(--mark-soft); color: var(--mark); font-weight: 600; }
+.chip.on .n { color: var(--mark); }
+.chip.nil { color: oklch(0.72 0.01 285); }
+.chip.nil .n { color: oklch(0.76 0.01 285); }
+.sep { width: 1px; height: 15px; background: var(--rule); margin: 0 7px; }
+.inl { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin-right: 3px; }
+
+.rows { overflow: auto; flex: 1; }
+.row { display: block; text-decoration: none; color: inherit;
+  padding: 11px 20px 12px; border-bottom: 1px solid var(--rule-soft);
+  border-left: 3px solid transparent; }
+.row.on { background: var(--raise); border-left-color: var(--mark); }
+.rtop { display: flex; align-items: baseline; gap: 8px; }
+.tk { font: 700 14.5px/1 Inter, sans-serif; }
+.nm { font-size: 12px; color: var(--muted); flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spark { width: 54px; height: 18px; flex: none; fill: var(--mark);
+  opacity: 0.75; }
+.phr { margin-top: 5px; font-size: 13px; color: var(--ink-2); }
+.phr .num { font-weight: 650; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.phr .dot { color: oklch(0.78 0.01 285); margin: 0 5px; }
+.phr .new { color: var(--mark); font-weight: 650; }
+.meta { margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+
+/* What did NOT make the list. Without this a two-row board is
+   indistinguishable from a broken one. */
+.below { padding: 15px 20px 20px; font-size: 12.5px; color: var(--muted);
+  line-height: 1.55; }
+.below b { color: var(--ink-2); font-weight: 600; }
+
+.ident { display: flex; align-items: flex-start; gap: 16px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+.ident h2 { font: 700 26px/1 Inter, sans-serif; margin: 0 0 5px;
+  letter-spacing: -0.015em; }
+.ident .full { font-size: 14px; color: var(--ink-2); }
+.ident .facts { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.px { margin-left: auto; text-align: right; flex: none; }
+.px .v { font: 650 24px/1 Inter, sans-serif;
+  font-variant-numeric: tabular-nums; }
+.px .mv { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.px .st { font-size: 11.5px; color: var(--warn); margin-top: 3px;
+  font-weight: 600; }
+
+.read { margin: 16px 0 4px; font-size: 14.5px; line-height: 1.62;
+  color: var(--ink-2); max-width: 74ch; }
+.read b { color: var(--ink); font-weight: 650; }
+.read .warn { color: var(--warn); font-weight: 600; }
+
+h3 { font: 600 11px/1 Inter, sans-serif; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--muted); margin: 26px 0 11px; }
+.spans { display: inline-flex; gap: 3px; margin-left: 12px;
+  vertical-align: -1px; }
+.spans .chip { padding: 2px 8px; font-size: 11.5px; }
+.chart { background: var(--raise); border: 1px solid var(--rule-soft);
+  border-radius: var(--r); padding: 14px 16px 10px; }
+.legend { display: flex; gap: 16px; font-size: 11.5px; color: var(--muted);
+  margin-top: 6px; }
+.legend i { font-style: normal; }
+.key { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+  background: var(--mark); margin-right: 5px; }
+.key.line { height: 2px; border-radius: 0; background: var(--down);
+  vertical-align: 3px; }
+
+.bd { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px;
+  align-items: start; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; font-size: 10.5px; color: var(--muted);
+  letter-spacing: 0.06em; text-transform: uppercase; padding: 0 0 6px;
+  border-bottom: 1px solid var(--rule); }
+td { padding: 7px 0; border-bottom: 1px solid var(--rule-soft);
+  font-variant-numeric: tabular-nums; }
+td.venue { font-variant-numeric: normal; }
+th.r, td.r { text-align: right; }
+.stat { display: flex; justify-content: space-between; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid var(--rule-soft); font-size: 13px; }
+.stat .k { color: var(--muted); }
+.stat .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+.wording { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px;
+  font-size: 13px; color: var(--ink-2); }
+.wording b { font-weight: 650; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.wording .q { color: var(--muted); }
+.wording .q b { color: var(--ink-2); }
+
+ul.posts { list-style: none; margin: 0; padding: 0; }
+.post { padding: 12px 0 13px; border-bottom: 1px solid var(--rule-soft); }
+.phead { display: flex; align-items: baseline; gap: 9px; font-size: 11.5px; }
+.src { font-weight: 600; font-size: 10.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--mark);
+  background: var(--mark-wash); padding: 2px 7px; border-radius: 4px; }
+.who { color: var(--ink-2); font-weight: 500; }
+.when { color: var(--muted); }
+.out { margin-left: auto; color: var(--muted); }
+.post p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.55;
+  color: var(--ink-2); max-width: 82ch; }
+</style>
+
+<div class="page">
+  <aside class="list">
+    <div class="lhead">
+      <div class="brand"><h1>Radar</h1>
+        <span class="state">market closed</span></div>
+      <div class="finding">No price is moving, so these are ranked by
+        <b>chatter against each ticker's own normal</b> — what to look at when
+        it opens. <b>2 tickers</b> cleared the bar in the last <b>4h</b>.</div>
+    </div>
+
+    <div class="ctl">
+      <div class="grp"><span class="lbl">Segment</span><button class="chip on">Small<span class="n">2</span></button>
+<button class="chip">All<span class="n">2</span></button>
+<button class="chip nil">Large<span class="n">0</span></button>
+<button class="chip nil">Mid<span class="n">0</span></button>
+<button class="chip">Micro<span class="n">1</span></button>
+<button class="chip nil">Recent IPO<span class="n">0</span></button>
+<button class="chip">Unknown<span class="n">1</span></button></div>
+      <div class="grp"><span class="lbl">Sources</span>
+        <button class="chip on">Bluesky<span class="n">2</span></button>
+        <button class="chip on">4chan /biz/<span class="n">1</span></button>
+        <button class="chip nil">StockTwits<span class="n">0</span></button>
+      </div>
+      <div class="grp"><span class="lbl">Venues</span>
+        <button class="chip on">any<span class="n">2</span></button>
+        <button class="chip">2+<span class="n">1</span></button>
+        <span class="sep"></span><span class="inl">Window</span>
+        <button class="chip">1h</button>
+        <button class="chip on">4h</button>
+        <button class="chip">24h</button>
+      </div>
+    </div>
+
+    <div class="rows">
+      <a class="row on" href="?t=SBFM">
+        <div class="rtop"><span class="tk">SBFM</span>
+          <span class="nm">Sunshine Biopharma</span><svg class="spark" viewBox="0 0 54 18" aria-hidden="true"><rect x="0.0" y="16.6" width="5.0" height="1.4"/><rect x="6.0" y="17.0" width="5.0" height="1.0"/><rect x="12.0" y="15.9" width="5.0" height="2.1"/><rect x="18.0" y="16.6" width="5.0" height="1.4"/><rect x="24.0" y="15.2" width="5.0" height="2.8"/><rect x="30.0" y="13.8" width="5.0" height="4.2"/><rect x="36.0" y="10.4" width="5.0" height="7.6"/><rect x="42.0" y="0.0" width="5.0" height="18.0"/><rect x="48.0" y="2.8" width="5.0" height="15.2"/></svg></div>
+        <div class="phr"><span class="num">9×</span><span class="txt"> its normal</span><span class="dot">·</span><span class="num">2</span><span class="txt"> venues</span><span class="dot">·</span><span class="num">6</span><span class="txt"> people</span></div>
+        <div class="meta">micro · closed at $1.84</div>
+      </a>
+      <a class="row" href="?t=GRML">
+        <div class="rtop"><span class="tk">GRML</span>
+          <span class="nm">Greenland Acquisition</span><svg class="spark" viewBox="0 0 54 18" aria-hidden="true"><rect x="0.0" y="17.0" width="5.0" height="1.0"/><rect x="6.0" y="17.0" width="5.0" height="1.0"/><rect x="12.0" y="17.0" width="5.0" height="1.0"/><rect x="18.0" y="16.7" width="5.0" height="1.3"/><rect x="24.0" y="17.0" width="5.0" height="1.0"/><rect x="30.0" y="15.4" width="5.0" height="2.6"/><rect x="36.0" y="11.6" width="5.0" height="6.4"/><rect x="42.0" y="6.4" width="5.0" height="11.6"/><rect x="48.0" y="0.0" width="5.0" height="18.0"/></svg></div>
+        <div class="phr"><span class="new">new here</span><span class="txt"> — 31 mentions, nothing to compare against yet</span></div>
+        <div class="meta">unknown · no quote</div>
+      </a>
+
+      <div class="below">
+        <b>14 other tickers</b> were mentioned in this window and are not
+        listed: 9 came from a single voice, 4 from one venue only, and 1 has
+        no baseline old enough to measure against.
+        <br><br>
+        Quiet is the normal state on a Sunday. Widen the window to 24h, or
+        switch to <b>All</b>, to see more.
+      </div>
+    </div>
+  </aside>
+
+  <main class="detail">
+    <div class="ident">
+      <div>
+        <h2>SBFM</h2>
+        <div class="full">Sunshine Biopharma, Inc. — Common Stock</div>
+        <div class="facts">NASDAQ · micro cap · $31M · IPO Feb 2022 ·
+          first seen on the radar 2 days ago</div>
+      </div>
+      <div class="px">
+        <div class="v">$1.84</div>
+        <div class="mv">−0.5% on Friday</div>
+        <div class="st">market closed</div>
+      </div>
+    </div>
+
+    <p class="read">
+      <b>26 mentions in the last 4 hours, about 9× this ticker's own normal</b>
+      of 3. Six distinct people across both live venues. <b>The market is
+      shut</b>, so there is no price move to compare this against — divergence
+      needs a live tape and returns with one.
+      <span class="warn">The baseline is 2 days old, not 30.</span>
+      The stock is down <b>53%</b> over the past year and the talk is about a
+      shelf registration filed after Friday's close.
+    </p>
+
+    <h3>Price and chatter
+      <span class="spans">
+        <button class="chip">1M</button>
+        <button class="chip">6M</button>
+        <button class="chip on">1Y</button>
+        <button class="chip">3Y</button>
+      </span>
+    </h3>
+    <div class="chart">
+      <svg viewBox="0 0 860 300" width="100%" height="300" role="img"
+           aria-label="SBFM price over one year with chatter beneath">
+        <line x1="0" y1="196" x2="860" y2="196"
+              stroke="var(--rule-soft)" stroke-width="1" />
+        <line x1="172.5" y1="0" x2="172.5" y2="196" stroke="var(--rule-soft)" stroke-width="1" /><text x="172.5" y="294" font-size="10.5" fill="var(--muted)" text-anchor="middle">Nov</text>
+        <line x1="344.9" y1="0" x2="344.9" y2="196" stroke="var(--rule-soft)" stroke-width="1" /><text x="344.9" y="294" font-size="10.5" fill="var(--muted)" text-anchor="middle">Feb</text>
+        <line x1="517.4" y1="0" x2="517.4" y2="196" stroke="var(--rule-soft)" stroke-width="1" /><text x="517.4" y="294" font-size="10.5" fill="var(--muted)" text-anchor="middle">May</text>
+        <line x1="689.9" y1="0" x2="689.9" y2="196" stroke="var(--rule-soft)" stroke-width="1" /><text x="689.9" y="294" font-size="10.5" fill="var(--muted)" text-anchor="middle">Aug</text>
+        <path d="M0.0,13.3 L2.4,30.5 L4.7,43.1 L7.1,45.3 L9.5,71.4 L16.5,51.0 L18.9,52.2 L21.3,45.6 L23.6,49.8 L26.0,43.9 L33.1,38.7 L35.4,27.6 L37.8,27.2 L40.2,24.2 L42.5,21.2 L49.6,13.6 L52.0,10.8 L54.3,21.9 L56.7,9.2 L59.1,0.0 L66.2,17.6 L68.5,25.7 L70.9,9.9 L73.2,20.8 L75.6,14.9 L82.7,28.6 L85.1,31.4 L87.4,50.0 L89.8,54.6 L92.1,52.0 L99.2,60.5 L101.6,62.2 L104.0,72.9 L106.3,70.7 L108.7,63.9 L115.8,67.6 L118.1,54.0 L120.5,66.0 L122.9,61.4 L125.2,66.4 L132.3,47.4 L134.7,38.3 L137.0,39.5 L139.4,35.1 L141.8,37.9 L148.8,42.4 L151.2,47.7 L153.6,34.8 L155.9,29.0 L158.3,27.7 L165.4,48.7 L167.7,47.3 L170.1,61.9 L172.5,63.0 L174.8,54.0 L181.9,51.7 L184.3,48.7 L186.6,42.5 L189.0,47.8 L191.4,47.6 L198.5,77.9 L200.8,81.5 L203.2,89.3 L205.5,99.4 L207.9,92.1 L215.0,120.9 L217.4,112.7 L219.7,117.5 L222.1,134.3 L224.5,144.2 L231.5,124.5 L233.9,120.2 L236.3,123.7 L238.6,128.4 L241.0,126.0 L248.1,123.2 L250.4,127.7 L252.8,120.4 L255.2,122.0 L257.5,107.2 L264.6,137.8 L267.0,146.5 L269.3,148.8 L271.7,141.5 L274.1,149.1 L281.2,129.9 L283.5,125.9 L285.9,119.7 L288.2,112.1 L290.6,116.6 L297.7,125.8 L300.1,124.9 L302.4,128.6 L304.8,122.9 L307.1,136.8 L314.2,131.2 L316.6,136.1 L319.0,144.1 L321.3,146.3 L323.7,145.7 L330.8,152.7 L333.1,146.6 L335.5,150.9 L337.9,147.2 L340.2,150.5 L347.3,137.5 L349.7,132.8 L352.0,124.2 L354.4,135.7 L356.8,139.9 L363.8,158.3 L366.2,159.8 L368.6,163.8 L370.9,172.2 L373.3,172.3 L380.4,165.7 L382.7,163.0 L385.1,159.3 L387.5,165.6 L389.8,169.7 L396.9,170.0 L399.3,172.8 L401.6,179.6 L404.0,171.9 L406.4,174.4 L413.5,176.8 L415.8,176.1 L418.2,170.2 L420.5,173.3 L422.9,166.2 L430.0,168.9 L432.4,167.3 L434.7,162.5 L437.1,157.5 L439.5,173.4 L446.5,178.7 L448.9,175.0 L451.3,174.7 L453.6,176.7 L456.0,173.0 L463.1,174.2 L465.4,169.0 L467.8,167.3 L470.2,164.5 L472.5,167.0 L479.6,176.2 L482.0,168.5 L484.3,165.3 L486.7,155.9 L489.1,158.9 L496.2,158.4 L498.5,143.3 L500.9,135.6 L503.2,134.6 L505.6,118.8 L512.7,89.0 L515.1,80.7 L517.4,69.8 L519.8,82.3 L522.1,90.4 L529.2,120.2 L531.6,128.2 L534.0,125.9 L536.3,131.3 L538.7,140.7 L545.8,192.9 L548.1,195.2 L550.5,196.0 L552.9,186.7 L555.2,184.8 L562.3,187.9 L564.7,188.8 L567.0,180.5 L569.4,168.8 L571.8,163.8 L578.8,151.0 L581.2,156.5 L583.6,156.6 L585.9,159.2 L588.3,161.9 L595.4,151.2 L597.7,143.1 L600.1,144.8 L602.5,136.5 L604.8,138.9 L611.9,138.6 L614.3,126.8 L616.6,127.9 L619.0,127.0 L621.4,117.8 L628.5,122.4 L630.8,115.0 L633.2,99.3 L635.5,91.9 L637.9,92.5 L645.0,106.1 L647.4,115.1 L649.7,110.9 L652.1,102.0 L654.5,103.4 L661.5,115.0 L663.9,117.0 L666.3,121.7 L668.6,124.9 L671.0,106.4 L678.1,126.0 L680.4,122.4 L682.8,129.4 L685.2,122.8 L687.5,105.7 L694.6,113.2 L697.0,120.3 L699.3,111.3 L701.7,110.3 L704.1,115.8 L711.2,109.3 L713.5,112.8 L715.9,118.8 L718.2,116.5 L720.6,133.4 L727.7,133.0 L730.1,131.4 L732.4,121.4 L734.8,136.9 L737.1,133.8 L744.2,145.7 L746.6,143.1 L749.0,129.4 L751.3,127.5 L753.7,126.3 L760.8,135.2 L763.1,129.7 L765.5,146.4 L767.9,148.4 L770.2,152.6 L777.3,155.4 L779.7,157.9 L782.0,161.5 L784.4,168.8 L786.8,168.7 L793.8,169.6 L796.2,164.7 L798.6,171.2 L800.9,172.4 L803.3,159.2 L810.4,156.8 L812.7,155.0 L815.1,163.3 L817.5,162.6 L819.8,159.5 L826.9,147.4 L829.3,149.4 L831.6,150.6 L834.0,148.6 L836.4,155.1 L843.5,162.9 L845.8,169.0 L848.2,165.6 L850.5,165.5 L852.9,168.2 L860.0,176.4" fill="none" stroke="var(--down)" stroke-width="1.6"
+              stroke-linejoin="round" />
+        <text x="4" y="12" font-size="10.5" fill="var(--muted)">$3.94</text>
+        <text x="4" y="192" font-size="10.5"
+              fill="var(--muted)">$1.95</text>
+        <line x1="0" y1="274" x2="855.3"
+              y2="274" stroke="var(--rule)"
+              stroke-width="1" stroke-dasharray="2 4" />
+        <text x="0" y="267" font-size="10.5"
+              fill="var(--muted)">chatter not yet observed</text>
+        <rect x="852.9" y="246.9" width="2.2" height="27.1" fill="var(--mark)" />
+        <rect x="855.3" y="210.0" width="2.2" height="64.0" fill="var(--mark)" />
+        <rect x="857.6" y="219.8" width="2.2" height="54.2" fill="var(--mark)" />
+        <text x="0" y="294" font-size="10.5" fill="var(--muted)">Aug 2025</text>
+        <text x="856" y="294" font-size="10.5" fill="var(--muted)"
+              text-anchor="end">today</text>
+      </svg>
+      <div class="legend">
+        <i><span class="key line"></span>price · daily close, −53% over the year</i>
+        <i><span class="key"></span>chatter · mentions per day, peak 26</i>
+      </div>
+    </div>
+
+    <h3>Chatter breakdown · last 4 hours</h3>
+    <div class="bd">
+      <div>
+        <table>
+          <tr><th>Venue</th><th class="r">Mentions</th><th class="r">Voices</th>
+            <th class="r">Share</th></tr>
+          <tr><td class="venue">Bluesky</td><td class="r">21</td>
+            <td class="r">5</td><td class="r">81%</td></tr>
+          <tr><td class="venue">4chan /biz/</td><td class="r">5</td>
+            <td class="r">1</td><td class="r">19%</td></tr>
+        </table>
+        <div class="wording">
+          <span><b>2</b> bullish</span><span><b>9</b> bearish</span>
+          <span class="q"><b>15</b> carried no wording at all</span>
+        </div>
+      </div>
+      <div>
+        <div class="stat"><span class="k">Loudest account's share</span>
+          <span class="v">23%</span></div>
+        <div class="stat"><span class="k">Top two accounts</span>
+          <span class="v">35%</span></div>
+        <div class="stat"><span class="k">Peak hour</span>
+          <span class="v">22:00 · 11/h</span></div>
+        <div class="stat"><span class="k">First ever seen</span>
+          <span class="v">21 Aug 2026</span></div>
+        <div class="stat"><span class="k">Repeated text</span>
+          <span class="v">4%</span></div>
+      </div>
+    </div>
+
+    <h3>What people are saying · 26 posts</h3>
+    <ul class="posts">
+        <li class="post">
+          <div class="phead"><span class="src">bluesky</span>
+            <span class="who">@quietalpha</span><span class="when">Sat 22:14</span>
+            <span class="out">open ↗</span></div>
+          <p>SBFM filed the S-1 amendment friday after close. shelf registration. not the news the holders were hoping for.</p>
+        </li>
+        <li class="post">
+          <div class="phead"><span class="src">bluesky</span>
+            <span class="who">@pennywatch</span><span class="when">Sat 20:02</span>
+            <span class="out">open ↗</span></div>
+          <p>Sunshine Biopharma still sitting at 1.84. been watching this one since the reverse split, no volume at all.</p>
+        </li>
+        <li class="post">
+          <div class="phead"><span class="src">4chan</span>
+            <span class="who">/biz/</span><span class="when">Sat 18:37</span>
+            <span class="out">open ↗</span></div>
+          <p>SBFM bagholders how we feeling</p>
+        </li>
+        <li class="post">
+          <div class="phead"><span class="src">bluesky</span>
+            <span class="who">@marketjanitor</span><span class="when">Sat 17:55</span>
+            <span class="out">open ↗</span></div>
+          <p>reminder that SBFM has done three reverse splits in four years. the chart you are looking at is not the chart shareholders lived through.</p>
+        </li>
+    </ul>
+  </main>
+</div>

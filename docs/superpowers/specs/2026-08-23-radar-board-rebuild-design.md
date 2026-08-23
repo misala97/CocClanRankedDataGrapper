@@ -155,7 +155,48 @@ deliberate. The page states the situation as a finding — *market closed · 3
 tickers above their normal in the last 4h* — and when nothing clears the bar,
 says so plainly rather than rendering an empty frame.
 
-The quiet state gets a mockup of its own. It is the majority case.
+**The list accounts for what is missing.** Below the rows:
+
+> **14 other tickers** were mentioned in this window and are not listed: 9
+> came from a single voice, 4 from one venue only, and 1 has no baseline old
+> enough to measure against.
+
+A two-row board and a broken board are otherwise indistinguishable. This is
+also the eligibility floor made honest — today those tickers vanish with no
+trace, and the reader cannot tell a quiet market from a dead ingest. It is
+followed by a pointer at the two controls that widen the net.
+
+## Approved mockups
+
+Built and approved 2026-08-23, before any application code:
+
+- `docs/superpowers/mockups/2026-08-23-radar-board-busy.html` — market open,
+  seven rows, HOWL selected.
+- `docs/superpowers/mockups/2026-08-23-radar-board-quiet.html` — market
+  closed, two rows, SBFM selected. The majority case.
+
+Static HTML, no scripts, chart geometry computed from generated series rather
+than drawn, so what was approved is the shape the real component produces.
+
+Decisions the mockups settled that the prose above did not:
+
+- **Two lanes, not an overlay.** Price occupies the upper ~65% of the chart
+  and chatter its own lane beneath, sharing one x-axis. Overlaying three days
+  of chatter onto 365 days of price makes the chatter invisible; the lane
+  keeps it legible at every span, and the "not yet observed" region is a
+  dashed baseline with a small label rather than a filled slab, so it notes
+  the absence without shouting it.
+- **The read does not paraphrase post content.** An earlier draft said "the
+  talk is about a shelf registration". Cut — the page cannot reliably
+  summarise what it has not understood, and the posts are directly below.
+  The read confines itself to facts the pipeline actually computes.
+- **No tone bar.** Bull/bear/neutral are counts in words. A green/red tone bar
+  was drafted, caught, and removed: green and red are price direction and
+  nothing else, and this exact bar was already built and deleted once in
+  August for the same reason.
+- Mobile gets a plain single-column fallback and no design attention. Michi's
+  call, 2026-08-23: desktop is where this is used, and doing mobile properly
+  is its own session.
 
 ## Data work this requires
 
