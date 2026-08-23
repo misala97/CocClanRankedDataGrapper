@@ -51,6 +51,17 @@ def board():
         wipe()
 
 
+def build_rows(*args, **kwargs):
+    """Rows only.
+
+    leaderboard.build_rows returns a Ranking since 2026-08-23 -- rows plus
+    an account of what the floor excluded. The tests below predate that and
+    are about ordering and row content, so they take the rows and ignore the
+    account. Tests that are ABOUT the account call the real API.
+    """
+    return leaderboard.build_rows(*args, **kwargs).rows
+
+
 def universe_row(ticker, cap='50000000000', name='Test Corp'):
     db.session.add(TickerUniverse(
         symbol=ticker, name=name, exchange='NYSE',
@@ -85,7 +96,7 @@ def test_a_scored_eligible_ticker_becomes_a_row(board):
     quoted('LBA', '100.00', '100.00')
     db.session.commit()
 
-    rows = leaderboard.build_rows(['bluesky'], NOW)
+    rows = build_rows(['bluesky'], NOW)
     assert [r.ticker for r in rows] == ['LBA']
     assert rows[0].name == 'Test Corp'
     assert rows[0].mentions == 10
@@ -98,7 +109,7 @@ def test_an_ineligible_ticker_is_excluded_not_ranked_low(board):
     universe_row('LBB')
     scored('LBB', mentions=2, authors=1)
     db.session.commit()
-    assert leaderboard.build_rows(['bluesky'], NOW) == []
+    assert build_rows(['bluesky'], NOW) == []
 
 
 def test_ranking_is_by_divergence(board):
@@ -111,7 +122,7 @@ def test_ranking_is_by_divergence(board):
     quoted('LBFLAT', '100.20', '100.00')   # barely moved
     db.session.commit()
 
-    rows = leaderboard.build_rows(['bluesky'], NOW)
+    rows = build_rows(['bluesky'], NOW)
     assert [r.ticker for r in rows] == ['LBFLAT', 'LBUP']
 
 
@@ -122,8 +133,8 @@ def test_only_the_selected_sources_are_pooled(board):
     scored('LBC', source='fourchan', mentions=6, z=3.0)
     db.session.commit()
 
-    both = leaderboard.build_rows(['bluesky', 'fourchan'], NOW)[0]
-    one = leaderboard.build_rows(['bluesky'], NOW)[0]
+    both = build_rows(['bluesky', 'fourchan'], NOW)[0]
+    one = build_rows(['bluesky'], NOW)[0]
     assert both.mentions == 12
     assert one.mentions == 6
     assert both.mention_z > one.mention_z
@@ -134,7 +145,7 @@ def test_a_row_records_which_sources_contributed(board):
     scored('LBD', source='bluesky')
     scored('LBD', source='fourchan')
     db.session.commit()
-    row = leaderboard.build_rows(['bluesky', 'fourchan'], NOW)[0]
+    row = build_rows(['bluesky', 'fourchan'], NOW)[0]
     assert set(row.sources) == {'bluesky', 'fourchan'}
 
 
@@ -144,7 +155,7 @@ def test_a_single_source_row_is_marked(board):
     universe_row('LBE')
     scored('LBE', source='bluesky')
     db.session.commit()
-    assert 'single-source' in leaderboard.build_rows(['bluesky', 'fourchan'],
+    assert 'single-source' in build_rows(['bluesky', 'fourchan'],
                                                      NOW)[0].marks
 
 
@@ -159,7 +170,7 @@ def test_a_frozen_tape_carries_no_divergence(board):
                quote_ts=frozen)
     db.session.commit()
 
-    row = leaderboard.build_rows(['bluesky'], NOW)[0]
+    row = build_rows(['bluesky'], NOW)[0]
     assert row.divergence is None
     assert 'no-print' in row.marks
 
@@ -170,7 +181,7 @@ def test_a_ticker_with_no_quote_still_appears_without_divergence(board):
     universe_row('LBG')
     scored('LBG')
     db.session.commit()
-    row = leaderboard.build_rows(['bluesky'], NOW)[0]
+    row = build_rows(['bluesky'], NOW)[0]
     assert row.divergence is None
     assert row.price is None
 
@@ -179,14 +190,14 @@ def test_a_thin_baseline_is_marked_provisional(board):
     universe_row('LBH')
     scored('LBH', baseline_days=3)
     db.session.commit()
-    assert 'provisional' in leaderboard.build_rows(['bluesky'], NOW)[0].marks
+    assert 'provisional' in build_rows(['bluesky'], NOW)[0].marks
 
 
 def test_a_truncated_source_is_marked_partial(board):
     universe_row('LBI')
     scored('LBI', status='truncated')
     db.session.commit()
-    assert 'partial' in leaderboard.build_rows(['bluesky'], NOW)[0].marks
+    assert 'partial' in build_rows(['bluesky'], NOW)[0].marks
 
 
 def test_segment_filtering(board):
@@ -196,9 +207,9 @@ def test_segment_filtering(board):
         scored(ticker)
     db.session.commit()
 
-    assert [r.ticker for r in leaderboard.build_rows(['bluesky'], NOW,
+    assert [r.ticker for r in build_rows(['bluesky'], NOW,
                                                      segment='large')] == ['LBBIG']
-    assert [r.ticker for r in leaderboard.build_rows(['bluesky'], NOW,
+    assert [r.ticker for r in build_rows(['bluesky'], NOW,
                                                      segment='micro')] == ['LBSML']
 
 
@@ -207,7 +218,7 @@ def test_a_ticker_missing_from_the_universe_still_ranks(board):
     Unknown segment is a first-class tab rather than a discard pile."""
     scored('LBZZ')
     db.session.commit()
-    row = leaderboard.build_rows(['bluesky'], NOW)[0]
+    row = build_rows(['bluesky'], NOW)[0]
     assert row.ticker == 'LBZZ'
     assert row.segment == 'unknown'
 
@@ -218,7 +229,7 @@ def test_the_limit_is_respected(board):
         universe_row(ticker)
         scored(ticker, z=float(index))
     db.session.commit()
-    assert len(leaderboard.build_rows(['bluesky'], NOW, limit=3)) == 3
+    assert len(build_rows(['bluesky'], NOW, limit=3)) == 3
 
 
 _mention_seq = [0]
@@ -255,7 +266,7 @@ def test_authors_are_counted_across_the_window_not_per_bucket(board):
         _mention('LBW', 'author%d' % (index * 2 + 1), 30 + index * 15)
     db.session.commit()
 
-    row = leaderboard.build_rows(['bluesky'], NOW)[0]
+    row = build_rows(['bluesky'], NOW)[0]
     assert row.authors == 8, 'window union, not the per-bucket maximum'
 
 
@@ -266,7 +277,7 @@ def test_the_bucket_maximum_is_the_fallback(board):
     universe_row('LBX')
     scored('LBX', mentions=10, authors=7)
     db.session.commit()
-    assert leaderboard.build_rows(['bluesky'], NOW)[0].authors == 7
+    assert build_rows(['bluesky'], NOW)[0].authors == 7
 
 
 def test_a_genuinely_concentrated_ticker_is_still_rejected(board):
@@ -277,7 +288,7 @@ def test_a_genuinely_concentrated_ticker_is_still_rejected(board):
     for index in range(14):
         _mention('LBY', 'onlyvoice', 30)
     db.session.commit()
-    assert leaderboard.build_rows(['bluesky'], NOW) == []
+    assert build_rows(['bluesky'], NOW) == []
 
 
 # Broadcast venues. A channel's admin is always one author, so the author gate
@@ -323,7 +334,7 @@ def test_a_broadcast_only_ticker_reaches_the_board_on_two_channels(board, monkey
                channel='chan-a' if n % 2 else 'chan-b', author='admin')
     db.session.commit()
 
-    assert [r.ticker for r in leaderboard.build_rows(['fourchan'], NOW)] == ['LBB']
+    assert [r.ticker for r in build_rows(['fourchan'], NOW)] == ['LBB']
 
 
 def test_one_channel_shouting_is_not_two_voices(board, monkeypatch):
@@ -338,7 +349,7 @@ def test_one_channel_shouting_is_not_two_voices(board, monkeypatch):
         posted('LBC', f'LBC{n}', 'fourchan', channel='chan-a', author='admin')
     db.session.commit()
 
-    assert leaderboard.build_rows(['fourchan'], NOW) == []
+    assert build_rows(['fourchan'], NOW) == []
 
 
 def test_a_forum_ticker_is_unaffected_by_the_new_path(board):
@@ -348,4 +359,101 @@ def test_a_forum_ticker_is_unaffected_by_the_new_path(board):
     quoted('LBD', '100.00', '100.00')
     db.session.commit()
 
-    assert [r.ticker for r in leaderboard.build_rows(['bluesky'], NOW)] == ['LBD']
+    assert [r.ticker for r in build_rows(['bluesky'], NOW)] == ['LBD']
+
+
+# What the floor left out, added 2026-08-23. Without it a two-row board and a
+# stopped ingest render identically.
+
+def test_a_ticker_below_the_voice_gate_is_counted_not_just_dropped(board):
+    universe_row('LBQUIET')
+    scored('LBQUIET', authors=1)
+    db.session.commit()
+
+    ranking = leaderboard.build_rows(['bluesky'], NOW)
+
+    assert ranking.rows == []
+    assert ranking.excluded['too_few_voices'] == 1
+
+
+def test_a_ticker_that_clears_the_floor_is_not_counted_as_excluded(board):
+    universe_row('LBA')
+    scored('LBA')
+    db.session.commit()
+
+    ranking = leaderboard.build_rows(['bluesky'], NOW)
+
+    assert [r.ticker for r in ranking.rows] == ['LBA']
+    assert sum(ranking.excluded.values()) == 0
+
+
+def test_the_breadth_filter_is_counted_apart_from_the_floor(board):
+    """`one venue only` is the reader's own filter doing what they asked, not
+    the data being too thin to measure. Merging them would tell the reader the
+    data was worse than it is."""
+    universe_row('LBA')
+    scored('LBA')
+    db.session.commit()
+
+    ranking = leaderboard.build_rows(['bluesky'], NOW, min_venues=2)
+
+    assert ranking.rows == []
+    assert ranking.excluded['one_venue'] == 1
+    assert ranking.excluded.get('too_few_voices', 0) == 0
+
+
+def test_repeated_text_is_named_as_such(board):
+    """Fifty voices pasting one message defeat the voice gate completely, and
+    "too few voices" would be the wrong account of why it was dropped."""
+    universe_row('LBSPAM')
+    scored('LBSPAM', authors=40, text_ratio=0.01)
+    db.session.commit()
+
+    ranking = leaderboard.build_rows(['bluesky'], NOW)
+
+    assert ranking.rows == []
+    assert ranking.excluded['repeated_text'] == 1
+
+
+def test_a_thin_ticker_is_reported_by_how_far_it_got(board):
+    """A later gate means the earlier ones passed, so the furthest failure is
+    the most informative description. Two mentions is a volume problem, and
+    calling it a voice problem would send the reader after the wrong fix."""
+    universe_row('LBTINY')
+    scored('LBTINY', mentions=2, authors=1)
+    db.session.commit()
+
+    ranking = leaderboard.build_rows(['bluesky'], NOW)
+
+    assert ranking.excluded['too_few_mentions'] == 1
+    assert 'too_few_voices' not in ranking.excluded
+
+
+def test_the_reason_is_the_furthest_gate_any_kind_reached():
+    """Only reachable with a broadcast source configured, which there is not
+    today -- so it is unit-tested directly rather than left to rot untested
+    until Telegram lands.
+
+    A ticker glanced at by one channel and discussed by forty forum authors
+    who all pasted the same text failed on wording, not on breadth. Reporting
+    the channel's failure would send the reader after the wrong fix.
+    """
+    from features.radar.scoring import Contribution
+
+    reason = leaderboard._rejection({
+        'broadcast': Contribution(mentions=1, voices=1, text_ratio=1.0),
+        'forum': Contribution(mentions=40, voices=40, text_ratio=0.01),
+    })
+
+    assert reason == 'repeated_text'
+
+
+def test_a_kind_that_passes_clears_the_whole_ticker():
+    """Eligibility is a union across kinds, so one passing kind means no
+    rejection at all -- not a rejection described by the other one."""
+    from features.radar.scoring import Contribution
+
+    assert leaderboard._rejection({
+        'broadcast': Contribution(mentions=1, voices=1, text_ratio=1.0),
+        'forum': Contribution(mentions=40, voices=40, text_ratio=0.9),
+    }) is None

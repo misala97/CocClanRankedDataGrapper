@@ -23,6 +23,20 @@ from .config import PROVISIONAL_BASELINE_DAYS, segments_in, source_kind
 
 
 @dataclasses.dataclass
+class Ranking:
+    """Rows worth showing, and an account of what was left out.
+
+    The account is not decoration. The eligibility floor is the single largest
+    reason this board is short, and until now it dropped tickers with no trace
+    -- so a quiet market and a stopped daemon rendered identically, and the
+    reader had no way to tell which they were looking at.
+    """
+    rows: list
+    # reason -> how many tickers it rejected. See _rejection for the vocabulary.
+    excluded: dict
+
+
+@dataclasses.dataclass
 class Row:
     ticker: str
     name: str | None
@@ -146,6 +160,7 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
     channel_counts = _distinct_channels(grouped.keys(), sources, since, now)
     today = now.date()
     rows = []
+    excluded = collections.Counter()
 
     for ticker, buckets in grouped.items():
         mentions = sum(b.mention_count for b in buckets)
@@ -179,8 +194,11 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
         }
 
         # Below the floor there is nothing to rank. Showing it low would imply
-        # it was measured and found wanting, when it was never measurable.
+        # it was measured and found wanting, when it was never measurable --
+        # but dropping it silently is how a two-row board became
+        # indistinguishable from a dead ingest, so the reason is counted.
         if not scoring.is_eligible(contributions):
+            excluded[_rejection(contributions)] += 1
             continue
 
         mention_z = ((mentions - expected)
@@ -235,7 +253,12 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
         # Breadth as a filter, not as a score. `contributing` is the list of
         # sources that actually said something, so this asks how many venues
         # are talking rather than how many the viewer has switched on.
+        #
+        # Counted apart from the floor: this is the reader's own filter doing
+        # what they asked, not the data being too thin to measure. Merging the
+        # two would tell them the data was worse than it is.
         if len(contributing) < min_venues:
+            excluded['one_venue'] += 1
             continue
 
         rows.append(Row(
@@ -263,4 +286,35 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
     rows.sort(key=lambda r: (r.divergence is not None,
                              r.divergence if r.divergence is not None else 0,
                              r.mention_z or 0), reverse=True)
-    return rows[:limit]
+    return Ranking(rows=rows[:limit] if limit else rows,
+                   excluded=dict(excluded))
+
+
+# Ordered by how far a ticker got before failing. A later gate means every
+# earlier one passed, so the furthest failure is the most informative
+# description of why a ticker is not on the board.
+_GATE_ORDER = ('too_few_mentions', 'too_few_voices', 'repeated_text')
+
+
+def _rejection(contributions):
+    """Which gate a ticker failed, or None if it passed.
+
+    Reported against the ticker's BEST kind rather than every kind it touched.
+    A ticker carried by three Bluesky authors and glanced at by one Telegram
+    channel is not "too few voices" merely because the broadcast side was
+    thin -- it failed on the forum side or not at all.
+    """
+    best = None
+    for kind, part in contributions.items():
+        if part.mentions < scoring.MIN_MENTIONS:
+            reason = 'too_few_mentions'
+        elif part.voices < scoring._VOICE_FLOOR.get(
+                kind, scoring.MIN_DISTINCT_AUTHORS):
+            reason = 'too_few_voices'
+        elif part.text_ratio < scoring.MIN_DISTINCT_TEXT_RATIO:
+            reason = 'repeated_text'
+        else:
+            return None
+        if best is None or _GATE_ORDER.index(reason) > _GATE_ORDER.index(best):
+            best = reason
+    return best

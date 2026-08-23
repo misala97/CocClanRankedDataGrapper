@@ -317,8 +317,9 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
     selected segment's size in every slot.
     """
     session = market_calendar.session_state(now.replace(tzinfo=dt.timezone.utc))
-    ranked = leaderboard.build_rows(sources, now, window_hours=window_hours,
-                                    segment=None, limit=None, session=session)
+    ranking = leaderboard.build_rows(sources, now, window_hours=window_hours,
+                                     segment=None, limit=None, session=session)
+    ranked = ranking.rows
 
     counts = collections.Counter(row.segment for row in ranked)
     segment_counts = dict(counts)
