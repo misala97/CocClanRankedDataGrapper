@@ -17,9 +17,23 @@ import datetime as dt
 from extensions import db
 from models import RadarDailyClose
 
-# A full trading year. 252 is the usual count; 260 covers a run of holidays
-# without needing a second request.
-HISTORY_DAYS = 260
+# Three years of trading days. Was 260 -- a single year -- until 2026-08-23,
+# when the detail panel gained a 3Y span.
+#
+# The long span is the one that answers "has this stock done this before",
+# which is the whole reason a reader opens the panel on a ticker they have
+# never heard of. ~780 rows x 247 tickers is about 190k rows, which is
+# nothing, and one full backfill takes about an hour against the provider's
+# eight-per-minute limit.
+HISTORY_DAYS = 780
+
+# A stored ticker counts as deep enough at this fraction of HISTORY_DAYS.
+#
+# Not 1.0. A listing younger than the window has less history than we ask for
+# and always will, so an exact comparison would put every recent IPO back in
+# the queue on every cycle -- spending the whole rate limit on precisely the
+# tickers that can never satisfy it.
+MIN_STORED_RATIO = 0.9
 
 # How old the newest stored close may be before it is worth re-asking.
 #
@@ -89,22 +103,36 @@ def closes_for(tickers, days=HISTORY_DAYS, today=None):
 def tickers_needing_history(candidates, today, stale_after_days=STALE_AFTER_DAYS):
     """Which of `candidates` to spend requests on, most urgent first.
 
-    Missing before stale, each keeping the caller's order -- the caller passes
-    them loudest first, and among tickers we cannot draw at all the loudest is
-    the one most likely to be looked at next.
+    Missing before stale before shallow, each keeping the caller's order --
+    the caller passes them loudest first, and among tickers we cannot draw at
+    all the loudest is the one most likely to be looked at next.
+
+    Shallow comes last and exists because raising HISTORY_DAYS does nothing on
+    its own: every already-stored ticker has a current newest close, so the
+    staleness rule never fires for it and the store would sit at its old depth
+    forever. A ticker we can already draw is the least urgent of the three.
     """
     if not candidates:
         return []
 
-    newest = dict(db.session.query(
-        RadarDailyClose.ticker, db.func.max(RadarDailyClose.close_date))
+    rows = (db.session.query(
+        RadarDailyClose.ticker,
+        db.func.max(RadarDailyClose.close_date),
+        db.func.count())
         .filter(RadarDailyClose.ticker.in_(list(candidates)))
         .group_by(RadarDailyClose.ticker).all())
+    newest = {ticker: day for ticker, day, _ in rows}
+    stored = {ticker: count for ticker, _, count in rows}
 
     cutoff = today - dt.timedelta(days=stale_after_days)
+    floor = int(HISTORY_DAYS * MIN_STORED_RATIO)
+
     missing = [t for t in candidates if t not in newest]
     stale = [t for t in candidates if t in newest and newest[t] < cutoff]
-    return missing + stale
+    seen = set(missing) | set(stale)
+    shallow = [t for t in candidates
+               if t not in seen and stored.get(t, 0) < floor]
+    return missing + stale + shallow
 
 
 def fetch_into_store(provider, tickers, now):

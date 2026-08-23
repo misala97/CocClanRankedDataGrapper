@@ -92,8 +92,15 @@ def test_a_ticker_with_no_history_is_asked_about_first(clean):
 def test_fridays_close_is_not_stale_on_monday(clean):
     """Two days, not one. The provider has nothing newer to give over a
     weekend, so a one-day rule would spend every Monday-morning cycle
-    re-fetching rows that cannot have changed."""
-    store(f'{PREFIX}A', 2)
+    re-fetching rows that cannot have changed.
+
+    Stored deep on purpose. This asserts an empty result, and since 2026-08-23
+    that depends on the depth rule as well as the staleness one -- with a
+    single row the ticker is legitimately due, and the test would be measuring
+    the wrong rule while still reading as if it measured this one.
+    """
+    for n in range(2, history.HISTORY_DAYS + 2):
+        store(f'{PREFIX}A', n)
     db.session.commit()
 
     assert history.tickers_needing_history([f'{PREFIX}A'], today=TODAY) == []
@@ -138,3 +145,44 @@ def test_a_full_year_is_requested(clean):
 
     assert provider.asked == [(f'{PREFIX}A', history.HISTORY_DAYS)]
     assert history.HISTORY_DAYS >= 252
+
+
+# Three years, added 2026-08-23 for the detail panel's 3Y span.
+
+def test_three_years_are_requested():
+    """The panel offers 1M/6M/1Y/3Y and the longest span is the one that
+    answers "has this stock done this before"."""
+    assert history.HISTORY_DAYS >= 780
+
+
+def test_a_ticker_stored_shallow_is_refetched(clean):
+    """Raising HISTORY_DAYS does nothing on its own. Every stored ticker has a
+    current newest close, so the staleness rule never fires and the store
+    would stay one year deep forever."""
+    for n in range(40):
+        store(f'{PREFIX}SHALLOW', n)
+    db.session.commit()
+
+    assert f'{PREFIX}SHALLOW' in history.tickers_needing_history(
+        [f'{PREFIX}SHALLOW'], TODAY)
+
+
+def test_a_ticker_stored_deep_is_left_alone(clean):
+    for n in range(history.HISTORY_DAYS):
+        store(f'{PREFIX}DEEP', n)
+    db.session.commit()
+
+    assert f'{PREFIX}DEEP' not in history.tickers_needing_history(
+        [f'{PREFIX}DEEP'], TODAY)
+
+
+def test_a_recent_ipo_is_not_refetched_forever(clean):
+    """A listing younger than the window has less history than we ask for and
+    always will. Refetching it every cycle would spend the whole rate limit on
+    the tickers that can never satisfy it."""
+    for n in range(int(history.HISTORY_DAYS * history.MIN_STORED_RATIO) + 5):
+        store(f'{PREFIX}IPO', n)
+    db.session.commit()
+
+    assert f'{PREFIX}IPO' not in history.tickers_needing_history(
+        [f'{PREFIX}IPO'], TODAY)
