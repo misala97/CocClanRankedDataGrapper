@@ -151,3 +151,24 @@ def test_changing_a_scoring_threshold_does_not_reset_baselines():
         assert config.source_config_version() == before
     finally:
         config.MIN_MENTIONS = original
+
+
+# Source kinds. The author gate is a proxy for "how many independent voices",
+# and on a broadcast network that unit is the channel, not the author.
+
+def test_every_configured_source_has_a_kind():
+    """A source with no kind still works -- it gets the forum gate -- but the
+    map going stale silently is how a broadcast venue would end up judged by
+    an author count it can never reach."""
+    from features.radar import config
+
+    for source in config.SOURCES:
+        assert source in config.SOURCE_KIND, source
+
+
+def test_an_unknown_source_gets_the_stricter_gate():
+    """Forum is the tighter of the two. A source nobody has characterised
+    should be judged strictly, not leniently."""
+    from features.radar.config import source_kind
+
+    assert source_kind('something-new') == 'forum'

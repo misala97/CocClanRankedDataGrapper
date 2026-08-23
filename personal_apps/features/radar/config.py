@@ -67,6 +67,31 @@ COIN_SYMBOLS_MEAN_STOCKS = {
 }
 
 
+# What kind of venue each source is, which decides how its independent voices
+# get counted.
+#
+# The author gate is a proxy for one question -- how many independent voices
+# are saying this. On a forum that is distinct authors. On a BROADCAST network
+# one admin posts and thousands read, so every bucket has exactly one author
+# and the author gate can never be cleared however loud the ticker is. There
+# the independent unit is the CHANNEL: three channels carrying the same symbol
+# is corroboration, one channel posting it forty times is not.
+SOURCE_KIND = {
+    'stocktwits': 'forum',
+    'bluesky': 'forum',
+    'fourchan': 'forum',
+}
+
+
+def source_kind(source):
+    """'forum' or 'broadcast'. Unknown sources are treated as forums.
+
+    The strict direction: forum is the tighter gate, so a source nobody has
+    characterised is judged by the harder standard rather than waved through.
+    """
+    return SOURCE_KIND.get(source, 'forum')
+
+
 # Single-letter cashtags. `$M`, `$B`, `$T` and `$K` are money shorthand far
 # more often than Macy's, Barnes Group, AT&T and Kellanova -- measured on live
 # Bluesky, 119 of 3302 cashtag matches were single letters and essentially all
@@ -256,6 +281,12 @@ def prefer_ipv4_if_configured():
 # any volume, and fifty accounts can paste one message.
 MIN_MENTIONS = 5
 MIN_DISTINCT_AUTHORS = 3
+
+# Distinct CHANNELS a broadcast source needs, against MIN_DISTINCT_AUTHORS for
+# a forum. Two rather than three because there are orders of magnitude fewer
+# channels than authors, and a symbol reaching two independent channels is
+# already the rarer event.
+MIN_DISTINCT_CHANNELS = 2
 MIN_DISTINCT_TEXT_RATIO = 0.35
 
 # A window counts as elevated at or above this z.
