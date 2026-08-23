@@ -30,18 +30,88 @@ export type Segment = 'large' | 'mid' | 'micro' | 'unknown' | 'recent_ipo'
  *  reports it, so Row.segment stays the narrower type. */
 export type SegmentFilter = Segment | 'small'
 
+/** One styled fragment of a phrase.
+ *
+ *  The client styles by `kind` and never parses `text`. The wording is decided
+ *  in features/radar/phrasing.py, so there is exactly one implementation of
+ *  that judgement -- a component that rebuilt "40x its normal" from mentions
+ *  and expected would be a second one, free to disagree. */
+export interface Clause {
+  kind: 'ratio' | 'venues' | 'people' | 'price-up' | 'price-down'
+      | 'price-flat' | 'new' | 'warn' | 'plain'
+  text: string
+}
+
+/** How far back the panel's chart reaches. Owned by the panel, not the board:
+ *  it changes one ticker's chart, not which rows are listed. */
+export type PanelSpan = '1M' | '6M' | '1Y' | '3Y'
+
 /** Price and chatter over the same calendar days, sharing `from`.
  *
  *  `closes[i]` null means the market did not trade that day -- the line is
  *  drawn across it. `chatter[i]` null means we were not watching yet -- no bar
  *  is drawn at all. Two different absences, deliberately not collapsed. */
-export interface Chart {
+export interface DetailChart {
   from: string
+  span: PanelSpan
   closes: (number | null)[]
   chatter: (number | null)[]
+  /** The day observation began. Before it the chatter lane is unobserved
+   *  rather than silent, and the panel draws that boundary. */
+  watched_from: string | null
 }
 
-export type ChartSpan = '24h' | '1M' | '3M' | '1Y'
+export interface Post {
+  source: string
+  author: string | null
+  channel: string
+  created: string
+  title: string | null
+  body: string | null
+  url: string | null
+}
+
+export interface Venue {
+  source: string
+  mentions: number
+  voices: number
+}
+
+export interface Breakdown {
+  venues: Venue[]
+  bullish: number
+  neutral: number
+  bearish: number
+  /** The pump tell: one account posting forty times reads as forty mentions
+   *  everywhere else on the surface. */
+  top_author_share: number | null
+  top_two_share: number | null
+  peak_hour: string | null
+  peak_count: number
+  first_seen: string | null
+  mentions: number
+  voices: number
+}
+
+export interface Detail {
+  identity: {
+    ticker: string
+    name: string | null
+    exchange: string | null
+    segment: Segment
+    market_cap: number | null
+    ipo_date: string | null
+    price: number | null
+    price_move: number | null
+    price_status: string
+    session: Session
+  }
+  read: Clause[]
+  chart: DetailChart
+  breakdown: Breakdown
+  posts: Post[]
+  post_total: number
+}
 
 export interface Row {
   ticker: string
@@ -68,8 +138,10 @@ export interface Row {
   /** Keyed by window length in hours, as a string: {"1": 3.1, "4": ...}. */
   triplet: Record<string, number | null>
   tone: Tone
-  /** null when the ticker has no stored closes at all. */
-  chart: Chart | null
+  /** Why this row is on the list. The chart used to live here and moved to
+   *  the panel: at the 3Y span it is ~780 numbers, and a twenty-row board
+   *  would have carried sixteen thousand of them to draw twenty sparklines. */
+  clauses: Clause[]
 }
 
 /** The exchange's state. It changes what the ranking MEANS, not merely how it
@@ -92,6 +164,9 @@ export interface BoardPayload {
   series_hours: number
   lead_count: number
   rows: Row[]
+  /** What the eligibility floor and the breadth filter left out, by reason.
+   *  Without it a quiet board and a stopped ingest look identical. */
+  excluded: Record<string, number>
 }
 
 export interface Selection {
