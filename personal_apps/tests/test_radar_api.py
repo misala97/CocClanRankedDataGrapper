@@ -115,3 +115,17 @@ def test_the_page_falls_back_to_the_default_board_on_a_bad_query(client):
     surfacing. A person editing the address bar is not a bug."""
     assert client.get('/radar/api/board?window=7').status_code == 400
     assert client.get('/radar/?window=7').status_code == 200
+
+
+def test_the_chart_serializes_as_two_aligned_arrays(client):
+    """One start date, two equal-length arrays. Index i is the same calendar
+    day in each, which is what lets the client draw them on one axis."""
+    payload = json.loads(client.get('/radar/api/board').data)
+
+    for row in payload['rows']:
+        chart = row['chart']
+        if chart is None:
+            continue
+        assert set(chart) == {'from', 'closes', 'chatter'}
+        assert len(chart['closes']) == len(chart['chatter'])
+        assert chart['from'].count('-') == 2

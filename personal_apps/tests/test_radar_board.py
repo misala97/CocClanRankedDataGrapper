@@ -15,8 +15,8 @@ from app import app as flask_app
 from extensions import db
 from features.radar import board
 from features.radar.config import source_config_version
-from models import (RadarBucketSource, RadarMention, RadarPost, RadarQuote,
-                    TickerUniverse)
+from models import (RadarBucketSource, RadarDailyClose, RadarMention,
+                    RadarPost, RadarQuote, TickerUniverse)
 
 # Deliberately outside any window a running dev database holds data for.
 # `_covered_hours` asks "was ingest alive this hour" across ALL tickers, by
@@ -40,7 +40,10 @@ def clean():
             RadarMention.ticker.like(f'{PREFIX}%')).delete(synchronize_session=False)
         RadarPost.query.filter(
             RadarPost.external_id.like(f'{PREFIX}%')).delete(synchronize_session=False)
-        for model in (RadarBucketSource, RadarQuote):
+        # RadarDailyClose included from the day it existed: its primary key
+        # is (ticker, close_date), so a leaked row does not merely skew the
+        # next test, it makes the next INSERT fail outright.
+        for model in (RadarBucketSource, RadarQuote, RadarDailyClose):
             model.query.filter(model.ticker.like(f'{PREFIX}%')).delete(
                 synchronize_session=False)
         TickerUniverse.query.filter(
@@ -280,3 +283,74 @@ def test_only_the_lead_rows_carry_a_price_series(clean):
 
     assert all(entry.price_series for entry in built.rows[:2])
     assert all(not entry.price_series for entry in built.rows[2:])
+
+
+# ------------------------------------------------------------------ chart ---
+#
+# Price and chatter on one calendar axis. The alignment is the whole reason
+# they are one structure: a year holds ~252 trading days and 365 calendar
+# days, so positioning each by its own index would drift them over a hundred
+# days apart by December.
+
+def test_the_chart_aligns_price_and_chatter_on_calendar_days(clean):
+    from models import RadarDailyClose
+
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    for offset in (0, 1, 2):
+        db.session.add(RadarDailyClose(
+            ticker=f'{PREFIX}A', close_date=NOW.date() - dt.timedelta(days=offset),
+            close=decimal.Decimal('10') + decimal.Decimal(offset), fetched_at=NOW))
+    db.session.commit()
+
+    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
+
+    assert len(chart.closes) == len(chart.chatter) == board.CHART_DAYS
+    assert (NOW.date() - chart.start).days == board.CHART_DAYS - 1
+    # Today is the last index of both arrays, so the two line up by date.
+    assert float(chart.closes[-1]) == 10.0
+    assert chart.chatter[-1] == 10
+
+
+def test_a_day_the_market_did_not_trade_is_null_not_carried_forward(clean):
+    """Null means no trade happened. The client draws the line across it;
+    repeating the previous close here would invent a print."""
+    from models import RadarDailyClose
+
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    db.session.add(RadarDailyClose(
+        ticker=f'{PREFIX}A', close_date=NOW.date() - dt.timedelta(days=3),
+        close=decimal.Decimal('10'), fetched_at=NOW))
+    db.session.commit()
+
+    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
+
+    assert chart.closes[-1] is None
+    assert float(chart.closes[-4]) == 10.0
+
+
+def test_days_before_ingest_began_have_no_chatter_at_all(clean):
+    """Not zero. We were not watching, and a zero bar would claim a silence we
+    never observed -- the same rule the hourly series already follows."""
+    from models import RadarDailyClose
+
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    db.session.add(RadarDailyClose(
+        ticker=f'{PREFIX}A', close_date=NOW.date(),
+        close=decimal.Decimal('10'), fetched_at=NOW))
+    db.session.commit()
+
+    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
+
+    assert chart.chatter[0] is None
+    assert chart.chatter[-1] == 10
+
+
+def test_a_ticker_with_no_stored_closes_has_no_chart(clean):
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    db.session.commit()
+
+    assert only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart is None

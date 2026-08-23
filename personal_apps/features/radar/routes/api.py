@@ -107,6 +107,7 @@ def _row(entry):
         'price_series': [{'at': at.isoformat() + 'Z',
                           'price': _decimal_or_none(price)}
                          for at, price in entry.price_series],
+        'chart': _chart(entry.chart),
     }
 
 
