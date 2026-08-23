@@ -241,19 +241,19 @@ def _scheduled_quotes():
                 result['requested'], result['stored'], result['error'])
 
 
-def refresh_volatility(now_utc, provider, limit=SIGMA_LIMIT):
+def refresh_volatility(now_utc, limit=SIGMA_LIMIT):
     """Recompute daily sigma for the tickers on the board.
 
-    Divergence needs a sigma for every row of every page load, and fetching
-    thirty daily closes per ticker per request would be absurd -- so it is
-    cached, and this is what fills the cache.
+    No provider argument: sigma comes from the closes the history job already
+    stored (features/radar/history.py). Divergence needs a sigma for every row
+    of every page load, so it stays cached -- this fills the cache from the
+    table rather than from the network.
     """
     tickers = _loud_tickers(now_utc, limit)
     if not tickers:
         return 0
     try:
-        return quotes.refresh_sigma(provider, tickers,
-                                    now_utc.replace(tzinfo=None))
+        return quotes.refresh_sigma(tickers, now_utc.replace(tzinfo=None))
     except Exception:
         logger.exception('radar volatility refresh failed')
         return 0
@@ -308,10 +308,8 @@ def _scheduled_profiles():
 
 def _scheduled_volatility():
     now = dt.datetime.now(dt.timezone.utc)
-    provider = twelvedata_provider.TwelveDataProvider(
-        twelvedata_provider.TwelveDataHttp())
     with app.app_context():
-        updated = refresh_volatility(now, provider)
+        updated = refresh_volatility(now)
     logger.info('radar volatility refreshed %d tickers', updated)
 
 

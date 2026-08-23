@@ -132,19 +132,29 @@ def scale_sigma(sigma, hours):
     return sigma * ((hours / SESSION_HOURS) ** 0.5)
 
 
-def refresh_sigma(provider, tickers, now):
-    """Recompute and store daily volatility. Returns how many were updated.
+def refresh_sigma(tickers, now):
+    """Recompute and store daily volatility from stored closes. Returns how
+    many were updated.
 
-    A ticker whose provider returns no history keeps whatever it had. No
+    Reads radar_daily_closes rather than calling the provider. It used to
+    fetch thirty-five closes per ticker every twelve hours and discard them;
+    the history job now keeps a year of the same data, and on an
+    eight-request-a-minute budget the duplicate fetch competed directly with
+    the tickers that have no history at all.
+
+    A ticker without enough stored history keeps whatever sigma it had. No
     history is not a volatility of zero, and a zero sigma downstream turns
     every price move into an infinite z.
     """
     from models import TickerUniverse
 
+    from . import history
+
+    stored = history.closes_for(tickers, days=history.HISTORY_DAYS)
+
     updated = 0
     for ticker in tickers:
-        closes = provider.daily_closes(ticker, days=35)
-        sigma = daily_sigma(closes)
+        sigma = daily_sigma(stored.get(ticker, []))
         if sigma is None:
             continue
 

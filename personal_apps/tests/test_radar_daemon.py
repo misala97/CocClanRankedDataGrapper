@@ -205,35 +205,35 @@ def test_sigma_refresh_covers_the_board(monkeypatch):
     slow schedule rather than per page load."""
     asked = {}
 
-    def fake_refresh(provider, tickers, now):
+    def fake_refresh(tickers, now):
         asked['tickers'] = list(tickers)
         return len(asked['tickers'])
 
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
     monkeypatch.setattr(daemon.quotes, 'refresh_sigma', fake_refresh)
-    assert daemon.refresh_volatility(_utc(2026, 8, 21, 14), object()) == 2
+    assert daemon.refresh_volatility(_utc(2026, 8, 21, 14)) == 2
     assert asked['tickers'] == ['AAA', 'BBB']
 
 
 def test_a_failing_sigma_refresh_is_contained(monkeypatch):
-    def boom(provider, tickers, now):
-        raise RuntimeError('provider down')
+    def boom(tickers, now):
+        raise RuntimeError('sigma blew up')
 
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
     monkeypatch.setattr(daemon.quotes, 'refresh_sigma', boom)
-    assert daemon.refresh_volatility(_utc(2026, 8, 21, 14), object()) == 0
+    assert daemon.refresh_volatility(_utc(2026, 8, 21, 14)) == 0
 
 
 def test_an_empty_board_needs_no_volatility_call(monkeypatch):
     called = {'n': 0}
 
-    def counting(provider, tickers, now):
+    def counting(tickers, now):
         called['n'] += 1
         return 0
 
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: [])
     monkeypatch.setattr(daemon.quotes, 'refresh_sigma', counting)
-    daemon.refresh_volatility(_utc(2026, 8, 21, 14), object())
+    daemon.refresh_volatility(_utc(2026, 8, 21, 14))
     assert called['n'] == 0
 
 
