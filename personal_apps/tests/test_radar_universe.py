@@ -293,3 +293,122 @@ def test_an_ordinary_word_can_become_distinctive_and_that_is_accepted():
     })
 
     assert 'peace' in lookup['PECE']['distinctive']
+
+
+# A fund's own name cannot promote its ticker. Added 2026-08-23 after the live
+# board's entire small-cap section was MAGA and GOP.
+
+def test_a_thematic_fund_cannot_promote_itself_from_its_own_name():
+    """The live failure. `Subversive Congressional Republicans Trading ETF`
+    handed GOP the token `republicans`, so any Bluesky post containing both
+    the word GOP and the word republicans -- which is most posts about
+    American politics -- promoted itself into a scored stock mention.
+
+    A thematic fund is named after a discourse, so its name tokens are the
+    most common words IN that discourse. The corroboration is backwards: for
+    `tesla` the word is evidence the post is about the company, for
+    `republicans` the word is evidence the post is NOT about the fund.
+    """
+    lookup = universe.annotate_distinctive({
+        'GOP': {'name': 'Subversive Congressional Republicans Trading ETF'},
+        'MAGA': {'name': 'Truth Social America First ETF'},
+    })
+
+    assert lookup['GOP']['distinctive'] == set()
+    assert lookup['MAGA']['distinctive'] == set()
+
+
+def test_an_operating_company_still_promotes_from_its_name():
+    """The guard. Bare-token reach into small caps is the whole point of the
+    mechanism; this narrows it to issuers, not funds."""
+    lookup = universe.annotate_distinctive({
+        'SBFM': {'name': 'Sunshine Biopharma Inc. - Common Stock'},
+        'GRML': {'name': 'Greenland Acquisition Holdings - Common Stock'},
+    })
+
+    assert 'sunshine' in lookup['SBFM']['distinctive']
+    assert 'greenland' in lookup['GRML']['distinctive']
+
+
+def test_a_fund_is_still_reachable_by_cashtag():
+    """Not a silent delisting. Dropping the tokens removes one PROMOTION path
+    for a bare mention; `$MAGA` is a cashtag and scores directly, which is the
+    right reading -- a person typing the dollar sign means the fund."""
+    from features.radar import extraction
+
+    found = extraction.extract_tickers(
+        None, '$MAGA looks overbought',
+        {'MAGA': {'name': 'Truth Social America First ETF',
+                  'distinctive': set()}})
+
+    assert found == [('MAGA', 'high')]
+
+
+def test_an_adr_keeps_its_tokens():
+    """The reason the two predicates had to split. An ADR is a real foreign
+    operating company listing in the US, and Chinese and Israeli small caps
+    list that way constantly -- silencing them cuts exactly the stocks the
+    board exists to find. 1302 listings on the live universe."""
+    lookup = universe.annotate_distinctive({
+        'AACG': {'name': 'ATA Creativity Global - American Depositary Shares'},
+    })
+
+    assert 'creativity' in lookup['AACG']['distinctive']
+
+
+def test_a_trust_that_is_an_operating_company_keeps_its_tokens():
+    """`trust` is deliberately absent from POOLED_VEHICLE_PATTERN. Most
+    REITs are named this way, and so is Adamas Trust -- which issues common
+    stock and senior notes, not units of a strategy."""
+    lookup = universe.annotate_distinctive({
+        'ADMS': {'name': 'Adamas Trust, Inc. - Common Stock'},
+    })
+
+    assert 'adamas' in lookup['ADMS']['distinctive']
+
+
+def test_a_leveraged_product_loses_them():
+    lookup = universe.annotate_distinctive({
+        'TSLL': {'name': 'Direxion Daily TSLA Bull 2X Shares ETF'},
+    })
+
+    assert lookup['TSLL']['distinctive'] == set()
+
+
+def test_a_warrant_keeps_tokens_but_still_does_not_pad_the_issuer_count():
+    """Both halves in one place. The warrant may vouch for itself, and it must
+    not make its own parent's name look common."""
+    lookup = universe.annotate_distinctive({
+        'IPEX': {'name': 'Inflection Point Acquisition Corp. - Common Stock'},
+        'IPEXU': {'name': 'Inflection Point Acquisition Corp. - Unit'},
+        'IPEXW': {'name': 'Inflection Point Acquisition Corp. - Warrant'},
+        'IPEXR': {'name': 'Inflection Point Acquisition Corp. - Right'},
+    })
+
+    assert 'inflection' in lookup['IPEXW']['distinctive']
+    assert 'inflection' in lookup['IPEX']['distinctive']
+
+
+def test_note_listings_without_a_separator_collapse_to_one_issuer():
+    """Sachem Capital's four note lines carry no comma and no dash -- the
+    coupon rate is the only boundary. Without it one small-cap lender counted
+    as five issuers and `sachem` stopped being distinctive, which is the exact
+    shape of bug this whole rule exists to prevent.
+
+    Asserted on _issuer_of rather than through annotate_distinctive: the
+    ceiling scales with the lookup, so a five-symbol universe allows one
+    issuer per token and any second key fails regardless of the split.
+    """
+    keys = {universe._issuer_of(name) for name in (
+        'Sachem Capital Corp. 6.00% Notes due 2026',
+        'Sachem Capital Corp. 6.00% Notes due 2027',
+        'Sachem Capital Corp. 7.125% Notes due 2027',
+        'Sachem Capital Corp. 8.00% Notes due 2027',
+    )}
+
+    assert keys == {'sachem capital corp.'}
+
+
+def test_the_coupon_split_leaves_ordinary_names_alone():
+    assert universe._issuer_of('Tesla, Inc. - Common Stock') == 'tesla'
+    assert universe._issuer_of('NVIDIA Corp') == 'nvidia corp'

@@ -175,11 +175,47 @@ NAME_WORD_PATTERN = r"[a-z']+"
 # name is common -- counting them is why `tesla` scored a document frequency
 # of 4 against a ceiling of 3, and TSLA could never be promoted from a bare
 # mention.
-FUND_NAME_PATTERN = (
-    r'\b(etf|etn|fund|trust|index|portfolio|inverse|bull|bear|\d+x'
-    r'|daily target|yield premium|covered call|leveraged|warrant|rights?'
-    r'|units?|notes due|preferred|depositary)\b'
-)
+# A POOLED VEHICLE: something whose name describes a strategy rather than a
+# business. One predicate, governing both halves of distinctiveness -- a name
+# either contributes its tokens AND counts toward the issuer tally, or does
+# neither.
+#
+# The two have to stay the same set. An earlier version used a broader pattern
+# for the tally than for token suppression, and a word appearing only in
+# excluded names then looked rare: an ADR kept `depositary` as a distinctive
+# token because all 331 names carrying the word were skipped from the
+# denominator.
+#
+# Deliberately narrow. Warrants, units, rights, preferred lines, notes and
+# ADRs all stay IN -- an ADR is a real foreign company listing in the US,
+# `ATA Creativity Global - American Depositary Shares`, and Chinese and
+# Israeli small caps list that way constantly, so suppressing them would cut
+# exactly the stocks this board exists to find. `trust` is out too: `Adamas
+# Trust, Inc. - Common Stock` is an operating company, as are most REITs.
+# Those listings collapse onto their issuer through _issuer_of instead, which
+# is where that job belongs.
+POOLED_VEHICLE_PATTERN = (
+    r'\b(etf|etn|fund|index|portfolio|inverse|bull|bear|\d+x'
+    r'|daily target|yield premium|covered call|leveraged)\b')
+
+# Whether a pooled vehicle's own name may promote a bare mention of its
+# ticker.
+#
+# False since 2026-08-23. It was True on the reasoning that an ETF's name
+# should vouch for its own symbol, and the live board showed what that costs:
+# the entire small-cap section was MAGA and GOP -- `Truth Social America First
+# ETF` and `Subversive Congressional Republicans Trading ETF` -- promoted by
+# ordinary political posts containing the words `truth social` and
+# `republicans`.
+#
+# A thematic fund is named after a discourse, so its name tokens are the most
+# common words in that discourse, and the corroboration runs backwards: for
+# `tesla` the word is evidence the post concerns the company; for
+# `republicans` it is evidence the post does not concern the fund.
+#
+# Funds remain reachable by cashtag, which scores directly. A person typing
+# the dollar sign means the fund.
+FUNDS_PROMOTE_BARE_TOKENS = False
 
 
 def looks_like_exchange_bot(text):
@@ -279,7 +315,11 @@ def source_config_version():
         'bot_re': _EXCHANGE_BOT_RE.pattern,
         'name_df': [MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO,
                     MIN_NAME_TOKEN_LEN],
-        'fund_re': FUND_NAME_PATTERN,
+        'pooled_re': POOLED_VEHICLE_PATTERN,
+        # The PATTERN alone was not enough: this flag changes what the same
+        # pattern is used FOR, so flipping it changed which mentions were
+        # counted while leaving the stamp identical.
+        'fund_tokens': FUNDS_PROMOTE_BARE_TOKENS,
     }, separators=(',', ':'), sort_keys=True)
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 
