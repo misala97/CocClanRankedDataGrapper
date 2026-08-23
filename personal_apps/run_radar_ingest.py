@@ -23,7 +23,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app import app
 from extensions import db
 from features.radar import (
-    ingest, market_calendar, quotes, retention, scheduling, scoring, universe)
+    history, ingest, market_calendar, quotes, retention, scheduling, scoring,
+    universe)
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
@@ -71,6 +72,12 @@ SIGMA_INTERVAL_HOURS = 12
 PROFILE_LIMIT = 40
 PROFILE_INTERVAL_HOURS = 6
 PROFILE_MAX_AGE_DAYS = 7
+
+# Daily closes for the chart's longer spans. The binding constraint is Twelve
+# Data's EIGHT REQUESTS PER MINUTE, not its 800/day quota: 20 per five-minute
+# cycle is four a minute, leaving room for the quote job alongside.
+HISTORY_LIMIT = 20
+HISTORY_INTERVAL_MINUTES = 5
 
 
 def _utcnow():
@@ -306,6 +313,37 @@ def _scheduled_profiles():
     logger.info('radar profiles refreshed %d tickers', updated)
 
 
+def refresh_history(now_utc, provider, limit=HISTORY_LIMIT):
+    """Fetch a year of daily closes for board tickers that need them.
+
+    Returns how many tickers came back with data. Ordering is the history
+    module's decision -- missing before stale -- because a ticker the board
+    cannot draw at all is worth more than a fresher copy of one it can.
+    """
+    candidates = _loud_tickers(now_utc, limit * 5)
+    if not candidates:
+        return 0
+
+    naive = now_utc.replace(tzinfo=None)
+    try:
+        due = history.tickers_needing_history(candidates, naive.date())[:limit]
+        if not due:
+            return 0
+        return history.fetch_into_store(provider, due, naive)
+    except Exception:
+        logger.exception('radar history refresh failed')
+        return 0
+
+
+def _scheduled_history():
+    now = dt.datetime.now(dt.timezone.utc)
+    provider = twelvedata_provider.TwelveDataProvider(
+        twelvedata_provider.TwelveDataHttp())
+    with app.app_context():
+        stored = refresh_history(now, provider)
+    logger.info('radar history stored %d tickers', stored)
+
+
 def _scheduled_volatility():
     now = dt.datetime.now(dt.timezone.utc)
     with app.app_context():
@@ -358,6 +396,13 @@ def main():
                       max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc)
                       + dt.timedelta(minutes=3))
+    # One minute in, ahead of everything else that costs requests: a ticker
+    # with no stored history is the only one the chart literally cannot draw.
+    scheduler.add_job(_scheduled_history, 'interval',
+                      minutes=HISTORY_INTERVAL_MINUTES, id='radar_history',
+                      max_instances=1, coalesce=True,
+                      next_run_time=dt.datetime.now(dt.timezone.utc)
+                      + dt.timedelta(minutes=1))
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
     scheduler.start()

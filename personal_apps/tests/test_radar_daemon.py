@@ -290,3 +290,80 @@ def test_the_daemon_schedules_a_profile_job():
 
     assert "id='radar_profiles'" in source
     assert '_scheduled_profiles' in source
+
+
+# Daily closes. The binding constraint is Twelve Data's eight requests a
+# minute, not its 800/day quota, so what the job spends its cycle on matters
+# more than how often it runs.
+
+def test_history_is_fetched_for_tickers_that_have_none(monkeypatch):
+    seen = {}
+
+    def fake_fetch(provider, tickers, now):
+        seen['tickers'] = list(tickers)
+        return len(tickers)
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
+    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
+                        lambda candidates, today: ['BBB'])
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+
+    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 1
+    assert seen['tickers'] == ['BBB']
+
+
+def test_the_history_job_respects_its_per_cycle_cap(monkeypatch):
+    """Eight requests a minute is the real ceiling. A cycle that asked for
+    everything would trip it and lose the whole batch."""
+    asked = {}
+
+    def fake_fetch(provider, tickers, now):
+        asked['n'] = len(tickers)
+        return len(tickers)
+
+    many = [f'T{n}' for n in range(100)]
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: many)
+    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
+                        lambda candidates, today: list(candidates))
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+
+    daemon.refresh_history(_utc(2026, 8, 21, 14), object(), limit=20)
+    assert asked['n'] == 20
+
+
+def test_a_failing_history_provider_does_not_kill_the_cycle(monkeypatch):
+    def boom(provider, tickers, now):
+        raise RuntimeError('provider down')
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
+    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
+                        lambda candidates, today: ['AAA'])
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', boom)
+
+    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 0
+
+
+def test_nothing_due_spends_no_requests(monkeypatch):
+    called = {'n': 0}
+
+    def counting(provider, tickers, now):
+        called['n'] += 1
+        return 0
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
+    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
+                        lambda candidates, today: [])
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', counting)
+
+    daemon.refresh_history(_utc(2026, 8, 21, 14), object())
+    assert called['n'] == 0
+
+
+def test_the_daemon_schedules_a_history_job():
+    """The profile job shipped unscheduled and nothing caught it, because the
+    defect was an absence. Assert the registration itself."""
+    import inspect
+    source = inspect.getsource(daemon.main)
+
+    assert "id='radar_history'" in source
+    assert '_scheduled_history' in source
