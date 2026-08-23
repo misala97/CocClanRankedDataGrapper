@@ -191,3 +191,16 @@ def test_the_version_stamp_covers_the_distinctiveness_rule():
     finally:
         config.MAX_NAME_TOKEN_DF = original
     assert config.source_config_version() == before
+
+
+def test_bluesky_reads_bare_tokens_now():
+    """Off since the first live measurement, when Bluesky's top bare tokens
+    were IA (Iowa), GOP and AP. That reasoning expired: an uncorroborated bare
+    token is now stored `low` and never scored, and only becomes countable via
+    a distinctive company name in the same post or a different author
+    cashtagging it in the same bucket. Bluesky has the many independent
+    authors that second path needs; a broadcast channel does not.
+    """
+    from features.radar.config import bare_tokens_allowed
+
+    assert bare_tokens_allowed('bluesky') is True

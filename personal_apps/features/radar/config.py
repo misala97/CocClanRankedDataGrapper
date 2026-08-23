@@ -34,7 +34,19 @@ SOURCES = ('stocktwits', 'bluesky', 'fourchan')
 BARE_TOKENS_ALLOWED = {
     'stocktwits': True,    # finance-only by construction
     'fourchan': True,      # /biz/ is a finance board
-    'bluesky': False,      # general population; cashtags only
+    # Was False, set after the first live pass found IA (Iowa), GOP and AP
+    # among the top bare tokens. Re-enabled 2026-08-23: an uncorroborated bare
+    # token is stored `low` and never scored, so the junk that measurement
+    # found now costs a row in a table and nothing on the board. What it buys
+    # is the promotion path -- a distinctive company name in the same post, or
+    # a different author cashtagging the same ticker in the same bucket --
+    # which needs many independent authors and is therefore exactly this
+    # source. Verified on Telegram, where channels whose bare tokens were RSI,
+    # ROE, DMA and GROW produced zero high-confidence hits.
+    #
+    # See scripts/measure_bare_tokens.py. Revert if the top twenty scored
+    # tickers stop looking like equities.
+    'bluesky': True,
 }
 
 
