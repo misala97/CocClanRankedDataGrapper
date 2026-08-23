@@ -11,16 +11,17 @@ silent on another. Pooling happens at read time, over whichever sources the
 viewer selected (spec 8.6).
 """
 import collections
+import dataclasses
 import datetime as dt
 
 from extensions import db
 from models import RadarBucketSource
 
 from . import baselines, profile
-from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_TEXT_RATIO,
-                     MIN_MENTIONS, SUSTAINED_HOURS_CONSIDERED,
-                     SUSTAINED_HOURS_REQUIRED, VARIANCE_FLOOR,
-                     source_config_version)
+from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
+                     MIN_DISTINCT_TEXT_RATIO, MIN_MENTIONS,
+                     SUSTAINED_HOURS_CONSIDERED, SUSTAINED_HOURS_REQUIRED,
+                     VARIANCE_FLOOR, source_config_version)
 
 # Weight of the cold-start prior, in units of observed mass. 0.05 of a week is
 # about eight hours: enough to dominate on day one and vanish by week two.
@@ -130,16 +131,48 @@ def pooled_z(ticker, bucket_start, sources):
     return (observed - expected) / max(variance, VARIANCE_FLOOR) ** 0.5, len(rows)
 
 
-def is_eligible(mentions, authors, text_ratio):
+@dataclasses.dataclass
+class Contribution:
+    """What one kind of venue contributed to a ticker in a window.
+
+    `voices` is deliberately not called `authors`. It is whatever counts as an
+    independent voice for that kind -- distinct authors on a forum, distinct
+    channels on a broadcast network -- and naming it after the forum case is
+    what made the gate untranslatable in the first place.
+    """
+    mentions: int
+    voices: int
+    text_ratio: float
+
+
+# Independent voices each kind needs. An unknown kind gets the forum floor,
+# which is the stricter of the two.
+_VOICE_FLOOR = {
+    'forum': MIN_DISTINCT_AUTHORS,
+    'broadcast': MIN_DISTINCT_CHANNELS,
+}
+
+
+def is_eligible(contributions):
     """Whether a reading is worth ranking at all.
 
-    Three gates, because each is blind to what the others catch: raw volume
-    means nothing at low counts, one determined account can supply any volume,
-    and fifty accounts pasting one message defeat the author gate completely.
+    `contributions` maps source kind to Contribution. A ticker is eligible if
+    ANY kind clears its own gate -- a union, not an intersection. A ticker
+    carried by three Bluesky authors qualifies on the forum gate with no
+    broadcast traffic at all; one carried by two Telegram channels qualifies
+    on the broadcast gate even though its author count is two.
+
+    Three gates per kind, because each is blind to what the others catch: raw
+    volume means nothing at low counts, one determined voice can supply any
+    volume, and fifty voices pasting one message defeat the voice gate
+    completely. Volume and distinct wording are universal; only what counts as
+    a voice differs.
     """
-    return (mentions >= MIN_MENTIONS
-            and authors >= MIN_DISTINCT_AUTHORS
-            and text_ratio >= MIN_DISTINCT_TEXT_RATIO)
+    return any(
+        part.mentions >= MIN_MENTIONS
+        and part.voices >= _VOICE_FLOOR.get(kind, MIN_DISTINCT_AUTHORS)
+        and part.text_ratio >= MIN_DISTINCT_TEXT_RATIO
+        for kind, part in contributions.items())
 
 
 def window_z(ticker, sources, end, hours):

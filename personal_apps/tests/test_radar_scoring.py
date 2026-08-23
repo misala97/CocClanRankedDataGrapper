@@ -214,20 +214,64 @@ def test_pooling_nothing_returns_none(rows):
     assert scoring.pooled_z('SSNOPE', MONDAY, ['stocktwits']) == (None, 0)
 
 
-def test_eligibility_needs_volume_authors_and_variety():
-    assert scoring.is_eligible(mentions=10, authors=6, text_ratio=0.9) is True
-    assert scoring.is_eligible(mentions=2, authors=2, text_ratio=1.0) is False
-    assert scoring.is_eligible(mentions=10, authors=1, text_ratio=1.0) is False
-    assert scoring.is_eligible(mentions=40, authors=40, text_ratio=0.05) is False
+def _forum(mentions=10, voices=6, text_ratio=0.9):
+    return {'forum': scoring.Contribution(mentions, voices, text_ratio)}
 
 
-def test_the_author_gate_stops_one_person_shouting():
-    assert scoring.is_eligible(mentions=50, authors=1, text_ratio=1.0) is False
+def _broadcast(mentions=10, voices=2, text_ratio=0.9):
+    return {'broadcast': scoring.Contribution(mentions, voices, text_ratio)}
 
 
-def test_the_text_gate_stops_fifty_people_pasting_one_thing():
-    """Distinct authors cannot see a brigade; distinct text can."""
-    assert scoring.is_eligible(mentions=50, authors=50, text_ratio=0.02) is False
+def test_a_forum_ticker_needs_three_voices():
+    assert scoring.is_eligible(_forum(voices=6)) is True
+    assert scoring.is_eligible(_forum(voices=2)) is False
+
+
+def test_volume_alone_is_never_enough():
+    """One determined account can supply any volume."""
+    assert scoring.is_eligible(_forum(mentions=50, voices=1)) is False
+
+
+def test_copy_paste_is_never_enough():
+    """Fifty accounts pasting one message defeat the voice gate completely."""
+    assert scoring.is_eligible(_forum(mentions=50, voices=50, text_ratio=0.02)) is False
+
+
+def test_too_few_mentions_is_never_enough():
+    assert scoring.is_eligible(_forum(mentions=2, voices=2)) is False
+
+
+def test_a_broadcast_ticker_qualifies_on_two_channels():
+    """The whole reason this changed. A Telegram channel has one author by
+    construction, so under the author gate a broadcast-only ticker could never
+    reach the board however loud it got."""
+    assert scoring.is_eligible(_broadcast(voices=2)) is True
+    assert scoring.is_eligible(_broadcast(voices=1)) is False
+
+
+def test_a_broadcast_ticker_still_needs_distinct_wording():
+    """One channel's forty reposts must not become forty mentions, and two
+    channels reposting each other must not become corroboration."""
+    assert scoring.is_eligible(_broadcast(voices=2, text_ratio=0.02)) is False
+
+
+def test_either_kind_can_carry_a_ticker_alone():
+    """A union, not an intersection: the ticker qualifies on whichever kind
+    can vouch for it, and a kind that cannot does not veto the one that can."""
+    mixed = {**_forum(voices=6), **_broadcast(voices=1)}
+    assert scoring.is_eligible(mixed) is True
+
+    other = {**_forum(voices=1), **_broadcast(voices=3)}
+    assert scoring.is_eligible(other) is True
+
+
+def test_nothing_at_all_is_not_eligible():
+    assert scoring.is_eligible({}) is False
+
+
+def test_an_unknown_kind_is_judged_as_a_forum():
+    unknown = {'something-new': scoring.Contribution(10, 2, 0.9)}
+    assert scoring.is_eligible(unknown) is False
 
 
 def test_a_window_aggregates_its_buckets(rows):
