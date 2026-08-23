@@ -1,9 +1,7 @@
-# Radar visual pass — handoff prompt
+# Radar visual pass — handoff
 
-Paste the block below into a fresh chat opened at
-`C:\Users\michi\Desktop\CodingStuff`.
-
----
+> The whole of this file is the prompt. Paste it into a fresh chat opened at
+> `C:\Users\michi\Desktop\CodingStuff`.
 
 Run `/impeccable` on the radar board surface in `personal_apps`. Scope the
 brief with `IMPECCABLE_CONTEXT_DIR=personal_apps/features/radar` — the repo has
