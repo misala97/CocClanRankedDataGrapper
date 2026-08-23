@@ -12,28 +12,15 @@ import re
 from extensions import db
 from models import TickerUniverse
 
-from .config import (LARGE_CAP_FLOOR, MID_CAP_FLOOR, PENNY_PRICE,
-                     RECENT_IPO_DAYS)
+from .config import (FUND_NAME_PATTERN, LARGE_CAP_FLOOR, MAX_NAME_TOKEN_DF,
+                     MAX_NAME_TOKEN_RATIO, MID_CAP_FLOOR, MIN_NAME_TOKEN_LEN,
+                     NAME_WORD_PATTERN, PENNY_PRICE, RECENT_IPO_DAYS)
 
-# A name token is only evidence for its ticker if it is rare across the whole
-# universe. Nasdaq security names all end in boilerplate -- "Common Stock",
-# "Class A Ordinary Share", "ETF" -- so `stock` appears in 4219 of 12596 names
-# and `etf` in 5196. Treating those as corroboration meant any post containing
-# the word "stock" promoted every bare token in it, which on a stock message
-# board is every post.
-#
-# Rather than maintain a boilerplate blacklist that each new listing convention
-# defeats, distinctiveness is measured from the universe itself.
-# The threshold is both absolute and proportional. Absolute alone does not
-# scale down: in a four-symbol universe where every name ends "Common Stock",
-# `stock` has a document frequency of four and would qualify as distinctive.
-# Proportional alone does not scale up: a quarter of 12596 names is 3149, which
-# would admit plenty of boilerplate. Whichever is stricter wins.
-MAX_NAME_TOKEN_DF = 3
-MAX_NAME_TOKEN_RATIO = 0.25
-MIN_NAME_TOKEN_LEN = 4
-
-_NAME_WORD_RE = re.compile(r"[a-z']+")
+# The distinctiveness tunables now live in config, so source_config_version
+# can hash them -- changing any of them changes which mentions get promoted,
+# and therefore which get counted.
+_NAME_WORD_RE = re.compile(NAME_WORD_PATTERN)
+_FUND_NAME_RE = re.compile(FUND_NAME_PATTERN, re.IGNORECASE)
 
 # Crypto is excluded entirely (spec 3.7), and the exclusion has to work on
 # every source rather than only on StockTwits, where an instrument_class field

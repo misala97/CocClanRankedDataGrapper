@@ -133,6 +133,43 @@ CASHTAG_PATTERN = r'(?<![A-Za-z0-9])\$([A-Z]{1,5})\b'
 BARE_PATTERN = r'(?<![$A-Za-z0-9])([A-Z]{2,5})\b'
 
 
+# A name token is only evidence for its ticker if it is rare across the whole
+# universe. Nasdaq security names all end in boilerplate -- "Common Stock",
+# "Class A Ordinary Share", "ETF" -- so `stock` appears in 4219 of 12596 names
+# and `etf` in 5196. Treating those as corroboration meant any post containing
+# the word "stock" promoted every bare token in it, which on a stock message
+# board is every post.
+#
+# Rather than maintain a boilerplate blacklist that each new listing convention
+# defeats, distinctiveness is measured from the universe itself.
+# The threshold is both absolute and proportional. Absolute alone does not
+# scale down: in a four-symbol universe where every name ends "Common Stock",
+# `stock` has a document frequency of four and would qualify as distinctive.
+# Proportional alone does not scale up: a quarter of 12596 names is 3149, which
+# would admit plenty of boilerplate. Whichever is stricter wins.
+#
+# These live here rather than in universe.py for the same reason the two match
+# patterns above do: changing any of them changes WHICH mentions get counted,
+# and source_config_version() has to see it. universe imports config, so the
+# dependency cannot run the other way.
+MAX_NAME_TOKEN_DF = 3
+MAX_NAME_TOKEN_RATIO = 0.25
+MIN_NAME_TOKEN_LEN = 4
+
+NAME_WORD_PATTERN = r"[a-z']+"
+
+# Names that are derivatives rather than issuers. A leveraged ETF, a warrant
+# or a share class naming its underlying is not independent evidence that the
+# name is common -- counting them is why `tesla` scored a document frequency
+# of 4 against a ceiling of 3, and TSLA could never be promoted from a bare
+# mention.
+FUND_NAME_PATTERN = (
+    r'\b(etf|etn|fund|trust|index|portfolio|inverse|bull|bear|\d+x'
+    r'|daily target|yield premium|covered call|leveraged|warrant|rights?'
+    r'|units?|notes due|preferred|depositary)\b'
+)
+
+
 def looks_like_exchange_bot(text):
     """True for machine-generated crypto exchange output.
 
@@ -228,6 +265,9 @@ def source_config_version():
         'cashtag_re': CASHTAG_PATTERN,
         'bare_re': BARE_PATTERN,
         'bot_re': _EXCHANGE_BOT_RE.pattern,
+        'name_df': [MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO,
+                    MIN_NAME_TOKEN_LEN],
+        'fund_re': FUND_NAME_PATTERN,
     }, separators=(',', ':'), sort_keys=True)
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 

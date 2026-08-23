@@ -172,3 +172,22 @@ def test_an_unknown_source_gets_the_stricter_gate():
     from features.radar.config import source_kind
 
     assert source_kind('something-new') == 'forum'
+
+
+def test_the_version_stamp_covers_the_distinctiveness_rule():
+    """Distinctiveness decides whether a bare mention is promoted to `high`,
+    so changing it changes WHICH mentions get counted -- the exact
+    discontinuity the stamp warms up from. It hashed the source list and the
+    extraction patterns but not this, which is the same omission that shipped
+    three extraction fixes over stale baselines on 2026-08-22.
+    """
+    from features.radar import config
+
+    before = config.source_config_version()
+    original = config.MAX_NAME_TOKEN_DF
+    try:
+        config.MAX_NAME_TOKEN_DF = original + 5
+        assert config.source_config_version() != before
+    finally:
+        config.MAX_NAME_TOKEN_DF = original
+    assert config.source_config_version() == before
