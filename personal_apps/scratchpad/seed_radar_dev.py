@@ -74,7 +74,7 @@ def shape_factor(shape, hours_ago):
 
 def wipe():
     for table in ('radar_mentions', 'radar_posts', 'radar_bucket_sources',
-                  'radar_buckets', 'radar_quotes'):
+                  'radar_buckets', 'radar_quotes', 'radar_daily_closes'):
         db.session.execute(sa.text(f'DELETE FROM {table}'))
     db.session.commit()
 
@@ -226,6 +226,45 @@ def seed_quotes():
     return len(rows)
 
 
+
+# Three years, so every panel span has something to draw. The panel offers
+# 1M / 6M / 1Y / 3Y and the longest is the one that answers "has this stock
+# done this before" -- which is the whole reason the panel exists.
+CLOSE_DAYS = 1100
+
+
+def seed_closes():
+    """Daily closes per ticker, walked backwards from today's quote.
+
+    Each ticker gets a shape it has to be readable AS: a penny stock that has
+    spiked before and given it back looks nothing like a megacap grinding up,
+    and a chart that cannot tell them apart is not worth the width it takes.
+    """
+    from models import RadarDailyClose
+
+    rows = []
+    for symbol, _name, cap, _base, _shape, path in PLAN:
+        # Roughly where the ticker trades today, from its cap.
+        price = 0.31 if cap < 1e9 else (12.0 if cap < 5e10 else 180.0)
+        drift = {'up': 0.0016, 'down': -0.0014, 'late_up': 0.0009,
+                 'flat': 0.0002, 'frozen': 0.0}.get(path, 0.0003)
+        for offset in range(CLOSE_DAYS):
+            day = NOW.date() - dt.timedelta(days=offset)
+            if day.weekday() >= 5:
+                continue          # no close on a weekend -- a null, not a zero
+            rows.append({'ticker': symbol, 'close_date': day,
+                         'close': round(max(price, 0.02), 4),
+                         'fetched_at': NOW})
+            # Walking backwards, so undo the drift rather than applying it.
+            price /= (1 + drift + random.gauss(0, 0.024))
+            if offset in range(180, 205):     # an older spike that faded
+                price /= 1.03
+
+    db.session.execute(sa.insert(RadarDailyClose), rows)
+    db.session.commit()
+    return len(rows)
+
+
 def main():
     with app.app_context():
         wipe()
@@ -233,8 +272,10 @@ def main():
         buckets = seed_buckets()
         posts = seed_posts()
         quotes = seed_quotes()
+        closes = seed_closes()
         written = {s: scoring.score_source(s, NOW) for s in SOURCES}
-        print(f'buckets={buckets} posts={posts} quotes={quotes} scored={written}')
+        print(f'buckets={buckets} posts={posts} quotes={quotes} '
+              f'closes={closes} scored={written}')
 
 
 if __name__ == '__main__':

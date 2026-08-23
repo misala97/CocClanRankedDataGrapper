@@ -167,439 +167,290 @@ body {
 }
 .skip-link:focus { left: 0; }
 
-.wrap { max-width: 1280px; margin: 0 auto; padding: 0 var(--pad) 96px; }
+/* ============================================================================
+   LAYOUT  ·  two panes
+   ----------------------------------------------------------------------------
+   The list answers "which of these is worth my time"; the panel answers "is
+   this real". Different questions, so different columns -- and the panel gets
+   the larger share, because three years of closes needs width and a column of
+   tickers does not.
 
-/* --------------------------------------------------------- masthead ------ */
+   Structure only. Palette, type scale and refinement come from a later pass;
+   what is here is what makes the arrangement exist at all.
+   ========================================================================= */
 
-.masthead {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 24px; flex-wrap: wrap;
-  padding: 34px 0 13px;
-  /* A 2px ink rule, not a hairline. It is the one piece of pure structure on
-     the page and it says "this is a document with a top", which is what makes
-     the two tiers below read as a hierarchy rather than a pile. */
-  border-bottom: 2px solid var(--ink);
+.page {
+  display: grid;
+  grid-template-columns: 404px minmax(0, 1fr);
+  min-height: 100vh;
 }
-.masthead h1 {
-  margin: 0; font-size: 29px; font-weight: 640; letter-spacing: -0.021em;
+
+/* Desktop is the primary target by decision, not by accident. Below this the
+   panel stacks under the list -- unbroken, undesigned, and its own session if
+   it ever deserves one. */
+@media (max-width: 900px) {
+  .page { grid-template-columns: minmax(0, 1fr); }
+  .list { border-right: none; border-bottom: 1px solid var(--rule); }
 }
-.stamp { color: var(--muted); font-size: 13px; }
-.stamp b { color: var(--ink-2); font-weight: 560; }
-.stamp .sep { opacity: 0.5; margin: 0 2px; }
 
-/* ------------------------------------------------------- session line ---- */
+/* ----------------------------------------------------------- the list ---- */
 
-/* What the ranking currently means. Deliberately above the controls and below
-   the masthead rule: it is a statement about the whole board, not a filter. */
-.session {
-  margin: 0; padding: 11px 0 0;
-  font-size: 13px; color: var(--muted);
+.list {
+  border-right: 1px solid var(--rule);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-.session b { color: var(--ink-2); font-weight: 600; }
 
-/* The market being shut is not an error, so it gets the caution colour and no
-   border -- loud enough that the changed column heading is explained, quiet
-   enough that it is not mistaken for something being broken. */
-.session.shut b { color: var(--warn); }
+.lhead { padding: 18px 20px 14px; border-bottom: 1px solid var(--rule); }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 19px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.brand .state { font-size: 12px; color: var(--warn); font-weight: 600; }
+.finding { margin: 9px 0 0; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.finding b { font-weight: 600; color: var(--ink); }
 
-/* --------------------------------------------------------- controls ------ */
+.rows { overflow-y: auto; flex: 1; }
+
+.row {
+  display: block;
+  padding: 11px 20px 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  /* The selected marker sits on the left edge rather than as a fill, so a row
+     reads the same whether or not it is the one being shown. */
+  border-left: 3px solid transparent;
+  text-decoration: none;
+  color: inherit;
+}
+.row:hover { background: var(--mark-wash); }
+.row.on { background: var(--raise); border-left-color: var(--mark); }
+.row:focus-visible { outline: 2px solid var(--mark); outline-offset: -2px; }
+
+.rtop { display: flex; align-items: baseline; gap: 8px; }
+.rtop .tk { font-size: 14.5px; font-weight: 700; }
+.rtop .nm {
+  font-size: 12px; color: var(--muted); flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rtop .spark { width: 54px; height: 18px; flex: none; opacity: 0.8; }
+
+/* The phrase, styled per clause kind. The client never parses the text --
+   see features/radar/phrasing.py, which decides the wording. */
+.phr { margin-top: 5px; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.phr > span + span::before { content: " · "; color: var(--muted); opacity: 0.5; }
+.phr .c-ratio { color: var(--ink); font-weight: 650; }
+.phr .c-venues, .phr .c-people { color: var(--ink-2); }
+.phr .c-new { color: var(--mark); font-weight: 650; }
+.phr .c-warn { color: var(--warn); }
+.phr .c-price-up { color: var(--up); font-weight: 650; }
+.phr .c-price-down { color: var(--down); font-weight: 650; }
+.phr .c-price-flat { color: var(--muted); }
+.row .meta { margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+
+/* What the list left out. Without it a two-row board and a stopped ingest
+   look identical. */
+.below {
+  padding: 15px 20px 20px; margin: 0;
+  font-size: 12.5px; color: var(--muted); line-height: 1.55;
+}
+.below b { color: var(--ink-2); font-weight: 600; }
+
+/* --------------------------------------------------------- the panel ----- */
+
+.detail { min-width: 0; padding: 22px 28px 72px; }
+.detail.empty { display: grid; place-items: center; color: var(--muted); }
+
+.ident {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--rule);
+}
+.ident h2 { margin: 0 0 5px; font-size: 26px; font-weight: 700; letter-spacing: -0.015em; }
+/* Untruncated on purpose. The list truncates because it has 400px; here the
+   half that carries the meaning is the half that used to be cut off. */
+.ident .full { font-size: 14px; color: var(--ink-2); }
+.ident .facts { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.ident .px { margin-left: auto; text-align: right; flex: none; }
+.ident .px .v { font-size: 24px; font-weight: 650; }
+.ident .px .mv { font-size: 14px; font-weight: 650; }
+.ident .px .mv.up { color: var(--up); }
+.ident .px .mv.down { color: var(--down); }
+.ident .px .st { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.ident .px .st.closed, .ident .px .st.warn { color: var(--warn); font-weight: 600; }
+
+.read {
+  margin: 16px 0 4px; max-width: 74ch;
+  font-size: 14.5px; line-height: 1.62; color: var(--ink-2);
+  font-variant-numeric: normal;
+}
+.read .c-warn { color: var(--warn); font-weight: 600; }
+
+.detail h3 {
+  display: flex; align-items: center; gap: 12px;
+  margin: 26px 0 11px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--muted);
+}
+.spans { display: inline-flex; gap: 3px; }
+.spans button {
+  font: inherit; font-size: 11.5px; letter-spacing: 0; text-transform: none;
+  padding: 2px 9px; border: 0; border-radius: var(--r-pill);
+  background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.spans button:hover { background: var(--rule-soft); }
+.spans button[aria-pressed="true"] {
+  background: var(--mark-soft); color: var(--mark); font-weight: 600;
+}
+
+.chart {
+  background: var(--raise); border: 1px solid var(--rule-soft);
+  border-radius: var(--r); padding: 14px 16px 10px;
+}
+.chart .pxchart { display: block; width: 100%; height: 300px; }
+.chart .ax { font-size: 10.5px; fill: var(--muted); }
+.legend { display: flex; gap: 16px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+.legend i { font-style: normal; }
+.legend .key {
+  display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+  background: var(--mark); margin-right: 5px;
+}
+.legend .key.line { height: 2px; border-radius: 0; background: var(--up); vertical-align: 3px; }
+
+/* ------------------------------------------------------ the breakdown ---- */
+
+.bd { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
+@media (max-width: 1100px) { .bd { grid-template-columns: minmax(0, 1fr); } }
+
+.bd table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bd th {
+  text-align: left; padding: 0 0 6px; border-bottom: 1px solid var(--rule);
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.bd td { padding: 7px 0; border-bottom: 1px solid var(--rule-soft); }
+.bd td.venue { font-variant-numeric: normal; }
+.bd th.r, .bd td.r { text-align: right; }
+
+.stat {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid var(--rule-soft); font-size: 13px;
+}
+.stat .k { color: var(--muted); }
+.stat .v { font-weight: 600; }
+.stat .v.warn { color: var(--warn); }
+
+/* Counts in words. A green/red tone bar has been built and deleted twice:
+   green and red mean price direction on this surface and nothing else. */
+.wording {
+  display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0 0;
+  font-size: 13px; color: var(--ink-2);
+}
+.wording b { font-weight: 650; color: var(--ink); }
+.wording .q { color: var(--muted); }
+.wording .q b { color: var(--ink-2); }
+
+/* ---------------------------------------------------------- the posts ---- */
+
+.posts { list-style: none; margin: 0; padding: 0; }
+.post { padding: 12px 0 13px; border-bottom: 1px solid var(--rule-soft); }
+.phead { display: flex; align-items: baseline; gap: 9px; font-size: 11.5px; }
+.phead .src {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--mark);
+  background: var(--mark-wash); padding: 2px 7px; border-radius: 4px;
+}
+.phead .who { color: var(--ink-2); font-weight: 500; }
+.phead .when { color: var(--muted); }
+.phead .out { margin-left: auto; color: var(--muted); text-decoration: none; }
+.phead .out:hover { color: var(--mark); text-decoration: underline; }
+.post p {
+  margin: 6px 0 0; max-width: 82ch;
+  font-size: 13.5px; line-height: 1.55; color: var(--ink-2);
+  font-variant-numeric: normal; overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------- the banner ---- */
+
+.oops {
+  grid-column: 1 / -1; margin: 0;
+  padding: 10px 20px; background: var(--warn-soft); color: var(--ink-2);
+  font-size: 13px;
+}
+.oops button {
+  font: inherit; margin-left: 10px; border: 1px solid var(--rule);
+  background: var(--raise); border-radius: var(--r-pill);
+  padding: 2px 10px; cursor: pointer;
+}
+
+/* A chip whose count is zero: dimmed, never removed. Chips used to vanish at
+   zero and return as data changed, which moved everything under the cursor. */
+.seg button.nil, .seg button.nil .n { color: oklch(0.72 0.01 285); }
+
+
+/* --------------------------------------------------------- the controls -- */
+/*
+   Every group's label sits on its own line above its chips. Inline, the
+   groups wrapped mid-row in a 404px column and labels ended up next to the
+   wrong chips.
+
+   Fixed slots throughout: a chip whose count is zero dims rather than
+   disappearing. Chips used to be dropped at zero, which made the strip change
+   shape between loads and move things under the cursor.
+*/
 
 .controls {
-  position: sticky; top: 0; z-index: var(--z-sticky);
-  display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
-  padding: 11px 0;
-  background: color-mix(in oklab, var(--bg) 88%, transparent);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  padding: 12px 20px 13px;
   border-bottom: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
-.group { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.group > .lbl { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.seg { display: flex; gap: 2px; flex-wrap: wrap; }
+.controls[aria-busy="true"] button { opacity: 0.55; pointer-events: none; }
+
+.group { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-width: 0; }
+.group > .lbl {
+  width: 100%;
+  margin-bottom: 2px;
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap;
+}
+.seg { display: flex; gap: 3px; flex-wrap: wrap; }
 
 .seg button, .chip {
-  appearance: none; border: 1px solid transparent; background: none;
-  color: var(--ink-2); font: inherit; font-size: 13.5px;
-  padding: 5px 11px; border-radius: 6px; cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--fast) var(--ease),
-              color var(--fast) var(--ease),
-              border-color var(--fast) var(--ease);
+  font: inherit; font-size: 12.5px;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex; align-items: baseline; gap: 5px;
+  transition: background var(--fast) var(--ease);
 }
 .seg button:hover, .chip:hover { background: var(--rule-soft); color: var(--ink); }
-.seg button:active, .chip:active { background: var(--rule); }
+.seg button:focus-visible, .chip:focus-visible {
+  outline: 2px solid var(--mark); outline-offset: 1px;
+}
 .seg button[aria-pressed="true"] {
   background: var(--mark-soft); color: var(--mark); font-weight: 600;
 }
-.seg .n { color: var(--muted); font-size: 12px; margin-left: 5px; }
-.seg button[aria-pressed="true"] .n { color: var(--mark); opacity: 0.75; }
+.seg .n { color: var(--muted); font-size: 11px; }
+.seg button[aria-pressed="true"] .n { color: var(--mark); opacity: 0.8; }
 
-.chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  border-color: var(--rule); border-radius: var(--r-pill);
-  font-size: 13px; padding: 4px 11px 4px 9px;
-}
 .chip .dot {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--rule);
-  transition: background var(--fast) var(--ease);
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--rule); flex: none; align-self: center;
 }
-.chip[aria-pressed="true"] { border-color: var(--mark); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--mark-soft); color: var(--mark); font-weight: 600; }
 .chip[aria-pressed="true"] .dot { background: var(--mark); }
 .chip[aria-pressed="false"] { color: var(--muted); }
+.chip:disabled { cursor: default; opacity: 0.75; }
 
-/* A source that cannot be reached is not a source you chose to turn off. It
-   stays visible and stays selectable -- turning it on is how you find out it
-   came back -- but it says so. */
-.chip[data-status="down"] .dot { background: var(--warn); }
-.chip[data-status="down"] { border-style: dashed; }
-
-button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid var(--mark); outline-offset: 2px; border-radius: 4px;
-}
-
-/* Every control is disabled while a board is in flight. Not hidden, not
-   replaced by a spinner: the previous board stays readable and simply stops
-   accepting input for the ~200ms it takes to answer. */
-.controls[aria-busy="true"] button { opacity: 0.55; pointer-events: none; }
-
-/* ------------------------------------------------------- section heads --- */
-
-.head {
-  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
-  padding: 30px 0 13px;
-}
-.head h2 { margin: 0; font-size: 16px; font-weight: 620; letter-spacing: -0.01em; }
-.head p { margin: 0; font-size: 13px; color: var(--muted); }
-
-/* ------------------------------------------------------------- leads ----- */
-
-.leads {
-  display: grid; gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-}
-
-.lead {
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--r);
-  padding: 17px 18px 15px;
-  display: flex; flex-direction: column; gap: 12px;
-}
-
-.lead-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
-/* The ticker-and-name column must be allowed to shrink. Its child sets
-   white-space: nowrap, so without this the flex item's min-content is the
-   full untruncated company name and the whole card grows past the phone. */
-.lead-top > div:first-child { min-width: 0; }
-.lead-sym { font-size: 21px; font-weight: 650; letter-spacing: -0.015em; display: block; }
-.lead-co {
-  display: block; font-size: 12.5px; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch;
-}
-.lead-div { text-align: right; flex: none; }
-.lead-div .v {
-  display: block; font-size: 25px; font-weight: 650; color: var(--mark);
-  letter-spacing: -0.02em; line-height: 1.1;
-}
-.lead-div .k {
-  display: block; font-size: 10.5px; color: var(--muted);
-  letter-spacing: 0.06em; text-transform: uppercase;
-}
-.lead-div.none .v { font-size: 15px; font-weight: 560; color: var(--muted); padding-top: 7px; }
-
-/* The sentence is the whole argument in words, for the reader who does not
-   want to decode a chart -- and for the screen reader, which cannot. */
-.sentence { margin: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
-.sentence b { color: var(--ink); font-weight: 600; }
-
-.chart { position: relative; }
-.chart svg { display: block; width: 100%; height: 88px; }
-.legend {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 11px; color: var(--muted); margin-top: 3px;
-}
-.legend .keys { display: flex; gap: 11px; }
-.k-chat { color: var(--mark); font-weight: 560; }
-.k-price { font-weight: 560; }
-.k-price.up { color: var(--up); }
-.k-price.down { color: var(--down); }
-
-.lead-foot {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  font-size: 12px; color: var(--muted);
-  padding-top: 11px; border-top: 1px solid var(--rule-soft);
-}
-.lead-foot b { color: var(--ink-2); font-weight: 600; }
-
-/* There is deliberately no tone BAR. A green/red split showing bullish
-   against bearish sat two centimetres from a green/red price line meaning
-   something else entirely, which is precisely the collision the colour
-   reservation at the top of this file exists to prevent. The counts are
-   printed as words instead, which is also the only honest way to show that
-   most mentions carry no sentiment wording at all. */
-
-/* -------------------------------------------------------------- scan ----- */
-
-.cols, .row {
-  display: grid;
-  grid-template-columns:
-    minmax(190px, 1.5fr)   /* ticker + name + marks -- see .tick min-width */
-    150px                  /* chatter + price chart */
-    146px                  /* z triplet             */
-    104px                  /* divergence            */
-    132px                  /* mentions / people / venues */
-    104px;                 /* price move            */
-  align-items: center;
-  gap: 14px;
-}
-
-.cols {
-  font-size: 10.5px; letter-spacing: 0.065em; text-transform: uppercase;
-  color: var(--muted); padding: 0 4px 8px;
-  border-bottom: 1px solid var(--rule);
-}
-.cols .n { text-align: right; }
-
-.row {
-  padding: 9px 4px;
-  border-bottom: 1px solid var(--rule-soft);
-  transition: background var(--fast) var(--ease);
-}
-.row:hover { background: var(--mark-wash); }
-.row:last-child { border-bottom: 1px solid var(--rule); }
-
-.tick {
-  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-  /* Without this the flex item refuses to shrink below its content and the
-     grid track grows past the viewport instead. */
-  min-width: 0;
-}
-.sym { font-size: 15.5px; font-weight: 640; letter-spacing: -0.012em; }
-.co {
-  font-size: 12.5px; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
-}
-
-.spark { position: relative; }
-.spark svg { display: block; width: 100%; height: 26px; }
-
-/* The three windows side by side. A hot 1h against a cool 24h is new; the
-   reverse is fading. One number cannot say that, which is why there are
-   three. The largest is highlighted only when it clears the elevated
-   threshold -- highlighting the largest of three unremarkable numbers would
-   invent a story. */
-.trip { display: flex; gap: 3px; justify-content: flex-end; }
-.trip span {
-  min-width: 42px; text-align: center; font-size: 12.5px; color: var(--ink-2);
-  padding: 2px 5px; border-radius: 5px; background: var(--rule-soft);
-}
-.trip span.hot { background: var(--mark-soft); color: var(--mark); font-weight: 620; }
-.trip span.none { color: var(--muted); background: none; }
-
-.dv { text-align: right; font-size: 17px; font-weight: 620; color: var(--mark); letter-spacing: -0.01em; }
-.dv.neg { color: var(--ink-2); font-weight: 560; }
-.dv.none { font-size: 12.5px; font-weight: 400; color: var(--muted); }
-
-.n { text-align: right; font-size: 14px; color: var(--ink-2); }
-.n .up { color: var(--up); font-weight: 560; }
-.n .down { color: var(--down); font-weight: 560; }
-
-/* An unknown price is an em-dash, never a zero and never a 0.00%. The
-   distinction is load-bearing: no quote is not evidence of no movement. */
-.dash { color: var(--muted); }
-
-/* The mobile-only restatement of the numeric columns. */
-.meta { display: none; }
-
-/* ------------------------------------------------------------- venues ---- */
-
-/* Which venues are talking. Slots, not a count: each dot's position is fixed,
-   so the same place always means the same source down the column. */
-.venues {
-  display: inline-flex; gap: 3px; margin-left: 7px; vertical-align: 1px;
-}
-.venue {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--rule);
-}
-.venue.on { background: var(--mark); }
-
-/* -------------------------------------------------------------- marks ---- */
-
-.mk {
-  font-size: 10.5px; font-weight: 560; letter-spacing: 0.01em;
-  color: var(--muted); background: var(--rule-soft);
-  border: 1px solid transparent;
-  padding: 1px 6px; border-radius: 4px; white-space: nowrap;
-  cursor: help;
-}
-/* `no-print` is not metadata. It says the divergence would be an artifact of a
-   frozen tape, so it is the one mark that gets the caution colour. */
-.mk.hard { color: var(--warn); background: var(--warn-soft); border-color: var(--warn-soft); }
-
-button.mk { cursor: pointer; font-family: inherit; }
-button.mk:hover { background: var(--rule); }
-button.mk.hard:hover { background: color-mix(in oklab, var(--warn) 22%, transparent); }
-
-/* Native popover, not an absolutely-positioned div: the scan rows sit inside a
-   scrolling container on small screens and an in-flow tooltip would be clipped
-   by it. It also opens from the keyboard and from a touch tap, neither of
-   which `title` does.
-
-   One shared element pinned near the top of the viewport rather than anchored
-   to the mark that opened it -- CSS anchor positioning is not available
-   everywhere yet, and a fixed card that always appears in the same place is
-   easier to find than one that moves with the row. */
-.why {
-  position: fixed; inset: auto; margin: 0;
-  top: 15vh; left: 50%; translate: -50% 0;
-  z-index: var(--z-popover);
-  width: max-content; max-width: min(34ch, calc(100vw - 32px));
-  padding: 13px 15px;
-  background: var(--raise); color: var(--ink-2);
-  border: 1px solid var(--rule); border-radius: var(--r);
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.05), 0 16px 40px -16px oklch(0 0 0 / 0.35);
-  font-size: 12.5px; line-height: 1.5;
-}
-.why::backdrop { background: none; }
-.why b {
-  display: block; margin-bottom: 5px;
-  color: var(--ink); font-weight: 620; font-size: 13px;
-}
-.why p { margin: 0; }
-/* The popover fades in; it must not fade the layout under it. */
-@starting-style { .why:popover-open { opacity: 0; translate: -50% -6px; } }
-.why:popover-open { opacity: 1; translate: -50% 0; }
-.why { transition: opacity var(--base) var(--ease), translate var(--base) var(--ease),
-                   overlay var(--base) allow-discrete, display var(--base) allow-discrete; }
-
-/* ------------------------------------------------------------- states ---- */
-
-.empty {
-  border: 1px dashed var(--rule); border-radius: var(--r);
-  padding: 40px 28px; text-align: center; margin-top: 20px;
-}
-.empty h3 { margin: 0 0 8px; font-size: 16px; font-weight: 620; }
-.empty p { margin: 0 auto; max-width: 62ch; color: var(--muted); font-size: 13.5px; }
-.empty p + p { margin-top: 10px; }
-
-.oops {
-  border: 1px solid var(--warn); background: var(--warn-soft);
-  border-radius: var(--r); padding: 14px 16px; margin-top: 20px;
-  font-size: 13.5px; color: var(--ink-2);
-}
-.oops b { color: var(--ink); }
-.oops button {
-  appearance: none; margin-left: 10px; font: inherit; font-size: 13px;
-  background: none; border: 1px solid var(--rule); color: var(--ink);
-  padding: 3px 10px; border-radius: 6px; cursor: pointer;
-}
-.oops button:hover { background: var(--rule-soft); }
-
-/* Skeleton, not a spinner: the shape of the answer is known before it
-   arrives, so the page should hold it rather than blink. Only used on the
-   very first paint after a hard reload with no embedded payload -- a control
-   change keeps the previous board on screen instead. */
-.skel { background: var(--rule-soft); border-radius: 5px; height: 1em; }
-.skel-row { padding: 13px 4px; border-bottom: 1px solid var(--rule-soft); }
-@keyframes shimmer { 50% { opacity: 0.55; } }
-.skel { animation: shimmer 1.4s var(--ease) infinite; }
-
-/* --------------------------------------------------------------- foot ---- */
-
-.foot {
-  margin: 34px 0 0; padding-top: 18px; border-top: 1px solid var(--rule-soft);
-  max-width: 74ch; font-size: 12.5px; line-height: 1.6; color: var(--muted);
-}
-.foot code {
-  font-family: inherit; font-weight: 600; color: var(--ink-2);
-  background: var(--rule-soft); padding: 0 4px; border-radius: 3px;
-}
-.foot em { color: var(--ink-2); font-style: normal; font-weight: 600; }
-
-/* -------------------------------------------------------- responsive ----- */
-
-/* Tablet: the triplet is the first thing to go horizontal-scarce, and the
-   company name is the first thing worth losing. */
-@media (max-width: 1080px) {
-  .cols, .row {
-    grid-template-columns:
-      minmax(150px, 1.4fr) 120px 132px 92px 116px 92px;
-    gap: 10px;
-  }
-  .co { display: none; }
-}
-
-/* Phone: the table stops being a table. It becomes one dense divided row per
-   ticker -- ticker and divergence on the first line, sparkline and triplet on
-   the second, the counts restated as a caption. Deliberately NOT a stack of
-   spacious cards: the reason to open this on a phone is to scan twelve
-   tickers, and cards turn twelve rows into twelve screens. */
-@media (max-width: 720px) {
-  :root { --pad: 14px; }
-
-  .masthead { padding-top: 22px; }
-  .masthead h1 { font-size: 24px; }
-
-  .controls {
-    /* nowrap is load-bearing, not tidiness. The base rule wraps, and a WRAPPING
-       column flex container takes its cross size (here the width) from its
-       content and packs lines across it -- so every `min-width: 0` below was
-       ignored and the strip measured 456px inside a 390px viewport. Single-line
-       is what lets align-items: stretch clamp the groups to the page.
-
-       One group per line, each scrolling horizontally inside itself, rather
-       than a wrapped pile of buttons that pushes the board off the screen. */
-    gap: 12px; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
-  }
-  .group { gap: 8px; min-width: 0; }
-  /* The scroller only scrolls if it is allowed to be narrower than its
-     content. A flex item's default min-width is auto, so without this the
-     group grew to fit every chip and took the whole page sideways with it --
-     measured at 456px against a 390px viewport. */
-  .group .seg {
-    flex: 1 1 0; min-width: 0;
-    overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .group .seg::-webkit-scrollbar { display: none; }
-  /* 44px minimum target on touch. */
-  .seg button, .chip { padding: 9px 12px; min-height: 40px; }
-
-  /* minmax(0, 1fr), not 1fr: a plain 1fr floors at min-content, and the card
-     carries a nowrap company name, so the track grew wider than the viewport
-     and took the page with it -- measured at 407px against 390. */
-  .leads { grid-template-columns: minmax(0, 1fr); }
-
-  .cols { display: none; }
-
-  .row {
-    /* minmax(0, 1fr), not 1fr: a plain 1fr floors at min-content, so a row
-       carrying three trust marks pushed the grid wider than the phone and the
-       whole page scrolled sideways. Found by measuring scrollWidth, not by
-       looking -- the overflow is invisible until you drag. */
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'tick  dv'
-      'spark trip'
-      'meta  meta';
-    gap: 6px 12px;
-    padding: 12px 2px;
-  }
-  .tick  { grid-area: tick; min-width: 0; }
-  .dv    { grid-area: dv; }
-  .spark { grid-area: spark; min-width: 0; }
-  .trip  { grid-area: trip; }
-  .co    { display: inline; }
-
-  .row > .n { display: none; }
-  .meta {
-    grid-area: meta; display: flex; gap: 14px; flex-wrap: wrap;
-    font-size: 12px; color: var(--muted);
-  }
-  .meta b { color: var(--ink-2); font-weight: 600; }
-
-  .lead-co { max-width: 100%; }
-}
+/* ------------------------------------------------------------- row fixes - */
+/*
+   The row's three lines are spans inside an anchor, so without this they run
+   together as one wrapped paragraph -- "20 peoplemicro".
+*/
+.phr, .row .meta { display: block; }
 
 /* -------------------------------------------------------- reduced motion - */
 
@@ -609,8 +460,6 @@ button.mk.hard:hover { background: color-mix(in oklab, var(--warn) 22%, transpar
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  /* The skeleton loses its shimmer but must not lose its presence. */
-  .skel { opacity: 0.75; }
 }
 
 /* ------------------------------------------------------------ printing --- */
@@ -618,7 +467,7 @@ button.mk.hard:hover { background: color-mix(in oklab, var(--warn) 22%, transpar
 /* Not decoration: the plausible use is pasting the morning board into a note.
    Colour survives, chrome does not. */
 @media print {
-  .controls, .skip-link { display: none; }
-  .wrap { max-width: none; padding: 0; }
-  .row, .lead { break-inside: avoid; }
+  .controls, .skip-link, .spans { display: none; }
+  .page { grid-template-columns: minmax(0, 1fr); }
+  .row, .post { break-inside: avoid; }
 }
