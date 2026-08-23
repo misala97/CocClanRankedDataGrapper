@@ -19,7 +19,7 @@ from . import divergence as divergence_mod
 from . import market_calendar
 from . import quotes as quotes_mod
 from . import scoring, universe
-from .config import PROVISIONAL_BASELINE_DAYS
+from .config import PROVISIONAL_BASELINE_DAYS, source_kind
 
 
 @dataclasses.dataclass
@@ -73,6 +73,32 @@ def _distinct_authors(tickers, sources, since, now):
     return {ticker: count for ticker, count in rows}
 
 
+def _distinct_channels(tickers, sources, since, now):
+    """True distinct channels per ticker across the window.
+
+    The broadcast analogue of _distinct_authors. On a broadcast network the
+    author is the channel's admin and is therefore always one; the channel is
+    what varies, and two channels carrying the same symbol is the corroboration
+    an author count cannot express.
+
+    Counted from the mention rows for the same reason authors are: a bucket
+    stores a COUNT, and the maximum across buckets systematically undercounts.
+    """
+    if not tickers:
+        return {}
+
+    rows = (db.session.query(RadarMention.ticker,
+                             sa.func.count(sa.distinct(RadarPost.channel)))
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+            .filter(RadarMention.ticker.in_(list(tickers)),
+                    RadarPost.source.in_(list(sources)),
+                    RadarPost.created_utc >= since,
+                    RadarPost.created_utc < now,
+                    RadarMention.confidence.in_(('high', 'medium')))
+            .group_by(RadarMention.ticker).all())
+    return {ticker: count for ticker, count in rows}
+
+
 def _universe_rows(tickers):
     if not tickers:
         return {}
@@ -114,6 +140,7 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
 
     profiles = _universe_rows(grouped.keys())
     author_counts = _distinct_authors(grouped.keys(), sources, since, now)
+    channel_counts = _distinct_channels(grouped.keys(), sources, since, now)
     today = now.date()
     rows = []
 
@@ -129,9 +156,28 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
             ticker, max(b.distinct_authors for b in buckets))
         text_ratio = min(b.distinct_text_ratio for b in buckets)
 
+        # The gate is per kind: a forum's independent voices are its authors, a
+        # broadcast network's are its channels. The pooled figures above still
+        # describe the row -- they just no longer decide it.
+        by_kind = collections.defaultdict(
+            lambda: [0, 1.0])          # [mentions, lowest text ratio seen]
+        for bucket in buckets:
+            totals = by_kind[source_kind(bucket.source)]
+            totals[0] += bucket.mention_count
+            totals[1] = min(totals[1], bucket.distinct_text_ratio)
+
+        contributions = {
+            kind: scoring.Contribution(
+                mentions=totals[0],
+                voices=(channel_counts.get(ticker, 0) if kind == 'broadcast'
+                        else authors),
+                text_ratio=totals[1])
+            for kind, totals in by_kind.items()
+        }
+
         # Below the floor there is nothing to rank. Showing it low would imply
         # it was measured and found wanting, when it was never measurable.
-        if not scoring.is_eligible(mentions, authors, text_ratio):
+        if not scoring.is_eligible(contributions):
             continue
 
         mention_z = ((mentions - expected)

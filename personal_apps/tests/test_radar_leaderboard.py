@@ -278,3 +278,74 @@ def test_a_genuinely_concentrated_ticker_is_still_rejected(board):
         _mention('LBY', 'onlyvoice', 30)
     db.session.commit()
     assert leaderboard.build_rows(['bluesky'], NOW) == []
+
+
+# Broadcast venues. A channel's admin is always one author, so the author gate
+# can never be cleared there however loud a ticker gets; the independent unit
+# is the channel instead.
+
+def posted(ticker, external, source, channel, author, minutes_ago=20):
+    """A post plus its mention, so author and channel counts are real.
+
+    The bucket helpers above write COUNTS; these write the rows those counts
+    are derived from, which is what the channel gate actually reads.
+    """
+    from models import RadarMention, RadarPost
+    when = NOW - dt.timedelta(minutes=minutes_ago)
+    row = RadarPost(source=source, external_id=external, channel=channel,
+                    author=author, created_utc=when, body='x', score=0,
+                    num_comments=0, simhash=abs(hash(external)) % 10 ** 9,
+                    first_seen=when, last_seen=when)
+    db.session.add(row)
+    db.session.flush()
+    db.session.add(RadarMention(post_id=row.id, ticker=ticker,
+                                confidence='high', lexicon_sentiment=0.0))
+
+
+def test_a_broadcast_only_ticker_reaches_the_board_on_two_channels(board, monkeypatch):
+    """Before this, a Telegram-shaped source could never put a row up: one
+    admin posts, every bucket has one author, and the author gate rejects it
+    however loud the ticker gets.
+
+    fourchan is borrowed as the broadcast source rather than inventing one,
+    because a source not in config.SOURCES has no ingest path and could not
+    have written these rows in the first place.
+    """
+    from features.radar import config
+
+    monkeypatch.setitem(config.SOURCE_KIND, 'fourchan', 'broadcast')
+
+    universe_row('LBB')
+    scored('LBB', source='fourchan', mentions=8, authors=1)
+    quoted('LBB', '100.00', '100.00')
+    for n in range(8):
+        posted('LBB', f'LBB{n}', 'fourchan',
+               channel='chan-a' if n % 2 else 'chan-b', author='admin')
+    db.session.commit()
+
+    assert [r.ticker for r in leaderboard.build_rows(['fourchan'], NOW)] == ['LBB']
+
+
+def test_one_channel_shouting_is_not_two_voices(board, monkeypatch):
+    from features.radar import config
+
+    monkeypatch.setitem(config.SOURCE_KIND, 'fourchan', 'broadcast')
+
+    universe_row('LBC')
+    scored('LBC', source='fourchan', mentions=8, authors=1)
+    quoted('LBC', '100.00', '100.00')
+    for n in range(8):
+        posted('LBC', f'LBC{n}', 'fourchan', channel='chan-a', author='admin')
+    db.session.commit()
+
+    assert leaderboard.build_rows(['fourchan'], NOW) == []
+
+
+def test_a_forum_ticker_is_unaffected_by_the_new_path(board):
+    """The regression guard. Forum sources must behave exactly as before."""
+    universe_row('LBD')
+    scored('LBD', mentions=10, authors=6)
+    quoted('LBD', '100.00', '100.00')
+    db.session.commit()
+
+    assert [r.ticker for r in leaderboard.build_rows(['bluesky'], NOW)] == ['LBD']
