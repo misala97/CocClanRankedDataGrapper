@@ -195,3 +195,15 @@ def test_the_row_serializer_actually_runs(client):
     assert len(row['chart']['closes']) == len(row['chart']['chatter'])
     # Serializable end to end -- the 500 was a NameError inside _row.
     _json.dumps(payload)
+
+
+def test_an_unsupported_venue_filter_is_rejected(client):
+    assert client.get('/radar/api/board?venues=7').status_code == 400
+    assert client.get('/radar/api/board?venues=2').status_code == 200
+
+
+def test_the_payload_carries_the_venue_filter_and_its_counts(client):
+    payload = json.loads(client.get('/radar/api/board').data)
+
+    assert payload['min_venues'] == 1
+    assert set(payload['venue_counts']) == {'any', 'multi'}

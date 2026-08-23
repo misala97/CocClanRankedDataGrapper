@@ -1,4 +1,5 @@
 """JSON for the leaderboard surface."""
+import dataclasses
 import datetime as dt
 
 from flask import jsonify, request
@@ -11,7 +12,23 @@ from ._blueprint import radar_bp
 
 SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo')
 WINDOWS = (1, 4, 24)
+VENUE_FLOORS = (1, 2)
 MAX_LIMIT = 100
+
+
+@dataclasses.dataclass
+class Query:
+    """A validated query string.
+
+    A dataclass rather than a tuple: five fields unpacked positionally in two
+    call sites, three of them ints, is one transposition away from silently
+    swapping limit and min_venues with nothing to complain about.
+    """
+    sources: list
+    segment: str | None
+    window: int
+    limit: int
+    min_venues: int
 
 
 def _chart(chart):
@@ -69,7 +86,15 @@ def parse_query(args):
     except ValueError:
         raise BadQuery('bad limit')
 
-    return selected, segment, window, limit
+    try:
+        min_venues = int(args.get('venues', 1))
+    except ValueError:
+        raise BadQuery('bad venues')
+    if min_venues not in VENUE_FLOORS:
+        raise BadQuery('unsupported venues')
+
+    return Query(sources=selected, segment=segment, window=window,
+                 limit=limit, min_venues=min_venues)
 
 
 def serialize(board):
@@ -85,6 +110,8 @@ def serialize(board):
         'all_sources': list(SOURCES),
         'segment': board.segment,
         'session': board.session,
+        'min_venues': board.min_venues,
+        'venue_counts': board.venue_counts,
         'window_hours': board.window_hours,
         'segment_counts': board.segment_counts,
         'triplet_hours': list(board_mod.TRIPLET_HOURS),
@@ -126,10 +153,11 @@ def _row(entry):
 
 def build_payload(args, now=None):
     """Validated query -> serialized board. Shared by the page and the API."""
-    selected, segment, window, limit = parse_query(args)
+    query = parse_query(args)
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
-    board = board_mod.build(selected, now, window_hours=window,
-                            segment=segment, limit=limit)
+    board = board_mod.build(query.sources, now, window_hours=query.window,
+                            segment=query.segment, limit=query.limit,
+                            min_venues=query.min_venues)
     return serialize(board)
 
 

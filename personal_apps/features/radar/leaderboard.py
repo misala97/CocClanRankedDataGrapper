@@ -108,7 +108,7 @@ def _universe_rows(tickers):
 
 
 def build_rows(sources, now, window_hours=4, segment=None, limit=50,
-               session=None):
+               session=None, min_venues=1):
     """Ranked leaderboard rows for the selected sources.
 
     The source list is a read-time filter: it re-pools components that were
@@ -228,6 +228,11 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
             latest.price if latest else None,
             today)
         if segment is not None and row_segment != segment:
+            continue
+        # Breadth as a filter, not as a score. `contributing` is the list of
+        # sources that actually said something, so this asks how many venues
+        # are talking rather than how many the viewer has switched on.
+        if len(contributing) < min_venues:
             continue
 
         rows.append(Row(

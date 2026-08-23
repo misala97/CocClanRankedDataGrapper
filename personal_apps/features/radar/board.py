@@ -117,6 +117,11 @@ class Board:
     # is no price movement to diverge from, so the board ranks on chatter
     # alone and has to say so rather than presenting the same column heading.
     session: str
+    # Breadth. `any` is every ranked row, `multi` the ones more than one venue
+    # is talking about -- both counted before the filter, because they label
+    # the control that applies it.
+    venue_counts: dict
+    min_venues: int
 
 
 def _hour_floor(when):
@@ -304,7 +309,7 @@ def _chart_for(ticker, start, days, closes_by_day, counts, watched_from):
 
 
 def build(sources, now, window_hours=4, segment=None, limit=50,
-          leads=LEAD_COUNT):
+          leads=LEAD_COUNT, min_venues=1):
     """The whole board.
 
     Segment counts are taken before the segment filter, because the counts
@@ -319,8 +324,18 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
     segment_counts = dict(counts)
     segment_counts['all'] = len(ranked)
 
+    # Both venue counts come from the same unfiltered pass, for the reason the
+    # segment counts do: they label the control, and counting after the filter
+    # would report the filtered size in every slot.
+    venue_counts = {
+        'any': len(ranked),
+        'multi': sum(1 for row in ranked if len(row.sources) > 1),
+    }
+
     if segment is not None:
         ranked = [row for row in ranked if row.segment == segment]
+    if min_venues > 1:
+        ranked = [row for row in ranked if len(row.sources) >= min_venues]
     ranked = ranked[:limit]
 
     tickers = [row.ticker for row in ranked]
@@ -354,4 +369,5 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
 
     return Board(generated_at=now, sources=list(sources), segment=segment,
                  window_hours=window_hours, segment_counts=segment_counts,
-                 rows=rows, session=session)
+                 rows=rows, session=session, venue_counts=venue_counts,
+                 min_venues=min_venues)

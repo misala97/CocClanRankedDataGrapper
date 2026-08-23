@@ -342,3 +342,38 @@ def test_a_ticker_with_no_stored_closes_has_no_chart(clean):
     db.session.commit()
 
     assert only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart is None
+
+
+# ----------------------------------------------------------------- venues ---
+#
+# Breadth as a filter, not as a score. What more than one venue is talking
+# about at the same time is a different question from what is loudest.
+
+def test_the_venue_filter_keeps_only_corroborated_rows(clean):
+    universe(f'{PREFIX}A')
+    universe(f'{PREFIX}B')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='bluesky')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='bluesky')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='fourchan')
+    db.session.commit()
+
+    built = board.build(['bluesky', 'fourchan'], NOW, min_venues=2)
+
+    assert [e.rank.ticker for e in built.rows] == [f'{PREFIX}B']
+
+
+def test_venue_counts_are_taken_before_the_venue_filter(clean):
+    """Same rule the segment counts follow: the counts label the control, so
+    computing them after the filter would report the filtered size in both
+    slots."""
+    universe(f'{PREFIX}A')
+    universe(f'{PREFIX}B')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='bluesky')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='bluesky')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='fourchan')
+    db.session.commit()
+
+    built = board.build(['bluesky', 'fourchan'], NOW, min_venues=2)
+
+    assert built.venue_counts['any'] == 2
+    assert built.venue_counts['multi'] == 1
