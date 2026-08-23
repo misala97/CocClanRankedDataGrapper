@@ -64,7 +64,7 @@ def test_the_payload_carries_what_the_surface_has_to_draw(client):
     if payload['rows']:
         row = payload['rows'][0]
         for key in ('ticker', 'divergence', 'mention_z', 'mentions', 'authors',
-                    'marks', 'series', 'triplet', 'tone', 'price_series',
+                    'marks', 'series', 'triplet', 'tone', 'chart',
                     'price_status'):
             assert key in row, key
         assert set(row['triplet']) == {'1', '4', '24'}
@@ -129,3 +129,69 @@ def test_the_chart_serializes_as_two_aligned_arrays(client):
         assert set(chart) == {'from', 'closes', 'chatter'}
         assert len(chart['closes']) == len(chart['chatter'])
         assert chart['from'].count('-') == 2
+
+
+def test_the_row_serializer_actually_runs(client):
+    """The teeth on every other test in this file.
+
+    Each of them iterates payload['rows'] and skips what it cannot check, so
+    on an empty board they all pass without executing a line of _row(). That
+    happened: `_chart` went missing from the serializer, every test here
+    stayed green, and the page 500'd in a browser.
+
+    This test builds a row itself rather than trusting the dev database to
+    contain one.
+    """
+    import datetime as dt
+    import decimal
+    import json as _json
+    from app import app as flask_app
+    from extensions import db
+    from features.radar import board
+    from features.radar.routes.api import serialize
+    from features.radar.config import source_config_version
+    from models import (RadarBucketSource, RadarDailyClose, RadarMention,
+                        RadarPost, TickerUniverse)
+
+    now = dt.datetime(2026, 3, 12, 15, 0, 0)
+    tag = 'SERZ'
+
+    def wipe():
+        RadarMention.query.filter(RadarMention.ticker == tag).delete(
+            synchronize_session=False)
+        RadarPost.query.filter(RadarPost.external_id.like(f'{tag}%')).delete(
+            synchronize_session=False)
+        for model in (RadarBucketSource, RadarDailyClose):
+            model.query.filter(model.ticker == tag).delete(
+                synchronize_session=False)
+        TickerUniverse.query.filter_by(symbol=tag).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    with flask_app.app_context():
+        wipe()
+        db.session.add(TickerUniverse(symbol=tag, name='Serializer Corp',
+                                      first_seen=dt.datetime(2020, 1, 1),
+                                      daily_sigma=0.02))
+        db.session.add(RadarBucketSource(
+            ticker=tag, bucket_start=now - dt.timedelta(minutes=30),
+            source='bluesky', mention_count=10, high_confidence_count=10,
+            low_count=0, distinct_authors=6, distinct_text_ratio=0.9,
+            engagement_weighted_count=10.0, status='ok',
+            source_config_version=source_config_version(),
+            expected=1.0, variance=2.0, mention_z=5.0, baseline_days=30))
+        db.session.add(RadarDailyClose(
+            ticker=tag, close_date=now.date(),
+            close=decimal.Decimal('12.34'), fetched_at=now))
+        db.session.commit()
+
+        payload = serialize(board.build(['bluesky'], now))
+        wipe()
+
+    rows = [r for r in payload['rows'] if r['ticker'] == tag]
+    assert len(rows) == 1, 'the fixture row did not reach the board'
+    row = rows[0]
+    assert row['chart'] is not None
+    assert len(row['chart']['closes']) == len(row['chart']['chatter'])
+    # Serializable end to end -- the 500 was a NameError inside _row.
+    _json.dumps(payload)

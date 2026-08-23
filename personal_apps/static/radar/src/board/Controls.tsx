@@ -1,7 +1,8 @@
 import { SEGMENT_ORDER, segmentLabel, sourceLabel } from '../format'
-import type { BoardPayload, Segment, Selection } from '../types'
+import type { BoardPayload, ChartSpan, Segment, Selection } from '../types'
 
 const WINDOWS = [1, 4, 24]
+const SPANS: ChartSpan[] = ['24h', '1M', '3M', '1Y']
 
 /** Segment, sources and window.
  *
@@ -14,11 +15,14 @@ const WINDOWS = [1, 4, 24]
  *  At least one source must stay selected. Turning off the last one would ask
  *  the server for a board built from nothing, which is not a view of anything.
  */
-export function Controls({ payload, selection, busy, onChange }: {
+export function Controls({ payload, selection, busy, onChange, span, onSpan }: {
   payload: BoardPayload
   selection: Selection
   busy: boolean
   onChange: (next: Selection) => void
+  /** Which slice of the year the charts draw. Client-side only. */
+  span: ChartSpan
+  onSpan: (next: ChartSpan) => void
 }) {
   const counts = payload.segment_counts
 
@@ -78,14 +82,31 @@ export function Controls({ payload, selection, busy, onChange }: {
         </div>
       </div>
 
+      {/* Two time controls, named for what they decide rather than both being
+          called Window. Score changes what the SERVER ranks and refetches;
+          Chart changes what is DRAWN and costs no request, because the whole
+          year is already in the payload. */}
       <div className="group">
-        <span className="lbl" id="win-lbl">Window</span>
-        <div className="seg" role="group" aria-labelledby="win-lbl">
+        <span className="lbl" id="score-lbl">Score</span>
+        <div className="seg" role="group" aria-labelledby="score-lbl">
           {WINDOWS.map((hours) => (
             <button key={hours} type="button"
                     aria-pressed={selection.window === hours}
                     onClick={() => onChange({ ...selection, window: hours })}>
               {hours}h
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="group">
+        <span className="lbl" id="span-lbl">Chart</span>
+        <div className="seg" role="group" aria-labelledby="span-lbl">
+          {SPANS.map((option) => (
+            <button key={option} type="button"
+                    aria-pressed={span === option}
+                    onClick={() => onSpan(option)}>
+              {option}
             </button>
           ))}
         </div>

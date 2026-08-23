@@ -25,7 +25,7 @@
 //    band, the line is mapped into the upper band, and the two overlap in the
 //    middle where a spike actually meets a move. Verified by rendering it.
 
-import type { Chart, ChartSpan, Point, PricePoint } from '../types'
+import type { Chart, ChartSpan, Point } from '../types'
 
 export interface Box {
   width: number
@@ -98,45 +98,12 @@ export function chatterBars(points: Point[], box: Box, yMax: number): Bar[] {
   return bars
 }
 
-/** The price line, scaled to its own range. Returns '' when there is nothing
- *  to draw -- fewer than two quotes is not a line, and a flat stroke across
- *  the middle would imply a price that held steady when it was simply never
- *  sampled twice. */
-export function priceLine(points: PricePoint[], box: Box): string {
-  const values = points
-    .map((p) => p.price)
-    .filter((p): p is number => p !== null)
-  if (values.length < 2) return ''
-
-  const low = Math.min(...values)
-  const high = Math.max(...values)
-  const span = high - low || 1
-
-  const band = plot(box) * (box.priceBand ?? 1)
-  return values.map((value, index) => {
-    const x = xAt(index, values.length, box)
-    const y = box.pad + band - ((value - low) / span) * band
-    return `${index ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-}
-
 function plot(box: Box): number {
   return box.height - box.pad * 2
 }
 
 function xAt(index: number, total: number, box: Box): number {
   return total <= 1 ? box.width / 2 : (index / (total - 1)) * box.width
-}
-
-/** Whether a price series ended higher than it started. */
-export function priceRose(points: PricePoint[]): boolean {
-  const values = points.map((p) => p.price).filter((p): p is number => p !== null)
-  const first = values.at(0)
-  const last = values.at(-1)
-  // Not enough data is not a fall. Two quotes are the minimum for a direction,
-  // and below that the caller draws no line at all.
-  if (first === undefined || last === undefined || values.length < 2) return true
-  return last >= first
 }
 
 /** Calendar days per span. '24h' is absent on purpose: that span reads the
@@ -216,7 +183,12 @@ export function dailyBars(chatter: (number | null)[], box: Box,
     bars.push({
       x: index * slot + slot * 0.15,
       y: box.height - box.pad - height,
-      width: Math.max(slot * 0.7, 0.6),
+      // A floor of 1.2px, not the 0.7 gap ratio alone. Over a year a day is
+      // 0.34px in a scan cell, so the honest width rounds to nothing and five
+      // real days of chatter render invisible. Only the HEIGHT carries the
+      // value; the width is legibility, and a bar you cannot see is worse
+      // than one a third of a pixel too wide.
+      width: Math.max(slot * 0.7, 1.2),
       height,
       ratio,
     })

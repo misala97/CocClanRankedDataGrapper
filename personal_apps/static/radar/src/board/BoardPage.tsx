@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { BoardUnavailable, fetchBoard, queryFor } from '../api'
 import { plural, pricesAreMoving, sessionLabel, sourceLabel, stampTime } from '../format'
-import type { BoardPayload, Mark, Selection } from '../types'
+import type { BoardPayload, ChartSpan, Mark, Selection } from '../types'
 import { Controls } from './Controls'
 import { LeadCard } from './LeadCard'
 import { MarkExplainer } from './Marks'
 import { ScanRow } from './ScanRow'
-import { peak } from './geometry'
+import { peak, peakOf, sliceChart } from './geometry'
 
 export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [payload, setPayload] = useState(initial)
@@ -17,6 +17,10 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     window: initial.window_hours,
   })
   const [busy, setBusy] = useState(false)
+  // Client-side only: the payload holds the whole year, so switching span
+  // costs no request. Defaults to 24h -- the operational "is this spiking
+  // now" view, and the only span with a meaningful amount of chatter today.
+  const [span, setSpan] = useState<ChartSpan>('24h')
   const [error, setError] = useState<BoardUnavailable | null>(null)
   const inflight = useRef<AbortController | null>(null)
   // The board embedded in the document already matches the initial selection,
@@ -57,9 +61,14 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
 
   const leads = payload.rows.slice(0, payload.lead_count)
   const rest = payload.rows.slice(payload.lead_count)
-  // One scale across the three lead charts, so a tall bar in the first card
-  // means more mentions than a short bar in the third.
-  const chatterMax = Math.max(1, ...leads.map((row) => peak(row.series)))
+  // One chatter scale across the three lead cards, so a tall bar in the first
+  // means more mentions than a short bar in the third. It has to follow the
+  // span: at 24h the source is the hourly series, at anything longer it is the
+  // sliced daily array, and the two are on completely different magnitudes.
+  const chatterMax = Math.max(1, ...leads.map((row) => (
+    span === '24h'
+      ? peak(row.series)
+      : (row.chart ? peakOf(sliceChart(row.chart, span).chatter) : 0))))
   // With the exchange shut there is no price movement to diverge from, so the
   // board ranks on chatter and says so. Presenting the same "Divergence"
   // heading over what is really a chatter score would be the quiet kind of
@@ -109,7 +118,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
         </p>
 
         <Controls payload={payload} selection={selection} busy={busy}
-                  onChange={setSelection} />
+                  onChange={setSelection} span={span} onSpan={setSpan} />
 
         {error && (
           <p className="oops" role="alert">
@@ -132,7 +141,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
               {leads.map((row) => (
                 <LeadCard key={row.ticker} row={row} chatterMax={chatterMax}
                           windowHours={payload.window_hours} ranked={ranked}
-                          hiddenMarks={universal} />
+                          hiddenMarks={universal} span={span} />
               ))}
             </div>
 
@@ -143,21 +152,22 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
                   <p>ranked by the same measure</p>
                 </div>
                 <div className="cols" aria-hidden="true">
+                  {/* SIX cells, matching six grid tracks. A seventh would
+                      silently shift every column right of it. */}
                   <div>Ticker</div>
-                  <div>{payload.series_hours}h chatter</div>
+                  <div>{span} chart</div>
                   <div className="n">
                     {payload.triplet_hours.map((h) => `${h}h`).join(' · ')}
                   </div>
                   <div className="n">
                     {ranked === 'chatter' ? 'Chatter z' : 'Divergence'}
                   </div>
-                  <div className="n">Mentions</div>
-                  <div className="n">Authors</div>
+                  <div className="n">Mentions / people</div>
                   <div className="n">Price {payload.window_hours}h</div>
                 </div>
                 {rest.map((row) => (
                   <ScanRow key={row.ticker} row={row} ranked={ranked}
-                           hiddenMarks={universal}
+                           hiddenMarks={universal} span={span}
                            triplet={payload.triplet_hours} />
                 ))}
               </>

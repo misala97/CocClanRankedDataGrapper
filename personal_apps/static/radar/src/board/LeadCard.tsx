@@ -1,7 +1,8 @@
 import { divergence, move, plural, signed, UNKNOWN } from '../format'
-import type { Mark, Row } from '../types'
-import { chatterBars, priceLine, priceRose, type Box } from './geometry'
+import type { ChartSpan, Mark, Row } from '../types'
+import { type Box } from './geometry'
 import { Marks } from './Marks'
+import { SpanChart } from './SpanChart'
 
 // The bars get almost the full height and the price line is mapped into the
 // upper half, so a peak grows UP THROUGH the line rather than cowering under
@@ -25,8 +26,9 @@ const BOX: Box = { width: 300, height: 92, pad: 11, barBand: 0.94, priceBand: 0.
  *  auto-scaling made three unrelated charts look identically busy.
  */
 export function LeadCard({ row, chatterMax, windowHours, ranked,
-                          hiddenMarks = [] }: {
+                          hiddenMarks = [], span }: {
   row: Row
+  /** Shared across all three cards -- see SpanChart's yMax. */
   chatterMax: number
   windowHours: number
   /** 'divergence' while prices move, 'chatter' while the exchange is shut. */
@@ -34,11 +36,9 @@ export function LeadCard({ row, chatterMax, windowHours, ranked,
   /** Marks every row on the board carries, which the page states once
    *  instead. A badge repeated on all 46 rows is scenery, not a warning. */
   hiddenMarks?: Mark[]
+  /** Which slice of the year the chart draws. */
+  span: ChartSpan
 }) {
-  const bars = chatterBars(row.series, BOX, chatterMax)
-  const line = priceLine(row.price_series, BOX)
-  const rose = priceRose(row.price_series)
-  const stroke = rose ? 'var(--up)' : 'var(--down)'
   const byChatter = ranked === 'chatter'
   const scored = byChatter ? row.mention_z !== null : row.divergence !== null
   const headline = byChatter
@@ -78,35 +78,18 @@ export function LeadCard({ row, chatterMax, windowHours, ranked,
       </p>
 
       <div className="chart">
-        <svg viewBox={`0 0 ${BOX.width} ${BOX.height}`} preserveAspectRatio="none"
-             role="img"
-             aria-label={
-               `${row.ticker}: chatter and price over 24 hours. ` +
-               `${row.mentions} mentions in the last ${windowHours} hours ` +
-               `against ${row.expected.toFixed(0)} typical, price ` +
-               `${priced ? move(row.price_move) : 'unknown'}.`
-             }>
-          {bars.map((bar, index) => (
-            <rect key={index} x={bar.x} y={bar.y} width={bar.width}
-                  height={bar.height} rx="1" fill="var(--mark)"
-                  opacity={(0.32 + 0.68 * bar.ratio).toFixed(2)} />
-          ))}
-          {line && (
-            <path d={line} fill="none" stroke={stroke} strokeWidth="2"
-                  strokeLinecap="round" strokeLinejoin="round"
-                  vectorEffect="non-scaling-stroke" />
-          )}
-        </svg>
+        {/* The same component the scan rows use. A card and a row draw the
+            same two series over the same span, and a second implementation
+            would be a second place for them to disagree. */}
+        <SpanChart chart={row.chart} series={row.series} span={span}
+                   box={BOX} yMax={chatterMax}
+                   label={`${row.ticker}, ${span}`} />
         <div className="legend">
           <span className="keys">
             <span className="k-chat">▪ chatter</span>
-            {line
-              ? <span className={rose ? 'k-price up' : 'k-price down'}>— price</span>
-              : <span>no price history</span>}
+            <span className="k-price">— price</span>
           </span>
-          {/* The scale is shared across all three cards, so a bar height is
-              only comparable once the reader knows what full height means. */}
-          <span>peak {peakHour}/h · 24h</span>
+          <span>{span === '24h' ? `peak ${peakHour}/h · 24h` : span}</span>
         </div>
       </div>
 

@@ -19,11 +19,6 @@ export interface Tone {
   bearish: number
 }
 
-export interface PricePoint {
-  at: string
-  price: number | null
-}
-
 /** Why a number on this row cannot be taken at face value. Rendered, never
  *  hidden behind a hover -- see PRODUCT.md. */
 export type Mark = 'no-print' | 'provisional' | 'single-source' | 'partial'
@@ -68,8 +63,6 @@ export interface Row {
   /** Keyed by window length in hours, as a string: {"1": 3.1, "4": ...}. */
   triplet: Record<string, number | null>
   tone: Tone
-  /** Only the lead rows carry one; everything else gets an empty array. */
-  price_series: PricePoint[]
   /** null when the ticker has no stored closes at all. */
   chart: Chart | null
 }

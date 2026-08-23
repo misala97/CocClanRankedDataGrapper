@@ -1,19 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Point, PricePoint } from '../types'
+import type { Point } from '../types'
 import {
-  chartRose, chatterBars, chatterRuns, dailyBars, peak, peakOf, priceLine,
-  pricePath, priceRose, sliceChart, type Box,
+  chartRose, chatterBars, chatterRuns, dailyBars, peak, peakOf, pricePath,
+  sliceChart, type Box,
 } from './geometry'
 
 const BOX: Box = { width: 100, height: 40, pad: 0 }
 
 function series(counts: (number | null)[]): Point[] {
   return counts.map((count, index) => ({ hour: `h${index}`, count }))
-}
-
-function quotes(prices: (number | null)[]): PricePoint[] {
-  return prices.map((price, index) => ({ at: `t${index}`, price }))
 }
 
 /** Every y value in a path, in order. */
@@ -76,36 +72,6 @@ describe('unmeasured hours', () => {
   it('reports the peak over measured hours only', () => {
     expect(peak(series([null, 3, null, 7]))).toBe(7)
     expect(peak(series([null, null]))).toBe(0)
-  })
-})
-
-describe('the price line', () => {
-  it('draws nothing from fewer than two quotes', () => {
-    // A single quote drawn as a flat stroke would assert the price held
-    // steady, when it was simply never sampled twice.
-    expect(priceLine(quotes([101]), BOX)).toBe('')
-    expect(priceLine([], BOX)).toBe('')
-    expect(priceLine(quotes([null, null]), BOX)).toBe('')
-  })
-
-  it('scales to its own range rather than to zero', () => {
-    const points = ys(priceLine(quotes([100, 101, 102]), BOX))
-
-    expect(points[0]).toBe(BOX.height)
-    expect(points[2]).toBe(0)
-  })
-
-  it('stays inside its band when one is set, leaving the floor to the bars', () => {
-    const banded = ys(priceLine(quotes([100, 110]), { ...BOX, priceBand: 0.5 }))
-
-    expect(Math.max(...banded)).toBeLessThanOrEqual(BOX.height * 0.5)
-  })
-
-  it('reads direction from first to last, not from the extremes', () => {
-    expect(priceRose(quotes([100, 130, 101]))).toBe(true)
-    expect(priceRose(quotes([100, 130, 99]))).toBe(false)
-    // Not enough data is not a fall.
-    expect(priceRose(quotes([100]))).toBe(true)
   })
 })
 

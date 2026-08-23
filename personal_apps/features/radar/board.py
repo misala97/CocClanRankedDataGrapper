@@ -99,7 +99,6 @@ class BoardRow:
     series: list          # list[Point], oldest first
     triplet: dict         # hours -> z or None
     tone: Tone
-    price_series: list    # list[(datetime, Decimal)], only for leads
     # Price and chatter over one calendar year, aligned. None when the ticker
     # has no stored closes at all.
     chart: object
@@ -304,24 +303,6 @@ def _chart_for(ticker, start, days, closes_by_day, counts, watched_from):
     return Chart(start=start, closes=closes, chatter=chatter)
 
 
-def _price_series(tickers, since, now):
-    """Every quote snapshot in the window, per ticker, oldest first."""
-    if not tickers:
-        return {}
-
-    rows = (db.session.query(RadarQuote.ticker, RadarQuote.fetched_at,
-                             RadarQuote.price)
-            .filter(RadarQuote.ticker.in_(list(tickers)),
-                    RadarQuote.fetched_at >= since,
-                    RadarQuote.fetched_at <= now)
-            .order_by(RadarQuote.fetched_at.asc()).all())
-
-    out = collections.defaultdict(list)
-    for ticker, fetched_at, price in rows:
-        out[ticker].append((fetched_at, price))
-    return out
-
-
 def build(sources, now, window_hours=4, segment=None, limit=50,
           leads=LEAD_COUNT):
     """The whole board.
@@ -349,7 +330,6 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
     totals = _hourly_counts(tickers, sources, since, now)
     triplets = _triplets(tickers, sources, now)
     tones = _tones(tickers, sources, since, now)
-    prices = _price_series(tickers[:leads], since, now)
 
     # The chart spans a calendar year regardless of the scoring window, so it
     # gets its own start rather than reusing `since`.
@@ -366,7 +346,6 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
         series=_series_for(row.ticker, totals, covered, since, now),
         triplet=triplets.get(row.ticker, empty_triplet),
         tone=tones.get(row.ticker, Tone(0, 0, 0)),
-        price_series=prices.get(row.ticker, []) if index < leads else [],
         chart=(_chart_for(row.ticker, chart_start, CHART_DAYS,
                           dict(stored_closes[row.ticker]), daily_counts,
                           watched_from)

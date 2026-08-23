@@ -15,7 +15,6 @@ function row(over: Partial<Row> = {}): Row {
     series: Array.from({ length: 25 }, (_, i) => ({ hour: `h${i}`, count: i })),
     triplet: { '1': 1.1, '4': 3.2, '24': 2.0 },
     tone: { bullish: 4, neutral: 10, bearish: 2 },
-    price_series: [{ at: 't0', price: 10 }, { at: 't1', price: 10.1 }],
     // A year where the market trades Mon-Fri and we started watching five days
     // ago -- the shape the real payload has today, nulls and all.
     chart: {
@@ -159,7 +158,10 @@ describe('the controls', () => {
     vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'))
     const { container } = render(<BoardPage initial={payload()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: '24h' }))
+    // Score's 24h, not Chart's. Both groups render a button with that label
+    // and only Score triggers a refetch, so this must be scoped.
+    await userEvent.click(within(screen.getByRole('group', { name: 'Score' }))
+      .getByRole('button', { name: '24h' }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
     expect(container.querySelectorAll('.lead')).toHaveLength(3)
@@ -291,5 +293,93 @@ describe('a mark every row carries', () => {
     render(<BoardPage initial={single} />)
 
     expect(screen.getByRole('button', { name: /^no-print/ })).toBeInTheDocument()
+  })
+})
+
+describe('the chart on a row', () => {
+  it('shows mentions and people as one column', () => {
+    // Merged to pay for the chart column. They answer the same question --
+    // how much talk, from how many mouths -- and the lead cards already say
+    // them as one sentence.
+    const { container } = render(<BoardPage initial={payload()} />)
+    const scan = container.querySelector('.row') as HTMLElement
+
+    expect(within(scan).getByText('20 / 9')).toBeInTheDocument()
+  })
+
+  it('draws chatter only at the 24h span', () => {
+    // 24h reads the hourly series. There is no price line at that resolution:
+    // daily closes cannot express a day.
+    const { container } = render(<BoardPage initial={payload()} />)
+    const scan = container.querySelector('.row') as HTMLElement
+
+    expect(scan.querySelector('.spark path.chat')).not.toBeNull()
+    expect(scan.querySelector('.spark path.px')).toBeNull()
+  })
+
+  it('draws both series once a longer span is chosen', async () => {
+    const { container } = render(<BoardPage initial={payload()} />)
+
+    await userEvent.click(within(screen.getByRole('group', { name: 'Chart' }))
+      .getByRole('button', { name: '1Y' }))
+
+    const scan = container.querySelector('.row') as HTMLElement
+    expect(scan.querySelector('.spark path.px')).not.toBeNull()
+  })
+
+  it('draws a dashed rule, not a flat line, for a ticker with no closes', async () => {
+    const none = payload({
+      rows: [row(), row(), row(), row({ ticker: 'DDD', chart: null })],
+    })
+    const { container } = render(<BoardPage initial={none} />)
+
+    await userEvent.click(within(screen.getByRole('group', { name: 'Chart' }))
+      .getByRole('button', { name: '1Y' }))
+
+    const scan = container.querySelector('.row') as HTMLElement
+    expect(scan.querySelector('.spark path.px')).toBeNull()
+    expect(scan.querySelector('.spark line')).not.toBeNull()
+  })
+})
+
+describe('the two time controls', () => {
+  it('labels them Score and Chart, because they are different questions', () => {
+    // One decides what gets ranked, the other what gets drawn. Both called
+    // "Window" they would read as one setting that had been split in half.
+    render(<BoardPage initial={payload()} />)
+
+    expect(screen.getByText('Score')).toBeInTheDocument()
+    expect(screen.getByText('Chart')).toBeInTheDocument()
+  })
+
+  it('defaults the chart to 24h, the operational view', () => {
+    // Both groups render a 24h button -- Score's longest window and Chart's
+    // shortest span -- so this must be scoped or it matches two and throws.
+    render(<BoardPage initial={payload()} />)
+    const chart = screen.getByRole('group', { name: 'Chart' })
+
+    expect(within(chart).getByRole('button', { name: '24h' }))
+      .toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('re-slices the chart without refetching the board', async () => {
+    // The whole year is already in the payload; asking the server again for
+    // data the client is holding would be a round trip for nothing.
+    render(<BoardPage initial={payload()} />)
+
+    await userEvent.click(within(screen.getByRole('group', { name: 'Chart' }))
+      .getByRole('button', { name: '3M' }))
+
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('still refetches when the SCORE window changes', async () => {
+    // The opposite case, and the reason the two controls stay separate: the
+    // score window changes what the server ranks.
+    render(<BoardPage initial={payload()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: '1h' }))
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
   })
 })

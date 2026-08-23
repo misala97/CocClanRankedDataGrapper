@@ -343,12 +343,11 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
   display: grid;
   grid-template-columns:
     minmax(190px, 1.5fr)   /* ticker + name + marks -- see .tick min-width */
-    124px                  /* sparkline            */
-    146px                  /* z triplet            */
-    104px                  /* divergence           */
-    84px                   /* mentions             */
-    84px                   /* authors              */
-    104px;                 /* price move           */
+    150px                  /* chatter + price chart */
+    146px                  /* z triplet             */
+    104px                  /* divergence            */
+    104px                  /* mentions / people     */
+    104px;                 /* price move            */
   align-items: center;
   gap: 14px;
 }
@@ -511,7 +510,7 @@ button.mk.hard:hover { background: color-mix(in oklab, var(--warn) 22%, transpar
 @media (max-width: 1080px) {
   .cols, .row {
     grid-template-columns:
-      minmax(150px, 1.4fr) 100px 132px 92px 72px 72px 92px;
+      minmax(150px, 1.4fr) 120px 132px 92px 92px 92px;
     gap: 10px;
   }
   .co { display: none; }

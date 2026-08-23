@@ -268,21 +268,9 @@ def test_segment_counts_are_taken_before_the_segment_filter(clean):
     assert built.segment_counts['all'] >= 2
 
 
-def test_only_the_lead_rows_carry_a_price_series(clean):
-    """A quote series per row would be fifteen extra chart payloads nothing
-    draws."""
-    for index in range(4):
-        ticker = f'{PREFIX}{index}'
-        universe(ticker)
-        bucket(ticker, minutes_ago=30, z=10 - index)
-        quote(ticker, 60, '100.00')
-        quote(ticker, 5, '101.00')
-    db.session.commit()
-
-    built = board.build(['bluesky'], NOW, leads=2)
-
-    assert all(entry.price_series for entry in built.rows[:2])
-    assert all(not entry.price_series for entry in built.rows[2:])
+# The lead cards' intraday quote series is gone. They now draw the same
+# span-switched chart the scan rows do, so the payload field, its per-row quote
+# query and the geometry that read it all lost their last consumer.
 
 
 # ------------------------------------------------------------------ chart ---

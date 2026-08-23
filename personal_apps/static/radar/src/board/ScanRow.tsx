@@ -1,7 +1,7 @@
 import { divergence, move, signed, UNKNOWN, zscore } from '../format'
-import type { Mark, Row } from '../types'
+import type { ChartSpan, Mark, Row } from '../types'
 import { Marks } from './Marks'
-import { Sparkline } from './Sparkline'
+import { SpanChart } from './SpanChart'
 
 // The z at which a window is worth calling out. Matches config.ELEVATED_Z on
 // the server; duplicated rather than shipped in the payload because it is a
@@ -9,7 +9,7 @@ import { Sparkline } from './Sparkline'
 // ever drift.
 const ELEVATED = 2.0
 
-export function ScanRow({ row, triplet, ranked, hiddenMarks = [] }: {
+export function ScanRow({ row, triplet, ranked, hiddenMarks = [], span }: {
   row: Row
   triplet: number[]
   /** 'divergence' while prices move, 'chatter' while the exchange is shut. */
@@ -17,6 +17,8 @@ export function ScanRow({ row, triplet, ranked, hiddenMarks = [] }: {
   /** Marks every row on the board carries, which the page states once
    *  instead. A badge repeated on all 46 rows is scenery, not a warning. */
   hiddenMarks?: Mark[]
+  /** Which slice of the stored year the chart draws. */
+  span: ChartSpan
 }) {
   const scores = triplet.map((hours) => row.triplet[String(hours)] ?? null)
   const hottest = scores.reduce<number | null>(
@@ -31,7 +33,9 @@ export function ScanRow({ row, triplet, ranked, hiddenMarks = [] }: {
         <Marks marks={row.marks.filter((m) => !hiddenMarks.includes(m))} />
       </div>
 
-      <Sparkline points={row.series} label={`${row.ticker} chatter over 24 hours`} />
+      <SpanChart chart={row.chart} series={row.series} span={span}
+                 box={{ width: 124, height: 26, pad: 3 }}
+                 label={`${row.ticker}, ${span}`} />
 
       <div className="trip">
         {scores.map((value, index) => (
@@ -56,15 +60,17 @@ export function ScanRow({ row, triplet, ranked, hiddenMarks = [] }: {
         </div>
       )}
 
-      <div className="n">{row.mentions}</div>
-      <div className="n">{row.authors}</div>
+      {/* Merged to pay for the chart column. They answer the same question --
+          how much talk, from how many mouths -- and the lead cards already
+          say them as one sentence. */}
+      <div className="n">{row.mentions} / {row.authors}</div>
       <div className="n">{priceCell(row)}</div>
 
       {/* Mobile restates the three numeric columns as a caption, because the
           grid drops to two columns below 720px. Same values, one source. */}
       <div className="meta">
         <span><b>{row.mentions}</b> mentions</span>
-        <span><b>{row.authors}</b> authors</span>
+        <span><b>{row.authors}</b> people</span>
         <span>{priceCell(row)}</span>
       </div>
     </div>

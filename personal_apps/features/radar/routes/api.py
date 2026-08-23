@@ -14,6 +14,22 @@ WINDOWS = (1, 4, 24)
 MAX_LIMIT = 100
 
 
+def _chart(chart):
+    """{'from', 'closes', 'chatter'} or null, both arrays calendar-aligned.
+
+    365 entries each, mostly literal nulls -- about 250KB across a full board
+    and roughly 30KB once nginx gzips it. Sending the year whole is what makes
+    the span switch instant: the client already holds every span it can show.
+    """
+    if chart is None:
+        return None
+    return {
+        'from': chart.start.isoformat(),
+        'closes': [float(c) if c is not None else None for c in chart.closes],
+        'chatter': chart.chatter,
+    }
+
+
 def _decimal_or_none(value):
     return float(value) if value is not None else None
 
@@ -104,9 +120,6 @@ def _row(entry):
         'tone': {'bullish': entry.tone.bullish,
                  'neutral': entry.tone.neutral,
                  'bearish': entry.tone.bearish},
-        'price_series': [{'at': at.isoformat() + 'Z',
-                          'price': _decimal_or_none(price)}
-                         for at, price in entry.price_series],
         'chart': _chart(entry.chart),
     }
 
