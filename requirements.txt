@@ -11,6 +11,7 @@ gunicorn
 anthropic
 pywebpush
 websockets
+Telethon
 
 # test
 pytest

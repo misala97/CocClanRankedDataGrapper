@@ -17,3 +17,9 @@ coc_stats/.impeccable/live/
 node_modules/
 personal_apps/static/gym/dist/
 personal_apps/static/radar/dist/
+
+# Telegram session files. Full account access with no password and no
+# second factor -- anyone holding one is signed in as michi. Revoke from
+# Telegram -> Settings -> Devices if one ever leaks.
+*.session
+*.session-journal
