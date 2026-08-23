@@ -1,8 +1,7 @@
 import { SEGMENT_ORDER, segmentLabel, sourceLabel } from '../format'
-import type { BoardPayload, ChartSpan, SegmentFilter, Selection } from '../types'
+import type { BoardPayload, SegmentFilter, Selection } from '../types'
 
 const WINDOWS = [1, 4, 24]
-const SPANS: ChartSpan[] = ['24h', '1M', '3M', '1Y']
 
 /** Segment, sources and window.
  *
@@ -15,14 +14,11 @@ const SPANS: ChartSpan[] = ['24h', '1M', '3M', '1Y']
  *  At least one source must stay selected. Turning off the last one would ask
  *  the server for a board built from nothing, which is not a view of anything.
  */
-export function Controls({ payload, selection, busy, onChange, span, onSpan }: {
+export function Controls({ payload, selection, busy, onChange }: {
   payload: BoardPayload
   selection: Selection
   busy: boolean
   onChange: (next: Selection) => void
-  /** Which slice of the year the charts draw. Client-side only. */
-  span: ChartSpan
-  onSpan: (next: ChartSpan) => void
 }) {
   const counts = payload.segment_counts
 
@@ -44,19 +40,23 @@ export function Controls({ payload, selection, busy, onChange, span, onSpan }: {
       <div className="group">
         <span className="lbl" id="seg-lbl">Segment</span>
         <div className="seg" role="group" aria-labelledby="seg-lbl">
-          {/* A segment with no rows is dropped -- except the one currently
-              selected. Hiding the active filter leaves the reader looking at
-              an empty board with nothing on screen saying which filter
-              emptied it, which is how a filter becomes a bug report. */}
-          {SEGMENT_ORDER.filter((key) => key === 'all' || counts[key]
-                                || key === selection.segment).map((key) => {
+          {/* Every slot, always, in one order.
+              Chips used to be dropped at a count of zero, on the reasoning
+              that a dead chip is clutter. What it produced was a strip that
+              changed shape between loads, so things moved under the cursor --
+              Michi, 2026-08-23: "the settings are bad and switch around".
+              A dimmed zero is information. A missing chip is a moving
+              target. */}
+          {SEGMENT_ORDER.map((key) => {
             const value = key === 'all' ? null : (key as SegmentFilter)
             const active = selection.segment === value
+            const count = counts[key] ?? 0
             return (
               <button key={key} type="button" aria-pressed={active}
+                      className={count ? undefined : 'nil'}
                       onClick={() => onChange({ ...selection, segment: value })}>
                 {segmentLabel(key)}
-                <span className="n">{counts[key] ?? 0}</span>
+                <span className="n">{count}</span>
               </button>
             )
           })}
@@ -82,12 +82,8 @@ export function Controls({ payload, selection, busy, onChange, span, onSpan }: {
         </div>
       </div>
 
-      {/* Two time controls, named for what they decide rather than both being
-          called Window. Score changes what the SERVER ranks and refetches;
-          Chart changes what is DRAWN and costs no request, because the whole
-          year is already in the payload. */}
-      {/* Breadth. Server-side, unlike Chart -- it changes which rows exist,
-          not how they are drawn, so it refetches like Segment does. */}
+      {/* Breadth. Server-side: it changes which rows exist, so it refetches
+          the way Segment does. */}
       <div className="group">
         <span className="lbl" id="venues-lbl">Venues</span>
         <div className="seg" role="group" aria-labelledby="venues-lbl">
@@ -115,18 +111,10 @@ export function Controls({ payload, selection, busy, onChange, span, onSpan }: {
         </div>
       </div>
 
-      <div className="group">
-        <span className="lbl" id="span-lbl">Chart</span>
-        <div className="seg" role="group" aria-labelledby="span-lbl">
-          {SPANS.map((option) => (
-            <button key={option} type="button"
-                    aria-pressed={span === option}
-                    onClick={() => onSpan(option)}>
-              {option}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* The chart span used to sit here. It belongs to the panel now: it
+          changes one ticker's chart, not which rows the board lists, and
+          having it here made a control that decides nothing about the list
+          look like one that does. */}
     </div>
   )
 }

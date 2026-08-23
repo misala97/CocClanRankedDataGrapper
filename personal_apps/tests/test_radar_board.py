@@ -273,76 +273,8 @@ def test_segment_counts_are_taken_before_the_segment_filter(clean):
 # query and the geometry that read it all lost their last consumer.
 
 
-# ------------------------------------------------------------------ chart ---
-#
-# Price and chatter on one calendar axis. The alignment is the whole reason
-# they are one structure: a year holds ~252 trading days and 365 calendar
-# days, so positioning each by its own index would drift them over a hundred
-# days apart by December.
-
-def test_the_chart_aligns_price_and_chatter_on_calendar_days(clean):
-    from models import RadarDailyClose
-
-    universe(f'{PREFIX}A')
-    bucket(f'{PREFIX}A', minutes_ago=30)
-    for offset in (0, 1, 2):
-        db.session.add(RadarDailyClose(
-            ticker=f'{PREFIX}A', close_date=NOW.date() - dt.timedelta(days=offset),
-            close=decimal.Decimal('10') + decimal.Decimal(offset), fetched_at=NOW))
-    db.session.commit()
-
-    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
-
-    assert len(chart.closes) == len(chart.chatter) == board.CHART_DAYS
-    assert (NOW.date() - chart.start).days == board.CHART_DAYS - 1
-    # Today is the last index of both arrays, so the two line up by date.
-    assert float(chart.closes[-1]) == 10.0
-    assert chart.chatter[-1] == 10
-
-
-def test_a_day_the_market_did_not_trade_is_null_not_carried_forward(clean):
-    """Null means no trade happened. The client draws the line across it;
-    repeating the previous close here would invent a print."""
-    from models import RadarDailyClose
-
-    universe(f'{PREFIX}A')
-    bucket(f'{PREFIX}A', minutes_ago=30)
-    db.session.add(RadarDailyClose(
-        ticker=f'{PREFIX}A', close_date=NOW.date() - dt.timedelta(days=3),
-        close=decimal.Decimal('10'), fetched_at=NOW))
-    db.session.commit()
-
-    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
-
-    assert chart.closes[-1] is None
-    assert float(chart.closes[-4]) == 10.0
-
-
-def test_days_before_ingest_began_have_no_chatter_at_all(clean):
-    """Not zero. We were not watching, and a zero bar would claim a silence we
-    never observed -- the same rule the hourly series already follows."""
-    from models import RadarDailyClose
-
-    universe(f'{PREFIX}A')
-    bucket(f'{PREFIX}A', minutes_ago=30)
-    db.session.add(RadarDailyClose(
-        ticker=f'{PREFIX}A', close_date=NOW.date(),
-        close=decimal.Decimal('10'), fetched_at=NOW))
-    db.session.commit()
-
-    chart = only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart
-
-    assert chart.chatter[0] is None
-    assert chart.chatter[-1] == 10
-
-
-def test_a_ticker_with_no_stored_closes_has_no_chart(clean):
-    universe(f'{PREFIX}A')
-    bucket(f'{PREFIX}A', minutes_ago=30)
-    db.session.commit()
-
-    assert only(board.build(['bluesky'], NOW), f'{PREFIX}A').chart is None
-
+# The chart moved to the detail panel on 2026-08-23, and its tests with
+# it -- see test_radar_detail.py. The board no longer ships one.
 
 # ----------------------------------------------------------------- venues ---
 #

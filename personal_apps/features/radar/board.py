@@ -31,7 +31,7 @@ import sqlalchemy as sa
 from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
 
-from . import history, leaderboard, market_calendar
+from . import leaderboard, market_calendar, phrasing
 from .config import SEGMENT_GROUPS, VARIANCE_FLOOR, segments_in
 
 # The windows the triplet reports, shortest first. Fixed rather than derived
@@ -46,33 +46,12 @@ SERIES_HOURS = 24
 # How many rows get the full treatment at the top of the page.
 LEAD_COUNT = 3
 
-# One calendar year -- the chart's widest span.
-CHART_DAYS = 365
-
 
 @dataclasses.dataclass
 class Point:
     """One hour of the chatter series. `count` is None when unmeasured."""
     hour: dt.datetime
     count: int | None
-
-
-@dataclasses.dataclass
-class Chart:
-    """Price and chatter over the same calendar days.
-
-    Both arrays are CHART_DAYS long and share `start`, so index i is the same
-    date in each. That alignment is why this is one structure rather than two:
-    a year holds ~252 trading days and 365 calendar days, and positioning each
-    by its own index would drift them apart by over a hundred days.
-
-    `closes[i]` is None where the market did not trade -- weekends, holidays.
-    `chatter[i]` is None where we were not yet watching. Different absences,
-    drawn differently: the price line spans its gaps, the chatter bars do not.
-    """
-    start: dt.date
-    closes: list
-    chatter: list
 
 
 @dataclasses.dataclass
@@ -99,9 +78,14 @@ class BoardRow:
     series: list          # list[Point], oldest first
     triplet: dict         # hours -> z or None
     tone: Tone
-    # Price and chatter over one calendar year, aligned. None when the ticker
-    # has no stored closes at all.
-    chart: object
+    # Why this row is on the list, in words -- see phrasing.py. The client
+    # styles by clause kind and never re-derives the wording, so there is
+    # exactly one implementation of that judgement.
+    #
+    # The year-long price chart used to live here and now belongs to the
+    # detail panel: at three years it is ~780 numbers, and a twenty-row board
+    # would have shipped sixteen thousand of them to draw twenty sparklines.
+    clauses: list
 
 
 @dataclasses.dataclass
@@ -122,6 +106,9 @@ class Board:
     # the control that applies it.
     venue_counts: dict
     min_venues: int
+    # What the eligibility floor and the breadth filter left out, by reason.
+    # Without it a quiet board and a stopped ingest look the same.
+    excluded: dict
 
 
 def _hour_floor(when):
@@ -256,58 +243,6 @@ def _tones(tickers, sources, since, now):
     return out
 
 
-def _daily_counts(tickers, sources, start, now):
-    """Pooled mention count per (ticker, calendar day).
-
-    From buckets, which are retained forever -- unlike posts, which prune at
-    30 days. That is what lets the chart's long spans fill in over time with
-    no new collection.
-    """
-    if not tickers:
-        return {}
-
-    rows = (db.session.query(RadarBucketSource.ticker,
-                             sa.func.date(RadarBucketSource.bucket_start),
-                             sa.func.sum(RadarBucketSource.mention_count))
-            .filter(RadarBucketSource.ticker.in_(list(tickers)),
-                    RadarBucketSource.source.in_(list(sources)),
-                    RadarBucketSource.bucket_start >= start,
-                    RadarBucketSource.bucket_start < now)
-            .group_by(RadarBucketSource.ticker,
-                      sa.func.date(RadarBucketSource.bucket_start)).all())
-
-    totals = {}
-    for ticker, day, count in rows:
-        # MySQL returns DATE() as a date object; MariaDB has been seen to
-        # return a string. Normalise rather than trusting the driver.
-        if isinstance(day, str):
-            day = dt.date.fromisoformat(day)
-        totals[(ticker, day)] = int(count or 0)
-    return totals
-
-
-def _first_watched_day(sources, start, now):
-    """Earliest calendar day any bucket exists for. Before it, chatter is
-    unknown rather than zero."""
-    earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
-                .filter(RadarBucketSource.source.in_(list(sources)),
-                        RadarBucketSource.bucket_start >= start).scalar())
-    return earliest.date() if earliest else None
-
-
-def _chart_for(ticker, start, days, closes_by_day, counts, watched_from):
-    """One Chart, both arrays indexed by calendar day from `start`."""
-    closes, chatter = [], []
-    for offset in range(days):
-        day = start + dt.timedelta(days=offset)
-        closes.append(closes_by_day.get(day))
-        if watched_from is None or day < watched_from:
-            chatter.append(None)
-        else:
-            chatter.append(counts.get((ticker, day), 0))
-    return Chart(start=start, closes=closes, chatter=chatter)
-
-
 def build(sources, now, window_hours=4, segment=None, limit=50,
           leads=LEAD_COUNT, min_venues=1):
     """The whole board.
@@ -317,8 +252,9 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
     selected segment's size in every slot.
     """
     session = market_calendar.session_state(now.replace(tzinfo=dt.timezone.utc))
-    ranked = leaderboard.build_rows(sources, now, window_hours=window_hours,
-                                    segment=None, limit=None, session=session)
+    ranking = leaderboard.build_rows(sources, now, window_hours=window_hours,
+                                     segment=None, limit=None, session=session)
+    ranked = ranking.rows
 
     counts = collections.Counter(row.segment for row in ranked)
     segment_counts = dict(counts)
@@ -349,28 +285,16 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
     triplets = _triplets(tickers, sources, now)
     tones = _tones(tickers, sources, since, now)
 
-    # The chart spans a calendar year regardless of the scoring window, so it
-    # gets its own start rather than reusing `since`.
-    chart_start = now.date() - dt.timedelta(days=CHART_DAYS - 1)
-    chart_from = dt.datetime.combine(chart_start, dt.time.min)
-    stored_closes = history.closes_for(tickers, days=CHART_DAYS,
-                                       today=now.date())
-    daily_counts = _daily_counts(tickers, sources, chart_from, now)
-    watched_from = _first_watched_day(sources, chart_from, now)
-
     empty_triplet = {hours: None for hours in TRIPLET_HOURS}
     rows = [BoardRow(
         rank=row,
         series=_series_for(row.ticker, totals, covered, since, now),
         triplet=triplets.get(row.ticker, empty_triplet),
         tone=tones.get(row.ticker, Tone(0, 0, 0)),
-        chart=(_chart_for(row.ticker, chart_start, CHART_DAYS,
-                          dict(stored_closes[row.ticker]), daily_counts,
-                          watched_from)
-               if row.ticker in stored_closes else None),
-    ) for index, row in enumerate(ranked)]
+        clauses=phrasing.row_clauses(row, session),
+    ) for row in ranked]
 
     return Board(generated_at=now, sources=list(sources), segment=segment,
                  window_hours=window_hours, segment_counts=segment_counts,
                  rows=rows, session=session, venue_counts=venue_counts,
-                 min_venues=min_venues)
+                 min_venues=min_venues, excluded=ranking.excluded)
