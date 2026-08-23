@@ -25,6 +25,11 @@ export type Mark = 'no-print' | 'provisional' | 'single-source' | 'partial'
 
 export type Segment = 'large' | 'mid' | 'micro' | 'unknown' | 'recent_ipo'
 
+/** What the reader can filter BY, which is a wider vocabulary than what a row
+ *  can BE. `small` is a group over the three segments below mid; no row ever
+ *  reports it, so Row.segment stays the narrower type. */
+export type SegmentFilter = Segment | 'small'
+
 /** Price and chatter over the same calendar days, sharing `from`.
  *
  *  `closes[i]` null means the market did not trade that day -- the line is
@@ -76,7 +81,7 @@ export interface BoardPayload {
   generated_at: string
   sources: string[]
   all_sources: string[]
-  segment: Segment | null
+  segment: SegmentFilter | null
   session: Session
   /** 1 = any, 2 = only rows more than one venue is talking about. */
   min_venues: number
@@ -93,6 +98,6 @@ export interface Selection {
   sources: string[]
   /** Server-side filter, unlike the chart span -- changing it refetches. */
   minVenues: number
-  segment: Segment | null
+  segment: SegmentFilter | null
   window: number
 }

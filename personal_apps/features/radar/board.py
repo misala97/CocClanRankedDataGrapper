@@ -32,7 +32,7 @@ from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
 
 from . import history, leaderboard, market_calendar
-from .config import VARIANCE_FLOOR
+from .config import SEGMENT_GROUPS, VARIANCE_FLOOR, segments_in
 
 # The windows the triplet reports, shortest first. Fixed rather than derived
 # from the selected window: the point of the triplet is that all three are
@@ -323,6 +323,8 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
     counts = collections.Counter(row.segment for row in ranked)
     segment_counts = dict(counts)
     segment_counts['all'] = len(ranked)
+    segment_counts['small'] = sum(
+        1 for row in ranked if row.segment in SEGMENT_GROUPS['small'])
 
     # Both venue counts come from the same unfiltered pass, for the reason the
     # segment counts do: they label the control, and counting after the filter
@@ -332,8 +334,9 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
         'multi': sum(1 for row in ranked if len(row.sources) > 1),
     }
 
-    if segment is not None:
-        ranked = [row for row in ranked if row.segment == segment]
+    allowed = segments_in(segment)
+    if allowed:
+        ranked = [row for row in ranked if row.segment in allowed]
     if min_venues > 1:
         ranked = [row for row in ranked if len(row.sources) >= min_venues]
     ranked = ranked[:limit]

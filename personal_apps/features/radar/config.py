@@ -339,6 +339,31 @@ MIN_DISTINCT_AUTHORS = 3
 # channels than authors, and a symbol reaching two independent channels is
 # already the rarer event.
 MIN_DISTINCT_CHANNELS = 2
+
+
+# Segment groups. `Small` is what "penny stocks and unknown stuff" means in
+# the segment vocabulary -- anything that is not large or mid.
+#
+# A GROUP, not a sixth segment: universe.segment_for still returns exactly one
+# of the five and every row still reports its own, so the counts keep summing
+# to the total. `unknown` is folded in on an assumption worth naming -- it
+# means no market cap is known, not that the cap is small -- and it holds
+# because a ticker no provider has profiled is overwhelmingly a tiny one. If
+# `unknown` ever stops being dominated by small names, this is what to revisit.
+SEGMENT_GROUPS = {
+    'small': ('micro', 'unknown', 'recent_ipo'),
+}
+
+# What the board opens on. It is a discovery radar for the things nobody has
+# heard of; opening on everything buries them under megacap chatter.
+DEFAULT_SEGMENT = 'small'
+
+
+def segments_in(selection):
+    """The concrete segments a selection covers, or () for everything."""
+    if selection is None:
+        return ()
+    return SEGMENT_GROUPS.get(selection, (selection,))
 MIN_DISTINCT_TEXT_RATIO = 0.35
 
 # A window counts as elevated at or above this z.

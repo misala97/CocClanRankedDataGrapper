@@ -127,9 +127,23 @@ describe('the controls', () => {
 
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
     expect(vi.mocked(fetch).mock.calls[0]![0])
-      .toBe('/radar/api/board?sources=stocktwits%2Cbluesky&window=4')
+      .toBe('/radar/api/board?sources=stocktwits%2Cbluesky&window=4&segment=')
     await waitFor(() =>
-      expect(window.location.search).toBe('?sources=stocktwits%2Cbluesky&window=4'))
+      expect(window.location.search)
+        .toBe('?sources=stocktwits%2Cbluesky&window=4&segment='))
+  })
+
+  it('keeps All in the address bar rather than omitting it', async () => {
+    /* The server's default segment is Small, so a URL with no segment param
+       reloads as Small. Sharing the All view has to survive a reload, which
+       means the empty value is the state -- not the absence of one. */
+    render(<BoardPage initial={payload({ segment: 'small' })} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }))
+
+    await waitFor(() =>
+      expect(window.location.search).toContain('segment='))
+    expect(window.location.search).not.toContain('segment=small')
   })
 
   it('will not let the last source be turned off', async () => {

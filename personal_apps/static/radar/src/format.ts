@@ -32,6 +32,7 @@ export function zscore(value: number | null): string {
 
 const SEGMENT_LABELS: Record<string, string> = {
   all: 'All',
+  small: 'Small',
   large: 'Large',
   mid: 'Mid',
   micro: 'Micro',
@@ -39,8 +40,12 @@ const SEGMENT_LABELS: Record<string, string> = {
   recent_ipo: 'Recent IPO',
 }
 
-/** Segment order is by size, then the two that are not sizes. `all` leads. */
-export const SEGMENT_ORDER = ['all', 'large', 'mid', 'micro', 'recent_ipo', 'unknown']
+/** Size order, with the two that are not sizes last. `small` leads because it
+ *  is what the board opens on and what it is for; `all` sits beside it as the
+ *  way back out. The three it covers stay listed -- Small is a shortcut to the
+ *  common reading, not a replacement for reading them apart. */
+export const SEGMENT_ORDER = ['small', 'all', 'large', 'mid', 'micro',
+                              'recent_ipo', 'unknown']
 
 export function segmentLabel(key: string): string {
   return SEGMENT_LABELS[key] ?? key

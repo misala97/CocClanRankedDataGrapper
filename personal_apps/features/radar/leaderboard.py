@@ -19,7 +19,7 @@ from . import divergence as divergence_mod
 from . import market_calendar
 from . import quotes as quotes_mod
 from . import scoring, universe
-from .config import PROVISIONAL_BASELINE_DAYS, source_kind
+from .config import PROVISIONAL_BASELINE_DAYS, segments_in, source_kind
 
 
 @dataclasses.dataclass
@@ -123,6 +123,9 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
     ticker; the caller may pass it in to avoid computing it twice.
     """
     since = now - dt.timedelta(hours=window_hours)
+    # A selection may name a group ('small') or a single segment. Resolved
+    # once rather than per row; empty means everything.
+    allowed = segments_in(segment)
     if session is None:
         session = market_calendar.session_state(
             now.replace(tzinfo=dt.timezone.utc))
@@ -227,7 +230,7 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
             profile.ipo_date if profile else None,
             latest.price if latest else None,
             today)
-        if segment is not None and row_segment != segment:
+        if allowed and row_segment not in allowed:
             continue
         # Breadth as a filter, not as a score. `contributing` is the list of
         # sources that actually said something, so this asks how many venues

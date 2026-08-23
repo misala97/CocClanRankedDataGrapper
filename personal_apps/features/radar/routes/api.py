@@ -7,10 +7,10 @@ from flask import jsonify, request
 from auth import login_required
 
 from .. import board as board_mod
-from ..config import SOURCES
+from ..config import DEFAULT_SEGMENT, SOURCES
 from ._blueprint import radar_bp
 
-SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo')
+SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'small')
 WINDOWS = (1, 4, 24)
 VENUE_FLOORS = (1, 2)
 MAX_LIMIT = 100
@@ -70,7 +70,9 @@ def parse_query(args):
     else:
         selected = list(SOURCES)
 
-    segment = args.get('segment') or None
+    # `?segment=` with an empty value is how the surface asks for All, and
+    # it has to stay reachable now that the default is not None.
+    segment = args.get('segment', DEFAULT_SEGMENT) or None
     if segment is not None and segment not in SEGMENTS:
         raise BadQuery('unknown segment')
 

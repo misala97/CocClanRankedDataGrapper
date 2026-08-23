@@ -1,5 +1,5 @@
 import { SEGMENT_ORDER, segmentLabel, sourceLabel } from '../format'
-import type { BoardPayload, ChartSpan, Segment, Selection } from '../types'
+import type { BoardPayload, ChartSpan, SegmentFilter, Selection } from '../types'
 
 const WINDOWS = [1, 4, 24]
 const SPANS: ChartSpan[] = ['24h', '1M', '3M', '1Y']
@@ -50,7 +50,7 @@ export function Controls({ payload, selection, busy, onChange, span, onSpan }: {
               emptied it, which is how a filter becomes a bug report. */}
           {SEGMENT_ORDER.filter((key) => key === 'all' || counts[key]
                                 || key === selection.segment).map((key) => {
-            const value = key === 'all' ? null : (key as Segment)
+            const value = key === 'all' ? null : (key as SegmentFilter)
             const active = selection.segment === value
             return (
               <button key={key} type="button" aria-pressed={active}
