@@ -16,6 +16,13 @@ function row(over: Partial<Row> = {}): Row {
     triplet: { '1': 1.1, '4': 3.2, '24': 2.0 },
     tone: { bullish: 4, neutral: 10, bearish: 2 },
     price_series: [{ at: 't0', price: 10 }, { at: 't1', price: 10.1 }],
+    // A year where the market trades Mon-Fri and we started watching five days
+    // ago -- the shape the real payload has today, nulls and all.
+    chart: {
+      from: '2025-08-23',
+      closes: Array.from({ length: 365 }, (_, i) => (i % 7 < 5 ? 100 + i : null)),
+      chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
+    },
     ...over,
   }
 }

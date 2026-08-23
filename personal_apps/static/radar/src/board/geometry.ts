@@ -25,7 +25,7 @@
 //    band, the line is mapped into the upper band, and the two overlap in the
 //    middle where a spike actually meets a move. Verified by rendering it.
 
-import type { Point, PricePoint } from '../types'
+import type { Chart, ChartSpan, Point, PricePoint } from '../types'
 
 export interface Box {
   width: number
@@ -136,5 +136,99 @@ export function priceRose(points: PricePoint[]): boolean {
   // Not enough data is not a fall. Two quotes are the minimum for a direction,
   // and below that the caller draws no line at all.
   if (first === undefined || last === undefined || values.length < 2) return true
+  return last >= first
+}
+
+/** Calendar days per span. '24h' is absent on purpose: that span reads the
+ *  hourly `series` the payload already carried, at a resolution the daily
+ *  arrays cannot express. */
+export const SPAN_DAYS: Record<Exclude<ChartSpan, '24h'>, number> = {
+  '1M': 30,
+  '3M': 90,
+  '1Y': 365,
+}
+
+/** The most recent N calendar days of both series, with `from` moved to match.
+ *
+ *  Slicing both by the same count is what keeps them aligned; moving `from`
+ *  is what stops every span claiming to start a year ago. */
+export function sliceChart(chart: Chart, span: ChartSpan): Chart {
+  const days = span === '24h' ? SPAN_DAYS['1M'] : SPAN_DAYS[span]
+  if (chart.closes.length <= days) return chart
+
+  const cut = chart.closes.length - days
+  const start = new Date(`${chart.from}T00:00:00Z`)
+  start.setUTCDate(start.getUTCDate() + cut)
+  return {
+    from: start.toISOString().slice(0, 10),
+    closes: chart.closes.slice(cut),
+    chatter: chart.chatter.slice(cut),
+  }
+}
+
+/** The price line, drawn ACROSS days the market was shut.
+ *
+ *  The chatter line breaks at its gaps because a gap there is an hour nobody
+ *  measured. A gap here is a weekend: the price did not stop existing, and
+ *  breaking at every Saturday would render a year as 52 fragments. Points
+ *  keep their calendar index, so a Monday sits three days after the Friday
+ *  before it whether or not anything traded between. */
+export function pricePath(closes: (number | null)[], box: Box): string {
+  const real = closes
+    .map((value, index) => ({ value, index }))
+    .filter((p): p is { value: number; index: number } => p.value !== null)
+  if (real.length < 2) return ''
+
+  const values = real.map((p) => p.value)
+  const low = Math.min(...values)
+  const span = Math.max(...values) - low || 1
+  // priceBand keeps the line in the upper part of the box so the chatter bars
+  // growing from the floor can cross it rather than hide under it. The scan
+  // cell leaves it unset and uses the full height; the lead card sets 0.5.
+  const band = plot(box) * (box.priceBand ?? 1)
+  const lastIndex = Math.max(closes.length - 1, 1)
+
+  return real.map((point, n) => {
+    const x = (point.index / lastIndex) * box.width
+    const y = box.pad + band - ((point.value - low) / span) * band
+    return `${n ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}
+
+/** Highest measured value, ignoring nulls. */
+export function peakOf(values: (number | null)[]): number {
+  return values.reduce<number>(
+    (best, v) => (v !== null && v > best ? v : best), 0)
+}
+
+/** One bar per day of chatter, zero-anchored, nothing for a null day. */
+export function dailyBars(chatter: (number | null)[], box: Box,
+                          yMax: number): Bar[] {
+  const top = Math.max(yMax, 1)
+  const slot = box.width / Math.max(chatter.length, 1)
+  const full = plot(box) * (box.barBand ?? 1)
+  const bars: Bar[] = []
+
+  chatter.forEach((count, index) => {
+    if (count === null || count === 0) return
+    const ratio = count / top
+    const height = Math.max(ratio * full, 1.2)
+    bars.push({
+      x: index * slot + slot * 0.15,
+      y: box.height - box.pad - height,
+      width: Math.max(slot * 0.7, 0.6),
+      height,
+      ratio,
+    })
+  })
+  return bars
+}
+
+/** Whether the span ended higher than it began, ignoring untraded days. */
+export function chartRose(closes: (number | null)[]): boolean {
+  const real = closes.filter((v): v is number => v !== null)
+  const first = real.at(0)
+  const last = real.at(-1)
+  if (first === undefined || last === undefined) return true
   return last >= first
 }

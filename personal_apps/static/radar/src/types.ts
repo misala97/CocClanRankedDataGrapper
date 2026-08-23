@@ -30,6 +30,19 @@ export type Mark = 'no-print' | 'provisional' | 'single-source' | 'partial'
 
 export type Segment = 'large' | 'mid' | 'micro' | 'unknown' | 'recent_ipo'
 
+/** Price and chatter over the same calendar days, sharing `from`.
+ *
+ *  `closes[i]` null means the market did not trade that day -- the line is
+ *  drawn across it. `chatter[i]` null means we were not watching yet -- no bar
+ *  is drawn at all. Two different absences, deliberately not collapsed. */
+export interface Chart {
+  from: string
+  closes: (number | null)[]
+  chatter: (number | null)[]
+}
+
+export type ChartSpan = '24h' | '1M' | '3M' | '1Y'
+
 export interface Row {
   ticker: string
   name: string | null
@@ -57,6 +70,8 @@ export interface Row {
   tone: Tone
   /** Only the lead rows carry one; everything else gets an empty array. */
   price_series: PricePoint[]
+  /** null when the ticker has no stored closes at all. */
+  chart: Chart | null
 }
 
 /** The exchange's state. It changes what the ranking MEANS, not merely how it

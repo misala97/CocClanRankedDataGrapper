@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Point, PricePoint } from '../types'
-import { chatterBars, chatterRuns, peak, priceLine, priceRose, type Box } from './geometry'
+import {
+  chartRose, chatterBars, chatterRuns, dailyBars, peak, peakOf, priceLine,
+  pricePath, priceRose, sliceChart, type Box,
+} from './geometry'
 
 const BOX: Box = { width: 100, height: 40, pad: 0 }
 
@@ -103,5 +106,88 @@ describe('the price line', () => {
     expect(priceRose(quotes([100, 130, 99]))).toBe(false)
     // Not enough data is not a fall.
     expect(priceRose(quotes([100]))).toBe(true)
+  })
+})
+
+describe('the chart span', () => {
+  const chart = {
+    from: '2025-08-23',
+    closes: Array.from({ length: 365 }, (_, i) => (i % 7 < 5 ? 100 + i : null)),
+    chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
+  }
+
+  it('slices both series to the same days', () => {
+    const month = sliceChart(chart, '1M')
+
+    expect(month.closes).toHaveLength(30)
+    expect(month.chatter).toHaveLength(30)
+  })
+
+  it('moves the start date with the slice', () => {
+    // Otherwise every span would claim to begin a year ago.
+    expect(sliceChart(chart, '1Y').from).toBe('2025-08-23')
+    expect(sliceChart(chart, '1M').from).not.toBe('2025-08-23')
+  })
+
+  it('returns everything it has when the series is shorter than the span', () => {
+    const young = { from: '2026-08-01', closes: [1, 2, 3], chatter: [1, 2, 3] }
+
+    expect(sliceChart(young, '1Y').closes).toEqual([1, 2, 3])
+  })
+})
+
+describe('the price line across a closed market', () => {
+  it('draws through a gap rather than breaking at it', () => {
+    // A weekend is not missing data about the price, it is a weekend. The
+    // chatter line breaks at its gaps; this one must not, or a year renders
+    // as 52 fragments.
+    const path = pricePath([10, null, null, 13], BOX)
+
+    expect(path.split('M')).toHaveLength(2)
+    expect(path.match(/L/g) ?? []).toHaveLength(1)
+  })
+
+  it('keeps calendar position, not the order of surviving points', () => {
+    const path = pricePath([10, null, null, 13], BOX)
+    const xs = [...path.matchAll(/[ML]([\d.]+),/g)].map((m) => Number(m[1]))
+
+    expect(xs[0]).toBe(0)
+    expect(xs[1]).toBeCloseTo(BOX.width)
+  })
+
+  it('draws nothing from fewer than two real closes', () => {
+    expect(pricePath([null, null], BOX)).toBe('')
+    expect(pricePath([10, null], BOX)).toBe('')
+  })
+
+  it('stays in its band when one is set, leaving the floor to the bars', () => {
+    const banded = pricePath([100, 110], { ...BOX, priceBand: 0.5 })
+    const ys = [...banded.matchAll(/[ML][\d.]+,([\d.]+)/g)].map((m) => Number(m[1]))
+
+    expect(Math.max(...ys)).toBeLessThanOrEqual(BOX.height * 0.5)
+  })
+
+  it('reads direction across the span, ignoring untraded days', () => {
+    expect(chartRose([100, null, 50])).toBe(false)
+    expect(chartRose([50, null, 100])).toBe(true)
+    expect(chartRose([null, null])).toBe(true)
+  })
+})
+
+describe('daily chatter bars', () => {
+  it('emits nothing for a day nobody was watching', () => {
+    expect(dailyBars([null, null, 4], BOX, 4)).toHaveLength(1)
+  })
+
+  it('emits nothing for a measured zero, and something for a one', () => {
+    const bars = dailyBars([0, 1], BOX, 4)
+
+    expect(bars).toHaveLength(1)
+    expect(bars[0]!.ratio).toBeCloseTo(0.25)
+  })
+
+  it('ignores nulls when finding the peak', () => {
+    expect(peakOf([null, 7, null, 3])).toBe(7)
+    expect(peakOf([null, null])).toBe(0)
   })
 })
