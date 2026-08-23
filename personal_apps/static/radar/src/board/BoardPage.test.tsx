@@ -32,6 +32,7 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
     sources: ['stocktwits', 'bluesky', 'fourchan'],
     all_sources: ['stocktwits', 'bluesky', 'fourchan'],
     segment: null, session: 'regular', window_hours: 4,
+    min_venues: 1, venue_counts: { any: 4, multi: 2 },
     segment_counts: { all: 4, large: 4 },
     triplet_hours: [1, 4, 24], series_hours: 24, lead_count: 3,
     rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' }),
@@ -381,5 +382,52 @@ describe('the two time controls', () => {
     await userEvent.click(screen.getByRole('button', { name: '1h' }))
 
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
+  })
+})
+
+
+describe('breadth on a row', () => {
+  it('shows which venues are talking, not how many', () => {
+    // Fixed slots, lit and dim, so the same position means the same source
+    // down the whole column. A count cannot be scanned vertically.
+    const mixed = payload({
+      rows: [row(), row(), row(),
+             row({ ticker: 'DDD', sources: ['bluesky', 'fourchan'] })],
+    })
+    const { container } = render(<BoardPage initial={mixed} />)
+    const scan = container.querySelector('.row') as HTMLElement
+
+    // Three slots per rendering, and the row renders the set twice -- the
+    // wide grid's cell plus the caption the mobile layout shows instead.
+    // Exactly one of the two is displayed at any width, as with the price.
+    expect(scan.querySelectorAll('.venue')).toHaveLength(6)
+    expect(scan.querySelectorAll('.venue.on')).toHaveLength(4)
+  })
+
+  it('names each slot for assistive tech, since the mark is only colour', () => {
+    const { container } = render(<BoardPage initial={payload()} />)
+    const scan = container.querySelector('.row') as HTMLElement
+
+    expect(within(scan).getAllByLabelText(/Bluesky/)).toHaveLength(2)
+  })
+})
+
+describe('the venues filter', () => {
+  it('offers the two-or-more query with its count', () => {
+    render(<BoardPage initial={payload()} />)
+
+    const group = screen.getByRole('group', { name: 'Venues' })
+    expect(within(group).getByRole('button', { name: /2\+/ })).toBeInTheDocument()
+    expect(within(group).getByText('2')).toBeInTheDocument()
+  })
+
+  it('refetches, because the filter is applied server-side', async () => {
+    render(<BoardPage initial={payload()} />)
+
+    await userEvent.click(within(screen.getByRole('group', { name: 'Venues' }))
+      .getByRole('button', { name: /2\+/ }))
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
+    expect(String(vi.mocked(fetch).mock.calls[0]![0])).toContain('venues=2')
   })
 })

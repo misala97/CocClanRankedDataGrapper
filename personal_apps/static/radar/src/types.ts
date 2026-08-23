@@ -78,6 +78,9 @@ export interface BoardPayload {
   all_sources: string[]
   segment: Segment | null
   session: Session
+  /** 1 = any, 2 = only rows more than one venue is talking about. */
+  min_venues: number
+  venue_counts: Record<string, number>
   window_hours: number
   segment_counts: Record<string, number>
   triplet_hours: number[]
@@ -88,6 +91,8 @@ export interface BoardPayload {
 
 export interface Selection {
   sources: string[]
+  /** Server-side filter, unlike the chart span -- changing it refetches. */
+  minVenues: number
   segment: Segment | null
   window: number
 }

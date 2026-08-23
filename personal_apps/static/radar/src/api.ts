@@ -28,6 +28,8 @@ export function queryFor(selection: Selection): string {
   params.set('sources', selection.sources.join(','))
   params.set('window', String(selection.window))
   if (selection.segment) params.set('segment', selection.segment)
+  // Omitted at 1 so the default board keeps a clean URL.
+  if (selection.minVenues > 1) params.set('venues', String(selection.minVenues))
   return params.toString()
 }
 

@@ -15,6 +15,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     sources: initial.sources,
     segment: initial.segment,
     window: initial.window_hours,
+    minVenues: initial.min_venues,
   })
   const [busy, setBusy] = useState(false)
   // Client-side only: the payload holds the whole year, so switching span
@@ -162,12 +163,13 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
                   <div className="n">
                     {ranked === 'chatter' ? 'Chatter z' : 'Divergence'}
                   </div>
-                  <div className="n">Mentions / people</div>
+                  <div className="n">Mentions / people / venues</div>
                   <div className="n">Price {payload.window_hours}h</div>
                 </div>
                 {rest.map((row) => (
                   <ScanRow key={row.ticker} row={row} ranked={ranked}
                            hiddenMarks={universal} span={span}
+                           allSources={payload.all_sources}
                            triplet={payload.triplet_hours} />
                 ))}
               </>
