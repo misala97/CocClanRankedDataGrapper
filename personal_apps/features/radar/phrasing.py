@@ -40,6 +40,20 @@ class Clause:
     text: str
 
 
+def ratio_value(mentions, expected):
+    """How many times its own normal this is, or None when there is no normal.
+
+    The number behind the `ratio` clause, for a client that wants to DRAW it
+    rather than read it -- the board's rows carry a bar of how far above
+    normal they are. It shares this guard with the wording rather than
+    repeating the threshold in TypeScript, so the bar and the words cannot
+    come to different conclusions about whether a row is measurable at all.
+    """
+    if not expected or expected < MIN_RATIO_BASELINE:
+        return None
+    return mentions / expected
+
+
 def _ratio(mentions, expected):
     """`40x` rather than `40.0x`, `3.5x` rather than `4x` at the low end.
 
@@ -62,7 +76,7 @@ def row_clauses(row, session):
     clauses = []
 
     # An expected of zero is not "we expected none", it is "no baseline".
-    if not row.expected or row.expected < MIN_RATIO_BASELINE:
+    if ratio_value(row.mentions, row.expected) is None:
         clauses.append(Clause('new', 'new here'))
         clauses.append(Clause(
             'ratio',
@@ -131,7 +145,7 @@ def read_clauses(detail, mentions, expected, voices, session,
     """
     out = []
 
-    if not expected or expected < MIN_RATIO_BASELINE:
+    if ratio_value(mentions, expected) is None:
         out.append(Clause('plain',
                           f'{mentions} mentions in this window. This ticker '
                           f'has no baseline yet, so there is nothing to say '
@@ -155,9 +169,10 @@ def read_clauses(detail, mentions, expected, voices, session,
     out.extend(_read_price(detail, session))
 
     if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
+        days = 'day' if baseline_days == 1 else 'days'
         out.append(Clause('warn',
-                          f'The baseline is {baseline_days} days old, not 30, '
-                          f'so this rests on very little history.'))
+                          f'The baseline is {baseline_days} {days} old, not '
+                          f'30, so this rests on very little history.'))
     return out
 
 

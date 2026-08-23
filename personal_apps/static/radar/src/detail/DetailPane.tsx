@@ -14,6 +14,11 @@ const SPANS: PanelSpan[] = ['1M', '6M', '1Y', '3Y']
  *  one ticker's chart and nothing about which rows are listed. It also costs a
  *  request, unlike the old client-side span switch -- three years of closes is
  *  not something to carry per row on the chance the reader wants it.
+ *
+ *  Five zones, each opened by a hairline with its heading under it. Not four
+ *  tracked-uppercase eyebrows down the page: that is the scaffold every
+ *  generated dashboard reaches for, and it makes a section heading and a
+ *  column header look like the same kind of thing.
  */
 export function DetailPane({ ticker, selection, windowHours }: {
   ticker: string | null
@@ -68,6 +73,8 @@ export function DetailPane({ ticker, selection, windowHours }: {
     )
   }
 
+  const rising = firstAndLast(detail.chart.closes)
+
   return (
     <main className="detail">
       <Identity identity={detail.identity} />
@@ -80,26 +87,36 @@ export function DetailPane({ ticker, selection, windowHours }: {
         ))}
       </p>
 
-      <h3>
-        Price and chatter
-        <span className="spans" role="group" aria-label="Chart span">
-          {SPANS.map((option) => (
-            <button key={option} type="button"
-                    aria-pressed={option === span}
-                    onClick={() => setSpan(option)}>{option}</button>
-          ))}
-        </span>
-      </h3>
-      <div className="chart">
+      <section className="zone">
+        <h3>
+          Price and chatter
+          <span className="q">daily closes · mentions per day</span>
+          <span className="spans" role="group" aria-label="Chart span">
+            {SPANS.map((option) => (
+              <button key={option} type="button"
+                      aria-pressed={option === span}
+                      onClick={() => setSpan(option)}>{option}</button>
+            ))}
+          </span>
+        </h3>
         <PriceChart chart={detail.chart} />
         <div className="legend">
-          <i><span className="key line" />price · daily close</i>
+          <i><span className={`key line${rising ? '' : ' down'}`} />
+            price · daily close</i>
           <i><span className="key" />chatter · mentions per day</i>
         </div>
-      </div>
+      </section>
 
       <Breakdown breakdown={detail.breakdown} windowHours={windowHours} />
       <Posts posts={detail.posts} total={detail.post_total} retentionNote />
     </main>
   )
+}
+
+/** The legend's price key has to match the line, and the line is coloured by
+ *  the direction of the whole visible span -- the only thing green and red are
+ *  allowed to mean here. */
+function firstAndLast(closes: (number | null)[]): boolean {
+  const real = closes.filter((v): v is number => v !== null)
+  return real.length < 2 || real[real.length - 1]! >= real[0]!
 }

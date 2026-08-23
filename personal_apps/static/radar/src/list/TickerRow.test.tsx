@@ -7,7 +7,8 @@ import type { BoardPayload, Row } from '../types'
 
 const row = (over: Partial<Row> = {}): Row => ({
   ticker: 'HOWL', name: 'Werewolf Therapeutics', segment: 'micro',
-  divergence: 4.1, mention_z: 4.1, mentions: 284, expected: 7, authors: 11,
+  divergence: 4.1, mention_z: 4.1, mentions: 284, expected: 7, ratio: 284 / 7,
+  authors: 11,
   text_ratio: 0.9, sources: ['bluesky', 'fourchan'], price: 0.31,
   price_move: 0.182, direction: 'up', price_status: 'ok', baseline_days: 2,
   marks: [], series: [], triplet: {},
@@ -44,7 +45,7 @@ describe('a ticker row', () => {
        with an em-dash. The server decides the wording now; this pins that the
        row does not reconstruct its own from the raw numbers. */
     render(<TickerRow selected={false} onSelect={() => {}} row={row({
-      expected: 0, mentions: 209, clauses: [
+      expected: 0, ratio: null, mentions: 209, clauses: [
         { kind: 'new', text: 'new here' },
         { kind: 'ratio', text: '209 mentions, nothing to compare against yet' },
       ],

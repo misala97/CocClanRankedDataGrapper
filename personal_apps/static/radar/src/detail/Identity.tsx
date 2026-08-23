@@ -1,3 +1,4 @@
+import { exchangeLabel } from '../format'
 import type { Detail } from '../types'
 
 /** Who this is, and what the tape says right now.
@@ -8,7 +9,7 @@ import type { Detail } from '../types'
  */
 export function Identity({ identity }: { identity: Detail['identity'] }) {
   const facts = [
-    identity.exchange,
+    exchangeLabel(identity.exchange),
     `${identity.segment} cap`,
     identity.market_cap ? cap(identity.market_cap) : null,
     identity.ipo_date ? `IPO ${identity.ipo_date.slice(0, 7)}` : null,

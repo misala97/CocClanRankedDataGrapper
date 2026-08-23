@@ -1,11 +1,20 @@
-import { sourceLabel } from '../format'
+import { dayStamp, sourceLabel } from '../format'
 import type { Breakdown as BreakdownData } from '../types'
+
+/** Above these, one or two accounts are carrying the whole thing and the
+ *  number stops describing a crowd. Shared with the wording below so the
+ *  amber and the sentence can never disagree about what is going on. */
+const LOUD_ONE = 0.3
+const LOUD_TWO = 0.4
 
 /** The chatter, taken apart.
  *
- *  `Loudest account` is the reason this section exists. One account posting
+ *  Two columns split by KIND, not into "the table" and "whatever is left".
+ *  Concentration is the reason this section exists -- one account posting
  *  forty times reads as forty mentions everywhere else on the surface, and no
- *  other figure the board computes exposes that.
+ *  other figure the board computes exposes that -- so it gets its own column
+ *  and a sentence saying what the share means. As row four of five identical
+ *  stats it read like trivia.
  *
  *  Bull and bear are counts in words, never a coloured bar. Green and red mean
  *  price direction on this surface and nothing else -- a green/red tone bar
@@ -16,9 +25,12 @@ export function Breakdown({ breakdown, windowHours }: {
   windowHours: number
 }) {
   const b = breakdown
+  const one = b.top_author_share
+  const two = b.top_two_share
+
   return (
-    <>
-      <h3>Chatter breakdown · last {windowHours} hours</h3>
+    <section className="zone">
+      <h3>Chatter breakdown <span className="q">· last {windowHours} hours</span></h3>
       <div className="bd">
         <div>
           <table>
@@ -63,23 +75,62 @@ export function Breakdown({ breakdown, windowHours }: {
               </span>
             </p>
           )}
+
+          {/* The facts that are only facts, kept out of the column beside so
+              that column stays five lines about one thing. */}
+          <p className="plain">
+            {b.peak_hour
+              ? <>Peak hour <b>{b.peak_hour.slice(11, 16)}</b> at{' '}
+                  <b>{b.peak_count}</b> mentions · </>
+              : null}
+            <b>{b.voices}</b> distinct {b.voices === 1 ? 'voice' : 'voices'}
+            {b.first_seen
+              ? <> · first ever seen on <b>{dayStamp(b.first_seen)}</b></>
+              : null}
+          </p>
         </div>
 
         <div>
-          <Stat label="Loudest account's share"
-                value={share(b.top_author_share)}
-                warn={(b.top_author_share ?? 0) >= 0.3} />
-          <Stat label="Top two accounts" value={share(b.top_two_share)}
-                warn={(b.top_two_share ?? 0) >= 0.4} />
-          <Stat label="Peak hour" value={
-            b.peak_hour
-              ? `${b.peak_hour.slice(11, 16)} · ${b.peak_count}/h`
-              : '—'} />
-          <Stat label="First ever seen" value={b.first_seen ?? 'never'} />
-          <Stat label="Distinct voices" value={String(b.voices)} />
+          <p className="sub">How concentrated it is</p>
+          <Stat label="Loudest account’s share" value={share(one)}
+                warn={(one ?? 0) >= LOUD_ONE} />
+          <Stat label="Top two accounts" value={share(two)}
+                warn={(two ?? 0) >= LOUD_TWO} />
+          <Concentration one={one} two={two} voices={b.voices} />
         </div>
       </div>
-    </>
+    </section>
+  )
+}
+
+/** What the share means, in a sentence, either way round.
+ *
+ *  A number the reader has to threshold in their head is a number they will
+ *  skip. This says which of the two situations they are looking at without
+ *  ever saying what to do about it -- PRODUCT.md's scope boundary holds here
+ *  as much as anywhere.
+ */
+function Concentration({ one, two, voices }: {
+  one: number | null
+  two: number | null
+  voices: number
+}) {
+  if (one === null) return null
+
+  if (one >= LOUD_ONE || (two ?? 0) >= LOUD_TWO) {
+    return (
+      <p className="note">
+        {Math.round(one * 100)}% of this came from a single account.
+        {' '}{voices} {voices === 1 ? 'voice' : 'voices'} saying it once is a
+        different fact than one account saying it {voices} times.
+      </p>
+    )
+  }
+  return (
+    <p className="note">
+      No single account is carrying this — the loudest of {voices}{' '}
+      {voices === 1 ? 'voice' : 'voices'} is under a third of it.
+    </p>
   )
 }
 
@@ -89,9 +140,9 @@ function Stat({ label, value, warn }: {
   warn?: boolean
 }) {
   return (
-    <div className="stat">
+    <div className={warn ? 'stat hot' : 'stat'}>
       <span className="k">{label}</span>
-      <span className={warn ? 'v warn' : 'v'}>{value}</span>
+      <span className="v">{value}</span>
     </div>
   )
 }

@@ -20,6 +20,15 @@
      climbing while the price line stays flat. Every chart on the page draws
      exactly those two things on one axis.
 
+   THE SIGNATURE
+     Every row draws how far above its own normal it is, as a bare violet mark
+     on a hairline axis that all the rows share. It is the ranking made
+     visible: the board's shape reads in one sweep instead of one number at a
+     time. The quantity is EXCESS over normal, not the ratio -- 1x is no news
+     and draws nothing -- and a row with no baseline draws no axis at all,
+     because an empty track beside six filled ones would say "measured, and it
+     was nothing", which is the one thing it does not mean.
+
    THEME
      Light is the base. The scene is a bright room in the morning, next to a
      broker terminal that is almost certainly dark; a pale board is legible in
@@ -31,15 +40,16 @@
    TYPE
      One family, Inter, vendored -- see inter.css. Weight and size carry the
      whole hierarchy; there is no display face, because every heading here is
-     a label on data rather than a thing to look at. Fixed rem-ish px scale,
-     not clamp(): the viewer is at a consistent desk DPI and a heading that
-     shrinks with the viewport would only make the two tiers harder to tell
-     apart.
+     a label on data rather than a thing to look at. A fixed px scale, not
+     clamp(): the viewer is at a consistent desk DPI and a heading that shrank
+     with the viewport would only make the tiers harder to tell apart.
 
    DENSITY
      Built for the twelve-row board that actually exists, not a hypothetical
-     fifty. Three rows get a full chart, the rest are scan lines. A fifty-row
-     table showing twelve looks broken; this does not.
+     fifty. A fifty-row table showing twelve looks broken; this does not. And
+     the quiet board -- two rows, market shut -- is the NORMAL case, so the
+     account of what was left out falls to the bottom of the pane rather than
+     trailing off under the last row.
    ========================================================================= */
 
 :root {
@@ -57,6 +67,10 @@
   --ink:       oklch(0.230 0.021 285);
   --ink-2:     oklch(0.395 0.018 285);
   --muted:     oklch(0.480 0.016 285);
+  /* A control whose count is zero is dimmed, never removed -- but it is still
+     a control with a readable label, so this clears 4.5:1 rather than sitting
+     at the 3:1 a decorative grey would. */
+  --dim:       oklch(0.545 0.012 285);
 
   /* ---- the accent: chatter, selection, focus --------------------------- */
   --mark:      oklch(0.470 0.185 296);
@@ -72,10 +86,28 @@
   --warn:      oklch(0.480 0.110 65);
   --warn-soft: oklch(0.480 0.110 65 / 0.11);
 
+  /* ---- type ------------------------------------------------------------ */
+  /* Fixed px, ratio ~1.15. More type elements here than on a brand surface,
+     so exaggerated contrast between steps would only make noise. */
+  --t-ax:   10.5px;   /* chart axis, control labels */
+  --t-xs:   11.5px;   /* row meta, post heads */
+  --t-sm:   13px;     /* tables, stats */
+  --t-md:   13.5px;   /* the row phrase, zone headings */
+  --t-base: 15px;     /* body */
+  --t-lg:   17px;     /* the row's ticker, the wordmark */
+  --t-2xl:  30px;     /* the panel's ticker */
+
+  /* ---- space ----------------------------------------------------------- */
+  --s1: 4px;  --s2: 6px;  --s3: 8px;  --s4: 12px; --s5: 16px;
+  --s6: 20px; --s7: 26px; --s8: 34px; --s9: 44px;
+
   /* ---- geometry -------------------------------------------------------- */
   --r:      8px;
   --r-pill: 100px;
   --pad:    24px;
+  /* How far the row's magnitude axis runs. Fixed rather than a share of the
+     row, so the axis is the same length in a 420px pane and a 900px one. */
+  --axis:   176px;
 
   /* Exponential ease-out. Product motion is 150-220ms: the reader is mid-task
      and a transition they can watch is a transition that is too slow. */
@@ -101,6 +133,7 @@
     --ink:       oklch(0.952 0.006 290);
     --ink-2:     oklch(0.800 0.012 290);
     --muted:     oklch(0.700 0.014 290);
+    --dim:       oklch(0.605 0.014 288);
 
     --mark:      oklch(0.760 0.150 296);
     --mark-hi:   oklch(0.830 0.120 296);
@@ -126,6 +159,7 @@
   --ink:       oklch(0.952 0.006 290);
   --ink-2:     oklch(0.800 0.012 290);
   --muted:     oklch(0.700 0.014 290);
+  --dim:       oklch(0.605 0.014 288);
 
   --mark:      oklch(0.760 0.150 296);
   --mark-hi:   oklch(0.830 0.120 296);
@@ -149,7 +183,7 @@ body {
   color: var(--ink);
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
                Roboto, sans-serif;
-  font-size: 15px;
+  font-size: var(--t-base);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   /* Every column on this page is a number read against the number above it.
@@ -168,29 +202,37 @@ body {
 .skip-link:focus { left: 0; }
 
 /* ============================================================================
-   LAYOUT  ·  two panes
+   LAYOUT  ·  two panes, each scrolling itself
    ----------------------------------------------------------------------------
    The list answers "which of these is worth my time"; the panel answers "is
    this real". Different questions, so different columns -- and the panel gets
    the larger share, because three years of closes needs width and a column of
    tickers does not.
 
-   Structure only. Palette, type scale and refinement come from a later pass;
-   what is here is what makes the arrangement exist at all.
+   The shell is height-bound. Without that the grid grows to its tallest child,
+   and a panel carrying thirty posts made the list 2700px tall: its header, its
+   controls and the top of the board all scrolled off, which is the entire
+   reason the panel sits BESIDE the list rather than under it.
    ========================================================================= */
 
 .page {
   display: grid;
-  grid-template-columns: 404px minmax(0, 1fr);
-  min-height: 100vh;
+  grid-template-columns: 420px minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
 }
 
 /* Desktop is the primary target by decision, not by accident. Below this the
    panel stacks under the list -- unbroken, undesigned, and its own session if
-   it ever deserves one. */
+   it ever deserves one. The height bound comes off with the columns, or the
+   stacked layout would be two scrollers inside one viewport. */
 @media (max-width: 900px) {
-  .page { grid-template-columns: minmax(0, 1fr); }
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto; min-height: 100vh; overflow: visible;
+  }
   .list { border-right: none; border-bottom: 1px solid var(--rule); }
+  .detail { overflow: visible; }
 }
 
 /* ----------------------------------------------------------- the list ---- */
@@ -201,230 +243,64 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
-.lhead { padding: 18px 20px 14px; border-bottom: 1px solid var(--rule); }
+.lhead { padding: 18px var(--s6) 14px; }
 .brand { display: flex; align-items: baseline; gap: 10px; }
-.brand h1 { font-size: 19px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
-.brand .state { font-size: 12px; color: var(--warn); font-weight: 600; }
-.finding { margin: 9px 0 0; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.brand h1 {
+  margin: 0; font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.015em;
+}
+.brand .state { font-size: var(--t-xs); color: var(--muted); }
+/* Amber for the fact, not for the timestamp carrying it. */
+.brand .state b { color: var(--warn); font-weight: 600; }
+
+.finding {
+  margin: 9px 0 0; font-size: var(--t-md); line-height: 1.55;
+  color: var(--ink-2); text-wrap: pretty;
+}
 .finding b { font-weight: 600; color: var(--ink); }
+/* A caution the whole board carries. Amber, because it is the same fact
+   the row's own mark would have been. */
+.finding .shared { color: var(--warn); }
 
-.rows { overflow-y: auto; flex: 1; }
-
-.row {
-  display: block;
-  padding: 11px 20px 12px;
-  border-bottom: 1px solid var(--rule-soft);
-  /* The selected marker sits on the left edge rather than as a fill, so a row
-     reads the same whether or not it is the one being shown. */
-  border-left: 3px solid transparent;
-  text-decoration: none;
-  color: inherit;
-}
-.row:hover { background: var(--mark-wash); }
-.row.on { background: var(--raise); border-left-color: var(--mark); }
-.row:focus-visible { outline: 2px solid var(--mark); outline-offset: -2px; }
-
-.rtop { display: flex; align-items: baseline; gap: 8px; }
-.rtop .tk { font-size: 14.5px; font-weight: 700; }
-.rtop .nm {
-  font-size: 12px; color: var(--muted); flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.rtop .spark { width: 54px; height: 18px; flex: none; opacity: 0.8; }
-
-/* The phrase, styled per clause kind. The client never parses the text --
-   see features/radar/phrasing.py, which decides the wording. */
-.phr { margin-top: 5px; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
-.phr > span + span::before { content: " · "; color: var(--muted); opacity: 0.5; }
-.phr .c-ratio { color: var(--ink); font-weight: 650; }
-.phr .c-venues, .phr .c-people { color: var(--ink-2); }
-.phr .c-new { color: var(--mark); font-weight: 650; }
-.phr .c-warn { color: var(--warn); }
-.phr .c-price-up { color: var(--up); font-weight: 650; }
-.phr .c-price-down { color: var(--down); font-weight: 650; }
-.phr .c-price-flat { color: var(--muted); }
-.row .meta { margin-top: 3px; font-size: 11.5px; color: var(--muted); }
-
-/* What the list left out. Without it a two-row board and a stopped ingest
-   look identical. */
-.below {
-  padding: 15px 20px 20px; margin: 0;
-  font-size: 12.5px; color: var(--muted); line-height: 1.55;
-}
-.below b { color: var(--ink-2); font-weight: 600; }
-
-/* --------------------------------------------------------- the panel ----- */
-
-.detail { min-width: 0; padding: 22px 28px 72px; }
-.detail.empty { display: grid; place-items: center; color: var(--muted); }
-
-.ident {
-  display: flex; align-items: flex-start; gap: 16px;
-  padding-bottom: 14px; border-bottom: 1px solid var(--rule);
-}
-.ident h2 { margin: 0 0 5px; font-size: 26px; font-weight: 700; letter-spacing: -0.015em; }
-/* Untruncated on purpose. The list truncates because it has 400px; here the
-   half that carries the meaning is the half that used to be cut off. */
-.ident .full { font-size: 14px; color: var(--ink-2); }
-.ident .facts { margin-top: 6px; font-size: 12px; color: var(--muted); }
-.ident .px { margin-left: auto; text-align: right; flex: none; }
-.ident .px .v { font-size: 24px; font-weight: 650; }
-.ident .px .mv { font-size: 14px; font-weight: 650; }
-.ident .px .mv.up { color: var(--up); }
-.ident .px .mv.down { color: var(--down); }
-.ident .px .st { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
-.ident .px .st.closed, .ident .px .st.warn { color: var(--warn); font-weight: 600; }
-
-.read {
-  margin: 16px 0 4px; max-width: 74ch;
-  font-size: 14.5px; line-height: 1.62; color: var(--ink-2);
-  font-variant-numeric: normal;
-}
-.read .c-warn { color: var(--warn); font-weight: 600; }
-
-.detail h3 {
-  display: flex; align-items: center; gap: 12px;
-  margin: 26px 0 11px;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
-  text-transform: uppercase; color: var(--muted);
-}
-.spans { display: inline-flex; gap: 3px; }
-.spans button {
-  font: inherit; font-size: 11.5px; letter-spacing: 0; text-transform: none;
-  padding: 2px 9px; border: 0; border-radius: var(--r-pill);
-  background: transparent; color: var(--ink-2); cursor: pointer;
-}
-.spans button:hover { background: var(--rule-soft); }
-.spans button[aria-pressed="true"] {
-  background: var(--mark-soft); color: var(--mark); font-weight: 600;
-}
-
-.chart {
-  background: var(--raise); border: 1px solid var(--rule-soft);
-  border-radius: var(--r); padding: 14px 16px 10px;
-}
-.chart .pxchart { display: block; width: 100%; height: 300px; }
-.chart .ax { font-size: 10.5px; fill: var(--muted); }
-.legend { display: flex; gap: 16px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
-.legend i { font-style: normal; }
-.legend .key {
-  display: inline-block; width: 9px; height: 9px; border-radius: 2px;
-  background: var(--mark); margin-right: 5px;
-}
-.legend .key.line { height: 2px; border-radius: 0; background: var(--up); vertical-align: 3px; }
-
-/* ------------------------------------------------------ the breakdown ---- */
-
-.bd { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
-@media (max-width: 1100px) { .bd { grid-template-columns: minmax(0, 1fr); } }
-
-.bd table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.bd th {
-  text-align: left; padding: 0 0 6px; border-bottom: 1px solid var(--rule);
-  font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--muted);
-}
-.bd td { padding: 7px 0; border-bottom: 1px solid var(--rule-soft); }
-.bd td.venue { font-variant-numeric: normal; }
-.bd th.r, .bd td.r { text-align: right; }
-
-.stat {
-  display: flex; justify-content: space-between; align-items: baseline;
-  padding: 7px 0; border-bottom: 1px solid var(--rule-soft); font-size: 13px;
-}
-.stat .k { color: var(--muted); }
-.stat .v { font-weight: 600; }
-.stat .v.warn { color: var(--warn); }
-
-/* Counts in words. A green/red tone bar has been built and deleted twice:
-   green and red mean price direction on this surface and nothing else. */
-.wording {
-  display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0 0;
-  font-size: 13px; color: var(--ink-2);
-}
-.wording b { font-weight: 650; color: var(--ink); }
-.wording .q { color: var(--muted); }
-.wording .q b { color: var(--ink-2); }
-
-/* ---------------------------------------------------------- the posts ---- */
-
-.posts { list-style: none; margin: 0; padding: 0; }
-.post { padding: 12px 0 13px; border-bottom: 1px solid var(--rule-soft); }
-.phead { display: flex; align-items: baseline; gap: 9px; font-size: 11.5px; }
-.phead .src {
-  font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
-  text-transform: uppercase; color: var(--mark);
-  background: var(--mark-wash); padding: 2px 7px; border-radius: 4px;
-}
-.phead .who { color: var(--ink-2); font-weight: 500; }
-.phead .when { color: var(--muted); }
-.phead .out { margin-left: auto; color: var(--muted); text-decoration: none; }
-.phead .out:hover { color: var(--mark); text-decoration: underline; }
-.post p {
-  margin: 6px 0 0; max-width: 82ch;
-  font-size: 13.5px; line-height: 1.55; color: var(--ink-2);
-  font-variant-numeric: normal; overflow-wrap: anywhere;
-}
-
-/* --------------------------------------------------------- the banner ---- */
-
-.oops {
-  grid-column: 1 / -1; margin: 0;
-  padding: 10px 20px; background: var(--warn-soft); color: var(--ink-2);
-  font-size: 13px;
-}
-.oops button {
-  font: inherit; margin-left: 10px; border: 1px solid var(--rule);
-  background: var(--raise); border-radius: var(--r-pill);
-  padding: 2px 10px; cursor: pointer;
-}
-
-/* A chip whose count is zero: dimmed, never removed. Chips used to vanish at
-   zero and return as data changed, which moved everything under the cursor. */
-.seg button.nil, .seg button.nil .n { color: oklch(0.72 0.01 285); }
-
-
-/* --------------------------------------------------------- the controls -- */
-/*
-   Every group's label sits on its own line above its chips. Inline, the
-   groups wrapped mid-row in a 404px column and labels ended up next to the
-   wrong chips.
+/* --------------------------------------------------------- the controls --
+   A label gutter, not a heading line per group. Four stacked labels over four
+   chip rows was 273px of furniture before the first ticker; the gutter puts
+   each label beside its own chips and gets the block under 180px. Chips wrap
+   within their own column, so a label can never end up next to the wrong
+   group -- which is what happened when they shared one inline flow.
 
    Fixed slots throughout: a chip whose count is zero dims rather than
    disappearing. Chips used to be dropped at zero, which made the strip change
    shape between loads and move things under the cursor.
-*/
+   ========================================================================= */
 
 .controls {
-  padding: 12px 20px 13px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: var(--s3) 10px;
+  align-items: start;
+  padding: var(--s4) var(--s6) 14px;
+  border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
 }
 .controls[aria-busy="true"] button { opacity: 0.55; pointer-events: none; }
 
-.group { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-width: 0; }
-.group > .lbl {
-  width: 100%;
-  margin-bottom: 2px;
-  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+.controls > .lbl {
+  padding-top: 5px;
+  font-size: var(--t-ax); letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--muted); white-space: nowrap;
 }
-.seg { display: flex; gap: 3px; flex-wrap: wrap; }
+.seg { display: flex; flex-wrap: wrap; gap: var(--s1); }
 
 .seg button, .chip {
-  font: inherit; font-size: 12.5px;
-  padding: 3px 9px;
-  border: 1px solid transparent;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--ink-2);
-  cursor: pointer;
+  font: inherit; font-size: 12.5px; line-height: 1.3;
   display: inline-flex; align-items: baseline; gap: 5px;
-  transition: background var(--fast) var(--ease);
+  padding: 3px 9px;
+  border: 1px solid transparent; border-radius: var(--r-pill);
+  background: transparent; color: var(--ink-2); cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
 }
 .seg button:hover, .chip:hover { background: var(--rule-soft); color: var(--ink); }
 .seg button:focus-visible, .chip:focus-visible {
@@ -433,24 +309,315 @@ body {
 .seg button[aria-pressed="true"] {
   background: var(--mark-soft); color: var(--mark); font-weight: 600;
 }
-.seg .n { color: var(--muted); font-size: 11px; }
-.seg button[aria-pressed="true"] .n { color: var(--mark); opacity: 0.8; }
+.seg .n { font-size: var(--t-xs); color: var(--muted); }
+.seg button[aria-pressed="true"] .n { color: var(--mark); opacity: 0.75; }
+
+/* A chip whose count is zero: dimmed, never removed. */
+.seg button.nil, .seg button.nil .n { color: var(--dim); }
 
 .chip .dot {
-  width: 7px; height: 7px; border-radius: 50%;
+  width: 6px; height: 6px; border-radius: 50%;
   background: var(--rule); flex: none; align-self: center;
 }
-.chip[aria-pressed="true"] { background: var(--mark-soft); color: var(--mark); font-weight: 600; }
+.chip[aria-pressed="true"] {
+  background: var(--mark-soft); color: var(--mark); font-weight: 600;
+}
 .chip[aria-pressed="true"] .dot { background: var(--mark); }
 .chip[aria-pressed="false"] { color: var(--muted); }
 .chip:disabled { cursor: default; opacity: 0.75; }
 
-/* ------------------------------------------------------------- row fixes - */
-/*
-   The row's three lines are spans inside an anchor, so without this they run
-   together as one wrapped paragraph -- "20 peoplemicro".
-*/
-.phr, .row .meta { display: block; }
+/* ------------------------------------------------------------- the rows --
+   A column rather than a plain scroller, so `.below` can fall to the bottom
+   of the pane. On a two-row board that is the difference between a footer
+   band and a paragraph trailing into 400px of nothing; on a full board the
+   rows overflow and it simply follows the last one. No state check involved.
+   ========================================================================= */
+
+.rows {
+  overflow-y: auto; flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+}
+
+.row {
+  display: block; position: relative;
+  flex: none;
+  padding: 9px var(--s6) 16px;
+  border-bottom: 1px solid var(--rule-soft);
+  text-decoration: none; color: inherit;
+  transition: background var(--fast) var(--ease);
+}
+
+/* The magnitude axis. Drawn as well as the mark: a bare bar left-aligned
+   under a left-aligned meta line read as an underline of that line, and with
+   its own extent and end tick visible it reads as what it is. */
+.row::before {
+  content: ""; position: absolute; left: var(--s6); bottom: 6px;
+  width: var(--axis); height: 5px;
+  border-bottom: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+}
+.row::after {
+  content: ""; position: absolute; left: var(--s6); bottom: 7px; height: 3px;
+  width: calc(var(--axis) * var(--mag, 0));
+  background: var(--mark);
+}
+/* No baseline to measure against draws no scale at all. */
+.row.unmeasured::before, .row.unmeasured::after { content: none; }
+
+.row:hover { background: var(--mark-wash); }
+.row:focus-visible { outline: 2px solid var(--mark); outline-offset: -2px; }
+
+/* Selected takes the panel's own ground and punches a 1px hole through the
+   divider, so the row and the panel it opened read as one continuous surface.
+   Replaces a 3px left stripe, which said the same thing by decorating an edge. */
+.row.on { background: var(--bg); }
+.row.on .r1 { position: relative; }
+.row.on .r1::after {
+  content: ""; position: absolute;
+  top: -10px; bottom: -17px; right: -21px; width: 1px;
+  background: var(--bg);
+}
+.row.on .tk { color: var(--mark); }
+
+.r1 { display: flex; align-items: baseline; gap: var(--s3); line-height: 1.25; }
+.r1 .tk { font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.01em; }
+.r1 .nm {
+  flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.r1 .spark { width: 56px; height: 17px; flex: none; opacity: 0.7; }
+.row.on .spark { opacity: 1; }
+
+/* The phrase, styled per clause kind. The client never parses the text --
+   see features/radar/phrasing.py, which decides the wording. */
+.phr {
+  display: block; margin-top: var(--s1);
+  font-size: var(--t-md); line-height: 1.4; color: var(--ink-2);
+}
+.phr > span + span::before { content: " · "; color: var(--muted); opacity: 0.5; }
+.phr .c-ratio { color: var(--ink); font-weight: 650; }
+.phr .c-venues, .phr .c-people { color: var(--ink-2); }
+.phr .c-new { color: var(--mark); font-weight: 650; }
+.phr .c-warn { color: var(--warn); }
+.phr .c-price-up { color: var(--up); font-weight: 650; }
+.phr .c-price-down { color: var(--down); font-weight: 650; }
+.phr .c-price-flat { color: var(--muted); }
+
+.row .meta {
+  display: block; margin-top: 3px; font-size: var(--t-xs); color: var(--muted);
+}
+.row .meta .mark { color: var(--warn); }
+
+/* What the list left out. Without it a two-row board and a stopped ingest
+   look identical. `margin-top: auto` is the quiet board's whole composition. */
+.below {
+  margin: auto 0 0; padding: var(--s5) var(--s6) 22px;
+  border-top: 1px solid var(--rule);
+  font-size: 12.5px; line-height: 1.6; color: var(--muted);
+  font-variant-numeric: normal;
+}
+.below b { color: var(--ink-2); font-weight: 600; }
+/* Two of them can render together -- "nothing cleared the bar" above the
+   account of what was excluded. Only the first is a footer band. */
+.below ~ .below { margin-top: 0; border-top: 0; padding-top: 0; }
+
+/* The pointer at the two controls that widen the net, on its own line: the
+   account of what was excluded is a fact, the suggestion is a suggestion. */
+.pointer { display: block; margin-top: 9px; }
+
+/* Nothing cleared the bar. Not a footnote -- it is the whole answer, so it
+   sits where the first row would have been. */
+.none {
+  margin: 0; padding: var(--s7) var(--s6);
+  font-size: 14px; line-height: 1.6; color: var(--ink-2);
+  font-variant-numeric: normal;
+}
+
+/* --------------------------------------------------------- the panel ----- */
+
+.detail {
+  min-width: 0; min-height: 0; overflow-y: auto;
+  padding: var(--s7) 32px 72px;
+}
+.detail.empty { display: grid; place-items: center; color: var(--muted); }
+.detail .failed { color: var(--warn); }
+
+.ident { display: flex; align-items: flex-start; gap: var(--s5); padding-bottom: 18px; }
+.ident h2 {
+  margin: 0 0 var(--s2); font-size: var(--t-2xl); font-weight: 700;
+  line-height: 1; letter-spacing: -0.025em;
+}
+/* Untruncated on purpose. The list truncates because it has 420px; here the
+   half that carries the meaning is the half that used to be cut off. */
+.ident .full { font-size: var(--t-base); color: var(--ink-2); }
+.ident .facts { margin-top: 7px; font-size: 12.5px; color: var(--muted); }
+.ident .px { margin-left: auto; text-align: right; flex: none; }
+.ident .px .v {
+  font-size: 26px; font-weight: 650; line-height: 1; letter-spacing: -0.02em;
+}
+.ident .px .mv { margin-top: var(--s2); font-size: var(--t-base); font-weight: 650; }
+.ident .px .mv.up { color: var(--up); }
+.ident .px .mv.down { color: var(--down); }
+.ident .px .st { margin-top: var(--s1); font-size: var(--t-xs); color: var(--muted); }
+.ident .px .st.closed, .ident .px .st.warn { color: var(--warn); font-weight: 600; }
+
+/* The one block of prose on the page. Set at reading size and measure, not at
+   the size of a caption. */
+.read {
+  margin: 0; padding: 18px 0 0; border-top: 1px solid var(--rule);
+  max-width: 66ch; font-size: 15.5px; line-height: 1.65; color: var(--ink-2);
+  font-variant-numeric: normal; text-wrap: pretty;
+}
+.read b { font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.read .c-warn { color: var(--warn); font-weight: 600; }
+
+/* Zones. A hairline opens each one and the heading sits under it -- rather
+   than four identical tracked-uppercase eyebrows down the page, which is the
+   scaffold every generated dashboard reaches for. */
+.zone { margin-top: var(--s8); border-top: 1px solid var(--rule); padding-top: 14px; }
+.zone h3 {
+  display: flex; align-items: baseline; gap: 10px; margin: 0 0 var(--s5);
+  font-size: var(--t-md); font-weight: 600; color: var(--ink);
+}
+.zone h3 .q { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+
+.spans { margin-left: auto; display: inline-flex; gap: 3px; }
+.spans button {
+  font: inherit; font-size: 12px;
+  padding: 2px 9px; border: 0; border-radius: var(--r-pill);
+  background: transparent; color: var(--ink-2); cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.spans button:hover { background: var(--rule-soft); color: var(--ink); }
+.spans button:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
+.spans button[aria-pressed="true"] {
+  background: var(--mark-soft); color: var(--mark); font-weight: 600;
+}
+
+/* ------------------------------------------------------------- the chart --
+   No card. The lane rules and the label gutter carry it; a bordered box drawn
+   around a chart that already draws its own axes is furniture drawn twice. */
+
+.pxchart { display: block; width: 100%; height: 300px; }
+.pxchart .ax {
+  font-size: var(--t-ax); fill: var(--muted); font-variant-numeric: tabular-nums;
+}
+.legend {
+  display: flex; gap: var(--s6); margin-top: 10px;
+  font-size: var(--t-xs); color: var(--muted);
+}
+.legend i { font-style: normal; }
+.legend .key {
+  display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+  background: var(--mark); margin-right: 6px;
+}
+.legend .key.line {
+  height: 2px; border-radius: 0; background: var(--up); vertical-align: 3px;
+}
+.legend .key.line.down { background: var(--down); }
+
+/* ------------------------------------------------------ the breakdown ---- */
+/* Split by kind rather than into "table" and "leftovers". Concentration is
+   the pump tell and no other figure on the surface exposes it, so it reads as
+   a finding with a sentence under it -- not as row four of five identical
+   stats. */
+
+.bd {
+  display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--s9); align-items: start; max-width: 790px;
+}
+@media (max-width: 1120px) {
+  .bd { grid-template-columns: minmax(0, 1fr); gap: var(--s7); }
+}
+
+.bd .sub { margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
+
+.bd table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+.bd th {
+  text-align: left; padding: 0 0 var(--s2); border-bottom: 1px solid var(--rule);
+  font-size: var(--t-ax); font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.bd td { padding: 8px 0; border-bottom: 1px solid var(--rule-soft); color: var(--ink-2); }
+.bd td.venue { font-variant-numeric: normal; color: var(--ink); }
+.bd th.r, .bd td.r { text-align: right; }
+
+.stat {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: var(--s4);
+  padding: 8px 0; border-bottom: 1px solid var(--rule-soft);
+  font-size: var(--t-sm);
+}
+.stat .k { color: var(--muted); font-variant-numeric: normal; }
+.stat .v { font-weight: 600; color: var(--ink); }
+.stat.hot { border-bottom-color: var(--rule); }
+.stat.hot .k { color: var(--ink-2); }
+.stat.hot .v { color: var(--warn); }
+
+/* Counts in words. A green/red tone bar has been built and deleted twice:
+   green and red mean price direction on this surface and nothing else. */
+.wording {
+  display: flex; gap: var(--s6); flex-wrap: wrap; margin: 14px 0 0;
+  font-size: var(--t-sm); color: var(--ink-2);
+}
+.wording b { font-weight: 650; color: var(--ink); }
+.wording .q { color: var(--muted); }
+.wording .q b { color: var(--ink-2); }
+
+/* The facts that are only facts. Kept out of the concentration block so that
+   block stays five lines of one idea. */
+.plain {
+  margin: 14px 0 0; font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: normal; text-wrap: pretty; max-width: 52ch;
+}
+.plain b {
+  color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted);
+  font-variant-numeric: normal; max-width: 44ch;
+}
+
+/* ---------------------------------------------------------- the posts ---- */
+/* The panel narrows as it goes: chart full width, breakdown 790, posts a
+   reading column. The zone rules stay full width, so what is left to the
+   right reads as margin rather than as a gap. */
+
+.posts { list-style: none; margin: 0; padding: 0; max-width: 660px; }
+.post { padding: 14px 0 15px; border-bottom: 1px solid var(--rule-soft); }
+.phead { display: flex; align-items: baseline; gap: 10px; font-size: var(--t-xs); }
+/* The venue tag stays neutral. Violet is chatter and selection; a violet badge
+   on every post would spend the accent on a label. Fixed width so the author
+   column starts in the same place whatever the venue is called. */
+.phead .src {
+  min-width: 66px; text-align: center;
+  font-size: var(--t-ax); font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink-2);
+  background: var(--rule-soft); padding: 2px 7px; border-radius: 4px;
+}
+.phead .who { color: var(--ink-2); font-weight: 500; }
+.phead .when { color: var(--muted); }
+.phead .out { margin-left: auto; color: var(--muted); text-decoration: none; }
+.phead .out:hover { color: var(--mark); text-decoration: underline; }
+.post p {
+  margin: 7px 0 0;
+  font-size: 14px; line-height: 1.58; color: var(--ink-2);
+  font-variant-numeric: normal; overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------- the banner ---- */
+
+.oops {
+  grid-column: 1 / -1; margin: 0;
+  padding: 10px var(--s6); background: var(--warn-soft); color: var(--ink-2);
+  font-size: var(--t-sm);
+}
+.oops button {
+  font: inherit; margin-left: 10px; border: 1px solid var(--rule);
+  background: var(--raise); border-radius: var(--r-pill);
+  padding: 2px 10px; cursor: pointer;
+}
 
 /* -------------------------------------------------------- reduced motion - */
 
@@ -468,6 +635,7 @@ body {
    Colour survives, chrome does not. */
 @media print {
   .controls, .skip-link, .spans { display: none; }
-  .page { grid-template-columns: minmax(0, 1fr); }
+  .page { grid-template-columns: minmax(0, 1fr); height: auto; overflow: visible; }
+  .list, .detail, .rows { overflow: visible; }
   .row, .post { break-inside: avoid; }
 }
