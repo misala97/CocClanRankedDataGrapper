@@ -10,16 +10,21 @@ const HEADERS = { Accept: 'application/json' }
  *  concludes the page is broken and reloads it. */
 const TIMEOUT_MS = 8000
 
-export class BoardUnavailable extends Error {
-  constructor(readonly reason: 'timeout' | 'network' | 'session') {
-    super(reason)
-  }
+const REASON_TEXT = {
+  session: 'Session expired — reload to sign in again.',
+  timeout: 'The board did not answer in time.',
+  network: 'Could not reach the board.',
+} as const
 
-  get message(): string {
-    if (this.reason === 'session') return 'Session expired — reload to sign in again.'
-    return this.reason === 'timeout'
-      ? 'The board did not answer in time.'
-      : 'Could not reach the board.'
+export class BoardUnavailable extends Error {
+  // The text is passed to super rather than exposed through a getter.
+  // `super(reason)` sets `message` as an OWN property, and an own data
+  // property shadows a prototype accessor -- so a `get message()` here never
+  // ran, and the banner showed readers the bare word "network" instead of a
+  // sentence. Found by a test written for the two-pane rebuild; it had been
+  // that way since the error path was added.
+  constructor(readonly reason: keyof typeof REASON_TEXT) {
+    super(REASON_TEXT[reason])
   }
 }
 
