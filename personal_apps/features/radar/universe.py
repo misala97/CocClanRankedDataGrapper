@@ -121,26 +121,57 @@ def mark_delisted(symbols, now):
     return marked
 
 
+def _issuer_of(name):
+    """The issuer a listing belongs to.
+
+    Everything before the first comma or ' - ', so every share class, unit,
+    warrant and right of one company collapses to a single key. Crude, and it
+    only has to be good enough to stop one company counting as four.
+    """
+    return re.split(r',| - ', name or '', maxsplit=1)[0].strip().lower()
+
+
 def annotate_distinctive(lookup):
     """Add a `distinctive` token set to every entry, in place.
 
-    A token qualifies when it appears in at most MAX_NAME_TOKEN_DF names across
-    the whole lookup, is long enough to be a real word, and is not the symbol
-    echoing itself. Measured against the passed lookup rather than a constant,
-    so it calibrates to whatever universe it is given -- including the small
-    ones in tests.
+    A token qualifies when at most MAX_NAME_TOKEN_DF distinct ISSUERS use it,
+    it is long enough to be a real word, and it is not the symbol echoing
+    itself. Measured against the passed lookup rather than a constant, so it
+    calibrates to whatever universe it is given -- including the small ones in
+    tests.
+
+    ISSUERS, not listings, and funds excluded from the count. Counting
+    listings made a company compete with its own derivatives: `tesla` appeared
+    in four names -- Tesla plus three leveraged ETFs -- against a ceiling of
+    three, so TSLA could never be promoted from a bare mention. The same shape
+    hits small caps harder, because a recent IPO lists as Common Stock plus
+    Units plus Warrants plus Rights. Both exclusions are needed: dropping
+    funds alone leaves Alphabet's five share classes, and issuer-deduping
+    alone leaves Tesla's three ETFs.
+
+    A token appearing only in fund names has no issuers at all and so passes
+    the ceiling. That is deliberate -- an ETF's own name should be able to
+    promote its own ticker.
+
+    The cost is that some ordinary words qualify: `peace` drops from four
+    listings to one issuer because three of the four are Peace Acquisition's
+    unit, warrant and right. Accepted, because promotion still requires the
+    bare ticker in the same post.
 
     Symbols left with an empty set can never be promoted from a bare mention.
-    That is the intended outcome for tickers like HR or DYOR, whose names carry
-    nothing but boilerplate.
+    That remains the intended outcome for tickers like HR or DYOR, whose names
+    carry nothing but boilerplate.
     """
-    frequency = collections.Counter()
+    issuers = collections.defaultdict(set)
     tokens_by_symbol = {}
     for symbol, entry in lookup.items():
-        tokens = set(_NAME_WORD_RE.findall((entry.get('name') or '').lower()))
+        name = entry.get('name') or ''
+        tokens = set(_NAME_WORD_RE.findall(name.lower()))
         tokens_by_symbol[symbol] = tokens
+        if _FUND_NAME_RE.search(name):
+            continue
         for token in tokens:
-            frequency[token] += 1
+            issuers[token].add(_issuer_of(name))
 
     ceiling = min(MAX_NAME_TOKEN_DF,
                   max(1, int(MAX_NAME_TOKEN_RATIO * len(lookup))))
@@ -148,7 +179,7 @@ def annotate_distinctive(lookup):
     for symbol, tokens in tokens_by_symbol.items():
         lookup[symbol]['distinctive'] = {
             token for token in tokens
-            if frequency[token] <= ceiling
+            if len(issuers.get(token, ())) <= ceiling
             and len(token) >= MIN_NAME_TOKEN_LEN
             and token != symbol.lower()
         }
