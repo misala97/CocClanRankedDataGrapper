@@ -101,3 +101,26 @@ One Vite entry per ported page, listed in `vite.config.ts` under
 adds its own entry there and its own `{{ vite_asset('<name>') }}` in the
 template — an entry missing from the config raises `ViteManifestError` naming
 the entry and the file to add it to.
+
+## Radar price history (2026-08-23)
+
+`flask db upgrade` creates `radar_daily_closes`. **No deploy-script change**:
+the fetch job runs inside the existing `radar_ingest` unit, and `npm run build`
+already chains both Vite configs.
+
+Two things will look wrong for a while and are not.
+
+**The chart's longer spans are dashed rules at first.** The job fetches 20
+tickers per five-minute cycle against Twelve Data's eight-per-minute limit, so
+a board of ~50 takes roughly fifteen minutes to fill, and tickers that join
+later fill on the cycle after they arrive. That is the rate limit, not a
+failure.
+
+**The 1Y span is price-only for months.** Chatter history starts 2026-08-21
+and grows one day per day. `radar_buckets` is never pruned, so it fills in on
+its own — but until it does, a year of price sits beside a few days of bars.
+The chart defaults to 24h partly for this reason.
+
+Watch it with:
+
+    journalctl -u radar_ingest -f | grep "history stored"
