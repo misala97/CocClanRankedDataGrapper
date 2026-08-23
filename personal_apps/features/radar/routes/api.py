@@ -31,22 +31,6 @@ class Query:
     min_venues: int
 
 
-def _chart(chart):
-    """{'from', 'closes', 'chatter'} or null, both arrays calendar-aligned.
-
-    365 entries each, mostly literal nulls -- about 250KB across a full board
-    and roughly 30KB once nginx gzips it. Sending the year whole is what makes
-    the span switch instant: the client already holds every span it can show.
-    """
-    if chart is None:
-        return None
-    return {
-        'from': chart.start.isoformat(),
-        'closes': [float(c) if c is not None else None for c in chart.closes],
-        'chatter': chart.chatter,
-    }
-
-
 def _decimal_or_none(value):
     return float(value) if value is not None else None
 
@@ -116,6 +100,7 @@ def serialize(board):
         'venue_counts': board.venue_counts,
         'window_hours': board.window_hours,
         'segment_counts': board.segment_counts,
+        'excluded': board.excluded,
         'triplet_hours': list(board_mod.TRIPLET_HOURS),
         'series_hours': board_mod.SERIES_HOURS,
         'lead_count': board_mod.LEAD_COUNT,
@@ -149,7 +134,9 @@ def _row(entry):
         'tone': {'bullish': entry.tone.bullish,
                  'neutral': entry.tone.neutral,
                  'bearish': entry.tone.bearish},
-        'chart': _chart(entry.chart),
+        # Why this row is here, in words. The client styles by `kind` and
+        # never parses `text` -- see phrasing.py.
+        'clauses': [{'kind': c.kind, 'text': c.text} for c in entry.clauses],
     }
 
 

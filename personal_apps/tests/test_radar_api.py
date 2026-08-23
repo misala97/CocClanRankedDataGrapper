@@ -76,7 +76,7 @@ def test_the_payload_carries_what_the_surface_has_to_draw(client):
     if payload['rows']:
         row = payload['rows'][0]
         for key in ('ticker', 'divergence', 'mention_z', 'mentions', 'authors',
-                    'marks', 'series', 'triplet', 'tone', 'chart',
+                    'marks', 'series', 'triplet', 'tone', 'clauses',
                     'price_status'):
             assert key in row, key
         assert set(row['triplet']) == {'1', '4', '24'}
@@ -129,18 +129,19 @@ def test_the_page_falls_back_to_the_default_board_on_a_bad_query(client):
     assert client.get('/radar/?window=7').status_code == 200
 
 
-def test_the_chart_serializes_as_two_aligned_arrays(client):
-    """One start date, two equal-length arrays. Index i is the same calendar
-    day in each, which is what lets the client draw them on one axis."""
+def test_the_row_carries_no_chart_of_its_own(client):
+    """The chart moved to the detail panel on 2026-08-23. Three years is ~780
+    closes, so a twenty-row board would have shipped sixteen thousand numbers
+    to draw twenty sparklines.
+
+    This replaces a test that walked every row's chart and skipped nulls --
+    which passed vacuously the moment the board was empty, which is the same
+    hole test_the_row_serializer_actually_runs exists to cover.
+    """
     payload = json.loads(client.get('/radar/api/board').data)
 
     for row in payload['rows']:
-        chart = row['chart']
-        if chart is None:
-            continue
-        assert set(chart) == {'from', 'closes', 'chatter'}
-        assert len(chart['closes']) == len(chart['chatter'])
-        assert chart['from'].count('-') == 2
+        assert 'chart' not in row
 
 
 def test_the_row_serializer_actually_runs(client):
@@ -203,8 +204,12 @@ def test_the_row_serializer_actually_runs(client):
     rows = [r for r in payload['rows'] if r['ticker'] == tag]
     assert len(rows) == 1, 'the fixture row did not reach the board'
     row = rows[0]
-    assert row['chart'] is not None
-    assert len(row['chart']['closes']) == len(row['chart']['chatter'])
+    # `chart` was the field this test was written for. It moved to the detail
+    # panel on 2026-08-23; the phrase took its place as the row's one field
+    # that is computed rather than copied, so it is the one worth guarding.
+    assert row['clauses'], 'the row phrase is missing'
+    assert all({'kind', 'text'} == set(c) for c in row['clauses'])
+    assert 'chart' not in row
     # Serializable end to end -- the 500 was a NameError inside _row.
     _json.dumps(payload)
 
@@ -231,3 +236,11 @@ def test_the_board_opens_on_the_small_stuff(client):
     payload = json.loads(client.get('/radar/api/board').data)
 
     assert payload['segment'] == 'small'
+
+
+def test_the_payload_says_what_the_floor_left_out(client):
+    """A two-row board and a stopped ingest are indistinguishable without
+    this, and the reader has no way to tell which they are looking at."""
+    payload = json.loads(client.get('/radar/api/board').data)
+
+    assert isinstance(payload['excluded'], dict)
