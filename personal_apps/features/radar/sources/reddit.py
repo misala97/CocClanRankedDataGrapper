@@ -177,11 +177,17 @@ def fetch_one(sub, since, client):
     return [p for p in posts if p.created_utc > since], status, rate
 
 
-def fetch(since, client, subs, pause=REQUEST_INTERVAL_SECONDS):
-    """Every subreddit in `subs`, in one cycle.
+def fetch(since_by_sub, client, pause=REQUEST_INTERVAL_SECONDS):
+    """Every subreddit in `since_by_sub`, each read from its OWN cursor.
 
-    `subs` is already the budgeted, rotated slice -- this module does not
-    decide which subreddits are due, because that state belongs to the
+    Per subreddit, not per source, and that is the whole point. One shared
+    cursor is advanced to the newest comment seen across the batch, so polling
+    r/wallstreetbets moves it to seconds ago and every quieter subreddit
+    afterwards has its entire feed filtered out as "already seen". Measured
+    2026-08-25: six of eight cycles returned nothing at all for that reason.
+
+    `since_by_sub` is already the budgeted, rotated slice -- this module does
+    not decide which subreddits are due, because that state belongs to the
     scheduler that the StockTwits path already uses.
 
     A 429 stops the cycle rather than moving to the next subreddit: the
@@ -203,7 +209,7 @@ def fetch(since, client, subs, pause=REQUEST_INTERVAL_SECONDS):
     """
     posts, statuses, rates = [], [], {}
 
-    for index, sub in enumerate(subs):
+    for index, (sub, since) in enumerate(since_by_sub.items()):
         if index and pause:
             time.sleep(pause)
         try:
