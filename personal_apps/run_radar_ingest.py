@@ -365,9 +365,16 @@ def _scheduled_volatility():
 
 def _scheduled_prune():
     with app.app_context():
-        deleted = retention.prune_posts(_utcnow())
+        now = _utcnow()
+        deleted = retention.prune_posts(now)
         if deleted:
             logger.info('radar retention pruned %d posts', deleted)
+        # Quotes were never pruned at all, and since the board began reading
+        # them on every load (2026-08-24) that table is the one most likely to
+        # slowly undo the work that made it fast.
+        quotes = retention.prune_quotes(now)
+        if quotes:
+            logger.info('radar retention pruned %d quotes', quotes)
 
 
 def main():

@@ -257,6 +257,13 @@ PAGE_CAP = 10
 
 POST_RETENTION_DAYS = 30
 
+# How long a price snapshot is worth keeping. The longest window the board or
+# the panel ever measures a move across is 24h, so a week is generous; what
+# the number cannot do is decide on its own which rows go, because
+# `price_status` reads a ticker's most recent STALE_QUOTE_POLLS snapshots
+# whenever they were taken. See retention.prune_quotes.
+QUOTE_RETENTION_DAYS = 7
+
 # English words and trading slang that collide with real ticker symbols. Every
 # entry costs a real ticker its bare-token matches, so entries are only added
 # when the collision is common enough to outweigh that.
