@@ -294,6 +294,14 @@ def _profiles_due(now, limit):
     cutoff = now.replace(tzinfo=None) - dt.timedelta(days=PROFILE_MAX_AGE_DAYS)
     eligible = {symbol for (symbol,) in db.session.query(TickerUniverse.symbol)
                 .filter(TickerUniverse.symbol.in_(candidates),
+                        # A fund has no profile to fetch. Finnhub answers an
+                        # empty payload for every one of them, so each costs a
+                        # slot to learn nothing -- and 5,636 of the 12,599
+                        # rows in the live universe are funds. Skipped where
+                        # the directory SAID so; NULL still gets asked, since
+                        # not knowing is not the same as knowing it is a fund.
+                        sa.or_(TickerUniverse.is_etf.is_(None),
+                               TickerUniverse.is_etf.is_(False)),
                         sa.or_(TickerUniverse.profile_refreshed_at.is_(None),
                                TickerUniverse.profile_refreshed_at < cutoff))}
     return [symbol for symbol in candidates if symbol in eligible][:limit]
