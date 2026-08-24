@@ -148,8 +148,8 @@ def test_a_throttle_stops_the_cycle_instead_of_asking_again():
         'c': feed([entry('t1_c', 5)]),
     })
 
-    result = reddit.fetch(NOW - dt.timedelta(hours=1), client,
-                          ['a', 'b', 'c'], pause=0)
+    since = NOW - dt.timedelta(hours=1)
+    result = reddit.fetch({'a': since, 'b': since, 'c': since}, client, pause=0)
 
     assert client.asked == ['a', 'b']
     assert [p.external_id for p in result.posts] == ['t1_a']
@@ -171,7 +171,8 @@ def test_one_unreachable_sub_does_not_cost_the_others():
         'b': feed([entry('t1_b', 5)]),
     })
 
-    result = reddit.fetch(NOW - dt.timedelta(hours=1), client, ['a', 'b'], pause=0)
+    since = NOW - dt.timedelta(hours=1)
+    result = reddit.fetch({'a': since, 'b': since}, client, pause=0)
 
     assert client.asked == ['a', 'b']
     assert [p.external_id for p in result.posts] == ['t1_b']
@@ -186,7 +187,7 @@ def test_a_cycle_that_read_nothing_is_missing_not_ok():
     nothing at all, which is a different fact."""
     client = FakeClient({'a': reddit.RedditUnavailable('down')})
 
-    result = reddit.fetch(NOW - dt.timedelta(hours=1), client, ['a'], pause=0)
+    result = reddit.fetch({'a': NOW - dt.timedelta(hours=1)}, client, pause=0)
 
     assert result.status == 'missing'
 
@@ -257,3 +258,30 @@ def test_the_channel_column_holds_the_longest_subreddit_too():
 
     assert len(worst) <= limit, (
         f'r/{worst} is {len(worst)} chars and channel holds {limit}')
+
+
+def test_each_subreddit_is_read_from_its_own_cursor():
+    """The regression, measured live 2026-08-25: six of eight cycles returned
+    nothing.
+
+    One cursor per SOURCE is advanced to the newest comment seen across the
+    batch, so a busy subreddit moves it to seconds ago and every quieter one
+    polled afterwards has its whole feed filtered out as already-seen. Quiet
+    subs could never contribute anything, permanently.
+
+    Here r/busy has just posted and r/quiet last spoke an hour ago. Under a
+    shared cursor set by r/busy, r/quiet yields nothing.
+    """
+    client = FakeClient({
+        'busy': feed([entry('t1_busy', 1)]),
+        'quiet': feed([entry('t1_quiet', 55)]),
+    })
+
+    result = reddit.fetch({
+        'busy': NOW - dt.timedelta(minutes=5),      # read 5 minutes ago
+        'quiet': NOW - dt.timedelta(minutes=90),    # last read 90 minutes ago
+    }, client, pause=0)
+
+    got = {p.external_id for p in result.posts}
+    assert got == {'t1_busy', 't1_quiet'}, (
+        "the quiet subreddit was filtered out by another sub cursor")

@@ -22,6 +22,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app import app
 from extensions import db
+from models import RadarPollState
 from features.radar import (
     history, ingest, market_calendar, quotes, retention, scheduling, scoring,
     universe)
@@ -156,12 +157,22 @@ def _reddit_fetcher(client):
         scheduling.ensure_tracked('reddit', REDDIT_SUBS, now)
         subs = scheduling.due_symbols('reddit', now, limit=REDDIT_SUBS_PER_CYCLE)
         if not subs:
-            # Nothing due. Not a quiet period and not a failure -- there is
-            # simply no observation to report, and `missing` is what keeps the
-            # rollup from writing zero counts for it.
-            return FetchResult(posts=[], status='missing')
+            # Nothing due. Every subreddit was read inside its own interval,
+            # so coverage IS current -- this is no work to do, not a failure.
+            # `missing` here made six of eight cycles look like outages in the
+            # log and hid the real ones among them.
+            return FetchResult(posts=[], status='ok')
 
-        result = reddit.fetch(since, client, subs)
+        # Each subreddit reads from when IT was last polled, never from a
+        # cursor shared across the source. Shared, the busiest sub sets a
+        # watermark that permanently excludes every quieter one.
+        rows = {row.symbol: row.last_polled_at for row in
+                RadarPollState.query.filter(
+                    RadarPollState.source == 'reddit',
+                    RadarPollState.symbol.in_(subs)).all()}
+        since_by_sub = {sub: (rows.get(sub) or since) for sub in subs}
+
+        result = reddit.fetch(since_by_sub, client)
         # Only what was actually attempted. A throttle stops the cycle, and
         # stamping the subreddits after it as polled would push them down the
         # queue for a request that was never made -- so they would lose their
