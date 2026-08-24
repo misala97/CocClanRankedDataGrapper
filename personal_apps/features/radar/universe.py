@@ -77,7 +77,7 @@ def _is_reassignment(row, incoming_name):
 
 def upsert_symbols(rows, now):
     """Add or refresh universe rows. Returns counts of what happened."""
-    counts = {'added': 0, 'updated': 0, 'reassigned': 0}
+    counts = {'added': 0, 'updated': 0, 'reassigned': 0, 'flagged': 0}
 
     for row in rows:
         symbol = (row.get('symbol') or '').strip().upper()
@@ -99,6 +99,11 @@ def upsert_symbols(rows, now):
         # file without the column must not overwrite a Y we already have.
         if is_etf is not None and existing.is_etf != is_etf:
             existing.is_etf = is_etf
+            # Counted separately from `updated`, which tracks name and
+            # exchange. The first re-seed after the column was added rewrote
+            # thousands of rows and reported "0 updated", which reads as
+            # nothing having happened.
+            counts['flagged'] += 1
 
         if _is_reassignment(existing, name):
             existing.first_seen = now
