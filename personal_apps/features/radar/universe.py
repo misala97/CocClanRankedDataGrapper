@@ -85,13 +85,20 @@ def upsert_symbols(rows, now):
             continue
         name = row.get('name')
         exchange = row.get('exchange')
+        is_etf = row.get('is_etf')
 
         existing = TickerUniverse.query.filter_by(symbol=symbol).one_or_none()
         if existing is None:
             db.session.add(TickerUniverse(symbol=symbol, name=name,
-                                          exchange=exchange, first_seen=now))
+                                          exchange=exchange, is_etf=is_etf,
+                                          first_seen=now))
             counts['added'] += 1
             continue
+
+        # Only when the directory actually said something. A re-seed from a
+        # file without the column must not overwrite a Y we already have.
+        if is_etf is not None and existing.is_etf != is_etf:
+            existing.is_etf = is_etf
 
         if _is_reassignment(existing, name):
             existing.first_seen = now
@@ -190,7 +197,7 @@ def annotate_distinctive(lookup):
         # appearing ONLY in excluded names looks rare. That leaked -- an ADR
         # kept `depositary` as a distinctive token because all 331 names
         # carrying the word were skipped from the denominator.
-        if _POOLED_RE.search(name):
+        if is_pooled_vehicle(name):
             tokens_by_symbol[symbol] = (
                 tokens if FUNDS_PROMOTE_BARE_TOKENS else set())
             continue
@@ -226,7 +233,21 @@ def load_lookup():
     return annotate_distinctive(lookup)
 
 
-def segment_for(market_cap, ipo_date, last_price, today):
+def is_pooled_vehicle(name):
+    """Whether a listing is a fund rather than a company.
+
+    One predicate, two callers: which names may promote a bare ticker, and
+    which segment a row lands in. They are the same judgement -- "is this an
+    operating business" -- and POOLED_VEHICLE_PATTERN carries the full account
+    of what is deliberately excluded from it. ADRs stay in, because an ADR is
+    a real foreign company; `trust` is not matched, because most REITs and
+    plenty of operating companies carry it.
+    """
+    return bool(name) and bool(_POOLED_RE.search(name))
+
+
+def segment_for(market_cap, ipo_date, last_price, today, name=None,
+                is_etf=None):
     """Which segment tab a ticker belongs to.
 
     Order matters. A recent listing is its own segment whatever its size,
@@ -234,6 +255,24 @@ def segment_for(market_cap, ipo_date, last_price, today):
     it is small. And a penny price overrides the reported cap, since a stale or
     wrong cap should not put a three-dollar stock in Large.
     """
+    # `is_etf` is the Nasdaq directory's own Y/N and beats everything. The
+    # name pattern is only the fallback for a row the directory has not been
+    # read for -- it misses `Invesco QQQ Trust`, `SPDR Dow Jones Industrial`
+    # and `SPDR Gold Shares`, which carry no fund word between them, and
+    # `trust` cannot be added to it because Adamas Trust is a real company.
+    # Where the directory HAS spoken and said N, the name is not consulted:
+    # an operating company is not reclassified by a word in its title.
+    #
+    # Before everything else, including recency. A fund has no market cap to
+    # look up anywhere -- Finnhub's /stock/profile2 returns an empty payload
+    # for SPY and QQQ, verified against the live API 2026-08-24 -- so without
+    # this it falls through to Unknown, and Unknown sits inside the Small
+    # group. That put SPY in the tab meant for penny stocks nobody has heard
+    # of. Ahead of recent_ipo too: a fund launched last month is still a fund,
+    # and landing it in Recent IPO would put it back in Small.
+    if is_etf or (is_etf is None and is_pooled_vehicle(name)):
+        return 'fund'
+
     if ipo_date is not None and (today - ipo_date).days <= RECENT_IPO_DAYS:
         return 'recent_ipo'
 

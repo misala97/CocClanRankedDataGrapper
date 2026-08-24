@@ -220,6 +220,87 @@ def test_a_provider_returning_nothing_leaves_the_row_alone(clean_universe):
         decimal.Decimal('1000000000')
 
 
+# Funds are their own segment, and deliberately outside the `small` group --
+# Michi, 2026-08-24: "etfs should be a seperate thing. they should be
+# chooseable but default should only be actual normal stocks".
+
+def test_a_fund_is_its_own_segment_not_an_unknown_company():
+    """A fund has no market cap to look up ANYWHERE. Finnhub returns an empty
+    payload for SPY and QQQ, verified against the live API, so before this it
+    fell through to Unknown -- and Unknown is inside Small, which is the tab
+    for penny stocks nobody has heard of."""
+    assert universe.segment_for(None, None, None, dt.date(2026, 8, 24),
+                                'SPDR S&P 500 ETF Trust') == 'fund'
+    # By the directory's own flag, because the NAME cannot reach this one:
+    # `Invesco QQQ Trust` carries no fund word, and `trust` is unmatchable --
+    # Adamas Trust is an operating company.
+    assert universe.segment_for(None, None, None, dt.date(2026, 8, 24),
+                                'Invesco QQQ Trust', is_etf=True) == 'fund'
+    assert universe.segment_for(None, None, None, dt.date(2026, 8, 24),
+                                'Invesco QQQ Trust') != 'fund',         'the name pattern is not supposed to catch this one -- the flag is'
+
+
+def test_the_directory_beats_the_name_in_both_directions():
+    """A word in a title does not reclassify an operating company.
+
+    The pattern matches `index`, and a company called something like `Index
+    Systems Inc` would be caught by it. Where the directory has actually said
+    N, the name is not consulted at all.
+    """
+    assert universe.segment_for(decimal.Decimal('90000000'), None, None,
+                                dt.date(2026, 8, 24),
+                                'Index Systems Inc - Common Stock',
+                                is_etf=False) == 'micro'
+
+
+def test_an_unread_row_still_falls_back_to_the_name():
+    """NULL is not False. Existing rows carry NULL until the directory is
+    re-seeded, and until then a name that plainly says ETF should still be
+    believed rather than treated as a stock."""
+    assert universe.segment_for(None, None, None, dt.date(2026, 8, 24),
+                                'ARK Innovation ETF', is_etf=None) == 'fund'
+
+
+def test_a_fund_stays_a_fund_even_when_newly_listed():
+    """Ahead of recent_ipo on purpose: recent_ipo is inside the small group,
+    so a fund launched last month would land straight back on the default
+    board."""
+    assert universe.segment_for(None, dt.date(2026, 8, 1), None,
+                                dt.date(2026, 8, 24),
+                                'Some Brand New Bitcoin ETF') == 'fund'
+
+
+def test_a_fund_is_not_on_the_default_board():
+    """The requirement, asserted against the group rather than by eye."""
+    from features.radar.config import DEFAULT_SEGMENT, segments_in
+    assert 'fund' not in segments_in(DEFAULT_SEGMENT)
+
+
+def test_an_adr_is_a_company_not_a_fund():
+    """The exception POOLED_VEHICLE_PATTERN is explicitly careful about: an ADR
+    is a real foreign company, and Chinese and Israeli small caps list that way
+    constantly -- exactly the stocks this board exists to find."""
+    assert universe.segment_for(decimal.Decimal('90000000'), None, None,
+                                dt.date(2026, 8, 24),
+                                'ATA Creativity Global - American Depositary '
+                                'Shares') == 'micro'
+
+
+def test_an_operating_company_with_trust_in_its_name_is_not_a_fund():
+    """`trust` is deliberately not in the pattern: most REITs and plenty of
+    operating companies carry it."""
+    assert universe.segment_for(decimal.Decimal('90000000'), None, None,
+                                dt.date(2026, 8, 24),
+                                'Adamas Trust, Inc. - Common Stock') == 'micro'
+
+
+def test_a_nameless_row_is_segmented_by_size_as_before():
+    """The name is optional, and a missing one must not make everything a
+    fund."""
+    assert universe.segment_for(decimal.Decimal('50000000000'), None, None,
+                                dt.date(2026, 8, 24), None) == 'large'
+
+
 def test_a_provider_that_could_not_answer_is_asked_again(clean_universe):
     """A timeout says nothing about the symbol.
 

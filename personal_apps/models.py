@@ -511,6 +511,16 @@ class TickerUniverse(db.Model):
                             nullable=False, unique=True, index=True)
     name        = db.Column(db.String(255), nullable=True)
     exchange    = db.Column(db.String(32), nullable=True)
+    # Y/N from the Nasdaq Trader directory files, which is the only
+    # authoritative answer available: a fund has no market cap to look
+    # up, so nothing downstream can infer it, and the names do not carry
+    # it reliably -- `Invesco QQQ Trust` and `SPDR Dow Jones Industrial`
+    # contain no fund word at all.
+    #
+    # NULL means the directory has not been read for this row yet, which
+    # is not the same as False. segment_for falls back to the name
+    # pattern there rather than asserting it is a stock.
+    is_etf      = db.Column(db.Boolean, nullable=True)
     first_seen  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
     delisted_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
 

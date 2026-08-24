@@ -38,6 +38,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   micro: 'Micro',
   unknown: 'Unknown',
   recent_ipo: 'Recent IPO',
+  fund: 'Funds',
 }
 
 /** Size order, with the two that are not sizes last. `small` leads because it
@@ -45,7 +46,7 @@ const SEGMENT_LABELS: Record<string, string> = {
  *  way back out. The three it covers stay listed -- Small is a shortcut to the
  *  common reading, not a replacement for reading them apart. */
 export const SEGMENT_ORDER = ['small', 'all', 'large', 'mid', 'micro',
-                              'recent_ipo', 'unknown']
+                              'recent_ipo', 'unknown', 'fund']
 
 export function segmentLabel(key: string): string {
   return SEGMENT_LABELS[key] ?? key

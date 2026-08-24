@@ -23,7 +23,13 @@ export interface Tone {
  *  hidden behind a hover -- see PRODUCT.md. */
 export type Mark = 'no-print' | 'provisional' | 'single-source' | 'partial'
 
+/** `fund` is a pooled vehicle -- an ETF, an ETN, an index product. It is
+ *  deliberately outside the `small` group and therefore off the default
+ *  board: a fund has no market cap to look up, so before it had a segment
+ *  of its own it fell through to `unknown`, and SPY sat in the tab meant
+ *  for penny stocks nobody has heard of. */
 export type Segment = 'large' | 'mid' | 'micro' | 'unknown' | 'recent_ipo'
+                    | 'fund'
 
 /** What the reader can filter BY, which is a wider vocabulary than what a row
  *  can BE. `small` is a group over the three segments below mid; no row ever
