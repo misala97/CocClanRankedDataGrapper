@@ -110,6 +110,22 @@ def test_the_request_budget_is_a_sane_fraction_of_the_hourly_one():
     assert 1 <= daemon.SYMBOL_BUDGET_PER_CYCLE <= 40
 
 
+def test_reddit_runs_on_its_own_clock_not_the_market_session():
+    """The regression: four subs per 1800-second overnight cycle meant a full
+    rotation of eighteen took over two hours, against a feed that turns over
+    in under two minutes. Six hours of it produced one scorable mention.
+
+    Reddit does not stop at the closing bell, and a missed comment is gone
+    rather than late -- there is no cursor to catch up from.
+    """
+    import inspect
+    source = inspect.getsource(daemon.main)
+
+    assert "id='radar_reddit'" in source, 'reddit has no job of its own'
+    assert 'REDDIT_INTERVAL_SECONDS' in source, 'reddit rides the session interval'
+    assert "if name != 'reddit'" in source, 'reddit is still in the session cycle'
+
+
 def test_the_first_cycle_is_scheduled_immediately():
     """An interval trigger fires only after the interval elapses. Overnight
     that is thirty minutes of silence after starting the service, which reads
