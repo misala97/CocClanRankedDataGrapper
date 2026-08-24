@@ -12,7 +12,7 @@ from .. import detail_panel, phrasing
 from ..config import DEFAULT_SEGMENT, SOURCES
 from ._blueprint import radar_bp
 
-SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'small')
+SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund', 'small')
 WINDOWS = (1, 4, 24)
 VENUE_FLOORS = (1, 2)
 MAX_LIMIT = 100

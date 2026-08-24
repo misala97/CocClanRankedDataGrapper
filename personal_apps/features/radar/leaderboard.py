@@ -305,7 +305,8 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
             profile.market_cap if profile else None,
             profile.ipo_date if profile else None,
             latest.price if latest else None,
-            today)
+            today, profile.name if profile else None,
+            profile.is_etf if profile else None)
         if allowed and row_segment not in allowed:
             continue
         # Breadth as a filter, not as a score. `contributing` is the list of

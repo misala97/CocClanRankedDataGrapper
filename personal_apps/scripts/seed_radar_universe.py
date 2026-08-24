@@ -30,6 +30,9 @@ from features.radar import universe       # noqa: E402
 _SYMBOL_KEYS = ('Symbol', 'ACT Symbol', 'NASDAQ Symbol', 'symbol')
 _NAME_KEYS = ('Security Name', 'name')
 _EXCHANGE_KEYS = ('Exchange', 'Listing Exchange', 'Market Category', 'exchange')
+# Both files carry it, both spell it the same, and it is the only
+# authoritative statement anywhere that a listing is a fund.
+_ETF_KEYS = ('ETF', 'etf')
 
 
 def _first(row, keys):
@@ -66,10 +69,16 @@ def load_rows(path):
             if not symbol.isalpha() or len(symbol) > 5:
                 continue
 
+            # 'Y', 'N', or absent. Absent stays None rather than becoming
+            # False: a file that does not carry the column has not told us
+            # this is a stock.
+            etf = _first(row, _ETF_KEYS).upper()
+
             yield {
                 'symbol': symbol,
                 'name': _first(row, _NAME_KEYS),
                 'exchange': _first(row, _EXCHANGE_KEYS),
+                'is_etf': {'Y': True, 'N': False}.get(etf),
             }
 
 
