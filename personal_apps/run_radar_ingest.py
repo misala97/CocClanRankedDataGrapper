@@ -161,8 +161,12 @@ def _reddit_fetcher(client):
             return FetchResult(posts=[], status='missing')
 
         result = reddit.fetch(since, client, subs)
-        for sub in subs:
-            scheduling.record_poll('reddit', sub, now, result.rates.get(sub))
+        # Only what was actually attempted. A throttle stops the cycle, and
+        # stamping the subreddits after it as polled would push them down the
+        # queue for a request that was never made -- so they would lose their
+        # turn to the ones that happened to be earlier in the batch.
+        for sub, rate in (result.rates or {}).items():
+            scheduling.record_poll('reddit', sub, now, rate)
         return result
     return fetch
 

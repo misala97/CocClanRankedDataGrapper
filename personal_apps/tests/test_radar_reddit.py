@@ -154,6 +154,14 @@ def test_a_throttle_stops_the_cycle_instead_of_asking_again():
     assert client.asked == ['a', 'b']
     assert [p.external_id for p in result.posts] == ['t1_a']
 
+    # 'c' was never requested, so it must not be scheduled as though it had
+    # been -- it would lose its turn to whatever happened to sort earlier.
+    assert 'c' not in result.rates
+    # 'b' was requested and refused, and is backed off rather than left as the
+    # most overdue entry: unbacked it would be tried first next cycle, throttle
+    # again, and break the cycle before anything else was read.
+    assert result.rates['b'] == 0.0
+
 
 def test_one_unreachable_sub_does_not_cost_the_others():
     """Unlike a throttle: a single 500 says nothing about the next subreddit,
@@ -167,6 +175,9 @@ def test_one_unreachable_sub_does_not_cost_the_others():
 
     assert client.asked == ['a', 'b']
     assert [p.external_id for p in result.posts] == ['t1_b']
+    # Attempted and told nothing. Unknown, not zero -- a 500 says nothing
+    # about whether the next request will work, so it is retried soon.
+    assert result.rates['a'] is None
 
 
 def test_a_cycle_that_read_nothing_is_missing_not_ok():
@@ -209,3 +220,40 @@ def test_an_empty_feed_is_quiet_rather_than_broken():
     posts, status, rate = reddit.fetch_one('x', NOW - dt.timedelta(hours=1), client)
 
     assert posts == [] and status == 'ok' and rate == 0.0
+
+
+def test_every_configured_subreddit_fits_the_column_it_is_stored_in():
+    """The bug this suite did not catch, 2026-08-24.
+
+    Reddit reuses the StockTwits poll scheduler with the SUBREDDIT as the
+    polled unit, and `radar_poll_state.symbol` was String(12) because
+    everything it had ever held was a ticker. Six of the eighteen names are
+    longer -- `RobinHoodPennyStocks` is 20 -- so `ensure_tracked` failed the
+    whole batch insert on the daemon's first cycle and the source silently
+    produced nothing at all.
+
+    Asserted against the column rather than a literal, so widening the column
+    moves this test with it and adding a longer subreddit fails here instead
+    of in a log at 23:41.
+    """
+    from features.radar.config import REDDIT_SUBS
+    from models import RadarPollState
+
+    limit = RadarPollState.__table__.c.symbol.type.length
+    worst = max(REDDIT_SUBS, key=len)
+
+    assert len(worst) <= limit, (
+        f'r/{worst} is {len(worst)} chars and the column holds {limit}')
+
+
+def test_the_channel_column_holds_the_longest_subreddit_too():
+    """The other end of the same mistake: the subreddit is also written to
+    radar_posts.channel on every single comment."""
+    from features.radar.config import REDDIT_SUBS
+    from models import RadarPost
+
+    limit = RadarPost.__table__.c.channel.type.length
+    worst = max(REDDIT_SUBS, key=len)
+
+    assert len(worst) <= limit, (
+        f'r/{worst} is {len(worst)} chars and channel holds {limit}')
