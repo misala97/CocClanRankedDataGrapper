@@ -74,14 +74,34 @@ def test_every_configured_source_gets_a_fetcher():
     assert all(callable(f) for f in fetchers.values())
 
 
-def test_reddit_is_gone():
-    """Reddit closed self-serve API access. A leftover module is a trap: it
-    imports cleanly and fails only at runtime, against a wall that is not
-    coming down."""
-    import importlib
-    import pytest
-    with pytest.raises(ImportError):
-        importlib.import_module('features.radar.sources.reddit')
+def test_reddit_reads_the_feeds_and_never_the_closed_api():
+    """Replaces test_reddit_is_gone, 2026-08-24.
+
+    That test asserted the module must not exist, because Reddit closed
+    self-serve API access and a leftover module would fail only at runtime.
+    The premise was half right and it took measuring to find out: the JSON API
+    really is shut, and app registration at reddit.com/prefs/apps really is
+    dead, but the published Atom feeds answer 200 with no auth at all.
+
+      /r/pennystocks/new.json   403
+      /r/pennystocks/new.rss    200
+
+    So the wall the old test described is real and still standing -- this just
+    pins that we go around it rather than into it. A module that reached for
+    /api/ or .json would fail on every request against a closed door, which is
+    exactly the trap the original was written to prevent.
+    """
+    from features.radar.sources import reddit
+
+    # Every URL the module can reach, rather than a grep over its text -- the
+    # docstring necessarily mentions the .json route in order to explain why
+    # it is not used, and a text search cannot tell an explanation from a call.
+    urls = [value for value in vars(reddit).values()
+            if isinstance(value, str) and value.startswith('http')]
+
+    assert urls == [reddit.FEED], f'unexpected endpoint reachable: {urls}'
+    assert '.rss' in reddit.FEED
+    assert '.json' not in reddit.FEED
 
 
 def test_the_request_budget_is_a_sane_fraction_of_the_hourly_one():

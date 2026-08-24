@@ -28,8 +28,9 @@ from features.radar import (
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
-    SOURCES, STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured)
-from features.radar.sources import bluesky, fourchan, stocktwits
+    REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES, STOCKTWITS_REQUESTS_PER_HOUR,
+    prefer_ipv4_if_configured)
+from features.radar.sources import bluesky, fourchan, reddit, stocktwits
 from features.radar.sources import FetchResult
 
 logger = logging.getLogger('radar.ingest')
@@ -135,16 +136,49 @@ def _stocktwits_fetcher(client):
     return fetch
 
 
+def _reddit_fetcher(client):
+    """Reddit, a budgeted slice of subreddits per cycle.
+
+    The feed holds 25 comments and has no cursor, so how often a subreddit is
+    read IS its coverage -- r/wallstreetbets turns over in under two minutes.
+    Reading all eighteen every cycle would be six requests a minute, which is
+    well past what earned a sustained 429 during measurement, so they rotate
+    through the same scheduler StockTwits symbols use: most-overdue first, so
+    a backlog larger than the budget rotates instead of starving the same subs
+    forever.
+
+    The observed rate comes back from the feed itself, which lets a quiet sub
+    fall to a slow cadence and hand its share of the budget to a busy one.
+    """
+    def fetch(since):
+        now = _utcnow()
+        scheduling.ensure_tracked('reddit', REDDIT_SUBS, now)
+        subs = scheduling.due_symbols('reddit', now, limit=REDDIT_SUBS_PER_CYCLE)
+        if not subs:
+            # Nothing due. Not a quiet period and not a failure -- there is
+            # simply no observation to report, and `missing` is what keeps the
+            # rollup from writing zero counts for it.
+            return FetchResult(posts=[], status='missing')
+
+        result = reddit.fetch(since, client, subs)
+        for sub in subs:
+            scheduling.record_poll('reddit', sub, now, result.rates.get(sub))
+        return result
+    return fetch
+
+
 def build_fetchers():
     """One callable per active source, each taking `since`."""
     st_client = stocktwits.StockTwitsClient()
     fc_client = fourchan.FourChanClient()
+    rd_client = reddit.RedditClient()
 
     return {
         'stocktwits': _stocktwits_fetcher(st_client),
         'bluesky': lambda since: bluesky.fetch(since, bluesky.live_drain),
         'fourchan': lambda since: fourchan.fetch(
             since, fc_client, pause=fourchan.REQUEST_INTERVAL_SECONDS),
+        'reddit': _reddit_fetcher(rd_client),
     }
 
 
