@@ -42,11 +42,11 @@ def clean():
         wipe()
 
 
-def universe(suffix, refreshed_at=None):
+def universe(suffix, refreshed_at=None, is_etf=None):
     symbol = f'{PREFIX}{suffix}'
     db.session.add(TickerUniverse(
         symbol=symbol, name=f'{symbol} Corp', exchange='N',
-        first_seen=dt.datetime(2020, 1, 1),
+        is_etf=is_etf, first_seen=dt.datetime(2020, 1, 1),
         profile_refreshed_at=refreshed_at))
     return symbol
 
@@ -103,3 +103,24 @@ def test_nothing_loud_asks_the_database_nothing(clean, monkeypatch):
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: [])
 
     assert daemon._profiles_due(NOW, 40) == []
+
+
+def test_a_known_fund_is_never_queued_for_a_profile(clean, monkeypatch):
+    """There is nothing to fetch. Finnhub returns an empty payload for every
+    ETF, so each one costs a slot to learn nothing -- and 5,636 of the 12,599
+    rows in the live universe are funds, which is 140 runs of the queue.
+    """
+    universe('FUND', is_etf=True)
+    universe('STOCK', is_etf=False)
+    universe('UNREAD')
+    db.session.commit()
+
+    pool = [f'{PREFIX}{s}' for s in ('FUND', 'STOCK', 'UNREAD')]
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: pool)
+
+    due = daemon._profiles_due(NOW, 40)
+
+    assert f'{PREFIX}FUND' not in due
+    # Both of the others stay: not knowing is not the same as knowing it is a
+    # fund, so a NULL is still asked.
+    assert set(due) == {f'{PREFIX}STOCK', f'{PREFIX}UNREAD'}
