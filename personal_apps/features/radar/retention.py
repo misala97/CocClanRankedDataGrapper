@@ -1,4 +1,4 @@
-"""Rolling deletion of raw text.
+"""Rolling deletion of raw text and of stale price snapshots.
 
 Buckets are never touched here. They are the queryable layer and are retained
 forever; raw posts exist only long enough to be extracted from and read on a
@@ -7,10 +7,13 @@ detail page (spec 5).
 import datetime as dt
 import time
 
-from extensions import db
-from models import RadarPost
+import sqlalchemy as sa
 
-from .config import POST_RETENTION_DAYS
+from extensions import db
+from models import RadarPost, RadarQuote
+
+from .config import (POST_RETENTION_DAYS, QUOTE_RETENTION_DAYS,
+                     STALE_QUOTE_POLLS)
 
 # Breathing room between chunks so the daemon's next cycle is not queued behind
 # a long delete on the same connection.
@@ -44,6 +47,56 @@ def prune_posts(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):
         if len(ids) < chunk_size:
             break
         if pause:
+            time.sleep(pause)
+
+    return total
+
+
+def prune_quotes(now, keep=STALE_QUOTE_POLLS, chunk_size=5000,
+                 pause=_CHUNK_PAUSE_SECONDS):
+    """Delete price snapshots past the window, in chunks. Returns the count.
+
+    Not a plain age filter, and that is the whole difficulty. `price_status`
+    decides from a ticker's most recent `keep` snapshots WHENEVER THEY WERE
+    TAKEN -- quotes are only fetched for tickers the board is watching, so a
+    name that went quiet weeks ago still has three real snapshots and still
+    answers 'ok' or 'stale'. Deleting them by age alone would turn it
+    'unknown', which asserts the board never quoted it: a statement about the
+    stock rather than about our polling, and exactly the collapse those four
+    statuses exist to prevent.
+
+    So the rank is computed over ALL of a ticker's rows and the age filter is
+    applied after it. Ranking only the old rows would protect the newest three
+    OF THE OLD ONES, which is a different set and the wrong one -- a busy
+    ticker would keep three ancient snapshots it has no use for while the rule
+    that needed them was already satisfied by newer rows.
+
+    Deletable ids are collected in one pass rather than re-ranked per chunk:
+    the window function would otherwise sort the whole table once per chunk,
+    and this runs nightly against a table nothing else is reading at 04:30.
+    """
+    cutoff = now - dt.timedelta(days=QUOTE_RETENTION_DAYS)
+
+    ranked = sa.select(
+        RadarQuote.id.label('id'),
+        RadarQuote.fetched_at.label('fetched_at'),
+        sa.func.row_number().over(
+            partition_by=RadarQuote.ticker,
+            order_by=RadarQuote.fetched_at.desc()).label('rn'),
+    ).subquery()
+
+    doomed = [row_id for (row_id,) in db.session.execute(
+        sa.select(ranked.c.id)
+        .where(ranked.c.rn > keep, ranked.c.fetched_at < cutoff))]
+
+    total = 0
+    for start in range(0, len(doomed), chunk_size):
+        batch = doomed[start:start + chunk_size]
+        db.session.query(RadarQuote).filter(RadarQuote.id.in_(batch)).delete(
+            synchronize_session=False)
+        db.session.commit()
+        total += len(batch)
+        if pause and start + chunk_size < len(doomed):
             time.sleep(pause)
 
     return total

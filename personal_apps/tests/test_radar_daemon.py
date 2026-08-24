@@ -282,6 +282,30 @@ def test_a_failing_profile_provider_does_not_kill_the_cycle(monkeypatch):
     assert daemon.refresh_profiles(_utc(2026, 8, 21, 14), object()) == 0
 
 
+def test_the_nightly_prune_covers_quotes_as_well_as_posts():
+    """The regression here is an omission, like the profile job's.
+
+    retention.py handled posts and mentions and never touched radar_quotes,
+    so that table grew without bound -- and since the board started reading it
+    on every load it is the one most able to undo the work that made it fast.
+    Asserting both are called, because the failure mode is a function that
+    exists and is never reached.
+    """
+    called = []
+
+    daemon.retention.prune_posts, real_posts = (
+        lambda now: called.append('posts') or 0, daemon.retention.prune_posts)
+    daemon.retention.prune_quotes, real_quotes = (
+        lambda now: called.append('quotes') or 0, daemon.retention.prune_quotes)
+    try:
+        daemon._scheduled_prune()
+    finally:
+        daemon.retention.prune_posts = real_posts
+        daemon.retention.prune_quotes = real_quotes
+
+    assert called == ['posts', 'quotes']
+
+
 def test_the_daemon_schedules_a_profile_job():
     """The regression this pins is an omission, not a bug: every other piece
     of the profile path existed and worked, and nothing called it."""
