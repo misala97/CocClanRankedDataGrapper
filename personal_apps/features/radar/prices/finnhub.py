@@ -86,11 +86,20 @@ class FinnhubProvider:
         return found
 
     def profile(self, symbol):
-        """Company profile, or None when the provider has nothing at all."""
-        try:
-            payload = self._http.get('/stock/profile2', {'symbol': symbol})
-        except PriceUnavailable:
-            return None
+        """The company profile, or None when the provider covers no such thing.
+
+        Two different facts, and they used to collapse into one None:
+
+        - the request failed -- a timeout, a 429, a bad gateway. That says
+          nothing about the symbol, so it RAISES and the caller asks again.
+        - the request succeeded and came back empty. The provider genuinely
+          has no profile for this symbol, and asking again in six hours will
+          get the same nothing. `/stock/profile2` does not cover ETFs, so
+          SPY, QQQ and DIA answer this way every time -- and because a caller
+          could not tell the two apart, they were retried forever, spending
+          slots that companies with a real profile were queueing for.
+        """
+        payload = self._http.get('/stock/profile2', {'symbol': symbol})
         if not payload:
             return None
 

@@ -12,6 +12,8 @@ import re
 from extensions import db
 from models import TickerUniverse
 
+from .prices import PriceUnavailable
+
 from .config import (FUNDS_PROMOTE_BARE_TOKENS, LARGE_CAP_FLOOR,
                      MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO, MID_CAP_FLOOR,
                      MIN_NAME_TOKEN_LEN, NAME_WORD_PATTERN, PENNY_PRICE,
@@ -260,12 +262,24 @@ def refresh_profiles(provider, symbols, now):
     """
     updated = 0
     for symbol in symbols:
-        profile = provider.profile(symbol)
-        if profile is None:
+        try:
+            profile = provider.profile(symbol)
+        except PriceUnavailable:
+            # We learned nothing. A timeout or a rate limit says nothing about
+            # whether this symbol has a profile, so the row is left untouched
+            # and asked again next run rather than stamped and left for a week.
             continue
 
         row = TickerUniverse.query.filter_by(symbol=symbol).one_or_none()
         if row is None:
+            continue
+
+        if profile is None:
+            # The provider answered and has nothing. Stamped, so the job stops
+            # asking every six hours forever -- ETFs are the common case and
+            # they will never answer. The existing cap, if any, is left alone:
+            # erasing it would move the ticker into Unknown.
+            row.profile_refreshed_at = now
             continue
 
         if profile.market_cap is not None:
