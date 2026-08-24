@@ -267,11 +267,24 @@ def refresh_volatility(now_utc, limit=SIGMA_LIMIT):
 
 
 def _profiles_due(now, limit):
-    """Board tickers whose profile is missing or has gone stale.
+    """Board tickers whose profile is missing or has gone stale, loudest first.
 
     Drawn from a wider slice of the board than `limit`, then filtered by age,
     so a settled board spends its calls on the arrivals that need them rather
     than re-asking about the same forty rows every six hours.
+
+    The ordering is the whole job. `_loud_tickers` ranks the pool by mention_z
+    and this used to throw that away: the eligible rows came back from a
+    `WHERE symbol IN (...)` with no ORDER BY, so the scan order decided who got
+    a profile. In practice that is symbol order, and with more eligible
+    tickers than `limit` the tail of the alphabet starved outright -- in
+    production on 2026-08-24 there were 167 eligible against a limit of 40, and
+    SPY, QQQ and TSLA had been losing the cut for three days while new arrivals
+    between A and N jumped the queue. Every one of them rendered as segment
+    Unknown the whole time, which is what put Tesla under the Small tab.
+
+    So the eligibility test stays in SQL and the ranking stays in Python, where
+    it cannot be dropped by a query planner.
     """
     from models import TickerUniverse
     candidates = _loud_tickers(now, limit * 5)
@@ -279,12 +292,11 @@ def _profiles_due(now, limit):
         return []
 
     cutoff = now.replace(tzinfo=None) - dt.timedelta(days=PROFILE_MAX_AGE_DAYS)
-    rows = (db.session.query(TickerUniverse.symbol)
-            .filter(TickerUniverse.symbol.in_(candidates),
-                    sa.or_(TickerUniverse.profile_refreshed_at.is_(None),
-                           TickerUniverse.profile_refreshed_at < cutoff))
-            .limit(limit).all())
-    return [symbol for (symbol,) in rows]
+    eligible = {symbol for (symbol,) in db.session.query(TickerUniverse.symbol)
+                .filter(TickerUniverse.symbol.in_(candidates),
+                        sa.or_(TickerUniverse.profile_refreshed_at.is_(None),
+                               TickerUniverse.profile_refreshed_at < cutoff))}
+    return [symbol for symbol in candidates if symbol in eligible][:limit]
 
 
 def refresh_profiles(now_utc, provider, limit=PROFILE_LIMIT):
