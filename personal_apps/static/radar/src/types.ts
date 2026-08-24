@@ -122,6 +122,12 @@ export interface Row {
   mention_z: number | null
   mentions: number
   expected: number
+  /** How many times its own normal this is. `null` where there is no baseline
+   *  worth dividing by -- the same guard that makes the phrase say "new here",
+   *  decided once in phrasing.py. The row draws its bar from this and never
+   *  from `mentions / expected`, which would be a second opinion about when a
+   *  baseline is thick enough to mean anything. */
+  ratio: number | null
   authors: number
   text_ratio: number
   sources: string[]

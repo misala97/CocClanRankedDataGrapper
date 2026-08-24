@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { divergence, move, segmentLabel, signed, sourceLabel, stampTime, zscore } from './format'
+import { UNKNOWN, dayStamp, divergence, exchangeLabel, move, rowPrice,
+         segmentLabel, signed, sourceLabel, stampTime, zscore } from './format'
 
 describe('an unknown never renders as a zero', () => {
   // The single rule PRODUCT.md is most insistent about. A row with no quote,
@@ -54,5 +55,41 @@ describe('the stamp', () => {
 
   it('does not crash on a malformed timestamp', () => {
     expect(stampTime('not a date')).toBe('—')
+  })
+})
+
+describe('the panel identity line', () => {
+  it('names the exchange rather than printing its code', () => {
+    /* The panel read `Q · large cap · $2.9T`. Q is a listing code, not a
+       thing a reader knows. */
+    expect(exchangeLabel('Q')).toBe('Nasdaq Global Select')
+    expect(exchangeLabel('S')).toBe('Nasdaq Capital Market')
+    expect(exchangeLabel('P')).toBe('NYSE Arca')
+  })
+
+  it('renders a code it has never seen rather than dropping it', () => {
+    expect(exchangeLabel('ZZ')).toBe('ZZ')
+    expect(exchangeLabel(null)).toBeNull()
+  })
+})
+
+describe('a date inside a sentence', () => {
+  it('is not the storage format', () => {
+    expect(dayStamp('2026-07-22')).toBe('22 Jul 2026')
+  })
+
+  it('is an unknown, not an empty string, when there is no date', () => {
+    expect(dayStamp(null)).toBe(UNKNOWN)
+  })
+})
+
+describe('the price under a ticker', () => {
+  it('says the exchange is shut rather than showing a live-looking number', () => {
+    expect(rowPrice(1.84, 'closed')).toBe('closed at $1.84')
+  })
+
+  it('separates no quote from a quote of zero', () => {
+    expect(rowPrice(null, 'ok')).toBe('no quote')
+    expect(rowPrice(0, 'ok')).toBe('$0.00')
   })
 })

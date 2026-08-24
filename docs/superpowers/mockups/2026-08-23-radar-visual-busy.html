@@ -1,0 +1,508 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Radar &mdash; visual pass, busy board</title>
+<style>
+:root{
+  --bg:oklch(0.988 0.002 290); --surface:oklch(0.970 0.004 290);
+  --raise:oklch(1 0 0); --rule:oklch(0.888 0.007 290);
+  --rule-soft:oklch(0.940 0.005 290);
+  --ink:oklch(0.230 0.021 285); --ink-2:oklch(0.395 0.018 285);
+  --muted:oklch(0.480 0.016 285);
+  --mark:oklch(0.470 0.185 296); --mark-hi:oklch(0.560 0.180 296);
+  --mark-soft:oklch(0.470 0.185 296/0.13); --mark-wash:oklch(0.470 0.185 296/0.07);
+  --up:oklch(0.470 0.130 150); --down:oklch(0.500 0.175 27);
+  --warn:oklch(0.480 0.110 65); --warn-soft:oklch(0.480 0.110 65/0.11);
+  --dim:oklch(0.545 0.012 285);
+
+  /* type: fixed px, ratio ~1.15. no clamp -- one desk, one DPI. */
+  --t-ax:10.5px; --t-xs:11.5px; --t-sm:13px; --t-md:13.5px;
+  --t-base:15px; --t-lg:17px; --t-xl:21px; --t-2xl:30px;
+
+  /* space */
+  --s1:4px; --s2:6px; --s3:8px; --s4:12px; --s5:16px; --s6:20px;
+  --s7:26px; --s8:34px; --s9:44px;
+
+  --r:8px; --r-pill:100px;
+  --ease:cubic-bezier(0.22,1,0.36,1); --fast:140ms; --base:200ms;
+  --z-sticky:10; --z-popover:30;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:oklch(0.178 0.014 288); --surface:oklch(0.216 0.016 288);
+  --raise:oklch(0.248 0.017 288); --rule:oklch(0.330 0.018 288);
+  --rule-soft:oklch(0.262 0.016 288);
+  --ink:oklch(0.952 0.006 290); --ink-2:oklch(0.800 0.012 290);
+  --muted:oklch(0.700 0.014 290);
+  --mark:oklch(0.760 0.150 296); --mark-hi:oklch(0.830 0.120 296);
+  --mark-soft:oklch(0.760 0.150 296/0.20); --mark-wash:oklch(0.760 0.150 296/0.11);
+  --up:oklch(0.760 0.150 150); --down:oklch(0.715 0.165 27);
+  --warn:oklch(0.800 0.115 70); --warn-soft:oklch(0.800 0.115 70/0.16);
+  --dim:oklch(0.605 0.014 288);
+}}
+:root[data-theme="dark"]{
+  --bg:oklch(0.178 0.014 288); --surface:oklch(0.216 0.016 288);
+  --raise:oklch(0.248 0.017 288); --rule:oklch(0.330 0.018 288);
+  --rule-soft:oklch(0.262 0.016 288);
+  --ink:oklch(0.952 0.006 290); --ink-2:oklch(0.800 0.012 290);
+  --muted:oklch(0.700 0.014 290);
+  --mark:oklch(0.760 0.150 296); --mark-hi:oklch(0.830 0.120 296);
+  --mark-soft:oklch(0.760 0.150 296/0.20); --mark-wash:oklch(0.760 0.150 296/0.11);
+  --up:oklch(0.760 0.150 150); --down:oklch(0.715 0.165 27);
+  --warn:oklch(0.800 0.115 70); --warn-soft:oklch(0.800 0.115 70/0.16);
+  --dim:oklch(0.605 0.014 288);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:var(--t-base); line-height:1.45; -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
+}
+
+/* ============ frame: two panes, each scrolling itself ====================
+   The old shell let the grid grow to the tallest child, so at 2700px of
+   posts the list header and its controls scrolled off the top -- which is
+   the entire reason the panel sits beside the list rather than under it. */
+.page{
+  display:grid; grid-template-columns:420px minmax(0,1fr);
+  height:100dvh; overflow:hidden;
+}
+.list{
+  border-right:1px solid var(--rule); background:var(--surface);
+  display:flex; flex-direction:column; min-width:0; min-height:0;
+}
+.detail{min-width:0; min-height:0; overflow-y:auto; padding:var(--s7) 32px 72px}
+
+/* ---------------------------------------------------------- list head --- */
+.lhead{padding:18px var(--s6) 14px}
+.brand{display:flex; align-items:baseline; gap:10px}
+.brand h1{margin:0; font-size:var(--t-lg); font-weight:700; letter-spacing:-0.015em}
+.brand .state{font-size:var(--t-xs); color:var(--muted)}
+.brand .state b{color:var(--warn); font-weight:600}
+.finding{
+  margin:9px 0 0; font-size:var(--t-md); line-height:1.55; color:var(--ink-2);
+  text-wrap:pretty;
+}
+.finding b{font-weight:600; color:var(--ink)}
+
+/* ---------------------------------------------------------- controls ----
+   A label gutter instead of a label line per group: four stacked headings
+   above four chip rows was 273px of furniture before the first ticker. */
+.ctl{
+  display:grid; grid-template-columns:56px minmax(0,1fr);
+  gap:var(--s3) 10px; align-items:start;
+  padding:var(--s4) var(--s6) 14px;
+  border-top:1px solid var(--rule); border-bottom:1px solid var(--rule);
+}
+.ctl .lbl{
+  padding-top:5px; font-size:var(--t-ax); letter-spacing:0.07em;
+  text-transform:uppercase; color:var(--muted); white-space:nowrap;
+}
+.seg{display:flex; flex-wrap:wrap; gap:var(--s1)}
+.chip{
+  font:inherit; font-size:12.5px; line-height:1.3;
+  display:inline-flex; align-items:baseline; gap:5px;
+  padding:3px 9px; border:1px solid transparent; border-radius:var(--r-pill);
+  background:transparent; color:var(--ink-2); cursor:pointer;
+  transition:background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.chip:hover{background:var(--rule-soft); color:var(--ink)}
+.chip:focus-visible{outline:2px solid var(--mark); outline-offset:1px}
+.chip .n{font-size:var(--t-xs); color:var(--muted)}
+.chip.on{background:var(--mark-soft); color:var(--mark); font-weight:600}
+.chip.on .n{color:var(--mark); opacity:0.75}
+.chip.nil,.chip.nil .n{color:var(--dim)}
+.chip .dot{
+  width:6px; height:6px; border-radius:50%; align-self:center; flex:none;
+  background:var(--rule);
+}
+.chip.on .dot{background:var(--mark)}
+
+/* ------------------------------------------------------------- rows -----
+   The bar under each row is how far above its own normal that ticker is,
+   scaled to the loudest row on the board. Excess over normal, not the ratio
+   itself: 1x is "no news", so it draws nothing. Every quantity it implies is
+   also in the phrase as words -- the bar is for the shape of the board. */
+/* A column, so the account of what was left out can fall to the bottom of
+   the pane on a two-row board instead of trailing off under the last row.
+   On a full board the rows overflow and it simply follows them. */
+.rows{overflow-y:auto; flex:1; min-height:0; display:flex; flex-direction:column}
+.row{
+  display:block; position:relative; text-decoration:none; color:inherit;
+  flex:none; padding:9px var(--s6) 16px;
+  border-bottom:1px solid var(--rule-soft);
+  transition:background var(--fast) var(--ease);
+}
+/* The scale is drawn as well as the mark. Bar alone, left-aligned under a
+   left-aligned meta line, read as an underline of that line; with its own
+   extent visible it reads as what it is -- a measure against the loudest
+   row on the board. */
+.row::before{
+  content:""; position:absolute; left:var(--s6); bottom:6px;
+  width:176px; height:5px;
+  border-bottom:1px solid var(--rule); border-right:1px solid var(--rule);
+}
+/* No baseline to measure against draws no scale. An empty track next to
+   six filled ones is the absence-as-zero mistake in one pixel. */
+.row.unmeasured::before,.row.unmeasured::after{content:none}
+.row::after{
+  content:""; position:absolute; left:var(--s6); bottom:7px; height:3px;
+  width:calc(176px * var(--mag,0)); background:var(--mark);
+}
+.row:hover{background:var(--mark-wash)}
+.row:focus-visible{outline:2px solid var(--mark); outline-offset:-2px}
+/* Selected takes the panel's own ground and punches a 1px hole through the
+   divider, so the row and the panel read as one continuous surface. */
+.row.on{background:var(--bg)}
+.row.on .r1::after{
+  content:""; position:absolute; top:-10px; bottom:-17px; right:-21px; width:1px;
+  background:var(--bg);
+}
+.row.on .r1{position:relative}
+.row.on .tk{color:var(--mark)}
+
+.r1{display:flex; align-items:baseline; gap:var(--s3); line-height:1.25}
+.tk{font-size:var(--t-lg); font-weight:700; letter-spacing:-0.01em}
+.nm{
+  flex:1; min-width:0; font-size:12.5px; color:var(--muted);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.spark{width:56px; height:17px; flex:none; fill:var(--mark); opacity:0.7}
+.row.on .spark{opacity:1}
+.phr{display:block; margin-top:var(--s1); font-size:var(--t-md);
+  line-height:1.4; color:var(--ink-2)}
+.phr .num{font-weight:650; color:var(--ink)}
+.phr .sep{color:var(--muted); opacity:0.5; margin:0 5px}
+.phr .up{color:var(--up); font-weight:650}
+.phr .down{color:var(--down); font-weight:650}
+.phr .warn{color:var(--warn)}
+.phr .new{color:var(--mark); font-weight:650}
+.meta{display:block; margin-top:3px; font-size:var(--t-xs); color:var(--muted)}
+.meta .mark{color:var(--warn)}
+
+.below{
+  margin:auto 0 0; padding:var(--s5) var(--s6) 22px;
+  border-top:1px solid var(--rule);
+  font-size:12.5px; line-height:1.6; color:var(--muted);
+  font-variant-numeric:normal;
+}
+.below b{color:var(--ink-2); font-weight:600}
+/* =========================================================== the panel === */
+
+.ident{display:flex; align-items:flex-start; gap:var(--s5); padding-bottom:18px}
+.ident h2{margin:0 0 var(--s2); font-size:var(--t-2xl); font-weight:700;
+  line-height:1; letter-spacing:-0.025em}
+.ident .full{font-size:var(--t-base); color:var(--ink-2)}
+.ident .facts{margin-top:7px; font-size:12.5px; color:var(--muted)}
+.px{margin-left:auto; text-align:right; flex:none}
+.px .v{font-size:26px; font-weight:650; line-height:1; letter-spacing:-0.02em}
+.px .mv{margin-top:var(--s2); font-size:var(--t-base); font-weight:650}
+.px .mv.up{color:var(--up)} .px .mv.down{color:var(--down)}
+.px .st{margin-top:var(--s1); font-size:var(--t-xs); color:var(--muted)}
+.px .st.shut,.px .st.warn{color:var(--warn); font-weight:600}
+
+/* The one block of prose on the page. Set at reading size and measure, not
+   at the size of a caption. */
+.read{
+  margin:0; padding:18px 0 0; border-top:1px solid var(--rule);
+  max-width:66ch; font-size:15.5px; line-height:1.65; color:var(--ink-2);
+  font-variant-numeric:normal; text-wrap:pretty;
+}
+.read b{font-weight:650; color:var(--ink); font-variant-numeric:tabular-nums}
+.read .warn{color:var(--warn); font-weight:600}
+
+/* Zones: a hairline opens each one, the heading sits under it. Not four
+   identical tracked-uppercase eyebrows down the page. */
+.zone{margin-top:var(--s8); border-top:1px solid var(--rule); padding-top:14px}
+.zh{
+  display:flex; align-items:baseline; gap:10px; margin:0 0 var(--s5);
+  font-size:var(--t-md); font-weight:600; color:var(--ink);
+}
+.zh .q{font-weight:400; font-size:12.5px; color:var(--muted)}
+.zh .spans{margin-left:auto; display:inline-flex; gap:3px}
+.zh .spans .chip{padding:2px 9px; font-size:12px}
+
+/* ------------------------------------------------------------- chart ---- */
+/* No card. The lane rules and the gutter carry it; a bordered box around a
+   chart is furniture drawn twice. */
+.plot{display:block; width:100%; height:300px}
+.plot .ax{font-size:var(--t-ax); fill:var(--muted); font-variant-numeric:tabular-nums}
+.legend{
+  display:flex; gap:var(--s6); margin-top:10px;
+  font-size:var(--t-xs); color:var(--muted);
+}
+.legend i{font-style:normal}
+.legend .key{
+  display:inline-block; width:9px; height:9px; border-radius:2px;
+  background:var(--mark); margin-right:6px;
+}
+.legend .key.line{height:2px; border-radius:0; background:var(--down); vertical-align:3px}
+
+/* --------------------------------------------------------- breakdown ---- */
+.bd{display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);
+  gap:var(--s9); align-items:start; max-width:790px}
+@media (max-width:1120px){.bd{grid-template-columns:minmax(0,1fr); gap:var(--s7)}}
+
+.sub{margin:0 0 10px; font-size:12.5px; color:var(--muted)}
+table{width:100%; border-collapse:collapse; font-size:var(--t-sm)}
+th{
+  padding:0 0 var(--s2); border-bottom:1px solid var(--rule);
+  text-align:left; font-size:var(--t-ax); font-weight:500;
+  letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);
+}
+td{padding:8px 0; border-bottom:1px solid var(--rule-soft)}
+td.venue{font-variant-numeric:normal; color:var(--ink)}
+th.r,td.r{text-align:right}
+td.r{color:var(--ink-2)}
+
+.plain{
+  margin:14px 0 0; font-size:12.5px; color:var(--muted);
+  font-variant-numeric:normal; text-wrap:pretty; max-width:52ch;
+}
+.plain b{color:var(--ink-2); font-weight:600; font-variant-numeric:tabular-nums}
+.wording{
+  display:flex; gap:var(--s6); flex-wrap:wrap; margin:14px 0 0;
+  font-size:var(--t-sm); color:var(--ink-2);
+}
+.wording b{font-weight:650; color:var(--ink)}
+.wording .q{color:var(--muted)}
+.wording .q b{color:var(--ink-2)}
+
+.stat{
+  display:flex; justify-content:space-between; align-items:baseline; gap:var(--s4);
+  padding:8px 0; border-bottom:1px solid var(--rule-soft); font-size:var(--t-sm);
+}
+.stat .k{color:var(--muted); font-variant-numeric:normal}
+.stat .v{font-weight:600; color:var(--ink)}
+.stat.hot{border-bottom-color:var(--rule)}
+.stat.hot .k{color:var(--ink-2)}
+.stat.hot .v{color:var(--warn)}
+.note{
+  margin:14px 0 0; font-size:12px; line-height:1.5; color:var(--muted);
+  font-variant-numeric:normal; max-width:44ch;
+}
+
+/* ------------------------------------------------------------- posts ---- */
+/* The panel narrows as it goes: chart full width, breakdown 790,
+   posts a reading column. The zone rules stay full width, so the
+   space to the right reads as margin rather than as a gap. */
+/* The pointer at the two controls that widen the net. Its own line, so
+   the account of what was excluded reads as a fact and the suggestion
+   reads as a suggestion. */
+.pointer{display:block; margin-top:9px}
+
+.posts{list-style:none; margin:0; padding:0; max-width:660px}
+.post{padding:14px 0 15px; border-bottom:1px solid var(--rule-soft)}
+.phead{display:flex; align-items:baseline; gap:10px; font-size:var(--t-xs)}
+/* The venue tag stays neutral. Violet is chatter and selection; a violet
+   badge on every post would spend the accent on a label. */
+.src{
+  min-width:66px; text-align:center;
+  font-size:var(--t-ax); font-weight:600; letter-spacing:0.05em;
+  text-transform:uppercase; color:var(--ink-2);
+  background:var(--rule-soft); padding:2px 7px; border-radius:4px;
+}
+.who{color:var(--ink-2); font-weight:500}
+.when{color:var(--muted)}
+.out{margin-left:auto; color:var(--muted); text-decoration:none}
+.out:hover{color:var(--mark); text-decoration:underline}
+.post p{
+  margin:7px 0 0; font-size:14px; line-height:1.58;
+  color:var(--ink-2); font-variant-numeric:normal; overflow-wrap:anywhere;
+}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:0.01ms !important;
+    animation-duration:0.01ms !important; animation-iteration-count:1 !important}
+}
+
+</style>
+
+<div class="page">
+  <aside class="list">
+    <div class="lhead">
+      <div class="brand"><h1>Radar</h1>
+        <span class="state">15:08 UTC &middot; market open</span></div>
+      <p class="finding"><b>7 tickers</b> above their normal in the last
+        <b>4h</b> &middot; baselines over 30 days</p>
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Segment</span>
+      <div class="seg"><button class="chip on">Small<span class="n">7</span></button><button class="chip ">All<span class="n">24</span></button><button class="chip ">Large<span class="n">3</span></button><button class="chip ">Mid<span class="n">14</span></button><button class="chip ">Micro<span class="n">6</span></button><button class="chip nil">Recent IPO<span class="n">0</span></button><button class="chip ">Unknown<span class="n">1</span></button></div>
+      <span class="lbl">Sources</span>
+      <div class="seg"><button class="chip on"><span class="dot"></span>Bluesky<span class="n">21</span></button><button class="chip on"><span class="dot"></span>4chan /biz/<span class="n">6</span></button><button class="chip nil"><span class="dot"></span>StockTwits<span class="n">0</span></button></div>
+      <span class="lbl">Venues</span>
+      <div class="seg"><button class="chip on">any<span class="n">24</span></button><button class="chip ">2+<span class="n">9</span></button></div>
+      <span class="lbl">Score</span>
+      <div class="seg"><button class="chip ">1h</button><button class="chip on">4h</button><button class="chip ">24h</button></div>
+    </div>
+
+    <div class="rows">
+      <a class="row on" href="?t=HOWL" style="--mag:0.780" aria-current="true">
+        <span class="r1"><span class="tk">HOWL</span>
+          <span class="nm">Werewolf Therapeutics</span><svg class="spark" viewBox="0 0 56 17" aria-hidden="true" preserveAspectRatio="none"><rect x="0.0" y="16.0" width="5.1" height="1.0"/><rect x="6.2" y="16.0" width="5.1" height="1.0"/><rect x="12.4" y="16.0" width="5.1" height="1.0"/><rect x="18.7" y="16.0" width="5.1" height="1.0"/><rect x="24.9" y="16.0" width="5.1" height="1.0"/><rect x="31.1" y="15.7" width="5.1" height="1.3"/><rect x="37.3" y="14.0" width="5.1" height="3.0"/><rect x="43.6" y="9.3" width="5.1" height="7.7"/><rect x="49.8" y="0.0" width="5.1" height="17.0"/></svg></span>
+        <span class="phr"><span class="num">40&times;</span> its normal<span class="sep">&middot;</span><span class="num">2</span> venues<span class="sep">&middot;</span><span class="num">11</span> people<span class="sep">&middot;</span>price <span class="up">+18%</span></span>
+        <span class="meta">micro &middot; $0.31 &middot; <span class="mark">provisional</span></span>
+      </a>
+      <a class="row" href="?t=SBFM" style="--mag:0.340">
+        <span class="r1"><span class="tk">SBFM</span>
+          <span class="nm">Sunshine Biopharma</span><svg class="spark" viewBox="0 0 56 17" aria-hidden="true" preserveAspectRatio="none"><rect x="0.0" y="15.0" width="5.1" height="2.0"/><rect x="6.2" y="16.0" width="5.1" height="1.0"/><rect x="12.4" y="14.0" width="5.1" height="3.0"/><rect x="18.7" y="15.0" width="5.1" height="2.0"/><rect x="24.9" y="13.0" width="5.1" height="4.0"/><rect x="31.1" y="10.0" width="5.1" height="7.0"/><rect x="37.3" y="8.0" width="5.1" height="9.0"/><rect x="43.6" y="3.0" width="5.1" height="14.0"/><rect x="49.8" y="0.0" width="5.1" height="17.0"/></svg></span>
+        <span class="phr"><span class="num">18&times;</span> its normal<span class="sep">&middot;</span><span class="num">2</span> venues<span class="sep">&middot;</span><span class="num">7</span> people<span class="sep">&middot;</span>price <span class="up">+4%</span></span>
+        <span class="meta">micro &middot; $1.84</span>
+      </a>
+      <a class="row unmeasured" href="?t=GRML" style="--mag:0.000">
+        <span class="r1"><span class="tk">GRML</span>
+          <span class="nm">Greenland Acquisition Holdings</span><svg class="spark" viewBox="0 0 56 17" aria-hidden="true" preserveAspectRatio="none"><rect x="0.0" y="16.0" width="5.1" height="1.0"/><rect x="6.2" y="16.0" width="5.1" height="1.0"/><rect x="12.4" y="16.0" width="5.1" height="1.0"/><rect x="18.7" y="16.0" width="5.1" height="1.0"/><rect x="24.9" y="16.0" width="5.1" height="1.0"/><rect x="31.1" y="16.0" width="5.1" height="1.0"/><rect x="37.3" y="15.5" width="5.1" height="1.5"/><rect x="43.6" y="12.8" width="5.1" height="4.2"/><rect x="49.8" y="0.0" width="5.1" height="17.0"/></svg></span>
+        <span class="phr"><span class="new">new here</span> &mdash; 209 mentions, nothing to compare against yet</span>
+        <span class="meta">unknown &middot; no quote</span>
+      </a>
+      <a class="row" href="?t=HTOO" style="--mag:0.220">
+        <span class="r1"><span class="tk">HTOO</span>
+          <span class="nm">Fusion Fuel Green</span><svg class="spark" viewBox="0 0 56 17" aria-hidden="true" preserveAspectRatio="none"><rect x="0.0" y="15.8" width="5.1" height="1.2"/><rect x="6.2" y="15.8" width="5.1" height="1.2"/><rect x="12.4" y="14.0" width="5.1" height="3.0"/><rect x="18.7" y="15.8" width="5.1" height="1.2"/><rect x="24.9" y="12.8" width="5.1" height="4.2"/><rect x="31.1" y="14.0" width="5.1" height="3.0"/><rect x="37.3" y="4.9" width="5.1" height="12.1"/><rect x="43.6" y="0.0" width="5.1" height="17.0"/><rect x="49.8" y="3.6" width="5.1" height="13.4"/></svg></span>
+        <span class="phr"><span class="num">12&times;</span> its normal <span class="warn">but one channel, 2 voices</span></span>
+        <span class="meta">micro &middot; $0.94 &middot; <span class="mark">single-source</span></span>
+      </a>
+      <a class="row" href="?t=SACH" style="--mag:0.100">
+        <span class="r1"><span class="tk">SACH</span>
+          <span class="nm">Sachem Capital</span><svg class="spark" viewBox="0 0 56 17" aria-hidden="true" preserveAspectRatio="none"><rect x="0.0" y="9.4" width="5.1" height="7.6"/><rect x="6.2" y="11.3" width="5.1" height="5.7"/><rect x="12.4" y="7.6" width="5.1" height="9.4"/><rect x="18.7" y="9.4" width="5.1" height="7.6"/><rect x="24.9" y="5.7" width="5.1" height="11.3"/><rect x="31.1" y="7.6" width="5.1" height="9.4"/><rect x="37.3" y="3.8" width="5.1" height="13.2"/><rect x="43.6" y="0.0" width="5.1" height="17.0"/><rect x="49.8" y="1.9" width="5.1" height="15.1"/></svg></span>
+        <span class="phr"><span class="num">6&times;</span> its normal<span class="sep">&middot;</span><span class="num">2</span> venues<span class="sep">&middot;</span><span class="num">5</span> people<span class="sep">&middot;</span>price <span class="down">&minus;3%</span></span>
+        <span class="meta">micro &middot; $2.11</span>
+      </a>
+      <a class="row" href="?t=NVDA" style="--mag:0.060">
+        <span class="r1"><span class="tk">NVDA</span>
+          <span class="nm">NVIDIA Corporation</span><svg class="spark" viewBox="0 0 56 17" aria-hidden="true" preserveAspectRatio="none"><rect x="0.0" y="10.4" width="5.1" height="6.6"/><rect x="6.2" y="9.4" width="5.1" height="7.6"/><rect x="12.4" y="11.3" width="5.1" height="5.7"/><rect x="18.7" y="8.5" width="5.1" height="8.5"/><rect x="24.9" y="10.4" width="5.1" height="6.6"/><rect x="31.1" y="8.5" width="5.1" height="8.5"/><rect x="37.3" y="4.7" width="5.1" height="12.3"/><rect x="43.6" y="1.9" width="5.1" height="15.1"/><rect x="49.8" y="0.0" width="5.1" height="17.0"/></svg></span>
+        <span class="phr"><span class="num">4&times;</span> its normal<span class="sep">&middot;</span><span class="num">2</span> venues<span class="sep">&middot;</span><span class="num">26</span> people<span class="sep">&middot;</span>price <span class="up">+1%</span></span>
+        <span class="meta">large &middot; $184.20</span>
+      </a>
+      <a class="row" href="?t=ATNF" style="--mag:0.040">
+        <span class="r1"><span class="tk">ATNF</span>
+          <span class="nm">180 Life Sciences</span><svg class="spark" viewBox="0 0 56 17" aria-hidden="true" preserveAspectRatio="none"><rect x="0.0" y="11.3" width="5.1" height="5.7"/><rect x="6.2" y="14.2" width="5.1" height="2.8"/><rect x="12.4" y="11.3" width="5.1" height="5.7"/><rect x="18.7" y="8.5" width="5.1" height="8.5"/><rect x="24.9" y="11.3" width="5.1" height="5.7"/><rect x="31.1" y="8.5" width="5.1" height="8.5"/><rect x="37.3" y="5.7" width="5.1" height="11.3"/><rect x="43.6" y="2.8" width="5.1" height="14.2"/><rect x="49.8" y="0.0" width="5.1" height="17.0"/></svg></span>
+        <span class="phr"><span class="num">3&times;</span> its normal <span class="warn">&middot; one venue only</span></span>
+        <span class="meta">micro &middot; $0.44</span>
+      </a>
+      <p class="below"><b>17 other tickers</b> were mentioned in this window
+        and are not listed: 9 came from a single voice, 6 from one venue only,
+        and 2 were mentioned only once or twice. Widen the window, or switch
+        to <b>All</b>, to see more.</p>
+    </div>
+  </aside>
+
+  <main class="detail">
+    <div class="ident">
+      <div>
+        <h2>HOWL</h2>
+        <div class="full">Werewolf Therapeutics, Inc. &mdash; Common Stock</div>
+        <div class="facts">NASDAQ &middot; micro cap &middot; $110M &middot;
+          IPO Apr 2021 &middot; first seen on the radar 2 days ago</div>
+      </div>
+      <div class="px">
+        <div class="v">$0.31</div>
+        <div class="mv up">+18.2%</div>
+        <div class="st">last trade 15:07 UTC</div>
+      </div>
+    </div>
+
+    <p class="read">
+      <b>284 mentions in the last 4 hours, about 40&times; this ticker&rsquo;s
+      own normal</b> of 7. Eleven distinct people across three venues, so this
+      is not one account repeating itself. The price moved <b>+18.2%</b> over
+      the same window, which means the talk and the tape agree &mdash; chatter
+      is following a move rather than preceding one.
+      <span class="warn">The baseline is 2 days old, not 30</span>, so
+      &ldquo;40&times; normal&rdquo; rests on very little history and could
+      shrink as more is gathered.
+    </p>
+
+    <section class="zone">
+      <h3 class="zh">Price and chatter
+        <span class="q">daily closes &middot; mentions per day</span>
+        <span class="spans"><button class="chip ">1M</button><button class="chip ">6M</button><button class="chip on">1Y</button><button class="chip ">3Y</button></span>
+      </h3>
+      <svg class="plot" viewBox="0 0 912 300" role="img"
+     aria-label="price with chatter beneath, on one shared axis">
+  <line x1="213.7" y1="8" x2="213.7" y2="190" stroke="var(--rule-soft)" stroke-width="1" vector-effect="non-scaling-stroke"/><text class="ax" x="213.7" y="292" text-anchor="middle">Nov</text><line x1="427.5" y1="8" x2="427.5" y2="190" stroke="var(--rule-soft)" stroke-width="1" vector-effect="non-scaling-stroke"/><text class="ax" x="427.5" y="292" text-anchor="middle">Feb</text><line x1="638.9" y1="8" x2="638.9" y2="190" stroke="var(--rule-soft)" stroke-width="1" vector-effect="non-scaling-stroke"/><text class="ax" x="638.9" y="292" text-anchor="middle">May</text><line x1="0" y1="190" x2="848" y2="190" stroke="var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/><path d="M0.0,145.4 L2.3,141.7 L4.6,142.5 L7.0,143.9 L9.3,149.1 L11.6,149.8 L13.9,142.6 L16.3,139.4 L18.6,132.2 L20.9,130.0 L23.2,126.8 L25.6,125.0 L27.9,135.5 L30.2,129.4 L32.5,125.5 L34.8,121.5 L37.2,132.4 L39.5,143.1 L41.8,148.1 L44.1,150.3 L46.5,147.9 L48.8,147.7 L51.1,143.9 L53.4,147.3 L55.8,144.9 L58.1,141.9 L60.4,145.4 L62.7,134.3 L65.1,130.2 L67.4,121.7 L69.7,125.3 L72.0,129.6 L74.3,131.3 L76.7,131.4 L79.0,126.6 L81.3,124.4 L83.6,126.7 L86.0,132.5 L88.3,135.3 L90.6,126.8 L92.9,131.6 L95.3,129.4 L97.6,126.0 L99.9,135.3 L102.2,134.4 L104.5,125.4 L106.9,138.2 L109.2,139.7 L111.5,139.8 L113.8,144.3 L116.2,140.7 L118.5,140.5 L120.8,149.1 L123.1,143.5 L125.5,138.8 L127.8,132.3 L130.1,122.3 L132.4,119.2 L134.8,117.8 L137.1,126.1 L139.4,121.4 L141.7,124.9 L144.0,127.3 L146.4,135.1 L148.7,140.7 L151.0,143.4 L153.3,134.9 L155.7,147.4 L158.0,155.6 L160.3,153.7 L162.6,144.6 L165.0,140.5 L167.3,151.8 L169.6,166.3 L171.9,163.8 L174.2,167.4 L176.6,173.0 L178.9,167.3 L181.2,160.7 L183.5,159.3 L185.9,157.4 L188.2,154.3 L190.5,144.4 L192.8,140.0 L195.2,136.2 L197.5,132.1 L199.8,141.7 L202.1,133.1 L204.4,126.3 L206.8,122.2 L209.1,134.9 L211.4,138.4 L213.7,132.5 L216.1,143.6 L218.4,144.2 L220.7,137.3 L223.0,145.1 L225.4,134.6 L227.7,130.5 L230.0,130.9 L232.3,128.1 L234.7,123.2 L237.0,121.8 L239.3,113.4 L241.6,117.4 L243.9,119.6 L246.3,111.8 L248.6,111.0 L250.9,116.6 L253.2,109.4 L255.6,98.2 L257.9,100.9 L260.2,110.3 L262.5,110.6 L264.9,111.0 L267.2,112.5 L269.5,101.9 L271.8,108.8 L274.1,59.4 L276.5,69.4 L278.8,76.8 L281.1,72.5 L283.4,64.2 L285.8,57.9 L288.1,55.8 L290.4,55.5 L292.7,55.2 L295.1,51.1 L297.4,53.6 L299.7,52.1 L302.0,48.0 L304.4,49.0 L306.7,43.2 L309.0,39.1 L311.3,21.7 L313.6,19.6 L316.0,24.8 L318.3,29.4 L320.6,30.5 L322.9,22.8 L325.3,27.1 L327.6,24.5 L329.9,8.0 L332.2,34.6 L334.6,46.0 L336.9,44.8 L339.2,42.2 L341.5,41.0 L343.8,45.9 L346.2,41.0 L348.5,39.4 L350.8,45.1 L353.1,24.4 L355.5,22.0 L357.8,28.4 L360.1,30.3 L362.4,33.4 L364.8,35.0 L367.1,61.1 L369.4,66.2 L371.7,58.6 L374.0,69.5 L376.4,71.0 L378.7,64.0 L381.0,57.7 L383.3,45.9 L385.7,62.0 L388.0,65.9 L390.3,69.6 L392.6,65.4 L395.0,57.1 L397.3,81.1 L399.6,73.3 L401.9,86.0 L404.3,81.5 L406.6,94.2 L408.9,93.7 L411.2,85.4 L413.5,87.4 L415.9,86.8 L418.2,81.4 L420.5,81.1 L422.8,82.7 L425.2,71.4 L427.5,63.7 L429.8,67.1 L432.1,45.2 L434.5,56.4 L436.8,49.4 L439.1,52.7 L441.4,52.5 L443.7,47.2 L446.1,46.2 L448.4,41.5 L450.7,56.3 L453.0,70.2 L455.4,66.0 L457.7,75.0 L460.0,84.1 L462.3,96.5 L464.7,87.8 L467.0,82.9 L469.3,72.1 L471.6,80.7 L474.0,81.5 L476.3,91.4 L478.6,86.3 L480.9,74.8 L483.2,82.9 L485.6,71.4 L487.9,64.2 L490.2,66.6 L492.5,83.9 L494.9,73.7 L497.2,75.4 L499.5,81.1 L501.8,78.8 L504.2,76.4 L506.5,65.2 L508.8,74.6 L511.1,66.3 L513.4,54.8 L515.8,43.1 L518.1,45.7 L520.4,53.3 L522.7,45.4 L525.1,45.3 L527.4,45.1 L529.7,33.4 L532.0,36.8 L534.4,58.8 L536.7,63.1 L539.0,79.6 L541.3,73.9 L543.6,72.2 L546.0,78.1 L548.3,79.0 L550.6,73.2 L552.9,73.5 L555.3,63.5 L557.6,65.0 L559.9,57.1 L562.2,45.2 L564.6,31.8 L566.9,39.1 L569.2,32.0 L571.5,50.5 L573.9,60.9 L576.2,78.5 L578.5,70.8 L580.8,81.8 L583.1,82.8 L585.5,85.1 L587.8,86.2 L590.1,91.6 L592.4,90.7 L594.8,77.8 L597.1,78.3 L599.4,74.9 L601.7,67.6 L604.1,70.2 L606.4,81.4 L608.7,86.7 L611.0,79.2 L613.3,93.1 L615.7,98.5 L618.0,91.8 L620.3,86.6 L622.6,87.3 L625.0,81.9 L627.3,81.5 L629.6,91.7 L631.9,104.4 L634.3,109.8 L636.6,104.0 L638.9,108.9 L641.2,116.1 L643.6,122.2 L645.9,133.3 L648.2,134.8 L650.5,143.1 L652.8,141.5 L655.2,156.9 L657.5,155.6 L659.8,160.0 L662.1,171.7 L664.5,168.3 L666.8,170.4 L669.1,183.1 L671.4,188.1 L673.8,187.2 L676.1,190.0 L678.4,186.7 L680.7,183.5 L683.0,180.7 L685.4,179.6 L687.7,173.2 L690.0,170.3 L692.3,168.4 L694.7,180.4 L697.0,176.4 L699.3,170.0 L701.6,172.2 L704.0,175.3 L706.3,165.6 L708.6,176.0 L710.9,174.1 L713.2,161.8 L715.6,167.6 L717.9,164.4 L720.2,154.5 L722.5,155.8 L724.9,153.2 L727.2,148.5 L729.5,154.6 L731.8,155.7 L734.2,154.7 L736.5,150.4 L738.8,151.3 L741.1,153.1 L743.5,159.7 L745.8,162.4 L748.1,158.0 L750.4,158.0 L752.7,163.5 L755.1,168.9 L757.4,154.9 L759.7,148.8 L762.0,145.6 L764.4,162.1 L766.7,159.2 L769.0,157.1 L771.3,147.9 L773.7,146.0 L776.0,147.1 L778.3,144.5 L780.6,157.2 L782.9,151.8 L785.3,150.5 L787.6,155.3 L789.9,148.2 L792.2,137.9 L794.6,147.5 L796.9,152.2 L799.2,151.1 L801.5,150.6 L803.9,153.7 L806.2,160.0 L808.5,148.5 L810.8,142.9 L813.2,151.0 L815.5,159.6 L817.8,150.5 L820.1,145.2 L822.4,134.7 L824.8,130.2 L827.1,136.6 L829.4,135.6 L831.7,150.1 L834.1,155.3 L836.4,156.2 L838.7,153.8 L841.0,158.7 L843.4,160.1 L845.7,158.1 L848.0,120.5" fill="none" stroke="var(--down)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/><circle cx="848.0" cy="120.5" r="3.2" fill="var(--down)"/><line x1="848" y1="8.0" x2="854" y2="8.0" stroke="var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/><text class="ax" x="860" y="11.5">$0.45</text><line x1="848" y1="190.0" x2="854" y2="190.0" stroke="var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/><text class="ax" x="860" y="193.5">$0.22</text><line x1="0" y1="272" x2="827.1" y2="272" stroke="var(--rule)" stroke-width="1" stroke-dasharray="2 4" vector-effect="non-scaling-stroke"/><text class="ax" x="817.1" y="240.0" text-anchor="end">nothing observed before 21 Aug</text><line x1="827.1" y1="214" x2="827.1" y2="272" stroke="var(--mark)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/><line x1="827.1" y1="272" x2="848" y2="272" stroke="var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/><rect x="827.1" y="270.5" width="1.9" height="1.5" fill="var(--mark)"/><rect x="829.5" y="270.5" width="1.9" height="1.5" fill="var(--mark)"/><rect x="831.8" y="270.5" width="1.9" height="1.5" fill="var(--mark)"/><rect x="834.1" y="269.5" width="1.9" height="2.5" fill="var(--mark)"/><rect x="836.4" y="265.9" width="1.9" height="6.1" fill="var(--mark)"/><rect x="838.7" y="260.6" width="1.9" height="11.4" fill="var(--mark)"/><rect x="841.0" y="247.6" width="1.9" height="24.4" fill="var(--mark)"/><rect x="843.4" y="229.3" width="1.9" height="42.7" fill="var(--mark)"/><rect x="845.7" y="214.0" width="1.9" height="58.0" fill="var(--mark)"/><line x1="848" y1="214" x2="854" y2="214" stroke="var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/><text class="ax" x="860" y="217.5">209/d</text><text class="ax" x="0" y="292">Aug 2025</text><text class="ax" x="848" y="292" text-anchor="end">today</text>
+</svg>
+      <div class="legend">
+        <i><span class="key line"></span>price &middot; fell 29% over the year</i>
+        <i><span class="key"></span>chatter &middot; peak 209 in a day</i>
+      </div>
+    </section>
+
+    <section class="zone">
+      <h3 class="zh">Chatter breakdown <span class="q">&middot; last 4 hours</span></h3>
+      <div class="bd">
+        <div>
+          <table>
+            <thead><tr><th>Venue</th><th class="r">Mentions</th>
+              <th class="r">Voices</th><th class="r">Share</th></tr></thead>
+            <tbody>
+              <tr><td class="venue">Bluesky</td><td class="r">213</td>
+                <td class="r">9</td><td class="r">75%</td></tr>
+              <tr><td class="venue">4chan /biz/</td><td class="r">71</td>
+                <td class="r">2</td><td class="r">25%</td></tr>
+            </tbody>
+          </table>
+          <p class="wording"><span><b>130</b> bullish</span>
+            <span><b>43</b> bearish</span>
+            <span class="q"><b>111</b> carried no wording at all</span></p>
+          <p class="plain">Peak hour <b>14:00</b> at <b>209</b> mentions
+            &middot; <b>11</b> distinct voices &middot; first ever seen on
+            <b>21 Aug 2026</b></p>
+        </div>
+        <div>
+          <p class="sub">How concentrated it is</p>
+          <div class="stat hot"><span class="k">Loudest account&rsquo;s share</span>
+            <span class="v">31%</span></div>
+          <div class="stat hot"><span class="k">Top two accounts</span>
+            <span class="v">44%</span></div>
+          <p class="note">Nearly a third of this came from one account. Two
+            hundred mentions from eleven people is a different fact than two
+            hundred from two hundred.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="zone">
+      <h3 class="zh">What people are saying
+        <span class="q">&middot; 284 posts, newest first</span></h3>
+      <ul class="posts">
+        <li class="post">
+          <div class="phead"><span class="src">bluesky</span>
+            <span class="who">@quietalpha</span>
+            <time class="when">14:52</time>
+            <a class="out" href="#">open ↗</a></div>
+          <p>HOWL up 40% premarket on the phase 2 readout. thin float, 11M shares. this is the kind of thing that gaps and then gives it all back by noon.</p>
+        </li>
+        <li class="post">
+          <div class="phead"><span class="src">4chan /biz/</span>
+            <span class="who">/biz/</span>
+            <time class="when">14:48</time>
+            <a class="out" href="#">open ↗</a></div>
+          <p>anyone in HOWL? saw the PR this morning. biotech penny with actual data for once</p>
+        </li>
+        <li class="post">
+          <div class="phead"><span class="src">bluesky</span>
+            <span class="who">@marketjanitor</span>
+            <time class="when">14:31</time>
+            <a class="out" href="#">open ↗</a></div>
+          <p>Werewolf Therapeutics (HOWL) — the readout is real but read the secondary endpoints before you get excited. dilution risk is the story here, they have two quarters of cash.</p>
+        </li>
+        <li class="post">
+          <div class="phead"><span class="src">bluesky</span>
+            <span class="who">@smallcapdaily</span>
+            <time class="when">14:20</time>
+            <a class="out" href="#">open ↗</a></div>
+          <p>$HOWL next 10 bagger dont miss this one</p>
+        </li>
+        <li class="post">
+          <div class="phead"><span class="src">bluesky</span>
+            <span class="who">@quietalpha</span>
+            <time class="when">13:58</time>
+            <a class="out" href="#">open ↗</a></div>
+          <p>watching HOWL. volume is 9x the 30 day average and it is only 10am.</p>
+        </li>
+      </ul>
+    </section>
+  </main>
+</div>

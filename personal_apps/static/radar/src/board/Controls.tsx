@@ -36,79 +36,75 @@ export function Controls({ payload, selection, busy, onChange }: {
   }
 
   return (
+    // Label and chip row are siblings, not a wrapped pair: the controls are a
+    // two-column grid whose left column is a label gutter. Each label sits
+    // beside its own chips, so a group can wrap without its label drifting
+    // next to another group's -- which is what a single inline flow did.
     <div className="controls" aria-busy={busy}>
-      <div className="group">
-        <span className="lbl" id="seg-lbl">Segment</span>
-        <div className="seg" role="group" aria-labelledby="seg-lbl">
-          {/* Every slot, always, in one order.
-              Chips used to be dropped at a count of zero, on the reasoning
-              that a dead chip is clutter. What it produced was a strip that
-              changed shape between loads, so things moved under the cursor --
-              Michi, 2026-08-23: "the settings are bad and switch around".
-              A dimmed zero is information. A missing chip is a moving
-              target. */}
-          {SEGMENT_ORDER.map((key) => {
-            const value = key === 'all' ? null : (key as SegmentFilter)
-            const active = selection.segment === value
-            const count = counts[key] ?? 0
-            return (
-              <button key={key} type="button" aria-pressed={active}
-                      className={count ? undefined : 'nil'}
-                      onClick={() => onChange({ ...selection, segment: value })}>
-                {segmentLabel(key)}
-                <span className="n">{count}</span>
-              </button>
-            )
-          })}
-        </div>
+      <span className="lbl" id="seg-lbl">Segment</span>
+      <div className="seg" role="group" aria-labelledby="seg-lbl">
+        {/* Every slot, always, in one order.
+            Chips used to be dropped at a count of zero, on the reasoning
+            that a dead chip is clutter. What it produced was a strip that
+            changed shape between loads, so things moved under the cursor --
+            Michi, 2026-08-23: "the settings are bad and switch around".
+            A dimmed zero is information. A missing chip is a moving
+            target. */}
+        {SEGMENT_ORDER.map((key) => {
+          const value = key === 'all' ? null : (key as SegmentFilter)
+          const active = selection.segment === value
+          const count = counts[key] ?? 0
+          return (
+            <button key={key} type="button" aria-pressed={active}
+                    className={count ? undefined : 'nil'}
+                    onClick={() => onChange({ ...selection, segment: value })}>
+              {segmentLabel(key)}
+              <span className="n">{count}</span>
+            </button>
+          )
+        })}
       </div>
 
-      <div className="group">
-        <span className="lbl" id="src-lbl">Sources</span>
-        <div className="seg" role="group" aria-labelledby="src-lbl">
-          {payload.all_sources.map((name) => {
-            const on = selection.sources.includes(name)
-            const last = on && selection.sources.length === 1
-            return (
-              <button key={name} type="button" className="chip" aria-pressed={on}
-                      disabled={last}
-                      title={last ? 'At least one source has to stay on' : undefined}
-                      onClick={() => toggleSource(name)}>
-                <span className="dot" />
-                {sourceLabel(name)}
-              </button>
-            )
-          })}
-        </div>
+      <span className="lbl" id="src-lbl">Sources</span>
+      <div className="seg" role="group" aria-labelledby="src-lbl">
+        {payload.all_sources.map((name) => {
+          const on = selection.sources.includes(name)
+          const last = on && selection.sources.length === 1
+          return (
+            <button key={name} type="button" className="chip" aria-pressed={on}
+                    disabled={last}
+                    title={last ? 'At least one source has to stay on' : undefined}
+                    onClick={() => toggleSource(name)}>
+              <span className="dot" />
+              {sourceLabel(name)}
+            </button>
+          )
+        })}
       </div>
 
       {/* Breadth. Server-side: it changes which rows exist, so it refetches
           the way Segment does. */}
-      <div className="group">
-        <span className="lbl" id="venues-lbl">Venues</span>
-        <div className="seg" role="group" aria-labelledby="venues-lbl">
-          <button type="button" aria-pressed={selection.minVenues === 1}
-                  onClick={() => onChange({ ...selection, minVenues: 1 })}>
-            any <span className="n">{payload.venue_counts.any ?? 0}</span>
-          </button>
-          <button type="button" aria-pressed={selection.minVenues === 2}
-                  onClick={() => onChange({ ...selection, minVenues: 2 })}>
-            2+ <span className="n">{payload.venue_counts.multi ?? 0}</span>
-          </button>
-        </div>
+      <span className="lbl" id="venues-lbl">Venues</span>
+      <div className="seg" role="group" aria-labelledby="venues-lbl">
+        <button type="button" aria-pressed={selection.minVenues === 1}
+                onClick={() => onChange({ ...selection, minVenues: 1 })}>
+          any <span className="n">{payload.venue_counts.any ?? 0}</span>
+        </button>
+        <button type="button" aria-pressed={selection.minVenues === 2}
+                onClick={() => onChange({ ...selection, minVenues: 2 })}>
+          2+ <span className="n">{payload.venue_counts.multi ?? 0}</span>
+        </button>
       </div>
 
-      <div className="group">
-        <span className="lbl" id="score-lbl">Score</span>
-        <div className="seg" role="group" aria-labelledby="score-lbl">
-          {WINDOWS.map((hours) => (
-            <button key={hours} type="button"
-                    aria-pressed={selection.window === hours}
-                    onClick={() => onChange({ ...selection, window: hours })}>
-              {hours}h
-            </button>
-          ))}
-        </div>
+      <span className="lbl" id="score-lbl">Score</span>
+      <div className="seg" role="group" aria-labelledby="score-lbl">
+        {WINDOWS.map((hours) => (
+          <button key={hours} type="button"
+                  aria-pressed={selection.window === hours}
+                  onClick={() => onChange({ ...selection, window: hours })}>
+            {hours}h
+          </button>
+        ))}
       </div>
 
       {/* The chart span used to sit here. It belongs to the panel now: it

@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { PriceChart } from './PriceChart'
+import { PLOT_R, PriceChart } from './PriceChart'
 import type { DetailChart } from '../types'
 
 const chart = (over: Partial<DetailChart> = {}): DetailChart => ({
@@ -108,7 +108,10 @@ describe('the panel chart', () => {
     const d = container.querySelector('path.px')!.getAttribute('d')!
     const xs = [...d.matchAll(/[ML]([\d.]+),/g)].map((m) => Number(m[1]))
     expect(xs[0]).toBe(0)
-    // The last real close is at index 9 of 10, which is the full width.
-    expect(xs[1]).toBeCloseTo(860, 0)
+    // The last real close is at index 9 of 10, which is the plot's right
+    // edge. Against PLOT_R rather than a literal: the plot narrowed once
+    // already when the axis labels moved out into a gutter, and pinning the
+    // number instead of the relationship is what made that a failure.
+    expect(xs[1]).toBeCloseTo(PLOT_R, 0)
   })
 })

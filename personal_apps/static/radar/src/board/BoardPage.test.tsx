@@ -8,7 +8,8 @@ import { BoardPage } from './BoardPage'
 function row(over: Partial<Row> = {}): Row {
   return {
     ticker: 'AAA', name: 'Alpha Inc', segment: 'large',
-    divergence: 0.5, mention_z: 3.2, mentions: 20, expected: 6, authors: 9,
+    divergence: 0.5, mention_z: 3.2, mentions: 20, expected: 6, ratio: 20 / 6,
+    authors: 9,
     text_ratio: 0.9, sources: ['bluesky'],
     price: 10, price_move: 0.012, direction: 'up', price_status: 'ok',
     baseline_days: 30, marks: [],

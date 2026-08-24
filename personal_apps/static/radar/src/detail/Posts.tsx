@@ -18,8 +18,12 @@ export function Posts({ posts, total, retentionNote }: {
   retentionNote?: boolean
 }) {
   return (
-    <>
-      <h3>What people are saying · {total} {total === 1 ? 'post' : 'posts'}</h3>
+    <section className="zone">
+      <h3>What people are saying
+        <span className="q">
+          · {total} {total === 1 ? 'post' : 'posts'}, newest first
+        </span>
+      </h3>
       {posts.length === 0 ? (
         <p className="below">
           Nothing in this window.
@@ -45,6 +49,6 @@ export function Posts({ posts, total, retentionNote }: {
           ))}
         </ul>
       )}
-    </>
+    </section>
   )
 }

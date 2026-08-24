@@ -105,3 +105,64 @@ function plot(box: Box): number {
 function xAt(index: number, total: number, box: Box): number {
   return total <= 1 ? box.width / 2 : (index / (total - 1)) * box.width
 }
+
+// ---------------------------------------------------------------------------
+// THE BOARD'S SHAPE, AS ONE SHARED SCALE
+//
+// Every row draws how far above its own normal it is, on an axis all the rows
+// share. Three decisions, and each one is about honesty rather than looks:
+//
+// 1. THE QUANTITY IS EXCESS, NOT THE RATIO. 1x is "exactly its normal", which
+//    is no news at all, so it draws nothing. A bar proportional to the ratio
+//    itself would give a row with nothing to report a third of the width.
+//
+// 2. THE SCALE RUNS TO A ROUND NUMBER, the way an axis does, rather than to
+//    the loudest row exactly. Otherwise the top bar is always full width and
+//    reads as a rule under the row rather than as a measurement.
+//
+// 3. LINEAR. A square root would spread a heavy-tailed board into a prettier
+//    staircase and would misstate every magnitude on it. When one ticker is
+//    forty times its normal and the rest are three, the flat-looking tail is
+//    the finding.
+
+/** The round number just above `value`, on a fine enough ladder to be worth
+ *  rounding to.
+ *
+ *  A 1/2/5 ladder is the reflex and it wastes the axis: a board topping out at
+ *  1.3x its normal rounds to 2 and every bar on it lands in the middle third,
+ *  which is the shape of no board in particular. Real boards cluster -- twelve
+ *  tickers between 1.4x and 2.3x is the ordinary Tuesday -- so the rounding has
+ *  to be fine enough that the top bar still reaches. This ladder keeps it
+ *  between two thirds and all of the axis at every magnitude -- the rung at
+ *  4 is there only because 3 -> 5 was a 0.60 gap, found by the property
+ *  test rather than by the handful of values that looked convenient. */
+export function niceMax(value: number): number {
+  if (value <= 0) return 1
+  const decade = 10 ** Math.floor(Math.log10(value))
+  for (const mantissa of [1, 1.5, 2, 3, 4, 5, 7.5]) {
+    if (mantissa * decade >= value) return mantissa * decade
+  }
+  return 10 * decade
+}
+
+/** Each row's share of the shared scale, keyed by ticker.
+ *
+ *  A row with no ratio is absent from the map rather than present at zero.
+ *  An empty track beside six filled ones would say "we measured this and it
+ *  was nothing", which is the one thing it does not mean. */
+export function magnitudes(rows: { ticker: string; ratio: number | null }[]):
+    Record<string, number> {
+  const excess = (ratio: number) => Math.max(0, ratio - 1)
+  const top = rows.reduce(
+    (best, row) => (row.ratio !== null ? Math.max(best, excess(row.ratio)) : best),
+    0)
+  if (top <= 0) return {}
+
+  const scale = niceMax(top)
+  const out: Record<string, number> = {}
+  for (const row of rows) {
+    if (row.ratio === null) continue
+    out[row.ticker] = excess(row.ratio) / scale
+  }
+  return out
+}

@@ -63,6 +63,29 @@ export function sourceLabel(key: string): string {
   return SOURCE_LABELS[key] ?? key
 }
 
+/** Nasdaq's one-letter listing codes, as stored in radar_ticker_universe.
+ *
+ *  The panel printed the raw letter: `Q · large cap · $2.9T`. The tier is
+ *  worth keeping rather than flattening all three Nasdaq codes to "Nasdaq" --
+ *  Capital Market is the lowest listing standard and it is where most of what
+ *  this board is for actually lists. Verified against the stored universe:
+ *  F and GE are N, SPY and DIA are P, NVDA is Q, SOUN is G, HOWL is S. */
+const EXCHANGE_LABELS: Record<string, string> = {
+  Q: 'Nasdaq Global Select',
+  G: 'Nasdaq Global',
+  S: 'Nasdaq Capital Market',
+  N: 'NYSE',
+  P: 'NYSE Arca',
+  A: 'NYSE American',
+  Z: 'Cboe BZX',
+  V: 'IEX',
+}
+
+export function exchangeLabel(code: string | null): string | null {
+  if (!code) return null
+  return EXCHANGE_LABELS[code] ?? code
+}
+
 export const MARK_WHY: Record<string, string> = {
   'no-print':
     'The tape has not printed for several polls, so the price looks unmoved ' +
@@ -117,4 +140,31 @@ export function sessionLabel(session: string): string {
  */
 export function pricesAreMoving(session: string): boolean {
   return session !== 'closed'
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "22 Jul 2026" from a stored `YYYY-MM-DD`.
+ *
+ *  The ISO form is how the row travels and how it is compared; it is not how a
+ *  date is read inside a sentence. `first ever seen on 2026-07-22` printed the
+ *  storage format into prose. */
+export function dayStamp(iso: string | null): string {
+  if (!iso) return UNKNOWN
+  const at = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
+  if (Number.isNaN(at.getTime())) return iso
+  return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}`
+}
+
+/** What the row says about the tape, under the ticker.
+ *
+ *  A shut exchange and a missing quote are different silences: the first says
+ *  nothing about this stock and the second says the board does not know its
+ *  price at all. Neither may render as a bare number pretending to be live. */
+export function rowPrice(price: number | null, status: string): string {
+  if (price === null) return 'no quote'
+  const money = price >= 100 ? `$${price.toFixed(0)}` : `$${price.toFixed(2)}`
+  if (status === 'closed') return `closed at ${money}`
+  return money
 }

@@ -120,6 +120,11 @@ def _row(entry):
         'mention_z': r.mention_z,
         'mentions': r.mentions,
         'expected': r.expected,
+        # The number behind the `ratio` clause. Sent so the row can draw a bar
+        # of how far above its own normal it is without the client deciding
+        # for itself when a baseline is too thin to divide by -- that guard
+        # lives once, in phrasing.py, beside the wording it also governs.
+        'ratio': phrasing.ratio_value(r.mentions, r.expected),
         'authors': r.authors,
         'text_ratio': r.text_ratio,
         'sources': r.sources,
