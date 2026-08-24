@@ -721,7 +721,11 @@ class RadarPollState(db.Model):
     )
 
     source          = db.Column(db.String(24), primary_key=True)
-    symbol          = db.Column(db.String(12, collation='utf8mb4_bin'),
+    # 64, not 12. This holds whatever the source polls by, and that stopped
+    # being a ticker when Reddit reused the scheduler with the SUBREDDIT as
+    # the unit -- `RobinHoodPennyStocks` is 20 characters, and at 12 the whole
+    # insert failed on the daemon's first cycle.
+    symbol          = db.Column(db.String(64, collation='utf8mb4_bin'),
                                 primary_key=True)
     last_polled_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
     next_due_at     = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)

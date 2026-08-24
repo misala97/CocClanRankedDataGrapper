@@ -188,6 +188,18 @@ def fetch(since, client, subs, pause=REQUEST_INTERVAL_SECONDS):
     penalty is per-IP and asking again immediately deepens it. Whatever was
     collected before the refusal is still returned, because those comments
     were really read.
+
+    `rates` carries ONLY the subreddits actually attempted, and it is what the
+    caller schedules from. The ones after a throttle were never requested, so
+    stamping them as polled would push them down the queue for something that
+    never happened to them.
+
+    A throttled subreddit is reported at rate zero, which the scheduler reads
+    as "silent" and pushes to the slowest cadence. That is a lie about the
+    subreddit and a deliberate one: recorded honestly as unknown it would be
+    the most overdue entry next cycle, get tried first, throttle again, and
+    break the cycle before anything else was ever read. Backing it off is what
+    keeps the rotation moving.
     """
     posts, statuses, rates = [], [], {}
 
@@ -198,9 +210,14 @@ def fetch(since, client, subs, pause=REQUEST_INTERVAL_SECONDS):
             found, status, rate = fetch_one(sub, since, client)
         except RedditThrottled:
             statuses.append('missing')
+            rates[sub] = 0.0
             break
         except RedditUnavailable:
+            # Attempted and learned nothing. Recorded as unknown so it is
+            # retried soon -- unlike a throttle, a 500 says nothing about
+            # whether the next request will work.
             statuses.append('missing')
+            rates[sub] = None
             continue
         posts.extend(found)
         statuses.append(status)
