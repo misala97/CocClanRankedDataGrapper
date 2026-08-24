@@ -12,9 +12,12 @@ it. The data cannot separate the two, so the mark is NO PRINT rather than HALT
 (a deliberate wording change from spec 6.5): both are untradeable, and calling
 an empty tape a halt claims more than the data supports.
 """
+import collections
 import datetime as dt
 import decimal
 import statistics
+
+import sqlalchemy as sa
 
 from extensions import db
 from models import RadarQuote
@@ -61,7 +64,17 @@ def price_status(ticker, now, polls=STALE_QUOTE_POLLS, session=None):
                       RadarQuote.fetched_at <= now)
               .order_by(RadarQuote.fetched_at.desc())
               .limit(polls).all())
+    return _status_from(recent, polls, session)
 
+
+def _status_from(recent, polls, session):
+    """The rule itself, given a ticker's most recent `polls` snapshots.
+
+    Split out so the batched lookup below decides with THIS function rather
+    than a copy of it. Whether a tape counts as frozen is a judgement, and two
+    implementations of one judgement is how a no-print mark ends up on a
+    different set of rows depending on which code path asked.
+    """
     if not recent:
         return 'unknown'
     if session == 'closed':
@@ -84,6 +97,52 @@ def price_status(ticker, now, polls=STALE_QUOTE_POLLS, session=None):
     # send volume restores the second signal for free; what was wrong was the
     # comment claiming a safeguard that has never been active.
     return 'stale' if len(signatures) == 1 else 'ok'
+
+
+def statuses_for(tickers, now, polls=STALE_QUOTE_POLLS, session=None):
+    """`price_status` for many tickers at once, with each latest snapshot.
+
+    Returns {ticker: (status, latest_row_or_None)} covering every ticker asked
+    about, including ones with no quote at all -- absent from the mapping and
+    'unknown' are not the same answer, and a caller that used `.get()` on a
+    partial mapping would silently turn the second into the first.
+
+    One query instead of two per ticker. `leaderboard.build_rows` ranks every
+    eligible ticker before the segment filter, so the per-ticker version there
+    cost roughly 1200 round trips on the live board and 1.5 seconds of the
+    page's time to first byte.
+
+    ROW_NUMBER is the only way to take the newest `polls` rows PER ticker in
+    one statement. A time window cannot substitute: quotes are only fetched
+    for tickers the board is watching, so a name that went quiet weeks ago has
+    three real snapshots that any recent window would miss, and it would drop
+    from 'ok' to 'unknown' -- which says something about the stock rather than
+    about our polling. Needs MariaDB 10.2+ / MySQL 8+, both long past.
+    """
+    if not tickers:
+        return {}
+
+    numbered = sa.select(
+        RadarQuote,
+        sa.func.row_number().over(
+            partition_by=RadarQuote.ticker,
+            order_by=RadarQuote.fetched_at.desc()).label('rn'),
+    ).where(RadarQuote.ticker.in_(list(tickers)),
+            RadarQuote.fetched_at <= now).subquery()
+
+    entity = sa.orm.aliased(RadarQuote, numbered)
+    rows = db.session.execute(
+        sa.select(entity, numbered.c.rn)
+        .where(numbered.c.rn <= polls)
+        .order_by(numbered.c.ticker, numbered.c.rn)).all()
+
+    recent = collections.defaultdict(list)
+    for quote, _ in rows:
+        recent[quote.ticker].append(quote)
+
+    return {ticker: (_status_from(recent.get(ticker, []), polls, session),
+                     recent[ticker][0] if recent.get(ticker) else None)
+            for ticker in tickers}
 
 
 def daily_sigma(closes):
@@ -116,13 +175,41 @@ def move_since(ticker, hours, now):
                     RadarQuote.fetched_at <= now)
             .order_by(RadarQuote.fetched_at.asc()).all())
 
-    if len(rows) < 2:
-        return None
+    return _move_from([row.price for row in rows])
 
-    first, last = rows[0].price, rows[-1].price
+
+def _move_from(prices):
+    """The rule, given a ticker's prices across the window in time order."""
+    if len(prices) < 2:
+        return None
+    first, last = prices[0], prices[-1]
     if not first:
         return None
     return (last - first) / first
+
+
+def moves_for(tickers, hours, now):
+    """`move_since` for many tickers in one query.
+
+    Returns {ticker: fraction_or_None} for every ticker asked about. None means
+    the window holds fewer than two snapshots, which is not a flat price -- see
+    `_move_from`, which both this and the single-ticker version decide with.
+    """
+    if not tickers:
+        return {}
+
+    since = now - dt.timedelta(hours=hours)
+    rows = (db.session.query(RadarQuote.ticker, RadarQuote.price)
+            .filter(RadarQuote.ticker.in_(list(tickers)),
+                    RadarQuote.fetched_at >= since,
+                    RadarQuote.fetched_at <= now)
+            .order_by(RadarQuote.ticker, RadarQuote.fetched_at.asc()).all())
+
+    prices = collections.defaultdict(list)
+    for ticker, price in rows:
+        prices[ticker].append(price)
+
+    return {ticker: _move_from(prices.get(ticker, [])) for ticker in tickers}
 
 
 def scale_sigma(sigma, hours):

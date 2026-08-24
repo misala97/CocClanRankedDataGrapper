@@ -158,6 +158,15 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
     profiles = _universe_rows(grouped.keys())
     author_counts = _distinct_authors(grouped.keys(), sources, since, now)
     channel_counts = _distinct_channels(grouped.keys(), sources, since, now)
+    # Batched for the same reason as the three above, and it was the one that
+    # was not: the loop below asked for a status, a move and a latest snapshot
+    # per ticker, and it runs over EVERY eligible ticker because the segment
+    # counts need the unfiltered set. Measured 2026-08-24 -- 2.93 radar_quotes
+    # queries per ticker, ~1200 round trips and 1.58s of TTFB on the live
+    # board, against 30ms for the detail panel doing the same three lookups
+    # for one ticker.
+    statuses = quotes_mod.statuses_for(grouped.keys(), now, session=session)
+    moves = quotes_mod.moves_for(grouped.keys(), window_hours, now)
     today = now.date()
     rows = []
     excluded = collections.Counter()
@@ -209,16 +218,13 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
                              if b.baseline_days is not None), default=None)
 
         profile = profiles.get(ticker)
-        status = quotes_mod.price_status(ticker, now, session=session)
-        move = quotes_mod.move_since(ticker, hours=window_hours, now=now)
-
-        latest = None
-        if status != 'unknown':
-            from models import RadarQuote
-            latest = (RadarQuote.query
-                      .filter(RadarQuote.ticker == ticker,
-                              RadarQuote.fetched_at <= now)
-                      .order_by(RadarQuote.fetched_at.desc()).first())
+        status, latest = statuses[ticker]
+        move = moves[ticker]
+        if status == 'unknown':
+            # Kept explicit rather than relying on the batch: 'unknown' means
+            # never quoted, so there is no snapshot to carry even though the
+            # mapping always has an entry for every ticker asked about.
+            latest = None
 
         # A frozen tape reports no movement while mentions explode because it
         # froze. That is maximum divergence produced by an artifact, so the
