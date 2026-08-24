@@ -224,6 +224,39 @@ def test_a_provider_returning_nothing_leaves_the_row_alone(clean_universe):
 # Michi, 2026-08-24: "etfs should be a seperate thing. they should be
 # chooseable but default should only be actual normal stocks".
 
+def test_setting_a_fund_flag_is_reported(clean_universe):
+    """The first live re-seed wrote thousands of flags and printed "0 updated".
+    A run that changed the board reading as a no-op is how a working step gets
+    repeated, or worse, assumed broken and undone."""
+    universe.upsert_symbols(
+        [{'symbol': 'ZZT', 'name': 'Some Fund', 'exchange': 'P'}], NOW)
+
+    counts = universe.upsert_symbols(
+        [{'symbol': 'ZZT', 'name': 'Some Fund', 'exchange': 'P',
+          'is_etf': True}], NOW)
+
+    assert counts['flagged'] == 1
+    assert TickerUniverse.query.filter_by(symbol='ZZT').one().is_etf is True
+
+    # Idempotent: a second identical pass has nothing left to say.
+    again = universe.upsert_symbols(
+        [{'symbol': 'ZZT', 'name': 'Some Fund', 'exchange': 'P',
+          'is_etf': True}], NOW)
+    assert again['flagged'] == 0
+
+
+def test_a_file_without_the_column_does_not_erase_a_flag(clean_universe):
+    """`is_etf` absent means the file did not say, not that it said no."""
+    universe.upsert_symbols(
+        [{'symbol': 'ZZU', 'name': 'Some Fund', 'exchange': 'P',
+          'is_etf': True}], NOW)
+
+    universe.upsert_symbols(
+        [{'symbol': 'ZZU', 'name': 'Some Fund', 'exchange': 'P'}], NOW)
+
+    assert TickerUniverse.query.filter_by(symbol='ZZU').one().is_etf is True
+
+
 def test_a_fund_is_its_own_segment_not_an_unknown_company():
     """A fund has no market cap to look up ANYWHERE. Finnhub returns an empty
     payload for SPY and QQQ, verified against the live API, so before this it

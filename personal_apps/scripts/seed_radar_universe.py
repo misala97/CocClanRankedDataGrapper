@@ -102,8 +102,10 @@ def main():
 
     with app.app_context():
         counts = universe.upsert_symbols(rows, dt.datetime.utcnow())
-    print('universe: %d added, %d updated, %d reassigned (from %d rows)'
-          % (counts['added'], counts['updated'], counts['reassigned'], len(rows)))
+    print('universe: %d added, %d updated, %d reassigned, %d fund flags set '
+          '(from %d rows)'
+          % (counts['added'], counts['updated'], counts['reassigned'],
+             counts['flagged'], len(rows)))
     return 0
 
 
