@@ -56,6 +56,7 @@ const SOURCE_LABELS: Record<string, string> = {
   stocktwits: 'StockTwits',
   bluesky: 'Bluesky',
   fourchan: '4chan /biz/',
+  reddit: 'Reddit',
 }
 
 /** A source name the config knows but this file does not still renders --

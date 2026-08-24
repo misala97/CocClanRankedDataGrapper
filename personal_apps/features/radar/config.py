@@ -13,7 +13,7 @@ import re
 
 # Active sources. Adding one is a module in sources/ plus an entry here --
 # nothing else in the pipeline names a source (spec 8.6).
-SOURCES = ('stocktwits', 'bluesky', 'fourchan')
+SOURCES = ('stocktwits', 'bluesky', 'fourchan', 'reddit')
 
 # Whether a bare uppercase token may be read as a ticker on a given source.
 #
@@ -47,6 +47,12 @@ BARE_TOKENS_ALLOWED = {
     # See scripts/measure_bare_tokens.py. Revert if the top twenty scored
     # tickers stop looking like equities.
     'bluesky': True,
+    # A finance subreddit is finance-native the way /biz/ and StockTwits are:
+    # `AAPL` without a dollar sign is a ticker there in a way it is not on a
+    # general network. Measured 2026-08-24, the junk this admits is the same
+    # shape as elsewhere -- WTF and NATO topped r/StockMarket, OI and CC
+    # topped r/options -- and lands as `low`, counted but never scored.
+    'reddit': True,
 }
 
 
@@ -92,6 +98,9 @@ SOURCE_KIND = {
     'stocktwits': 'forum',
     'bluesky': 'forum',
     'fourchan': 'forum',
+    # Comments carry real distinct authors, so the forum gate applies
+    # unchanged -- unlike a broadcast channel, where one admin is every voice.
+    'reddit': 'forum',
 }
 
 
@@ -242,6 +251,37 @@ def coin_collision_dropped(source, symbol):
 def bare_tokens_allowed(source):
     return BARE_TOKENS_ALLOWED.get(source, False)
 
+# Subreddits to read, from
+# docs/superpowers/specs/2026-08-24-radar-subreddit-source-list.md. Tier 1 and
+# Tier 2 together, on Michi's call 2026-08-24: measure everything for a few
+# days from real stored data, then prune. The alternative was 25-comment
+# snapshots, which were too small a sample to decide on -- r/stocks measured
+# zero ticker density across 93 comments an hour, which is sampling noise
+# rather than truth.
+#
+# Regional subs are deliberately absent and must stay absent: TSX-V, NSE and
+# ASX symbols collide with the US universe exactly the way crypto tickers do
+# on /biz/. Single-ticker subs (Superstonk, GME, amcstock) likewise -- they
+# discover nothing and would pin one symbol at a permanent maximum.
+REDDIT_SUBS = (
+    # Tier 1, core volume
+    'wallstreetbets', 'stocks', 'Daytrading', 'StockMarket', 'pennystocks',
+    'options', 'smallstreetbets', 'shortsqueeze', 'SPACs',
+    # Tier 2, narrower
+    'RobinHoodPennyStocks', 'wallstreetbetsOGs', 'Wallstreetbetsnew',
+    'thetagang', 'swingtrading', 'Vitards', 'Biotechplays', 'weedstocks',
+    'UraniumSqueeze',
+)
+
+# Feeds read per cycle. The cycle is three minutes at the fastest cadence, so
+# four is roughly one request every forty-five seconds -- deliberately below
+# the rate that earned a sustained 429 during measurement. Eighteen subs
+# therefore come round about every fourteen minutes, which is honest rather
+# than complete: r/wallstreetbets turns its 25-entry feed over in under two
+# minutes, so most of its comments will be missed and its buckets will say
+# `truncated`. Raise this only after watching for 429s in the daemon log.
+REDDIT_SUBS_PER_CYCLE = 4
+
 # StockTwits publishes no rate-limit headers and twenty consecutive requests
 # drew no 429, so this is a conservative budget rather than a documented
 # ceiling. The daemon backs off on 429 regardless.
@@ -322,6 +362,11 @@ def source_config_version():
         'bot_re': _EXCHANGE_BOT_RE.pattern,
         'name_df': [MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO,
                     MIN_NAME_TOKEN_LEN],
+        # Every subreddit shares the source name `reddit`, so adding or
+        # dropping one changes which mentions are counted under it while the
+        # source list stays identical. Exactly the false assurance the
+        # extraction rules gave before 2026-08-22.
+        'reddit_subs': sorted(REDDIT_SUBS),
         'pooled_re': POOLED_VEHICLE_PATTERN,
         # The PATTERN alone was not enough: this flag changes what the same
         # pattern is used FOR, so flipping it changed which mentions were
