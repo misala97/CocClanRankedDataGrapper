@@ -18,17 +18,20 @@ def test_the_exercise_table_carries_an_owner():
     assert Exercise.__table__.c.user_id.nullable is False, 'Exercise.user_id must be NOT NULL'
 
 
-def test_every_pre_existing_exercise_was_backfilled_to_the_admin():
-    from models import AppUser, Exercise
-    with flask_app.app_context():
-        admin = AppUser.query.filter_by(is_admin=True).order_by(AppUser.id).first()
-        assert admin is not None
-        orphans = Exercise.query.filter(
-            Exercise.user_id != admin.id,
-            Exercise.name.notlike('pytest%'),
-        ).count()
-        assert orphans == 0, 'Exercise has rows not owned by the admin'
-
+# REMOVED 2026-08-24: test_every_pre_existing_exercise_was_backfilled_to_the_admin.
+#
+# It asserted that no row is owned by anyone but the admin, which was true for
+# exactly as long as the app had one user. Since 2026-08-02 it has three, and
+# the assertion had been failing on every run since the second person logged
+# anything -- sixteen exercise rows by the time it was looked at.
+#
+# Not repairable, because it was never about an invariant: it pinned the
+# outcome of a one-time backfill migration, and a migration that has already
+# run cannot regress. What it was protecting is covered by things that are
+# still true -- test_the_three_roots_carry_an_owner asserts the NOT NULL, and
+# the route tables below assert that one user cannot reach another's rows.
+# The test immediately below asserts two users CAN own the same
+# exercise name. Both could not be right.
 
 def test_two_users_can_hold_an_exercise_with_the_same_name():
     """The constraint swap: unique(name) globally would reject this outright."""

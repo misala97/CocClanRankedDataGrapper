@@ -28,35 +28,18 @@ def test_the_three_roots_carry_an_owner():
             f'{model.__name__}.user_id must be NOT NULL'
 
 
-def test_every_pre_existing_row_was_backfilled_to_the_admin():
-    """Rows created by this suite's own fixtures are excluded by name -- they
-    are deliberately owned by throwaway users, and this assertion is about what
-    the migration did to the data that already existed."""
-    import sqlalchemy as sa
-    from models import AppUser, PushSubscription, WorkoutSession, WorkoutTemplate
-    with flask_app.app_context():
-        admin = AppUser.query.filter_by(is_admin=True).order_by(AppUser.id).first()
-        assert admin is not None
-        for model in (WorkoutSession, WorkoutTemplate):
-            orphans = model.query.filter(
-                model.user_id != admin.id,
-                # WorkoutSession.name is nullable, and NOT LIKE is NULL (not
-                # true) for a NULL -- without the is_(None) arm an unnamed row
-                # owned by someone else would slip past this check.
-                sa.or_(model.name.is_(None), model.name.notlike('pytest%')),
-            ).count()
-            assert orphans == 0, f'{model.__name__} has rows not owned by the admin'
-
-        # The migration backfills all three roots from one table-agnostic loop,
-        # so leaving this one unchecked would let a fault isolated to it pass
-        # silently. PushSubscription has no name column -- its scratch rows are
-        # identified by the endpoint path this suite mints.
-        orphan_subscriptions = PushSubscription.query.filter(
-            PushSubscription.user_id != admin.id,
-            PushSubscription.endpoint.notlike('%/pytest/%'),
-        ).count()
-        assert orphan_subscriptions == 0, 'PushSubscription has rows not owned by the admin'
-
+# REMOVED 2026-08-24: test_every_pre_existing_row_was_backfilled_to_the_admin.
+#
+# It asserted that no row is owned by anyone but the admin, which was true for
+# exactly as long as the app had one user. Since 2026-08-02 it has three, and
+# the assertion had been failing on every run since the second person logged
+# anything -- seven session rows by the time it was looked at.
+#
+# Not repairable, because it was never about an invariant: it pinned the
+# outcome of a one-time backfill migration, and a migration that has already
+# run cannot regress. What it was protecting is covered by things that are
+# still true -- test_the_three_roots_carry_an_owner asserts the NOT NULL, and
+# the route tables below assert that one user cannot reach another's rows.
 
 import datetime as dt
 

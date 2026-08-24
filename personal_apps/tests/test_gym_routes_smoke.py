@@ -107,10 +107,20 @@ def test_statistik_renders(client):
     assert client.get('/gym/statistik').status_code == 200
 
 
+# Scoped to the acting user since 2026-08-24. These walked every row in the
+# table and expected the admin to render each one, which was fine while the
+# database had a single user and has failed since 2026-08-02, when it stopped
+# having one: another account's exercise 404s, and that 404 is the ownership
+# check doing its job. So the suite was asserting that authorization does NOT
+# work. Cross-user denial is covered properly in test_gym_ownership.py and
+# test_gym_exercise_ownership.py; what belongs here is only whether every page
+# this user can reach still renders.
 def test_exercise_detail_renders_for_every_exercise(client):
     with flask_app.app_context():
         from models import Exercise
-        ids = [row.id for row in Exercise.query.all()]
+        ids = [row.id for row in
+               Exercise.query.filter_by(user_id=_admin_id()).all()]
+    assert ids, 'the dev database needs an exercise owned by the admin'
     for exercise_id in ids:
         response = client.get('/gym/exercises/{}'.format(exercise_id))
         assert response.status_code == 200, exercise_id
@@ -120,7 +130,9 @@ def test_session_pages_render_for_every_finished_session(client):
     with flask_app.app_context():
         from models import WorkoutSession
         ids = [row.id for row in WorkoutSession.query.filter(
+            WorkoutSession.user_id == _admin_id(),
             WorkoutSession.finished_at.isnot(None)).all()]
+    assert ids, 'the dev database needs a finished session owned by the admin'
     for session_id in ids:
         assert client.get('/gym/session/{}'.format(session_id)).status_code == 200
         # /summary is a redirect now (a finished workout is one page under
