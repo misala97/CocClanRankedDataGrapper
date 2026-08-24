@@ -183,20 +183,20 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
     for row in per_source:
         grouped[row.ticker].append(row)
 
-    profiles = _universe_rows(grouped.keys())
+    # Eligibility needs these two and nothing else, so they are the only
+    # lookups that have to cover every ticker with a scored bucket.
     author_counts = _distinct_authors(grouped.keys(), sources, since, now)
     channel_counts = _distinct_channels(grouped.keys(), sources, since, now)
-    # Batched for the same reason as the three above, and it was the one that
-    # was not: the loop below asked for a status, a move and a latest snapshot
-    # per ticker, and it runs over EVERY eligible ticker because the segment
-    # counts need the unfiltered set. Measured 2026-08-24 -- 2.93 radar_quotes
-    # queries per ticker, ~1200 round trips and 1.58s of TTFB on the live
-    # board, against 30ms for the detail panel doing the same three lookups
-    # for one ticker.
-    statuses = quotes_mod.statuses_for(grouped.keys(), now, session=session)
-    moves = quotes_mod.moves_for(grouped.keys(), window_hours, now)
-    today = now.date()
-    rows = []
+
+    # PASS ONE: fold the aggregates and apply the floor.
+    #
+    # Split from pass two because of the ratio between them. Measured on the
+    # live board 2026-08-24: 3,497 tickers have a scored bucket in a 24h
+    # window and 41 clear the floor. Fetching universe rows, quote statuses
+    # and price moves before this point meant doing all three for 3,497
+    # tickers and discarding 3,456 of them -- 14,029 quote rows to end up
+    # using about 170, and a mapped TickerUniverse object per rejected ticker.
+    survivors = {}
     excluded = collections.Counter()
 
     for ticker, parts in grouped.items():
@@ -244,6 +244,21 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
             excluded[_rejection(contributions)] += 1
             continue
 
+        survivors[ticker] = (mentions, expected, variance, authors, text_ratio)
+
+    # PASS TWO: everything that costs a lookup, for the rows that survived.
+    profiles = _universe_rows(survivors.keys())
+    # The quote lookups were an N+1 here until 2026-08-24 -- a status, a move
+    # and a latest snapshot per ticker, ~1200 round trips and 1.58s of TTFB
+    # against 30ms for the detail panel doing the same three for one ticker.
+    statuses = quotes_mod.statuses_for(survivors.keys(), now, session=session)
+    moves = quotes_mod.moves_for(survivors.keys(), window_hours, now)
+    today = now.date()
+    rows = []
+
+    for ticker, (mentions, expected, variance, authors,
+                 text_ratio) in survivors.items():
+        parts = grouped[ticker]
         mention_z = ((mentions - expected)
                      / max(variance, 0.25) ** 0.5) if variance else None
 
