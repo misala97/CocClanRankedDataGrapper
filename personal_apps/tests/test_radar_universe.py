@@ -220,6 +220,48 @@ def test_a_provider_returning_nothing_leaves_the_row_alone(clean_universe):
         decimal.Decimal('1000000000')
 
 
+def test_a_provider_that_could_not_answer_is_asked_again(clean_universe):
+    """A timeout says nothing about the symbol.
+
+    Stamping on a failed request would take a real company out of the queue
+    for a week over one bad gateway -- and since the queue is what decides
+    which tickers have a segment at all, that is a ticker sitting in Unknown
+    for a week because of a network blip.
+    """
+    from features.radar.prices import PriceUnavailable
+
+    class Flaky:
+        def profile(self, symbol):
+            raise PriceUnavailable('429')
+
+    universe.upsert_symbols(
+        [{'symbol': 'ZZF', 'name': 'Flaky Corp', 'exchange': 'NYSE'}], NOW)
+
+    assert universe.refresh_profiles(Flaky(), ['ZZF'], NOW) == 0
+    assert TickerUniverse.query.filter_by(
+        symbol='ZZF').one().profile_refreshed_at is None
+
+
+def test_a_symbol_the_provider_does_not_cover_stops_being_asked(clean_universe):
+    """The ETF case, measured against the live API 2026-08-24: /stock/profile2
+    returns an empty payload for SPY and QQQ and always will.
+
+    Retried every six hours forever, they were spending slots that companies
+    with a real profile were queued behind. Stamped, they drop out until the
+    staleness window brings them round again.
+    """
+    class Uncovered:
+        def profile(self, symbol):
+            return None
+
+    universe.upsert_symbols(
+        [{'symbol': 'ZZE', 'name': 'Some Index Fund', 'exchange': 'P'}], NOW)
+
+    assert universe.refresh_profiles(Uncovered(), ['ZZE'], NOW) == 0
+    assert TickerUniverse.query.filter_by(
+        symbol='ZZE').one().profile_refreshed_at == NOW
+
+
 # Distinctiveness counts ISSUERS, not listings. Counting listings made a
 # company compete with its own derivatives.
 
