@@ -28,7 +28,8 @@ from features.radar import (
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
-    REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES, STOCKTWITS_REQUESTS_PER_HOUR,
+    REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL, REDDIT_MIN_POLL, REDDIT_SUBS,
+    REDDIT_SUBS_PER_CYCLE, SOURCES, STOCKTWITS_REQUESTS_PER_HOUR,
     prefer_ipv4_if_configured)
 from features.radar.sources import bluesky, fourchan, reddit, stocktwits
 from features.radar.sources import FetchResult
@@ -166,7 +167,14 @@ def _reddit_fetcher(client):
         # queue for a request that was never made -- so they would lose their
         # turn to the ones that happened to be earlier in the batch.
         for sub, rate in (result.rates or {}).items():
-            scheduling.record_poll('reddit', sub, now, rate)
+            # This source's own bounds. The scheduler's defaults are
+            # StockTwits-shaped, and a fifteen-minute floor would lose most of
+            # r/wallstreetbets -- whose feed holds 25 comments and turns over
+            # in under two minutes.
+            scheduling.record_poll('reddit', sub, now, rate,
+                                   floor=REDDIT_MIN_POLL,
+                                   ceiling=REDDIT_MAX_POLL,
+                                   page_size=reddit.FEED_LIMIT)
         return result
     return fetch
 
@@ -208,7 +216,11 @@ def tick(now_utc, fetchers):
 
 
 def _scheduled_cycle(scheduler, fetchers):
-    """Run a cycle, then reschedule at the interval the session now calls for."""
+    """Run a cycle, then reschedule at the interval the session now calls for.
+
+    Reddit is deliberately absent from `fetchers` here -- see
+    `_scheduled_reddit`. Its cadence must not follow the market session.
+    """
     now = dt.datetime.now(dt.timezone.utc)
     with app.app_context():
         tick(now, fetchers)
@@ -409,6 +421,33 @@ def _scheduled_volatility():
     logger.info('radar volatility refreshed %d tickers', updated)
 
 
+def _scheduled_reddit(fetcher):
+    """Reddit, on a fixed interval of its own.
+
+    Everything else here follows the NYSE session, because the chatter those
+    sources carry does. Reddit does not stop at the closing bell -- and more
+    to the point, its feed holds 25 comments with no cursor, so a slow poll
+    does not arrive late, it never arrives at all.
+
+    Riding the session cycle, four subs per 1800-second overnight cycle meant
+    a full rotation of eighteen took over two hours against a feed that turns
+    over in under two minutes. Six hours of that produced one scorable
+    mention.
+
+    Its own `run_cycle` rather than a shared one, which means the parent
+    RadarBucket rows it writes reflect Reddit alone. Nothing reads that table
+    -- every consumer goes through RadarBucketSource, which stays correct
+    because roll_up only writes children for the sources in this cycle. If
+    something ever does read the parent, it has to be recomputed from the
+    children rather than from whichever cycle wrote last.
+    """
+    def run():
+        now = dt.datetime.now(dt.timezone.utc)
+        with app.app_context():
+            tick(now, {'reddit': fetcher})
+    return run
+
+
 def _scheduled_prune():
     with app.app_context():
         now = _utcnow()
@@ -435,10 +474,20 @@ def main():
     # means thirty minutes of silence before any evidence it works -- and the
     # same wait after every deploy restart. Catch-up is cursor-driven, so an
     # immediate first cycle costs nothing and collects the gap.
+    # Reddit is pulled out of the session-driven cycle: it needs a fixed
+    # cadence of its own, and the reason is in _scheduled_reddit.
+    session_fetchers = {name: f for name, f in fetchers.items()
+                        if name != 'reddit'}
     scheduler.add_job(_scheduled_cycle, 'interval', seconds=180,
-                      id='radar_cycle', args=[scheduler, fetchers],
+                      id='radar_cycle', args=[scheduler, session_fetchers],
                       max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc))
+    if 'reddit' in fetchers:
+        scheduler.add_job(_scheduled_reddit(fetchers['reddit']), 'interval',
+                          seconds=REDDIT_INTERVAL_SECONDS, id='radar_reddit',
+                          max_instances=1, coalesce=True,
+                          next_run_time=dt.datetime.now(dt.timezone.utc)
+                          + dt.timedelta(seconds=30))
     # Two minutes behind the first cycle, so there are buckets to read before
     # the first scoring pass goes looking for them.
     scheduler.add_job(_scheduled_scoring, 'interval', minutes=15,

@@ -24,20 +24,30 @@ MIN_INTERVAL = dt.timedelta(minutes=15)
 MAX_INTERVAL = dt.timedelta(hours=4)
 
 
-def interval_for_rate(rate):
+def interval_for_rate(rate, floor=None, ceiling=None, page_size=None):
     """How long until this symbol should be polled again.
 
     A rate of None means never measured -- poll soon and find out. A measured
     rate of zero means genuinely silent, so wait the maximum.
-    """
-    if rate is None:
-        return MIN_INTERVAL
-    if rate <= 0:
-        return MAX_INTERVAL
 
-    coverage_hours = PAGE_SIZE / rate
+    The bounds are arguments because the defaults are StockTwits-shaped and a
+    second source borrowed this scheduler. Reddit's feed holds 25 comments and
+    r/wallstreetbets turns it over in under two minutes, so a fifteen-minute
+    floor would mean never seeing most of it -- and unlike a symbol stream,
+    what is missed is gone rather than merely late.
+    """
+    floor = floor or MIN_INTERVAL
+    ceiling = ceiling or MAX_INTERVAL
+    page = page_size or PAGE_SIZE
+
+    if rate is None:
+        return floor
+    if rate <= 0:
+        return ceiling
+
+    coverage_hours = page / rate
     interval = dt.timedelta(hours=coverage_hours * SAFETY_FACTOR)
-    return max(MIN_INTERVAL, min(MAX_INTERVAL, interval))
+    return max(floor, min(ceiling, interval))
 
 
 def ensure_tracked(source, symbols, now):
@@ -74,7 +84,8 @@ def due_symbols(source, now, limit):
     return [row.symbol for row in rows]
 
 
-def record_poll(source, symbol, now, rate):
+def record_poll(source, symbol, now, rate, floor=None, ceiling=None,
+                page_size=None):
     """Stamp a completed poll and schedule the next one from the new rate."""
     row = RadarPollState.query.filter_by(source=source, symbol=symbol).one_or_none()
     if row is None:
@@ -83,5 +94,5 @@ def record_poll(source, symbol, now, rate):
 
     row.last_polled_at = now
     row.observed_rate = rate
-    row.next_due_at = now + interval_for_rate(rate)
+    row.next_due_at = now + interval_for_rate(rate, floor, ceiling, page_size)
     db.session.commit()

@@ -7,6 +7,7 @@ stamped onto every bucket. Baselines are computed only over buckets sharing the
 current version, so adding a source starts a warm-up instead of reading
 straight through the discontinuity (spec 6.6).
 """
+import datetime as dt
 import hashlib
 import json
 import re
@@ -280,7 +281,26 @@ REDDIT_SUBS = (
 # than complete: r/wallstreetbets turns its 25-entry feed over in under two
 # minutes, so most of its comments will be missed and its buckets will say
 # `truncated`. Raise this only after watching for 429s in the daemon log.
-REDDIT_SUBS_PER_CYCLE = 4
+REDDIT_SUBS_PER_CYCLE = 3
+
+# Reddit runs on its OWN clock, not the market-session cycle.
+#
+# The ingest cycle stretches to 1800s overnight because chatter follows the
+# session -- which is right for the sources it was built for and wrong here.
+# Measured 2026-08-24: four subs per 30-minute cycle meant a full rotation of
+# eighteen took over two hours, and r/wallstreetbets turns its 25-entry feed
+# over in under two minutes. Six hours of that produced ONE scorable mention.
+#
+# Reddit does not stop at the closing bell, and what a slow poll misses is
+# gone rather than late -- there is no cursor to catch up from.
+REDDIT_INTERVAL_SECONDS = 120
+
+# Bounds for this source's adaptive cadence. The scheduler's defaults are
+# StockTwits-shaped (15 min to 4 h) and its floor alone would lose most of
+# r/wallstreetbets. The floor is what a busy sub gets; the ceiling is where a
+# silent one -- or a throttled one -- ends up.
+REDDIT_MIN_POLL = dt.timedelta(seconds=90)
+REDDIT_MAX_POLL = dt.timedelta(minutes=45)
 
 # StockTwits publishes no rate-limit headers and twenty consecutive requests
 # drew no 429, so this is a conservative budget rather than a documented
