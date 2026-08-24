@@ -144,15 +144,43 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
         session = market_calendar.session_state(
             now.replace(tzinfo=dt.timezone.utc))
 
-    scored_rows = (RadarBucketSource.query
-                   .filter(RadarBucketSource.source.in_(list(sources)),
-                           RadarBucketSource.bucket_start >= since,
-                           RadarBucketSource.bucket_start < now,
-                           RadarBucketSource.mention_z.isnot(None))
-                   .all())
+    # Aggregated in SQL rather than in Python, and this is the difference
+    # between a page and a wait. Every figure the loop below needs is a SUM, a
+    # MAX or a MIN over a ticker's buckets, and fetching the buckets themselves
+    # meant materialising a mapped object per bucket per source per quarter
+    # hour: measured on the live board 2026-08-24, 17,508 rows to rank four
+    # tickers on the 4h board and 99,776 to rank forty-one on the 24h one --
+    # 707ms of SQL and 1.8s of object construction, for figures the database
+    # can produce in one pass.
+    #
+    # Grouped by SOURCE as well as ticker, not folded to kind here: which kind
+    # a source belongs to is `source_kind`'s judgement and it stays in Python.
+    # Sources are a handful, so this is ~3 rows per ticker rather than ~96.
+    #
+    # MIN over a nullable baseline_days skips NULLs, which is exactly what the
+    # Python it replaces did. The columns that must not skip -- mention_count,
+    # distinct_authors, distinct_text_ratio, status -- are all NOT NULL.
+    bucket = RadarBucketSource
+    per_source = (db.session.query(
+        bucket.ticker.label('ticker'),
+        bucket.source.label('source'),
+        sa.func.sum(bucket.mention_count).label('mentions'),
+        sa.func.sum(sa.func.coalesce(bucket.expected, 0.0)).label('expected'),
+        sa.func.sum(sa.func.coalesce(bucket.variance, 0.0)).label('variance'),
+        sa.func.max(bucket.distinct_authors).label('authors'),
+        sa.func.min(bucket.distinct_text_ratio).label('text_ratio'),
+        sa.func.min(bucket.baseline_days).label('baseline_days'),
+        sa.func.max(sa.case((bucket.status == 'truncated', 1), else_=0))
+        .label('truncated'))
+        .filter(bucket.source.in_(list(sources)),
+                bucket.bucket_start >= since,
+                bucket.bucket_start < now,
+                bucket.mention_z.isnot(None))
+        .group_by(bucket.ticker, bucket.source)
+        .all())
 
     grouped = collections.defaultdict(list)
-    for row in scored_rows:
+    for row in per_source:
         grouped[row.ticker].append(row)
 
     profiles = _universe_rows(grouped.keys())
@@ -171,27 +199,33 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
     rows = []
     excluded = collections.Counter()
 
-    for ticker, buckets in grouped.items():
-        mentions = sum(b.mention_count for b in buckets)
-        expected = sum(b.expected or 0.0 for b in buckets)
-        variance = sum(b.variance or 0.0 for b in buckets)
+    for ticker, parts in grouped.items():
+        # `parts` is one already-aggregated row per source, so these fold a
+        # handful of numbers rather than a few hundred bucket objects.
+        # Coerced here, once. SUM over an INTEGER column comes back as Decimal
+        # from MySQL and MariaDB alike, and Decimal minus float raises -- so
+        # the mention_z line below would have been the first thing to break,
+        # in the middle of scoring rather than at the boundary.
+        mentions = int(sum(part.mentions for part in parts))
+        expected = float(sum(part.expected for part in parts))
+        variance = float(sum(part.variance for part in parts))
         # True count where the posts are still retained; the bucket maximum
         # only as a fallback once they have aged out. The fallback undercounts,
         # which is the safe direction -- it can hide a ticker but never invent
         # breadth that was not there.
         authors = author_counts.get(
-            ticker, max(b.distinct_authors for b in buckets))
-        text_ratio = min(b.distinct_text_ratio for b in buckets)
+            ticker, int(max(part.authors for part in parts)))
+        text_ratio = float(min(part.text_ratio for part in parts))
 
         # The gate is per kind: a forum's independent voices are its authors, a
         # broadcast network's are its channels. The pooled figures above still
         # describe the row -- they just no longer decide it.
         by_kind = collections.defaultdict(
             lambda: [0, 1.0])          # [mentions, lowest text ratio seen]
-        for bucket in buckets:
-            totals = by_kind[source_kind(bucket.source)]
-            totals[0] += bucket.mention_count
-            totals[1] = min(totals[1], bucket.distinct_text_ratio)
+        for part in parts:
+            totals = by_kind[source_kind(part.source)]
+            totals[0] += int(part.mentions)
+            totals[1] = min(totals[1], float(part.text_ratio))
 
         contributions = {
             kind: scoring.Contribution(
@@ -213,9 +247,12 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
         mention_z = ((mentions - expected)
                      / max(variance, 0.25) ** 0.5) if variance else None
 
-        contributing = sorted({b.source for b in buckets})
-        baseline_days = min((b.baseline_days for b in buckets
-                             if b.baseline_days is not None), default=None)
+        contributing = sorted({part.source for part in parts})
+        # MIN already skipped NULLs per source; this skips the sources that
+        # had nothing but NULLs, so a row with no usable baseline anywhere
+        # still reports None rather than raising.
+        baseline_days = min((part.baseline_days for part in parts
+                             if part.baseline_days is not None), default=None)
 
         profile = profiles.get(ticker)
         status, latest = statuses[ticker]
@@ -246,7 +283,7 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
             marks.append('single-source')
         if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
             marks.append('provisional')
-        if any(b.status == 'truncated' for b in buckets):
+        if any(part.truncated for part in parts):
             marks.append('partial')
 
         row_segment = universe.segment_for(
