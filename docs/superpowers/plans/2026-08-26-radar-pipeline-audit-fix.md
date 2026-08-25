@@ -79,7 +79,7 @@
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `models.RadarMentionEvent` with columns `id, source, external_id, ticker, created_utc, bucket_start, author, simhash, confidence, sentiment, engagement`; `config.MENTION_EVENT_RETENTION_HOURS = 48`.
+- Produces: `models.RadarMentionEvent` with columns `id, source, external_id, ticker, channel, created_utc, bucket_start, author, simhash, confidence, sentiment, engagement`; `config.MENTION_EVENT_RETENTION_HOURS = 48`.
 
 This table is the record `roll_up` currently lacks. `radar_posts` cannot serve — a post whose tickers were all `low` is never stored, so promotion inputs are absent from it.
 
