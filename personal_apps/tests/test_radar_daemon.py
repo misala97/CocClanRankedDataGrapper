@@ -427,3 +427,33 @@ def test_the_daemon_schedules_a_history_job():
 
     assert "id='radar_history'" in source
     assert '_scheduled_history' in source
+
+
+def test_the_daemon_schedules_a_sentiment_job():
+    """Same absence-shaped defect the history job's test documents.
+
+    A pass nobody runs looks exactly like a pass that runs and finds nothing:
+    every mention keeps answering on its lexicon score and the board renders
+    normally, so the only evidence would be a column that never fills.
+    """
+    import inspect
+    source = inspect.getsource(daemon.main)
+
+    assert "id='radar_sentiment'" in source
+    assert '_scheduled_sentiment' in source
+
+
+def test_a_broken_sentiment_pass_does_not_take_the_daemon_down(monkeypatch):
+    """It is an optional enrichment on top of ingest, and it is the only job
+    here that depends on a third-party API key.
+
+    An unset key raises at client construction, which would otherwise mean a
+    missing environment variable silently costs the whole radar service --
+    ingest, scoring, quotes and all -- to decorate a column nothing blocks on.
+    """
+    def explode():
+        raise RuntimeError('ANTHROPIC_API_KEY is not set')
+
+    monkeypatch.setattr(daemon.llm_sentiment, 'run_pass', explode)
+
+    daemon._scheduled_sentiment()   # must not raise

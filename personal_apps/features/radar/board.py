@@ -221,11 +221,29 @@ def _tones(tickers, sources, since, now):
     if not tickers:
         return {}
 
+    # A model verdict outranks the word list on the same post, and a NULL
+    # verdict falls back to it rather than counting as toneless. The lexicon
+    # is forty words with a negation window: it reads "great, another green
+    # day" after a crash as bullish, which is exactly the case spec 6.11
+    # specified a re-read for. Verdicts arrive on a scheduled pass, so most
+    # rows carry none at any given moment and the fallback is the normal path,
+    # not the exception.
+    #
+    # `unclear` deliberately votes neither way AND blocks the lexicon from
+    # voting: it means the post named the ticker without saying anything about
+    # it, and the read is better informed than the word list it overrides.
     score = RadarMention.lexicon_sentiment
+    verdict = RadarMention.llm_sentiment
+    bullish = sa.case(
+        (verdict.is_(None), sa.case((score > 0, 1), else_=0)),
+        (verdict == 'bullish', 1), else_=0)
+    bearish = sa.case(
+        (verdict.is_(None), sa.case((score < 0, 1), else_=0)),
+        (verdict == 'bearish', 1), else_=0)
     rows = (db.session.query(
                 RadarMention.ticker,
-                sa.func.sum(sa.case((score > 0, 1), else_=0)),
-                sa.func.sum(sa.case((score < 0, 1), else_=0)),
+                sa.func.sum(bullish),
+                sa.func.sum(bearish),
                 sa.func.count())
             .join(RadarPost, RadarPost.id == RadarMention.post_id)
             .filter(RadarMention.ticker.in_(list(tickers)),

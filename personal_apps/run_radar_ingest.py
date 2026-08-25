@@ -24,8 +24,8 @@ from app import app
 from extensions import db
 from models import RadarPollState
 from features.radar import (
-    history, ingest, market_calendar, quotes, retention, scheduling, scoring,
-    universe)
+    history, ingest, llm_sentiment, market_calendar, quotes, retention,
+    scheduling, scoring, universe)
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
@@ -473,6 +473,29 @@ def _scheduled_prune():
             logger.info('radar retention pruned %d quotes', quotes)
 
 
+def _scheduled_sentiment():
+    """The model re-read of tone, spec 6.11.
+
+    Its own job rather than part of a cycle, and deliberately: ingest must
+    never wait on an external API, and a source that failed must never be able
+    to fail because sentiment did. Nothing downstream blocks on this -- a
+    mention with no verdict simply keeps answering on its lexicon score.
+    """
+    with app.app_context():
+        try:
+            judged = llm_sentiment.run_pass()
+        except Exception:
+            # Broad on purpose, same as the source isolation above. A missing
+            # API key raises at client construction, and taking the whole
+            # daemon down over an optional enrichment would cost the ingest
+            # this exists to decorate.
+            logger.exception('radar sentiment pass failed')
+            return
+        if judged:
+            logger.info('radar sentiment judged %d mentions, %d still waiting',
+                        judged, llm_sentiment.pending_count())
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
     if prefer_ipv4_if_configured():
@@ -530,6 +553,13 @@ def main():
                       + dt.timedelta(minutes=1))
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
+    # Ten minutes, and PASS_LIMIT caps each run, so a day of normal volume is
+    # covered many times over and an abnormal one cannot run up a bill
+    # unattended. Offset past the first cycle so there are mentions to read.
+    scheduler.add_job(_scheduled_sentiment, 'interval', minutes=10,
+                      id='radar_sentiment', max_instances=1, coalesce=True,
+                      next_run_time=dt.datetime.now(dt.timezone.utc)
+                      + dt.timedelta(minutes=4))
     scheduler.start()
     logger.info('radar ingest daemon started, sources=%s', ','.join(SOURCES))
 

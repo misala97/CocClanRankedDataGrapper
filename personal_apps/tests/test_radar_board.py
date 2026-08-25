@@ -75,7 +75,7 @@ def bucket(ticker, minutes_ago, source='bluesky', mentions=10, authors=6,
 
 
 def post(ticker, external, minutes_ago, sentiment, author=None,
-         source='bluesky'):
+         source='bluesky', llm=None):
     # A distinct author per post unless one is named: the eligibility floor
     # needs three, and reusing one name silently drops the row from the board
     # before any assertion about tone gets a chance to run.
@@ -88,7 +88,8 @@ def post(ticker, external, minutes_ago, sentiment, author=None,
     db.session.add(row)
     db.session.flush()
     db.session.add(RadarMention(post_id=row.id, ticker=ticker,
-                                confidence='high', lexicon_sentiment=sentiment))
+                                confidence='high', lexicon_sentiment=sentiment,
+                                llm_sentiment=llm))
 
 
 def quote(ticker, minutes_ago, price):
@@ -234,6 +235,58 @@ def test_tone_counts_neutral_separately_rather_than_folding_it_in(clean):
 
     assert (tone.bullish, tone.bearish, tone.neutral) == (1, 1, 3)
     assert tone.scored == 2
+
+
+def test_a_model_verdict_outranks_the_lexicon_on_the_same_post(clean):
+    """The lexicon is forty words and cannot read sarcasm, which is the whole
+    reason spec 6.11 specified a model re-read.
+
+    "great, another green day" after a crash scores bullish on the word list
+    and bearish on a read of the sentence. Where both exist the read wins --
+    keeping both columns is what makes the disagreement visible at all.
+    """
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    post(f'{PREFIX}A', f'{PREFIX}1', 30, 0.6, llm='bearish')
+    post(f'{PREFIX}A', f'{PREFIX}2', 30, -0.4, llm='bullish')
+    post(f'{PREFIX}A', f'{PREFIX}3', 30, 0.0, llm='bullish')
+    db.session.commit()
+
+    tone = only(board.build(['bluesky'], NOW), f'{PREFIX}A').tone
+
+    assert (tone.bullish, tone.bearish) == (2, 1)
+
+
+def test_an_unjudged_post_still_counts_on_its_lexicon_score(clean):
+    """The verdicts arrive on a scheduled pass, so at any moment most rows
+    have none. A column that is NULL for a post means nothing was read for it,
+    not that the post was toneless -- the lexicon still answers for those."""
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    post(f'{PREFIX}A', f'{PREFIX}1', 30, 0.6, llm=None)
+    post(f'{PREFIX}A', f'{PREFIX}2', 30, -0.4, llm=None)
+    post(f'{PREFIX}A', f'{PREFIX}3', 30, 0.0, llm='bearish')
+    db.session.commit()
+
+    tone = only(board.build(['bluesky'], NOW), f'{PREFIX}A').tone
+
+    assert (tone.bullish, tone.bearish) == (1, 2)
+
+
+def test_an_unclear_verdict_is_not_a_bullish_or_bearish_vote(clean):
+    """`unclear` is the model saying the post names the ticker without saying
+    anything about it. It must not borrow a direction, and it must not let the
+    lexicon supply one either -- the read is the more informed of the two."""
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    post(f'{PREFIX}A', f'{PREFIX}1', 30, 0.6, llm='unclear')
+    post(f'{PREFIX}A', f'{PREFIX}2', 30, 0.6, llm='bullish')
+    post(f'{PREFIX}A', f'{PREFIX}3', 30, 0.0, llm='unclear')
+    db.session.commit()
+
+    tone = only(board.build(['bluesky'], NOW), f'{PREFIX}A').tone
+
+    assert (tone.bullish, tone.bearish, tone.neutral) == (1, 0, 2)
 
 
 def test_tone_ignores_posts_from_a_source_that_is_switched_off(clean):
