@@ -417,6 +417,13 @@ PAGE_CAP = 10
 
 POST_RETENTION_DAYS = 30
 
+# How long the mention journal is kept. Buckets are the durable artifact; the
+# journal exists only so a bucket can be rebuilt while cycles are still
+# arriving in it. Two days is generous against a catch-up after an outage --
+# what it must outlast is the deepest cursor rewind, not the retention of
+# anything the board reads.
+MENTION_EVENT_RETENTION_HOURS = 48
+
 # How long a price snapshot is worth keeping. The longest window the board or
 # the panel ever measures a move across is 24h, so a week is generous; what
 # the number cannot do is decide on its own which rows go, because

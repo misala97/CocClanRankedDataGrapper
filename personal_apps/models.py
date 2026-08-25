@@ -830,3 +830,61 @@ class RadarLlmSpend(db.Model):
     input_tokens  = db.Column(db.BigInteger, nullable=False, default=0)
     output_tokens = db.Column(db.BigInteger, nullable=False, default=0)
     cost_micros   = db.Column(db.BigInteger, nullable=False, default=0)
+
+
+class RadarMentionEvent(db.Model):
+    """Every extracted mention, kept just long enough to rebuild its bucket.
+
+    roll_up recomputes a bucket from scratch on every pass. That is right --
+    cycles overlap and additive rollup would double-count the boundary -- but
+    it can only be right if the recompute sees the WHOLE quarter-hour. Cycles
+    advance a cursor, so what one cycle holds in memory is a slice, and
+    rebuilding from that slice erased the earlier ones. Measured in production
+    2026-08-26: 4.4% lost on singleton buckets, 42.9% on the 10+ buckets the
+    board exists to rank.
+
+    radar_posts cannot serve as this record. A post whose tickers were all
+    `low` is never stored -- Bluesky alone would be 100 million rows a month --
+    so the promotion inputs are simply absent from it.
+
+    NOT partitioned, unlike radar_buckets: retention here is 48 hours with
+    chunked deletes, so there is no month-sized range to drop.
+    """
+    __tablename__ = 'radar_mention_events'
+    __table_args__ = (
+        # The identity of a mention. A post returned by two overlapping cycles
+        # is one mention, and this is what makes the rebuild idempotent.
+        db.UniqueConstraint('source', 'external_id', 'ticker',
+                            name='uq_radar_mention_event'),
+        # How roll_up reads it back: every event in one ticker's quarter-hour.
+        db.Index('ix_radar_mention_events_bucket', 'ticker', 'bucket_start'),
+        # How retention finds what to drop.
+        db.Index('ix_radar_mention_events_created', 'created_utc'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id           = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    # 48, not 24: a Reddit source name carries its subreddit
+    # (`reddit:smallstreetbets`), and the width is not worth defending.
+    source       = db.Column(db.String(48), nullable=False)
+    external_id  = db.Column(db.String(128), nullable=False)
+    ticker       = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
+    # The venue inside the source -- a subreddit, a board, a channel. Carried
+    # because a broadcast network's independent unit is the CHANNEL and not the
+    # author: one admin posts and thousands read, so every bucket has exactly
+    # one author and an author gate can never be cleared however loud a symbol
+    # is. No live source is broadcast today; Telegram is why the column exists.
+    channel      = db.Column(db.String(64), nullable=False, default='')
+    created_utc  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    # Denormalised so the rebuild is one indexed read rather than a scan with
+    # date arithmetic in the predicate.
+    bucket_start = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    author       = db.Column(db.String(64), nullable=True)
+    simhash      = db.Column(MYSQL_BIGINT(unsigned=True), nullable=False, default=0)
+    # PRE-promotion. `medium` is awarded at rollup from the complete bucket and
+    # is never stored here, because storing it would freeze a decision that the
+    # next cycle's arrivals can legitimately change.
+    confidence   = db.Column(
+        db.Enum('high', 'low', name='radar_event_confidence'), nullable=False)
+    sentiment    = db.Column(db.Float, nullable=True)
+    engagement   = db.Column(db.Float, nullable=False, default=0.0)
