@@ -15,7 +15,7 @@ from models import RadarMention, RadarPost, RadarSourceCursor
 from . import buckets, extraction, fingerprint, sentiment, universe
 from .config import (
     BUCKET_MINUTES, bare_token_confidence, bare_tokens_allowed,
-    coin_collision_dropped)
+    coin_collision_dropped, looks_like_bot_feed)
 
 logger = logging.getLogger('radar.ingest')
 
@@ -70,6 +70,13 @@ def _extract_for(raw, lookup):
     uncorroborated one is WORTH, and whether a coin-shaped symbol means the
     company or the coin.
     """
+    # An automated feed is one publisher however many tickers it names, and
+    # it is not a person discussing anything. Dropped before extraction so the
+    # whole post goes -- config.looks_like_bot_feed carries what counts and
+    # why it matches the format's vocabulary rather than the symbols.
+    if looks_like_bot_feed('%s %s' % (raw.title or '', raw.body or '')):
+        return []
+
     tickers = extraction.extract_tickers(
         raw.title, raw.body, lookup,
         allow_bare=bare_tokens_allowed(raw.source),

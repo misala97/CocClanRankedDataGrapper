@@ -112,20 +112,20 @@ def test_an_unknown_source_drops_them():
 # shorthand rather than equities.
 
 def test_exchange_bot_output_is_recognised():
-    from features.radar.config import looks_like_exchange_bot
+    from features.radar.config import looks_like_bot_feed
 
-    assert looks_like_exchange_bot(
+    assert looks_like_bot_feed(
         '$485.6K $PUMP LONG liquidated on Binance @ $0.0048')
-    assert looks_like_exchange_bot('$H ARB 5.77% OKX -> BinanceF #arbitrage')
+    assert looks_like_bot_feed('$H ARB 5.77% OKX -> BinanceF #arbitrage')
 
 
 def test_a_person_talking_about_selling_is_not_a_bot():
     """The rule matches exchange vocabulary, not trading vocabulary. Dropping
     posts because someone wrote 'liquidated' would cost real mentions."""
-    from features.radar.config import looks_like_exchange_bot
+    from features.radar.config import looks_like_bot_feed
 
-    assert not looks_like_exchange_bot('I liquidated my position yesterday')
-    assert not looks_like_exchange_bot('NVDA earnings beat, calls printing')
+    assert not looks_like_bot_feed('I liquidated my position yesterday')
+    assert not looks_like_bot_feed('NVDA earnings beat, calls printing')
 
 
 def test_the_version_stamp_covers_the_extraction_rules():

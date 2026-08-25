@@ -126,18 +126,33 @@ SINGLE_LETTER_CASHTAGS = {
     'bluesky': False,
 }
 
-# Exchange bots, not people. Crypto liquidation and arbitrage feeds post in a
-# fixed format and are prolific on general networks:
+# Automated feeds, not people. A machine restating a template every few
+# seconds is ONE publisher however many tickers it names, so it is dropped
+# whole rather than symbol by symbol -- and per-symbol rules would have to
+# enumerate a list that changes weekly.
 #
+# Crypto exchange bots, prolific on general networks:
 #   "$485.6K $PUMP LONG liquidated on Binance @ $0.0048"
 #   "$H ARB 5.77% OKX -> BinanceF #arbitrage"
 #
-# They are dropped whole rather than symbol by symbol, because the post is not
-# a person discussing anything -- and the symbols they carry are coins, so
-# per-symbol rules would have to enumerate a list that changes weekly. Matched
-# on the exchange vocabulary itself, which is what stays constant.
-_EXCHANGE_BOT_RE = re.compile(
-    r'liquidated on\b|\bOKX\b|\bBinanceF\b|#arbitrage\b|vs\. Bitcoin\b',
+# Sports results, found 2026-08-25 as the top discarded symbol left after the
+# junk-class stopwords shipped:
+#   "FIP GOLD BELGRADE  Qualifying - Male - 1  B. Levchuk/Z. Meireles def ..."
+# That is the International Padel Federation -- FIP the federation, GOLD a
+# tournament tier -- at 3025 mentions a week from one account. A stopword was
+# the wrong instrument: global, and it would have cost Barrick Gold and FTAI
+# Infrastructure their bare mentions everywhere to silence one feed.
+#
+# Matched on the vocabulary of the FORMAT, which is what stays constant.
+#
+# DEFINED 2026-08-22 AND CALLED BY NOTHING until 2026-08-25, while being
+# hashed into source_config_version the whole time -- so the stamp claimed it
+# was policy while it had no effect. A defect shaped like an absence, which is
+# why there is now an ingest test asserting the call actually happens.
+_BOT_FEED_RE = re.compile(
+    r'liquidated on\b|\bOKX\b|\bBinanceF\b|#arbitrage\b|vs\. Bitcoin\b'
+    r'|\bFIP (?:GOLD|SILVER|BRONZE|PLATINUM|STAR)\b'
+    r'|\bQualifying - (?:Male|Female)\b',
     re.IGNORECASE)
 
 
@@ -228,14 +243,14 @@ POOLED_VEHICLE_PATTERN = (
 FUNDS_PROMOTE_BARE_TOKENS = False
 
 
-def looks_like_exchange_bot(text):
+def looks_like_bot_feed(text):
     """True for machine-generated crypto exchange output.
 
     Applied on every source. These bots do not post to StockTwits, so the rule
     costs nothing there, and scoping it per source would only invite the
     question of which sources are safe.
     """
-    return bool(_EXCHANGE_BOT_RE.search(text or ''))
+    return bool(_BOT_FEED_RE.search(text or ''))
 
 
 def single_letter_cashtags_allowed(source):
@@ -435,9 +450,8 @@ STOPWORDS = frozenset({
     # is the federation and GOLD is a tournament tier. A stopword is the wrong
     # instrument for one bot -- it is global, and it would cost Barrick Gold
     # and FTAI Infrastructure their bare mentions everywhere to silence a
-    # padel feed. looks_like_exchange_bot is the right instrument and is
-    # currently defined, hashed into source_config_version, and called by
-    # nothing. Wiring it is its own decision.
+    # padel feed. looks_like_bot_feed is the right instrument, and as of
+    # 2026-08-25 it is wired into ingest and matches this format.
 })
 
 # How many bare mentions one cashtagging author may vouch for, inside one
@@ -493,7 +507,7 @@ def source_config_version():
         'stopwords': sorted(STOPWORDS),
         'cashtag_re': CASHTAG_PATTERN,
         'bare_re': BARE_PATTERN,
-        'bot_re': _EXCHANGE_BOT_RE.pattern,
+        'bot_re': _BOT_FEED_RE.pattern,
         'name_df': [MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO,
                     MIN_NAME_TOKEN_LEN],
         # Every subreddit shares the source name `reddit`, so adding or

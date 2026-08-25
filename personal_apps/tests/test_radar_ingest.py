@@ -332,3 +332,44 @@ def test_the_same_symbol_still_counts_on_a_finance_source(seeded, monkeypatch):
     result = ingest.run_cycle(
         NOW, {'stocktwits': lambda s: FetchResult(posts=[p], status='ok')})
     assert result['mentions'] == 1
+
+
+# --- Automated feeds, wired in 2026-08-25 -----------------------------------
+#
+# config.looks_like_bot_feed (was looks_like_exchange_bot) had been defined
+# since 2026-08-22 and hashed into source_config_version, and called by
+# NOTHING. The pattern was written and then never reached the pipeline, which
+# is a defect shaped like an absence: the board looked normal, it just counted
+# machines.
+
+def test_a_bot_feed_post_contributes_no_mentions():
+    """The post is not a person discussing anything.
+
+    Dropped whole rather than symbol by symbol -- a machine restating the same
+    template every few seconds is one publisher, however many tickers it
+    names, and per-symbol rules would have to enumerate a list that changes
+    weekly.
+    """
+    from features.radar import ingest, universe
+
+    lookup = universe.annotate_distinctive({
+        'GOLD': {'name': 'Barrick Mining Corporation', 'exchange': 'NYSE'},
+        'FIP': {'name': 'FTAI Infrastructure Inc.', 'exchange': 'NASDAQ'},
+    })
+    raw = post(body='FIP GOLD BELGRADE  Qualifying - Male - 1  '
+                    'B. Levchuk/Z. Meireles def Z. Schmidt-Bohn/M. Csereszny 7/6 7/6')
+
+    assert ingest._extract_for(raw, lookup) == []
+
+
+def test_a_person_naming_the_same_tickers_still_counts():
+    """Teeth. If the filter swallowed the tickers rather than the feed, the
+    assertion above would pass while Barrick became untrackable."""
+    from features.radar import ingest, universe
+
+    lookup = universe.annotate_distinctive({
+        'GOLD': {'name': 'Barrick Mining Corporation', 'exchange': 'NYSE'},
+    })
+    raw = post(body='$GOLD breaking out, miners finally waking up')
+
+    assert ingest._extract_for(raw, lookup) == [('GOLD', 'high')]
