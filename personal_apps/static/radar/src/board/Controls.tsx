@@ -1,5 +1,20 @@
 import { SEGMENT_ORDER, segmentLabel, sourceLabel } from '../format'
+
 import type { BoardPayload, SegmentFilter, Selection } from '../types'
+
+/** Add or remove one segment. `null` is the All chip and clears everything.
+ *
+ *  Turning the LAST chip off lands on All rather than on an empty board.
+ *  Zero selected and "no filter" are the same query, and a chip strip where
+ *  every chip is off but rows are still showing reads as broken.
+ */
+export function toggleSegment(current: SegmentFilter[],
+                              value: SegmentFilter | null): SegmentFilter[] {
+  if (value === null) return []
+  return current.includes(value)
+    ? current.filter((name) => name !== value)
+    : [...current, value]
+}
 
 const WINDOWS = [1, 4, 24]
 
@@ -52,12 +67,19 @@ export function Controls({ payload, selection, busy, onChange }: {
             target. */}
         {SEGMENT_ORDER.map((key) => {
           const value = key === 'all' ? null : (key as SegmentFilter)
-          const active = selection.segment === value
+          // `all` is not a segment, it is the absence of a filter -- so it
+          // reads as pressed exactly when nothing else is, and clicking it
+          // clears rather than adding a seventh selection.
+          const active = value === null
+            ? selection.segments.length === 0
+            : selection.segments.includes(value)
           const count = counts[key] ?? 0
           return (
             <button key={key} type="button" aria-pressed={active}
                     className={count ? undefined : 'nil'}
-                    onClick={() => onChange({ ...selection, segment: value })}>
+                    onClick={() => onChange({
+                      ...selection, segments: toggleSegment(selection.segments, value),
+                    })}>
               {segmentLabel(key)}
               <span className="n">{count}</span>
             </button>

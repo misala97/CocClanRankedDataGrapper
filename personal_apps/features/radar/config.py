@@ -604,10 +604,32 @@ DEFAULT_SEGMENT = 'small'
 
 
 def segments_in(selection):
-    """The concrete segments a selection covers, or () for everything."""
+    """The concrete segments a selection covers, or () for everything.
+
+    `selection` is one name or several. Several is a UNION, because picking a
+    second chip is asking to see MORE -- an intersection of disjoint segments
+    is always empty, which would make every multi-selection an empty board.
+
+    Groups expand inside a multi-selection too, so `small` beside `large`
+    means all four concrete segments rather than the literal string 'small'.
+    Overlaps are collapsed: `small` already contains `micro`, and selecting
+    both must not yield a duplicate a caller might count twice.
+
+    Order is deterministic rather than set-iteration order, so a config
+    version or a cache key built from this cannot change between runs.
+    """
     if selection is None:
         return ()
-    return SEGMENT_GROUPS.get(selection, (selection,))
+    if isinstance(selection, str):
+        selection = (selection,)
+
+    seen, out = set(), []
+    for name in selection:
+        for concrete in SEGMENT_GROUPS.get(name, (name,)):
+            if concrete not in seen:
+                seen.add(concrete)
+                out.append(concrete)
+    return tuple(out)
 MIN_DISTINCT_TEXT_RATIO = 0.35
 
 # A window counts as elevated at or above this z.

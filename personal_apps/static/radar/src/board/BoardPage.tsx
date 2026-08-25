@@ -17,7 +17,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [payload, setPayload] = useState(initial)
   const [selection, setSelection] = useState<Selection>({
     sources: initial.sources,
-    segment: initial.segment,
+    segments: initial.segments,
     window: initial.window_hours,
     minVenues: initial.min_venues,
   })

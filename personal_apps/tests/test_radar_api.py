@@ -50,7 +50,7 @@ def test_defaults_are_every_source_and_the_small_segment(client):
     payload = json.loads(client.get('/radar/api/board').data)
     from features.radar.config import DEFAULT_SEGMENT, SOURCES
     assert set(payload['sources']) == set(SOURCES)
-    assert payload['segment'] == DEFAULT_SEGMENT
+    assert payload['segments'] == [DEFAULT_SEGMENT]
 
 
 def test_an_empty_segment_still_asks_for_everything(client):
@@ -59,7 +59,7 @@ def test_an_empty_segment_still_asks_for_everything(client):
     the default or the chip would be dead."""
     payload = json.loads(client.get('/radar/api/board?segment=').data)
 
-    assert payload['segment'] is None
+    assert payload['segments'] == []
 
 
 def test_the_payload_carries_what_the_surface_has_to_draw(client):
@@ -68,7 +68,7 @@ def test_the_payload_carries_what_the_surface_has_to_draw(client):
     shows up as a blank panel, not an error."""
     payload = json.loads(client.get('/radar/api/board').data)
 
-    for key in ('generated_at', 'sources', 'all_sources', 'segment',
+    for key in ('generated_at', 'sources', 'all_sources', 'segments',
                 'window_hours', 'segment_counts', 'triplet_hours',
                 'series_hours', 'lead_count', 'rows'):
         assert key in payload, key
@@ -235,7 +235,7 @@ def test_the_board_opens_on_the_small_stuff(client):
     megacaps and micro-caps in one list."""
     payload = json.loads(client.get('/radar/api/board').data)
 
-    assert payload['segment'] == 'small'
+    assert payload['segments'] == ['small']
 
 
 def test_the_payload_says_what_the_floor_left_out(client):
@@ -262,3 +262,48 @@ def test_an_invented_span_is_still_rejected():
 
     assert not detail.known_span('5Y')
     assert not detail.known_span('')
+
+
+# --- Multi-segment query parsing, 2026-08-25 --------------------------------
+
+def _parse(**args):
+    from features.radar.routes.api import parse_query
+    return parse_query(args)
+
+
+def test_several_segments_arrive_as_a_list():
+    assert _parse(segment='small,large').segments == ['small', 'large']
+
+
+def test_a_single_segment_still_parses():
+    """Bookmarked URLs carry `?segment=small`. Widening the parameter must not
+    invalidate every link anyone saved."""
+    assert _parse(segment='small').segments == ['small']
+
+
+def test_an_empty_segment_is_still_how_the_surface_asks_for_all():
+    assert _parse(segment='').segments == []
+
+
+def test_the_default_is_still_the_discovery_segment():
+    """It is a radar for things nobody has heard of. Opening on everything
+    buries them under megacap chatter."""
+    from features.radar.config import DEFAULT_SEGMENT
+
+    assert _parse().segments == [DEFAULT_SEGMENT]
+
+
+def test_one_unknown_name_rejects_the_whole_selection():
+    """Silently dropping it would return a board under a selection the viewer
+    never made, which is the reason every other parameter here is validated
+    rather than coerced."""
+    from features.radar.routes.api import BadQuery
+    import pytest as _pytest
+
+    with _pytest.raises(BadQuery):
+        _parse(segment='small,nonsense')
+
+
+def test_whitespace_and_empty_entries_are_forgiven():
+    """A person editing the address bar is not a bug."""
+    assert _parse(segment=' small , large ,').segments == ['small', 'large']

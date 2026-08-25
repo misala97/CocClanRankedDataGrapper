@@ -171,7 +171,8 @@ export interface BoardPayload {
   generated_at: string
   sources: string[]
   all_sources: string[]
-  segment: SegmentFilter | null
+  /** What the board was filtered to. Empty means All. */
+  segments: SegmentFilter[]
   session: Session
   /** 1 = any, 2 = only rows more than one venue is talking about. */
   min_venues: number
@@ -195,6 +196,8 @@ export interface Selection {
   sources: string[]
   /** Server-side filter, unlike the chart span -- changing it refetches. */
   minVenues: number
-  segment: SegmentFilter | null
+  /** Several, and a union -- picking a second chip asks to see more. Empty
+   *  is no filter, which is what the All chip sets. */
+  segments: SegmentFilter[]
   window: number
 }

@@ -27,7 +27,7 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
     generated_at: '2026-08-22T19:00:00Z',
     sources: ['stocktwits', 'bluesky', 'fourchan'],
     all_sources: ['stocktwits', 'bluesky', 'fourchan'],
-    segment: null, session: 'regular', window_hours: 4,
+    segments: [], session: 'regular', window_hours: 4,
     min_venues: 1, venue_counts: { any: 4, multi: 2 },
     segment_counts: { all: 4, large: 4 },
     triplet_hours: [1, 4, 24], series_hours: 24, lead_count: 3,
@@ -169,7 +169,7 @@ describe('the controls', () => {
     /* The server's default segment is Small, so a URL with no segment param
        reloads as Small. Sharing the All view has to survive a reload, which
        means the empty value is the state, not the absence of one. */
-    render(<BoardPage initial={payload({ segment: 'small' })} />)
+    render(<BoardPage initial={payload({ segments: ['small'] })} />)
 
     await userEvent.click(screen.getByRole('button', { name: /^All/ }))
 

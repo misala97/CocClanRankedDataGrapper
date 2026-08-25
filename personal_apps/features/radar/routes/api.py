@@ -27,7 +27,9 @@ class Query:
     swapping limit and min_venues with nothing to complain about.
     """
     sources: list
-    segment: str | None
+    # Several, and a UNION -- picking a second chip asks to see more. Empty
+    # is 'no filter', which is how the surface asks for All.
+    segments: list
     window: int
     limit: int
     min_venues: int
@@ -56,10 +58,15 @@ def parse_query(args):
     else:
         selected = list(SOURCES)
 
-    # `?segment=` with an empty value is how the surface asks for All, and
-    # it has to stay reachable now that the default is not None.
-    segment = args.get('segment', DEFAULT_SEGMENT) or None
-    if segment is not None and segment not in SEGMENTS:
+    # Comma-separated since 2026-08-25, and `?segment=small` still parses --
+    # widening the parameter must not invalidate every bookmarked link.
+    # `?segment=` with an empty value stays how the surface asks for All.
+    raw_segments = args.get('segment', DEFAULT_SEGMENT)
+    segments = [name.strip() for name in raw_segments.split(',') if name.strip()]
+    # One bad name rejects the whole selection rather than being dropped:
+    # answering with a board under a selection the viewer never made is the
+    # thing every parameter here is validated rather than coerced to avoid.
+    if any(name not in SEGMENTS for name in segments):
         raise BadQuery('unknown segment')
 
     try:
@@ -81,7 +88,7 @@ def parse_query(args):
     if min_venues not in VENUE_FLOORS:
         raise BadQuery('unsupported venues')
 
-    return Query(sources=selected, segment=segment, window=window,
+    return Query(sources=selected, segments=segments, window=window,
                  limit=limit, min_venues=min_venues)
 
 
@@ -96,7 +103,7 @@ def serialize(board):
         'generated_at': board.generated_at.isoformat() + 'Z',
         'sources': board.sources,
         'all_sources': list(SOURCES),
-        'segment': board.segment,
+        'segments': board.segments,
         'session': board.session,
         'min_venues': board.min_venues,
         'venue_counts': board.venue_counts,
@@ -157,7 +164,7 @@ def build_payload(args, now=None):
     query = parse_query(args)
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     board = board_mod.build(query.sources, now, window_hours=query.window,
-                            segment=query.segment, limit=query.limit,
+                            segments=query.segments, limit=query.limit,
                             min_venues=query.min_venues)
     return serialize(board)
 

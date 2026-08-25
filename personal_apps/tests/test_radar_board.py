@@ -313,7 +313,7 @@ def test_segment_counts_are_taken_before_the_segment_filter(clean):
     bucket(f'{PREFIX}B', minutes_ago=30)
     db.session.commit()
 
-    built = board.build(['bluesky'], NOW, segment='mid')
+    built = board.build(['bluesky'], NOW, segments=['mid'])
 
     assert [entry.rank.ticker for entry in built.rows] == [f'{PREFIX}B']
     assert built.segment_counts['large'] >= 1
@@ -376,7 +376,7 @@ def test_small_unions_the_three_segments_below_mid(clean):
         bucket(f'{PREFIX}{suffix}', minutes_ago=30)
     db.session.commit()
 
-    built = board.build(['bluesky'], NOW, segment='small')
+    built = board.build(['bluesky'], NOW, segments=['small'])
     got = {entry.rank.ticker for entry in built.rows}
 
     assert got == {f'{PREFIX}B', f'{PREFIX}C'}
@@ -389,6 +389,6 @@ def test_a_row_in_small_still_reports_its_own_segment(clean):
     bucket(f'{PREFIX}B', minutes_ago=30)
     db.session.commit()
 
-    built = board.build(['bluesky'], NOW, segment='small')
+    built = board.build(['bluesky'], NOW, segments=['small'])
 
     assert built.rows[0].rank.segment == 'micro'

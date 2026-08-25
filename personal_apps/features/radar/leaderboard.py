@@ -121,7 +121,7 @@ def _universe_rows(tickers):
     return {row.symbol: row for row in rows}
 
 
-def build_rows(sources, now, window_hours=4, segment=None, limit=50,
+def build_rows(sources, now, window_hours=4, segments=(), limit=50,
                session=None, min_venues=1):
     """Ranked leaderboard rows for the selected sources.
 
@@ -137,9 +137,10 @@ def build_rows(sources, now, window_hours=4, segment=None, limit=50,
     ticker; the caller may pass it in to avoid computing it twice.
     """
     since = now - dt.timedelta(hours=window_hours)
-    # A selection may name a group ('small') or a single segment. Resolved
+    # A selection may name groups ('small'), single segments, or several of
+    # either. Resolved to a flat union.
     # once rather than per row; empty means everything.
-    allowed = segments_in(segment)
+    allowed = segments_in(segments)
     if session is None:
         session = market_calendar.session_state(
             now.replace(tzinfo=dt.timezone.utc))

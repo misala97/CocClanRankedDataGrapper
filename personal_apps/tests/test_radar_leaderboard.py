@@ -208,9 +208,9 @@ def test_segment_filtering(board):
     db.session.commit()
 
     assert [r.ticker for r in build_rows(['bluesky'], NOW,
-                                                     segment='large')] == ['LBBIG']
+                                                     segments=['large'])] == ['LBBIG']
     assert [r.ticker for r in build_rows(['bluesky'], NOW,
-                                                     segment='micro')] == ['LBSML']
+                                                     segments=['micro'])] == ['LBSML']
 
 
 def test_a_ticker_missing_from_the_universe_still_ranks(board):

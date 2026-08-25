@@ -34,7 +34,8 @@ export function queryFor(selection: Selection): string {
   params.set('window', String(selection.window))
   // Always sent, empty for All. Omitting it would hand the server its own
   // default, which is Small -- so the All chip would silently do nothing.
-  params.set('segment', selection.segment ?? '')
+  // Comma-separated; empty is how the surface asks for All.
+  params.set('segment', selection.segments.join(','))
   // Omitted at 1 so the default board keeps a clean URL.
   if (selection.minVenues > 1) params.set('venues', String(selection.minVenues))
   return params.toString()

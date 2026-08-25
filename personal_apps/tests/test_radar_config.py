@@ -201,3 +201,56 @@ def test_the_version_stamp_covers_the_distinctiveness_rule():
     finally:
         config.MAX_NAME_TOKEN_DF = original
     assert config.source_config_version() == before
+
+
+# --- Multi-segment selection, 2026-08-25 ------------------------------------
+
+def test_a_selection_of_several_segments_is_their_union():
+    """Michi's ask: "small and micro at once".
+
+    A union rather than an intersection -- picking two filters is asking to
+    see more, not less, and an intersection of disjoint segments is always
+    empty.
+    """
+    from features.radar.config import segments_in
+
+    assert set(segments_in(['large', 'mid'])) == {'large', 'mid'}
+
+
+def test_a_group_expands_inside_a_multi_selection():
+    """`small` is a group of three. Picking it beside `large` has to expand
+    it, not filter on the literal string, or the group stops meaning
+    anything the moment a second chip is on."""
+    from features.radar.config import segments_in
+
+    assert set(segments_in(['small', 'large'])) == {
+        'micro', 'unknown', 'recent_ipo', 'large'}
+
+
+def test_overlapping_selections_do_not_double_up():
+    """`small` already contains `micro`. Selecting both is not an error and
+    must not produce a duplicate that a caller might count."""
+    from features.radar.config import segments_in
+
+    got = segments_in(['small', 'micro'])
+
+    assert sorted(got) == sorted(set(got))
+    assert set(got) == {'micro', 'unknown', 'recent_ipo'}
+
+
+def test_an_empty_selection_still_means_everything():
+    """The existing contract, which the surface reaches by deselecting every
+    chip. () is 'no filter', not 'nothing matches'."""
+    from features.radar.config import segments_in
+
+    assert segments_in([]) == ()
+    assert segments_in(None) == ()
+
+
+def test_a_single_string_selection_still_works():
+    """Bookmarked URLs carry `?segment=small`, and the default is a bare
+    string. Widening the parameter must not break either."""
+    from features.radar.config import segments_in
+
+    assert set(segments_in('small')) == {'micro', 'unknown', 'recent_ipo'}
+    assert set(segments_in('large')) == {'large'}

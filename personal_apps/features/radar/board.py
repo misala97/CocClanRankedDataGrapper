@@ -92,7 +92,8 @@ class BoardRow:
 class Board:
     generated_at: dt.datetime
     sources: list
-    segment: str | None
+    # Several, and a union. Empty means no filter.
+    segments: list
     window_hours: int
     segment_counts: dict
     rows: list
@@ -261,7 +262,7 @@ def _tones(tickers, sources, since, now):
     return out
 
 
-def build(sources, now, window_hours=4, segment=None, limit=50,
+def build(sources, now, window_hours=4, segments=(), limit=50,
           leads=LEAD_COUNT, min_venues=1):
     """The whole board.
 
@@ -271,7 +272,7 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
     """
     session = market_calendar.session_state(now.replace(tzinfo=dt.timezone.utc))
     ranking = leaderboard.build_rows(sources, now, window_hours=window_hours,
-                                     segment=None, limit=None, session=session)
+                                     segments=(), limit=None, session=session)
     ranked = ranking.rows
 
     counts = collections.Counter(row.segment for row in ranked)
@@ -288,7 +289,7 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
         'multi': sum(1 for row in ranked if len(row.sources) > 1),
     }
 
-    allowed = segments_in(segment)
+    allowed = segments_in(segments)
     if allowed:
         ranked = [row for row in ranked if row.segment in allowed]
     if min_venues > 1:
@@ -312,7 +313,8 @@ def build(sources, now, window_hours=4, segment=None, limit=50,
         clauses=phrasing.row_clauses(row, session),
     ) for row in ranked]
 
-    return Board(generated_at=now, sources=list(sources), segment=segment,
+    return Board(generated_at=now, sources=list(sources),
+                 segments=list(segments),
                  window_hours=window_hours, segment_counts=segment_counts,
                  rows=rows, session=session, venue_counts=venue_counts,
                  min_venues=min_venues, excluded=ranking.excluded)
