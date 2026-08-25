@@ -119,7 +119,7 @@ def clean_events():
 
 def test_the_table_accepts_one_event(clean_events):
     db.session.add(RadarMentionEvent(
-        source='bluesky', external_id='zz-1', ticker='ZZA',
+        source='bluesky', external_id='zz-1', ticker='ZZA', channel='c',
         created_utc=dt.datetime(2026, 4, 15, 14, 3, 0),
         bucket_start=dt.datetime(2026, 4, 15, 14, 0, 0),
         author='u1', simhash=111, confidence='high',
@@ -141,7 +141,7 @@ def test_the_same_mention_cannot_be_stored_twice(clean_events):
 
     for _ in range(2):
         db.session.add(RadarMentionEvent(
-            source='bluesky', external_id='zz-dup', ticker='ZZB',
+            source='bluesky', external_id='zz-dup', ticker='ZZB', channel='c',
             created_utc=dt.datetime(2026, 4, 15, 14, 3, 0),
             bucket_start=dt.datetime(2026, 4, 15, 14, 0, 0),
             author='u1', simhash=222, confidence='high',
@@ -203,6 +203,12 @@ class RadarMentionEvent(db.Model):
     source       = db.Column(db.String(48), nullable=False)
     external_id  = db.Column(db.String(128), nullable=False)
     ticker       = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
+    # The venue inside the source -- a subreddit, a board, a channel. Carried
+    # because a broadcast network's independent unit is the CHANNEL and not the
+    # author: one admin posts and thousands read, so every bucket has exactly
+    # one author and an author gate can never be cleared however loud a symbol
+    # is. No live source is broadcast today; Telegram is why the column exists.
+    channel      = db.Column(db.String(64), nullable=False, default='')
     created_utc  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
     # Denormalised so the rebuild is one indexed read rather than a scan with
     # date arithmetic in the predicate.
@@ -250,6 +256,8 @@ def upgrade():
         sa.Column('external_id', sa.String(length=128), nullable=False),
         sa.Column('ticker', sa.String(length=12, collation='utf8mb4_bin'),
                   nullable=False),
+        sa.Column('channel', sa.String(length=64), nullable=False,
+                  server_default=''),
         sa.Column('created_utc', mysql.DATETIME(fsp=6), nullable=False),
         sa.Column('bucket_start', mysql.DATETIME(fsp=6), nullable=False),
         sa.Column('author', sa.String(length=64), nullable=True),
@@ -397,12 +405,13 @@ _ALL_OK = {'bluesky': 'ok'}
 
 
 def _row(external_id, ticker='ZZA', minute=3, source='bluesky', author='u1',
-         simhash=111, confidence='high', sentiment=0.5, engagement=10.0):
+         simhash=111, confidence='high', sentiment=0.5, engagement=10.0,
+         channel='c'):
     from features.radar import buckets
     return buckets.MentionRow(
         ticker=ticker, external_id=external_id,
         created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
-        source=source, author=author, simhash=simhash,
+        source=source, channel=channel, author=author, simhash=simhash,
         confidence=confidence, sentiment=sentiment, engagement=engagement)
 ```
 
@@ -429,6 +438,9 @@ class MentionRow:
     external_id: str
     created_utc: dt.datetime
     source: str
+    # The venue inside the source. Journalled because a broadcast network's
+    # independent unit is the channel rather than the author.
+    channel: str
     author: str | None
     simhash: int
     confidence: str
@@ -480,6 +492,7 @@ def record(rows):
         'source': row.source,
         'external_id': row.external_id,
         'ticker': row.ticker,
+        'channel': row.channel,
         'created_utc': row.created_utc,
         'bucket_start': bucket_start_for(row.created_utc),
         'author': row.author,
@@ -519,7 +532,7 @@ def events_for(keys):
     rows = RadarMentionEvent.query.filter(sa.or_(*clauses)).all()
     return [MentionRow(ticker=row.ticker, external_id=row.external_id,
                        created_utc=row.created_utc, source=row.source,
-                       author=row.author, simhash=row.simhash,
+                       channel=row.channel, author=row.author, simhash=row.simhash,
                        confidence=row.confidence, sentiment=row.sentiment,
                        engagement=row.engagement)
             for row in rows]
@@ -579,6 +592,7 @@ In `personal_apps/features/radar/ingest.py`, both `buckets.MentionRow(` calls ta
             mention_rows.append(buckets.MentionRow(
                 ticker=symbol, external_id=raw.external_id,
                 created_utc=raw.created_utc, source=raw.source,
+                channel=raw.channel,
                 author=raw.author, simhash=fingerprint.simhash64(
                     '%s %s' % (raw.title or '', raw.body)),
                 confidence=confidence, sentiment=score,
@@ -591,6 +605,7 @@ and
             mention_rows.append(buckets.MentionRow(
                 ticker=symbol, external_id=raw.external_id,
                 created_utc=raw.created_utc, source=raw.source,
+                channel=raw.channel,
                 author=raw.author, simhash=row.simhash, confidence=confidence,
                 sentiment=score,
                 engagement=float(raw.score + raw.num_comments)))
@@ -603,12 +618,13 @@ In `personal_apps/tests/test_radar_buckets.py`, give the `row()` helper an
 
 ```python
 def row(ticker='ZZA', minute=3, source='bluesky', author='u1', simhash=111,
-        confidence='high', sentiment=0.5, engagement=10.0, external_id=None):
+        confidence='high', sentiment=0.5, engagement=10.0, external_id=None,
+        channel='c'):
     return buckets.MentionRow(
         ticker=ticker,
         external_id=external_id or ('zz-%s-%s-%s' % (ticker, author, minute)),
         created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
-        source=source, author=author, simhash=simhash,
+        source=source, channel=channel, author=author, simhash=simhash,
         confidence=confidence, sentiment=sentiment, engagement=engagement)
 
 
@@ -889,7 +905,7 @@ def distinct_voices(tickers, sources, since, now, field):
         return {}
 
     column = {'author': RadarMentionEvent.author,
-              'channel': RadarMentionEvent.source}[field]
+              'channel': RadarMentionEvent.channel}[field]
     rows = (db.session.query(RadarMentionEvent.ticker,
                              sa.func.count(sa.distinct(column)))
             .filter(RadarMentionEvent.ticker.in_(list(tickers)),
@@ -902,8 +918,6 @@ def distinct_voices(tickers, sources, since, now, field):
     # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
     return {ticker: int(count) for ticker, count in rows}
 ```
-
-`'channel'` maps to `source` deliberately: since Task 9 the source name carries the subreddit, so a broadcast venue's channel *is* its source name. Note that in the docstring when Task 9 lands.
 
 In `personal_apps/features/radar/buckets.py`, `roll_up`, after the promotion loop:
 
@@ -2944,7 +2958,7 @@ def test_the_journal_is_pruned_by_when_the_post_was_written(clean_events):
     for hours, ident in ((1, 'zz-new'), (72, 'zz-old')):
         created = now - dt.timedelta(hours=hours)
         db.session.add(RadarMentionEvent(
-            source='bluesky', external_id=ident, ticker='ZZA',
+            source='bluesky', external_id=ident, ticker='ZZA', channel='c',
             created_utc=created,
             bucket_start=created.replace(minute=0, second=0, microsecond=0),
             author='u1', simhash=1, confidence='high',
