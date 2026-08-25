@@ -219,8 +219,14 @@ A post whose tickers were *all* low is never stored at all, so its promoted ment
 has no row anywhere.
 
 The eligibility floor consequently reads a smaller author count than the mention
-count it is gating. Fixed as a side effect of §2.1, which gives promotion a durable
-record.
+count it is gating.
+
+**Correction, made while planning:** this is *not* a side effect of §2.1, as an
+earlier draft of this spec claimed. The journal stores the extractor's verdict —
+`high` or `low` — and promotion stays a decision of the rollup, so nothing in the
+journal alone tells a reader which bare mentions were vouched for. It needs
+`_promote`'s answer written back, and the voice counts re-pointed at the journal
+rather than at `radar_mentions`. That is its own task in the plan.
 
 ### 1.12 A script and the daemon contend for the same budget
 
@@ -341,7 +347,7 @@ Diagnosed as a Cloudflare bot challenge (§1.5), not repairable without defeatin
 - Remove `'stocktwits'` from `config.SOURCES` and from the UI source list.
 - Remove `sources/stocktwits.py`, `_stocktwits_fetcher`, `STOCKTWITS_REQUESTS_PER_HOUR`, `SYMBOL_BUDGET_PER_CYCLE`.
 - Remove its entries from `BARE_TOKENS_ALLOWED`, `SINGLE_LETTER_CASHTAGS`, `COIN_SYMBOLS_MEAN_STOCKS`, `SOURCE_KIND`.
-- `COIN_SYMBOLS_MEAN_STOCKS` then has no `True` entry and `coin_collision_dropped` always drops. Collapse it to a single documented constant rather than leaving a map that reads as configurable.
+- `COIN_SYMBOLS_MEAN_STOCKS` then has no `True` entry and `coin_collision_dropped` always drops — so 49 real tickers lose their bare and cashtag mentions on every live source. **Revised while planning:** keep it a map rather than collapsing it to a constant, as an earlier draft said. Telegram is the next source and will need its own entry, and the extension point is the point. Annotate the consequence, and pin the override with a monkeypatched test so the mechanism stays covered with no live source using it.
 - `scheduling.MIN_INTERVAL` / `MAX_INTERVAL` are documented as StockTwits-shaped and are overridden by every remaining caller. Re-document as generic defaults.
 - `scheduling.retire_untracked`'s prohibition ("StockTwits must never call this") loses its subject. Rewrite the reason in terms of the property — a source whose configured list is not exhaustive — rather than the vanished example.
 - Every surviving source is `forum`, so `MIN_DISTINCT_CHANNELS`, `_distinct_channels` and `_VOICE_FLOOR['broadcast']` become unexercised by any live source. **Keep them** — they exist for the Telegram work already in the working tree — but annotate that no live source covers them.
