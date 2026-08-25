@@ -70,6 +70,19 @@ LOOKBACK = dt.timedelta(seconds=30)
 # are the scarce thing here.
 REDDIT_LOOKBACK = dt.timedelta(days=1)
 
+# Reddit throttling is per IP, and on the VPS this script shares that IP with
+# the running daemon. The daemon spends 3 requests per 120 seconds
+# (REDDIT_SUBS_PER_CYCLE, REDDIT_INTERVAL_SECONDS); sixteen requests in thirty
+# seconds is what earned a sustained 429 when this was measured. Reading all
+# eighteen configured subreddits would be twelve times the daemon's rate on
+# top of the daemon, which throttles live ingest to collect a sample -- paying
+# for the measurement with the thing being measured.
+#
+# So the default is three, and r/wallstreetbets is first because bare tokens
+# meant as tickers are the entire question. Pass --subs to widen it
+# deliberately, ideally with the daemon stopped.
+REDDIT_DEFAULT_SUBS = ('wallstreetbets', 'stocks', 'pennystocks')
+
 
 def full_text(row):
     """Title and body together -- which is what the extractor actually reads.
@@ -186,7 +199,23 @@ def main():
                         help='samples to keep per arm')
     parser.add_argument('--out', default='radar_sample',
                         help='output file stem; two files per arm are written')
+    parser.add_argument('--subs', default=None,
+                        help='reddit only: comma-separated subreddits. '
+                             'Defaults to %s -- see REDDIT_DEFAULT_SUBS for '
+                             'why this is not all of them. Pass "all" for the '
+                             'full configured list, ideally with the daemon '
+                             'stopped.' % ','.join(REDDIT_DEFAULT_SUBS))
     args = parser.parse_args()
+
+    if args.subs == 'all':
+        subs = list(REDDIT_SUBS)
+    elif args.subs:
+        subs = [name.strip() for name in args.subs.split(',') if name.strip()]
+        unknown = [name for name in subs if name not in REDDIT_SUBS]
+        if unknown:
+            raise SystemExit('not in REDDIT_SUBS: %s' % ', '.join(unknown))
+    else:
+        subs = list(REDDIT_DEFAULT_SUBS)
 
     with app.app_context():
         lookup = universe.load_lookup()
@@ -199,11 +228,12 @@ def main():
             print('draining bluesky for %ds...' % args.seconds)
             discarded, kept, posts_seen = collect_bluesky(args.seconds, lookup)
         else:
-            print('reading %d subreddits, ~%.0fs at %gs between requests...'
-                  % (len(REDDIT_SUBS),
-                     len(REDDIT_SUBS) * reddit.REQUEST_INTERVAL_SECONDS,
+            print('reading %d subreddits (%s), ~%.0fs at %gs between '
+                  'requests...'
+                  % (len(subs), ', '.join(subs),
+                     len(subs) * reddit.REQUEST_INTERVAL_SECONDS,
                      reddit.REQUEST_INTERVAL_SECONDS))
-            discarded, kept, posts_seen = collect_reddit(lookup, REDDIT_SUBS)
+            discarded, kept, posts_seen = collect_reddit(lookup, subs)
 
     print('\nposts seen            %s' % format(posts_seen, ','))
     print('discarded mentions    %s   <- the population in question'
