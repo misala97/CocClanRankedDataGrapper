@@ -157,10 +157,51 @@ def test_a_throttle_stops_the_cycle_instead_of_asking_again():
     # 'c' was never requested, so it must not be scheduled as though it had
     # been -- it would lose its turn to whatever happened to sort earlier.
     assert 'c' not in result.rates
-    # 'b' was requested and refused, and is backed off rather than left as the
-    # most overdue entry: unbacked it would be tried first next cycle, throttle
-    # again, and break the cycle before anything else was read.
-    assert result.rates['b'] == 0.0
+
+
+def test_a_throttled_subreddit_keeps_its_place_rather_than_being_backed_off():
+    """Reversed 2026-08-25, after measuring what the 429s actually were.
+
+    This used to report a throttled sub at rate 0.0 -- a deliberate lie,
+    reasoned as: recorded honestly it would be the most overdue entry next
+    cycle, get tried first, throttle again, and break the cycle before
+    anything else was read. Backing it off kept the rotation moving.
+
+    That reasoning assumed the throttle was OUR fault, earned by asking too
+    fast. The response headers say otherwise: `x-ratelimit-remaining` is 0.0
+    after a single request, so the budget is one feed per window and every
+    request after the first in a window is refused no matter how long the
+    pause. Whichever subreddit happened to go second was refused -- two runs
+    in a row blamed a different sub purely on ordering.
+
+    So a 429 says nothing about the subreddit, and a sub that was refused was
+    never read. Backing it off punishes it for its position in a queue, and
+    with one request per cycle there is no longer any rotation to protect.
+    """
+    client = FakeClient({'b': reddit.RedditThrottled('r/b: 429')})
+
+    result = reddit.fetch({'b': NOW - dt.timedelta(hours=1)}, client, pause=0)
+
+    assert 'b' not in result.rates
+    # Still `missing`, not `ok`: nothing was observed, and a zero count here
+    # would be indistinguishable from a genuinely silent quarter-hour.
+    assert result.status == 'missing'
+
+
+def test_one_feed_per_cycle_because_that_is_the_whole_budget():
+    """Measured on the VPS 2026-08-25 against the live endpoint.
+
+    Successes landed at t=0, t=78 and t=198 seconds and refusals at t=19 and
+    t=138, alternating regardless of which subreddit was asked. Roughly one
+    feed per 90-120s is the sustainable rate, so a cycle asking for three got
+    one answer and two 429s -- and the 429 then broke the cycle, which is why
+    Reddit ran at about a third of even this budget.
+    """
+    from features.radar.config import (REDDIT_INTERVAL_SECONDS,
+                                       REDDIT_SUBS_PER_CYCLE)
+
+    assert REDDIT_SUBS_PER_CYCLE == 1
+    assert REDDIT_INTERVAL_SECONDS >= 90
 
 
 def test_one_unreachable_sub_does_not_cost_the_others():

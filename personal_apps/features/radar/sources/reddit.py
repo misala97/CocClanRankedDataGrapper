@@ -195,17 +195,19 @@ def fetch(since_by_sub, client, pause=REQUEST_INTERVAL_SECONDS):
     collected before the refusal is still returned, because those comments
     were really read.
 
-    `rates` carries ONLY the subreddits actually attempted, and it is what the
+    `rates` carries ONLY the subreddits actually READ, and it is what the
     caller schedules from. The ones after a throttle were never requested, so
     stamping them as polled would push them down the queue for something that
-    never happened to them.
+    never happened to them -- and neither is the throttled one, for the same
+    reason: it was refused, not read.
 
-    A throttled subreddit is reported at rate zero, which the scheduler reads
-    as "silent" and pushes to the slowest cadence. That is a lie about the
-    subreddit and a deliberate one: recorded honestly as unknown it would be
-    the most overdue entry next cycle, get tried first, throttle again, and
-    break the cycle before anything else was ever read. Backing it off is what
-    keeps the rotation moving.
+    Reversed 2026-08-25. A throttled sub used to be reported at rate zero, so
+    the scheduler read it as silent and backed it off. The response headers
+    disproved the reasoning behind that: `x-ratelimit-remaining` is 0.0 after
+    a SINGLE request, so the budget is one feed per window and everything
+    after the first is refused however long the pause. Whichever sub went
+    second took the 429 -- two consecutive runs blamed a different one purely
+    on ordering. A 429 is a fact about the budget, never about the subreddit.
     """
     posts, statuses, rates = [], [], {}
 
@@ -215,8 +217,9 @@ def fetch(since_by_sub, client, pause=REQUEST_INTERVAL_SECONDS):
         try:
             found, status, rate = fetch_one(sub, since, client)
         except RedditThrottled:
+            # Nothing recorded: it was refused, not read, so it stays due and
+            # is retried rather than losing its turn.
             statuses.append('missing')
-            rates[sub] = 0.0
             break
         except RedditUnavailable:
             # Attempted and learned nothing. Recorded as unknown so it is

@@ -281,7 +281,17 @@ REDDIT_SUBS = (
 # than complete: r/wallstreetbets turns its 25-entry feed over in under two
 # minutes, so most of its comments will be missed and its buckets will say
 # `truncated`. Raise this only after watching for 429s in the daemon log.
-REDDIT_SUBS_PER_CYCLE = 3
+# One, because one is the entire budget. Measured against the live endpoint
+# on the VPS 2026-08-25: `x-ratelimit-remaining` reads 0.0 after a single
+# request, and successes landed at t=0, t=78 and t=198 seconds against
+# refusals at t=19 and t=138 -- alternating, whichever subreddit was asked.
+#
+# Asking for three meant one answer and two 429s, and the 429 broke the cycle,
+# so Reddit ran at roughly a third of even this budget from the day it
+# shipped. Not hashed into source_config_version: cadence changes how much of
+# a subreddit is seen, not which mentions count, and the per-source `truncated`
+# status is what records the coverage honestly.
+REDDIT_SUBS_PER_CYCLE = 1
 
 # Reddit runs on its OWN clock, not the market-session cycle.
 #
@@ -293,7 +303,7 @@ REDDIT_SUBS_PER_CYCLE = 3
 #
 # Reddit does not stop at the closing bell, and what a slow poll misses is
 # gone rather than late -- there is no cursor to catch up from.
-REDDIT_INTERVAL_SECONDS = 120
+REDDIT_INTERVAL_SECONDS = 120  # ~1 feed/window, matching the measured budget
 
 # Bounds for this source's adaptive cadence. The scheduler's defaults are
 # StockTwits-shaped (15 min to 4 h) and its floor alone would lose most of
