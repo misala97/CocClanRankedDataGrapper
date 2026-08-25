@@ -106,3 +106,74 @@ def test_tracking_is_per_source(ctx):
     scheduling.ensure_tracked('othersource2', ['ZZA'], NOW)
     assert 'ZZA' in scheduling.due_symbols('othersource2', NOW, limit=5)
     assert scheduling.due_symbols('testsource', NOW, limit=5) == []
+
+
+# --- The ceiling was starving the busy subreddits, 2026-08-25 ---------------
+
+def test_a_near_silent_subreddit_is_not_polled_every_45_minutes():
+    """Measured live: two hours of Reddit produced 179 mentions across 92
+    tickers, and exactly ONE bucket cleared the eligibility floor.
+
+    The cause was budget allocation, not extraction. `interval_for_rate` sizes
+    the interval so the 25-entry feed does not roll over -- but the result was
+    clamped to a 45-minute ceiling, so a subreddit producing 0.07 comments an
+    hour was polled 1.33 times an hour. Nineteen polls per comment, while
+    r/wallstreetbets -- which needs one every 1.8 minutes to keep up -- fought
+    seventeen near-dead subreddits for the same 30 feeds an hour.
+    """
+    from features.radar.config import REDDIT_MAX_POLL, REDDIT_MIN_POLL
+    from features.radar.scheduling import interval_for_rate
+
+    quiet = interval_for_rate(0.07, floor=REDDIT_MIN_POLL,
+                              ceiling=REDDIT_MAX_POLL, page_size=25)
+
+    assert quiet >= dt.timedelta(hours=4), (
+        'a subreddit producing one comment every 14 hours is still being '
+        'polled every %s' % quiet)
+
+
+def test_a_busy_subreddit_still_gets_the_floor():
+    """Teeth. Raising the ceiling must not touch what a loud sub is given --
+    r/wallstreetbets turns its feed over in under two minutes and what a slow
+    poll misses is gone, not late."""
+    from features.radar.config import REDDIT_MAX_POLL, REDDIT_MIN_POLL
+    from features.radar.scheduling import interval_for_rate
+
+    busy = interval_for_rate(818, floor=REDDIT_MIN_POLL,
+                             ceiling=REDDIT_MAX_POLL, page_size=25)
+
+    assert busy == REDDIT_MIN_POLL
+
+
+def test_a_middling_subreddit_keeps_the_cadence_its_rate_implies():
+    """The ceiling should bind only on subs whose own rate asks for less than
+    it. r/stocks at 67 comments an hour wants roughly 20 minutes, and that
+    must be unaffected by where the ceiling sits."""
+    from features.radar.config import REDDIT_MAX_POLL, REDDIT_MIN_POLL
+    from features.radar.scheduling import interval_for_rate
+
+    middling = interval_for_rate(67, floor=REDDIT_MIN_POLL,
+                                 ceiling=REDDIT_MAX_POLL, page_size=25)
+
+    assert dt.timedelta(minutes=10) < middling < dt.timedelta(minutes=45)
+
+
+def test_the_ceiling_cannot_lose_comments_it_was_not_going_to_lose():
+    """The safety check on raising it: a subreddit slow enough to be pinned at
+    the ceiling must not fill its 25-entry feed within one interval, or the
+    change trades starvation for silent data loss."""
+    from features.radar.config import REDDIT_MAX_POLL
+
+    from features.radar.scheduling import SAFETY_FACTOR
+
+    hours = REDDIT_MAX_POLL.total_seconds() / 3600
+    # A sub is pinned at the ceiling when (25 / rate) * SAFETY_FACTOR exceeds
+    # it, so the fastest pinned sub runs at this rate.
+    fastest_pinned = 25 * SAFETY_FACTOR / hours
+    fill_hours = 25 / fastest_pinned
+
+    # Its feed must take substantially longer to fill than one interval, or
+    # the change trades starvation for silent data loss.
+    assert fill_hours >= 2 * hours, (
+        'at a %sh ceiling the fastest pinned sub fills its feed in %.1fh'
+        % (hours, fill_hours))

@@ -350,7 +350,23 @@ REDDIT_INTERVAL_SECONDS = 120  # ~1 feed/window, matching the measured budget
 # r/wallstreetbets. The floor is what a busy sub gets; the ceiling is where a
 # silent one -- or a throttled one -- ends up.
 REDDIT_MIN_POLL = dt.timedelta(seconds=90)
-REDDIT_MAX_POLL = dt.timedelta(minutes=45)
+# Six hours, raised from 45 minutes on 2026-08-25.
+#
+# The ceiling was starving the subreddits that matter. Measured live: two
+# hours produced 179 mentions across 92 tickers and exactly ONE bucket cleared
+# the eligibility floor. interval_for_rate already sizes each interval so the
+# 25-entry feed cannot roll over, but clamping the result at 45 minutes meant
+# a subreddit producing 0.07 comments an hour was polled 1.33 times an hour --
+# nineteen polls per comment -- while r/wallstreetbets, which needs one every
+# 1.8 minutes to keep up, fought seventeen near-dead subreddits for the same
+# thirty feeds an hour.
+#
+# Safe because SAFETY_FACTOR is 0.5, so a sub is pinned here only when its
+# rate is below 12.5/6 = 2.08 comments an hour -- and at that rate its feed
+# takes twelve hours to fill, twice the interval. Nothing pinned can lose a
+# comment. Subs above it are unaffected: r/stocks at 67/hour asks for eleven
+# minutes and gets eleven minutes, ceiling or no ceiling.
+REDDIT_MAX_POLL = dt.timedelta(hours=6)
 
 # StockTwits publishes no rate-limit headers and twenty consecutive requests
 # drew no 429, so this is a conservative budget rather than a documented
