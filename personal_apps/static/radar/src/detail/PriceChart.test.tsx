@@ -4,8 +4,9 @@ import { PLOT_R, PriceChart } from './PriceChart'
 import type { DetailChart } from '../types'
 
 const chart = (over: Partial<DetailChart> = {}): DetailChart => ({
-  from: '2025-08-23',
+  from: '2025-08-23T00:00:00Z',
   span: '1Y',
+  step_minutes: 1440,
   closes: Array.from({ length: 365 }, (_, i) => 1 + i / 100),
   chatter: Array.from({ length: 365 }, (_, i) => (i < 362 ? null : i)),
   watched_from: '2026-08-21',
@@ -113,5 +114,51 @@ describe('the panel chart', () => {
     // already when the axis labels moved out into a gutter, and pinning the
     // number instead of the relationship is what made that a failure.
     expect(xs[1]).toBeCloseTo(PLOT_R, 0)
+  })
+})
+
+describe('the axis on an intraday span', () => {
+  const intraday = (step: number, span: '1D' | '1W'): DetailChart => ({
+    from: '2026-08-25T00:00:00Z',
+    span,
+    step_minutes: step,
+    closes: Array.from({ length: 96 }, (_, i) => 10 + i * 0.01),
+    chatter: Array.from({ length: 96 }, () => 1),
+    watched_from: null,
+  })
+
+  it('labels a 24-hour chart with times, not month names', () => {
+    /* The slots are fifteen minutes wide. Reading month names under them
+       would place the reader a year out from where they actually are. */
+    const { container } = render(<PriceChart chart={intraday(15, '1D')} />)
+
+    // The gridlines only. The leftmost label legitimately carries a date --
+    // a bare "00:00" does not say which day it belongs to.
+    const ticks = [...container.querySelectorAll('g text.ax')]
+      .map((n) => n.textContent ?? '')
+    expect(ticks.length).toBeGreaterThan(0)
+    expect(ticks.every((l) => /^\d{2}:\d{2}$/.test(l))).toBe(true)
+  })
+
+  it('ends at "now" rather than "today" when the span is hours', () => {
+    /* "today" is a calendar day. On a chart whose last slot is the last
+       fifteen minutes it names the wrong unit entirely. */
+    const { container } = render(<PriceChart chart={intraday(15, '1D')} />)
+
+    expect(container.textContent).toContain('now')
+    expect(container.textContent).not.toContain('today')
+  })
+
+  it('still says "today" on a day-indexed span', () => {
+    /* Teeth: the intraday branch must not have replaced the daily one. */
+    const daily: DetailChart = {
+      from: '2026-01-01T00:00:00Z', span: '1Y', step_minutes: 1440,
+      closes: Array.from({ length: 365 }, () => 5),
+      chatter: Array.from({ length: 365 }, () => 1), watched_from: null,
+    }
+
+    const { container } = render(<PriceChart chart={daily} />)
+
+    expect(container.textContent).toContain('today')
   })
 })

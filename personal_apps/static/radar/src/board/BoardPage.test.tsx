@@ -47,7 +47,7 @@ function detail(ticker = 'AAA'): Detail {
     },
     read: [{ kind: 'plain', text: `${ticker} is being discussed.` }],
     chart: {
-      from: '2025-08-23', span: '1Y',
+      from: '2025-08-23T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
       watched_from: '2026-08-18',

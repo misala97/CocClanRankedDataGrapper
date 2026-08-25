@@ -244,3 +244,21 @@ def test_the_payload_says_what_the_floor_left_out(client):
     payload = json.loads(client.get('/radar/api/board').data)
 
     assert isinstance(payload['excluded'], dict)
+
+
+def test_the_intraday_spans_are_accepted_by_the_route(client):
+    """The route validated against SPAN_DAYS alone, so 1D and 1W would have
+    been rejected as unknown while the panel underneath understood them
+    perfectly -- a 400 with no way to tell it from a typo."""
+    from features.radar import detail
+
+    for span in detail.INTRADAY_SPANS:
+        assert detail.known_span(span)
+
+
+def test_an_invented_span_is_still_rejected():
+    """Teeth. known_span widened the gate; it must not have removed it."""
+    from features.radar import detail
+
+    assert not detail.known_span('5Y')
+    assert not detail.known_span('')

@@ -199,7 +199,13 @@ def serialize_detail(d):
                      baseline_days=d.baseline_days,
                      venues=len(b.venues))],
         'chart': {
-            'from': d.chart.start.isoformat(),
+            # ISO with an explicit Z, and a DATETIME for the intraday spans:
+            # a slot fifteen minutes wide cannot be placed by a date alone.
+            'from': d.chart.start.isoformat() + (
+                'Z' if isinstance(d.chart.start, dt.datetime) else 'T00:00:00Z'),
+            # How wide one slot is. The renderer draws evenly spaced slots and
+            # cannot tell minutes from days without being told.
+            'step_minutes': d.chart.step_minutes,
             'span': d.span,
             'closes': [_decimal_or_none(c) for c in d.chart.closes],
             # null where nobody was watching, never a zero.
@@ -244,7 +250,7 @@ def ticker_detail(ticker):
     sixteen thousand numbers to draw twenty sparklines.
     """
     span = request.args.get('span', detail_mod.DEFAULT_SPAN)
-    if span not in detail_mod.SPAN_DAYS:
+    if not detail_mod.known_span(span):
         return jsonify({'error': 'unknown span'}), 400
     try:
         query = parse_query(request.args)

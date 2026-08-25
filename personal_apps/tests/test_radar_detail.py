@@ -385,3 +385,151 @@ def test_the_ticker_is_matched_case_insensitively(client, panel_live):
     """A bookmarked ?t=howl should not 404 because of its case."""
     assert client.get(
         f'/radar/api/ticker/{PREFIX.lower()}a').status_code == 200
+
+
+# --- Intraday spans, added 2026-08-25 ---------------------------------------
+#
+# 1D and 1W cannot be more entries in SPAN_DAYS. That chart is indexed by
+# CALENDAR DAY, so a one-day span is a single point and a week is seven -- a
+# chart with nothing in it. They need their own granularity: slots of minutes
+# rather than days, priced from radar_quotes rather than radar_daily_closes.
+
+def quote(ticker, minutes_ago, price):
+    from models import RadarQuote
+    db.session.add(RadarQuote(
+        ticker=ticker, fetched_at=NOW - dt.timedelta(minutes=minutes_ago),
+        quote_ts=NOW - dt.timedelta(minutes=minutes_ago),
+        price=decimal.Decimal(str(price))))
+
+
+@pytest.fixture()
+def clean_intraday(clean):
+    from models import RadarQuote
+    with flask_app.app_context():
+        RadarQuote.query.filter(
+            RadarQuote.ticker.like(f'{PREFIX}%')).delete(
+                synchronize_session=False)
+        db.session.commit()
+        yield
+        RadarQuote.query.filter(
+            RadarQuote.ticker.like(f'{PREFIX}%')).delete(
+                synchronize_session=False)
+        db.session.commit()
+
+
+def test_the_intraday_spans_are_slots_of_minutes_not_days():
+    slots, step = detail.INTRADAY_SPANS['1D']
+    assert slots * step == 24 * 60
+
+    slots, step = detail.INTRADAY_SPANS['1W']
+    assert slots * step == 7 * 24 * 60
+
+
+def test_a_days_chart_has_one_slot_per_bucket():
+    """15 minutes, matching the bucket grain exactly.
+
+    Anything coarser would re-aggregate what the rollup already decided;
+    anything finer would invent resolution the chatter does not have.
+    """
+    from features.radar.config import BUCKET_MINUTES
+
+    _slots, step = detail.INTRADAY_SPANS['1D']
+    assert step == BUCKET_MINUTES
+
+
+def test_price_comes_from_quotes_not_daily_closes(clean_intraday):
+    """A daily close is one point a day. An intraday line needs the 5-minute
+    snapshots, which is the only intraday price this system stores."""
+    with flask_app.app_context():
+        quote(f'{PREFIX}A', minutes_ago=10, price=4.25)
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+
+        assert any(c is not None for c in chart.closes)
+        assert chart.closes[-1] == pytest.approx(4.25)
+
+
+def test_a_slot_with_no_quote_is_none_rather_than_the_last_price(clean_intraday):
+    """Carrying the previous price forward would draw a flat line through a
+    stretch nobody priced, which is the same lie as a zero for chatter nobody
+    observed. The renderer already spans price gaps; it must be told they ARE
+    gaps."""
+    with flask_app.app_context():
+        quote(f'{PREFIX}A', minutes_ago=10, price=4.25)
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+
+        assert chart.closes[0] is None
+
+
+def test_the_last_quote_in_a_slot_wins(clean_intraday):
+    """Quotes land every five minutes and a slot is fifteen. The slot's price
+    is where it ended, the same convention a daily close follows."""
+    with flask_app.app_context():
+        quote(f'{PREFIX}A', minutes_ago=14, price=4.00)
+        quote(f'{PREFIX}A', minutes_ago=6, price=4.50)
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+
+        assert chart.closes[-1] == pytest.approx(4.50)
+
+
+def test_chatter_is_summed_into_its_slot(clean_intraday):
+    with flask_app.app_context():
+        bucket(f'{PREFIX}A', minutes_ago=10, mentions=7)
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+
+        assert chart.chatter[-1] == 7
+
+
+def test_a_week_pools_several_buckets_into_one_slot(clean_intraday):
+    """1W slots are an hour, and buckets are fifteen minutes. Four of them
+    land in one slot and must add up rather than overwrite."""
+    with flask_app.app_context():
+        for minutes in (5, 20, 35, 50):
+            bucket(f'{PREFIX}A', minutes_ago=minutes, mentions=3)
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1W')
+
+        assert chart.chatter[-1] == 12
+
+
+def test_a_slot_before_observation_began_is_unknown_not_zero(clean_intraday):
+    """The rule the daily chart already follows, and the reason chatter is
+    nullable at all: a slot nobody was watching is not a slot with no
+    mentions."""
+    with flask_app.app_context():
+        bucket(f'{PREFIX}A', minutes_ago=10, mentions=7)
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+
+        assert chart.chatter[0] is None
+
+
+def test_the_chart_reports_its_own_granularity(clean_intraday):
+    """The renderer draws evenly spaced slots and cannot tell minutes from
+    days. Without this it would label a 24-hour chart with month names."""
+    with flask_app.app_context():
+        db.session.commit()
+
+        day = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+        week = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1W')
+
+        assert day.step_minutes == 15
+        assert week.step_minutes == 60
+
+
+def test_a_daily_chart_still_reports_a_days_step(clean):
+    """Same field on both, so the renderer has one rule rather than a special
+    case keyed on the span name."""
+    with flask_app.app_context():
+        chart = detail.chart_for(f'{PREFIX}A', NOW.date(), 3, {}, {}, None)
+
+        assert chart.step_minutes == 1440

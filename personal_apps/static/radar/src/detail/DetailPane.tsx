@@ -6,7 +6,38 @@ import { Posts } from './Posts'
 import { PriceChart } from './PriceChart'
 import type { Detail, PanelSpan, Selection } from '../types'
 
-const SPANS: PanelSpan[] = ['1M', '6M', '1Y', '3Y']
+const SPANS: PanelSpan[] = ['1D', '1W', '1M', '6M', '1Y', '3Y']
+
+/** What the two lanes are made of, which is not the same on every span.
+ *
+ *  The long spans price from stored daily closes and count mentions per day.
+ *  1D and 1W price from the 5-minute quote snapshots and count per slot --
+ *  different source, different grain, and the caption has to say so or the
+ *  reader assumes a daily close is being plotted every fifteen minutes.
+ */
+const CAPTIONS: Record<PanelSpan, string> = {
+  '1D': 'intraday quotes · mentions per 15 min',
+  '1W': 'intraday quotes · mentions per hour',
+  '1M': 'daily closes · mentions per day',
+  '6M': 'daily closes · mentions per day',
+  '1Y': 'daily closes · mentions per day',
+  '3Y': 'daily closes · mentions per day',
+}
+
+/** The legend says the same thing as the caption, in two halves.
+ *
+ *  It used to be hardcoded to "daily close" and "mentions per day", which on
+ *  an intraday span sat directly under a caption saying the opposite. Two
+ *  labels for one line, disagreeing, is worse than neither.
+ */
+const LEGEND: Record<PanelSpan, { price: string; chatter: string }> = {
+  '1D': { price: 'intraday quote', chatter: 'mentions per 15 min' },
+  '1W': { price: 'intraday quote', chatter: 'mentions per hour' },
+  '1M': { price: 'daily close', chatter: 'mentions per day' },
+  '6M': { price: 'daily close', chatter: 'mentions per day' },
+  '1Y': { price: 'daily close', chatter: 'mentions per day' },
+  '3Y': { price: 'daily close', chatter: 'mentions per day' },
+}
 
 /** One ticker, in depth: is this real?
  *
@@ -90,7 +121,7 @@ export function DetailPane({ ticker, selection, windowHours }: {
       <section className="zone">
         <h3>
           Price and chatter
-          <span className="q">daily closes · mentions per day</span>
+          <span className="q">{CAPTIONS[span]}</span>
           <span className="spans" role="group" aria-label="Chart span">
             {SPANS.map((option) => (
               <button key={option} type="button"
@@ -102,8 +133,8 @@ export function DetailPane({ ticker, selection, windowHours }: {
         <PriceChart chart={detail.chart} />
         <div className="legend">
           <i><span className={`key line${rising ? '' : ' down'}`} />
-            price · daily close</i>
-          <i><span className="key" />chatter · mentions per day</i>
+            price · {LEGEND[span].price}</i>
+          <i><span className="key" />chatter · {LEGEND[span].chatter}</i>
         </div>
       </section>
 

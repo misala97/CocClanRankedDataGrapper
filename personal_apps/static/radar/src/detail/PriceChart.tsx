@@ -91,7 +91,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
                 strokeWidth="1" strokeDasharray="2 4"
                 vectorEffect="non-scaling-stroke" />
           <text className="ax" x={watchX - 10} y={C_TOP + 26} textAnchor="end">
-            nothing observed before {dayLabel(dayAt(chart.from, watchIndex))}
+            nothing observed before {slotLabel(chart, watchIndex)}
           </text>
           <line className="watch-edge" x1={watchX} y1={C_TOP} x2={watchX}
                 y2={C_BOT} stroke="var(--mark)" strokeWidth="1"
@@ -118,12 +118,18 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
 
       {/* Only where something was actually counted: `1/d` printed over an
           empty lane would put a number on a measurement nobody took. */}
-      {observed > 0 && <Gutter y={C_TOP} label={`${observed}/d`} />}
+      {observed > 0 && (
+        <Gutter y={C_TOP} label={`${observed}${perSlot(chart)}`} />
+      )}
 
       <text className="ax" x="0" y={X_LABEL_Y}>
-        {dayLabel(new Date(`${chart.from}T00:00:00Z`), true)}
+        {startLabel(chart)}
       </text>
-      <text className="ax" x={PLOT_R} y={X_LABEL_Y} textAnchor="end">today</text>
+      {/* "today" names a calendar day. On a chart whose last slot is the last
+          fifteen minutes it names the wrong unit entirely. */}
+      <text className="ax" x={PLOT_R} y={X_LABEL_Y} textAnchor="end">
+        {isIntraday(chart) ? 'now' : 'today'}
+      </text>
     </svg>
   )
 }
@@ -150,15 +156,51 @@ function ticks(chart: DetailChart): { x: number; label: string }[] {
     const index = Math.round((days - 1) * share)
     return {
       x: (index / Math.max(days - 1, 1)) * PLOT_R,
-      label: dayLabel(dayAt(chart.from, index), false, chart.span),
+      label: slotLabel(chart, index),
     }
   })
 }
 
-function dayAt(from: string, index: number): Date {
-  const date = new Date(`${from}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + index)
-  return date
+/** True where a slot is minutes rather than a calendar day. */
+export function isIntraday(chart: DetailChart): boolean {
+  return chart.step_minutes < 1440
+}
+
+/** The instant slot `index` begins at.
+ *
+ *  `from` is a full ISO instant. It used to be a bare date and this appended
+ *  `T00:00:00Z` to it -- which, once the server started sending a datetime
+ *  for the intraday spans, produced `...ZT00:00:00Z` and an Invalid Date on
+ *  EVERY span. The tick labels went blank and the React keys became NaN.
+ */
+function slotAt(chart: DetailChart, index: number): Date {
+  return new Date(new Date(chart.from).getTime() + index * chart.step_minutes * 60_000)
+}
+
+/** `14:45` on an intraday slot, a date on a calendar one. */
+function slotLabel(chart: DetailChart, index: number, withDate = false): string {
+  const at = slotAt(chart, index)
+  if (isIntraday(chart)) {
+    const hh = String(at.getUTCHours()).padStart(2, '0')
+    const mm = String(at.getUTCMinutes()).padStart(2, '0')
+    // On a week of hourly slots the time alone repeats seven times over, so
+    // the day has to ride along or three identical labels appear.
+    if (withDate || chart.step_minutes >= 60) {
+      return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]!} ${hh}:${mm}`
+    }
+    return `${hh}:${mm}`
+  }
+  return dayLabel(at, withDate, chart.span)
+}
+
+function startLabel(chart: DetailChart): string {
+  return slotLabel(chart, 0, true)
+}
+
+/** The chatter gutter's unit, which is the slot -- not always a day. */
+function perSlot(chart: DetailChart): string {
+  if (!isIntraday(chart)) return '/d'
+  return chart.step_minutes >= 60 ? '/h' : '/15m'
 }
 
 /** `21 Aug` inside a month, `Aug` across one, `Aug 2024` when the span is long

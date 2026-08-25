@@ -50,7 +50,7 @@ export interface Clause {
 
 /** How far back the panel's chart reaches. Owned by the panel, not the board:
  *  it changes one ticker's chart, not which rows are listed. */
-export type PanelSpan = '1M' | '6M' | '1Y' | '3Y'
+export type PanelSpan = '1D' | '1W' | '1M' | '6M' | '1Y' | '3Y'
 
 /** Price and chatter over the same calendar days, sharing `from`.
  *
@@ -58,8 +58,14 @@ export type PanelSpan = '1M' | '6M' | '1Y' | '3Y'
  *  drawn across it. `chatter[i]` null means we were not watching yet -- no bar
  *  is drawn at all. Two different absences, deliberately not collapsed. */
 export interface DetailChart {
+  /** ISO instant. A datetime, not a date -- a 15-minute slot cannot be
+   *  placed by a calendar day alone. */
   from: string
   span: PanelSpan
+  /** How wide one slot is. 1440 on the day-indexed spans, minutes on the
+   *  intraday ones. The chart draws evenly spaced slots and cannot tell
+   *  minutes from days without being told. */
+  step_minutes: number
   closes: (number | null)[]
   chatter: (number | null)[]
   /** The day observation began. Before it the chatter lane is unobserved

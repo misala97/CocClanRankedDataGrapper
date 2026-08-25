@@ -189,7 +189,7 @@ def first_mention_day(ticker):
 
 def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
     """One ticker's panel. Raises UnknownTicker if it is not in the universe."""
-    if span not in chart_mod.SPAN_DAYS:
+    if not chart_mod.known_span(span):
         raise ValueError('unknown span')
 
     profile = TickerUniverse.query.filter_by(symbol=ticker).one_or_none()
@@ -208,11 +208,21 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
                           RadarQuote.fetched_at <= now)
                   .order_by(RadarQuote.fetched_at.desc()).first())
 
-    days = chart_mod.SPAN_DAYS[span]
-    start = now.date() - dt.timedelta(days=days - 1)
-    from_dt = dt.datetime.combine(start, dt.time.min)
-    stored = dict(history.closes_for([ticker], days=days,
-                                     today=now.date()).get(ticker, []))
+    # Intraday spans price from radar_quotes and slot by minutes; the daily
+    # ones price from radar_daily_closes and slot by calendar day. Different
+    # sources, different granularity, same array shape out.
+    if chart_mod.is_intraday(span):
+        chart = chart_mod.intraday_chart_for(ticker, sources, now, span)
+    else:
+        days = chart_mod.SPAN_DAYS[span]
+        start = now.date() - dt.timedelta(days=days - 1)
+        from_dt = dt.datetime.combine(start, dt.time.min)
+        stored = dict(history.closes_for([ticker], days=days,
+                                         today=now.date()).get(ticker, []))
+        chart = chart_mod.chart_for(
+            ticker, start, days, stored,
+            chart_mod.daily_counts([ticker], sources, from_dt, now),
+            chart_mod.first_watched_day(sources, from_dt, now))
 
     breakdown = breakdown_for(ticker, sources, since, now)
     breakdown.first_seen = first_mention_day(ticker)
@@ -235,10 +245,7 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
         price_status=status,
         session=session,
         span=span,
-        chart=chart_mod.chart_for(
-            ticker, start, days, stored,
-            chart_mod.daily_counts([ticker], sources, from_dt, now),
-            chart_mod.first_watched_day(sources, from_dt, now)),
+        chart=chart,
         breakdown=breakdown,
         posts=posts,
         post_total=post_total,

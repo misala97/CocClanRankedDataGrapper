@@ -16,7 +16,7 @@ import datetime as dt
 import sqlalchemy as sa
 
 from extensions import db
-from models import RadarBucketSource
+from models import RadarBucketSource, RadarQuote
 
 # Calendar days per span, not trading days: the arrays are indexed by calendar
 # day so price and chatter stay aligned through weekends and holidays. A year
@@ -24,7 +24,29 @@ from models import RadarBucketSource
 # position would drift them apart by over a hundred days.
 SPAN_DAYS = {'1M': 30, '6M': 182, '1Y': 365, '3Y': 1095}
 
+# Spans measured in minutes rather than days, as (slots, minutes_per_slot).
+#
+# These CANNOT be entries in SPAN_DAYS. That chart is indexed by calendar day,
+# so a one-day span is a single point and a week is seven -- a chart with
+# nothing in it. They need their own granularity and their own price source:
+# radar_daily_closes holds one row per trading day, so the only intraday price
+# this system stores is radar_quotes.
+#
+# 1D uses 15-minute slots because that is exactly the bucket grain. Anything
+# coarser re-aggregates what the rollup already decided; anything finer
+# invents resolution the chatter does not have. 1W uses an hour, pooling four
+# buckets per slot.
+INTRADAY_SPANS = {'1D': (96, 15), '1W': (168, 60)}
+
 DEFAULT_SPAN = '1Y'
+
+
+def is_intraday(span):
+    return span in INTRADAY_SPANS
+
+
+def known_span(span):
+    return span in SPAN_DAYS or span in INTRADAY_SPANS
 
 
 class UnknownTicker(Exception):
@@ -45,6 +67,11 @@ class Chart:
     closes: list
     chatter: list
     watched_from: dt.date | None
+    # How wide one slot is. 1440 for the day-indexed spans, minutes for the
+    # intraday ones. The renderer draws evenly spaced slots and cannot tell
+    # minutes from days on its own -- without this it labels a 24-hour chart
+    # with month names.
+    step_minutes: int = 1440
 
 
 def daily_counts(tickers, sources, start, now):
@@ -98,3 +125,109 @@ def chart_for(ticker, start, days, closes_by_day, counts, watched_from):
             chatter.append(counts.get((ticker, day), 0))
     return Chart(start=start, closes=closes, chatter=chatter,
                  watched_from=watched_from)
+
+
+def _slot_index(when, start, step_minutes, slots):
+    """Which slot an instant falls in, or None if outside the window."""
+    offset = (when - start).total_seconds() / 60.0
+    if offset < 0:
+        return None
+    index = int(offset // step_minutes)
+    return index if index < slots else None
+
+
+def intraday_prices(ticker, start, now, step_minutes, slots):
+    """Last quoted price per slot, None where nothing was quoted.
+
+    The previous price is NOT carried forward. Doing so would draw a flat line
+    through a stretch nobody priced, which is the same lie as a zero for
+    chatter nobody observed -- and the renderer already spans price gaps, so
+    it only needs to be told they are gaps.
+
+    Quotes exist only for the tickers that have been loud enough to be polled
+    (run_radar_ingest.QUOTE_LIMIT) and only as far back as
+    config.QUOTE_RETENTION_DAYS. A ticker that has never ranked has no
+    intraday price at all, which is a real absence and drawn as one.
+    """
+    rows = (db.session.query(RadarQuote.fetched_at, RadarQuote.price)
+            .filter(RadarQuote.ticker == ticker,
+                    RadarQuote.fetched_at >= start,
+                    RadarQuote.fetched_at < now)
+            .order_by(RadarQuote.fetched_at).all())
+
+    prices = [None] * slots
+    for fetched_at, price in rows:
+        index = _slot_index(fetched_at, start, step_minutes, slots)
+        if index is not None:
+            # Ordered ascending, so the last write per slot is the slot's
+            # closing price -- the same convention a daily close follows.
+            prices[index] = float(price)
+    return prices
+
+
+def intraday_counts(ticker, sources, start, now, step_minutes, slots):
+    """Mentions per slot, and the first slot anything was observed in.
+
+    Returns (counts, first_seen_index). Buckets are 15 minutes; a 1W slot is
+    an hour, so four of them pool into one and must add rather than overwrite.
+    """
+    rows = (db.session.query(RadarBucketSource.bucket_start,
+                             sa.func.sum(RadarBucketSource.mention_count))
+            .filter(RadarBucketSource.ticker == ticker,
+                    RadarBucketSource.source.in_(list(sources)),
+                    RadarBucketSource.bucket_start >= start,
+                    RadarBucketSource.bucket_start < now)
+            .group_by(RadarBucketSource.bucket_start).all())
+
+    counts = [0] * slots
+    seen = None
+    for bucket_start, total in rows:
+        index = _slot_index(bucket_start, start, step_minutes, slots)
+        if index is None:
+            continue
+        counts[index] += int(total or 0)
+        seen = index if seen is None else min(seen, index)
+    return counts, seen
+
+
+def _watched_from_index(sources, start, now, step_minutes, slots):
+    """First slot ANY ticker was observed in.
+
+    Per source rather than per ticker, exactly like first_watched_day: the
+    question is when we were watching, not when this symbol was mentioned.
+    """
+    earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
+                .filter(RadarBucketSource.source.in_(list(sources)),
+                        RadarBucketSource.bucket_start >= start,
+                        RadarBucketSource.bucket_start < now).scalar())
+    if earliest is None:
+        return None
+    return _slot_index(earliest, start, step_minutes, slots)
+
+
+def intraday_chart_for(ticker, sources, now, span):
+    """One Chart over slots of minutes rather than calendar days.
+
+    Same array shape as the daily chart on purpose: the renderer draws evenly
+    spaced slots and does not need to know what a slot means, beyond
+    `step_minutes` for its axis labels.
+    """
+    slots, step_minutes = INTRADAY_SPANS[span]
+    start = now - dt.timedelta(minutes=slots * step_minutes)
+
+    closes = intraday_prices(ticker, start, now, step_minutes, slots)
+    counts, _seen = intraday_counts(ticker, sources, start, now,
+                                    step_minutes, slots)
+    watched = _watched_from_index(sources, start, now, step_minutes, slots)
+
+    chatter = []
+    for index in range(slots):
+        # A slot before observation began is unknown, not silent. Same rule
+        # the daily chart follows, and the reason chatter is nullable at all.
+        chatter.append(None if watched is None or index < watched
+                       else counts[index])
+
+    return Chart(start=start, closes=closes, chatter=chatter,
+                 watched_from=(start + dt.timedelta(minutes=watched * step_minutes)
+                               if watched is not None else None),
+                 step_minutes=step_minutes)
