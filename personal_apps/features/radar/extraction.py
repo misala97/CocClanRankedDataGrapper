@@ -41,7 +41,7 @@ _CONFIDENCE_RANK = {'low': 0, 'medium': 1, 'high': 2}
 
 
 def extract_tickers(title, body, lookup, allow_bare=True,
-                    allow_single_letter=True):
+                    allow_single_letter=True, bare_confidence='low'):
     """Return sorted (symbol, confidence) pairs for one post.
 
     lookup is universe.load_lookup()'s shape: uppercase symbol -> {'name',
@@ -105,6 +105,15 @@ def extract_tickers(title, body, lookup, allow_bare=True,
         # it overrides, and where they disagree the name is right.
         if symbol in STOPWORDS and not named:
             continue
-        record(symbol, 'high' if named else 'low')
+        # `bare_confidence` is what an UNCORROBORATED bare token is worth on
+        # this source, and it is per-source because the populations are not
+        # comparable. The 85%-false-positive figure this tier was built on was
+        # measured on a general network; sampled on r/wallstreetbets,
+        # r/stocks and r/pennystocks the same discard pile was 14 of 15 real
+        # tickers. Reddit comments do not write cashtags, so corroboration --
+        # a different author cashtagging the same ticker in the same 15
+        # minutes -- essentially never fires and the rule discarded the source
+        # whole. Defaults to `low`: a new source opts in deliberately.
+        record(symbol, 'high' if named else bare_confidence)
 
     return sorted(found.items())

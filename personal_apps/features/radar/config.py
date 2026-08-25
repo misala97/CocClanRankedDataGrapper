@@ -252,6 +252,31 @@ def coin_collision_dropped(source, symbol):
 def bare_tokens_allowed(source):
     return BARE_TOKENS_ALLOWED.get(source, False)
 
+
+# What an UNCORROBORATED bare token is worth, per source. Measured 2026-08-25
+# by sampling what the extractor actually threw away, live, on each source:
+#
+#   bluesky   0 of 25 discards were real tickers. CNH is a Brazilian driving
+#             licence, HQ is comics, EU is the Portuguese word "I".
+#   reddit   14 of 15 were real -- NVDA three times, plus AIXI, AMST, APRE,
+#             CAST, CODX, DKS, GITS, GPUS, INHD, OLOX, SWVL. The one miss was
+#             GPT, in a sentence about Claude and ChatGPT.
+#
+# Same rule, opposite populations. Reddit comments do not use cashtag
+# notation, so a bare token is the only form they have and the corroboration
+# path -- a DIFFERENT author cashtagging the same ticker inside 15 minutes --
+# essentially never fires. The rule was discarding an entire source.
+#
+# `low` is the default on purpose: a new source has to opt in, or a general
+# network quietly inherits a stock forum's rules.
+BARE_TOKEN_CONFIDENCE = {
+    'reddit': 'high',
+}
+
+
+def bare_token_confidence(source):
+    return BARE_TOKEN_CONFIDENCE.get(source, 'low')
+
 # Subreddits to read, from
 # docs/superpowers/specs/2026-08-24-radar-subreddit-source-list.md. Tier 1 and
 # Tier 2 together, on Michi's call 2026-08-24: measure everything for a few
@@ -389,6 +414,11 @@ STOPWORDS = frozenset({
     # a character, ST a street, PC a computer, FC a football club.
     'TV', 'LIVE', 'WTF', 'JUST', 'PR', 'OC', 'ST', 'PC', 'HE', 'FC', 'BOT',
 
+    # AI model names in tech discussion. GPT is the Intelligent Alpha Atlas
+    # ETF and also the only false positive in the Reddit sample that justified
+    # BARE_TOKEN_CONFIDENCE -- "the only reason people use Claude and GPT".
+    'GPT',
+
     # Maritime vessel-tracking identifiers, arriving together at 1676 and 1572
     # a week, which is the signature of a single position-reporting bot rather
     # than of people. A bot filter would be the better instrument; this is the
@@ -456,6 +486,7 @@ def source_config_version():
     payload = json.dumps({
         'sources': sorted(SOURCES),
         'bare': dict(sorted(BARE_TOKENS_ALLOWED.items())),
+        'bare_confidence': dict(sorted(BARE_TOKEN_CONFIDENCE.items())),
         'single_letter': dict(sorted(SINGLE_LETTER_CASHTAGS.items())),
         'coin_symbols': sorted(COIN_COLLISION_SYMBOLS),
         'coin_means_stocks': dict(sorted(COIN_SYMBOLS_MEAN_STOCKS.items())),

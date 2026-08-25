@@ -366,3 +366,72 @@ def test_the_stopword_reprieve_needs_the_right_company_name():
     got = junk_symbols('Medtronic guided up, MDT popping, call is 4pm CDT')
     assert 'MDT' in got
     assert 'CDT' not in got
+
+
+# --- Per-source bare-token confidence, measured 2026-08-25 ------------------
+#
+# The 85%-false-positive figure the `low` tier was built on came from a
+# GENERAL network. Sampled on r/wallstreetbets, r/stocks and r/pennystocks,
+# the same rule's discard pile was 14 of 15 REAL tickers -- NVDA three times,
+# plus AIXI, AMST, APRE, CAST, CODX, DKS, GITS, GPUS, INHD, OLOX and SWVL.
+# One junk: GPT, in a sentence about Claude and ChatGPT.
+#
+# Reddit comments do not use cashtags, so a bare token is the only form they
+# have and corroboration -- which needs a DIFFERENT author cashtagging the
+# same ticker in the same 15 minutes -- essentially never fires. The rule was
+# discarding the entire source.
+
+REDDIT_LOOKUP = annotate_distinctive({
+    'NVDA': {'name': 'NVIDIA Corporation - Common Stock', 'exchange': 'NASDAQ'},
+    'OLOX': {'name': 'Olenox Industries Inc. - Common Stock', 'exchange': 'OTC'},
+    'DKS': {'name': "Dick's Sporting Goods Inc Common Stock", 'exchange': 'NYSE'},
+    'ICE': {'name': 'Intercontinental Exchange Inc. Common Stock', 'exchange': 'NYSE'},
+})
+
+
+def test_a_bare_token_on_a_stock_subreddit_is_high_confidence():
+    """The whole finding. "NVDA TO THE MOON" in a daily discussion thread is
+    not an ambiguous token that needs a stranger to vouch for it."""
+    assert extract_tickers(None, 'NVDA TO THE MOON', REDDIT_LOOKUP,
+                           bare_confidence='high') == [('NVDA', 'high')]
+
+
+def test_the_same_token_stays_low_on_a_general_network():
+    """Teeth, and the reason this is per-source rather than a global loosening.
+
+    Bluesky's discard pile sampled 0 of 25 real -- CNH is a Brazilian driving
+    licence, HQ is comics, EU is the word "I". Promoting bare tokens there
+    would put all of it on the board.
+    """
+    assert extract_tickers(None, 'NVDA TO THE MOON', REDDIT_LOOKUP,
+                           bare_confidence='low') == [('NVDA', 'low')]
+
+
+def test_low_is_still_the_default():
+    """A new source must opt in deliberately. Inheriting the permissive
+    setting is how a general network would quietly get Reddit's rules."""
+    assert extract_tickers(None, 'NVDA TO THE MOON', REDDIT_LOOKUP) == \
+        [('NVDA', 'low')]
+
+
+def test_stopwords_still_win_on_a_permissive_source():
+    """Promotion is about which population is being read, not a licence to
+    count every capitalised word. ICE is stopworded and stays out even here --
+    and the name reprieve still applies, so a post naming the exchange counts.
+    """
+    assert extract_tickers(None, 'ICE raids again', REDDIT_LOOKUP,
+                           bare_confidence='high') == []
+    assert extract_tickers(None, 'Intercontinental Exchange ICE beat',
+                           REDDIT_LOOKUP, bare_confidence='high') == \
+        [('ICE', 'high')]
+
+
+def test_the_bare_confidence_policy_is_hashed_into_the_config_version():
+    """It changes which mentions are counted, so baselines built under the old
+    rule must not be read straight through the change."""
+    from unittest import mock
+    from features.radar import config
+
+    before = config.source_config_version()
+    with mock.patch.dict(config.BARE_TOKEN_CONFIDENCE, {'reddit': 'low'}):
+        assert config.source_config_version() != before

@@ -14,7 +14,8 @@ from models import RadarMention, RadarPost, RadarSourceCursor
 
 from . import buckets, extraction, fingerprint, sentiment, universe
 from .config import (
-    BUCKET_MINUTES, bare_tokens_allowed, coin_collision_dropped)
+    BUCKET_MINUTES, bare_token_confidence, bare_tokens_allowed,
+    coin_collision_dropped)
 
 logger = logging.getLogger('radar.ingest')
 
@@ -64,13 +65,15 @@ def _advance_cursor(source, newest_seen):
 def _extract_for(raw, lookup):
     """Extract under the policy that applies to this post's source.
 
-    Two per-source judgements, both about population rather than code: whether
-    a bare token can be read as a ticker at all, and whether a coin-shaped
-    symbol means the company or the coin.
+    Three per-source judgements, all about population rather than code:
+    whether a bare token can be read as a ticker at all, what an
+    uncorroborated one is WORTH, and whether a coin-shaped symbol means the
+    company or the coin.
     """
     tickers = extraction.extract_tickers(
         raw.title, raw.body, lookup,
-        allow_bare=bare_tokens_allowed(raw.source))
+        allow_bare=bare_tokens_allowed(raw.source),
+        bare_confidence=bare_token_confidence(raw.source))
     return [(symbol, confidence) for symbol, confidence in tickers
             if not coin_collision_dropped(raw.source, symbol)]
 
