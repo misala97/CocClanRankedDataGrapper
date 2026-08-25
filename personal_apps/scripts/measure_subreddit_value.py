@@ -7,11 +7,17 @@ about 30 an hour, TOTAL, for every subreddit combined. So the question is not
     cd personal_apps && PYTHONPATH=. python scripts/measure_subreddit_value.py
     cd personal_apps && PYTHONPATH=. python scripts/measure_subreddit_value.py --hours 24
 
-THE COLUMN THAT DECIDES IT is `mentions/feed`. A subreddit polled every six
-hours that yields nothing is not merely quiet -- it is spending requests that
-r/wallstreetbets needs, and WSB turns its 25-entry feed over every 1.8 minutes
-against a budget that cannot poll it faster than every 5.7. Everything cut
-here goes straight to the subs that overflow.
+THE COLUMNS THAT DECIDE IT are `mentions/hr` and `per feed`, and they answer
+different halves.
+
+`mentions/hr` is what a subreddit actually delivered. Undistorted.
+
+`per feed` is what it delivered per request it ASKED FOR, which is the cost
+side -- but it is understated for any sub the budget cannot satisfy. Demand
+runs to 67 feeds an hour against a budget of 30, so a sub pinned at the floor
+gets roughly half what it asks and its per-feed reads roughly half of the
+truth. r/wallstreetbets is the worst affected, being the only sub at the
+floor. Rows marked `starved` are the ones to read with that in mind.
 
 THE OTHER TEST is the top-ticker column, from the source-list spec: "if it's
 all mega-caps, the sub is a news reposter and adds nothing to a discovery
@@ -104,29 +110,34 @@ def main():
                 'tickers': tickers,
                 'authors': authors,
                 'per_feed': (mentions / feeds) if feeds else 0.0,
+                'per_hour': mentions / args.hours,
+                # At the floor means it wants the fastest cadence there is, so
+                # it is first in line for the shortfall when demand exceeds
+                # the budget -- and its per-feed is understated most.
+                'starved': interval <= REDDIT_MIN_POLL,
             })
 
         # Unmeasured last, and never ranked among the measured ones.
         report.sort(key=lambda entry: (entry['per_feed'] is None,
-                                       -(entry['per_feed'] or 0.0)))
+                                       -(entry['per_hour'] or 0.0)))
         measured = [e for e in report if e['feeds_hr'] is not None]
         unmeasured = [e for e in report if e['feeds_hr'] is None]
 
         print('reddit, last %g hours. Budget is ~%g feeds/hour for ALL '
               'subreddits combined.' % (args.hours, BUDGET_PER_HOUR))
         print()
-        print('  %-22s %8s %8s %8s %8s %8s %10s'
-              % ('subreddit', 'rate/hr', 'feeds/hr', 'posts', 'mentions',
-                 'tickers', 'per feed'))
+        print('  %-22s %8s %8s %8s %8s %10s %10s %s'
+              % ('subreddit', 'rate/hr', 'feeds/hr', 'mentions', 'tickers',
+                 'mentions/hr', 'per feed', ''))
         for entry in measured:
-            print('  %-22s %8.2f %8.2f %8d %8d %8d %10.2f'
+            print('  %-22s %8.2f %8.2f %8d %8d %10.1f %10.2f %s'
                   % (entry['sub'], entry['rate'], entry['feeds_hr'],
-                     entry['posts'], entry['mentions'], entry['tickers'],
-                     entry['per_feed']))
+                     entry['mentions'], entry['tickers'], entry['per_hour'],
+                     entry['per_feed'], 'starved' if entry['starved'] else ''))
         for entry in unmeasured:
-            print('  %-22s %8s %8s %8d %8d %8d %10s'
-                  % (entry['sub'], 'never', 'never', entry['posts'],
-                     entry['mentions'], entry['tickers'], '-'))
+            print('  %-22s %8s %8s %8d %8d %10s %10s'
+                  % (entry['sub'], 'never', 'never', entry['mentions'],
+                     entry['tickers'], '-', '-'))
         if unmeasured:
             print('\n  %d subreddit(s) have never been polled successfully. '
                   'Not ranked, and left out of the budget below -- they have '
@@ -147,26 +158,45 @@ def main():
         # ceiling cost little each; the mid-tier is where the budget actually
         # goes, and that is the uncomfortable part of the decision.
         print('\nWHAT CUTTING WOULD FREE, cheapest contributors first')
+        print('  (WSB turns its 25-entry feed over every 1.8 min, so that is '
+              'the number to beat)')
         print('  %-22s %10s %12s %14s'
               % ('cut through here', 'frees/hr', 'loses mentions', 'WSB poll'))
         freed = 0.0
         lost = 0
         wsb = next((e for e in measured if e['sub'] == 'wallstreetbets'), None)
         wsb_hr = (wsb['feeds_hr'] if wsb else 0.0)
-        # Only what the budget is actually oversubscribed BY can be handed
-        # back; freeing more than that just leaves the budget unspent.
-        headroom = max(spent - BUDGET_PER_HOUR, 0.0)
+
+        def wsb_interval(demand):
+            """Minutes between WSB polls at a given total demand.
+
+            The scheduler serves whoever is most overdue, which over any
+            stretch approximates a proportional share: every sub gets the same
+            fraction of what it asked for. So WSB's actual cadence is its
+            request scaled by budget/demand, and it cannot go below the floor
+            however much is freed.
+
+            The first version of this printed the same number on every row,
+            because it added the freed budget to WSB's REQUEST and then capped
+            at the budget -- WSB already requests more than the budget, so the
+            cap bound immediately and the column said nothing.
+            """
+            if demand <= 0:
+                return None
+            got = min(wsb_hr * BUDGET_PER_HOUR / demand, wsb_hr)
+            return 60.0 / got if got else None
+
+        demand = spent
         for entry in reversed(measured):
             if entry['sub'] == 'wallstreetbets':
                 continue
             freed += entry['feeds_hr']
             lost += entry['mentions']
-            # Everything freed goes to whoever wants the fastest cadence,
-            # which is always WSB -- it is pinned at the floor and starved.
-            share = min(wsb_hr + min(freed, headroom), BUDGET_PER_HOUR)
+            demand -= entry['feeds_hr']
+            share = wsb_interval(demand)
             print('  %-22s %10.2f %12d %14s'
                   % (entry['sub'], freed, lost,
-                     'every %.1f min' % (60.0 / share) if share else '-'))
+                     'every %.1f min' % share if share else '-'))
 
         print('\nTOP TICKERS PER SUBREDDIT -- all mega-caps means a news '
               'reposter, which a discovery radar does not need')
