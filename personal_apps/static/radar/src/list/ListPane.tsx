@@ -1,6 +1,7 @@
 import { Controls } from '../board/Controls'
 import { magnitudes } from '../board/geometry'
 import { Excluded } from './Excluded'
+import { Spend } from './Spend'
 import { TickerRow } from './TickerRow'
 import type { BoardPayload, Mark, Row, Selection } from '../types'
 
@@ -126,6 +127,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
           </p>
         )}
         <Excluded payload={payload} />
+        <Spend payload={payload} />
       </div>
     </aside>
   )

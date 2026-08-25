@@ -8,7 +8,7 @@ from auth import login_required
 
 from .. import board as board_mod
 from .. import detail as detail_mod
-from .. import detail_panel, phrasing
+from .. import detail_panel, phrasing, spend
 from ..config import DEFAULT_SEGMENT, SOURCES
 from ._blueprint import radar_bp
 
@@ -103,6 +103,11 @@ def serialize(board):
         'window_hours': board.window_hours,
         'segment_counts': board.segment_counts,
         'excluded': board.excluded,
+        # Spend, never a balance. There is no balance endpoint in the Claude
+        # API at all -- the Cost API reports what was spent, needs a separate
+        # Admin API key, and is documented as unavailable for individual
+        # accounts. Counted here from the token usage the responses carry.
+        'spend': spend.summary(),
         'triplet_hours': list(board_mod.TRIPLET_HOURS),
         'series_hours': board_mod.SERIES_HOURS,
         'lead_count': board_mod.LEAD_COUNT,

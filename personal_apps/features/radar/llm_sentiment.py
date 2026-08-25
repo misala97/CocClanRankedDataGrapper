@@ -34,6 +34,8 @@ import sqlalchemy as sa
 from extensions import db
 from models import RadarMention, RadarPost
 
+from . import spend
+
 logger = logging.getLogger('radar.llm_sentiment')
 
 # Deliberate, and decided in one place. The volume is what makes an Opus-tier
@@ -138,7 +140,13 @@ def _prompt_for(batch):
 
 
 def _judge_batch(batch, client, model):
-    """One call. Returns {key: verdict} for the items it answered for."""
+    """One call. Returns ({key: verdict}, usage) for the items it answered for.
+
+    `usage` is whatever the response carried, or None. It is the only exact
+    cost figure available: there is no balance endpoint, and Anthropic's Cost
+    API reports spend rather than credit and is documented as unavailable for
+    individual accounts.
+    """
     response = client.messages.create(
         model=model,
         max_tokens=1024,
@@ -177,15 +185,20 @@ def _judge_batch(batch, client, model):
         if not isinstance(number, int) or not 1 <= number <= len(batch):
             continue
         got[batch[number - 1].key] = verdict
-    return got
+    return got, getattr(response, 'usage', None)
 
 
-def judge(items, client=None, model=MODEL):
+def judge(items, client=None, model=MODEL, on_usage=None):
     """Judge every item, in batches. Returns {key: verdict}.
 
     A key absent from the result was NOT judged, and the caller must leave it
     unset rather than defaulting it. One batch failing costs only that batch:
     the calls are independent, and verdicts already paid for are kept.
+
+    `on_usage` is called once per SUCCESSFUL batch with that response's usage,
+    and is how the cost accounting gets its numbers. Optional, because
+    counting the money must not become a precondition for judging anything --
+    a failed batch reports nothing rather than a zero.
     """
     if not items:
         return {}
@@ -195,10 +208,14 @@ def judge(items, client=None, model=MODEL):
     for start in range(0, len(items), BATCH_SIZE):
         batch = items[start:start + BATCH_SIZE]
         try:
-            got.update(_judge_batch(batch, client, model))
+            verdicts, usage = _judge_batch(batch, client, model)
         except (SentimentUnavailable, anthropic.APIError) as exc:
             logger.warning('radar sentiment batch of %d failed: %s',
                            len(batch), exc)
+            continue
+        got.update(verdicts)
+        if on_usage is not None and usage is not None:
+            on_usage(usage)
     return got
 
 
@@ -248,11 +265,27 @@ def apply_verdicts(rows, verdicts):
 
 
 def run_pass(client=None, limit=PASS_LIMIT, model=MODEL):
-    """Judge the scored mentions that have no verdict yet. Returns how many."""
+    """Judge the scored mentions that have no verdict yet. Returns how many.
+
+    Also books what it cost. The tokens are read off the responses rather than
+    estimated, which makes the figure exact for radar specifically -- the
+    alternative would report everything the API key has ever done.
+    """
     rows = pending(limit)
     if not rows:
         return 0
-    verdicts = judge(items_for(rows), client=client, model=model)
+
+    meter = {'calls': 0, 'input': 0, 'output': 0}
+
+    def count(usage):
+        meter['calls'] += 1
+        meter['input'] += getattr(usage, 'input_tokens', 0) or 0
+        meter['output'] += getattr(usage, 'output_tokens', 0) or 0
+
+    verdicts = judge(items_for(rows), client=client, model=model,
+                     on_usage=count)
+    spend.record(model, calls=meter['calls'], input_tokens=meter['input'],
+                 output_tokens=meter['output'])
     return apply_verdicts(rows, verdicts)
 
 

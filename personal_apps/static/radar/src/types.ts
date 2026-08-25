@@ -179,6 +179,10 @@ export interface BoardPayload {
   /** What the eligibility floor and the breadth filter left out, by reason.
    *  Without it a quiet board and a stopped ingest look identical. */
   excluded: Record<string, number>
+  /** What the model tone pass has cost. SPEND, never a balance -- the Claude
+   *  API has no balance endpoint, so nothing here knows what is left. Absent
+   *  until the first pass books something. */
+  spend?: { today_usd: number; month_usd: number }
 }
 
 export interface Selection {

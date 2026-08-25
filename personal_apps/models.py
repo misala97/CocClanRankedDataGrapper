@@ -804,3 +804,29 @@ class RadarDailyClose(db.Model):
     close_date = db.Column(db.Date, primary_key=True)
     close      = db.Column(db.Numeric(18, 4), nullable=False)
     fetched_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+
+class RadarLlmSpend(db.Model):
+    """What the model sentiment pass cost, per day per model.
+
+    Accumulated from the `usage` every API response already carries. There is
+    no balance endpoint to ask instead: Anthropic's Cost API reports spend
+    rather than remaining credit, needs a separate Admin API key, and is
+    documented as unavailable for individual accounts.
+
+    Money is INTEGER MICROS (1 USD = 1_000_000). A float column accumulates
+    rounding on every call and then reports a total nobody can reconcile.
+
+    cost_micros is stored rather than derived, because the rate that applied
+    is part of what happened. Recomputing an old day against today's price
+    list would silently restate what was actually paid.
+    """
+    __tablename__ = 'radar_llm_spend'
+    __table_args__ = {'mysql_charset': 'utf8mb4'}
+
+    day           = db.Column(db.Date, primary_key=True)
+    model         = db.Column(db.String(40), primary_key=True)
+    calls         = db.Column(db.Integer, nullable=False, default=0)
+    input_tokens  = db.Column(db.BigInteger, nullable=False, default=0)
+    output_tokens = db.Column(db.BigInteger, nullable=False, default=0)
+    cost_micros   = db.Column(db.BigInteger, nullable=False, default=0)

@@ -325,3 +325,47 @@ def test_run_pass_judges_what_is_waiting(clean_posts):
         llm_sentiment.run_pass(client=client, limit=1)
 
         assert db.session.get(RadarMention, mention_id).llm_sentiment == 'bullish'
+
+
+# --- Metering ---------------------------------------------------------------
+
+def usage_answer(pairs, input_tokens, output_tokens):
+    """A response carrying the `usage` block the real API returns."""
+    response = answer(pairs)
+    response.usage = type('Usage', (), {
+        'input_tokens': input_tokens, 'output_tokens': output_tokens})()
+    return response
+
+
+def test_usage_is_reported_per_batch():
+    """There is no balance endpoint to ask, so the only exact figure available
+    is the one every response already carries."""
+    client = FakeClient([
+        usage_answer([(1, 'bullish')], 1200, 40),
+        usage_answer([(1, 'bearish')], 900, 30),
+    ])
+    seen = []
+
+    llm_sentiment.judge([item('a')], client=client, on_usage=seen.append)
+    llm_sentiment.judge([item('b')], client=client, on_usage=seen.append)
+
+    assert [(u.input_tokens, u.output_tokens) for u in seen] == [(1200, 40), (900, 30)]
+
+
+def test_a_failed_batch_reports_no_usage():
+    """Nothing was billed for a call that never produced a response, and a
+    zero would make an outage look like a cheap day."""
+    client = FakeClient([FakeResponse('garbage')])
+    seen = []
+
+    llm_sentiment.judge([item('a')], client=client, on_usage=seen.append)
+
+    assert seen == []
+
+
+def test_metering_is_optional():
+    """Every existing caller passes no meter. Requiring one would make the
+    cost accounting a precondition for judging anything."""
+    client = FakeClient([answer([(1, 'neutral')])])
+
+    assert llm_sentiment.judge([item('a')], client=client) == {'a': 'neutral'}
