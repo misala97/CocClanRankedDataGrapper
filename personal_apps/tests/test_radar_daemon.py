@@ -457,3 +457,17 @@ def test_a_broken_sentiment_pass_does_not_take_the_daemon_down(monkeypatch):
     monkeypatch.setattr(daemon.llm_sentiment, 'run_pass', explode)
 
     daemon._scheduled_sentiment()   # must not raise
+
+
+def test_the_daemon_retires_subreddits_dropped_from_the_config():
+    """due_symbols filters by SOURCE, not by REDDIT_SUBS.
+
+    So a subreddit removed from the list keeps its radar_poll_state row and
+    keeps being handed turns -- consuming exactly the request budget the
+    removal was meant to free, and silently. Ten subs were dropped on
+    2026-08-25; without this the cut would have changed nothing at all.
+    """
+    import inspect
+    source = inspect.getsource(daemon._reddit_fetcher)
+
+    assert 'retire_untracked' in source

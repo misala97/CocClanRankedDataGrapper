@@ -155,6 +155,17 @@ def _reddit_fetcher(client):
     def fetch(since):
         now = _utcnow()
         scheduling.ensure_tracked('reddit', REDDIT_SUBS, now)
+        # And drop the ones no longer configured. due_symbols filters by
+        # SOURCE rather than by this list, so a removed subreddit would keep
+        # its poll state and keep taking turns -- spending the very budget its
+        # removal was meant to free, while still appearing in the logs as
+        # though nothing had changed. Reddit can do this and StockTwits
+        # cannot: REDDIT_SUBS is the complete set, while a hot ticker falling
+        # out of StockTwits' rolling window is temporary.
+        retired = scheduling.retire_untracked('reddit', REDDIT_SUBS)
+        if retired:
+            logger.info('radar reddit retired %d subreddit(s) '
+                        'no longer configured', retired)
         subs = scheduling.due_symbols('reddit', now, limit=REDDIT_SUBS_PER_CYCLE)
         if not subs:
             # Nothing due. Every subreddit was read inside its own interval,

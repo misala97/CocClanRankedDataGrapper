@@ -69,6 +69,29 @@ def ensure_tracked(source, symbols, now):
     return added
 
 
+def retire_untracked(source, symbols):
+    """Drop poll state for symbols this source no longer tracks. Returns how many.
+
+    ONLY for a source whose configured list is the complete set -- Reddit,
+    where REDDIT_SUBS is exhaustive. StockTwits must never call this: its hot
+    set is a rolling window, a ticker falling out of it is temporary, and
+    deleting the row would throw away a real observed_rate that took hours to
+    learn.
+
+    Needed because due_symbols filters by SOURCE, not by the configured list.
+    Without this, removing a subreddit leaves its row behind and the scheduler
+    keeps handing it turns forever -- consuming exactly the request budget the
+    removal was meant to free, and silently: the sub still appears in the
+    logs, still costs feeds, and nothing looks wrong.
+    """
+    query = RadarPollState.query.filter(RadarPollState.source == source)
+    if symbols:
+        query = query.filter(RadarPollState.symbol.notin_(list(symbols)))
+    retired = query.delete(synchronize_session=False)
+    db.session.commit()
+    return retired
+
+
 def due_symbols(source, now, limit):
     """The most overdue symbols, up to the request budget.
 

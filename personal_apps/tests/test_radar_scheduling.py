@@ -177,3 +177,44 @@ def test_the_ceiling_cannot_lose_comments_it_was_not_going_to_lose():
     assert fill_hours >= 2 * hours, (
         'at a %sh ceiling the fastest pinned sub fills its feed in %.1fh'
         % (hours, fill_hours))
+
+
+# --- Retiring a source's dropped symbols, 2026-08-25 ------------------------
+
+def test_a_dropped_subreddit_stops_being_polled(ctx):
+    """due_symbols filters by SOURCE, not by the configured list.
+
+    So removing a subreddit from REDDIT_SUBS leaves its radar_poll_state row
+    behind and the scheduler keeps handing it turns forever -- consuming
+    exactly the request budget the removal was meant to free. The cut would
+    have been a no-op, and a silent one: the sub would still appear in the
+    logs, still cost feeds, and nothing would look wrong.
+    """
+    scheduling.ensure_tracked('testsource', ['ZZA', 'ZZB'], NOW)
+
+    retired = scheduling.retire_untracked('testsource', ['ZZA'])
+
+    assert retired == 1
+    assert scheduling.due_symbols('testsource', NOW, limit=10) == ['ZZA']
+
+
+def test_retiring_leaves_other_sources_alone(ctx):
+    """One shared table, one row per (source, symbol). A reddit list edit must
+    not reach into StockTwits' state."""
+    scheduling.ensure_tracked('testsource', ['ZZA'], NOW)
+    scheduling.ensure_tracked('othersource2', ['ZZB'], NOW)
+
+    scheduling.retire_untracked('testsource', [])
+
+    assert scheduling.due_symbols('othersource2', NOW, limit=10) == ['ZZB']
+
+
+def test_retiring_nothing_is_not_retiring_everything(ctx):
+    """The empty-list trap. `symbols` empty has to mean "this source tracks
+    nothing", but an accidental empty config would then wipe live state -- so
+    the caller that owns a fixed list is the only one allowed to call this,
+    and StockTwits, whose hot set legitimately empties, never does."""
+    scheduling.ensure_tracked('testsource', ['ZZA', 'ZZB'], NOW)
+
+    assert scheduling.retire_untracked('testsource', ['ZZA', 'ZZB']) == 0
+    assert len(scheduling.due_symbols('testsource', NOW, limit=10)) == 2

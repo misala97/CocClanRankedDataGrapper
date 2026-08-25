@@ -133,6 +133,39 @@ Once ingest is live, confirm per subreddit before trusting any of the above:
 
 Drop anything that fails, and record why in this file.
 
+### Done 2026-08-25 — eighteen cut to eight
+
+Seven hours of measured contribution, via `scripts/measure_subreddit_value.py`.
+Mentions per feed RECEIVED (demand ran to 67/hour against a ~30/hour budget,
+so each sub got roughly 45% of what it asked for).
+
+**Kept:** wallstreetbets (2.7/feed but 47% of all volume, and SNDK/AUR/CRSR are
+discovery names), pennystocks (25.0 — XELB, BMEA, APRE, AIXI), shortsqueeze
+(28.6 — HTZ, RZLV, GOSS, GRRR), thetagang (11.2), weedstocks (4.3), options
+(4.0), smallstreetbets (3.9), swingtrading (3.5).
+
+**Cut:**
+
+| Dropped | Cost | What it returned |
+|---|---|---|
+| `Daytrading` | 7.84 feeds/hr | TP, RSI, ES, SMB — take-profit, relative strength index, E-mini futures, a broker. Not companies. Rest was QQQ/SPY/IWM. |
+| `stocks` | 9.44 feeds/hr | NATO, GE, VOO, QQQ, VXUS, NKE. Index funds and megacaps — the news-reposter test above, failing as written. |
+| `StockMarket` | 1.12 feeds/hr | IQ, SSD, EWC, VTI, SCHD. Cheap, still only ETFs. |
+| `SPACs` | 0.17 feeds/hr | One mention in seven hours. |
+| `RobinHoodPennyStocks`, `wallstreetbetsOGs`, `Wallstreetbetsnew`, `Vitards`, `Biotechplays`, `UraniumSqueeze` | 1.0 feeds/hr total | Zero mentions between them in seven hours. |
+
+Freed 19.6 feeds/hour: demand 67.3 to 47.7, and r/wallstreetbets from a
+3.4-minute poll to 2.4 against a 1.8-minute feed turnover.
+
+`thetagang` was the close call — its tickers are liquid large caps exactly as
+predicted above, so it fails the spirit of the discovery test. Kept because
+11.2 real tickers per feed at 1.85 feeds/hour is cheap, and cutting it would
+buy r/wallstreetbets almost nothing.
+
+**The correlated-cluster check never ran.** Three of the four subs in the WSB
+cluster produced zero mentions and were cut on that alone, so author overlap
+had nothing to distinguish. `pennystocks`/`RobinHoodPennyStocks` likewise.
+
 ---
 
 ## What measurement has already settled (2026-08-24)

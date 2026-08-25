@@ -304,14 +304,48 @@ def bare_token_confidence(source):
 # ASX symbols collide with the US universe exactly the way crypto tickers do
 # on /biz/. Single-ticker subs (Superstonk, GME, amcstock) likewise -- they
 # discover nothing and would pin one symbol at a permanent maximum.
+# Pruned from eighteen to eight on 2026-08-25, after seven hours of measured
+# contribution -- see scripts/measure_subreddit_value.py, which produced every
+# number below. The budget is ~30 feed requests an hour for ALL subreddits
+# combined, so this list is a spending decision, not a taste one.
+#
+# KEPT, with mentions per feed actually RECEIVED (demand ran to 67/hour, so
+# each sub got about 45% of what it asked for):
+#
+#   shortsqueeze     28.6  HTZ, RZLV, GOSS, GRRR -- micro-caps, the target
+#   pennystocks      25.0  XELB, BMEA, APRE, AIXI -- likewise
+#   thetagang        11.2  liquid large caps, exactly as the spec predicted,
+#                          but real tickers at 1.85 feeds/hour
+#   weedstocks        4.3  sector micro-caps
+#   options           4.0
+#   smallstreetbets   3.9
+#   swingtrading      3.5
+#   wallstreetbets    2.7  47% of ALL reddit volume on its own, and SNDK, AUR
+#                          and CRSR are discovery names rather than megacaps
+#
+# CUT, and why:
+#
+#   Daytrading    7.84 feeds/hr for TP, RSI, ES, SMB -- take-profit, relative
+#                 strength index, E-mini futures, a broker. Not companies. The
+#                 remainder was QQQ, SPY and IWM. The most expensive junk here.
+#   stocks        9.44 feeds/hr for NATO, GE, VOO, QQQ, VXUS, NKE. Index funds
+#                 and megacaps: the source-list spec's own news-reposter test,
+#                 failing exactly as written.
+#   StockMarket   IQ, SSD, EWC, VTI, SCHD. Cheap, and still only ETFs.
+#   SPACs         one mention in seven hours.
+#   RobinHoodPennyStocks, wallstreetbetsOGs, Wallstreetbetsnew, Vitards,
+#   Biotechplays, UraniumSqueeze -- zero mentions between them in seven hours.
+#
+# Frees 19.6 feeds/hour. Demand drops 67.3 to 47.7 and r/wallstreetbets moves
+# from a 3.4-minute poll to 2.4, against a feed that turns over every 1.8.
+#
+# Hashed into source_config_version, so this starts a baseline warm-up. And
+# note run_radar_ingest retires the dropped subs' poll state -- due_symbols
+# filters by source rather than by this list, so without that they would keep
+# taking turns forever and the cut would be a silent no-op.
 REDDIT_SUBS = (
-    # Tier 1, core volume
-    'wallstreetbets', 'stocks', 'Daytrading', 'StockMarket', 'pennystocks',
-    'options', 'smallstreetbets', 'shortsqueeze', 'SPACs',
-    # Tier 2, narrower
-    'RobinHoodPennyStocks', 'wallstreetbetsOGs', 'Wallstreetbetsnew',
-    'thetagang', 'swingtrading', 'Vitards', 'Biotechplays', 'weedstocks',
-    'UraniumSqueeze',
+    'wallstreetbets', 'pennystocks', 'shortsqueeze', 'thetagang',
+    'options', 'smallstreetbets', 'swingtrading', 'weedstocks',
 )
 
 # Feeds read per cycle. The cycle is three minutes at the fastest cadence, so
