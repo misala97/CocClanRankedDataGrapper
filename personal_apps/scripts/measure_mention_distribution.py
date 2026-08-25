@@ -72,7 +72,8 @@ def main():
         query = (db.session.query(
                     RadarBucketSource.ticker,
                     sa.func.sum(RadarBucketSource.mention_count),
-                    sa.func.sum(RadarBucketSource.low_count))
+                    sa.func.sum(RadarBucketSource.low_count),
+                    sa.func.sum(RadarBucketSource.high_confidence_count))
                  .filter(RadarBucketSource.bucket_start >= since)
                  .group_by(RadarBucketSource.ticker))
         if args.source:
@@ -80,8 +81,14 @@ def main():
 
         # SUM() over an INTEGER column returns Decimal on MySQL and MariaDB,
         # and Decimal will not mix with the float arithmetic below.
-        rows = [(ticker, int(scored or 0), int(low or 0))
-                for ticker, scored, low in query.all()]
+        #
+        # mention_count is high+medium; low_count is separate. So medium --
+        # the bare tokens that a cashtag in the same bucket vouched for -- is
+        # the difference, and it is worth naming because buckets._promote puts
+        # no ceiling on it: one $ICE from one author promotes every bare "ICE
+        # raids" mention in that quarter-hour.
+        rows = [(ticker, int(scored or 0), int(low or 0), int(high or 0))
+                for ticker, scored, low, high in query.all()]
 
         if not rows:
             print('no buckets in the last %g days -- ingest is down, or the '
@@ -91,6 +98,8 @@ def main():
         rows.sort(key=lambda row: -(row[1] + row[2]))
         total_scored = sum(row[1] for row in rows)
         total_low = sum(row[2] for row in rows)
+        total_high = sum(row[3] for row in rows)
+        total_medium = total_scored - total_high
         total = total_scored + total_low
         per_day = 1.0 / args.days
 
@@ -99,11 +108,18 @@ def main():
         print('  tickers seen      %10s' % format(len(rows), ','))
         print('  scored mentions   %10s   (%s/day)'
               % (format(total_scored, ','), format(round(total_scored * per_day), ',')))
+        print('    of which high   %10s   (a cashtag, or a distinctive '
+              'company word in the same post)' % format(total_high, ','))
+        print('    of which medium %10s   (a bare token another author '
+              'cashtagged in the same 15 min)' % format(total_medium, ','))
         print('  low  mentions     %10s   (%s/day)'
               % (format(total_low, ','), format(round(total_low * per_day), ',')))
         print('  total             %10s   (%s/day)'
               % (format(total, ','), format(round(total * per_day), ',')))
         print('  discard rate      %10.1f%%' % (100.0 * total_low / total))
+        if total_scored:
+            print('  medium share of scored %5.1f%%   <- buckets._promote puts '
+                  'no ceiling on this' % (100.0 * total_medium / total_scored))
 
         print('\nHOW CONCENTRATED -- cumulative share of ALL mentions')
         print('  %10s  %12s  %7s  %10s  %8s  %9s'
@@ -131,10 +147,12 @@ def main():
 
         print('\nTOP 30 BY TOTAL MENTIONS -- scored + low, which is what a '
               'model pass would see')
-        print('  %-8s %8s %8s %8s' % ('ticker', 'scored', 'low', 'total'))
-        for ticker, scored, low in rows[:30]:
-            print('  %-8s %8s %8s %8s'
-                  % (ticker, format(scored, ','), format(low, ','),
+        print('  %-8s %8s %8s %8s %8s %8s'
+              % ('ticker', 'high', 'medium', 'scored', 'low', 'total'))
+        for ticker, scored, low, high in rows[:30]:
+            print('  %-8s %8s %8s %8s %8s %8s'
+                  % (ticker, format(high, ','), format(scored - high, ','),
+                     format(scored, ','), format(low, ','),
                      format(scored + low, ',')))
 
         # Mentions per post: how much the per-mention cost model over-counts,
@@ -161,7 +179,7 @@ def main():
         one_letter = [row for row in rows if len(row[0]) == 1]
         if one_letter:
             got = ', '.join('%s=%s' % (ticker, format(scored + low, ','))
-                            for ticker, scored, low in one_letter[:10])
+                            for ticker, scored, low, _high in one_letter[:10])
             print('\n  single-letter symbols counted: %s' % got)
         else:
             print('\n  single-letter symbols counted: none')
