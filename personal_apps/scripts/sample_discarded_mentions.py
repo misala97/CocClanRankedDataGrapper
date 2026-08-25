@@ -70,6 +70,11 @@ LOOKBACK = dt.timedelta(seconds=30)
 # are the scarce thing here.
 REDDIT_LOOKBACK = dt.timedelta(days=1)
 
+# Seconds between subreddit requests. See collect_reddit for the measurement;
+# the ingest module's 2.0 is tuned for three requests per cycle, not eighteen
+# back to back.
+REDDIT_PAUSE_SECONDS = 8.0
+
 # Reddit throttling is per IP, and on the VPS this script shares that IP with
 # the running daemon. The daemon spends 3 requests per 120 seconds
 # (REDDIT_SUBS_PER_CYCLE, REDDIT_INTERVAL_SECONDS); sixteen requests in thirty
@@ -155,20 +160,36 @@ def collect_bluesky(seconds, lookup):
     return classify(result.posts, lookup) + (len(result.posts),)
 
 
-def collect_reddit(lookup, subs):
+def collect_reddit(lookup, subs, pause=REDDIT_PAUSE_SECONDS):
     """One pass over every configured subreddit, split into the two arms.
 
-    Paced by the module's own REQUEST_INTERVAL_SECONDS. Sixteen requests in
-    thirty seconds earned a sustained 429 on a residential IP, so this is not
-    a knob to turn up for a bigger sample -- run it again later instead.
+    Slower than the ingest module's own REQUEST_INTERVAL_SECONDS, deliberately.
+    Two seconds apart is 0.5 requests a second, and 16 requests in 30 seconds
+    -- 0.53/s -- is what earned a sustained 429 when this was measured. The
+    daemon never approaches that (3 subreddits per 120s is 0.025/s); a sampler
+    walking every subreddit back to back does, and it did: two runs in a row
+    returned exactly one feed's worth before the cycle broke.
+
+    Nothing here is latency-sensitive, so the pause is cheap insurance.
     """
     since = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) - REDDIT_LOOKBACK
     client = reddit.RedditClient()
-    result = reddit.fetch({sub: since for sub in subs}, client)
+    result = reddit.fetch({sub: since for sub in subs}, client, pause=pause)
+
+    # Which subreddits actually answered. Without this a throttle looks
+    # identical to a quiet week, which is the confusion that cost two runs.
+    answered = sorted(result.rates)
+    missed = [sub for sub in subs if sub not in result.rates]
+    print('  answered %d/%d' % (len(answered), len(subs)))
+    if missed:
+        print('  never reached (cycle broke early): %s' % ', '.join(missed))
+    throttled = [sub for sub, rate in result.rates.items() if rate == 0.0]
+    if throttled:
+        print('  refused (429): %s' % ', '.join(sorted(throttled)))
 
     if result.status == 'missing':
         raise SystemExit('every subreddit request failed -- likely throttled; '
-                         'wait and run it again')
+                         'wait ten minutes and run it again')
 
     return classify(result.posts, lookup) + (len(result.posts),)
 
@@ -199,6 +220,10 @@ def main():
                         help='samples to keep per arm')
     parser.add_argument('--out', default='radar_sample',
                         help='output file stem; two files per arm are written')
+    parser.add_argument('--pause', type=float, default=REDDIT_PAUSE_SECONDS,
+                        help='reddit only: seconds between requests. Lower '
+                             'than the default earns a 429 and the cycle '
+                             'stops at the subreddit that got it.')
     parser.add_argument('--subs', default=None,
                         help='reddit only: comma-separated subreddits. '
                              'Defaults to %s -- see REDDIT_DEFAULT_SUBS for '
@@ -231,9 +256,9 @@ def main():
             print('reading %d subreddits (%s), ~%.0fs at %gs between '
                   'requests...'
                   % (len(subs), ', '.join(subs),
-                     len(subs) * reddit.REQUEST_INTERVAL_SECONDS,
-                     reddit.REQUEST_INTERVAL_SECONDS))
-            discarded, kept, posts_seen = collect_reddit(lookup, subs)
+                     len(subs) * args.pause, args.pause))
+            discarded, kept, posts_seen = collect_reddit(lookup, subs,
+                                                         pause=args.pause)
 
     print('\nposts seen            %s' % format(posts_seen, ','))
     print('discarded mentions    %s   <- the population in question'
