@@ -219,3 +219,101 @@ def test_the_config_version_is_stamped_on_each_source_row(clean_buckets):
                 RadarBucketSource.query.filter_by(ticker='ZZA').all()}
     assert len(versions) == 2
     assert set(versions.values()) == {source_config_version()}
+
+
+# --- The promotion leak, measured on live data 2026-08-25 -------------------
+#
+# ICE 315, IA 393, MAGA 256 and GOP 210 sat in the SCORED set over seven days,
+# and the top thirty tickers by volume were timezones, country codes and news
+# agencies rather than companies. Both facts trace to _promote, which had two
+# separate faults: it vouched across bucket boundaries, and it put no ceiling
+# on how many bare mentions one cashtag could carry.
+
+
+def test_a_cashtag_cannot_vouch_across_bucket_boundaries(clean_buckets):
+    """The docstring said "in the same window"; the code did not.
+
+    Vouchers were keyed by ticker alone and _promote ran over the whole
+    cycle's rows before they were grouped, so one $ZZA at 14:03 corroborated a
+    bare ZZA at 14:47 -- and on catch-up a cycle spans hours, which makes the
+    window unbounded in practice.
+    """
+    rows = [row(confidence='high', author='u2', minute=3, simhash=2),
+            row(confidence='low', author='u1', minute=47, simhash=1)]
+    buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0),
+                                   dt.datetime(2026, 4, 15, 14, 45, 0)})
+
+    later = RadarBucket.query.filter_by(
+        ticker='ZZA', bucket_start=dt.datetime(2026, 4, 15, 14, 45, 0)).one()
+    assert later.mention_count == 0
+    assert later.low_count == 1
+
+
+def test_one_cashtag_does_not_vouch_for_a_crowd(clean_buckets):
+    """A cashtag is one person's act of notation, and the confidence it lends
+    does not scale with how many strangers typed the same three letters.
+
+    This is the ICE case exactly: one $ICE from someone discussing the
+    exchange, beside a quarter-hour of unrelated posts about immigration
+    raids. Promoting all of them turns a news cycle into a stock signal.
+    """
+    rows = ([row(confidence='low', author='u%d' % i, simhash=i)
+             for i in range(50)]
+            + [row(confidence='high', author='voucher', simhash=999)])
+    buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 1        # the cashtag, and nothing else
+    assert bucket.low_count == 50
+
+
+def test_a_credible_ratio_still_promotes(clean_buckets):
+    """Teeth for the test above.
+
+    If the cap rejected every promotion the assertion there would pass without
+    the ratio meaning anything, and corroboration -- the mechanism that makes
+    bare tokens usable at all -- would be silently dead.
+    """
+    rows = ([row(confidence='low', author='u%d' % i, simhash=i)
+             for i in range(3)]
+            + [row(confidence='high', author='voucher', simhash=999)])
+    buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 4
+    assert bucket.low_count == 0
+
+
+def test_more_vouchers_carry_more_bare_mentions(clean_buckets):
+    """The ceiling is a ratio, not a fixed number.
+
+    Ten people cashtagging ZZA in one quarter-hour is a real conversation and
+    should vouch for more bare mentions than one person can. A flat cap would
+    throttle exactly the busy windows the board exists to surface.
+    """
+    rows = ([row(confidence='low', author='u%d' % i, simhash=i)
+             for i in range(9)]
+            + [row(confidence='high', author='v%d' % i, simhash=900 + i)
+               for i in range(3)])
+    buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 12
+    assert bucket.low_count == 0
+
+
+def test_the_promotion_ceiling_is_hashed_into_the_config_version():
+    """It changes which mentions get counted, so it belongs in the stamp.
+
+    Retuning it without a new stamp would mix populations scored under two
+    different corroboration rules inside one baseline -- the exact failure the
+    stamp exists to prevent, and the one the extraction rules already caused
+    once before 2026-08-22.
+    """
+    from unittest import mock
+    from features.radar import config
+
+    before = config.source_config_version()
+    with mock.patch.object(config, 'MAX_BARE_PER_VOUCHER',
+                           config.MAX_BARE_PER_VOUCHER + 1):
+        assert config.source_config_version() != before

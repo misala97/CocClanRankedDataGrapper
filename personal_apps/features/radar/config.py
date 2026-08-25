@@ -344,7 +344,80 @@ STOPWORDS = frozenset({
     'IF', 'IN', 'IS', 'OF', 'TO', 'DO', 'NO', 'OK', 'VS', 'AI', 'OPEN',
     'NEXT', 'REAL', 'GOOD', 'BEST', 'CASH', 'FREE', 'LIFE', 'PLAN',
     'PLAY', 'SAFE', 'TEAM', 'TRUE', 'WELL', 'WORK', 'LOVE', 'HOPE',
+    # --- Junk CLASSES, from seven days of live data measured 2026-08-25 -----
+    #
+    # The top thirty tickers by mention volume contained no company at all,
+    # and roughly a sixth of the SCORED set was these. What is added below is
+    # named classes rather than the individual collisions each of them
+    # produced -- the distinction that keeps this from being another round of
+    # the one-off patching the extraction rethink exists to stop.
+    #
+    # Each entry costs its ticker bare matches in posts that do not name the
+    # company. It keeps every cashtag, and since 2026-08-25 it also keeps
+    # every post carrying a distinctive word from the ticker's own name, so
+    # Medtronic, Deere, Intercontinental Exchange, Permian Resources and Owens
+    # Corning stay reachable in any post that is actually about them.
+
+    # Timezones. Measured: CDT 3591, PDT 1966, MDT 1469, ET 1380, BST 1146
+    # over seven days. Added as the whole family rather than the five that
+    # happened to surface, because the class is closed and known.
+    'CDT', 'PDT', 'MDT', 'EDT', 'EST', 'CST', 'MST', 'PST', 'ET', 'BST',
+    'CET', 'GMT', 'UTC',
+
+    # Countries, regions and cities. Measured: UK 4652, DC 2346, EU 2340,
+    # DE 1885, NYC 1153.
+    'UK', 'EU', 'DE', 'DC', 'NYC',
+
+    # Government agencies, political movements and news organisations. These
+    # are the ones that reached the SCORED set: MAGA 256, ICE 315, GOP 210,
+    # IA 393. `NWS` is the National Weather Service, whose marine warnings
+    # post continuously.
+    'MAGA', 'GOP', 'ICE', 'IA', 'BBC', 'NWS',
+
+    # Ordinary words and abbreviations, same class as the block above this
+    # comment and found the same way. PR is public relations, OC a county or
+    # a character, ST a street, PC a computer, FC a football club.
+    'TV', 'LIVE', 'WTF', 'JUST', 'PR', 'OC', 'ST', 'PC', 'HE', 'FC', 'BOT',
+
+    # Maritime vessel-tracking identifiers, arriving together at 1676 and 1572
+    # a week, which is the signature of a single position-reporting bot rather
+    # than of people. A bot filter would be the better instrument; this is the
+    # one that exists.
+    'AIS', 'MMSI',
+
+    # DELIBERATELY NOT ADDED, though both measured high:
+    #
+    #   FIP  3025/week, and the top discarded symbol after this list shipped
+    #   GOLD arriving in the same posts
+    #
+    # They are one account: "FIP GOLD BELGRADE  Qualifying - Male - 1 ..." is
+    # the International Padel Federation posting tournament results, where FIP
+    # is the federation and GOLD is a tournament tier. A stopword is the wrong
+    # instrument for one bot -- it is global, and it would cost Barrick Gold
+    # and FTAI Infrastructure their bare mentions everywhere to silence a
+    # padel feed. looks_like_exchange_bot is the right instrument and is
+    # currently defined, hashed into source_config_version, and called by
+    # nothing. Wiring it is its own decision.
 })
+
+# How many bare mentions one cashtagging author may vouch for, inside one
+# ticker's 15-minute bucket.
+#
+# Corroboration exists because a bare token is roughly 85% false positives on
+# its own. But a cashtag is ONE person's act of notation, and the confidence
+# it lends does not scale with how many strangers typed the same three
+# letters. Uncapped, a single $ICE from someone discussing the exchange
+# promoted an entire quarter-hour of immigration reporting into the scored
+# set, which is how ICE, IA, MAGA and GOP got there.
+#
+# Four, and expressed as a ratio rather than a fixed number: ten people
+# cashtagging in one quarter-hour is a real conversation and should carry more
+# bare mentions than one person can, so a flat cap would throttle exactly the
+# busy windows the board exists to surface. Over the ratio the promotion is
+# refused outright rather than truncated to the first N, because choosing
+# WHICH four to promote has no principled answer and the excess is itself the
+# evidence that a common word has collided with a ticker.
+MAX_BARE_PER_VOUCHER = 4
 
 
 def source_config_version():
@@ -392,6 +465,10 @@ def source_config_version():
         # pattern is used FOR, so flipping it changed which mentions were
         # counted while leaving the stamp identical.
         'fund_tokens': FUNDS_PROMOTE_BARE_TOKENS,
+        # Corroboration decides which bare mentions become scored, so retuning
+        # the ceiling mixes populations judged under two different rules
+        # inside one baseline unless the stamp moves with it.
+        'bare_per_voucher': MAX_BARE_PER_VOUCHER,
     }, separators=(',', ':'), sort_keys=True)
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 

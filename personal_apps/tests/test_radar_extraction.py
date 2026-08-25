@@ -7,6 +7,8 @@ The corpus below is deliberately adversarial in both directions -- posts that
 must yield tickers, and posts full of symbol-shaped tokens that must yield
 none.
 """
+import pytest
+
 from features.radar.extraction import extract_tickers
 from features.radar.universe import annotate_distinctive
 
@@ -268,3 +270,99 @@ def test_bare_tokens_can_be_switched_off_per_source():
 def test_bare_matching_is_on_by_default():
     """Finance-native sources keep it; the parameter exists to turn it off."""
     assert extract_tickers(None, 'GME to the moon', LOOKUP) == [('GME', 'low')]
+
+
+# --- The junk classes, measured on seven days of live data 2026-08-25 -------
+#
+# The top thirty tickers by mention volume contained no company at all. They
+# were timezones, country and region codes, government agencies, news
+# organisations and ordinary capitalised words. Between them they accounted
+# for a large share of every mention the pipeline handled, and a sixth of the
+# SCORED set.
+#
+# These are named classes rather than a list of one-off collisions, which is
+# the distinction that keeps this from being another round of the patching the
+# extraction rethink complains about.
+
+JUNK_LOOKUP = annotate_distinctive({
+    'CDT': {'name': 'CDT Equity Inc. - Common Stock', 'exchange': 'NASDAQ'},
+    'PDT': {'name': 'John Hancock Premium Dividend Fund', 'exchange': 'NYSE'},
+    'ET': {'name': 'Energy Transfer LP Common Units', 'exchange': 'NYSE'},
+    'MDT': {'name': 'Medtronic plc. Ordinary Shares', 'exchange': 'NYSE'},
+    'UK': {'name': 'Ucommune International Ltd', 'exchange': 'NASDAQ'},
+    'DE': {'name': 'Deere & Company Common Stock', 'exchange': 'NYSE'},
+    'ICE': {'name': 'Intercontinental Exchange Inc. Common Stock', 'exchange': 'NYSE'},
+    'NWS': {'name': 'News Corporation - Class B Common Stock', 'exchange': 'NASDAQ'},
+    'TV': {'name': 'Grupo Televisa S.A.B. Common Stock', 'exchange': 'NYSE'},
+    'HE': {'name': 'Hawaiian Electric Industries, Inc. Common Stock', 'exchange': 'NYSE'},
+    'MMSI': {'name': 'Merit Medical Systems, Inc. - Common Stock', 'exchange': 'NASDAQ'},
+    'AAPL': {'name': 'Apple Inc', 'exchange': 'NASDAQ'},
+})
+
+
+def junk_symbols(text):
+    return [symbol for symbol, _ in extract_tickers(None, text, JUNK_LOOKUP)]
+
+
+@pytest.mark.parametrize('text,symbol', [
+    # Timezones. CDT alone was 3591 mentions in seven days.
+    ('the panel runs 9:30-11am CDT', 'CDT'),
+    ('AI and Faith will host a panel 9:30-11am PDT', 'PDT'),
+    ('Filed Aug 20, 2026 - 8:00pm ET', 'ET'),
+    # Country and region codes.
+    ('it is just turned tummy tuesday here in the UK', 'UK'),
+    ('DE hat auch nichts gemacht', 'DE'),
+    # Agencies and news organisations.
+    ("ICE's tactics look increasingly like torture", 'ICE'),
+    ('NWS has issued a marine warning for Cape Hatteras', 'NWS'),
+    # Ordinary capitalised words. WSB and Bluesky both shout constantly.
+    ('local TV and talk radio and the podcasts', 'TV'),
+    ('You mean HE said that?', 'HE'),
+])
+def test_the_measured_junk_classes_are_not_bare_tickers(text, symbol):
+    assert symbol not in junk_symbols(text)
+
+
+def test_the_junk_classes_keep_their_cashtags():
+    """Teeth. A stopword removes bare matching only.
+
+    `$ICE` is a deliberate act of notation and means the exchange whoever is
+    in the room -- which is the same asymmetry the whole confidence design
+    rests on. If the stopword killed cashtags too, Intercontinental Exchange
+    would become untrackable to fix a problem about immigration reporting.
+    """
+    assert extract_tickers(None, 'long $ICE into earnings', JUNK_LOOKUP) == \
+        [('ICE', 'high')]
+    assert extract_tickers(None, 'adding $MDT and $DE', JUNK_LOOKUP) == \
+        [('DE', 'high'), ('MDT', 'high')]
+
+
+def test_a_stopworded_ticker_still_matches_when_its_own_company_is_named():
+    """What makes the junk classes safe to add at all.
+
+    Medtronic, Deere, Intercontinental Exchange, Permian Resources and Owens
+    Corning are real companies whose tickers spell a timezone, a country, an
+    agency, a profession and a county. Blocking the bare token outright would
+    cost them every mention that is genuinely about them.
+
+    A distinctive word from the ticker's OWN name is a far stronger signal
+    than the stopword is, and annotate_distinctive already excludes a symbol
+    echoing itself -- so `Medtronic` in the post cannot be `MDT` in the post.
+    Where the two disagree, the name wins.
+    """
+    assert ('MDT', 'high') in extract_tickers(
+        None, 'Medtronic guided up, MDT popping premarket', JUNK_LOOKUP)
+    # And the reverse, which is the whole point: no company word, no match.
+    assert 'MDT' not in junk_symbols('call at 4pm MDT')
+
+
+def test_the_stopword_reprieve_needs_the_right_company_name():
+    """Teeth for the test above.
+
+    If any distinctive word lifted any stopword, one company's name in a post
+    would unblock every stopworded ticker in it -- and posts naming a company
+    are exactly the posts most likely to shout other words in capitals.
+    """
+    got = junk_symbols('Medtronic guided up, MDT popping, call is 4pm CDT')
+    assert 'MDT' in got
+    assert 'CDT' not in got

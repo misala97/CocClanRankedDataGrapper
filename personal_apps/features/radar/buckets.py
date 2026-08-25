@@ -19,7 +19,8 @@ import statistics
 from extensions import db
 from models import RadarBucket, RadarBucketSource
 
-from .config import BUCKET_MINUTES, source_config_version
+from .config import (BUCKET_MINUTES, MAX_BARE_PER_VOUCHER,
+                     source_config_version)
 
 # Statuses whose counts are real enough to store. `missing` is not one:
 # see the module docstring. There is deliberately no list of source names --
@@ -58,16 +59,40 @@ def _promote(rows):
     for it. One person writing both ZZA and $ZZA is a single opinion twice, not
     corroboration, which is why the author must differ.
 
+    Two limits, both added 2026-08-25 after seven days of live data put ICE,
+    IA, MAGA and GOP in the scored set:
+
+    THE WINDOW IS THE BUCKET. Vouchers were keyed by ticker alone while this
+    runs over the whole cycle's rows, so a cashtag at 14:03 corroborated a bare
+    token at 14:47 -- and a catch-up cycle spans hours, which made the window
+    unbounded in practice rather than the quarter-hour the rule describes.
+
+    THE RATIO IS CAPPED. See config.MAX_BARE_PER_VOUCHER: a cashtag is one
+    person's act of notation and cannot vouch for an unlimited crowd. Over the
+    ceiling the whole group is refused rather than truncated, because there is
+    no principled way to choose which four of two hundred deserve it, and the
+    excess is itself the evidence that a common word has collided with a
+    ticker.
+
     Returns a new list; the input is not mutated.
     """
     vouchers = collections.defaultdict(set)
+    bare = collections.Counter()
     for row in rows:
+        key = (row.ticker, bucket_start_for(row.created_utc))
         if row.confidence == 'high' and row.author:
-            vouchers[row.ticker].add(row.author)
+            vouchers[key].add(row.author)
+        elif row.confidence == 'low':
+            bare[key] += 1
+
+    credible = {key for key, authors in vouchers.items()
+                if bare[key] <= MAX_BARE_PER_VOUCHER * len(authors)}
 
     promoted = []
     for row in rows:
-        if row.confidence == 'low' and (vouchers[row.ticker] - {row.author}):
+        key = (row.ticker, bucket_start_for(row.created_utc))
+        if (row.confidence == 'low' and key in credible
+                and (vouchers[key] - {row.author})):
             promoted.append(dataclasses.replace(row, confidence='medium'))
         else:
             promoted.append(row)

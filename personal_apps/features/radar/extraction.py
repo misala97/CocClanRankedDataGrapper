@@ -86,10 +86,25 @@ def extract_tickers(title, body, lookup, allow_bare=True,
     # the same window.
     for raw in (_BARE_RE.findall(text) if allow_bare else ()):
         symbol = raw.upper()
-        if symbol in STOPWORDS or symbol not in lookup:
+        if symbol not in lookup:
             continue
         distinctive = lookup[symbol].get('distinctive') or set()
-        confidence = 'high' if distinctive & lowered_words else 'low'
-        record(symbol, confidence)
+        named = bool(distinctive & lowered_words)
+
+        # A stopword blocks the bare token -- UNLESS a distinctive word from
+        # that ticker's OWN name is in the same post. Added 2026-08-25 with
+        # the junk classes, and it is what makes those safe: MDT, DE, ICE, PR
+        # and OC spell a timezone, a country, an agency, a profession and a
+        # county, and blocking them outright would cost Medtronic, Deere,
+        # Intercontinental Exchange, Permian Resources and Owens Corning every
+        # mention that is genuinely about them.
+        #
+        # Safe because annotate_distinctive already excludes a symbol echoing
+        # itself, so `MDT` in the post cannot be its own reprieve -- only
+        # `Medtronic` can. The name is a far stronger signal than the stopword
+        # it overrides, and where they disagree the name is right.
+        if symbol in STOPWORDS and not named:
+            continue
+        record(symbol, 'high' if named else 'low')
 
     return sorted(found.items())
