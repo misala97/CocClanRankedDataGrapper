@@ -21,6 +21,7 @@ Read-only until --apply. Run from personal_apps/:
     python -m scripts.backfill_radar_buckets --apply    # write
 """
 import argparse
+import datetime as dt
 import math
 import sys
 
@@ -75,6 +76,15 @@ def repair(apply=False, ticker_prefix=None):
         for src, tk, bs, n_high, n_authors, n_hashes, engagement in rows:
             if ticker_prefix and not tk.startswith(ticker_prefix):
                 continue
+            # sa.text() applies no DateTime type processor to a computed
+            # DATE_ADD(...) expression, so bs comes back a str, not a
+            # datetime, on this driver. MySQL 8 coerces the string implicitly
+            # for the filter_by() comparison below, but that coercion is not
+            # something this codebase can verify on MariaDB (production), so
+            # make the conversion explicit instead of leaning on it. Tolerate
+            # a driver that already hands back a real datetime.
+            if isinstance(bs, str):
+                bs = dt.datetime.strptime(bs, '%Y-%m-%d %H:%M:%S')
             bucket = RadarBucketSource.query.filter_by(
                 ticker=tk, bucket_start=bs, source=src).one_or_none()
             if bucket is None:

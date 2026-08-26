@@ -216,6 +216,11 @@ def test_stale_scores_clear_on_any_column_and_only_for_non_ok_status(clean):
 
     dry = backfill.repair(apply=False, ticker_prefix='ZZBF')
     assert dry['stale_scores'] == 1
+    # A prefix that owns nothing here must scope the stale query to zero --
+    # otherwise this assertion only proves the repair loop is scoped, not the
+    # separate stale-score query, and the latter would silently pass by
+    # coincidence of whatever else happens to be in the database.
+    assert backfill.repair(apply=False, ticker_prefix='ZZNOPE')['stale_scores'] == 0
 
     stale = _reread('ZZBF4')
     assert stale.baseline_days == 7            # untouched on dry-run
