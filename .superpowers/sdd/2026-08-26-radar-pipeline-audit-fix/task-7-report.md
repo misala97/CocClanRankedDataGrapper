@@ -141,3 +141,66 @@ Produced only: the two migration files, and the deliberate survivors enumerated 
 
 - The brief's own coverage gaps (three broken pre-existing tests, three dead daemon tests, six stray present-tense comments across files it never listed) suggest the brief was written from a narrower grep than this task needed. I applied the same "restate if live, leave if historical" judgment throughout, consistently, but that judgment call is inherently a matter of degree in a couple of spots (`config.py:64`, `universe.py:29` / `test_radar_universe.py:110`) -- reasonable reviewers could prefer those swapped to a live source too. None of them affect behavior; they're all comments/docstrings.
 - `npm install` populated `personal_apps/node_modules/` on this machine as a side effect of getting real (not assumed) frontend verification. It's gitignored and `git status` shows nothing, but it's a filesystem change outside the commit; flagging it in case a later task expects a pristine `node_modules`-free checkout.
+
+## Task 7 fix round 1/5
+
+Commit: `3b74f32c1a7e6bc8612a53cb3f7fdd598ab2b94e` on
+`codex/radar-pipeline-audit`
+
+### Scope
+
+- `personal_apps/tests/test_radar_ingest.py` adds the missing healthy-empty
+  `run_cycle` regression: `FetchResult(posts=[], status='ok')` stays `ok` and
+  creates no post, mention, bucket, bucket-source, mention-event, or cursor
+  artifact.
+- The suite now owns the exact `ZZG`, `zz_task7_ingest`, `bluesky`, and
+  `reddit` fixtures; cleanup no longer deletes broad `ZZ%` rows or every
+  source cursor.
+- The coin-symbol opt-in regression now drives `ingest._extract_for` with
+  `$LINK`, a complete lookup entry, and a monkeypatched source opt-in. It
+  asserts `[('LINK', 'high')]`, so it exercises ingest's consumer rather than
+  the config helper directly.
+- No production code changed. The review's Minor retirement-map assertion was
+  intentionally deferred as required by this round's scope.
+
+### Required teeth evidence
+
+1. Temporarily mutated `ingest.run_cycle` so an empty `ok` result was recorded
+   as `missing`, then ran:
+
+   ```
+   python -m pytest tests/test_radar_ingest.py -v -k "empty_healthy_source_stays_ok or source_can_opt_into_reading_coin_symbols"
+   ```
+
+   `test_an_empty_healthy_source_stays_ok_without_database_artifacts` failed
+   exactly at the status assertion: `{'bluesky': 'missing'}` rather than
+   `{'bluesky': 'ok'}`.
+
+2. In the same temporary mutation pass, changed ingest's coin filter to ignore
+   the raw post source and use the non-opted-in `fourchan` policy. The focused
+   test `test_a_source_can_opt_into_reading_coin_symbols_as_companies` failed
+   exactly at the extraction assertion: `[]` rather than `[('LINK', 'high')]`.
+
+Both production mutations were restored before the final verification and
+before committing.
+
+### Verification
+
+```text
+python -m pytest tests/test_radar_ingest.py tests/test_radar_daemon.py -q
+59 passed in 15.43s
+```
+
+After the run, exact owned-artifact checks returned `0` for
+`zz_task7_ingest` posts, `ZZG` buckets and mention events, and `bluesky`/
+`reddit` cursors. `git diff --check` was clean. The two known manifest API
+failures were not run or changed.
+
+### Commit contents
+
+Only `personal_apps/tests/test_radar_ingest.py` was staged and committed:
+
+```text
+3b74f32 test(radar): pin healthy empty source results
+1 file changed, 41 insertions(+), 15 deletions(-)
+```

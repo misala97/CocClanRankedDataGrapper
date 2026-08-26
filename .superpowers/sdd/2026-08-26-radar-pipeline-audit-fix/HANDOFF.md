@@ -1,5 +1,158 @@
 # HANDOFF — radar pipeline audit fix
 
+## CURRENT AUTHORITATIVE CHECKPOINT — Task 7 closed, 2026-08-27
+
+This checkpoint supersedes the live-worker checkpoint immediately below.
+There are **no active workers** at this instant.
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+Code HEAD: `3b74f32` (`test(radar): pin healthy empty source results`)
+
+Task 7 is complete and review-clean. The initial review returned 0 Critical,
+2 Important, 1 Minor, teeth 4/6. Fix round 1 commit `3b74f32` addressed both
+Important findings; scoped high-capability re-review approved 2/2 with zero
+new findings. The full evidence is in `task-7-review.md`,
+`task-7-fix-round-1.md`, `task-7-report.md`, and
+`task-7-re-review-1.md`. The false-valued `COIN_SYMBOLS_MEAN_STOCKS` key pin is
+the one deferred Minor and is recorded in `progress.md`.
+
+Immediate next action: commit this checkpoint's SDD artifacts by exact path,
+then dispatch Task 9 from the **hardened** `task-9-brief.md`. The Task 9
+rulings and migration caveat are fully recorded in the live checkpoint below
+and in `progress.md`; they remain binding. Task order remains:
+
+`9 -> 8 -> 10-13 -> 14-17 -> 18-19 -> final review`.
+
+---
+
+## LIVE AUTHORITATIVE CHECKPOINT — Codex continuation, 2026-08-27
+
+This checkpoint supersedes every checkpoint below it. Michi explicitly asked
+that the continuation be complete enough for Claude to take over without chat
+memory.
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD when this checkpoint was written: `a3f0b73`
+
+### Current live worker
+
+Task 7 fix-round implementer **Archimedes**, Codex agent
+`01a0406f-ec5d-7fe3-927a-8daef4b34a89`, is active. Do not dispatch another
+Task 7 fixer while it is running. It owns transient changes in:
+
+- `personal_apps/features/radar/ingest.py` — currently a deliberate teeth
+  mutation may be present; do not review or preserve it until the worker
+  reports that the mutation was restored.
+- `personal_apps/tests/test_radar_ingest.py`
+- possibly `personal_apps/tests/test_radar_daemon.py`
+- an append to ignored `task-7-report.md`
+
+Controller-owned dirty files:
+
+- `progress.md`
+- ignored `task-7-fix-round-1.md`
+- ignored `task-9-brief.md`, generated and then hardened
+- this `HANDOFF.md`
+- ignored `task-7-review.md`
+
+At the instant of this checkpoint, `git status --short` showed
+`progress.md`, `personal_apps/features/radar/ingest.py`, and
+`personal_apps/tests/test_radar_ingest.py` modified. The SDD files are ignored
+unless already force-added, so their absence from status does not mean they do
+not exist.
+
+### Task 7 review and fix loop
+
+The exceptional high-capability StockTwits review completed and wrote
+`task-7-review.md`:
+
+`VERDICT: NEEDS_FIXES | critical: 0 | important: 2 | minor: 1 | teeth: 4/6`
+
+Production retirement is compliant. Open Important findings:
+
+1. Surviving tests prove `missing -> ok` but not `empty healthy ok -> missing`.
+   Reddit has a live no-work-due branch returning empty `ok`; a reviewer
+   mutation changed every empty healthy result to `missing` and all four
+   status-sensitive ingest tests still passed.
+2. `test_a_source_can_opt_into_reading_coin_symbols_as_companies` calls the
+   config helper directly, so mutating ingest to ignore the opt-in survives.
+   It must exercise `_extract_for` or `run_cycle`.
+
+The one Minor is deferred to final review: the StockTwits retirement pin does
+not directly assert key absence from `COIN_SYMBOLS_MEAN_STOCKS`; adding a
+false-valued key survives `not any(values)`.
+
+Fix round 1 requirements are in `task-7-fix-round-1.md`. When Archimedes
+returns:
+
+1. Confirm the teeth mutations are restored and inspect its commit/report.
+2. Generate a scoped review package from `a3f0b73` to the implementation HEAD
+   (the intervening controller files are uncommitted/ignored, not code).
+3. Run one high-capability scoped re-review because Task 7 is StockTwits.
+4. If both Important findings are ADDRESSED, ledger Task 7 complete, force-add
+   `task-7-review.md`, report, fix brief, progress and handoff, commit docs,
+   then start Task 9. If not, continue the fix loop per SDD.
+
+### Task 9 preflight rulings already made
+
+Do not dispatch Task 9 from the unamended plan extract. The binding hardened
+brief is `task-9-brief.md`. Codex found these load-bearing defects before any
+Task 9 implementation:
+
+1. The draft adds both `statuses['reddit']` and concrete statuses. Because
+   `buckets.roll_up` treats every non-missing status key as countable, that
+   writes a fake aggregate root child with zero mentions. Rollup must receive
+   concrete names only whenever `per_source_status` exists.
+2. Aggregate Reddit status can be `missing` after one successful sub and a
+   later unavailable/throttled sub. The current `if result.status == 'missing'`
+   gate would discard the successful sub's posts. Partial successes must
+   survive under their concrete statuses.
+3. `run_radar_ingest.score_all` iterates root `SOURCES`; after the split,
+   `score_source('reddit')` matches no new rows. API expansion and scoring need
+   one shared concrete-source expansion.
+4. `RadarPost.source` is `String(16)`, so `reddit:wallstreetbets` cannot be
+   stored. Widen it to 48 in model/migration alongside `RadarBucketSource` and
+   `RadarPollState`; journal source is already 48. Cursor and poll-state keys
+   stay rooted at `reddit` by design.
+5. Current Alembic head is `1d26ac48e744`, not Task 1's `c489b7c94875`.
+   The new migration must chain from `1d26ac48e744` and leave one head.
+6. `SOURCES` and `REDDIT_SUBS` membership do not change in Task 9, so the
+   promised source-config bump would otherwise not happen. Add a dedicated,
+   documented source-name/population generation to the hash; do not silently
+   repurpose the journal-specific `ROLLUP_GENERATION = 2`.
+7. Required extra tests and mandatory teeth mutations are listed at the end of
+   the hardened brief: per-sub status isolation/no root child, partial-success
+   survival, three 48-character model/live DB widths, API root expansion plus
+   viewer-selection echo, concrete daemon scoring, real config-version bump,
+   and preservation of root cursor/poll state.
+
+Migration note from `caveman:migration`: forward and rollback paths must be
+explicit, mixed-version operation considered, retries observable, and existing
+data preserved. Widening is the forward expand step. Before narrowing
+`radar_posts.source` back to 16 on downgrade, prefixed posts must be normalized
+to root `reddit`. Per-subreddit bucket history cannot be losslessly collapsed
+to the old aggregate shape (distinct authors/text/status are not algebraically
+mergeable from child summaries); the report/deploy carry must state that
+semantic rollback limit rather than claim full compatibility.
+
+### Standing continuation order and model rule
+
+`7 fix/re-review -> 9 -> 8 -> 10-13 -> 14-17 -> 18-19 -> final review`.
+
+Reviews stay on Sonnet except StockTwits and Reddit, which use the most capable
+available reviewer. In Codex, Task 7's reviewer used `gpt-5.6-sol` at ultra.
+Task 9 and Task 8 are Reddit and get the same exception. Keep implementer and
+review reports in this SDD directory; subagents write full reports to file and
+return only the required status line.
+
+The frontend toolchain is installed: `tsc` is clean and vitest passed 78/78 in
+Task 7. Do not repeat the superseded claim below that frontend verification is
+blocked.
+
+---
+
 ## AUTHORITATIVE CHECKPOINT — Claude to Codex, 2026-08-26 (late)
 
 Michi stopped Claude near its session limit. **There are no active workers.**

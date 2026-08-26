@@ -224,3 +224,49 @@ Ruling: the standing "tsc is not installed, npm run build cannot run" note is
   that command being unavailable and must be replanned with the runner
   available. Cost if wrong is one npm install; leaving the note stands three
   frontend tasks down on verification they can actually run.
+
+Task 7 review: NEEDS FIXES (0 Critical, 2 Important, 1 Minor; teeth 4/6).
+  Production retirement, source list, config-version bump, frontend removal,
+  historical references and prose distinctions are compliant. Open Important
+  findings: no surviving regression proves an empty healthy fetch remains
+  `ok`; the ingest coin-symbol opt-in test calls config directly and does not
+  pin ingest's consumer. Fix round 1/5 pending from
+  `task-7-fix-round-1.md`.
+
+Task 7 minor (deferred to final review): `test_stocktwits_is_retired` omits
+  direct key absence from `COIN_SYMBOLS_MEAN_STOCKS`; adding a false-valued
+  StockTwits key survives because `not any(values)` checks values, not keys.
+
+Ruling: harden Task 9 before dispatch — the extracted draft would write a
+  zero-valued aggregate `reddit` child beside concrete subreddit rows because
+  `statuses` doubled as fetch summary and rollup population; it would discard
+  successful earlier subreddits when a later sub made aggregate status
+  `missing`; and daemon scoring would continue calling only the root name,
+  matching no new rows. Concrete per-sub statuses alone feed rollup, partial
+  successes survive, and one shared expansion drives API queries and scoring.
+  Cost if wrong is a wider ingest/API change and more regression tests; leaving
+  it makes the source split either pollute storage or produce unscored Reddit.
+
+Ruling: Task 9 widens `RadarPost.source` as well as the two planned columns and
+  chains its migration from current head `1d26ac48e744` — the post column is
+  String(16), shorter than `reddit:wallstreetbets`, and Task 3b already added a
+  migration after Task 1. Cost if wrong is one extra online table alter and a
+  more explicit downgrade; leaving it makes the first mentioning Reddit post
+  fail and/or forks Alembic history.
+
+Ruling: Task 9 adds a dedicated source-name population generation to
+  `source_config_version()` — Task 7 already left `SOURCES` at the same three
+  roots and Task 9 leaves `REDDIT_SUBS` membership unchanged, so the promised
+  bump otherwise does not happen. Cost if wrong is an unnecessary baseline
+  warm-up; omitting it mixes aggregate-Reddit and per-subreddit populations.
+
+Task 7: fix round 1/5 (2 addressed, 0 open; commit 3b74f32). Added a
+  behavioral empty-healthy `run_cycle` regression and moved the coin-symbol
+  opt-in assertion through `ingest._extract_for`; both targeted production
+  mutations failed as required, then were restored. The same commit narrowed
+  the ingest fixture's shared-DB cleanup from broad `ZZ%`/all-cursor deletion
+  to exact owned rows and source keys. Covering gate: 59 passed.
+
+Task 7: complete (commits 945c9d7..3b74f32, review clean). High-capability
+  scoped re-review APPROVED both Important findings with no new findings at
+  any severity. The one original Minor remains deferred to final review.
