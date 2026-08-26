@@ -151,3 +151,12 @@ Task 5: complete (commit c6ff071, spec review approved; no Critical/Important).
 Task 4+5 minor (deferred to final review): `_extract_for` says there are four
   per-source judgements but its prose enumerates only three, omitting the
   single-letter-cashtag judgement.
+
+Codex-to-Claude stop checkpoint (2026-08-26): Michi requested an immediate
+  stop near the Codex session limit. Task 6 implementer Socrates was
+  interrupted and shut down before producing any code, tests, report or
+  commit; Task 6 remains not started. HEAD before the handoff-only commit is
+  ee24d65. No active worker remains. Claude must begin with the hardened
+  `task-6-brief.md`, preserve the completed/reviewed Tasks 1-5, and follow the
+  remaining order 6, 7, 9, 8, 10-13, 14-17, 18-19, final review. The prepared
+  ignored `task-7-brief.md` is included in the handoff checkpoint for later use.

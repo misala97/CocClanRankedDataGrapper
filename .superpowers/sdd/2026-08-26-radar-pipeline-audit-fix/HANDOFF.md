@@ -2,6 +2,64 @@
 
 Written 2026-08-26 by Claude, handing to Codex at a session limit.
 
+## AUTHORITATIVE STOP CHECKPOINT — Codex to Claude, 2026-08-26
+
+Michi asked Codex to stop because the Codex session was near its limit. The
+Task 6 implementer Socrates (`01a03f75-a03d-78f1-a7e1-b8e700f41c42`) was
+interrupted and is now shut down. **There are no active workers.**
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+
+Branch: `codex/radar-pipeline-audit`
+
+HEAD at stop: `ee24d65` (`docs(radar): close config cleanup and pin backfill safety`)
+
+Exact working-tree state at stop:
+
+- Modified: this `HANDOFF.md` only, to record the stop.
+- Ignored/untracked: `task-7-brief.md`; it is intentionally force-added by the
+  handoff checkpoint commit so Claude has the prepared Task 7 package.
+- No Task 6 implementation or test files were created or modified. In
+  particular, `personal_apps/scripts/backfill_radar_buckets.py`,
+  `personal_apps/tests/test_radar_backfill.py`, and `task-6-report.md` do not
+  exist as work in progress. Nothing needs to be rescued or discarded.
+
+Completed and review-clean: Tasks 1, 2, 3, 3b, 3c, 4 and 5. Task 4+5 has one
+deferred Minor for final review: `_extract_for` says four source judgements but
+its prose enumerates only three. No production issue was found there.
+
+Task 6 is **not started**. Its authoritative implementation package is
+`task-6-brief.md`, and the plan/ledger contain the hardened safety requirements:
+`ticker_prefix='ZZBF'` isolation in every test, genuine dry-run rollback,
+apply/idempotence, Decimal conversion, all four score fields cleared, status
+and old source-config version preserved, secondary aggregates repaired even
+when the high count is equal, and stale cleanup keyed on any non-NULL score.
+
+### Claude's immediate next action
+
+1. Read this file, `progress.md`, the plan/spec, and `task-6-brief.md` in full.
+2. Verify `git status --short`, `git log -5 --oneline`, and that HEAD is the
+   handoff checkpoint commit written after `ee24d65`.
+3. Start Task 6 from scratch using TDD. Do not rerun or rewrite completed tasks.
+4. Run the focused Task 6 gate, the script's real dry-run path, and then
+   `python -m pytest tests/ -k radar -q` from `personal_apps`.
+5. Commit only Task 6 files/report and send that commit through one independent
+   review before advancing.
+
+Remaining order: **6, 7, 9, 8, 10–13, 14–17, 18–19, final branch review**.
+Task 9 deliberately precedes Task 8 because Reddit aggregate status is the
+wrong population until each subreddit owns its own status. `task-7-brief.md`
+is prepared but Task 7 must not start before Task 6 is complete and reviewed.
+
+The broad gate most recently passed 601 radar tests plus exactly two known API
+template failures caused by the missing ignored
+`personal_apps/static/radar/dist/.vite/manifest.json`. Do not treat those two
+as a Radar backend regression and do not fix them in these tasks. Production
+is MariaDB; tests use the real shared local MySQL database.
+
+The material below is historical context from earlier handoffs. Where it says
+Task 3c or Task 6 is active, this authoritative checkpoint supersedes it.
+
 ## Codex continuation checkpoint — 2026-08-26, session ~50%
 
 Codex verified the original handoff against Git, reports and tests, then
@@ -36,9 +94,12 @@ Important findings; broad radar gate 601 passed plus the two known manifest
 failures. One deferred Minor is in the ledger: `_extract_for` says four source
 judgements but enumerates three. The final branch review must triage it.
 
-**Immediate next action:** commit this controller checkpoint (including the
-Task 4+5 report and hardened `task-6-brief.md`), then dispatch Task 6 with one
-implementer and one independent review.
+Controller checkpoint committed as `ee24d65`. **Active work:** Task 6 is running
+with implementer Socrates (`01a03f75-a03d-78f1-a7e1-b8e700f41c42`) from the
+hardened `task-6-brief.md`. Immediate next action: inspect its commit/report,
+generate a review package from `ee24d65` to its HEAD, and run one independent
+review focused on dry-run/apply safety, shared-DB isolation, Decimal boundaries,
+partial lower-bound semantics, stale-score NULLs and idempotence.
 
 Latest verified tests before fix round 2: Task 3c covering gate 140 passed;
 broad radar gate 598 passed with exactly the two known missing-Vite-manifest
