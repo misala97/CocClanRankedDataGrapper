@@ -98,23 +98,36 @@ def events_for(keys):
 
 
 def mark_promoted(rows):
-    """Record which bare mentions the rollup promoted.
+    """Replace the promotion verdict for every recomputed bare mention.
 
-    Called after _promote has seen the whole bucket, so what is stored is the
-    decision rather than an intermediate. Idempotent: a later cycle recomputes
-    the same bucket and writes the same answer, or a better-informed one.
+    Promotion is not monotonic: one voucher may carry four bare mentions,
+    then a fifth makes the entire group incredible and revokes all four.
+    Reset every low/medium row in the recomputed windows before marking the
+    current mediums true.
     """
-    promoted = [(row.source, row.external_id, row.ticker) for row in rows
-                if row.confidence == 'medium']
-    if not promoted:
+    decisions = [(row.source, row.external_id, row.ticker,
+                  row.confidence == 'medium')
+                 for row in rows if row.confidence in ('low', 'medium')]
+    if not decisions:
         return
-    for start in range(0, len(promoted), _CHUNK):
+    for start in range(0, len(decisions), _CHUNK):
+        chunk = decisions[start:start + _CHUNK]
         clauses = [sa.and_(RadarMentionEvent.source == source,
                            RadarMentionEvent.external_id == external_id,
                            RadarMentionEvent.ticker == ticker)
-                   for source, external_id, ticker in promoted[start:start + _CHUNK]]
+                   for source, external_id, ticker, _ in chunk]
         (RadarMentionEvent.query.filter(sa.or_(*clauses))
-         .update({'promoted': True}, synchronize_session=False))
+         .update({'promoted': False}, synchronize_session=False))
+
+        promoted = [(source, external_id, ticker)
+                    for source, external_id, ticker, value in chunk if value]
+        if promoted:
+            promoted_clauses = [sa.and_(RadarMentionEvent.source == source,
+                                        RadarMentionEvent.external_id == external_id,
+                                        RadarMentionEvent.ticker == ticker)
+                                for source, external_id, ticker in promoted]
+            (RadarMentionEvent.query.filter(sa.or_(*promoted_clauses))
+             .update({'promoted': True}, synchronize_session=False))
     db.session.commit()
 
 

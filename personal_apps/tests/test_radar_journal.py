@@ -132,6 +132,48 @@ def test_a_cashtag_vouches_across_cycle_boundaries(clean_buckets, clean_events):
     assert bucket.low_count == 0
 
 
+def test_a_fifth_bare_mention_revokes_the_buckets_prior_promotions(
+        clean_buckets, clean_events):
+    """Promotion is the current bucket verdict, never an historical badge.
+
+    One cashtag can vouch for exactly MAX_BARE_PER_VOUCHER bare mentions. A
+    fifth is evidence the token is too ambiguous, so the complete recompute
+    must revoke the four earlier promotions as well as reject the newcomer.
+    """
+    from features.radar import buckets, journal
+    from features.radar.config import MAX_BARE_PER_VOUCHER
+    from models import RadarBucket
+
+    start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
+    voucher = _row(external_id='zz-voucher', author='voucher', simhash=99,
+                   confidence='high')
+    bare = [_row(external_id='zz-bare-%d' % number, author='u%d' % number,
+                 simhash=number, confidence='low', minute=number + 1)
+            for number in range(MAX_BARE_PER_VOUCHER)]
+    buckets.roll_up([voucher, *bare], _ALL_OK, start)
+
+    initially_promoted = RadarMentionEvent.query.filter_by(
+        ticker='ZZA', confidence='low').all()
+    assert len(initially_promoted) == MAX_BARE_PER_VOUCHER
+    assert all(event.promoted for event in initially_promoted)
+
+    buckets.roll_up([
+        _row(external_id='zz-bare-over-cap', author='u-over-cap', simhash=10,
+             confidence='low', minute=9),
+    ], _ALL_OK, start)
+
+    bare_events = RadarMentionEvent.query.filter_by(
+        ticker='ZZA', confidence='low').all()
+    assert len(bare_events) == MAX_BARE_PER_VOUCHER + 1
+    assert all(not event.promoted for event in bare_events)
+
+    voices = journal.distinct_voices(
+        ['ZZA'], ['bluesky'], dt.datetime(2026, 4, 15, 13, 0, 0),
+        dt.datetime(2026, 4, 15, 15, 0, 0), 'author')
+    assert voices['ZZA'] == 1
+    assert RadarBucket.query.filter_by(ticker='ZZA').one().mention_count == 1
+
+
 def test_a_down_sources_mentions_never_reach_the_journal(clean_buckets, clean_events):
     """The corollary of 'an absence is never a zero' (buckets.py's module
     docstring): a fabricated count from a source that was actually down would
