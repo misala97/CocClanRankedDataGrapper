@@ -228,6 +228,13 @@ journal alone tells a reader which bare mentions were vouched for. It needs
 `_promote`'s answer written back, and the voice counts re-pointed at the journal
 rather than at `radar_mentions`. That is its own task in the plan.
 
+The written verdict is replaceable, not monotonic. Exactly four bare mentions
+may be vouched for by one high mention, then a fifth bare mention makes the
+whole group incredible under `MAX_BARE_PER_VOUCHER`. Every full-bucket
+recompute therefore writes both outcomes: current mediums become
+`promoted=True`, and current lows become `promoted=False`. An ever-true flag
+would preserve voices that the rollup no longer counts.
+
 ### 1.12 A script and the daemon contend for the same budget
 
 `scripts/discover_reddit_sources.py` polls the same `/comments/.rss` feeds at
@@ -296,8 +303,34 @@ the bucket becomes true.
 Volume at current rates: ~22k events/hour, ~1.07M rows at 48-hour retention, roughly
 120 MB with indexes. VPS disk is 116 GB at 5%.
 
-Not hashed into `source_config_version`: it changes how counted mentions are
-aggregated, not which mentions count.
+The extraction decision is unchanged, but the stored-count population is not:
+production shows the old rollup understated Bluesky by 14.1% and Reddit by
+16.0%, rising to 42.9% in the busiest buckets. A `ROLLUP_GENERATION` therefore
+participates in `source_config_version`. Baselines, profiles and board rows from
+the old aggregation generation must not mix with corrected rows. The scorer
+uses current-generation rows both to build the baseline and as the only rows it
+writes scores onto; the weekly profile is current-generation too.
+
+Before the first post-migration cycle, bootstrap the 48-hour journal from the
+retained `radar_posts` x `radar_mentions` rows. This exactly recovers stored
+high mentions and any low mentions belonging to an otherwise-stored post. A
+low-only post was never retained and remains unrecoverable. The bootstrap is
+idempotent on the journal's `(source, external_id, ticker)` key and runs before
+the scheduler starts, so the first rebuild cannot replace an old full bucket
+with only the post-deploy cursor slice.
+
+Startup also clears incompatible score fields before fetchers or the scheduler
+can run. If bootstrap recovers zero rows while the overlap window contains a
+legacy bucket with observed high-confidence mentions, startup fails closed;
+that state is evidence loss, not a quiet period. A fresh or genuinely quiet
+database may continue. The scorer repeats score invalidation defensively only
+inside its active lookback.
+
+Whenever `roll_up` restamps an existing child row from a NULL or different
+generation to the current one, it clears `expected`, `variance`, `mention_z`
+and `baseline_days` first, regardless of status. Same-generation `ok` refreshes
+may preserve scores. This prevents an old score from being relabelled as
+current merely because new counts were written onto the row.
 
 **Backfill.** Recompute `high_confidence_count`, `mention_count`,
 `distinct_authors`, `distinct_text_ratio` and `engagement_weighted_count` for the
@@ -359,7 +392,8 @@ Bumps `source_config_version`.
 Reddit produces four elevated rows in 4.5 days because 90% of its buckets are
 excluded from scoring entirely.
 
-`scoring.score_source` scores `truncated` rows using baselines built from `ok` rows
+After the per-subreddit source split in §2.8, `scoring.score_source` scores
+`truncated` rows using baselines built from `ok` rows
 only (`baselines.usable` is unchanged), and those rows keep the `partial` mark. An
 undercounted observation against a correctly-scaled expectation biases z **downward**,
 so the error is conservative, and the mark is what tells the reader.
@@ -367,7 +401,9 @@ so the error is conservative, and the mark is what tells the reader.
 `profile.build_profile` continues to exclude `truncated` — a known undercount cannot
 describe what normal looks like.
 
-Depends on §2.2, or stale z values become indistinguishable from newly-legitimate ones.
+Depends on §2.2 and §2.8: stale z values must be cleared first, and a
+subreddit's own incomplete observation must be separated from the aggregate
+Reddit status before it becomes scoreable.
 
 #### 2.8 Per-subreddit sources
 

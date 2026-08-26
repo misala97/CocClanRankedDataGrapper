@@ -18,7 +18,7 @@
 - **Production is MariaDB, local dev is MySQL 8.** `CAST(... AS JSON)` is a parse error on MariaDB. DDL commits even when the surrounding migration then fails, so a migration that half-applies leaves the schema changed and the alembic version behind.
 - `radar_buckets` and `radar_bucket_sources` are **partitioned monthly by `bucket_start`**. Every unique key, primary key included, must contain `bucket_start`. InnoDB supports no foreign keys on partitioned tables.
 - Every datetime in this codebase is **naive UTC**. `dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)`, never `utcnow()`.
-- `config.source_config_version()` must be bumped by any change to **which mentions get counted**, and must not move for changes to how a counted mention is scored or aggregated. Each task below states which it is.
+- `config.source_config_version()` must be bumped by any change to **which mentions get counted** and by an aggregation change that makes old and new bucket counts statistically incompatible. Scoring-only presentation changes do not move it. `ROLLUP_GENERATION` names the exceptional aggregation boundary introduced by this repair.
 - An absence is never a zero. A missing verdict, a failed fetch, an unpriced model and an unobserved bucket all stay NULL.
 - Green and red are reserved for price direction. Nothing else on the surface may use them.
 - Alembic head at plan time is `a53d0b0fcc37`. Migrations chain from it in task order.
@@ -32,14 +32,13 @@
 
 | Path | Responsibility |
 |---|---|
-| `personal_apps/features/radar/journal.py` | Read and write `radar_mention_events`. The only module that knows the table exists. |
+| `personal_apps/features/radar/journal.py` | Read and write `radar_mention_events`; bootstrap retained mentions before the first corrected rollup. The only module that knows the table exists. |
 | `personal_apps/migrations/versions/<rev>_add_radar_mention_events.py` | Creates the journal table. |
 | `personal_apps/migrations/versions/<rev>_add_mention_event_promoted.py` | The `promoted` flag the eligibility floor reads. |
 | `personal_apps/migrations/versions/<rev>_widen_radar_source_columns.py` | `source` to `String(48)` on the two tables that key by it. |
 | `personal_apps/migrations/versions/<rev>_baseline_days_to_float.py` | `baseline_days` SmallInteger to Float. |
 | `personal_apps/scripts/backfill_radar_buckets.py` | One-shot repair of existing bucket counts from stored mentions. |
 | `personal_apps/tests/test_radar_journal.py` | The journal's own suite. |
-| `personal_apps/tests/test_radar_config_reachability.py` | Asserts no config member is dead. |
 
 **Modified files**
 
@@ -49,7 +48,8 @@
 | `personal_apps/features/radar/buckets.py` | `MentionRow.external_id`; `roll_up` reads the journal; clear scoring columns on a non-`ok` status. |
 | `personal_apps/features/radar/ingest.py` | Pass `external_id`; extract once per post; `depths` NULL on failure; wire `allow_single_letter`. |
 | `personal_apps/features/radar/config.py` | Delete `PAGE_CAP`; retire StockTwits entries; `MENTION_EVENT_RETENTION_HOURS`; prefix-aware source lookups. |
-| `personal_apps/features/radar/scoring.py` | Score `truncated` rows. |
+| `personal_apps/features/radar/scoring.py` | Keep scores inside one compatible data generation; score `truncated` rows after Reddit is split. |
+| `personal_apps/features/radar/profile.py` | Build the weekly shape from the current compatible data generation only. |
 | `personal_apps/features/radar/sources/reddit.py` | Rate `None` not `0.0`; per-subreddit source names. |
 | `personal_apps/features/radar/sources/stocktwits.py` | Deleted. |
 | `personal_apps/features/radar/spend.py` | `cost_micros` returns `None`; `summary` reports unpriced tokens. |
@@ -867,23 +867,37 @@ In `personal_apps/features/radar/journal.py`:
 
 ```python
 def mark_promoted(rows):
-    """Record which bare mentions the rollup promoted.
+    """Replace the promotion verdict for every recomputed bare mention.
 
-    Called after _promote has seen the whole bucket, so what is stored is the
-    decision rather than an intermediate. Idempotent: a later cycle recomputes
-    the same bucket and writes the same answer, or a better-informed one.
+    Promotion is not monotonic: one voucher may carry four bare mentions,
+    then a fifth makes the entire group incredible and revokes all four.
+    Reset every low/medium row in the recomputed windows before marking the
+    current mediums true.
     """
-    promoted = [(row.source, row.external_id, row.ticker) for row in rows
-                if row.confidence == 'medium']
-    if not promoted:
+    decisions = [(row.source, row.external_id, row.ticker,
+                  row.confidence == 'medium')
+                 for row in rows if row.confidence in ('low', 'medium')]
+    if not decisions:
         return
-    for start in range(0, len(promoted), _CHUNK):
+    for start in range(0, len(decisions), _CHUNK):
+        chunk = decisions[start:start + _CHUNK]
         clauses = [sa.and_(RadarMentionEvent.source == source,
                            RadarMentionEvent.external_id == external_id,
                            RadarMentionEvent.ticker == ticker)
-                   for source, external_id, ticker in promoted[start:start + _CHUNK]]
+                   for source, external_id, ticker, _ in chunk]
         (RadarMentionEvent.query.filter(sa.or_(*clauses))
-         .update({'promoted': True}, synchronize_session=False))
+         .update({'promoted': False}, synchronize_session=False))
+
+        promoted = [(source, external_id, ticker)
+                    for source, external_id, ticker, value in chunk if value]
+        if promoted:
+            promoted_clauses = [sa.and_(
+                RadarMentionEvent.source == source,
+                RadarMentionEvent.external_id == external_id,
+                RadarMentionEvent.ticker == ticker)
+                for source, external_id, ticker in promoted]
+            (RadarMentionEvent.query.filter(sa.or_(*promoted_clauses))
+             .update({'promoted': True}, synchronize_session=False))
     db.session.commit()
 
 
@@ -918,6 +932,13 @@ def distinct_voices(tickers, sources, since, now, field):
     # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
     return {ticker: int(count) for ticker, count in rows}
 ```
+
+Add a regression that first rolls up one high voucher plus exactly
+`MAX_BARE_PER_VOUCHER` bare mentions and observes their `promoted=True` flags,
+then adds one more bare event in the same bucket and recomputes. All prior bare
+events must become `promoted=False`, `distinct_voices` must count only the high
+voucher, and the bucket's scored `mention_count` must fall back to one. This
+test must fail against the one-way `False -> True` implementation.
 
 In `personal_apps/features/radar/buckets.py`, `roll_up`, after the promotion loop:
 
@@ -973,6 +994,194 @@ Expected: all pass. Expect some leaderboard fixtures to newly clear the eligibil
 ```bash
 git add -A personal_apps
 git commit -m "fix(radar): the eligibility floor can finally see the mentions it counts"
+```
+
+---
+
+## Task 3c: Start a compatible rollup generation safely
+
+**Files:**
+- Modify: `personal_apps/features/radar/config.py`
+- Modify: `personal_apps/features/radar/journal.py`
+- Modify: `personal_apps/features/radar/buckets.py`
+- Modify: `personal_apps/features/radar/profile.py`
+- Modify: `personal_apps/features/radar/scoring.py`
+- Modify: `personal_apps/run_radar_ingest.py`
+- Modify: `personal_apps/tests/test_radar_config.py`, `test_radar_journal.py`, `test_radar_buckets.py`, `test_radar_profile.py`, `test_radar_scoring.py`, `test_radar_daemon.py`
+
+**Interfaces:**
+- Produces: `config.ROLLUP_GENERATION = 2`, included in `source_config_version()`.
+- Produces: `journal.bootstrap_from_mentions(since) -> int`, idempotently recovering retained mention rows before the scheduler starts.
+- Produces: `profile.build_profile(source, until, config_version, weeks=...)`; the compatibility version is required.
+- Produces: `scoring.invalidate_incompatible_scores(version, since) -> int`.
+- Behaviour: startup bootstraps retained events and commits incompatible-score invalidation before any fetcher or scheduler exists; rollup clears scores on the exact row whose generation changes; scoring only reads and writes current-generation rows.
+
+The journal repair changes the measured population even though the extractor's
+membership decision is unchanged. Production proves the old aggregation
+understated Bluesky by 14.1% and Reddit by 16.0%, rising to 42.9% in the busy
+buckets. Mixing those rows with corrected rows defeats the compatibility key
+that baselines already rely on.
+
+There is also a release-boundary trap: the journal table is empty immediately
+after migration. Rebuilding an already-open quarter-hour from the first
+post-deploy cursor slice would repeat the original overwrite once. The retained
+`radar_posts x radar_mentions` rows recover every stored high mention and every
+low mention belonging to an otherwise-stored post. Low-only posts were never
+retained and remain honestly unrecoverable.
+
+- [ ] **Step 1: Write failing generation and startup tests**
+
+Add tests proving every compatibility boundary:
+
+1. Monkeypatching `ROLLUP_GENERATION` changes `source_config_version()`.
+2. `profile.build_profile(..., config_version=current)` ignores an `ok` row
+   stamped with an older version and retains a current-version row. The version
+   argument is required, and a scorer spy proves that `score_source` passes it.
+3. `score_source` clears `expected`, `variance`, `mention_z` and
+   `baseline_days` from incompatible rows inside its active lookback while
+   scoring a compatible row. Seed one row with an explicit old hash and a
+   second with a real SQL NULL; seed all four score fields on both before the
+   call.
+4. Rebuilding an existing bucket with a different or NULL generation clears
+   all four score columns before stamping the current generation. Rebuilding
+   an `ok` row already in the current generation preserves its scores.
+5. `journal.bootstrap_from_mentions` imports a retained high and low mention
+   with the post's source, external id, channel, author, simhash, lexicon
+   sentiment and engagement; running it twice leaves one event per
+   `(source, external_id, ticker)`.
+6. With an empty journal, retained pre-deploy mentions, an already-scored old-
+   generation bucket and a disjoint post-deploy cursor slice, startup bootstrap
+   plus rollup produces the recoverable full count, stamps the new generation
+   and leaves all score columns NULL.
+7. Startup fails closed when bootstrap recovers zero events while the overlap
+   window contains a legacy bucket with `high_confidence_count > 0`. A fresh or
+   genuinely quiet database may continue. Bootstrap or invalidation failure
+   prevents both `build_fetchers` and scheduler creation.
+
+The scoring regressions must seed non-NULL values first. An absence-only
+assertion would pass before the fix and proves nothing. Use naive UTC datetimes,
+matching the daemon and database convention.
+
+- [ ] **Step 2: Name the aggregation generation**
+
+In `config.py`:
+
+```python
+# Counts written by generation 1 were rebuilt from one cursor slice and lost
+# up to 42.9% of the busiest buckets. Generation 2 rebuilds from the complete
+# mention journal. This is hashed because the two populations are not valid
+# inputs to one baseline, even though the extractor admitted the same symbols.
+ROLLUP_GENERATION = 2
+```
+
+Add `'rollup_generation': ROLLUP_GENERATION` to the explicit payload in
+`source_config_version()`.
+
+- [ ] **Step 3: Bootstrap retained mentions**
+
+In `journal.py`, import `RadarMention` and `RadarPost` and add:
+
+```python
+def bootstrap_from_mentions(since):
+    """Recover retained extractor decisions before the first journal rollup.
+
+    Idempotent through record()'s unique key. `medium` is deliberately absent:
+    the extractor stores high/low and promotion is recomputed from the full
+    bucket. A low-only post was never retained and cannot be invented here.
+    """
+    rows = (db.session.query(
+                RadarMention.ticker, RadarMention.confidence,
+                RadarMention.lexicon_sentiment,
+                RadarPost.source, RadarPost.external_id, RadarPost.channel,
+                RadarPost.author, RadarPost.created_utc, RadarPost.simhash,
+                RadarPost.score, RadarPost.num_comments)
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+            .filter(RadarPost.created_utc >= since,
+                    RadarMention.confidence.in_(('high', 'low')))
+            .all())
+    recovered = [buckets.MentionRow(
+        ticker=ticker, external_id=external_id, created_utc=created_utc,
+        source=source, channel=channel, author=author, simhash=int(simhash),
+        confidence=confidence, sentiment=sentiment,
+        engagement=float((score or 0) + (num_comments or 0)))
+        for (ticker, confidence, sentiment, source, external_id, channel,
+             author, created_utc, simhash, score, num_comments) in rows]
+    record(recovered)
+    return len(recovered)
+```
+
+In `run_radar_ingest.py`, import `journal`, `scoring` and
+`MENTION_EVENT_RETENTION_HOURS`. Add a testable `_prepare_rollup_generation(now)`
+that opens the app context and:
+
+1. calls `journal.bootstrap_from_mentions` with
+   `now - timedelta(hours=MENTION_EVENT_RETENTION_HOURS)`,
+2. if zero events were recovered, checks that same overlap window for any
+   legacy `RadarBucketSource` with `high_confidence_count > 0` and raises a
+   `RuntimeError` when one exists,
+3. clears incompatible scores in the active lookback, and
+4. commits before returning the recovered and invalidated counts.
+
+`main()` calls this preparation before `build_fetchers` or scheduler creation,
+logs both counts and lets any exception abort startup. No network request occurs
+in this preparation. The zero-recovery invariant distinguishes a fresh/quiet
+database from a migrated database whose retained evidence unexpectedly failed
+to bootstrap; serving a stale board is not a valid fallback.
+
+- [ ] **Step 4: Keep bucket rows, profiles and scores inside the generation**
+
+Change `profile.build_profile` to require
+`build_profile(source, until, config_version, weeks=DEFAULT_WEEKS)` and filter
+its query by exact `RadarBucketSource.source_config_version`. Update every
+direct caller and test; there is no compatibility-unsafe optional mode.
+
+Add `scoring.invalidate_incompatible_scores(version, since) -> int`. It clears
+the four scoring columns from rows at or after `since` where
+`source_config_version` is SQL NULL or differs from `version`, and where at
+least one scoring column is non-NULL. Treat NULL explicitly because
+`NULL != version` does not match in SQL. Startup calls it before any ingest can
+run. `score_source` also calls it defensively, constrained to its active
+lookback rather than scanning full history every 15 minutes.
+
+Make `_rows_by_ticker(..., config_version)` load exact current-generation rows
+only, and have `score_source` pass the same current version into
+`profile.build_profile`.
+
+Finally, in `buckets.roll_up`, capture an existing child's generation before
+assigning the current version. If it is NULL or different, clear `expected`,
+`variance`, `mention_z` and `baseline_days` on that exact row before stamping
+the new version, regardless of its status. Keep Task 3's non-`ok` clearing too.
+An `ok` refresh in the same generation may preserve its scores.
+
+Together these rules prevent an old score from being disguised as current by a
+restamp, and keep incompatible rows absent rather than converting them to zero.
+
+- [ ] **Step 5: Run covering suites and a teeth check**
+
+```bash
+python -m pytest tests/test_radar_config.py tests/test_radar_journal.py \
+  tests/test_radar_buckets.py tests/test_radar_profile.py \
+  tests/test_radar_scoring.py \
+  tests/test_radar_daemon.py -v
+python -m pytest tests/ -k radar -q
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add personal_apps/features/radar/config.py \
+        personal_apps/features/radar/journal.py \
+        personal_apps/features/radar/buckets.py \
+        personal_apps/features/radar/profile.py \
+        personal_apps/features/radar/scoring.py \
+        personal_apps/run_radar_ingest.py \
+        personal_apps/tests/test_radar_config.py \
+        personal_apps/tests/test_radar_journal.py \
+        personal_apps/tests/test_radar_buckets.py \
+        personal_apps/tests/test_radar_profile.py \
+        personal_apps/tests/test_radar_scoring.py \
+        personal_apps/tests/test_radar_daemon.py
+git commit -m "fix(radar): start corrected rollups as a new baseline generation"
 ```
 
 ---
@@ -1084,134 +1293,60 @@ git commit -m "fix(radar): the single-letter cashtag rule was hashed but never c
 
 ---
 
-## Task 5: Delete `PAGE_CAP`, and make dead config impossible
+## Task 5: Delete the superseded `PAGE_CAP`
 
 **Files:**
 - Modify: `personal_apps/features/radar/config.py`
-- Create: `personal_apps/tests/test_radar_config_reachability.py`
+- Modify: `personal_apps/tests/test_radar_config.py`
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: no new runtime names.
 
-`PAGE_CAP` has zero references anywhere, tests included; `sources/fourchan.py` paginates under its own `THREAD_CAP`. This is the fourth member of `config` to have been dead in production — the bot filter, the profile job and the sentiment job preceded it — so the durable fix is the test, not the deletion.
+`PAGE_CAP` has zero references anywhere; `sources/fourchan.py` paginates under
+its own `THREAD_CAP`. Delete the obsolete promise rather than preserving a
+second page-cap vocabulary that no source implements.
 
-- [ ] **Step 1: Write the failing test**
+Do not add the earlier draft's raw-source “reachability” test. It counted names
+inside comments, docstrings and unused imports, so the exact
+`single_letter_cashtags_allowed` defect could satisfy it without a runtime call.
+The durable guards are behavioral and already live where the omissions
+happened: ingest tests exercise the bot filter and Task 4's single-letter hook;
+daemon tests assert the profile and sentiment jobs are scheduled.
 
-Create `personal_apps/tests/test_radar_config_reachability.py`:
+- [ ] **Step 1: Pin the deliberate deletion**
 
-```python
-# personal_apps/tests/test_radar_config_reachability.py
-"""No member of radar's config may be dead.
-
-Four have been, in production, while being hashed into
-source_config_version and therefore claiming to be policy: the bot filter
-(defined 2026-08-22, called from 2026-08-25), the profile job, the sentiment
-job, and single_letter_cashtags_allowed (audit 2026-08-26, 3% of the corpus).
-
-Reachability is checked against SOURCE TEXT rather than runtime coverage,
-because the failure mode is a name that is imported and never invoked -- which
-coverage would report as covered.
-"""
-import pathlib
-import re
-
-from features.radar import config
-
-_ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-# Where a config member may legitimately be used.
-_SEARCH_DIRS = ('features/radar', 'routes', 'scripts', 'tests')
-_SEARCH_FILES = ('run_radar_ingest.py',)
-
-# Members with no call site and a reason. Every entry is a decision, not a
-# waiver: if a name is here, someone chose to keep it unused.
-_EXEMPT = {
-    # Read only through coin_collision_dropped, which is itself reachable.
-    # Kept as a map rather than collapsed to a constant because Telegram will
-    # need its own entry.
-    'COIN_SYMBOLS_MEAN_STOCKS',
-}
-
-
-def _corpus():
-    texts = []
-    for name in _SEARCH_DIRS:
-        for path in (_ROOT / name).rglob('*.py'):
-            if path.name == 'config.py' and 'features/radar' in path.as_posix():
-                continue
-            texts.append(path.read_text(encoding='utf-8'))
-    for name in _SEARCH_FILES:
-        texts.append((_ROOT / name).read_text(encoding='utf-8'))
-    return '\n'.join(texts)
-
-
-def _config_source():
-    return pathlib.Path(config.__file__).read_text(encoding='utf-8')
-
-
-def _public_members():
-    return sorted(name for name in dir(config)
-                  if not name.startswith('_')
-                  and name not in ('dt', 'hashlib', 'json', 're'))
-
-
-def test_every_config_member_is_reachable():
-    corpus = _corpus()
-    own = _config_source()
-    dead = []
-    for name in _public_members():
-        if name in _EXEMPT:
-            continue
-        if re.search(r'\b%s\b' % re.escape(name), corpus):
-            continue
-        # Transitive: used by another config member, which the loop checks
-        # separately. `\b` twice so a prefix does not satisfy a longer name.
-        uses = len(re.findall(r'\b%s\b' % re.escape(name), own))
-        if uses > 1:
-            continue
-        dead.append(name)
-
-    assert not dead, (
-        'config members with no call site: %s. Either wire them, delete them, '
-        'or add them to _EXEMPT with a reason.' % ', '.join(dead))
-```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-```bash
-python -m pytest tests/test_radar_config_reachability.py -v
-```
-
-Expected: `AssertionError: config members with no call site: PAGE_CAP`.
-
-If other names appear, they are real findings — check each before adding it to `_EXEMPT`.
-
-- [ ] **Step 3: Delete `PAGE_CAP`**
-
-In `personal_apps/features/radar/config.py`, remove:
+Add to `test_radar_config.py`:
 
 ```python
-# Pages to walk per channel per cycle before giving up and
-# marking the affected buckets `truncated` (spec 4.3).
-PAGE_CAP = 10
+def test_the_superseded_page_cap_is_gone():
+    from features.radar import config
+
+    assert not hasattr(config, 'PAGE_CAP')
 ```
 
-`sources/fourchan.py` already caps with `THREAD_CAP`; nothing else referenced this.
+Run it before deletion and confirm it fails because `PAGE_CAP` exists.
 
-- [ ] **Step 4: Run it to verify it passes**
+- [ ] **Step 2: Delete `PAGE_CAP`**
+
+Remove the constant and its page-cap comment from `config.py`. Do not replace
+it: Fourchan's `THREAD_CAP` is the live limit and owns its own truncation
+status.
+
+- [ ] **Step 3: Run the relevant behavioral guards**
 
 ```bash
-python -m pytest tests/test_radar_config_reachability.py -v
+python -m pytest tests/test_radar_config.py \
+  tests/test_radar_ingest.py -k "bot_feed or single_letter or page_cap" -v
+python -m pytest tests/test_radar_daemon.py \
+  -k "schedules_a_profile_job or schedules_a_sentiment_job" -v
 ```
 
-Expected: `1 passed`.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add personal_apps/features/radar/config.py personal_apps/tests/test_radar_config_reachability.py
-git commit -m "fix(radar): delete PAGE_CAP and pin that config cannot go dead again"
+git add personal_apps/features/radar/config.py personal_apps/tests/test_radar_config.py
+git commit -m "fix(radar): delete the superseded page-cap config"
 ```
 
 ---
@@ -1322,6 +1457,15 @@ def main():
                 (int(n_hashes) / n_high) if n_high else 1.0)
             bucket.engagement_weighted_count = max(
                 float(bucket.engagement_weighted_count), float(engagement or 0))
+            # The score was computed from the understated count. Keeping it
+            # would make the repair cosmetic while the board continues to rank
+            # on the old number. Task 3c also keeps this old rollup generation
+            # out of current baselines; NULL is the honest state until a
+            # compatible scorer can recompute it.
+            bucket.expected = None
+            bucket.variance = None
+            bucket.mention_z = None
+            bucket.baseline_days = None
             repaired += 1
 
         # The stale scores Task 3 stopped PRODUCING, which it could not
@@ -1377,7 +1521,12 @@ The production run happens after deploy, against the live database, and is Michi
 
 ---
 
-# Stage 2 — Sources that misrepresent themselves
+# Stage 2 - Sources that misrepresent themselves
+
+Execution order inside this stage is Task 7, then Task 9, then Task 8. The
+numbering is retained so existing reports and commit references remain stable.
+Reddit's aggregate status is the wrong population; no truncated observation is
+made scoreable until each subreddit owns its own status.
 
 ## Task 7: Retire StockTwits
 
@@ -1536,7 +1685,7 @@ git commit -m "fix(radar): retire StockTwits, which Cloudflare has refused since
 - Modify: `personal_apps/tests/test_radar_scoring.py`
 
 **Interfaces:**
-- Consumes: Task 3 (without it, a stale z is indistinguishable from a newly-legitimate one).
+- Consumes: Task 3 (without it, a stale z is indistinguishable from a newly-legitimate one) and Task 9 (the status must belong to one subreddit, not aggregate Reddit).
 - Produces: no new names. Behaviour: `score_source` writes `expected`, `variance`, `mention_z`, `baseline_days` on rows with `status in ('ok', 'truncated')`; `baselines.usable` and `profile.build_profile` are unchanged and still see `ok` only.
 
 Reddit has 4,372 truncated bucket rows against 478 `ok`, so 90% of the source is excluded from scoring entirely — which is why it produced four elevated rows in 4.5 days. An undercounted observation against a correctly-scaled expectation biases z **downward**, so scoring these is conservative, and the `partial` mark carries the caveat.
@@ -1657,7 +1806,7 @@ git commit -m "fix(radar): rank truncated buckets instead of discarding ninety p
 - Modify: `personal_apps/tests/test_radar_reddit.py`, `test_radar_config.py`
 
 **Interfaces:**
-- Consumes: Task 7 (`SOURCES` no longer holds StockTwits), Task 8.
+- Consumes: Task 7 (`SOURCES` no longer holds StockTwits). Produces the source/status population Task 8 scores.
 - Produces: `config.source_root(source)` -> `str`, the part before `':'`. `config.source_kind`, `bare_tokens_allowed`, `bare_token_confidence` and `coin_collision_dropped` all resolve through it. `RawPost.source` for Reddit becomes `'reddit:<sub>'`.
 
 `sources/reddit._roll_up` collapses every subreddit in a cycle into one worst-case status, and `REDDIT_SUBS_PER_CYCLE = 1` makes that a single sub's verdict. r/wallstreetbets turns its 25-entry feed over in under two minutes against a 120-second poll, so it is permanently `truncated` — and it carries 47% of all Reddit volume, so its permanent truncation is Reddit's.
@@ -3094,7 +3243,7 @@ The trap from prior work applies: **an assertion whose passing state is an absen
 - `test_a_downgrade_to_truncated_clears_the_stale_score` (Task 3)
 - `test_a_promoted_mention_counts_towards_the_author_floor` (Task 3b)
 - `test_the_breadth_filter_reports_what_it_removed` (Task 13)
-- `test_every_config_member_is_reachable` (Task 5)
+- `test_the_superseded_page_cap_is_gone` (Task 5)
 - `test_a_feed_that_parses_to_nothing_reports_no_rate` (Task 10)
 - `test_a_failed_fetch_reports_no_catchup_depth` (Task 10)
 - `test_an_unpriced_model_costs_null_not_nothing` (Task 11)
