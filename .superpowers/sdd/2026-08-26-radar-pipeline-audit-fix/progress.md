@@ -114,6 +114,9 @@ Ruling: Task 6 now includes automated dry-run/apply/idempotence/Decimal and
   test file; the old draft could mutate the shared dev corpus during tests,
   skip refreshed secondary aggregates, or ship a production backfill proven
   only by printing `examined 0`.
+  The draft's unused `_BUCKET` SQL constant is deleted from the plan rather
+  than shipping another defined-but-uncalled promise in the audit that is
+  explicitly removing those.
 
 Task 3c: fix round 1/5 (8 original findings addressed, 1 new Important open;
   commit c553c47). New issue: `test_radar_scoring.rows` broadened teardown to
@@ -136,3 +139,15 @@ Task 3c: fix round 3/5 (2 addressed, 0 open; commit fa66e70). Scoped
 Task 3c: complete (commits 7791963..fa66e70, review clean). Final Task 3c
   covering gate: 141 passed. Latest broad gate: 598 passed with only the two
   established missing-Vite-manifest API template failures.
+
+Task 4: complete (commit c6ff071, spec review approved; no Critical/Important).
+  `single_letter_cashtags_allowed` is now a live extraction argument and the
+  Bluesky-vs-finance behavior has red/mutation evidence.
+
+Task 5: complete (commit c6ff071, spec review approved; no Critical/Important).
+  Superseded `PAGE_CAP` and its dead comment are deleted; targeted deletion,
+  bot-filter, profile-job and sentiment-job guards pass.
+
+Task 4+5 minor (deferred to final review): `_extract_for` says there are four
+  per-source judgements but its prose enumerates only three, omitting the
+  single-letter-cashtag judgement.

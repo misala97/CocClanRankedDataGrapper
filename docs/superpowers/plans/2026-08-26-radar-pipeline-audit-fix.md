@@ -1428,13 +1428,6 @@ from app import app                                        # noqa: E402
 from extensions import db                                  # noqa: E402
 from models import RadarBucketSource                       # noqa: E402
 
-# The 15-minute floor, in SQL. MariaDB and MySQL agree on this form; DATE_FORMAT
-# to the hour and then add the quarter, rather than arithmetic on a UNIX
-# timestamp, which loses the fractional-second precision the column carries.
-_BUCKET = sa.text(
-    "DATE_ADD(DATE_FORMAT(p.created_utc, '%Y-%m-%d %H:00:00'),"
-    " INTERVAL FLOOR(MINUTE(p.created_utc)/15)*15 MINUTE)")
-
 _TRUTH = sa.text("""
     SELECT p.source AS src, m.ticker AS tk,
            DATE_ADD(DATE_FORMAT(p.created_utc, '%Y-%m-%d %H:00:00'),

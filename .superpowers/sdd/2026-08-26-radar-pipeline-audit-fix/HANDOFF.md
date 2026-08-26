@@ -31,10 +31,14 @@ approved both remaining shared-DB findings. Its six-file gate is 141 passed;
 latest broad radar gate is 598 passed plus exactly the two known missing-Vite-
 manifest API template failures.
 
-**Immediate next action after takeover:** commit the controller-owned
-plan/ledger/HANDOFF checkpoint, then execute the Task 4+5 config-cleanup batch
-with one implementer and one independent review. Briefs already exist at
-`task-4-brief.md` and `task-5-brief.md`.
+Tasks 4+5 are complete in `c6ff071`: spec review approved, no Critical or
+Important findings; broad radar gate 601 passed plus the two known manifest
+failures. One deferred Minor is in the ledger: `_extract_for` says four source
+judgements but enumerates three. The final branch review must triage it.
+
+**Immediate next action:** commit this controller checkpoint (including the
+Task 4+5 report and hardened `task-6-brief.md`), then dispatch Task 6 with one
+implementer and one independent review.
 
 Latest verified tests before fix round 2: Task 3c covering gate 140 passed;
 broad radar gate 598 passed with exactly the two known missing-Vite-manifest
