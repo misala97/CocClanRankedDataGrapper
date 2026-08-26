@@ -162,8 +162,11 @@ def roll_up(rows, statuses, touched):
                if bucket_start_for(r.created_utc) in touched}
     complete = journal.events_for(windows)
 
+    promoted_rows = _promote(complete)
+    journal.mark_promoted(promoted_rows)
+
     grouped = collections.defaultdict(list)
-    for row in _promote(complete):
+    for row in promoted_rows:
         key = (row.ticker, bucket_start_for(row.created_utc))
         # Guards a BUCKET_MINUTES change, not same-bucket_start collisions --
         # events_for matches on the STORED bucket_start column, so a row

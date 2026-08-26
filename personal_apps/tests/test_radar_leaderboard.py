@@ -15,6 +15,7 @@ from extensions import db
 from models import RadarBucketSource, RadarQuote, TickerUniverse
 from features.radar import leaderboard
 from features.radar.config import source_config_version
+from test_radar_journal import _row, _ALL_OK, clean_buckets, clean_events  # noqa: F401
 
 # Deliberately far from any window a live dev database holds data for. These
 # tests assert on an exact list of LB* tickers, and the fixture can only clean
@@ -33,11 +34,16 @@ def board():
     # cleanup otherwise leaves rows that collide with the next one -- which is
     # exactly how this suite first broke.
     def wipe():
-        from models import RadarMention, RadarPost
+        from models import RadarMention, RadarMentionEvent, RadarPost
         RadarMention.query.filter(
             RadarMention.ticker.like('LB%')).delete(synchronize_session=False)
         RadarPost.query.filter(
             RadarPost.external_id.like('LB%')).delete(synchronize_session=False)
+        # Since Task 3b, _distinct_authors/_distinct_channels read the journal
+        # instead of radar_mentions -- the helpers below write matching rows
+        # here too, so this table needs the same LB* cleanup as the others.
+        RadarMentionEvent.query.filter(
+            RadarMentionEvent.ticker.like('LB%')).delete(synchronize_session=False)
         for model in (RadarBucketSource, RadarQuote):
             model.query.filter(model.ticker.like('LB%')).delete(
                 synchronize_session=False)
@@ -236,13 +242,19 @@ _mention_seq = [0]
 
 
 def _mention(ticker, author, minutes_ago, source='bluesky'):
-    """A stored post and its mention, so the author is countable."""
-    from models import RadarMention, RadarPost
+    """A stored post and its mention, so the author is countable.
+
+    Also writes the journal row _distinct_authors reads since Task 3b. A real
+    `high` mention still lands in radar_mentions too -- only the promoted
+    `medium` and post-was-all-low cases are journal-only -- so writing both
+    here mirrors production rather than special-casing the test.
+    """
+    from models import RadarMention, RadarMentionEvent, RadarPost
+    from features.radar import buckets
     _mention_seq[0] += 1
     when = NOW - dt.timedelta(minutes=minutes_ago)
-    post = RadarPost(source=source,
-                     external_id='%s-%s-%d-%d' % (ticker, author, minutes_ago,
-                                                  _mention_seq[0]),
+    external_id = '%s-%s-%d-%d' % (ticker, author, minutes_ago, _mention_seq[0])
+    post = RadarPost(source=source, external_id=external_id,
                      channel='firehose', author=author, created_utc=when,
                      title=None, body='$%s' % ticker, score=0, num_comments=0,
                      url='https://example.invalid/', simhash=1,
@@ -251,6 +263,12 @@ def _mention(ticker, author, minutes_ago, source='bluesky'):
     db.session.flush()
     db.session.add(RadarMention(post_id=post.id, ticker=ticker,
                                 confidence='high', lexicon_sentiment=0.0))
+    db.session.add(RadarMentionEvent(
+        source=source, external_id=external_id, ticker=ticker,
+        channel='firehose', created_utc=when,
+        bucket_start=buckets.bucket_start_for(when), author=author,
+        simhash=_mention_seq[0], confidence='high', sentiment=None,
+        engagement=0.0))
 
 
 def test_authors_are_counted_across_the_window_not_per_bucket(board):
@@ -299,18 +317,27 @@ def posted(ticker, external, source, channel, author, minutes_ago=20):
     """A post plus its mention, so author and channel counts are real.
 
     The bucket helpers above write COUNTS; these write the rows those counts
-    are derived from, which is what the channel gate actually reads.
+    are derived from, which is what the channel gate actually reads -- the
+    mention journal since Task 3b, alongside radar_mentions for the same
+    reason _mention above writes both.
     """
-    from models import RadarMention, RadarPost
+    from models import RadarMention, RadarMentionEvent, RadarPost
+    from features.radar import buckets
     when = NOW - dt.timedelta(minutes=minutes_ago)
+    simhash = abs(hash(external)) % 10 ** 9
     row = RadarPost(source=source, external_id=external, channel=channel,
                     author=author, created_utc=when, body='x', score=0,
-                    num_comments=0, simhash=abs(hash(external)) % 10 ** 9,
+                    num_comments=0, simhash=simhash,
                     first_seen=when, last_seen=when)
     db.session.add(row)
     db.session.flush()
     db.session.add(RadarMention(post_id=row.id, ticker=ticker,
                                 confidence='high', lexicon_sentiment=0.0))
+    db.session.add(RadarMentionEvent(
+        source=source, external_id=external, ticker=ticker, channel=channel,
+        created_utc=when, bucket_start=buckets.bucket_start_for(when),
+        author=author, simhash=simhash, confidence='high', sentiment=None,
+        engagement=0.0))
 
 
 def test_a_broadcast_only_ticker_reaches_the_board_on_two_channels(board, monkeypatch):
@@ -457,3 +484,32 @@ def test_a_kind_that_passes_clears_the_whole_ticker():
         'broadcast': Contribution(mentions=1, voices=1, text_ratio=1.0),
         'forum': Contribution(mentions=40, voices=40, text_ratio=0.9),
     }) is None
+
+
+def test_a_promoted_mention_counts_towards_the_author_floor(clean_buckets,
+                                                            clean_events):
+    """The floor gated on a count that could not see half the mentions.
+
+    `medium` is awarded at rollup and never written to radar_mentions -- zero
+    such rows exist in production -- and a post whose tickers were all `low` is
+    never stored at all. So bucket.mention_count counted the promoted mentions
+    and the author query could not, and the eligibility floor judged a ticker
+    on the smaller number (audit 2026-08-26).
+    """
+    import datetime as dt
+
+    from features.radar import buckets, journal
+
+    start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
+    buckets.roll_up([
+        _row(external_id='zz-h', author='u1', simhash=1, confidence='high'),
+        _row(external_id='zz-l', author='u2', simhash=2, confidence='low',
+             minute=7),
+    ], _ALL_OK, start)
+
+    voices = journal.distinct_voices(
+        ['ZZA'], ['bluesky'], dt.datetime(2026, 4, 15, 13, 0, 0),
+        dt.datetime(2026, 4, 15, 15, 0, 0), 'author')
+    # u2's bare mention was vouched for by u1's cashtag, so it is scored --
+    # and its author is one of the ticker's independent voices.
+    assert voices['ZZA'] == 2

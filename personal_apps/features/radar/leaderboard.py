@@ -13,9 +13,10 @@ import datetime as dt
 import sqlalchemy as sa
 
 from extensions import db
-from models import RadarBucketSource, RadarMention, RadarPost, TickerUniverse
+from models import RadarBucketSource, TickerUniverse
 
 from . import divergence as divergence_mod
+from . import journal
 from . import market_calendar
 from . import quotes as quotes_mod
 from . import scoring, universe
@@ -59,58 +60,22 @@ class Row:
 def _distinct_authors(tickers, sources, since, now):
     """True distinct authors per ticker across the whole window.
 
-    Buckets store distinct_authors as a COUNT, so aggregating them can only
-    take a maximum -- and a maximum systematically undercounts. Two buckets
-    holding {x, y} and {z, w} have four distinct authors between them and
-    report two.
+    Read from the mention journal rather than from radar_mentions. That table
+    never holds `medium` -- promotion is decided at rollup over the whole
+    bucket and written back onto the journal -- and a post whose tickers were
+    all `low` is never stored there at all, so the count it gave was smaller
+    than the mention count the floor was gating.
 
-    Measured on live data the gap was severe: NVDA showed 26 real authors
-    against a bucket maximum of 2, and SPY 21 against 2. The eligibility floor
-    needs three, so the maximum was rejecting almost every ticker on the board
-    -- including the ones with the broadest genuine participation.
-
-    Counted from the mention rows instead, where the authors themselves are
-    still available.
+    Falls back to nothing: a ticker whose events have aged out of the journal
+    is absent from the result and the caller uses the bucket maximum, which
+    undercounts in the safe direction.
     """
-    if not tickers:
-        return {}
-
-    rows = (db.session.query(RadarMention.ticker,
-                             sa.func.count(sa.distinct(RadarPost.author)))
-            .join(RadarPost, RadarPost.id == RadarMention.post_id)
-            .filter(RadarMention.ticker.in_(list(tickers)),
-                    RadarPost.source.in_(list(sources)),
-                    RadarPost.created_utc >= since,
-                    RadarPost.created_utc < now,
-                    RadarMention.confidence.in_(('high', 'medium')))
-            .group_by(RadarMention.ticker).all())
-    return {ticker: count for ticker, count in rows}
+    return journal.distinct_voices(tickers, sources, since, now, 'author')
 
 
 def _distinct_channels(tickers, sources, since, now):
-    """True distinct channels per ticker across the window.
-
-    The broadcast analogue of _distinct_authors. On a broadcast network the
-    author is the channel's admin and is therefore always one; the channel is
-    what varies, and two channels carrying the same symbol is the corroboration
-    an author count cannot express.
-
-    Counted from the mention rows for the same reason authors are: a bucket
-    stores a COUNT, and the maximum across buckets systematically undercounts.
-    """
-    if not tickers:
-        return {}
-
-    rows = (db.session.query(RadarMention.ticker,
-                             sa.func.count(sa.distinct(RadarPost.channel)))
-            .join(RadarPost, RadarPost.id == RadarMention.post_id)
-            .filter(RadarMention.ticker.in_(list(tickers)),
-                    RadarPost.source.in_(list(sources)),
-                    RadarPost.created_utc >= since,
-                    RadarPost.created_utc < now,
-                    RadarMention.confidence.in_(('high', 'medium')))
-            .group_by(RadarMention.ticker).all())
-    return {ticker: count for ticker, count in rows}
+    """The broadcast analogue. See _distinct_authors."""
+    return journal.distinct_voices(tickers, sources, since, now, 'channel')
 
 
 def _universe_rows(tickers):

@@ -888,3 +888,8 @@ class RadarMentionEvent(db.Model):
         db.Enum('high', 'low', name='radar_event_confidence'), nullable=False)
     sentiment    = db.Column(db.Float, nullable=True)
     engagement   = db.Column(db.Float, nullable=False, default=0.0)
+    # What _promote decided, written back after the rollup ran over the whole
+    # bucket. `confidence` above is what the EXTRACTOR said, and stays that
+    # way -- promotion is a property of the quarter-hour and legitimately
+    # changes as more of it arrives, so the two facts are stored apart.
+    promoted     = db.Column(db.Boolean, nullable=False, default=False)

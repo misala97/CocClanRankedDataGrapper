@@ -95,3 +95,56 @@ def events_for(keys):
                                simhash=row.simhash, confidence=row.confidence,
                                sentiment=row.sentiment, engagement=row.engagement)
             for row in rows]
+
+
+def mark_promoted(rows):
+    """Record which bare mentions the rollup promoted.
+
+    Called after _promote has seen the whole bucket, so what is stored is the
+    decision rather than an intermediate. Idempotent: a later cycle recomputes
+    the same bucket and writes the same answer, or a better-informed one.
+    """
+    promoted = [(row.source, row.external_id, row.ticker) for row in rows
+                if row.confidence == 'medium']
+    if not promoted:
+        return
+    for start in range(0, len(promoted), _CHUNK):
+        clauses = [sa.and_(RadarMentionEvent.source == source,
+                           RadarMentionEvent.external_id == external_id,
+                           RadarMentionEvent.ticker == ticker)
+                   for source, external_id, ticker in promoted[start:start + _CHUNK]]
+        (RadarMentionEvent.query.filter(sa.or_(*clauses))
+         .update({'promoted': True}, synchronize_session=False))
+    db.session.commit()
+
+
+def distinct_voices(tickers, sources, since, now, field):
+    """Distinct authors or channels per ticker over the SCORED mentions.
+
+    `field` is 'author' or 'channel'. Counted here rather than from
+    radar_mentions because that table never holds `medium` -- promotion happens
+    at rollup and is written back onto the journal, not onto the mention -- and
+    because a post whose tickers were all `low` has no mention row at all.
+
+    Buckets store distinct_authors as a COUNT, so aggregating them can only
+    take a maximum, and a maximum systematically undercounts: two buckets
+    holding {x, y} and {z, w} have four distinct voices and report two.
+    Measured on live data, NVDA showed 26 real authors against a bucket
+    maximum of 2.
+    """
+    if not tickers:
+        return {}
+
+    column = {'author': RadarMentionEvent.author,
+              'channel': RadarMentionEvent.channel}[field]
+    rows = (db.session.query(RadarMentionEvent.ticker,
+                             sa.func.count(sa.distinct(column)))
+            .filter(RadarMentionEvent.ticker.in_(list(tickers)),
+                    RadarMentionEvent.source.in_(list(sources)),
+                    RadarMentionEvent.created_utc >= since,
+                    RadarMentionEvent.created_utc < now,
+                    sa.or_(RadarMentionEvent.confidence == 'high',
+                           RadarMentionEvent.promoted.is_(True)))
+            .group_by(RadarMentionEvent.ticker).all())
+    # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
+    return {ticker: int(count) for ticker, count in rows}
