@@ -21,6 +21,13 @@ from models import RadarBucket, RadarBucketSource
 
 from .config import (BUCKET_MINUTES, MAX_BARE_PER_VOUCHER,
                      source_config_version)
+# Safe at the top because journal.py imports this module as `buckets` rather
+# than pulling MentionRow/bucket_start_for by name -- neither side touches an
+# attribute of the other until a function actually runs, so it no longer
+# matters which of the two a caller imports first. Verified all three orders
+# (`import buckets`, `import journal`, `import ingest`) after this change;
+# see the review that added this note for the command output.
+from . import journal
 
 # Statuses whose counts are real enough to store. `missing` is not one:
 # see the module docstring. There is deliberately no list of source names --
@@ -55,18 +62,6 @@ def bucket_start_for(when):
     """Floor a UTC instant to its 15-minute bucket."""
     return when.replace(minute=(when.minute // BUCKET_MINUTES) * BUCKET_MINUTES,
                         second=0, microsecond=0)
-
-
-# Deferred until after MentionRow and bucket_start_for exist: journal imports
-# both of those from this module at IMPORT time (`from .buckets import ...`),
-# so when this module is the one imported first -- the common case, since
-# ingest.py and every test import `buckets` rather than `journal` -- the names
-# journal asks for must already be bound before this line runs, or the import
-# fails with "cannot import name 'MentionRow' from partially initialized
-# module" instead of resolving. Importing the MODULE here rather than a name
-# from it is still what makes the cycle resolvable at all: this binding itself
-# needs nothing from journal yet, only roll_up() does, at call time.
-from . import journal
 
 
 def _promote(rows):
@@ -170,9 +165,13 @@ def roll_up(rows, statuses, touched):
     grouped = collections.defaultdict(list)
     for row in _promote(complete):
         key = (row.ticker, bucket_start_for(row.created_utc))
-        # A window the journal answered for that this cycle did not touch --
-        # possible when two tickers share a bucket_start -- is not this cycle's
-        # to rewrite.
+        # Guards a BUCKET_MINUTES change, not same-bucket_start collisions --
+        # events_for matches on the STORED bucket_start column, so a row
+        # journalled under a previous BUCKET_MINUTES can still come back for a
+        # window whose boundaries have since changed. Recomputing the key from
+        # created_utc under the CURRENT value is what catches that mismatch;
+        # without this check such a row would be written into a bucket this
+        # cycle never touched.
         if key in windows:
             grouped[key].append(row)
 

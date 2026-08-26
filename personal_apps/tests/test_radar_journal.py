@@ -80,18 +80,34 @@ def test_a_second_poll_inside_one_bucket_does_not_erase_the_first(clean_buckets,
     assert bucket.distinct_authors == 2
 
 
-def test_the_same_post_arriving_twice_is_counted_once(clean_buckets, clean_events):
-    """Cycles overlap by design; the unique key is what absorbs that."""
+def test_confidence_is_frozen_at_first_sight(clean_buckets, clean_events):
+    """record()'s own docstring: everything but engagement is decided once.
+
+    The reviewer's mutation widened `on_duplicate_key_update` to also refresh
+    confidence (and sentiment/author/simhash) on a duplicate key, and the
+    whole suite -- including the test this one replaces, which only ever sent
+    an identical row twice -- stayed green. A row that arrives again with a
+    DIFFERENT confidence is the case that actually exercises the freeze: if a
+    universe or extraction-rule change made the same post look more credible
+    on a later cycle, re-deciding would rewrite a bucket that was already
+    counted under the old rule.
+    """
     from features.radar import buckets
-    from models import RadarBucket
+    from models import RadarBucket, RadarMentionEvent
 
     start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
-    buckets.roll_up([_row(external_id='zz-a', author='u1', simhash=1)],
-                    _ALL_OK, start)
-    buckets.roll_up([_row(external_id='zz-a', author='u1', simhash=1)],
-                    _ALL_OK, start)
+    buckets.roll_up([_row(external_id='zz-a', author='u1', simhash=1,
+                          confidence='low')], _ALL_OK, start)
+    buckets.roll_up([_row(external_id='zz-a', author='u1', simhash=1,
+                          confidence='high')], _ALL_OK, start)
 
-    assert RadarBucket.query.filter_by(ticker='ZZA').one().mention_count == 1
+    event = RadarMentionEvent.query.filter_by(
+        source='bluesky', external_id='zz-a', ticker='ZZA').one()
+    assert event.confidence == 'low'
+
+    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+    assert bucket.mention_count == 0
+    assert bucket.low_count == 1
 
 
 def test_a_cashtag_vouches_across_cycle_boundaries(clean_buckets, clean_events):
@@ -114,6 +130,49 @@ def test_a_cashtag_vouches_across_cycle_boundaries(clean_buckets, clean_events):
     assert bucket.mention_count == 2
     assert bucket.high_confidence_count == 1
     assert bucket.low_count == 0
+
+
+def test_a_down_sources_mentions_never_reach_the_journal(clean_buckets, clean_events):
+    """The corollary of 'an absence is never a zero' (buckets.py's module
+    docstring): a fabricated count from a source that was actually down would
+    poison that source's own baseline the moment it recovers.
+
+    roll_up must journal only `usable` (this cycle's rows filtered to
+    countable sources), never `rows` (everything handed to it, missing
+    sources included). Reviewer's mutation swapped one for the other: a cycle
+    reporting `{'bluesky': 'ok', 'stocktwits': 'missing'}` still journalled
+    the stocktwits row, and the NEXT cycle -- once stocktwits reports 'ok'
+    again -- rebuilds from the journal and folds that leaked row into a brand
+    new RadarBucketSource stamped status='ok', exactly as if stocktwits had
+    been up the whole time.
+    """
+    from features.radar import buckets
+    from models import RadarBucketSource
+
+    start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
+
+    # Cycle 1: stocktwits is down but still handed roll_up a row (a fetch
+    # that parsed a post before the failure was detected, or a source whose
+    # cursor moved before its client raised). bluesky is up, so `countable`
+    # is non-empty and roll_up does not return 0 before reaching journal.record.
+    buckets.roll_up(
+        [_row(external_id='zz-down', source='stocktwits', author='u1',
+             simhash=1, minute=3),
+         _row(external_id='zz-a', source='bluesky', author='u2',
+             simhash=2, minute=3)],
+        {'bluesky': 'ok', 'stocktwits': 'missing'}, start)
+
+    # Cycle 2: stocktwits has recovered and contributes nothing new itself.
+    # bluesky activity in the same window still forces a full rebuild of it,
+    # which re-reads everything the journal is holding for (ZZA, 14:00).
+    buckets.roll_up(
+        [_row(external_id='zz-b', source='bluesky', author='u3',
+             simhash=3, minute=5)],
+        {'bluesky': 'ok', 'stocktwits': 'ok'}, start)
+
+    stocktwits_row = RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='stocktwits').one()
+    assert stocktwits_row.mention_count == 0
 
 
 def test_the_table_accepts_one_event(clean_events):

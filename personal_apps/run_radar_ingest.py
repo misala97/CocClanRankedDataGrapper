@@ -456,12 +456,14 @@ def _scheduled_reddit(fetcher):
     over in under two minutes. Six hours of that produced one scorable
     mention.
 
-    Its own `run_cycle` rather than a shared one, which means the parent
-    RadarBucket rows it writes reflect Reddit alone. Nothing reads that table
-    -- every consumer goes through RadarBucketSource, which stays correct
-    because roll_up only writes children for the sources in this cycle. If
-    something ever does read the parent, it has to be recomputed from the
-    children rather than from whichever cycle wrote last.
+    Its own `run_cycle` rather than a shared one -- but since roll_up now
+    rebuilds a touched RadarBucket from the whole journal rather than from
+    whichever cycle's rows are in memory (2026-08-26), the parent it writes is
+    the same cross-source union any other cycle would produce for that window,
+    not a Reddit-only total. Nothing reads that table anyway -- every consumer
+    goes through RadarBucketSource, which stays correctly scoped because
+    roll_up only writes a child row for the sources named in THIS cycle's
+    statuses, 'reddit' alone here.
     """
     def run():
         now = dt.datetime.now(dt.timezone.utc)
