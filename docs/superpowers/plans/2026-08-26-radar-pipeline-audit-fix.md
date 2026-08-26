@@ -1355,14 +1355,42 @@ git commit -m "fix(radar): delete the superseded page-cap config"
 
 **Files:**
 - Create: `personal_apps/scripts/backfill_radar_buckets.py`
+- Create: `personal_apps/tests/test_radar_backfill.py`
 
 **Interfaces:**
 - Consumes: `models.RadarBucketSource`, `RadarPost`, `RadarMention`.
-- Produces: a one-shot script, run manually, no imports elsewhere.
+- Produces: a one-shot script plus
+  `repair(apply=False, ticker_prefix=None) -> dict`, callable by tests and by
+  `main()`, no production imports elsewhere. `ticker_prefix` is a test-safety
+  scope and is not exposed by the CLI.
 
 The repair is partial by construction. `high` counts are exactly recoverable from `radar_posts` × `radar_mentions`; promoted `medium` mentions are not, because the events that created them were never written anywhere. The unrecoverable half is `low`-derived, and `low_count` is read by no surface.
 
-- [ ] **Step 1: Write the script**
+- [ ] **Step 1: Write failing safety and repair tests**
+
+Create `personal_apps/tests/test_radar_backfill.py` with namespaced `ZZBF...`
+fixtures. Every call uses `ticker_prefix='ZZBF'`; tests run against the shared
+real dev database and must never mutate ordinary seeded radar rows. Prove:
+
+1. Dry-run reports an understated row but leaves every database field
+   unchanged after the function returns.
+2. Apply repairs an understated row from retained high mentions, converts SQL
+   aggregate values before float arithmetic, clears all four score columns,
+   preserves `status` and the old `source_config_version`, and a second apply
+   is idempotent (`repaired == 0`). The partial backfill must never restamp a
+   row as the current full-journal generation.
+3. Equal `high_confidence_count` does not short-circuit a real lower-bound
+   repair in `distinct_authors`, `distinct_text_ratio` or engagement. Retained
+   posts can refresh author/text/engagement after the old bucket was written;
+   equality of one count is not equality of the aggregate row.
+4. A historical non-`ok` row with any one scoring column non-NULL loses all
+   four columns on apply and stays untouched on dry-run. Do not key cleanup
+   only on `mention_z`; a partially written score is still stale.
+
+Watch each absence-shaped assertion fail against a targeted mutation before
+restoring the implementation.
+
+- [ ] **Step 2: Write the script**
 
 Create `personal_apps/scripts/backfill_radar_buckets.py`:
 
@@ -1422,17 +1450,15 @@ _TRUTH = sa.text("""
 """)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--apply', action='store_true',
-                        help='write the repaired counts')
-    args = parser.parse_args()
-
+def repair(apply=False, ticker_prefix=None):
+    """Repair retained lower bounds; return integer report counters."""
     with app.app_context():
         rows = db.session.execute(_TRUTH).all()
         repaired = examined = 0
 
         for src, tk, bs, n_high, n_authors, n_hashes, engagement in rows:
+            if ticker_prefix and not tk.startswith(ticker_prefix):
+                continue
             bucket = RadarBucketSource.query.filter_by(
                 ticker=tk, bucket_start=bs, source=src).one_or_none()
             if bucket is None:
@@ -1442,21 +1468,34 @@ def main():
             # MySQL and MariaDB, and Decimal against a float column is a
             # TypeError waiting for the first row that needs it.
             n_high = int(n_high)
-            if bucket.high_confidence_count >= n_high:
+            n_authors = int(n_authors)
+            n_hashes = int(n_hashes)
+            engagement = float(engagement or 0)
+            candidate = {
+                'high_confidence_count': max(
+                    int(bucket.high_confidence_count), n_high),
+                'mention_count': max(int(bucket.mention_count), n_high),
+                'distinct_authors': max(int(bucket.distinct_authors),
+                                        n_authors),
+                'distinct_text_ratio': min(
+                    float(bucket.distinct_text_ratio),
+                    (n_hashes / n_high) if n_high else 1.0),
+                'engagement_weighted_count': max(
+                    float(bucket.engagement_weighted_count), engagement),
+            }
+            if all(getattr(bucket, field) == value
+                   for field, value in candidate.items()):
                 continue
 
-            bucket.high_confidence_count = n_high
+            bucket.high_confidence_count = candidate['high_confidence_count']
             # mention_count stays >= high: the promoted mediums it also counted
             # are unrecoverable, so take whichever is larger rather than
             # overwriting a real figure with an incomplete one.
-            bucket.mention_count = max(int(bucket.mention_count), n_high)
-            bucket.distinct_authors = max(int(bucket.distinct_authors),
-                                          int(n_authors))
-            bucket.distinct_text_ratio = min(
-                float(bucket.distinct_text_ratio),
-                (int(n_hashes) / n_high) if n_high else 1.0)
-            bucket.engagement_weighted_count = max(
-                float(bucket.engagement_weighted_count), float(engagement or 0))
+            bucket.mention_count = candidate['mention_count']
+            bucket.distinct_authors = candidate['distinct_authors']
+            bucket.distinct_text_ratio = candidate['distinct_text_ratio']
+            bucket.engagement_weighted_count = candidate[
+                'engagement_weighted_count']
             # The score was computed from the understated count. Keeping it
             # would make the repair cosmetic while the board continues to rank
             # on the old number. Task 3c also keeps this old rollup generation
@@ -1480,9 +1519,15 @@ def main():
         # is a different fact from not having been scored.
         stale = (RadarBucketSource.query
                  .filter(RadarBucketSource.status != 'ok',
-                         RadarBucketSource.mention_z.isnot(None)))
+                         sa.or_(RadarBucketSource.expected.isnot(None),
+                                RadarBucketSource.variance.isnot(None),
+                                RadarBucketSource.mention_z.isnot(None),
+                                RadarBucketSource.baseline_days.isnot(None))))
+        if ticker_prefix:
+            stale = stale.filter(
+                RadarBucketSource.ticker.like(ticker_prefix + '%'))
         stale_count = stale.count()
-        if args.apply and stale_count:
+        if apply and stale_count:
             stale.update({'expected': None, 'variance': None,
                           'mention_z': None, 'baseline_days': None},
                          synchronize_session=False)
@@ -1490,19 +1535,36 @@ def main():
         print('examined %d bucket rows, %d understated' % (examined, repaired))
         print('%d rows carry a score they earned under a different status'
               % stale_count)
-        if args.apply:
+        if apply:
             db.session.commit()
             print('written')
         else:
             db.session.rollback()
             print('dry run -- nothing written, pass --apply')
+        return {'examined': int(examined), 'repaired': int(repaired),
+                'stale_scores': int(stale_count)}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--apply', action='store_true',
+                        help='write the repaired counts')
+    args = parser.parse_args()
+    repair(apply=args.apply)
 
 
 if __name__ == '__main__':
     main()
 ```
 
-- [ ] **Step 2: Dry-run it locally**
+- [ ] **Step 3: Run the automated suite**
+
+```bash
+python -m pytest tests/test_radar_backfill.py -v
+python -m pytest tests/ -k radar -q
+```
+
+- [ ] **Step 4: Dry-run it locally**
 
 ```bash
 python -m scripts.backfill_radar_buckets
@@ -1510,10 +1572,11 @@ python -m scripts.backfill_radar_buckets
 
 Expected: a line of the form `examined N bucket rows, M understated`, then `dry run -- nothing written`. On a local dev database with no radar data, `examined 0`.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add personal_apps/scripts/backfill_radar_buckets.py
+git add personal_apps/scripts/backfill_radar_buckets.py \
+        personal_apps/tests/test_radar_backfill.py
 git commit -m "feat(radar): a one-shot repair for buckets the old rollup truncated"
 ```
 

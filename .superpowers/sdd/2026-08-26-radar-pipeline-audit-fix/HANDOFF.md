@@ -2,6 +2,58 @@
 
 Written 2026-08-26 by Claude, handing to Codex at a session limit.
 
+## Codex continuation checkpoint — 2026-08-26, session ~50%
+
+Codex verified the original handoff against Git, reports and tests, then
+continued in the same isolated worktree. The cross-agent handoff protocol is
+now also persisted globally in both `C:\Users\michi\.codex\AGENTS.md` and
+`C:\Users\michi\.claude\CLAUDE.md` (outside this repository).
+
+Current branch/worktree: `codex/radar-pipeline-audit` at
+`C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`.
+
+Current committed sequence:
+
+- `7791963` — Task 3c implementation.
+- `c0f6f6b` — Claude→Codex handoff/report/fix brief checkpoint.
+- `c553c47` — Task 3c fix round 1: all eight Claude review findings fixed.
+- `4850c9a` — Task 3c fix round 2: shared scoring-test cleanup scoped to
+  exact owned tickers with an unowned-ZZ sentinel regression.
+- `fa66e70` — Task 3c fix round 3: remove query-only `SSNOPE`; replace the
+  fixed/pre-deleted sentinel with a unique 12-character exact-cleanup ticker.
+
+Task 3c re-review verdict on `c0f6f6b..c553c47`: all eight original findings
+ADDRESSED, but NOT APPROVED because `test_radar_scoring.rows` broadened shared
+DB cleanup to every `ZZ%` ticker. That can erase another test's or user's data.
+
+Task 3c is COMPLETE and review-clean through `fa66e70`. Final scoped review
+approved both remaining shared-DB findings. Its six-file gate is 141 passed;
+latest broad radar gate is 598 passed plus exactly the two known missing-Vite-
+manifest API template failures.
+
+**Immediate next action after takeover:** commit the controller-owned
+plan/ledger/HANDOFF checkpoint, then execute the Task 4+5 config-cleanup batch
+with one implementer and one independent review. Briefs already exist at
+`task-4-brief.md` and `task-5-brief.md`.
+
+Latest verified tests before fix round 2: Task 3c covering gate 140 passed;
+broad radar gate 598 passed with exactly the two known missing-Vite-manifest
+API template failures.
+
+Expected dirty state while fix round 2 runs:
+
+- `personal_apps/tests/test_radar_scoring.py` — implementer-owned fix.
+- `docs/superpowers/plans/2026-08-26-radar-pipeline-audit-fix.md` —
+  controller-owned Task 6 safety/test amendment; do not stage with Task 3c.
+- `.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/progress.md` —
+  controller-owned ledger updates; do not stage with Task 3c.
+- `personal_apps/run_radar_ingest.py` may appear modified from line-ending/stat
+  churn, but its blob hash equals HEAD (`3f9263b4...`) and `git diff` is empty.
+
+Task 6 plan amendment pending a controller docs commit: add real dry-run,
+apply, idempotence, Decimal, stale-score and shared-DB isolation tests; compare
+all recoverable lower-bound fields; scope tests with `ticker_prefix='ZZBF'`.
+
 Plan: `docs/superpowers/plans/2026-08-26-radar-pipeline-audit-fix.md`
 Spec: `docs/superpowers/specs/2026-08-26-radar-pipeline-audit-design.md`
 Ledger: `.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/progress.md`

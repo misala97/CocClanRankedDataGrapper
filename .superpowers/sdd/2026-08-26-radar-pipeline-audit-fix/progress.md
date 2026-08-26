@@ -105,3 +105,34 @@ Ruling: fix all eight in one scoped round. Add an optional source argument to
   wider public helper signature and future-dated test data; leaving the gaps
   allows silent fail-open startup, phantom cross-generation spikes, flaky
   counts, or repeated range locks.
+
+Ruling: Task 6 now includes automated dry-run/apply/idempotence/Decimal and
+  stale-score tests plus a `ticker_prefix` test-only scope. Repair decisions
+  compare every recoverable lower-bound field rather than assuming equal high
+  count means an equal aggregate; stale cleanup detects any non-NULL score
+  field. Cost if wrong is a slightly larger one-shot script API and one extra
+  test file; the old draft could mutate the shared dev corpus during tests,
+  skip refreshed secondary aggregates, or ship a production backfill proven
+  only by printing `examined 0`.
+
+Task 3c: fix round 1/5 (8 original findings addressed, 1 new Important open;
+  commit c553c47). New issue: `test_radar_scoring.rows` broadened teardown to
+  every `ZZ%` ticker in the shared dev DB, so one suite can erase another
+  test's or user's namespaced evidence. Fix round 2/5 pending: exact owned
+  ticker set plus sentinel mutation regression.
+
+Task 3c: fix round 2/5 NOT ADDRESSED (commit 4850c9a; 2 Important open).
+  Exact cleanup still claims `SSNOPE`, which this file only queries and never
+  creates, and the sentinel regression pre-deletes every existing
+  `ZZSENTINEL` row. Fix round 3/5 must remove the query-only ticker and use a
+  per-run unique <=12-character sentinel with no pre-delete, cleaning only its
+  exact identity in `finally`.
+
+Task 3c: fix round 3/5 (2 addressed, 0 open; commit fa66e70). Scoped
+  re-review APPROVED: exact ownership excludes query-only `SSNOPE`; the
+  collision-safe 12-character sentinel is never pre-deleted and cleans only
+  its own identity.
+
+Task 3c: complete (commits 7791963..fa66e70, review clean). Final Task 3c
+  covering gate: 141 passed. Latest broad gate: 598 passed with only the two
+  established missing-Vite-manifest API template failures.
