@@ -192,3 +192,35 @@ Task 6 minor (deferred to final review): the `int()`-at-the-boundary comment
   driver. Left as-is because the same phrasing is an existing house
   convention (features/radar/journal.py:204); it misleads a reader but
   changes no behaviour.
+
+Task 7: IMPLEMENTED, NOT REVIEWED (commit 945c9d7). StockTwits retired:
+  module and its 11-test suite deleted, config/daemon/scheduler stripped, six
+  test suites moved off the source name, and the UI source label removed from
+  static/radar/src/format.ts with BoardPage.test.tsx updated to match.
+  `source_config_version()` moved fc1a0ee4cab51d65 -> 8106787f1fa72179 with no
+  manual edit, which is the intended bump and a deploy-time baseline warm-up.
+  Broad gate 594 passed, 2 skipped, plus only the two established
+  missing-Vite-manifest failures. Review package already generated at
+  .superpowers/sdd/review-73981db..945c9d7.diff - do not regenerate it.
+
+Task 7 review must go to the most capable model, not Sonnet. Michi's standing
+  ruling is Sonnet for every review EXCEPT StockTwits and Reddit; Task 7 is
+  StockTwits, and Tasks 9 and 8 are Reddit.
+
+Task 7 scope expansions the review must check, none independently verified:
+  three daemon tests DELETED rather than renamed because they called the
+  now-deleted `_stocktwits_fetcher` and `SYMBOL_BUDGET_PER_CYCLE` - the claim
+  that the missing-vs-ok distinction stays covered at run_cycle level needs a
+  mutation, not a reading; three pre-existing config/ingest tests rewritten as
+  monkeypatch extension-point tests because no surviving source sets
+  BARE_TOKENS_ALLOWED, COIN_SYMBOLS_MEAN_STOCKS or SINGLE_LETTER_CASHTAGS
+  True; about twelve prose restatements separating present-tense claims from
+  historical measurements. `models.py:660` and the migration files were
+  deliberately left - genuine historical column names, correct call.
+
+Ruling: the standing "tsc is not installed, npm run build cannot run" note is
+  now DISPROVED. A real npm install gives a clean tsc type-check and vitest
+  78/78 including BoardPage.test.tsx. Tasks 11, 15 and 16 were planned around
+  that command being unavailable and must be replanned with the runner
+  available. Cost if wrong is one npm install; leaving the note stands three
+  frontend tasks down on verification they can actually run.

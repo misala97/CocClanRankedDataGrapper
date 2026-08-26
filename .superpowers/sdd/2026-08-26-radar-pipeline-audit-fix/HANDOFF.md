@@ -1,8 +1,123 @@
 # HANDOFF — radar pipeline audit fix
 
+## AUTHORITATIVE CHECKPOINT — Claude to Codex, 2026-08-26 (late)
+
+Michi stopped Claude near its session limit. **There are no active workers.**
+The Task 7 implementer returned DONE and is shut down.
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD at stop: `945c9d7` (`fix(radar): retire StockTwits, which Cloudflare has refused since launch`)
+Working tree: **clean**. Nothing to rescue, nothing to discard.
+
+### State of the plan
+
+Complete and review-clean: **Tasks 1, 2, 3, 3b, 3c, 4, 5, 6.**
+
+**Task 7 is IMPLEMENTED but NOT REVIEWED.** That is the whole of the open work
+at this checkpoint. Its commit is `945c9d7`; its report is `task-7-report.md`
+in this directory (gitignored, force-add it with the next docs commit — it is
+not yet committed). The ledger does not yet record Task 7 at all.
+
+### Codex's immediate next action
+
+1. Read this file, `progress.md`, and `task-7-report.md` in full.
+2. Verify `git status --short` is clean and `git log -1` is `945c9d7`.
+3. **Dispatch the Task 7 review.** The review package is already generated:
+   `.superpowers/sdd/review-73981db..945c9d7.diff` (1 commit, ~110 KB).
+   Do not regenerate it. Give the reviewer that path, `task-7-brief.md`, and
+   `task-7-report.md`.
+4. **Michi's standing ruling on review models: Sonnet for every review EXCEPT
+   StockTwits and Reddit.** Task 7 IS StockTwits — this review goes to the most
+   capable model available, not Sonnet. Tasks 9 and 8 (Reddit) likewise.
+5. Fix round only if the review returns Critical or Important. Then update the
+   ledger, force-add the docs, and continue with Task 9.
+
+### What the Task 7 review must scrutinise
+
+The implementer went materially beyond the brief's file list. Most of it looks
+justified, but none of it has been independently checked. Point the reviewer at:
+
+- **Three deleted daemon tests.** `test_the_request_budget_is_a_sane_fraction_of_the_hourly_one`,
+  `test_a_blocked_source_reports_missing_not_ok`, and
+  `test_nothing_due_on_a_healthy_source_is_still_ok` were deleted, not renamed,
+  because they called `daemon._stocktwits_fetcher` and `daemon.SYMBOL_BUDGET_PER_CYCLE`
+  directly. The claim is that the general missing-vs-ok distinction stays covered
+  at the `ingest.run_cycle` level. **Verify that claim by mutation** — break the
+  missing-vs-ok distinction and confirm something still fails. Deleting a test
+  because its subject is gone is legitimate; deleting the last thing guarding a
+  surviving behaviour is not, and the two look identical from a diff.
+- **Three pre-existing tests rewritten**, in `test_radar_config.py` and
+  `test_radar_ingest.py`, because no surviving source has `BARE_TOKENS_ALLOWED`,
+  `COIN_SYMBOLS_MEAN_STOCKS` or `SINGLE_LETTER_CASHTAGS` set `True` any more.
+  They were replaced with monkeypatch-based extension-point tests. Confirm the
+  replacements have teeth and are not asserting the monkeypatch rather than the
+  mechanism.
+- **~12 prose restatements** across `config.py`, `run_radar_ingest.py`,
+  `reddit.py`, `profile.py`, `models.py:616`, `test_radar_reddit.py`,
+  `test_radar_scheduling.py`. The rule applied was: present-tense claims that
+  StockTwits is live or shares a mechanism get restated; past-tense measurements
+  and incidents stay as history. Spot-check that line.
+- `models.py:660` (`count_stocktwits`) and
+  `test_radar_bucket_sources.py:114-116` were deliberately LEFT — real historical
+  column names from migrations `7883c6e08708` and `01da83522036`. Correct call;
+  do not let a reviewer "fix" them. The migration files themselves were never
+  touched, which is also correct.
+
+### Two things that change how later tasks are planned
+
+**1. The frontend is NOT blocked. The standing note in this file saying `tsc` is
+not installed is now WRONG.** The Task 7 implementer ran a real `npm install`:
+`tsc` type-checks clean and **vitest passes 78/78**, including
+`BoardPage.test.tsx`. Tasks 11, 15 and 16 touch the frontend and were planned
+around that command being unavailable — replan them with the runner available.
+Side effect: `node_modules/` now exists on disk in the worktree. It is
+gitignored and harmless.
+
+**2. `source_config_version()` moved, as the brief intended:**
+`fc1a0ee4cab51d65` → `8106787f1fa72179`. It bumped automatically from the
+`SOURCES` hash with no manual edit. **Deploy carry:** this starts a baseline
+warm-up on deploy — buckets stamped with the old version are outside current
+baselines until enough new-generation history accumulates. Expected, not a bug.
+
+### Test-count bookkeeping
+
+The broad gate now reports **594 passed, 2 skipped**, plus exactly the two
+known API template failures from the missing gitignored
+`personal_apps/static/radar/dist/.vite/manifest.json`. It read 605 before
+Task 7. The drop is the 11 deleted `test_radar_stocktwits.py` tests and the 3
+deleted daemon tests, less the new tests added. Do not read the drop as a
+regression, and do not fix the two manifest failures.
+
+### Remaining order
+
+**7 review → 9 → 8 → 10-13 → 14-17 → 18-19 → final branch review.**
+
+Task 9 precedes Task 8 by standing ruling: Reddit's aggregate status is the
+wrong population, so no truncated observation is made scoreable until each
+subreddit owns its own status. Batch the rest per the ceremony table further
+down this file — Michi's call, made on cost.
+
+### Deferred Minors the final branch review must triage
+
+- **Task 4+5:** `_extract_for` says four per-source judgements but its prose
+  enumerates only three, omitting the single-letter-cashtag judgement.
+- **Task 6:** the `int()`-at-the-boundary comment claims `COUNT` returns
+  `Decimal`; empirically only `SUM` does on this driver. Left because the same
+  phrasing is an existing house convention at `features/radar/journal.py:204`.
+  Misleads a reader, changes no behaviour.
+
+---
+
+The material below is historical context from earlier handoffs. Where it
+conflicts with the checkpoint above, the checkpoint above wins — in particular
+its `tsc`-is-not-installed claim is now disproved, and its "Task 6 is not
+started" checkpoint is closed.
+
+
 Written 2026-08-26 by Claude, handing to Codex at a session limit.
 
-## AUTHORITATIVE STOP CHECKPOINT — Codex to Claude, 2026-08-26
+## Superseded: Codex-to-Claude stop checkpoint, 2026-08-26 (Task 6 now complete)
 
 Michi asked Codex to stop because the Codex session was near its limit. The
 Task 6 implementer Socrates (`01a03f75-a03d-78f1-a7e1-b8e700f41c42`) was
