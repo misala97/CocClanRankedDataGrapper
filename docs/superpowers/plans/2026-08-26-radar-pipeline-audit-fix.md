@@ -1239,6 +1239,10 @@ quarter-hour touched by several cycles kept only the last one. Measured across
 the live corpus: 14.1% of Bluesky's high-confidence mentions and 16.0% of
 Reddit's never reached a bucket, rising to 42.9% on the 10+ mention buckets.
 
+Also clears the scoring columns off rows that changed status after being
+scored. Task 3 stopped roll_up producing those, but could not reach the 399
+that already existed -- a closed quarter-hour is never touched again.
+
 PARTIAL BY CONSTRUCTION. radar_mentions holds every mention of every STORED
 post, which is exactly the `high` set. Promoted `medium` mentions came from
 posts that were never stored -- the journal that would have kept them did not
@@ -1320,7 +1324,28 @@ def main():
                 float(bucket.engagement_weighted_count), float(engagement or 0))
             repaired += 1
 
+        # The stale scores Task 3 stopped PRODUCING, which it could not
+        # retroactively clear: roll_up only revisits a (ticker, bucket_start,
+        # source) row when that window is touched again, and a closed
+        # historical quarter-hour never is. 399 rows in production carry a
+        # mention_z written while they were `ok` and are ranked on it now that
+        # they are `truncated` -- leaderboard filters on mention_z IS NOT NULL,
+        # so the scorer's refusal to score them buys nothing until this runs.
+        #
+        # NULL, never 0: a zero z claims the bucket was exactly average, which
+        # is a different fact from not having been scored.
+        stale = (RadarBucketSource.query
+                 .filter(RadarBucketSource.status != 'ok',
+                         RadarBucketSource.mention_z.isnot(None)))
+        stale_count = stale.count()
+        if args.apply and stale_count:
+            stale.update({'expected': None, 'variance': None,
+                          'mention_z': None, 'baseline_days': None},
+                         synchronize_session=False)
+
         print('examined %d bucket rows, %d understated' % (examined, repaired))
+        print('%d rows carry a score they earned under a different status'
+              % stale_count)
         if args.apply:
             db.session.commit()
             print('written')
