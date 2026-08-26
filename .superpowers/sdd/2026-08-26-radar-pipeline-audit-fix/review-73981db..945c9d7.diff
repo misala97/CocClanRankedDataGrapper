@@ -1,0 +1,2430 @@
+# Review package: 73981db..945c9d7
+
+## Commits
+945c9d7 fix(radar): retire StockTwits, which Cloudflare has refused since launch
+
+## Files changed
+ personal_apps/features/radar/config.py             |  36 ++---
+ personal_apps/features/radar/profile.py            |   2 +-
+ personal_apps/features/radar/scheduling.py         |  20 +--
+ personal_apps/features/radar/sources/reddit.py     |   2 +-
+ personal_apps/features/radar/sources/stocktwits.py | 138 ----------------
+ personal_apps/models.py                            |   2 +-
+ personal_apps/run_radar_ingest.py                  |  74 ++-------
+ .../static/radar/src/board/BoardPage.test.tsx      |   8 +-
+ personal_apps/static/radar/src/format.ts           |   1 -
+ personal_apps/tests/test_radar_bucket_sources.py   |  12 +-
+ personal_apps/tests/test_radar_buckets.py          |  14 +-
+ personal_apps/tests/test_radar_config.py           |  51 +++++-
+ personal_apps/tests/test_radar_daemon.py           |  50 +-----
+ personal_apps/tests/test_radar_ingest.py           | 105 +++++++-----
+ personal_apps/tests/test_radar_journal.py          |  22 +--
+ personal_apps/tests/test_radar_profile.py          |  40 ++---
+ personal_apps/tests/test_radar_reddit.py           |   6 +-
+ personal_apps/tests/test_radar_scheduling.py       |   5 +-
+ personal_apps/tests/test_radar_scoring.py          |  84 +++++-----
+ personal_apps/tests/test_radar_stocktwits.py       | 178 ---------------------
+ 20 files changed, 252 insertions(+), 598 deletions(-)
+
+## Diff
+diff --git a/personal_apps/features/radar/config.py b/personal_apps/features/radar/config.py
+index 905c481..e50b28f 100644
+--- a/personal_apps/features/radar/config.py
++++ b/personal_apps/features/radar/config.py
+@@ -7,57 +7,56 @@ stamped onto every bucket. Baselines are computed only over buckets sharing the
+ current version, so adding a source starts a warm-up instead of reading
+ straight through the discontinuity (spec 6.6).
+ """
+ import datetime as dt
+ import hashlib
+ import json
+ import re
+ 
+ # Active sources. Adding one is a module in sources/ plus an entry here --
+ # nothing else in the pipeline names a source (spec 8.6).
+-SOURCES = ('stocktwits', 'bluesky', 'fourchan', 'reddit')
++SOURCES = ('bluesky', 'fourchan', 'reddit')
+ 
+ # Whether a bare uppercase token may be read as a ticker on a given source.
+ #
+ # Measured on live data with the same extractor: StockTwits' top mentions were
+ # MRNA, DJT, AVGO, IOVA -- all real. Bluesky's were IA (Iowa), GOP (the party),
+ # AP (the news agency) and BTC (the coin) -- all real tickers, none of them
+ # about stocks. The difference is the population, not the code. Where everyone
+ # is discussing markets, MRNA means Moderna; on a general network almost nobody
+ # is, and three-letter words mean what they usually mean.
+ #
+ # Corroboration cannot rescue this. GOP's ETF is named "Subversive
+ # Congressional Republicans Trading", so a political post corroborates it
+ # perfectly, and thirty different people said "IA", so the distinct-author gate
+ # passes too.
+ #
+ # Sources absent from this mapping default to cashtag-only, which is the safe
+ # direction for a source nobody has characterised yet.
+ BARE_TOKENS_ALLOWED = {
+-    'stocktwits': True,    # finance-only by construction
+     'fourchan': True,      # /biz/ is a finance board
+     # Was False, set after the first live pass found IA (Iowa), GOP and AP
+     # among the top bare tokens. Re-enabled 2026-08-23: an uncorroborated bare
+     # token is stored `low` and never scored, so the junk that measurement
+     # found now costs a row in a table and nothing on the board. What it buys
+     # is the promotion path -- a distinctive company name in the same post, or
+     # a different author cashtagging the same ticker in the same bucket --
+     # which needs many independent authors and is therefore exactly this
+     # source. Verified on Telegram, where channels whose bare tokens were RSI,
+     # ROE, DMA and GROW produced zero high-confidence hits.
+     #
+     # See scripts/measure_bare_tokens.py. Revert if the top twenty scored
+     # tickers stop looking like equities.
+     'bluesky': True,
+-    # A finance subreddit is finance-native the way /biz/ and StockTwits are:
+-    # `AAPL` without a dollar sign is a ticker there in a way it is not on a
+-    # general network. Measured 2026-08-24, the junk this admits is the same
++    # A finance subreddit is finance-native the way /biz/ is: `AAPL` without a
++    # dollar sign is a ticker there in a way it is not on a general network.
++    # Measured 2026-08-24, the junk this admits is the same
+     # shape as elsewhere -- WTF and NATO topped r/StockMarket, OI and CC
+     # topped r/options -- and lands as `low`, counted but never scored.
+     'reddit': True,
+ }
+ 
+ 
+ # Ticker symbols that are also well-known crypto coins. The listed company is
+ # genuinely not crypto -- BCH is Banco de Chile, LINK is Interlink Electronics,
+ # ATOM is Atomera -- so the name-based crypto filter cannot see them, and
+ # deleting them from the universe would cost real coverage.
+@@ -71,39 +70,44 @@ BARE_TOKENS_ALLOWED = {
+ # per-source judgement bare tokens already get.
+ COIN_COLLISION_SYMBOLS = frozenset({
+     'BCH', 'LTC', 'LINK', 'ATOM', 'DOT', 'ADA', 'SOL', 'XMR', 'TRX', 'ALGO',
+     'ICP', 'FIL', 'APT', 'ARB', 'OP', 'INJ', 'SUI', 'SEI', 'TIA', 'NEAR',
+     'HBAR', 'VET', 'EOS', 'XLM', 'ETC', 'XTZ', 'AAVE', 'MKR', 'SNX', 'CRV',
+     'RUNE', 'FTM', 'GRT', 'IMX', 'LDO', 'STX', 'KAS', 'TON', 'PEPE', 'SHIB',
+     'DOGE', 'BNB', 'AVAX', 'MATIC', 'UNI', 'CAKE', 'RNDR', 'JUP', 'WIF',
+ })
+ 
+ # Sources where a coin-shaped symbol should be read as the coin, not the
+-# company. Finance-native populations are the exception.
++# company. Finance-native populations are the exception -- and since StockTwits
++# was retired 2026-08-26 there are none, so every symbol in
++# COIN_COLLISION_SYMBOLS is now dropped on every live source. That costs 49
++# real tickers their mentions, which is the price of not putting Chainlink
++# chatter under Interlink Electronics.
++#
++# Kept as a map rather than collapsed to a constant: Telegram is the next
++# source and will need its own entry, and the extension point is the point.
+ COIN_SYMBOLS_MEAN_STOCKS = {
+-    'stocktwits': True,
+     'fourchan': False,     # /biz/ is crypto culture first
+     'bluesky': False,
+ }
+ 
+ 
+ # What kind of venue each source is, which decides how its independent voices
+ # get counted.
+ #
+ # The author gate is a proxy for one question -- how many independent voices
+ # are saying this. On a forum that is distinct authors. On a BROADCAST network
+ # one admin posts and thousands read, so every bucket has exactly one author
+ # and the author gate can never be cleared however loud the ticker is. There
+ # the independent unit is the CHANNEL: three channels carrying the same symbol
+ # is corroboration, one channel posting it forty times is not.
+ SOURCE_KIND = {
+-    'stocktwits': 'forum',
+     'bluesky': 'forum',
+     'fourchan': 'forum',
+     # Comments carry real distinct authors, so the forum gate applies
+     # unchanged -- unlike a broadcast channel, where one admin is every voice.
+     'reddit': 'forum',
+ }
+ 
+ 
+ def source_kind(source):
+     """'forum' or 'broadcast'. Unknown sources are treated as forums.
+@@ -114,21 +118,20 @@ def source_kind(source):
+     return SOURCE_KIND.get(source, 'forum')
+ 
+ 
+ # Single-letter cashtags. `$M`, `$B`, `$T` and `$K` are money shorthand far
+ # more often than Macy's, Barnes Group, AT&T and Kellanova -- measured on live
+ # Bluesky, 119 of 3302 cashtag matches were single letters and essentially all
+ # of them were prose: "Tax @60% for over a $M", "make $B's", "is $B & can be
+ # $T if we all do it". A finance-native population is the exception, the same
+ # judgement bare tokens and coin collisions already get.
+ SINGLE_LETTER_CASHTAGS = {
+-    'stocktwits': True,
+     'fourchan': False,
+     'bluesky': False,
+ }
+ 
+ # Automated feeds, not people. A machine restating a template every few
+ # seconds is ONE publisher however many tickers it names, so it is dropped
+ # whole rather than symbol by symbol -- and per-symbol rules would have to
+ # enumerate a list that changes weekly.
+ #
+ # Crypto exchange bots, prolific on general networks:
+@@ -239,23 +242,23 @@ POOLED_VEHICLE_PATTERN = (
+ # `republicans` it is evidence the post does not concern the fund.
+ #
+ # Funds remain reachable by cashtag, which scores directly. A person typing
+ # the dollar sign means the fund.
+ FUNDS_PROMOTE_BARE_TOKENS = False
+ 
+ 
+ def looks_like_bot_feed(text):
+     """True for machine-generated crypto exchange output.
+ 
+-    Applied on every source. These bots do not post to StockTwits, so the rule
+-    costs nothing there, and scoping it per source would only invite the
+-    question of which sources are safe.
++    Applied on every source. A source these bots never touch pays nothing for
++    the check, and scoping it per source would only invite the question of
++    which sources are safe.
+     """
+     return bool(_BOT_FEED_RE.search(text or ''))
+ 
+ 
+ def single_letter_cashtags_allowed(source):
+     return SINGLE_LETTER_CASHTAGS.get(source, False)
+ 
+ 
+ def coin_collision_dropped(source, symbol):
+     """True when this symbol should be ignored on this source."""
+@@ -372,22 +375,22 @@ REDDIT_SUBS_PER_CYCLE = 1
+ # The ingest cycle stretches to 1800s overnight because chatter follows the
+ # session -- which is right for the sources it was built for and wrong here.
+ # Measured 2026-08-24: four subs per 30-minute cycle meant a full rotation of
+ # eighteen took over two hours, and r/wallstreetbets turns its 25-entry feed
+ # over in under two minutes. Six hours of that produced ONE scorable mention.
+ #
+ # Reddit does not stop at the closing bell, and what a slow poll misses is
+ # gone rather than late -- there is no cursor to catch up from.
+ REDDIT_INTERVAL_SECONDS = 120  # ~1 feed/window, matching the measured budget
+ 
+-# Bounds for this source's adaptive cadence. The scheduler's defaults are
+-# StockTwits-shaped (15 min to 4 h) and its floor alone would lose most of
++# Bounds for this source's adaptive cadence. The scheduler's module defaults
++# (15 min to 4 h) do not fit here, and the floor alone would lose most of
+ # r/wallstreetbets. The floor is what a busy sub gets; the ceiling is where a
+ # silent one -- or a throttled one -- ends up.
+ REDDIT_MIN_POLL = dt.timedelta(seconds=90)
+ # Six hours, raised from 45 minutes on 2026-08-25.
+ #
+ # The ceiling was starving the subreddits that matter. Measured live: two
+ # hours produced 179 mentions across 92 tickers and exactly ONE bucket cleared
+ # the eligibility floor. interval_for_rate already sizes each interval so the
+ # 25-entry feed cannot roll over, but clamping the result at 45 minutes meant
+ # a subreddit producing 0.07 comments an hour was polled 1.33 times an hour --
+@@ -395,25 +398,20 @@ REDDIT_MIN_POLL = dt.timedelta(seconds=90)
+ # 1.8 minutes to keep up, fought seventeen near-dead subreddits for the same
+ # thirty feeds an hour.
+ #
+ # Safe because SAFETY_FACTOR is 0.5, so a sub is pinned here only when its
+ # rate is below 12.5/6 = 2.08 comments an hour -- and at that rate its feed
+ # takes twelve hours to fill, twice the interval. Nothing pinned can lose a
+ # comment. Subs above it are unaffected: r/stocks at 67/hour asks for eleven
+ # minutes and gets eleven minutes, ceiling or no ceiling.
+ REDDIT_MAX_POLL = dt.timedelta(hours=6)
+ 
+-# StockTwits publishes no rate-limit headers and twenty consecutive requests
+-# drew no 429, so this is a conservative budget rather than a documented
+-# ceiling. The daemon backs off on 429 regardless.
+-STOCKTWITS_REQUESTS_PER_HOUR = 150
+-
+ # 15-minute grain. Fine enough for the 1h window in spec 6.9, coarse enough
+ # that a forever-retained table stays small.
+ BUCKET_MINUTES = 15
+ 
+ POST_RETENTION_DAYS = 30
+ 
+ # How long the mention journal is kept. Buckets are the durable artifact; the
+ # journal exists only so a bucket can be rebuilt while cycles are still
+ # arriving in it. Two days is generous against a catch-up after an outage --
+ # what it must outlast is the deepest cursor rewind, not the retention of
+diff --git a/personal_apps/features/radar/profile.py b/personal_apps/features/radar/profile.py
+index 1f27a36..cae2e07 100644
+--- a/personal_apps/features/radar/profile.py
++++ b/personal_apps/features/radar/profile.py
+@@ -1,19 +1,19 @@
+ # personal_apps/features/radar/profile.py
+ """What a normal bucket looks like, per source.
+ 
+ Mention volume has a strong weekly shape. Comparing 03:00 on a Sunday against
+ 15:00 on a Tuesday as though they were one population makes every weekday
+ afternoon look like a spike, which is most of what a naive z-score would report.
+ 
+ Built per source rather than market-wide, a deliberate departure from spec 6.1.
+-StockTwits follows US market hours, Bluesky is global and diurnal, /biz/ runs
++Reddit follows US market hours, Bluesky is global and diurnal, /biz/ runs
+ around the clock. A shared profile would tell Bluesky to expect silence at
+ 03:00 ET while half its users are awake, and every one of those buckets would
+ score as unusual.
+ """
+ import collections
+ import datetime as dt
+ 
+ import sqlalchemy as sa
+ 
+ from extensions import db
+diff --git a/personal_apps/features/radar/scheduling.py b/personal_apps/features/radar/scheduling.py
+index ded2f99..eb80c8a 100644
+--- a/personal_apps/features/radar/scheduling.py
++++ b/personal_apps/features/radar/scheduling.py
+@@ -23,25 +23,25 @@ SAFETY_FACTOR = 0.5
+ MIN_INTERVAL = dt.timedelta(minutes=15)
+ MAX_INTERVAL = dt.timedelta(hours=4)
+ 
+ 
+ def interval_for_rate(rate, floor=None, ceiling=None, page_size=None):
+     """How long until this symbol should be polled again.
+ 
+     A rate of None means never measured -- poll soon and find out. A measured
+     rate of zero means genuinely silent, so wait the maximum.
+ 
+-    The bounds are arguments because the defaults are StockTwits-shaped and a
+-    second source borrowed this scheduler. Reddit's feed holds 25 comments and
+-    r/wallstreetbets turns it over in under two minutes, so a fifteen-minute
+-    floor would mean never seeing most of it -- and unlike a symbol stream,
+-    what is missed is gone rather than merely late.
++    The bounds are arguments because the module defaults do not fit every
++    caller. Reddit's feed holds 25 comments and r/wallstreetbets turns it over
++    in under two minutes, so a fifteen-minute floor would mean never seeing
++    most of it -- and unlike a symbol stream, what is missed is gone rather
++    than merely late.
+     """
+     floor = floor or MIN_INTERVAL
+     ceiling = ceiling or MAX_INTERVAL
+     page = page_size or PAGE_SIZE
+ 
+     if rate is None:
+         return floor
+     if rate <= 0:
+         return ceiling
+ 
+@@ -65,25 +65,25 @@ def ensure_tracked(source, symbols, now):
+         db.session.add(RadarPollState(source=source, symbol=symbol,
+                                       next_due_at=now, observed_rate=None))
+         added += 1
+     db.session.commit()
+     return added
+ 
+ 
+ def retire_untracked(source, symbols):
+     """Drop poll state for symbols this source no longer tracks. Returns how many.
+ 
+-    ONLY for a source whose configured list is the complete set -- Reddit,
+-    where REDDIT_SUBS is exhaustive. StockTwits must never call this: its hot
+-    set is a rolling window, a ticker falling out of it is temporary, and
+-    deleting the row would throw away a real observed_rate that took hours to
+-    learn.
++    ONLY for a source whose configured list is the COMPLETE set -- Reddit,
++    where REDDIT_SUBS is exhaustive. A source whose tracked set is a rolling
++    window must never call this: a symbol falling out of the window is
++    temporary, and deleting the row throws away a real observed_rate that took
++    hours to learn.
+ 
+     Needed because due_symbols filters by SOURCE, not by the configured list.
+     Without this, removing a subreddit leaves its row behind and the scheduler
+     keeps handing it turns forever -- consuming exactly the request budget the
+     removal was meant to free, and silently: the sub still appears in the
+     logs, still costs feeds, and nothing looks wrong.
+     """
+     query = RadarPollState.query.filter(RadarPollState.source == source)
+     if symbols:
+         query = query.filter(RadarPollState.symbol.notin_(list(symbols)))
+diff --git a/personal_apps/features/radar/sources/reddit.py b/personal_apps/features/radar/sources/reddit.py
+index 8408440..6dfc784 100644
+--- a/personal_apps/features/radar/sources/reddit.py
++++ b/personal_apps/features/radar/sources/reddit.py
+@@ -181,21 +181,21 @@ def fetch(since_by_sub, client, pause=REQUEST_INTERVAL_SECONDS):
+     """Every subreddit in `since_by_sub`, each read from its OWN cursor.
+ 
+     Per subreddit, not per source, and that is the whole point. One shared
+     cursor is advanced to the newest comment seen across the batch, so polling
+     r/wallstreetbets moves it to seconds ago and every quieter subreddit
+     afterwards has its entire feed filtered out as "already seen". Measured
+     2026-08-25: six of eight cycles returned nothing at all for that reason.
+ 
+     `since_by_sub` is already the budgeted, rotated slice -- this module does
+     not decide which subreddits are due, because that state belongs to the
+-    scheduler that the StockTwits path already uses.
++    poll scheduler in features/radar/scheduling.py, not to this module.
+ 
+     A 429 stops the cycle rather than moving to the next subreddit: the
+     penalty is per-IP and asking again immediately deepens it. Whatever was
+     collected before the refusal is still returned, because those comments
+     were really read.
+ 
+     `rates` carries ONLY the subreddits actually READ, and it is what the
+     caller schedules from. The ones after a throttle were never requested, so
+     stamping them as polled would push them down the queue for something that
+     never happened to them -- and neither is the throttled one, for the same
+diff --git a/personal_apps/features/radar/sources/stocktwits.py b/personal_apps/features/radar/sources/stocktwits.py
+deleted file mode 100644
+index e9f7293..0000000
+--- a/personal_apps/features/radar/sources/stocktwits.py
++++ /dev/null
+@@ -1,138 +0,0 @@
+-# personal_apps/features/radar/sources/stocktwits.py
+-"""StockTwits ingest.
+-
+-Finance-native and dense -- messages arrive already $TICKER-tagged and about
+-half carry a native bull/bear label -- but narrow: the discovery surface is the
+-30 trending symbols, so the standing set in the scheduler is what widens it.
+-
+-Crypto is dropped here rather than downstream, using the explicit
+-instrument_class field rather than guessing at the .X suffix (spec 3.7).
+-"""
+-import concurrent.futures
+-import datetime as dt
+-
+-import requests
+-
+-from . import FetchResult, RawPost
+-
+-API_BASE = 'https://api.stocktwits.com/api/2'
+-USER_AGENT_DEFAULT = 'personal_apps-radar/0.1 (personal research)'
+-
+-# The API returns at most this many messages per stream call. A full page of
+-# messages newer than `since` means there were probably more we never saw.
+-PAGE_SIZE = 30
+-
+-# Measured: a stream call takes ~43 seconds, and trending the same, with
+-# timings identical enough to be a deliberate throttle rather than load.
+-# Serially that is five minutes for seven symbols against a three-minute
+-# cycle, so the calls run concurrently. Kept low because the rate limit is
+-# undocumented and a burst is the wrong thing to guess with.
+-MAX_CONCURRENCY = 4
+-
+-
+-class StockTwitsUnavailable(Exception):
+-    """This symbol's stream did not arrive. Never turns into a zero count."""
+-
+-
+-class StockTwitsClient:
+-    def __init__(self, user_agent=USER_AGENT_DEFAULT, timeout=25):
+-        self._headers = {'User-Agent': user_agent}
+-        self._timeout = timeout
+-
+-    def get(self, path, params=None):
+-        try:
+-            response = requests.get(API_BASE + path, params=params,
+-                                    headers=self._headers, timeout=self._timeout)
+-            response.raise_for_status()
+-            return response.json()
+-        except (requests.RequestException, ValueError) as exc:
+-            raise StockTwitsUnavailable('%s: %s' % (path, exc)) from exc
+-
+-
+-def trending(client):
+-    """Trending equity symbols. Crypto is excluded by instrument_class."""
+-    payload = client.get('/trending/symbols.json')
+-    return [s['symbol'] for s in payload.get('symbols', [])
+-            if (s.get('instrument_class') or '').upper() != 'CRYPTO']
+-
+-
+-def _to_raw_post(message, symbol):
+-    created = dt.datetime.strptime(message['created_at'], '%Y-%m-%dT%H:%M:%SZ')
+-    user = message.get('user') or {}
+-    entities = message.get('entities') or {}
+-    sentiment = (entities.get('sentiment') or {}).get('basic')
+-    likes = (message.get('likes') or {}).get('total') or 0
+-    symbols = [s['symbol'] for s in (message.get('symbols') or [])] or [symbol]
+-
+-    return RawPost(
+-        source='stocktwits',
+-        external_id='stocktwits:%s' % message['id'],
+-        channel=symbol,
+-        author=user.get('username'),
+-        created_utc=created,
+-        title=None,
+-        body=message.get('body') or '',
+-        score=int(likes),
+-        num_comments=0,
+-        url='https://stocktwits.com/message/%s' % message['id'],
+-        native_tickers=symbols,
+-        native_sentiment=sentiment,
+-    )
+-
+-
+-def _fetch_one(client, symbol, since):
+-    """One symbol's stream. Returns (posts, rate, truncated) or raises."""
+-    payload = client.get('/streams/symbol/%s.json' % symbol)
+-    messages = payload.get('messages') or []
+-
+-    fresh = [p for p in (_to_raw_post(m, symbol) for m in messages)
+-             if p.created_utc > since]
+-
+-    rate = None
+-    if messages:
+-        stamps = [dt.datetime.strptime(m['created_at'], '%Y-%m-%dT%H:%M:%SZ')
+-                  for m in messages]
+-        span = (max(stamps) - min(stamps)).total_seconds() / 3600
+-        rate = (len(messages) / span) if span > 0 else float(len(messages))
+-
+-    # A full page, all of it new, means the window very likely overflowed.
+-    return fresh, rate, len(fresh) >= PAGE_SIZE
+-
+-
+-def fetch(since, client, symbols, max_workers=MAX_CONCURRENCY):
+-    """Every message newer than `since` across `symbols`.
+-
+-    Requests run concurrently because each takes ~43 seconds against a
+-    three-minute cycle; serially, seven symbols would not fit.
+-
+-    Also reports observed messages/hour per symbol, which is what lets the
+-    scheduler poll a hot symbol often and a quiet one rarely (spec 3.5).
+-    """
+-    if not symbols:
+-        return FetchResult(posts=[], status='ok')
+-
+-    posts, rates = [], {}
+-    failures = 0
+-    truncated = False
+-
+-    workers = max(1, min(max_workers, len(symbols)))
+-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+-        futures = {pool.submit(_fetch_one, client, symbol, since): symbol
+-                   for symbol in symbols}
+-        for future in concurrent.futures.as_completed(futures):
+-            symbol = futures[future]
+-            try:
+-                fresh, rate, overflowed = future.result()
+-            except StockTwitsUnavailable:
+-                failures += 1
+-                continue
+-            posts.extend(fresh)
+-            if rate is not None:
+-                rates[symbol] = rate
+-            truncated = truncated or overflowed
+-
+-    if failures == len(symbols):
+-        return FetchResult(posts=[], status='missing')
+-
+-    status = 'truncated' if (truncated or failures) else 'ok'
+-    return FetchResult(posts=posts, status=status, rates=rates)
+diff --git a/personal_apps/models.py b/personal_apps/models.py
+index f5e9a3f..ad161f7 100644
+--- a/personal_apps/models.py
++++ b/personal_apps/models.py
+@@ -606,21 +606,21 @@ class RadarMention(db.Model):
+     lexicon_sentiment = db.Column(db.Float, nullable=True)
+     llm_sentiment     = db.Column(db.String(16), nullable=True)
+ 
+     post = db.relationship('RadarPost', back_populates='mentions')
+ 
+ 
+ class RadarBucket(db.Model):
+     """(ticker x 15 minutes). Retained forever; this is what scoring reads.
+ 
+     Status is per source, not per bucket. With one column and two sources,
+-    StockTwits dropping while Reddit keeps working forces a choice between
++    Bluesky dropping while Reddit keeps working forces a choice between
+     discarding good Reddit data and silently halving the count -- the second
+     being exactly the baseline poisoning the status column exists to prevent
+     (spec 4.5).
+ 
+     The mention_z_* and baseline_days_* columns are written by Plan 2 and are
+     NULL until then.
+     """
+     __tablename__ = 'radar_buckets'
+     __table_args__ = (
+         db.UniqueConstraint('ticker', 'bucket_start', name='uq_radar_bucket'),
+diff --git a/personal_apps/run_radar_ingest.py b/personal_apps/run_radar_ingest.py
+index 3f9263b..bc52a29 100644
+--- a/personal_apps/run_radar_ingest.py
++++ b/personal_apps/run_radar_ingest.py
+@@ -2,63 +2,60 @@
+ 
+ Mirrors run_gym_notifier.py: an APScheduler process holding a Flask app
+ context, deployed as its own systemd unit and restarted by the VPS deploy
+ script.
+ 
+ Cadence is chosen per cycle from the NYSE session rather than fixed, because
+ chatter volume follows the session and polling overnight at session rates is
+ wasted work. The state comes from the exchange calendar, never from local time
+ -- see the DST note in features/radar/market_calendar.py.
+ 
+-Three sources run behind one contract. Nothing here branches on which source is
+-which beyond building its fetcher; a fourth would be a module in sources/ plus
+-an entry in config.SOURCES.
++Every source runs behind one contract. Nothing here branches on which source
++is which beyond building its fetcher; a new one is a module in sources/ plus
++an entry in config.SOURCES. StockTwits was one of these until 2026-08-26,
++when Cloudflare bot management -- refusing every request, from launch --
++made it not worth defeating a bot challenge to keep.
+ """
+ import datetime as dt
+ import logging
+ import time
+ 
+ import sqlalchemy as sa
+ from apscheduler.schedulers.background import BackgroundScheduler
+ 
+ from app import app
+ from extensions import db
+ from models import RadarPollState
+ from features.radar import (
+     history, ingest, journal, llm_sentiment, market_calendar, quotes,
+     retention, scheduling, scoring, universe)
+ from features.radar.prices import finnhub as finnhub_provider
+ from features.radar.prices import twelvedata as twelvedata_provider
+ from features.radar.config import (
+     MENTION_EVENT_RETENTION_HOURS, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
+     REDDIT_MIN_POLL, REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES,
+-    STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured,
+-    source_config_version)
+-from features.radar.sources import bluesky, fourchan, reddit, stocktwits
++    prefer_ipv4_if_configured, source_config_version)
++from features.radar.sources import bluesky, fourchan, reddit
+ from features.radar.sources import FetchResult
+ 
+ logger = logging.getLogger('radar.ingest')
+ 
+ INTERVALS = {
+     'premarket': 180,
+     'regular': 180,
+     'afterhours': 600,
+     'closed': 1800,
+ }
+ # An unrecognized state polls at the slowest rate. Failing towards fewer
+ # requests is the safe direction when the alternative is hammering an API.
+ FALLBACK_INTERVAL = 1800
+ 
+-# Cycles per hour at the fastest cadence, used to divide the hourly budget.
+-_CYCLES_PER_HOUR = 20
+-SYMBOL_BUDGET_PER_CYCLE = max(1, STOCKTWITS_REQUESTS_PER_HOUR // _CYCLES_PER_HOUR)
+-
+ # Finnhub's free tier is 60 calls a minute. Quotes go to the tickers actually
+ # on the board, not to all 12,000 in the universe -- a quote for a ticker
+ # nobody is discussing answers a question nobody asked.
+ QUOTE_LIMIT = 50
+ QUOTE_INTERVAL_MINUTES = 5
+ 
+ # Twelve Data allows 800 requests a day and volatility moves on the scale of
+ # weeks, so this is deliberately slow and small.
+ SIGMA_LIMIT = 60
+ SIGMA_INTERVAL_HOURS = 12
+@@ -93,83 +90,44 @@ def _utcnow():
+     return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+ 
+ def interval_for(state):
+     return INTERVALS.get(state, FALLBACK_INTERVAL)
+ 
+ 
+ def current_state(now_utc):
+     return market_calendar.session_state(now_utc)
+ 
+ 
+-def _stocktwits_fetcher(client):
+-    """Trending is both the discovery surface and how the polled set grows.
+-
+-    Symbols accumulate: every symbol that has ever trended stays tracked, so
+-    the standing set builds itself rather than waiting on a market-cap source
+-    the free tier does not provide.
+-    """
+-    def fetch(since):
+-        now = _utcnow()
+-        discovery_failed = False
+-        try:
+-            hot = stocktwits.trending(client)
+-            scheduling.ensure_tracked('stocktwits', hot, now)
+-        except stocktwits.StockTwitsUnavailable as exc:
+-            # One bad trending call must not cost the cycle its polled set.
+-            # The reason is logged: "unavailable" alone is not diagnosable, and
+-            # a blocked IP looks identical to a rate limit without it.
+-            discovery_failed = True
+-            logger.warning('stocktwits trending unavailable this cycle: %s', exc)
+-
+-        symbols = scheduling.due_symbols('stocktwits', now,
+-                                         limit=SYMBOL_BUDGET_PER_CYCLE)
+-
+-        if discovery_failed and not symbols:
+-            # Nothing reached us and nothing was left to try, so this source
+-            # saw nothing -- which is `missing`, not a quiet period. Reporting
+-            # `ok` here wrote zero-count buckets for a source that was 403 on
+-            # every request, and thirty days of those would make any later
+-            # StockTwits data read as an enormous spike.
+-            return FetchResult(posts=[], status='missing')
+-
+-        result = stocktwits.fetch(since, client, symbols)
+-        for symbol in symbols:
+-            scheduling.record_poll('stocktwits', symbol, now,
+-                                   result.rates.get(symbol))
+-        return result
+-    return fetch
+-
+-
+ def _reddit_fetcher(client):
+     """Reddit, a budgeted slice of subreddits per cycle.
+ 
+     The feed holds 25 comments and has no cursor, so how often a subreddit is
+     read IS its coverage -- r/wallstreetbets turns over in under two minutes.
+     Reading all eighteen every cycle would be six requests a minute, which is
+     well past what earned a sustained 429 during measurement, so they rotate
+-    through the same scheduler StockTwits symbols use: most-overdue first, so
++    through the poll scheduler's due-symbol ordering: most-overdue first, so
+     a backlog larger than the budget rotates instead of starving the same subs
+     forever.
+ 
+     The observed rate comes back from the feed itself, which lets a quiet sub
+     fall to a slow cadence and hand its share of the budget to a busy one.
+     """
+     def fetch(since):
+         now = _utcnow()
+         scheduling.ensure_tracked('reddit', REDDIT_SUBS, now)
+         # And drop the ones no longer configured. due_symbols filters by
+         # SOURCE rather than by this list, so a removed subreddit would keep
+         # its poll state and keep taking turns -- spending the very budget its
+         # removal was meant to free, while still appearing in the logs as
+-        # though nothing had changed. Reddit can do this and StockTwits
+-        # cannot: REDDIT_SUBS is the complete set, while a hot ticker falling
+-        # out of StockTwits' rolling window is temporary.
++        # though nothing had changed. Reddit can do this because REDDIT_SUBS
++        # is the complete set; a source whose tracked set is a rolling window
++        # must never call this, since a symbol falling out of it is temporary.
+         retired = scheduling.retire_untracked('reddit', REDDIT_SUBS)
+         if retired:
+             logger.info('radar reddit retired %d subreddit(s) '
+                         'no longer configured', retired)
+         subs = scheduling.due_symbols('reddit', now, limit=REDDIT_SUBS_PER_CYCLE)
+         if not subs:
+             # Nothing due. Every subreddit was read inside its own interval,
+             # so coverage IS current -- this is no work to do, not a failure.
+             # `missing` here made six of eight cycles look like outages in the
+             # log and hid the real ones among them.
+@@ -183,40 +141,38 @@ def _reddit_fetcher(client):
+                     RadarPollState.source == 'reddit',
+                     RadarPollState.symbol.in_(subs)).all()}
+         since_by_sub = {sub: (rows.get(sub) or since) for sub in subs}
+ 
+         result = reddit.fetch(since_by_sub, client)
+         # Only what was actually attempted. A throttle stops the cycle, and
+         # stamping the subreddits after it as polled would push them down the
+         # queue for a request that was never made -- so they would lose their
+         # turn to the ones that happened to be earlier in the batch.
+         for sub, rate in (result.rates or {}).items():
+-            # This source's own bounds. The scheduler's defaults are
+-            # StockTwits-shaped, and a fifteen-minute floor would lose most of
+-            # r/wallstreetbets -- whose feed holds 25 comments and turns over
+-            # in under two minutes.
++            # This source's own bounds, not the scheduler's generic defaults:
++            # a fifteen-minute floor would lose most of r/wallstreetbets --
++            # whose feed holds 25 comments and turns over in under two
++            # minutes.
+             scheduling.record_poll('reddit', sub, now, rate,
+                                    floor=REDDIT_MIN_POLL,
+                                    ceiling=REDDIT_MAX_POLL,
+                                    page_size=reddit.FEED_LIMIT)
+         return result
+     return fetch
+ 
+ 
+ def build_fetchers():
+     """One callable per active source, each taking `since`."""
+-    st_client = stocktwits.StockTwitsClient()
+     fc_client = fourchan.FourChanClient()
+     rd_client = reddit.RedditClient()
+ 
+     return {
+-        'stocktwits': _stocktwits_fetcher(st_client),
+         'bluesky': lambda since: bluesky.fetch(since, bluesky.live_drain),
+         'fourchan': lambda since: fourchan.fetch(
+             since, fc_client, pause=fourchan.REQUEST_INTERVAL_SECONDS),
+         'reddit': _reddit_fetcher(rd_client),
+     }
+ 
+ 
+ def tick(now_utc, fetchers):
+     """One cycle across every source, with failures contained.
+ 
+diff --git a/personal_apps/static/radar/src/board/BoardPage.test.tsx b/personal_apps/static/radar/src/board/BoardPage.test.tsx
+index f4ceb08..58ccdd1 100644
+--- a/personal_apps/static/radar/src/board/BoardPage.test.tsx
++++ b/personal_apps/static/radar/src/board/BoardPage.test.tsx
+@@ -18,22 +18,22 @@ function row(over: Partial<Row> = {}): Row {
+     tone: { bullish: 4, neutral: 10, bearish: 2 },
+     clauses: [{ kind: 'ratio', text: '3x its normal' },
+               { kind: 'venues', text: '2 venues' }],
+     ...over,
+   }
+ }
+ 
+ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
+   return {
+     generated_at: '2026-08-22T19:00:00Z',
+-    sources: ['stocktwits', 'bluesky', 'fourchan'],
+-    all_sources: ['stocktwits', 'bluesky', 'fourchan'],
++    sources: ['bluesky', 'fourchan', 'reddit'],
++    all_sources: ['bluesky', 'fourchan', 'reddit'],
+     segments: [], session: 'regular', window_hours: 4,
+     min_venues: 1, venue_counts: { any: 4, multi: 2 },
+     segment_counts: { all: 4, large: 4 },
+     triplet_hours: [1, 4, 24], series_hours: 24, lead_count: 3,
+     rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' }),
+            row({ ticker: 'CCC' }), row({ ticker: 'DDD' })],
+     excluded: {},
+     ...over,
+   }
+ }
+@@ -152,24 +152,24 @@ describe('selecting a ticker', () => {
+ })
+ 
+ describe('the controls', () => {
+   it('refetches and rewrites the address bar when a source is dropped', async () => {
+     render(<BoardPage initial={payload()} />)
+ 
+     await userEvent.click(screen.getByRole('button', { name: /4chan/ }))
+ 
+     await waitFor(() => expect(boardCalls()).toHaveLength(1))
+     expect(boardCalls()[0]).toBe(
+-      '/radar/api/board?sources=stocktwits%2Cbluesky&window=4&segment=')
++      '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=')
+     await waitFor(() =>
+       expect(window.location.search)
+-        .toContain('sources=stocktwits%2Cbluesky&window=4&segment='))
++        .toContain('sources=bluesky%2Creddit&window=4&segment='))
+   })
+ 
+   it('keeps All in the address bar rather than omitting it', async () => {
+     /* The server's default segment is Small, so a URL with no segment param
+        reloads as Small. Sharing the All view has to survive a reload, which
+        means the empty value is the state, not the absence of one. */
+     render(<BoardPage initial={payload({ segments: ['small'] })} />)
+ 
+     await userEvent.click(screen.getByRole('button', { name: /^All/ }))
+ 
+diff --git a/personal_apps/static/radar/src/format.ts b/personal_apps/static/radar/src/format.ts
+index cca6bb0..77c68e4 100644
+--- a/personal_apps/static/radar/src/format.ts
++++ b/personal_apps/static/radar/src/format.ts
+@@ -46,21 +46,20 @@ const SEGMENT_LABELS: Record<string, string> = {
+  *  way back out. The three it covers stay listed -- Small is a shortcut to the
+  *  common reading, not a replacement for reading them apart. */
+ export const SEGMENT_ORDER = ['small', 'all', 'large', 'mid', 'micro',
+                               'recent_ipo', 'unknown', 'fund']
+ 
+ export function segmentLabel(key: string): string {
+   return SEGMENT_LABELS[key] ?? key
+ }
+ 
+ const SOURCE_LABELS: Record<string, string> = {
+-  stocktwits: 'StockTwits',
+   bluesky: 'Bluesky',
+   fourchan: '4chan /biz/',
+   reddit: 'Reddit',
+ }
+ 
+ /** A source name the config knows but this file does not still renders --
+  *  adding a source must not require touching the UI (PRODUCT.md). */
+ export function sourceLabel(key: string): string {
+   return SOURCE_LABELS[key] ?? key
+ }
+diff --git a/personal_apps/tests/test_radar_bucket_sources.py b/personal_apps/tests/test_radar_bucket_sources.py
+index 4749376..f99a840 100644
+--- a/personal_apps/tests/test_radar_bucket_sources.py
++++ b/personal_apps/tests/test_radar_bucket_sources.py
+@@ -28,69 +28,69 @@ def ctx():
+             RadarBucket.ticker.like('ZZ%')).delete(synchronize_session=False)
+         db.session.commit()
+         yield
+         RadarBucketSource.query.filter(
+             RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+         RadarBucket.query.filter(
+             RadarBucket.ticker.like('ZZ%')).delete(synchronize_session=False)
+         db.session.commit()
+ 
+ 
+-def _row(source='stocktwits', ticker='ZZA', count=3, status='ok'):
++def _row(source='bluesky', ticker='ZZA', count=3, status='ok'):
+     return RadarBucketSource(
+         ticker=ticker, bucket_start=START, source=source,
+         mention_count=count, high_confidence_count=count, low_count=0,
+         distinct_authors=count, distinct_text_ratio=1.0,
+         engagement_weighted_count=float(count), sentiment_mean=0.1,
+         sentiment_stdev=None, status=status)
+ 
+ 
+ def test_one_row_per_source_for_the_same_bucket(ctx):
+-    for source in ('stocktwits', 'bluesky', 'fourchan'):
++    for source in ('reddit', 'bluesky', 'fourchan'):
+         db.session.add(_row(source=source))
+     db.session.commit()
+     assert RadarBucketSource.query.filter_by(ticker='ZZA').count() == 3
+ 
+ 
+ def test_the_same_source_twice_in_one_bucket_is_rejected(ctx):
+     db.session.add(_row())
+     db.session.commit()
+     db.session.add(_row(count=99))
+     with pytest.raises(sa.exc.IntegrityError):
+         db.session.commit()
+     db.session.rollback()
+ 
+ 
+ def test_an_arbitrary_subset_pools_by_group_by(ctx):
+     """The whole reason this table exists. The UI selector picks sources and
+     the query sums over exactly those -- no schema knows their names."""
+-    db.session.add(_row(source='stocktwits', count=10))
++    db.session.add(_row(source='reddit', count=10))
+     db.session.add(_row(source='bluesky', count=4))
+     db.session.add(_row(source='fourchan', count=1))
+     db.session.commit()
+ 
+-    chosen = ['stocktwits', 'bluesky']
++    chosen = ['reddit', 'bluesky']
+     total = db.session.query(
+         sa.func.sum(RadarBucketSource.mention_count)).filter(
+         RadarBucketSource.ticker == 'ZZA',
+         RadarBucketSource.bucket_start == START,
+         RadarBucketSource.source.in_(chosen)).scalar()
+     assert total == 14
+ 
+ 
+ def test_a_source_can_be_missing_while_another_is_ok(ctx):
+-    db.session.add(_row(source='stocktwits', status='ok'))
++    db.session.add(_row(source='reddit', status='ok'))
+     db.session.add(_row(source='bluesky', status='truncated'))
+     db.session.commit()
+     statuses = {r.source: r.status for r in
+                 RadarBucketSource.query.filter_by(ticker='ZZA').all()}
+-    assert statuses == {'stocktwits': 'ok', 'bluesky': 'truncated'}
++    assert statuses == {'reddit': 'ok', 'bluesky': 'truncated'}
+ 
+ 
+ def test_low_confidence_is_counted_separately_from_scored(ctx):
+     """low is stored but never scored (spec 4.2). Keeping the count is what
+     lets the extractor's false-positive rate be measured against real data."""
+     row = _row(count=5)
+     row.low_count = 40
+     db.session.add(row)
+     db.session.commit()
+     db.session.expire(row)
+diff --git a/personal_apps/tests/test_radar_buckets.py b/personal_apps/tests/test_radar_buckets.py
+index c8fd662..998f6d9 100644
+--- a/personal_apps/tests/test_radar_buckets.py
++++ b/personal_apps/tests/test_radar_buckets.py
+@@ -75,21 +75,21 @@ def test_distinct_text_ratio_catches_a_copy_paste_brigade(clean_buckets):
+     this is the column that does."""
+     rows = [row(author='u%d' % i, simhash=999) for i in range(4)]
+     buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
+     bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+     assert bucket.distinct_authors == 4
+     assert bucket.distinct_text_ratio == pytest.approx(0.25)
+ 
+ 
+ def test_per_source_status_is_stored_separately(clean_buckets):
+     from models import RadarBucketSource
+-    buckets.roll_up([row()], {'bluesky': 'ok', 'stocktwits': 'missing'},
++    buckets.roll_up([row()], {'bluesky': 'ok', 'reddit': 'missing'},
+                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
+     assert RadarBucket.query.filter_by(ticker='ZZA').one().sources_ok == 1
+     rows = {r.source: r.status for r in
+             RadarBucketSource.query.filter_by(ticker='ZZA').all()}
+     # A `missing` source writes no row at all -- that is the rule.
+     assert rows == {'bluesky': 'ok'}
+ 
+ 
+ def test_truncated_counts_are_kept_and_marked(clean_buckets):
+     from models import RadarBucketSource
+@@ -98,21 +98,21 @@ def test_truncated_counts_are_kept_and_marked(clean_buckets):
+     bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
+     assert bucket.mention_count == 1
+     assert bucket.sources_ok == 0
+     assert RadarBucketSource.query.filter_by(
+         ticker='ZZA', source='bluesky').one().status == 'truncated'
+ 
+ 
+ def test_a_missing_source_writes_no_bucket_rather_than_a_zero(clean_buckets):
+     """The single most important rule in the ingest layer. A zero here would
+     poison the baseline and manufacture a spike when ingest resumes."""
+-    written = buckets.roll_up([], {'stocktwits': 'missing', 'bluesky': 'missing'},
++    written = buckets.roll_up([], {'reddit': 'missing', 'bluesky': 'missing'},
+                               {dt.datetime(2026, 4, 15, 14, 0, 0)})
+     assert written == 0
+     assert RadarBucket.query.filter_by(ticker='ZZA').count() == 0
+ 
+ 
+ def test_a_re_read_of_the_same_window_does_not_double(clean_buckets):
+     """A cycle that re-reads a window it already read must not add to it.
+ 
+     This is the overlap case, and it is the only one the old version of this
+     test covered -- it fed the second call a SUPERSET, which no source
+@@ -206,27 +206,27 @@ def test_a_generation_restamp_clears_every_stale_score(clean_buckets,
+ 
+     db.session.expire(source)
+     assert source.source_config_version == source_config_version()
+     assert source.expected is None
+     assert source.variance is None
+     assert source.mention_z is None
+     assert source.baseline_days is None
+ 
+ 
+ def test_per_source_rows_are_written(clean_buckets):
+-    rows = [row(source='stocktwits', author='u1', simhash=1),
++    rows = [row(source='reddit', author='u1', simhash=1),
+             row(source='bluesky', author='u2', simhash=2)]
+-    buckets.roll_up(rows, {'stocktwits': 'ok', 'bluesky': 'ok'},
++    buckets.roll_up(rows, {'reddit': 'ok', 'bluesky': 'ok'},
+                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
+     per_source = {r.source: r.mention_count for r in
+                   RadarBucketSource.query.filter_by(ticker='ZZA').all()}
+-    assert per_source == {'stocktwits': 1, 'bluesky': 1}
++    assert per_source == {'reddit': 1, 'bluesky': 1}
+     assert RadarBucket.query.filter_by(ticker='ZZA').one().mention_count == 2
+ 
+ 
+ def test_an_unknown_source_name_needs_no_schema_change(clean_buckets):
+     """The point of the child table. A source nobody has heard of writes a row
+     like any other -- no migration, no column, no code that knows its name."""
+     buckets.roll_up([row(source='some_new_source')], {'some_new_source': 'ok'},
+                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
+     assert RadarBucketSource.query.filter_by(
+         ticker='ZZA', source='some_new_source').one().mention_count == 1
+@@ -273,22 +273,22 @@ def test_a_bucket_with_only_lows_still_records_its_source_status(clean_buckets):
+                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
+     assert RadarBucketSource.query.filter_by(
+         ticker='ZZA', source='bluesky').one().status == 'ok'
+ 
+ 
+ def test_the_config_version_is_stamped_on_each_source_row(clean_buckets):
+     """Baselines exclude history from before a config change, and that
+     exclusion is per (ticker, source). Reading it off the parent bucket would
+     mean joining a table the baseline query has no other reason to touch."""
+     from features.radar.config import source_config_version
+-    buckets.roll_up([row(source='stocktwits'), row(source='bluesky')],
+-                    {'stocktwits': 'ok', 'bluesky': 'ok'},
++    buckets.roll_up([row(source='reddit'), row(source='bluesky')],
++                    {'reddit': 'ok', 'bluesky': 'ok'},
+                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
+     versions = {r.source: r.source_config_version for r in
+                 RadarBucketSource.query.filter_by(ticker='ZZA').all()}
+     assert len(versions) == 2
+     assert set(versions.values()) == {source_config_version()}
+ 
+ 
+ # --- The promotion leak, measured on live data 2026-08-25 -------------------
+ #
+ # ICE 315, IA 393, MAGA 256 and GOP 210 sat in the SCORED set over seven days,
+diff --git a/personal_apps/tests/test_radar_config.py b/personal_apps/tests/test_radar_config.py
+index 4370613..e44b710 100644
+--- a/personal_apps/tests/test_radar_config.py
++++ b/personal_apps/tests/test_radar_config.py
+@@ -63,21 +63,20 @@ def test_ipv4_preference_applies_when_set(monkeypatch):
+     original = urllib3_connection.allowed_gai_family
+     monkeypatch.setenv('RADAR_FORCE_IPV4', '1')
+     try:
+         assert config.prefer_ipv4_if_configured() is True
+         assert urllib3_connection.allowed_gai_family() == socket.AF_INET
+     finally:
+         urllib3_connection.allowed_gai_family = original
+ 
+ 
+ def test_finance_native_sources_allow_bare_tokens():
+-    assert config.bare_tokens_allowed('stocktwits') is True
+     assert config.bare_tokens_allowed('fourchan') is True
+ 
+ 
+ def test_bluesky_reads_bare_tokens_since_the_tiering_changed():
+     """Reversed 2026-08-23. This asserted False, set after the first live pass
+     found IA (Iowa), GOP and AP among Bluesky's top bare tokens.
+ 
+     What changed is not the noise but what it costs: an uncorroborated bare
+     token is stored `low` and never scored, so those three now occupy table
+     rows and nothing else. Meanwhile the promotion path -- a distinctive
+@@ -95,29 +94,35 @@ def test_an_uncharacterised_source_defaults_to_cashtags_only():
+ 
+ 
+ def test_coin_shaped_symbols_are_dropped_on_general_sources():
+     """BCH is Banco de Chile and LINK is Interlink Electronics, so the
+     name-based crypto filter cannot see them. On the first live hour four of
+     the ten loudest tickers were coins read as companies, BCH the largest."""
+     assert config.coin_collision_dropped('bluesky', 'BCH') is True
+     assert config.coin_collision_dropped('fourchan', 'LINK') is True
+ 
+ 
+-def test_finance_native_sources_keep_them():
+-    """On StockTwits, $LINK means Interlink -- the population is discussing
+-    equities, so the company reading is the right one."""
+-    assert config.coin_collision_dropped('stocktwits', 'LINK') is False
+-    assert config.coin_collision_dropped('stocktwits', 'BCH') is False
++def test_a_finance_native_source_can_opt_into_coin_symbols(monkeypatch):
++    """The extension point, kept alive with no live source using it.
++
++    StockTwits was the only population where $LINK meant Interlink rather
++    than Chainlink. It is retired; this pins that a future finance-native
++    source can still opt in, rather than the map quietly becoming a constant
++    nobody can override.
++    """
++    monkeypatch.setitem(config.COIN_SYMBOLS_MEAN_STOCKS, 'bluesky', True)
++    assert config.coin_collision_dropped('bluesky', 'LINK') is False
++    assert config.coin_collision_dropped('bluesky', 'BCH') is False
+ 
+ 
+ def test_ordinary_tickers_are_untouched_everywhere():
+-    for source in ('bluesky', 'fourchan', 'stocktwits'):
++    for source in ('bluesky', 'fourchan', 'reddit'):
+         assert config.coin_collision_dropped(source, 'MRNA') is False
+         assert config.coin_collision_dropped(source, 'AAPL') is False
+ 
+ 
+ def test_an_unknown_source_drops_them():
+     """Same safe default as bare tokens: unmeasured sources get the strict
+     reading."""
+     assert config.coin_collision_dropped('some_new_network', 'BCH') is True
+ 
+ 
+@@ -261,10 +266,42 @@ def test_an_empty_selection_still_means_everything():
+     assert segments_in(None) == ()
+ 
+ 
+ def test_a_single_string_selection_still_works():
+     """Bookmarked URLs carry `?segment=small`, and the default is a bare
+     string. Widening the parameter must not break either."""
+     from features.radar.config import segments_in
+ 
+     assert set(segments_in('small')) == {'micro', 'unknown', 'recent_ipo'}
+     assert set(segments_in('large')) == {'large'}
++
++
++def test_stocktwits_is_retired():
++    """Cloudflare bot management, diagnosed 2026-08-26.
++
++    403 on every endpoint with every user agent, from two networks. It reported
++    `missing` honestly for five days and produced nothing, while remaining a
++    selectable venue in the UI -- an invitation to filter on a source that has
++    never returned a row.
++    """
++    from features.radar import config
++
++    assert 'stocktwits' not in config.SOURCES
++    assert 'stocktwits' not in config.BARE_TOKENS_ALLOWED
++    assert 'stocktwits' not in config.SINGLE_LETTER_CASHTAGS
++    assert 'stocktwits' not in config.SOURCE_KIND
++    assert not hasattr(config, 'STOCKTWITS_REQUESTS_PER_HOUR')
++
++
++def test_no_source_reads_a_coin_symbol_as_a_company():
++    """A consequence of the retirement, named so it is not rediscovered.
++
++    StockTwits was the only population where $LINK meant Interlink rather than
++    Chainlink. With it gone, COIN_COLLISION_SYMBOLS are dropped everywhere --
++    49 real tickers lose their mentions on every live source. The map stays a
++    map rather than collapsing to a constant, because Telegram will need its
++    own entry and the extension point is the point.
++    """
++    from features.radar import config
++
++    assert not any(config.COIN_SYMBOLS_MEAN_STOCKS.values())
++    assert config.coin_collision_dropped('bluesky', 'LINK') is True
+diff --git a/personal_apps/tests/test_radar_daemon.py b/personal_apps/tests/test_radar_daemon.py
+index 64a94f1..3590d54 100644
+--- a/personal_apps/tests/test_radar_daemon.py
++++ b/personal_apps/tests/test_radar_daemon.py
+@@ -47,33 +47,33 @@ def test_interval_during_the_dst_desync_window():
+     assert daemon.interval_for(state) == 180
+ 
+ 
+ def test_tick_returns_the_cycle_summary(monkeypatch):
+     monkeypatch.setattr(daemon.ingest, 'run_cycle',
+                         lambda now, fetchers: {'per_source': {}, 'mentions': 3,
+                                               'buckets_written': 1,
+                                               'catchup_depth': 1,
+                                               'posts_seen': 3, 'posts_new': 3})
+     result = daemon.tick(_utc(2026, 4, 15, 14),
+-                         fetchers={'stocktwits': lambda s: None})
++                         fetchers={'bluesky': lambda s: None})
+     assert result['mentions'] == 3
+ 
+ 
+ def test_a_cycle_that_raises_does_not_kill_the_daemon(monkeypatch):
+     """APScheduler drops a job whose function raises. Losing ingest until the
+     next restart is worse than losing one cycle."""
+     def boom(now, fetchers):
+         raise RuntimeError('provider exploded')
+ 
+     monkeypatch.setattr(daemon.ingest, 'run_cycle', boom)
+     result = daemon.tick(_utc(2026, 4, 15, 14),
+-                         fetchers={'stocktwits': lambda s: None})
++                         fetchers={'bluesky': lambda s: None})
+     assert result['status'] == 'error'
+ 
+ 
+ def test_every_configured_source_gets_a_fetcher():
+     fetchers = daemon.build_fetchers()
+     assert set(fetchers) == set(daemon.SOURCES)
+     assert all(callable(f) for f in fetchers.values())
+ 
+ 
+ def test_reddit_reads_the_feeds_and_never_the_closed_api():
+@@ -99,26 +99,20 @@ def test_reddit_reads_the_feeds_and_never_the_closed_api():
+     # docstring necessarily mentions the .json route in order to explain why
+     # it is not used, and a text search cannot tell an explanation from a call.
+     urls = [value for value in vars(reddit).values()
+             if isinstance(value, str) and value.startswith('http')]
+ 
+     assert urls == [reddit.FEED], f'unexpected endpoint reachable: {urls}'
+     assert '.rss' in reddit.FEED
+     assert '.json' not in reddit.FEED
+ 
+ 
+-def test_the_request_budget_is_a_sane_fraction_of_the_hourly_one():
+-    """StockTwits publishes no limit; this is a conservative guess with
+-    adaptive backoff, not a documented ceiling."""
+-    assert 1 <= daemon.SYMBOL_BUDGET_PER_CYCLE <= 40
+-
+-
+ def test_reddit_runs_on_its_own_clock_not_the_market_session():
+     """The regression: four subs per 1800-second overnight cycle meant a full
+     rotation of eighteen took over two hours, against a feed that turns over
+     in under two minutes. Six hours of it produced one scorable mention.
+ 
+     Reddit does not stop at the closing bell, and a missed comment is gone
+     rather than late -- there is no cursor to catch up from.
+     """
+     import inspect
+     source = inspect.getsource(daemon.main)
+@@ -130,78 +124,40 @@ def test_reddit_runs_on_its_own_clock_not_the_market_session():
+ 
+ def test_the_first_cycle_is_scheduled_immediately():
+     """An interval trigger fires only after the interval elapses. Overnight
+     that is thirty minutes of silence after starting the service, which reads
+     as a dead daemon."""
+     import inspect
+     source = inspect.getsource(daemon.main)
+     assert 'next_run_time' in source, 'first cycle would wait a full interval'
+ 
+ 
+-def _stub_scheduling(monkeypatch, due):
+-    monkeypatch.setattr(daemon.scheduling, 'ensure_tracked',
+-                        lambda *a, **k: 0)
+-    monkeypatch.setattr(daemon.scheduling, 'due_symbols',
+-                        lambda *a, **k: list(due))
+-    monkeypatch.setattr(daemon.scheduling, 'record_poll', lambda *a, **k: None)
+-
+-
+-def test_a_blocked_source_reports_missing_not_ok(monkeypatch):
+-    """Live on the VPS, StockTwits 403'd every request and the cycle recorded
+-    it as `ok` with zero counts -- because trending failed, the poll set was
+-    empty, and an empty symbol list short-circuits to success. Thirty days of
+-    those zeros would make the first real data look like an enormous spike."""
+-    import datetime as dt
+-
+-    def blocked(*a, **k):
+-        raise daemon.stocktwits.StockTwitsUnavailable('403 Forbidden')
+-
+-    monkeypatch.setattr(daemon.stocktwits, 'trending', blocked)
+-    _stub_scheduling(monkeypatch, due=[])
+-
+-    result = daemon._stocktwits_fetcher(object())(dt.datetime(2026, 8, 21))
+-    assert result.status == 'missing'
+-    assert result.posts == []
+-
+-
+-def test_nothing_due_on_a_healthy_source_is_still_ok(monkeypatch):
+-    """The distinction the bug collapsed: no work to do is a real zero, and
+-    only a failure is `missing`."""
+-    import datetime as dt
+-
+-    monkeypatch.setattr(daemon.stocktwits, 'trending', lambda c: ['AAA'])
+-    _stub_scheduling(monkeypatch, due=[])
+-
+-    result = daemon._stocktwits_fetcher(object())(dt.datetime(2026, 8, 21))
+-    assert result.status == 'ok'
+-
+-
+ def test_scoring_covers_every_configured_source(monkeypatch):
+     seen = []
+     monkeypatch.setattr(daemon.scoring, 'score_source',
+                         lambda source, now, **k: seen.append(source) or 1)
+     daemon.score_all(_utc(2026, 8, 21, 14))
+     assert set(seen) == set(daemon.SOURCES)
+ 
+ 
+ def test_one_source_failing_to_score_does_not_stop_the_others(monkeypatch):
+     """Same rule as ingest. A bad baseline on one source is not a reason to
+     leave the others unscored."""
+     def flaky(source, now, **k):
+         if source == 'bluesky':
+             raise RuntimeError('bad baseline')
+         return 3
+ 
+     monkeypatch.setattr(daemon.scoring, 'score_source', flaky)
+     result = daemon.score_all(_utc(2026, 8, 21, 14))
+     assert result['bluesky'] == 0
+-    assert result['stocktwits'] == 3
++    assert result['fourchan'] == 3
+ 
+ 
+ def test_quote_polling_targets_the_loudest_tickers(monkeypatch):
+     """The free tier is 60 calls a minute, so quotes go to the tickers actually
+     on the board rather than to all 12,000 in the universe."""
+     asked = {}
+ 
+     class FakeProvider:
+         def quotes(self, symbols):
+             asked['symbols'] = list(symbols)
+diff --git a/personal_apps/tests/test_radar_ingest.py b/personal_apps/tests/test_radar_ingest.py
+index 9690fe3..55d7c29 100644
+--- a/personal_apps/tests/test_radar_ingest.py
++++ b/personal_apps/tests/test_radar_ingest.py
+@@ -55,29 +55,29 @@ def seeded(clean_radar):
+ def clean_radar():
+     with flask_app.app_context():
+         _wipe()
+         db.session.commit()
+         yield
+         _wipe()
+         db.session.commit()
+ 
+ 
+ def post(ident='t3_1', body='$ZZG is ripping', score=5, author='u1',
+-         minute=10, title=None, source='stocktwits'):
++         minute=10, title=None, source='bluesky'):
+     return RawPost(source=source, external_id=ident, channel='testsub',
+                    author=author,
+                    created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
+                    title=title, body=body, score=score, num_comments=0,
+                    url='https://example.invalid/%s' % ident)
+ 
+ 
+-def fetcher_for(result, source='stocktwits'):
++def fetcher_for(result, source='bluesky'):
+     def fetcher(since):
+         return result
+     return {source: fetcher}
+ 
+ 
+ def test_a_post_becomes_a_mention_and_a_bucket(seeded):
+     result = ingest.run_cycle(
+         NOW, fetcher_for(FetchResult(posts=[post()], status='ok')))
+ 
+     assert result['posts_new'] == 1
+@@ -116,39 +116,39 @@ def test_a_deleted_post_loses_its_text_but_keeps_its_counts(seeded):
+         stored = RadarPost.query.filter_by(external_id='t3_1').one()
+         assert stored.body == ''
+         assert RadarMention.query.filter_by(post_id=stored.id).count() == 1
+         assert RadarBucket.query.filter_by(ticker='ZZG').one().mention_count == 1
+ 
+ 
+ def test_a_missing_source_writes_nothing_at_all(seeded):
+     result = ingest.run_cycle(
+         NOW, fetcher_for(FetchResult(posts=[], status='missing')))
+ 
+-    assert result['per_source'] == {'stocktwits': 'missing'}
++    assert result['per_source'] == {'bluesky': 'missing'}
+     assert result['buckets_written'] == 0
+     with flask_app.app_context():
+         assert RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).count() == 0
+ 
+ 
+ def test_a_truncated_cycle_still_stores_its_mentions(seeded):
+     result = ingest.run_cycle(
+         NOW, fetcher_for(FetchResult(posts=[post()], status='truncated',
+                                      catchup_depth=10)))
+ 
+-    assert result['per_source'] == {'stocktwits': 'truncated'}
+-    assert result['catchup_depth'] == {'stocktwits': 10}
++    assert result['per_source'] == {'bluesky': 'truncated'}
++    assert result['catchup_depth'] == {'bluesky': 10}
+     with flask_app.app_context():
+         bucket = RadarBucket.query.filter_by(ticker='ZZG').one()
+         assert bucket.mention_count == 1
+         from models import RadarBucketSource
+         assert RadarBucketSource.query.filter_by(
+-            ticker='ZZG', source='stocktwits').one().status == 'truncated'
++            ticker='ZZG', source='bluesky').one().status == 'truncated'
+ 
+ 
+ def test_posts_with_no_recognizable_ticker_are_not_stored_at_all(seeded):
+     """Bluesky is 144k posts/hour and almost none are about stocks. Storing
+     everything and extracting later would be 100 million rows a month to find
+     the quarter-million that matter, so extraction runs first and a post that
+     mentions nothing is never written."""
+     result = ingest.run_cycle(
+         NOW,
+         fetcher_for(FetchResult(posts=[post(body='market feels weird today')],
+@@ -162,89 +162,94 @@ def test_posts_with_no_recognizable_ticker_are_not_stored_at_all(seeded):
+ 
+ 
+ def test_the_cursor_advances_even_when_nothing_was_stored(seeded):
+     """The cursor tracks what was SEEN, not what was KEPT. Inferring it from
+     stored rows would rewind every cycle and refetch the same window forever."""
+     ingest.run_cycle(
+         NOW,
+         fetcher_for(FetchResult(posts=[post(body='no tickers here', minute=12)],
+                                 status='ok')))
+     with flask_app.app_context():
+-        cursor = RadarSourceCursor.query.filter_by(source='stocktwits').one()
++        cursor = RadarSourceCursor.query.filter_by(source='bluesky').one()
+         assert cursor.cursor_utc == dt.datetime(2026, 4, 15, 14, 12, 0)
+ 
+ 
+ def test_since_advances_to_the_newest_post_seen(seeded):
+     captured = {}
+ 
+     def fetcher(since):
+         captured['since'] = since
+         return FetchResult(posts=[post(minute=10)], status='ok')
+ 
+-    ingest.run_cycle(NOW, {'stocktwits': fetcher})
+-    ingest.run_cycle(NOW, {'stocktwits': fetcher})
++    ingest.run_cycle(NOW, {'bluesky': fetcher})
++    ingest.run_cycle(NOW, {'bluesky': fetcher})
+     assert captured['since'] == dt.datetime(2026, 4, 15, 14, 10, 0)
+ 
+ 
+ def test_two_sources_ingest_in_one_cycle(seeded):
+-    def st(since):
+-        return FetchResult(posts=[post(ident='st1', body='$ZZG up')], status='ok')
++    def rd(since):
++        return FetchResult(
++            posts=[post(ident='st1', body='$ZZG up', source='reddit')],
++            status='ok')
+ 
+     def bs(since):
+         p = post(ident='bs1', body='$ZZG up')
+         p.source = 'bluesky'
+         return FetchResult(posts=[p], status='ok')
+ 
+-    result = ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
++    result = ingest.run_cycle(NOW, {'reddit': rd, 'bluesky': bs})
+     assert result['posts_new'] == 2
+-    assert result['per_source'] == {'stocktwits': 'ok', 'bluesky': 'ok'}
++    assert result['per_source'] == {'reddit': 'ok', 'bluesky': 'ok'}
+     with flask_app.app_context():
+         from models import RadarBucketSource
+         sources = {r.source for r in
+                    RadarBucketSource.query.filter_by(ticker='ZZG').all()}
+-        assert sources == {'stocktwits', 'bluesky'}
++        assert sources == {'reddit', 'bluesky'}
+ 
+ 
+ def test_one_source_failing_does_not_stop_the_other(seeded):
+     """The entire reason status is per source. A dead Bluesky must not cost a
+-    healthy StockTwits cycle, and must not write a zero for itself."""
+-    def st(since):
+-        return FetchResult(posts=[post(ident='st1', body='$ZZG up')], status='ok')
++    healthy Reddit cycle, and must not write a zero for itself."""
++    def rd(since):
++        return FetchResult(
++            posts=[post(ident='st1', body='$ZZG up', source='reddit')],
++            status='ok')
+ 
+     def bs(since):
+         return FetchResult(posts=[], status='missing')
+ 
+-    result = ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
+-    assert result['per_source'] == {'stocktwits': 'ok', 'bluesky': 'missing'}
++    result = ingest.run_cycle(NOW, {'reddit': rd, 'bluesky': bs})
++    assert result['per_source'] == {'reddit': 'ok', 'bluesky': 'missing'}
+     with flask_app.app_context():
+         from models import RadarBucketSource
+         rows = {r.source: r.status for r in
+                 RadarBucketSource.query.filter_by(ticker='ZZG').all()}
+-        assert rows == {'stocktwits': 'ok'}
++        assert rows == {'reddit': 'ok'}
+ 
+ 
+ def test_each_source_keeps_its_own_cursor(seeded):
+     """One source catching up must not drag the others back over ground they
+     already covered."""
+-    def st(since):
+-        return FetchResult(posts=[post(ident='st1', body='$ZZG', minute=10)],
+-                           status='ok')
++    def rd(since):
++        return FetchResult(
++            posts=[post(ident='st1', body='$ZZG', minute=10, source='reddit')],
++            status='ok')
+ 
+     def bs(since):
+         p = post(ident='bs1', body='$ZZG', minute=18)
+         p.source = 'bluesky'
+         return FetchResult(posts=[p], status='ok')
+ 
+-    ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
++    ingest.run_cycle(NOW, {'reddit': rd, 'bluesky': bs})
+     with flask_app.app_context():
+         cursors = {c.source: c.cursor_utc for c in RadarSourceCursor.query.all()}
+-    assert cursors['stocktwits'] == dt.datetime(2026, 4, 15, 14, 10, 0)
++    assert cursors['reddit'] == dt.datetime(2026, 4, 15, 14, 10, 0)
+     assert cursors['bluesky'] == dt.datetime(2026, 4, 15, 14, 18, 0)
+ 
+ 
+ def test_the_same_post_twice_in_one_batch_is_stored_once(seeded):
+     """A StockTwits message tagged $ZZG and $OTHER is returned by both symbol
+     streams, so one cycle sees the same external_id twice. Found in live data,
+     not in tests -- every fixture until now used distinct ids."""
+     duplicate = [post(ident='dup1', body='$ZZG and more'),
+                  post(ident='dup1', body='$ZZG and more')]
+     result = ingest.run_cycle(
+@@ -294,59 +299,62 @@ def test_a_low_is_still_promoted_by_a_stored_high(seeded):
+ 
+ def test_an_unexpected_source_error_does_not_kill_the_cycle(seeded):
+     """A missing dependency once took down a whole live cycle -- StockTwits and
+     4chan included -- because ModuleNotFoundError is not the exception type the
+     Bluesky module declares. Sources fail in ways they never anticipated, so
+     the isolation has to be broad."""
+     def exploding(since):
+         raise ModuleNotFoundError("No module named 'websockets'")
+ 
+     def healthy(since):
+-        return FetchResult(posts=[post(ident='ok1', body='$ZZG up')], status='ok')
++        return FetchResult(
++            posts=[post(ident='ok1', body='$ZZG up', source='reddit')],
++            status='ok')
+ 
+-    result = ingest.run_cycle(NOW, {'bluesky': exploding, 'stocktwits': healthy})
++    result = ingest.run_cycle(NOW, {'bluesky': exploding, 'reddit': healthy})
+ 
+-    assert result['per_source'] == {'bluesky': 'missing', 'stocktwits': 'ok'}
++    assert result['per_source'] == {'bluesky': 'missing', 'reddit': 'ok'}
+     assert result['mentions'] == 1
+     with flask_app.app_context():
+         from models import RadarBucketSource
+         rows = {r.source for r in RadarBucketSource.query.filter_by(ticker='ZZG')}
+-        assert rows == {'stocktwits'}   # no bluesky row, and no zero
++        assert rows == {'reddit'}   # no bluesky row, and no zero
+ 
+ 
+ def test_a_coin_collision_is_dropped_on_a_general_source(seeded, monkeypatch):
+     """$BCH on Bluesky means Bitcoin Cash, not Banco de Chile.
+ 
+     ZZG stands in for a coin-shaped symbol so the test does not depend on
+     which real tickers happen to collide this year.
+     """
+     from features.radar import config
+     monkeypatch.setattr(config, 'COIN_COLLISION_SYMBOLS', frozenset({'ZZG'}))
+ 
+     p = post(ident='bs_coin', body='$ZZG pumping')
+     p.source = 'bluesky'
+     result = ingest.run_cycle(
+         NOW, {'bluesky': lambda s: FetchResult(posts=[p], status='ok')})
+     assert result['mentions'] == 0
+ 
+ 
+-def test_the_same_symbol_still_counts_on_a_finance_source(seeded, monkeypatch):
+-    """On StockTwits the population is discussing equities, so the company
+-    reading is the right one."""
++def test_a_source_can_opt_into_reading_coin_symbols_as_companies(seeded,
++                                                                  monkeypatch):
++    """The extension point, kept alive with no live source using it.
++
++    StockTwits was the only population where $LINK meant Interlink. It is
++    retired; this pins that a future finance-native source can still opt in,
++    rather than the map quietly becoming a constant nobody can override.
++    """
+     from features.radar import config
+-    monkeypatch.setattr(config, 'COIN_COLLISION_SYMBOLS', frozenset({'ZZG'}))
+ 
+-    p = post(ident='st_coin', body='$ZZG pumping')
+-    p.source = 'stocktwits'
+-    result = ingest.run_cycle(
+-        NOW, {'stocktwits': lambda s: FetchResult(posts=[p], status='ok')})
+-    assert result['mentions'] == 1
++    monkeypatch.setitem(config.COIN_SYMBOLS_MEAN_STOCKS, 'bluesky', True)
++    assert config.coin_collision_dropped('bluesky', 'LINK') is False
+ 
+ 
+ # --- Automated feeds, wired in 2026-08-25 -----------------------------------
+ #
+ # config.looks_like_bot_feed (was looks_like_exchange_bot) had been defined
+ # since 2026-08-22 and hashed into source_config_version, and called by
+ # NOTHING. The pattern was written and then never reached the pipeline, which
+ # is a defect shaped like an absence: the board looked normal, it just counted
+ # machines.
+ 
+@@ -391,16 +399,31 @@ def test_a_single_letter_cashtag_is_refused_on_a_general_network():
+     config.SINGLE_LETTER_CASHTAGS has said so since it was written; nothing
+     passed it to the extractor until now, and 353 such mentions reached the
+     production corpus, 3.0% of the whole high-confidence set.
+     """
+     from features.radar import ingest
+ 
+     lookup = {'B': {'name': 'Barnes Group Inc.', 'exchange': 'NYSE',
+                     'distinctive': set()}}
+     general = post(ident='zz-single', body='make $B and youre set',
+                    source='bluesky')
+-    finance = post(ident='zz-single-2', body='make $B and youre set',
+-                   source='stocktwits')
+ 
+     assert ingest._extract_for(general, lookup) == []
+-    # The same text on a finance-native population still yields the company.
++
++
++def test_a_source_can_opt_into_single_letter_cashtags(monkeypatch):
++    """The extension point, kept alive with no live source using it.
++
++    StockTwits was the only population where a bare `$B` was worth reading as
++    Barnes Group rather than money shorthand. It is retired; this pins that a
++    future finance-native source can still opt in, rather than the map
++    quietly becoming a constant nobody can override.
++    """
++    from features.radar import config, ingest
++
++    monkeypatch.setitem(config.SINGLE_LETTER_CASHTAGS, 'bluesky', True)
++    lookup = {'B': {'name': 'Barnes Group Inc.', 'exchange': 'NYSE',
++                    'distinctive': set()}}
++    finance = post(ident='zz-single-2', body='make $B and youre set',
++                   source='bluesky')
++
+     assert ingest._extract_for(finance, lookup) == [('B', 'high')]
+diff --git a/personal_apps/tests/test_radar_journal.py b/personal_apps/tests/test_radar_journal.py
+index 2e673b2..b9d2db9 100644
+--- a/personal_apps/tests/test_radar_journal.py
++++ b/personal_apps/tests/test_radar_journal.py
+@@ -207,53 +207,53 @@ def test_a_fifth_bare_mention_revokes_the_buckets_prior_promotions(
+ 
+ 
+ def test_a_down_sources_mentions_never_reach_the_journal(clean_buckets, clean_events):
+     """The corollary of 'an absence is never a zero' (buckets.py's module
+     docstring): a fabricated count from a source that was actually down would
+     poison that source's own baseline the moment it recovers.
+ 
+     roll_up must journal only `usable` (this cycle's rows filtered to
+     countable sources), never `rows` (everything handed to it, missing
+     sources included). Reviewer's mutation swapped one for the other: a cycle
+-    reporting `{'bluesky': 'ok', 'stocktwits': 'missing'}` still journalled
+-    the stocktwits row, and the NEXT cycle -- once stocktwits reports 'ok'
++    reporting `{'bluesky': 'ok', 'reddit': 'missing'}` still journalled
++    the reddit row, and the NEXT cycle -- once reddit reports 'ok'
+     again -- rebuilds from the journal and folds that leaked row into a brand
+-    new RadarBucketSource stamped status='ok', exactly as if stocktwits had
++    new RadarBucketSource stamped status='ok', exactly as if reddit had
+     been up the whole time.
+     """
+     from features.radar import buckets
+     from models import RadarBucketSource
+ 
+     start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
+ 
+-    # Cycle 1: stocktwits is down but still handed roll_up a row (a fetch
++    # Cycle 1: reddit is down but still handed roll_up a row (a fetch
+     # that parsed a post before the failure was detected, or a source whose
+     # cursor moved before its client raised). bluesky is up, so `countable`
+     # is non-empty and roll_up does not return 0 before reaching journal.record.
+     buckets.roll_up(
+-        [_row(external_id='zz-down', source='stocktwits', author='u1',
++        [_row(external_id='zz-down', source='reddit', author='u1',
+              simhash=1, minute=3),
+          _row(external_id='zz-a', source='bluesky', author='u2',
+              simhash=2, minute=3)],
+-        {'bluesky': 'ok', 'stocktwits': 'missing'}, start)
++        {'bluesky': 'ok', 'reddit': 'missing'}, start)
+ 
+-    # Cycle 2: stocktwits has recovered and contributes nothing new itself.
++    # Cycle 2: reddit has recovered and contributes nothing new itself.
+     # bluesky activity in the same window still forces a full rebuild of it,
+     # which re-reads everything the journal is holding for (ZZA, 14:00).
+     buckets.roll_up(
+         [_row(external_id='zz-b', source='bluesky', author='u3',
+              simhash=3, minute=5)],
+-        {'bluesky': 'ok', 'stocktwits': 'ok'}, start)
++        {'bluesky': 'ok', 'reddit': 'ok'}, start)
+ 
+-    stocktwits_row = RadarBucketSource.query.filter_by(
+-        ticker='ZZA', source='stocktwits').one()
+-    assert stocktwits_row.mention_count == 0
++    reddit_row = RadarBucketSource.query.filter_by(
++        ticker='ZZA', source='reddit').one()
++    assert reddit_row.mention_count == 0
+ 
+ 
+ def test_bootstrap_recovers_retained_mentions_with_field_fidelity(
+         clean_events, clean_retained_mentions):
+     """bootstrap_from_mentions carries no ticker filter -- production has to
+     recover EVERY retained decision in the window, not one ticker's -- so
+     unlike the rest of this file it cannot lean on ZZ-namespacing alone for
+     isolation. The dev database seeds 1432 real RadarPost x RadarMention rows
+     dated before this test's 2027-06-01 window. This future window stays clear
+     of all real and seeded rows while preserving the same bootstrap behaviour.
+diff --git a/personal_apps/tests/test_radar_profile.py b/personal_apps/tests/test_radar_profile.py
+index 6b9361c..c392232 100644
+--- a/personal_apps/tests/test_radar_profile.py
++++ b/personal_apps/tests/test_radar_profile.py
+@@ -1,18 +1,18 @@
+ # personal_apps/tests/test_radar_profile.py
+ """What a normal bucket looks like, per source.
+ 
+ Chatter has a strong weekly shape, and comparing 03:00 Sunday against 15:00
+ Tuesday as one population makes every weekday afternoon a spike. The profile is
+ what removes that shape before anything is called unusual.
+ 
+-Per source, not market-wide: StockTwits follows US market hours, Bluesky is
++Per source, not market-wide: Reddit follows US market hours, Bluesky is
+ global and diurnal, /biz/ runs around the clock. One shared profile would tell
+ Bluesky to expect silence when half its users are awake.
+ """
+ import datetime as dt
+ 
+ import pytest
+ 
+ from app import app as flask_app
+ from extensions import db
+ from models import RadarBucketSource
+@@ -54,91 +54,91 @@ def test_bucket_of_week_advances_every_fifteen_minutes():
+ 
+ 
+ def test_bucket_of_week_wraps_after_a_week():
+     assert profile.bucket_of_week(MONDAY + dt.timedelta(days=7)) == 0
+     assert profile.bucket_of_week(
+         MONDAY + dt.timedelta(days=6, hours=23, minutes=45)) == 671
+ 
+ 
+ def test_a_profile_sums_to_one(buckets):
+     for hour in (2, 14, 20):
+-        add('stocktwits', MONDAY + dt.timedelta(hours=hour), count=hour)
++        add('bluesky', MONDAY + dt.timedelta(hours=hour), count=hour)
+     db.session.commit()
+-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
++    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
+                                   source_config_version())
+     assert sum(built.values()) == pytest.approx(1.0)
+ 
+ 
+ def test_busy_buckets_get_a_larger_share(buckets):
+-    add('stocktwits', MONDAY + dt.timedelta(hours=14), count=100)
+-    add('stocktwits', MONDAY + dt.timedelta(hours=3), count=1)
++    add('bluesky', MONDAY + dt.timedelta(hours=14), count=100)
++    add('bluesky', MONDAY + dt.timedelta(hours=3), count=1)
+     db.session.commit()
+-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
++    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
+                                   source_config_version())
+     busy = profile.hour_share(built, MONDAY + dt.timedelta(hours=14))
+     quiet = profile.hour_share(built, MONDAY + dt.timedelta(hours=3))
+     assert busy > quiet * 10
+ 
+ 
+ def test_every_bucket_has_a_nonzero_share(buckets):
+     """Smoothing is load-bearing. A share of zero makes expected zero, and any
+     observation against it is an infinite z -- so one quiet hour in the sample
+     window would manufacture a spike there forever after."""
+-    add('stocktwits', MONDAY + dt.timedelta(hours=14), count=50)
++    add('bluesky', MONDAY + dt.timedelta(hours=14), count=50)
+     db.session.commit()
+-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
++    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
+                                   source_config_version())
+     assert len(built) == 672
+     assert all(share > 0 for share in built.values())
+ 
+ 
+ def test_profiles_are_per_source(buckets):
+-    """StockTwits peaks in the US session; a 24/7 source does not. Sharing one
++    """Reddit peaks in the US session; a 24/7 source does not. Sharing one
+     profile would read half of Bluesky's normal traffic as unusual."""
+-    add('stocktwits', MONDAY + dt.timedelta(hours=14), count=100)
++    add('reddit', MONDAY + dt.timedelta(hours=14), count=100)
+     add('bluesky', MONDAY + dt.timedelta(hours=3), count=100)
+     db.session.commit()
+     version = source_config_version()
+-    st = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
++    rd = profile.build_profile('reddit', MONDAY + dt.timedelta(days=1),
+                                version)
+     bs = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1), version)
+-    assert profile.hour_share(st, MONDAY + dt.timedelta(hours=14)) > \
++    assert profile.hour_share(rd, MONDAY + dt.timedelta(hours=14)) > \
+         profile.hour_share(bs, MONDAY + dt.timedelta(hours=14))
+ 
+ 
+ def test_missing_and_truncated_buckets_are_ignored(buckets):
+     """A source that was down did not observe a quiet hour. Counting the gap
+     would bend the profile towards silence at exactly the wrong times."""
+-    add('stocktwits', MONDAY + dt.timedelta(hours=14), count=100)
+-    add('stocktwits', MONDAY + dt.timedelta(hours=15), count=0, status='missing')
+-    add('stocktwits', MONDAY + dt.timedelta(hours=16), count=5, status='truncated')
++    add('bluesky', MONDAY + dt.timedelta(hours=14), count=100)
++    add('bluesky', MONDAY + dt.timedelta(hours=15), count=0, status='missing')
++    add('bluesky', MONDAY + dt.timedelta(hours=16), count=5, status='truncated')
+     db.session.commit()
+-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
++    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
+                                   source_config_version())
+     fifteen = profile.hour_share(built, MONDAY + dt.timedelta(hours=15))
+     sixteen = profile.hour_share(built, MONDAY + dt.timedelta(hours=16))
+     # Both fall back to the smoothing floor, and are equal because neither
+     # contributed an observation.
+     assert fifteen == pytest.approx(sixteen)
+ 
+ 
+ def test_an_empty_history_gives_a_flat_profile(buckets):
+     """Day one. Flat means "no idea yet", which is the honest prior and cannot
+     on its own make anything look unusual."""
+-    built = profile.build_profile('stocktwits', MONDAY, source_config_version())
++    built = profile.build_profile('bluesky', MONDAY, source_config_version())
+     assert len(built) == 672
+     assert len(set(round(v, 12) for v in built.values())) == 1
+ 
+ 
+ def test_a_profile_uses_only_its_exact_config_generation(buckets):
+     current = source_config_version()
+     old_slot = MONDAY + dt.timedelta(hours=3)
+     current_slot = MONDAY + dt.timedelta(hours=14)
+-    add('stocktwits', old_slot, count=10_000, ticker='PPO', version='old-version')
+-    add('stocktwits', current_slot, count=100, ticker='PPC', version=current)
++    add('bluesky', old_slot, count=10_000, ticker='PPO', version='old-version')
++    add('bluesky', current_slot, count=100, ticker='PPC', version=current)
+     db.session.commit()
+ 
+-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
++    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
+                                   current)
+ 
+     assert profile.hour_share(built, current_slot) > \
+         profile.hour_share(built, old_slot) * 10
+diff --git a/personal_apps/tests/test_radar_reddit.py b/personal_apps/tests/test_radar_reddit.py
+index a2fe0c7..5c12bcf 100644
+--- a/personal_apps/tests/test_radar_reddit.py
++++ b/personal_apps/tests/test_radar_reddit.py
+@@ -260,23 +260,23 @@ def test_an_empty_feed_is_quiet_rather_than_broken():
+     client = FakeClient({'x': feed([])})
+ 
+     posts, status, rate = reddit.fetch_one('x', NOW - dt.timedelta(hours=1), client)
+ 
+     assert posts == [] and status == 'ok' and rate == 0.0
+ 
+ 
+ def test_every_configured_subreddit_fits_the_column_it_is_stored_in():
+     """The bug this suite did not catch, 2026-08-24.
+ 
+-    Reddit reuses the StockTwits poll scheduler with the SUBREDDIT as the
+-    polled unit, and `radar_poll_state.symbol` was String(12) because
+-    everything it had ever held was a ticker. Six of the eighteen names are
++    Reddit reuses the same poll scheduler every polled source shares, with the
++    SUBREDDIT as the polled unit, and `radar_poll_state.symbol` was String(12)
++    because everything it had ever held was a ticker. Six of the eighteen names are
+     longer -- `RobinHoodPennyStocks` is 20 -- so `ensure_tracked` failed the
+     whole batch insert on the daemon's first cycle and the source silently
+     produced nothing at all.
+ 
+     Asserted against the column rather than a literal, so widening the column
+     moves this test with it and adding a longer subreddit fails here instead
+     of in a log at 23:41.
+     """
+     from features.radar.config import REDDIT_SUBS
+     from models import RadarPollState
+diff --git a/personal_apps/tests/test_radar_scheduling.py b/personal_apps/tests/test_radar_scheduling.py
+index f699e1c..419992f 100644
+--- a/personal_apps/tests/test_radar_scheduling.py
++++ b/personal_apps/tests/test_radar_scheduling.py
+@@ -193,28 +193,29 @@ def test_a_dropped_subreddit_stops_being_polled(ctx):
+     scheduling.ensure_tracked('testsource', ['ZZA', 'ZZB'], NOW)
+ 
+     retired = scheduling.retire_untracked('testsource', ['ZZA'])
+ 
+     assert retired == 1
+     assert scheduling.due_symbols('testsource', NOW, limit=10) == ['ZZA']
+ 
+ 
+ def test_retiring_leaves_other_sources_alone(ctx):
+     """One shared table, one row per (source, symbol). A reddit list edit must
+-    not reach into StockTwits' state."""
++    not reach into another source's state."""
+     scheduling.ensure_tracked('testsource', ['ZZA'], NOW)
+     scheduling.ensure_tracked('othersource2', ['ZZB'], NOW)
+ 
+     scheduling.retire_untracked('testsource', [])
+ 
+     assert scheduling.due_symbols('othersource2', NOW, limit=10) == ['ZZB']
+ 
+ 
+ def test_retiring_nothing_is_not_retiring_everything(ctx):
+     """The empty-list trap. `symbols` empty has to mean "this source tracks
+     nothing", but an accidental empty config would then wipe live state -- so
+     the caller that owns a fixed list is the only one allowed to call this,
+-    and StockTwits, whose hot set legitimately empties, never does."""
++    and a source whose tracked set is a rolling window -- which legitimately
++    empties -- must never call it."""
+     scheduling.ensure_tracked('testsource', ['ZZA', 'ZZB'], NOW)
+ 
+     assert scheduling.retire_untracked('testsource', ['ZZA', 'ZZB']) == 0
+     assert len(scheduling.due_symbols('testsource', NOW, limit=10)) == 2
+diff --git a/personal_apps/tests/test_radar_scoring.py b/personal_apps/tests/test_radar_scoring.py
+index a2bf19f..756e025 100644
+--- a/personal_apps/tests/test_radar_scoring.py
++++ b/personal_apps/tests/test_radar_scoring.py
+@@ -31,31 +31,31 @@ def _clear_owned_rows():
+ 
+ 
+ @pytest.fixture()
+ def rows():
+     with flask_app.app_context():
+         _clear_owned_rows()
+         yield
+         _clear_owned_rows()
+ 
+ 
+-def add(when, count, ticker='SSA', source='stocktwits', status='ok',
++def add(when, count, ticker='SSA', source='bluesky', status='ok',
+         version=None):
+     db.session.add(RadarBucketSource(
+         ticker=ticker, bucket_start=when, source=source,
+         mention_count=count, high_confidence_count=count, low_count=0,
+         distinct_authors=count, distinct_text_ratio=1.0,
+         engagement_weighted_count=float(count), status=status,
+         source_config_version=version or source_config_version()))
+ 
+ 
+-def steady_history(ticker='SSA', per_bucket=2, days=30, source='stocktwits'):
++def steady_history(ticker='SSA', per_bucket=2, days=30, source='bluesky'):
+     """A boringly consistent ticker, so anything unusual is the test's doing.
+ 
+     2880 rows at 15-minute grain. Added to the session and committed once by
+     the caller -- committing per row makes this suite take minutes.
+     """
+     for step in range(days * 96):
+         add(MONDAY + dt.timedelta(minutes=15 * step), per_bucket,
+             ticker=ticker, source=source)
+ 
+ 
+@@ -75,276 +75,276 @@ def test_row_cleanup_preserves_an_unowned_zz_sentinel():
+             assert RadarBucketSource.query.filter_by(ticker=sentinel).count() == 1
+         finally:
+             RadarBucketSource.query.filter_by(ticker=sentinel).delete(
+                 synchronize_session=False)
+             db.session.commit()
+ 
+ 
+ def test_a_normal_bucket_scores_near_zero(rows):
+     steady_history()
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+ 
+     row = RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=10)).one()
+     assert row.mention_z is not None
+     assert abs(row.mention_z) < 2
+ 
+ 
+ def test_a_spike_scores_high(rows):
+     steady_history()
+     loud = MONDAY + dt.timedelta(days=20)
+     db.session.commit()
+     RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=loud).update(
+         {'mention_count': 60})
+     db.session.commit()
+ 
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+     assert RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=loud).one().mention_z > 5
+ 
+ 
+ def test_expected_and_variance_are_stored_too(rows):
+     """Pooling a user-selected subset means summing components, so the parts
+     have to survive, not just the z (spec 6.2)."""
+     steady_history()
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+ 
+     row = RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=10)).one()
+     assert row.expected > 0
+     assert row.variance >= row.expected
+ 
+ 
+ def test_missing_buckets_are_never_scored(rows):
+     """A source that was down has nothing to be surprised about."""
+     steady_history()
+     gap = MONDAY + dt.timedelta(days=12)
+     db.session.commit()
+     RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=gap).update(
+         {'status': 'missing', 'mention_count': 0})
+     db.session.commit()
+ 
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+     assert RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=gap).one().mention_z is None
+ 
+ 
+ def test_a_gap_does_not_depress_the_baseline(rows):
+     """The observed-mass property, end to end. A week of outage must not make
+     the ticker look like it went quiet, or everything after would spike."""
+     steady_history()
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+     reference = RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=25)).one().mention_z
+ 
+     outage_start = MONDAY + dt.timedelta(days=5)
+     RadarBucketSource.query.filter(
+         RadarBucketSource.ticker == 'SSA',
+         RadarBucketSource.bucket_start >= outage_start,
+         RadarBucketSource.bucket_start < outage_start + dt.timedelta(days=7)
+     ).update({'status': 'missing', 'mention_count': 0}, synchronize_session=False)
+     db.session.commit()
+ 
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+     after = RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=25)).one().mention_z
+     assert after == pytest.approx(reference, abs=0.5)
+ 
+ 
+ def test_baseline_days_is_recorded(rows):
+     steady_history(days=30)
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+     row = RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=10)).one()
+     assert row.baseline_days >= 14
+ 
+ 
+ def test_a_brand_new_ticker_is_provisional(rows):
+     """Two days of history cannot support a z-score anyone should act on."""
+     for step in range(2 * 96):
+         add(NOW - dt.timedelta(days=2) + dt.timedelta(minutes=15 * step), 3,
+             ticker='SSNEW')
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+ 
+     row = (RadarBucketSource.query.filter_by(ticker='SSNEW')
+            .order_by(RadarBucketSource.bucket_start.desc()).first())
+     assert row.baseline_days < 14
+ 
+ 
+ def test_scoring_only_touches_its_own_source(rows):
+-    steady_history(source='stocktwits')
+-    steady_history(ticker='SSB', source='bluesky')
++    steady_history(source='bluesky')
++    steady_history(ticker='SSB', source='reddit')
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+ 
+     assert RadarBucketSource.query.filter_by(
+-        ticker='SSB', source='bluesky').first().mention_z is None
++        ticker='SSB', source='reddit').first().mention_z is None
+ 
+ 
+ def test_scoring_passes_the_current_generation_to_the_profile(rows,
+                                                                monkeypatch):
+     steady_history()
+     db.session.commit()
+     seen = {}
+     real_build_profile = scoring.profile.build_profile
+ 
+     def watched_build_profile(source, until, config_version, **kwargs):
+         seen['version'] = config_version
+         return real_build_profile(source, until, config_version, **kwargs)
+ 
+     monkeypatch.setattr(scoring.profile, 'build_profile', watched_build_profile)
+ 
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+ 
+     assert seen['version'] == source_config_version()
+ 
+ 
+ def test_scoring_clears_old_and_sql_null_scores_inside_its_lookback(rows):
+     steady_history()
+     scored_at = NOW - dt.timedelta(days=1)
+     for ticker, version in (('SSOLD', 'old-generation'), ('SSNULL', None)):
+         db.session.add(RadarBucketSource(
+-            ticker=ticker, bucket_start=scored_at, source='stocktwits',
++            ticker=ticker, bucket_start=scored_at, source='bluesky',
+             mention_count=9, high_confidence_count=9, low_count=0,
+             distinct_authors=9, distinct_text_ratio=1.0,
+             engagement_weighted_count=9.0, status='ok',
+             source_config_version=version, expected=3.0, variance=4.0,
+             mention_z=3.0, baseline_days=20))
+     db.session.commit()
+ 
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+ 
+     incompatible = (RadarBucketSource.query
+                     .filter(RadarBucketSource.ticker.in_(['SSOLD', 'SSNULL']))
+                     .order_by(RadarBucketSource.ticker).all())
+     assert len(incompatible) == 2
+     for row in incompatible:
+         assert row.expected is None
+         assert row.variance is None
+         assert row.mention_z is None
+         assert row.baseline_days is None
+ 
+ 
+ def test_scoring_never_rescores_an_old_generation_row_mixed_with_current_history(rows):
+     """A current baseline must not make an incompatible row look current."""
+     steady_history(ticker='ZZGEN')
+     old_at = NOW - dt.timedelta(minutes=15)
+     add(old_at, 500, ticker='ZZGEN', version='old-generation')
+     db.session.commit()
+ 
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+ 
+     old = RadarBucketSource.query.filter_by(
+-        ticker='ZZGEN', bucket_start=old_at, source='stocktwits').one()
++        ticker='ZZGEN', bucket_start=old_at, source='bluesky').one()
+     assert old.mention_z is None
+ 
+ 
+ def test_invalidation_skips_an_already_unscored_incompatible_row(rows):
+     since = NOW - dt.timedelta(days=1)
+     for ticker, score in (('ZZSCORED', 3.0), ('ZZUNSCORED', None)):
+         db.session.add(RadarBucketSource(
+             ticker=ticker, bucket_start=NOW - dt.timedelta(hours=1),
+-            source='stocktwits', mention_count=5, high_confidence_count=5,
++            source='bluesky', mention_count=5, high_confidence_count=5,
+             low_count=0, distinct_authors=5, distinct_text_ratio=1.0,
+             engagement_weighted_count=5.0, status='ok',
+             source_config_version='old-generation', expected=2.0 if score else None,
+             variance=3.0 if score else None, mention_z=score,
+             baseline_days=10 if score else None))
+     db.session.commit()
+ 
+     cleared = scoring.invalidate_incompatible_scores(
+         source_config_version(), since)
+ 
+     assert cleared == 1
+     assert RadarBucketSource.query.filter_by(ticker='ZZUNSCORED').one().mention_z is None
+ 
+ 
+ def test_scoring_invalidates_only_its_active_source(rows):
+     since = NOW - dt.timedelta(hours=1)
+-    for source in ('stocktwits', 'bluesky'):
++    for source in ('reddit', 'bluesky'):
+         db.session.add(RadarBucketSource(
+             ticker='ZZSCOPE', bucket_start=NOW - dt.timedelta(minutes=15),
+             source=source, mention_count=5, high_confidence_count=5,
+             low_count=0, distinct_authors=5, distinct_text_ratio=1.0,
+             engagement_weighted_count=5.0, status='ok',
+             source_config_version='old-generation', expected=2.0, variance=3.0,
+             mention_z=3.0, baseline_days=10))
+     db.session.commit()
+ 
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('reddit', NOW)
+ 
+     assert RadarBucketSource.query.filter_by(
+-        ticker='ZZSCOPE', source='stocktwits').one().mention_z is None
++        ticker='ZZSCOPE', source='reddit').one().mention_z is None
+     assert RadarBucketSource.query.filter_by(
+         ticker='ZZSCOPE', source='bluesky').one().mention_z == 3.0
+ 
+ 
+ def test_pooling_sums_components_not_z_scores(rows):
+     """A weighted mean of z-scores is not a z-score. Two sources each two
+     sigma over is stronger evidence than either alone, and averaging would
+     report the same two."""
+-    for source in ('stocktwits', 'bluesky'):
++    for source in ('reddit', 'bluesky'):
+         steady_history(source=source)
+     loud = MONDAY + dt.timedelta(days=20)
+     db.session.commit()
+     RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=loud).update(
+         {'mention_count': 12})
+     db.session.commit()
+ 
+-    for source in ('stocktwits', 'bluesky'):
++    for source in ('reddit', 'bluesky'):
+         scoring.score_source(source, NOW)
+ 
+-    single, n_single = scoring.pooled_z('SSA', loud, ['stocktwits'])
+-    both, n_both = scoring.pooled_z('SSA', loud, ['stocktwits', 'bluesky'])
++    single, n_single = scoring.pooled_z('SSA', loud, ['reddit'])
++    both, n_both = scoring.pooled_z('SSA', loud, ['reddit', 'bluesky'])
+     assert n_single == 1 and n_both == 2
+     assert both > single
+ 
+ 
+ def test_pooling_ignores_unselected_sources(rows):
+-    for source in ('stocktwits', 'bluesky'):
++    for source in ('reddit', 'bluesky'):
+         steady_history(source=source)
+     when = MONDAY + dt.timedelta(days=10)
+     db.session.commit()
+-    for source in ('stocktwits', 'bluesky'):
++    for source in ('reddit', 'bluesky'):
+         scoring.score_source(source, NOW)
+ 
+     _, n = scoring.pooled_z('SSA', when, ['bluesky'])
+     assert n == 1
+ 
+ 
+ def test_a_missing_source_drops_out_rather_than_contributing_zero(rows):
+     """The rule, at read time. A source that was down must not drag the pooled
+     reading towards nothing."""
+-    for source in ('stocktwits', 'bluesky'):
++    for source in ('reddit', 'bluesky'):
+         steady_history(source=source)
+     when = MONDAY + dt.timedelta(days=10)
+     db.session.commit()
+     RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=when, source='bluesky').update(
+         {'status': 'missing', 'mention_count': 0})
+     db.session.commit()
+-    for source in ('stocktwits', 'bluesky'):
++    for source in ('reddit', 'bluesky'):
+         scoring.score_source(source, NOW)
+ 
+-    pooled, n = scoring.pooled_z('SSA', when, ['stocktwits', 'bluesky'])
+-    only, _ = scoring.pooled_z('SSA', when, ['stocktwits'])
++    pooled, n = scoring.pooled_z('SSA', when, ['reddit', 'bluesky'])
++    only, _ = scoring.pooled_z('SSA', when, ['reddit'])
+     assert n == 1
+     assert pooled == pytest.approx(only)
+ 
+ 
+ def test_pooling_nothing_returns_none(rows):
+-    assert scoring.pooled_z('SSNOPE', MONDAY, ['stocktwits']) == (None, 0)
++    assert scoring.pooled_z('SSNOPE', MONDAY, ['bluesky']) == (None, 0)
+ 
+ 
+ def _forum(mentions=10, voices=6, text_ratio=0.9):
+     return {'forum': scoring.Contribution(mentions, voices, text_ratio)}
+ 
+ 
+ def _broadcast(mentions=10, voices=2, text_ratio=0.9):
+     return {'broadcast': scoring.Contribution(mentions, voices, text_ratio)}
+ 
+ 
+@@ -396,48 +396,48 @@ def test_nothing_at_all_is_not_eligible():
+ 
+ 
+ def test_an_unknown_kind_is_judged_as_a_forum():
+     unknown = {'something-new': scoring.Contribution(10, 2, 0.9)}
+     assert scoring.is_eligible(unknown) is False
+ 
+ 
+ def test_a_window_aggregates_its_buckets(rows):
+     steady_history()
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
++    scoring.score_source('bluesky', NOW)
+     end = MONDAY + dt.timedelta(days=20)
+ 
+-    _, parts_1h = scoring.window_z('SSA', ['stocktwits'], end, hours=1)
+-    _, parts_4h = scoring.window_z('SSA', ['stocktwits'], end, hours=4)
++    _, parts_1h = scoring.window_z('SSA', ['bluesky'], end, hours=1)
++    _, parts_4h = scoring.window_z('SSA', ['bluesky'], end, hours=4)
+     assert parts_4h['mentions'] > parts_1h['mentions']
+     assert parts_4h['expected'] > parts_1h['expected']
+ 
+ 
+ def test_a_window_with_no_scored_buckets_is_none(rows):
+-    assert scoring.window_z('SSNOPE', ['stocktwits'], NOW, hours=1) == (None, {})
++    assert scoring.window_z('SSNOPE', ['bluesky'], NOW, hours=1) == (None, {})
+ 
+ 
+ def test_sustained_needs_several_non_overlapping_hours(rows):
+     """1h, 4h and 24h are nested, so one loud hour lifts all three and
+     "elevated in all three" would just restate it. Sustained is measured over
+     consecutive separate hours instead (spec 6.9)."""
+     steady_history()
+     end = MONDAY + dt.timedelta(days=20)
+     db.session.commit()
+ 
+     for step in range(4):                      # one loud hour only
+         RadarBucketSource.query.filter_by(
+             ticker='SSA',
+             bucket_start=end - dt.timedelta(minutes=15 * (step + 1))).update(
+             {'mention_count': 40})
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
+-    assert scoring.is_sustained('SSA', ['stocktwits'], end) is False
++    scoring.score_source('bluesky', NOW)
++    assert scoring.is_sustained('SSA', ['bluesky'], end) is False
+ 
+     for step in range(12):                     # three of the last four hours
+         RadarBucketSource.query.filter_by(
+             ticker='SSA',
+             bucket_start=end - dt.timedelta(minutes=15 * (step + 1))).update(
+             {'mention_count': 40})
+     db.session.commit()
+-    scoring.score_source('stocktwits', NOW)
+-    assert scoring.is_sustained('SSA', ['stocktwits'], end) is True
++    scoring.score_source('bluesky', NOW)
++    assert scoring.is_sustained('SSA', ['bluesky'], end) is True
+diff --git a/personal_apps/tests/test_radar_stocktwits.py b/personal_apps/tests/test_radar_stocktwits.py
+deleted file mode 100644
+index e5ffbab..0000000
+--- a/personal_apps/tests/test_radar_stocktwits.py
++++ /dev/null
+@@ -1,178 +0,0 @@
+-# personal_apps/tests/test_radar_stocktwits.py
+-"""StockTwits: finance-native, dense, and narrow.
+-
+-Measured at ~23 messages/hour on a trending symbol with 20-27 distinct authors
+-per 30 messages. Its discovery surface is only the 30 trending symbols, which
+-is why the standing set exists (spec 3.5).
+-"""
+-import datetime as dt
+-
+-from features.radar.sources import FetchResult
+-from features.radar.sources import stocktwits
+-
+-
+-class FakeClient:
+-    def __init__(self, payloads):
+-        self.payloads = payloads
+-        self.calls = []
+-
+-    def get(self, path, params=None):
+-        self.calls.append(path)
+-        if path not in self.payloads:
+-            raise stocktwits.StockTwitsUnavailable('404 %s' % path)
+-        return self.payloads[path]
+-
+-
+-def _message(ident, created, body='$ZZA to the moon', user=1, sentiment='Bullish'):
+-    return {
+-        'id': ident,
+-        'body': body,
+-        'created_at': created.strftime('%Y-%m-%dT%H:%M:%SZ'),
+-        'user': {'id': user, 'username': 'user%d' % user},
+-        'symbols': [{'symbol': 'ZZA'}],
+-        'entities': {'sentiment': {'basic': sentiment}} if sentiment else {},
+-        'likes': {'total': 3},
+-    }
+-
+-
+-BASE = dt.datetime(2026, 8, 21, 14, 0, 0)
+-
+-
+-def test_trending_filters_crypto_by_instrument_class():
+-    """instrument_class is explicit, so the filter is a field check rather than
+-    a guess at what .X means (spec 3.7)."""
+-    client = FakeClient({'/trending/symbols.json': {'symbols': [
+-        {'symbol': 'ZZA', 'instrument_class': 'Stock'},
+-        {'symbol': 'BTC.X', 'instrument_class': 'CRYPTO'},
+-        {'symbol': 'ZZB', 'instrument_class': 'Stock'},
+-    ]}})
+-    assert stocktwits.trending(client) == ['ZZA', 'ZZB']
+-
+-
+-def test_a_stream_becomes_rawposts():
+-    client = FakeClient({'/streams/symbol/ZZA.json': {
+-        'messages': [_message(2, BASE), _message(1, BASE - dt.timedelta(minutes=5))]}})
+-    result = stocktwits.fetch(BASE - dt.timedelta(hours=1), client, ['ZZA'])
+-    assert isinstance(result, FetchResult)
+-    assert result.status == 'ok'
+-    assert len(result.posts) == 2
+-    post = result.posts[0]
+-    assert post.source == 'stocktwits'
+-    assert post.external_id == 'stocktwits:2'
+-    assert post.native_tickers == ['ZZA']
+-    assert post.native_sentiment == 'Bullish'
+-    assert post.author == 'user1'
+-
+-
+-def test_messages_older_than_since_are_dropped():
+-    client = FakeClient({'/streams/symbol/ZZA.json': {'messages': [
+-        _message(2, BASE),
+-        _message(1, BASE - dt.timedelta(hours=4)),
+-    ]}})
+-    result = stocktwits.fetch(BASE - dt.timedelta(hours=1), client, ['ZZA'])
+-    assert [p.external_id for p in result.posts] == ['stocktwits:2']
+-
+-
+-def test_a_full_page_of_new_messages_is_truncated():
+-    """30 is the page size. All 30 newer than `since` means there are probably
+-    more we did not see, and an undercount must never reach a baseline."""
+-    messages = [_message(i, BASE - dt.timedelta(seconds=i)) for i in range(30)]
+-    client = FakeClient({'/streams/symbol/ZZA.json': {'messages': messages}})
+-    result = stocktwits.fetch(BASE - dt.timedelta(hours=1), client, ['ZZA'])
+-    assert result.status == 'truncated'
+-    assert len(result.posts) == 30
+-
+-
+-def test_one_symbol_failing_does_not_lose_the_others():
+-    client = FakeClient({'/streams/symbol/ZZA.json': {'messages': [_message(1, BASE)]}})
+-    result = stocktwits.fetch(BASE - dt.timedelta(hours=1), client, ['ZZA', 'MISSING'])
+-    assert [p.external_id for p in result.posts] == ['stocktwits:1']
+-    assert result.status == 'truncated'
+-
+-
+-def test_every_symbol_failing_is_missing_with_no_posts():
+-    client = FakeClient({})
+-    result = stocktwits.fetch(BASE - dt.timedelta(hours=1), client, ['ZZA', 'ZZB'])
+-    assert result.status == 'missing'
+-    assert result.posts == []
+-
+-
+-def test_message_rate_is_reported_per_symbol():
+-    """The scheduler derives each symbol's poll interval from this, because the
+-    API returns 30 messages whatever their timespan (spec 3.5)."""
+-    messages = [_message(i, BASE - dt.timedelta(minutes=i * 2)) for i in range(30)]
+-    client = FakeClient({'/streams/symbol/ZZA.json': {'messages': messages}})
+-    result = stocktwits.fetch(BASE - dt.timedelta(hours=6), client, ['ZZA'])
+-    # 30 messages spanning 58 minutes -> a bit over 30/hour.
+-    assert 25 < result.rates['ZZA'] < 40
+-
+-
+-def test_an_empty_stream_is_ok_not_missing():
+-    """A healthy source that saw nothing is a real zero. Only a failure is
+-    `missing` (spec 4.5)."""
+-    client = FakeClient({'/streams/symbol/ZZA.json': {'messages': []}})
+-    result = stocktwits.fetch(BASE - dt.timedelta(hours=1), client, ['ZZA'])
+-    assert result.status == 'ok'
+-    assert result.posts == []
+-
+-
+-def test_symbols_are_fetched_concurrently():
+-    """Measured: a stream call takes ~43 seconds, throttled rather than loaded.
+-    Serially, a cycle's worth of symbols would not fit inside the cycle."""
+-    import threading
+-    import time
+-
+-    peak = {'n': 0, 'now': 0}
+-    lock = threading.Lock()
+-
+-    class SlowClient:
+-        def get(self, path, params=None):
+-            with lock:
+-                peak['now'] += 1
+-                peak['n'] = max(peak['n'], peak['now'])
+-            time.sleep(0.2)
+-            with lock:
+-                peak['now'] -= 1
+-            return {'messages': [_message(1, BASE)]}
+-
+-    stocktwits.fetch(BASE - dt.timedelta(hours=1), SlowClient(),
+-                     ['A', 'B', 'C', 'D'], max_workers=4)
+-    assert peak['n'] > 1, 'requests ran serially'
+-
+-
+-def test_concurrency_never_exceeds_the_cap():
+-    """The rate limit is undocumented, so a burst is the wrong thing to guess
+-    with."""
+-    import threading
+-    import time
+-
+-    peak = {'n': 0, 'now': 0}
+-    lock = threading.Lock()
+-
+-    class SlowClient:
+-        def get(self, path, params=None):
+-            with lock:
+-                peak['now'] += 1
+-                peak['n'] = max(peak['n'], peak['now'])
+-            time.sleep(0.1)
+-            with lock:
+-                peak['now'] -= 1
+-            return {'messages': []}
+-
+-    stocktwits.fetch(BASE - dt.timedelta(hours=1), SlowClient(),
+-                     ['A', 'B', 'C', 'D', 'E', 'F'], max_workers=2)
+-    assert peak['n'] <= 2
+-
+-
+-def test_no_symbols_is_ok_and_costs_nothing():
+-    """A cycle where nothing is DUE must not look like a failure.
+-
+-    Narrow on purpose. This function cannot tell "nothing was scheduled" from
+-    "the source is dead", because both arrive as an empty symbol list -- and
+-    reading the second as `ok` wrote zero-count buckets for a source that was
+-    403 on every request. The caller knows which it is and decides; see
+-    run_radar_ingest._stocktwits_fetcher.
+-    """
+-    result = stocktwits.fetch(BASE, FakeClient({}), [])
+-    assert result.status == 'ok'
+-    assert result.posts == []
