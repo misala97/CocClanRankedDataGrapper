@@ -25,8 +25,8 @@ function row(over: Partial<Row> = {}): Row {
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
     generated_at: '2026-08-22T19:00:00Z',
-    sources: ['stocktwits', 'bluesky', 'fourchan'],
-    all_sources: ['stocktwits', 'bluesky', 'fourchan'],
+    sources: ['bluesky', 'fourchan', 'reddit'],
+    all_sources: ['bluesky', 'fourchan', 'reddit'],
     segments: [], session: 'regular', window_hours: 4,
     min_venues: 1, venue_counts: { any: 4, multi: 2 },
     segment_counts: { all: 4, large: 4 },
@@ -159,10 +159,10 @@ describe('the controls', () => {
 
     await waitFor(() => expect(boardCalls()).toHaveLength(1))
     expect(boardCalls()[0]).toBe(
-      '/radar/api/board?sources=stocktwits%2Cbluesky&window=4&segment=')
+      '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=')
     await waitFor(() =>
       expect(window.location.search)
-        .toContain('sources=stocktwits%2Cbluesky&window=4&segment='))
+        .toContain('sources=bluesky%2Creddit&window=4&segment='))
   })
 
   it('keeps All in the address bar rather than omitting it', async () => {

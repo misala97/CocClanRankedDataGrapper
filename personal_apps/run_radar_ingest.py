@@ -9,9 +9,11 @@ chatter volume follows the session and polling overnight at session rates is
 wasted work. The state comes from the exchange calendar, never from local time
 -- see the DST note in features/radar/market_calendar.py.
 
-Three sources run behind one contract. Nothing here branches on which source is
-which beyond building its fetcher; a fourth would be a module in sources/ plus
-an entry in config.SOURCES.
+Every source runs behind one contract. Nothing here branches on which source
+is which beyond building its fetcher; a new one is a module in sources/ plus
+an entry in config.SOURCES. StockTwits was one of these until 2026-08-26,
+when Cloudflare bot management -- refusing every request, from launch --
+made it not worth defeating a bot challenge to keep.
 """
 import datetime as dt
 import logging
@@ -31,9 +33,8 @@ from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
     MENTION_EVENT_RETENTION_HOURS, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
     REDDIT_MIN_POLL, REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES,
-    STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured,
-    source_config_version)
-from features.radar.sources import bluesky, fourchan, reddit, stocktwits
+    prefer_ipv4_if_configured, source_config_version)
+from features.radar.sources import bluesky, fourchan, reddit
 from features.radar.sources import FetchResult
 
 logger = logging.getLogger('radar.ingest')
@@ -47,10 +48,6 @@ INTERVALS = {
 # An unrecognized state polls at the slowest rate. Failing towards fewer
 # requests is the safe direction when the alternative is hammering an API.
 FALLBACK_INTERVAL = 1800
-
-# Cycles per hour at the fastest cadence, used to divide the hourly budget.
-_CYCLES_PER_HOUR = 20
-SYMBOL_BUDGET_PER_CYCLE = max(1, STOCKTWITS_REQUESTS_PER_HOUR // _CYCLES_PER_HOUR)
 
 # Finnhub's free tier is 60 calls a minute. Quotes go to the tickers actually
 # on the board, not to all 12,000 in the universe -- a quote for a ticker
@@ -100,45 +97,6 @@ def current_state(now_utc):
     return market_calendar.session_state(now_utc)
 
 
-def _stocktwits_fetcher(client):
-    """Trending is both the discovery surface and how the polled set grows.
-
-    Symbols accumulate: every symbol that has ever trended stays tracked, so
-    the standing set builds itself rather than waiting on a market-cap source
-    the free tier does not provide.
-    """
-    def fetch(since):
-        now = _utcnow()
-        discovery_failed = False
-        try:
-            hot = stocktwits.trending(client)
-            scheduling.ensure_tracked('stocktwits', hot, now)
-        except stocktwits.StockTwitsUnavailable as exc:
-            # One bad trending call must not cost the cycle its polled set.
-            # The reason is logged: "unavailable" alone is not diagnosable, and
-            # a blocked IP looks identical to a rate limit without it.
-            discovery_failed = True
-            logger.warning('stocktwits trending unavailable this cycle: %s', exc)
-
-        symbols = scheduling.due_symbols('stocktwits', now,
-                                         limit=SYMBOL_BUDGET_PER_CYCLE)
-
-        if discovery_failed and not symbols:
-            # Nothing reached us and nothing was left to try, so this source
-            # saw nothing -- which is `missing`, not a quiet period. Reporting
-            # `ok` here wrote zero-count buckets for a source that was 403 on
-            # every request, and thirty days of those would make any later
-            # StockTwits data read as an enormous spike.
-            return FetchResult(posts=[], status='missing')
-
-        result = stocktwits.fetch(since, client, symbols)
-        for symbol in symbols:
-            scheduling.record_poll('stocktwits', symbol, now,
-                                   result.rates.get(symbol))
-        return result
-    return fetch
-
-
 def _reddit_fetcher(client):
     """Reddit, a budgeted slice of subreddits per cycle.
 
@@ -146,7 +104,7 @@ def _reddit_fetcher(client):
     read IS its coverage -- r/wallstreetbets turns over in under two minutes.
     Reading all eighteen every cycle would be six requests a minute, which is
     well past what earned a sustained 429 during measurement, so they rotate
-    through the same scheduler StockTwits symbols use: most-overdue first, so
+    through the poll scheduler's due-symbol ordering: most-overdue first, so
     a backlog larger than the budget rotates instead of starving the same subs
     forever.
 
@@ -160,9 +118,9 @@ def _reddit_fetcher(client):
         # SOURCE rather than by this list, so a removed subreddit would keep
         # its poll state and keep taking turns -- spending the very budget its
         # removal was meant to free, while still appearing in the logs as
-        # though nothing had changed. Reddit can do this and StockTwits
-        # cannot: REDDIT_SUBS is the complete set, while a hot ticker falling
-        # out of StockTwits' rolling window is temporary.
+        # though nothing had changed. Reddit can do this because REDDIT_SUBS
+        # is the complete set; a source whose tracked set is a rolling window
+        # must never call this, since a symbol falling out of it is temporary.
         retired = scheduling.retire_untracked('reddit', REDDIT_SUBS)
         if retired:
             logger.info('radar reddit retired %d subreddit(s) '
@@ -190,10 +148,10 @@ def _reddit_fetcher(client):
         # queue for a request that was never made -- so they would lose their
         # turn to the ones that happened to be earlier in the batch.
         for sub, rate in (result.rates or {}).items():
-            # This source's own bounds. The scheduler's defaults are
-            # StockTwits-shaped, and a fifteen-minute floor would lose most of
-            # r/wallstreetbets -- whose feed holds 25 comments and turns over
-            # in under two minutes.
+            # This source's own bounds, not the scheduler's generic defaults:
+            # a fifteen-minute floor would lose most of r/wallstreetbets --
+            # whose feed holds 25 comments and turns over in under two
+            # minutes.
             scheduling.record_poll('reddit', sub, now, rate,
                                    floor=REDDIT_MIN_POLL,
                                    ceiling=REDDIT_MAX_POLL,
@@ -204,12 +162,10 @@ def _reddit_fetcher(client):
 
 def build_fetchers():
     """One callable per active source, each taking `since`."""
-    st_client = stocktwits.StockTwitsClient()
     fc_client = fourchan.FourChanClient()
     rd_client = reddit.RedditClient()
 
     return {
-        'stocktwits': _stocktwits_fetcher(st_client),
         'bluesky': lambda since: bluesky.fetch(since, bluesky.live_drain),
         'fourchan': lambda since: fourchan.fetch(
             since, fc_client, pause=fourchan.REQUEST_INTERVAL_SECONDS),

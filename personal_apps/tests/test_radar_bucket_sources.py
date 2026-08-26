@@ -35,7 +35,7 @@ def ctx():
         db.session.commit()
 
 
-def _row(source='stocktwits', ticker='ZZA', count=3, status='ok'):
+def _row(source='bluesky', ticker='ZZA', count=3, status='ok'):
     return RadarBucketSource(
         ticker=ticker, bucket_start=START, source=source,
         mention_count=count, high_confidence_count=count, low_count=0,
@@ -45,7 +45,7 @@ def _row(source='stocktwits', ticker='ZZA', count=3, status='ok'):
 
 
 def test_one_row_per_source_for_the_same_bucket(ctx):
-    for source in ('stocktwits', 'bluesky', 'fourchan'):
+    for source in ('reddit', 'bluesky', 'fourchan'):
         db.session.add(_row(source=source))
     db.session.commit()
     assert RadarBucketSource.query.filter_by(ticker='ZZA').count() == 3
@@ -63,12 +63,12 @@ def test_the_same_source_twice_in_one_bucket_is_rejected(ctx):
 def test_an_arbitrary_subset_pools_by_group_by(ctx):
     """The whole reason this table exists. The UI selector picks sources and
     the query sums over exactly those -- no schema knows their names."""
-    db.session.add(_row(source='stocktwits', count=10))
+    db.session.add(_row(source='reddit', count=10))
     db.session.add(_row(source='bluesky', count=4))
     db.session.add(_row(source='fourchan', count=1))
     db.session.commit()
 
-    chosen = ['stocktwits', 'bluesky']
+    chosen = ['reddit', 'bluesky']
     total = db.session.query(
         sa.func.sum(RadarBucketSource.mention_count)).filter(
         RadarBucketSource.ticker == 'ZZA',
@@ -78,12 +78,12 @@ def test_an_arbitrary_subset_pools_by_group_by(ctx):
 
 
 def test_a_source_can_be_missing_while_another_is_ok(ctx):
-    db.session.add(_row(source='stocktwits', status='ok'))
+    db.session.add(_row(source='reddit', status='ok'))
     db.session.add(_row(source='bluesky', status='truncated'))
     db.session.commit()
     statuses = {r.source: r.status for r in
                 RadarBucketSource.query.filter_by(ticker='ZZA').all()}
-    assert statuses == {'stocktwits': 'ok', 'bluesky': 'truncated'}
+    assert statuses == {'reddit': 'ok', 'bluesky': 'truncated'}
 
 
 def test_low_confidence_is_counted_separately_from_scored(ctx):

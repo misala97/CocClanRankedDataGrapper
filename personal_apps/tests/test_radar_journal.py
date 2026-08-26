@@ -214,10 +214,10 @@ def test_a_down_sources_mentions_never_reach_the_journal(clean_buckets, clean_ev
     roll_up must journal only `usable` (this cycle's rows filtered to
     countable sources), never `rows` (everything handed to it, missing
     sources included). Reviewer's mutation swapped one for the other: a cycle
-    reporting `{'bluesky': 'ok', 'stocktwits': 'missing'}` still journalled
-    the stocktwits row, and the NEXT cycle -- once stocktwits reports 'ok'
+    reporting `{'bluesky': 'ok', 'reddit': 'missing'}` still journalled
+    the reddit row, and the NEXT cycle -- once reddit reports 'ok'
     again -- rebuilds from the journal and folds that leaked row into a brand
-    new RadarBucketSource stamped status='ok', exactly as if stocktwits had
+    new RadarBucketSource stamped status='ok', exactly as if reddit had
     been up the whole time.
     """
     from features.radar import buckets
@@ -225,28 +225,28 @@ def test_a_down_sources_mentions_never_reach_the_journal(clean_buckets, clean_ev
 
     start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
 
-    # Cycle 1: stocktwits is down but still handed roll_up a row (a fetch
+    # Cycle 1: reddit is down but still handed roll_up a row (a fetch
     # that parsed a post before the failure was detected, or a source whose
     # cursor moved before its client raised). bluesky is up, so `countable`
     # is non-empty and roll_up does not return 0 before reaching journal.record.
     buckets.roll_up(
-        [_row(external_id='zz-down', source='stocktwits', author='u1',
+        [_row(external_id='zz-down', source='reddit', author='u1',
              simhash=1, minute=3),
          _row(external_id='zz-a', source='bluesky', author='u2',
              simhash=2, minute=3)],
-        {'bluesky': 'ok', 'stocktwits': 'missing'}, start)
+        {'bluesky': 'ok', 'reddit': 'missing'}, start)
 
-    # Cycle 2: stocktwits has recovered and contributes nothing new itself.
+    # Cycle 2: reddit has recovered and contributes nothing new itself.
     # bluesky activity in the same window still forces a full rebuild of it,
     # which re-reads everything the journal is holding for (ZZA, 14:00).
     buckets.roll_up(
         [_row(external_id='zz-b', source='bluesky', author='u3',
              simhash=3, minute=5)],
-        {'bluesky': 'ok', 'stocktwits': 'ok'}, start)
+        {'bluesky': 'ok', 'reddit': 'ok'}, start)
 
-    stocktwits_row = RadarBucketSource.query.filter_by(
-        ticker='ZZA', source='stocktwits').one()
-    assert stocktwits_row.mention_count == 0
+    reddit_row = RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='reddit').one()
+    assert reddit_row.mention_count == 0
 
 
 def test_bootstrap_recovers_retained_mentions_with_field_fidelity(

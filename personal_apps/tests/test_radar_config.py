@@ -70,7 +70,6 @@ def test_ipv4_preference_applies_when_set(monkeypatch):
 
 
 def test_finance_native_sources_allow_bare_tokens():
-    assert config.bare_tokens_allowed('stocktwits') is True
     assert config.bare_tokens_allowed('fourchan') is True
 
 
@@ -102,15 +101,21 @@ def test_coin_shaped_symbols_are_dropped_on_general_sources():
     assert config.coin_collision_dropped('fourchan', 'LINK') is True
 
 
-def test_finance_native_sources_keep_them():
-    """On StockTwits, $LINK means Interlink -- the population is discussing
-    equities, so the company reading is the right one."""
-    assert config.coin_collision_dropped('stocktwits', 'LINK') is False
-    assert config.coin_collision_dropped('stocktwits', 'BCH') is False
+def test_a_finance_native_source_can_opt_into_coin_symbols(monkeypatch):
+    """The extension point, kept alive with no live source using it.
+
+    StockTwits was the only population where $LINK meant Interlink rather
+    than Chainlink. It is retired; this pins that a future finance-native
+    source can still opt in, rather than the map quietly becoming a constant
+    nobody can override.
+    """
+    monkeypatch.setitem(config.COIN_SYMBOLS_MEAN_STOCKS, 'bluesky', True)
+    assert config.coin_collision_dropped('bluesky', 'LINK') is False
+    assert config.coin_collision_dropped('bluesky', 'BCH') is False
 
 
 def test_ordinary_tickers_are_untouched_everywhere():
-    for source in ('bluesky', 'fourchan', 'stocktwits'):
+    for source in ('bluesky', 'fourchan', 'reddit'):
         assert config.coin_collision_dropped(source, 'MRNA') is False
         assert config.coin_collision_dropped(source, 'AAPL') is False
 
@@ -268,3 +273,35 @@ def test_a_single_string_selection_still_works():
 
     assert set(segments_in('small')) == {'micro', 'unknown', 'recent_ipo'}
     assert set(segments_in('large')) == {'large'}
+
+
+def test_stocktwits_is_retired():
+    """Cloudflare bot management, diagnosed 2026-08-26.
+
+    403 on every endpoint with every user agent, from two networks. It reported
+    `missing` honestly for five days and produced nothing, while remaining a
+    selectable venue in the UI -- an invitation to filter on a source that has
+    never returned a row.
+    """
+    from features.radar import config
+
+    assert 'stocktwits' not in config.SOURCES
+    assert 'stocktwits' not in config.BARE_TOKENS_ALLOWED
+    assert 'stocktwits' not in config.SINGLE_LETTER_CASHTAGS
+    assert 'stocktwits' not in config.SOURCE_KIND
+    assert not hasattr(config, 'STOCKTWITS_REQUESTS_PER_HOUR')
+
+
+def test_no_source_reads_a_coin_symbol_as_a_company():
+    """A consequence of the retirement, named so it is not rediscovered.
+
+    StockTwits was the only population where $LINK meant Interlink rather than
+    Chainlink. With it gone, COIN_COLLISION_SYMBOLS are dropped everywhere --
+    49 real tickers lose their mentions on every live source. The map stays a
+    map rather than collapsing to a constant, because Telegram will need its
+    own entry and the extension point is the point.
+    """
+    from features.radar import config
+
+    assert not any(config.COIN_SYMBOLS_MEAN_STOCKS.values())
+    assert config.coin_collision_dropped('bluesky', 'LINK') is True

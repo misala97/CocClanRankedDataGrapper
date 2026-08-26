@@ -62,7 +62,7 @@ def clean_radar():
 
 
 def post(ident='t3_1', body='$ZZG is ripping', score=5, author='u1',
-         minute=10, title=None, source='stocktwits'):
+         minute=10, title=None, source='bluesky'):
     return RawPost(source=source, external_id=ident, channel='testsub',
                    author=author,
                    created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
@@ -70,7 +70,7 @@ def post(ident='t3_1', body='$ZZG is ripping', score=5, author='u1',
                    url='https://example.invalid/%s' % ident)
 
 
-def fetcher_for(result, source='stocktwits'):
+def fetcher_for(result, source='bluesky'):
     def fetcher(since):
         return result
     return {source: fetcher}
@@ -123,7 +123,7 @@ def test_a_missing_source_writes_nothing_at_all(seeded):
     result = ingest.run_cycle(
         NOW, fetcher_for(FetchResult(posts=[], status='missing')))
 
-    assert result['per_source'] == {'stocktwits': 'missing'}
+    assert result['per_source'] == {'bluesky': 'missing'}
     assert result['buckets_written'] == 0
     with flask_app.app_context():
         assert RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).count() == 0
@@ -134,14 +134,14 @@ def test_a_truncated_cycle_still_stores_its_mentions(seeded):
         NOW, fetcher_for(FetchResult(posts=[post()], status='truncated',
                                      catchup_depth=10)))
 
-    assert result['per_source'] == {'stocktwits': 'truncated'}
-    assert result['catchup_depth'] == {'stocktwits': 10}
+    assert result['per_source'] == {'bluesky': 'truncated'}
+    assert result['catchup_depth'] == {'bluesky': 10}
     with flask_app.app_context():
         bucket = RadarBucket.query.filter_by(ticker='ZZG').one()
         assert bucket.mention_count == 1
         from models import RadarBucketSource
         assert RadarBucketSource.query.filter_by(
-            ticker='ZZG', source='stocktwits').one().status == 'truncated'
+            ticker='ZZG', source='bluesky').one().status == 'truncated'
 
 
 def test_posts_with_no_recognizable_ticker_are_not_stored_at_all(seeded):
@@ -169,7 +169,7 @@ def test_the_cursor_advances_even_when_nothing_was_stored(seeded):
         fetcher_for(FetchResult(posts=[post(body='no tickers here', minute=12)],
                                 status='ok')))
     with flask_app.app_context():
-        cursor = RadarSourceCursor.query.filter_by(source='stocktwits').one()
+        cursor = RadarSourceCursor.query.filter_by(source='bluesky').one()
         assert cursor.cursor_utc == dt.datetime(2026, 4, 15, 14, 12, 0)
 
 
@@ -180,64 +180,69 @@ def test_since_advances_to_the_newest_post_seen(seeded):
         captured['since'] = since
         return FetchResult(posts=[post(minute=10)], status='ok')
 
-    ingest.run_cycle(NOW, {'stocktwits': fetcher})
-    ingest.run_cycle(NOW, {'stocktwits': fetcher})
+    ingest.run_cycle(NOW, {'bluesky': fetcher})
+    ingest.run_cycle(NOW, {'bluesky': fetcher})
     assert captured['since'] == dt.datetime(2026, 4, 15, 14, 10, 0)
 
 
 def test_two_sources_ingest_in_one_cycle(seeded):
-    def st(since):
-        return FetchResult(posts=[post(ident='st1', body='$ZZG up')], status='ok')
+    def rd(since):
+        return FetchResult(
+            posts=[post(ident='st1', body='$ZZG up', source='reddit')],
+            status='ok')
 
     def bs(since):
         p = post(ident='bs1', body='$ZZG up')
         p.source = 'bluesky'
         return FetchResult(posts=[p], status='ok')
 
-    result = ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
+    result = ingest.run_cycle(NOW, {'reddit': rd, 'bluesky': bs})
     assert result['posts_new'] == 2
-    assert result['per_source'] == {'stocktwits': 'ok', 'bluesky': 'ok'}
+    assert result['per_source'] == {'reddit': 'ok', 'bluesky': 'ok'}
     with flask_app.app_context():
         from models import RadarBucketSource
         sources = {r.source for r in
                    RadarBucketSource.query.filter_by(ticker='ZZG').all()}
-        assert sources == {'stocktwits', 'bluesky'}
+        assert sources == {'reddit', 'bluesky'}
 
 
 def test_one_source_failing_does_not_stop_the_other(seeded):
     """The entire reason status is per source. A dead Bluesky must not cost a
-    healthy StockTwits cycle, and must not write a zero for itself."""
-    def st(since):
-        return FetchResult(posts=[post(ident='st1', body='$ZZG up')], status='ok')
+    healthy Reddit cycle, and must not write a zero for itself."""
+    def rd(since):
+        return FetchResult(
+            posts=[post(ident='st1', body='$ZZG up', source='reddit')],
+            status='ok')
 
     def bs(since):
         return FetchResult(posts=[], status='missing')
 
-    result = ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
-    assert result['per_source'] == {'stocktwits': 'ok', 'bluesky': 'missing'}
+    result = ingest.run_cycle(NOW, {'reddit': rd, 'bluesky': bs})
+    assert result['per_source'] == {'reddit': 'ok', 'bluesky': 'missing'}
     with flask_app.app_context():
         from models import RadarBucketSource
         rows = {r.source: r.status for r in
                 RadarBucketSource.query.filter_by(ticker='ZZG').all()}
-        assert rows == {'stocktwits': 'ok'}
+        assert rows == {'reddit': 'ok'}
 
 
 def test_each_source_keeps_its_own_cursor(seeded):
     """One source catching up must not drag the others back over ground they
     already covered."""
-    def st(since):
-        return FetchResult(posts=[post(ident='st1', body='$ZZG', minute=10)],
-                           status='ok')
+    def rd(since):
+        return FetchResult(
+            posts=[post(ident='st1', body='$ZZG', minute=10, source='reddit')],
+            status='ok')
 
     def bs(since):
         p = post(ident='bs1', body='$ZZG', minute=18)
         p.source = 'bluesky'
         return FetchResult(posts=[p], status='ok')
 
-    ingest.run_cycle(NOW, {'stocktwits': st, 'bluesky': bs})
+    ingest.run_cycle(NOW, {'reddit': rd, 'bluesky': bs})
     with flask_app.app_context():
         cursors = {c.source: c.cursor_utc for c in RadarSourceCursor.query.all()}
-    assert cursors['stocktwits'] == dt.datetime(2026, 4, 15, 14, 10, 0)
+    assert cursors['reddit'] == dt.datetime(2026, 4, 15, 14, 10, 0)
     assert cursors['bluesky'] == dt.datetime(2026, 4, 15, 14, 18, 0)
 
 
@@ -301,16 +306,18 @@ def test_an_unexpected_source_error_does_not_kill_the_cycle(seeded):
         raise ModuleNotFoundError("No module named 'websockets'")
 
     def healthy(since):
-        return FetchResult(posts=[post(ident='ok1', body='$ZZG up')], status='ok')
+        return FetchResult(
+            posts=[post(ident='ok1', body='$ZZG up', source='reddit')],
+            status='ok')
 
-    result = ingest.run_cycle(NOW, {'bluesky': exploding, 'stocktwits': healthy})
+    result = ingest.run_cycle(NOW, {'bluesky': exploding, 'reddit': healthy})
 
-    assert result['per_source'] == {'bluesky': 'missing', 'stocktwits': 'ok'}
+    assert result['per_source'] == {'bluesky': 'missing', 'reddit': 'ok'}
     assert result['mentions'] == 1
     with flask_app.app_context():
         from models import RadarBucketSource
         rows = {r.source for r in RadarBucketSource.query.filter_by(ticker='ZZG')}
-        assert rows == {'stocktwits'}   # no bluesky row, and no zero
+        assert rows == {'reddit'}   # no bluesky row, and no zero
 
 
 def test_a_coin_collision_is_dropped_on_a_general_source(seeded, monkeypatch):
@@ -329,17 +336,18 @@ def test_a_coin_collision_is_dropped_on_a_general_source(seeded, monkeypatch):
     assert result['mentions'] == 0
 
 
-def test_the_same_symbol_still_counts_on_a_finance_source(seeded, monkeypatch):
-    """On StockTwits the population is discussing equities, so the company
-    reading is the right one."""
-    from features.radar import config
-    monkeypatch.setattr(config, 'COIN_COLLISION_SYMBOLS', frozenset({'ZZG'}))
+def test_a_source_can_opt_into_reading_coin_symbols_as_companies(seeded,
+                                                                  monkeypatch):
+    """The extension point, kept alive with no live source using it.
 
-    p = post(ident='st_coin', body='$ZZG pumping')
-    p.source = 'stocktwits'
-    result = ingest.run_cycle(
-        NOW, {'stocktwits': lambda s: FetchResult(posts=[p], status='ok')})
-    assert result['mentions'] == 1
+    StockTwits was the only population where $LINK meant Interlink. It is
+    retired; this pins that a future finance-native source can still opt in,
+    rather than the map quietly becoming a constant nobody can override.
+    """
+    from features.radar import config
+
+    monkeypatch.setitem(config.COIN_SYMBOLS_MEAN_STOCKS, 'bluesky', True)
+    assert config.coin_collision_dropped('bluesky', 'LINK') is False
 
 
 # --- Automated feeds, wired in 2026-08-25 -----------------------------------
@@ -398,9 +406,24 @@ def test_a_single_letter_cashtag_is_refused_on_a_general_network():
                     'distinctive': set()}}
     general = post(ident='zz-single', body='make $B and youre set',
                    source='bluesky')
-    finance = post(ident='zz-single-2', body='make $B and youre set',
-                   source='stocktwits')
 
     assert ingest._extract_for(general, lookup) == []
-    # The same text on a finance-native population still yields the company.
+
+
+def test_a_source_can_opt_into_single_letter_cashtags(monkeypatch):
+    """The extension point, kept alive with no live source using it.
+
+    StockTwits was the only population where a bare `$B` was worth reading as
+    Barnes Group rather than money shorthand. It is retired; this pins that a
+    future finance-native source can still opt in, rather than the map
+    quietly becoming a constant nobody can override.
+    """
+    from features.radar import config, ingest
+
+    monkeypatch.setitem(config.SINGLE_LETTER_CASHTAGS, 'bluesky', True)
+    lookup = {'B': {'name': 'Barnes Group Inc.', 'exchange': 'NYSE',
+                    'distinctive': set()}}
+    finance = post(ident='zz-single-2', body='make $B and youre set',
+                   source='bluesky')
+
     assert ingest._extract_for(finance, lookup) == [('B', 'high')]

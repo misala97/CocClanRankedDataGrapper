@@ -14,7 +14,7 @@ import re
 
 # Active sources. Adding one is a module in sources/ plus an entry here --
 # nothing else in the pipeline names a source (spec 8.6).
-SOURCES = ('stocktwits', 'bluesky', 'fourchan', 'reddit')
+SOURCES = ('bluesky', 'fourchan', 'reddit')
 
 # Whether a bare uppercase token may be read as a ticker on a given source.
 #
@@ -33,7 +33,6 @@ SOURCES = ('stocktwits', 'bluesky', 'fourchan', 'reddit')
 # Sources absent from this mapping default to cashtag-only, which is the safe
 # direction for a source nobody has characterised yet.
 BARE_TOKENS_ALLOWED = {
-    'stocktwits': True,    # finance-only by construction
     'fourchan': True,      # /biz/ is a finance board
     # Was False, set after the first live pass found IA (Iowa), GOP and AP
     # among the top bare tokens. Re-enabled 2026-08-23: an uncorroborated bare
@@ -48,9 +47,9 @@ BARE_TOKENS_ALLOWED = {
     # See scripts/measure_bare_tokens.py. Revert if the top twenty scored
     # tickers stop looking like equities.
     'bluesky': True,
-    # A finance subreddit is finance-native the way /biz/ and StockTwits are:
-    # `AAPL` without a dollar sign is a ticker there in a way it is not on a
-    # general network. Measured 2026-08-24, the junk this admits is the same
+    # A finance subreddit is finance-native the way /biz/ is: `AAPL` without a
+    # dollar sign is a ticker there in a way it is not on a general network.
+    # Measured 2026-08-24, the junk this admits is the same
     # shape as elsewhere -- WTF and NATO topped r/StockMarket, OI and CC
     # topped r/options -- and lands as `low`, counted but never scored.
     'reddit': True,
@@ -78,9 +77,15 @@ COIN_COLLISION_SYMBOLS = frozenset({
 })
 
 # Sources where a coin-shaped symbol should be read as the coin, not the
-# company. Finance-native populations are the exception.
+# company. Finance-native populations are the exception -- and since StockTwits
+# was retired 2026-08-26 there are none, so every symbol in
+# COIN_COLLISION_SYMBOLS is now dropped on every live source. That costs 49
+# real tickers their mentions, which is the price of not putting Chainlink
+# chatter under Interlink Electronics.
+#
+# Kept as a map rather than collapsed to a constant: Telegram is the next
+# source and will need its own entry, and the extension point is the point.
 COIN_SYMBOLS_MEAN_STOCKS = {
-    'stocktwits': True,
     'fourchan': False,     # /biz/ is crypto culture first
     'bluesky': False,
 }
@@ -96,7 +101,6 @@ COIN_SYMBOLS_MEAN_STOCKS = {
 # the independent unit is the CHANNEL: three channels carrying the same symbol
 # is corroboration, one channel posting it forty times is not.
 SOURCE_KIND = {
-    'stocktwits': 'forum',
     'bluesky': 'forum',
     'fourchan': 'forum',
     # Comments carry real distinct authors, so the forum gate applies
@@ -121,7 +125,6 @@ def source_kind(source):
 # $T if we all do it". A finance-native population is the exception, the same
 # judgement bare tokens and coin collisions already get.
 SINGLE_LETTER_CASHTAGS = {
-    'stocktwits': True,
     'fourchan': False,
     'bluesky': False,
 }
@@ -246,9 +249,9 @@ FUNDS_PROMOTE_BARE_TOKENS = False
 def looks_like_bot_feed(text):
     """True for machine-generated crypto exchange output.
 
-    Applied on every source. These bots do not post to StockTwits, so the rule
-    costs nothing there, and scoping it per source would only invite the
-    question of which sources are safe.
+    Applied on every source. A source these bots never touch pays nothing for
+    the check, and scoping it per source would only invite the question of
+    which sources are safe.
     """
     return bool(_BOT_FEED_RE.search(text or ''))
 
@@ -379,8 +382,8 @@ REDDIT_SUBS_PER_CYCLE = 1
 # gone rather than late -- there is no cursor to catch up from.
 REDDIT_INTERVAL_SECONDS = 120  # ~1 feed/window, matching the measured budget
 
-# Bounds for this source's adaptive cadence. The scheduler's defaults are
-# StockTwits-shaped (15 min to 4 h) and its floor alone would lose most of
+# Bounds for this source's adaptive cadence. The scheduler's module defaults
+# (15 min to 4 h) do not fit here, and the floor alone would lose most of
 # r/wallstreetbets. The floor is what a busy sub gets; the ceiling is where a
 # silent one -- or a throttled one -- ends up.
 REDDIT_MIN_POLL = dt.timedelta(seconds=90)
@@ -401,11 +404,6 @@ REDDIT_MIN_POLL = dt.timedelta(seconds=90)
 # comment. Subs above it are unaffected: r/stocks at 67/hour asks for eleven
 # minutes and gets eleven minutes, ceiling or no ceiling.
 REDDIT_MAX_POLL = dt.timedelta(hours=6)
-
-# StockTwits publishes no rate-limit headers and twenty consecutive requests
-# drew no 429, so this is a conservative budget rather than a documented
-# ceiling. The daemon backs off on 429 regardless.
-STOCKTWITS_REQUESTS_PER_HOUR = 150
 
 # 15-minute grain. Fine enough for the 1h window in spec 6.9, coarse enough
 # that a forever-retained table stays small.

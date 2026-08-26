@@ -5,7 +5,7 @@ Chatter has a strong weekly shape, and comparing 03:00 Sunday against 15:00
 Tuesday as one population makes every weekday afternoon a spike. The profile is
 what removes that shape before anything is called unusual.
 
-Per source, not market-wide: StockTwits follows US market hours, Bluesky is
+Per source, not market-wide: Reddit follows US market hours, Bluesky is
 global and diurnal, /biz/ runs around the clock. One shared profile would tell
 Bluesky to expect silence when half its users are awake.
 """
@@ -61,18 +61,18 @@ def test_bucket_of_week_wraps_after_a_week():
 
 def test_a_profile_sums_to_one(buckets):
     for hour in (2, 14, 20):
-        add('stocktwits', MONDAY + dt.timedelta(hours=hour), count=hour)
+        add('bluesky', MONDAY + dt.timedelta(hours=hour), count=hour)
     db.session.commit()
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
                                   source_config_version())
     assert sum(built.values()) == pytest.approx(1.0)
 
 
 def test_busy_buckets_get_a_larger_share(buckets):
-    add('stocktwits', MONDAY + dt.timedelta(hours=14), count=100)
-    add('stocktwits', MONDAY + dt.timedelta(hours=3), count=1)
+    add('bluesky', MONDAY + dt.timedelta(hours=14), count=100)
+    add('bluesky', MONDAY + dt.timedelta(hours=3), count=1)
     db.session.commit()
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
                                   source_config_version())
     busy = profile.hour_share(built, MONDAY + dt.timedelta(hours=14))
     quiet = profile.hour_share(built, MONDAY + dt.timedelta(hours=3))
@@ -83,36 +83,36 @@ def test_every_bucket_has_a_nonzero_share(buckets):
     """Smoothing is load-bearing. A share of zero makes expected zero, and any
     observation against it is an infinite z -- so one quiet hour in the sample
     window would manufacture a spike there forever after."""
-    add('stocktwits', MONDAY + dt.timedelta(hours=14), count=50)
+    add('bluesky', MONDAY + dt.timedelta(hours=14), count=50)
     db.session.commit()
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
                                   source_config_version())
     assert len(built) == 672
     assert all(share > 0 for share in built.values())
 
 
 def test_profiles_are_per_source(buckets):
-    """StockTwits peaks in the US session; a 24/7 source does not. Sharing one
+    """Reddit peaks in the US session; a 24/7 source does not. Sharing one
     profile would read half of Bluesky's normal traffic as unusual."""
-    add('stocktwits', MONDAY + dt.timedelta(hours=14), count=100)
+    add('reddit', MONDAY + dt.timedelta(hours=14), count=100)
     add('bluesky', MONDAY + dt.timedelta(hours=3), count=100)
     db.session.commit()
     version = source_config_version()
-    st = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+    rd = profile.build_profile('reddit', MONDAY + dt.timedelta(days=1),
                                version)
     bs = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1), version)
-    assert profile.hour_share(st, MONDAY + dt.timedelta(hours=14)) > \
+    assert profile.hour_share(rd, MONDAY + dt.timedelta(hours=14)) > \
         profile.hour_share(bs, MONDAY + dt.timedelta(hours=14))
 
 
 def test_missing_and_truncated_buckets_are_ignored(buckets):
     """A source that was down did not observe a quiet hour. Counting the gap
     would bend the profile towards silence at exactly the wrong times."""
-    add('stocktwits', MONDAY + dt.timedelta(hours=14), count=100)
-    add('stocktwits', MONDAY + dt.timedelta(hours=15), count=0, status='missing')
-    add('stocktwits', MONDAY + dt.timedelta(hours=16), count=5, status='truncated')
+    add('bluesky', MONDAY + dt.timedelta(hours=14), count=100)
+    add('bluesky', MONDAY + dt.timedelta(hours=15), count=0, status='missing')
+    add('bluesky', MONDAY + dt.timedelta(hours=16), count=5, status='truncated')
     db.session.commit()
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
                                   source_config_version())
     fifteen = profile.hour_share(built, MONDAY + dt.timedelta(hours=15))
     sixteen = profile.hour_share(built, MONDAY + dt.timedelta(hours=16))
@@ -124,7 +124,7 @@ def test_missing_and_truncated_buckets_are_ignored(buckets):
 def test_an_empty_history_gives_a_flat_profile(buckets):
     """Day one. Flat means "no idea yet", which is the honest prior and cannot
     on its own make anything look unusual."""
-    built = profile.build_profile('stocktwits', MONDAY, source_config_version())
+    built = profile.build_profile('bluesky', MONDAY, source_config_version())
     assert len(built) == 672
     assert len(set(round(v, 12) for v in built.values())) == 1
 
@@ -133,11 +133,11 @@ def test_a_profile_uses_only_its_exact_config_generation(buckets):
     current = source_config_version()
     old_slot = MONDAY + dt.timedelta(hours=3)
     current_slot = MONDAY + dt.timedelta(hours=14)
-    add('stocktwits', old_slot, count=10_000, ticker='PPO', version='old-version')
-    add('stocktwits', current_slot, count=100, ticker='PPC', version=current)
+    add('bluesky', old_slot, count=10_000, ticker='PPO', version='old-version')
+    add('bluesky', current_slot, count=100, ticker='PPC', version=current)
     db.session.commit()
 
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+    built = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1),
                                   current)
 
     assert profile.hour_share(built, current_slot) > \

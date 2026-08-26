@@ -53,7 +53,6 @@ export function segmentLabel(key: string): string {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  stocktwits: 'StockTwits',
   bluesky: 'Bluesky',
   fourchan: '4chan /biz/',
   reddit: 'Reddit',

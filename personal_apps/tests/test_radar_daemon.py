@@ -54,7 +54,7 @@ def test_tick_returns_the_cycle_summary(monkeypatch):
                                               'catchup_depth': 1,
                                               'posts_seen': 3, 'posts_new': 3})
     result = daemon.tick(_utc(2026, 4, 15, 14),
-                         fetchers={'stocktwits': lambda s: None})
+                         fetchers={'bluesky': lambda s: None})
     assert result['mentions'] == 3
 
 
@@ -66,7 +66,7 @@ def test_a_cycle_that_raises_does_not_kill_the_daemon(monkeypatch):
 
     monkeypatch.setattr(daemon.ingest, 'run_cycle', boom)
     result = daemon.tick(_utc(2026, 4, 15, 14),
-                         fetchers={'stocktwits': lambda s: None})
+                         fetchers={'bluesky': lambda s: None})
     assert result['status'] == 'error'
 
 
@@ -106,12 +106,6 @@ def test_reddit_reads_the_feeds_and_never_the_closed_api():
     assert '.json' not in reddit.FEED
 
 
-def test_the_request_budget_is_a_sane_fraction_of_the_hourly_one():
-    """StockTwits publishes no limit; this is a conservative guess with
-    adaptive backoff, not a documented ceiling."""
-    assert 1 <= daemon.SYMBOL_BUDGET_PER_CYCLE <= 40
-
-
 def test_reddit_runs_on_its_own_clock_not_the_market_session():
     """The regression: four subs per 1800-second overnight cycle meant a full
     rotation of eighteen took over two hours, against a feed that turns over
@@ -137,44 +131,6 @@ def test_the_first_cycle_is_scheduled_immediately():
     assert 'next_run_time' in source, 'first cycle would wait a full interval'
 
 
-def _stub_scheduling(monkeypatch, due):
-    monkeypatch.setattr(daemon.scheduling, 'ensure_tracked',
-                        lambda *a, **k: 0)
-    monkeypatch.setattr(daemon.scheduling, 'due_symbols',
-                        lambda *a, **k: list(due))
-    monkeypatch.setattr(daemon.scheduling, 'record_poll', lambda *a, **k: None)
-
-
-def test_a_blocked_source_reports_missing_not_ok(monkeypatch):
-    """Live on the VPS, StockTwits 403'd every request and the cycle recorded
-    it as `ok` with zero counts -- because trending failed, the poll set was
-    empty, and an empty symbol list short-circuits to success. Thirty days of
-    those zeros would make the first real data look like an enormous spike."""
-    import datetime as dt
-
-    def blocked(*a, **k):
-        raise daemon.stocktwits.StockTwitsUnavailable('403 Forbidden')
-
-    monkeypatch.setattr(daemon.stocktwits, 'trending', blocked)
-    _stub_scheduling(monkeypatch, due=[])
-
-    result = daemon._stocktwits_fetcher(object())(dt.datetime(2026, 8, 21))
-    assert result.status == 'missing'
-    assert result.posts == []
-
-
-def test_nothing_due_on_a_healthy_source_is_still_ok(monkeypatch):
-    """The distinction the bug collapsed: no work to do is a real zero, and
-    only a failure is `missing`."""
-    import datetime as dt
-
-    monkeypatch.setattr(daemon.stocktwits, 'trending', lambda c: ['AAA'])
-    _stub_scheduling(monkeypatch, due=[])
-
-    result = daemon._stocktwits_fetcher(object())(dt.datetime(2026, 8, 21))
-    assert result.status == 'ok'
-
-
 def test_scoring_covers_every_configured_source(monkeypatch):
     seen = []
     monkeypatch.setattr(daemon.scoring, 'score_source',
@@ -194,7 +150,7 @@ def test_one_source_failing_to_score_does_not_stop_the_others(monkeypatch):
     monkeypatch.setattr(daemon.scoring, 'score_source', flaky)
     result = daemon.score_all(_utc(2026, 8, 21, 14))
     assert result['bluesky'] == 0
-    assert result['stocktwits'] == 3
+    assert result['fourchan'] == 3
 
 
 def test_quote_polling_targets_the_loudest_tickers(monkeypatch):

@@ -613,7 +613,7 @@ class RadarBucket(db.Model):
     """(ticker x 15 minutes). Retained forever; this is what scoring reads.
 
     Status is per source, not per bucket. With one column and two sources,
-    StockTwits dropping while Reddit keeps working forces a choice between
+    Bluesky dropping while Reddit keeps working forces a choice between
     discarding good Reddit data and silently halving the count -- the second
     being exactly the baseline poisoning the status column exists to prevent
     (spec 4.5).

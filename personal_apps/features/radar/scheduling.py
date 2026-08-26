@@ -30,11 +30,11 @@ def interval_for_rate(rate, floor=None, ceiling=None, page_size=None):
     A rate of None means never measured -- poll soon and find out. A measured
     rate of zero means genuinely silent, so wait the maximum.
 
-    The bounds are arguments because the defaults are StockTwits-shaped and a
-    second source borrowed this scheduler. Reddit's feed holds 25 comments and
-    r/wallstreetbets turns it over in under two minutes, so a fifteen-minute
-    floor would mean never seeing most of it -- and unlike a symbol stream,
-    what is missed is gone rather than merely late.
+    The bounds are arguments because the module defaults do not fit every
+    caller. Reddit's feed holds 25 comments and r/wallstreetbets turns it over
+    in under two minutes, so a fifteen-minute floor would mean never seeing
+    most of it -- and unlike a symbol stream, what is missed is gone rather
+    than merely late.
     """
     floor = floor or MIN_INTERVAL
     ceiling = ceiling or MAX_INTERVAL
@@ -72,11 +72,11 @@ def ensure_tracked(source, symbols, now):
 def retire_untracked(source, symbols):
     """Drop poll state for symbols this source no longer tracks. Returns how many.
 
-    ONLY for a source whose configured list is the complete set -- Reddit,
-    where REDDIT_SUBS is exhaustive. StockTwits must never call this: its hot
-    set is a rolling window, a ticker falling out of it is temporary, and
-    deleting the row would throw away a real observed_rate that took hours to
-    learn.
+    ONLY for a source whose configured list is the COMPLETE set -- Reddit,
+    where REDDIT_SUBS is exhaustive. A source whose tracked set is a rolling
+    window must never call this: a symbol falling out of the window is
+    temporary, and deleting the row throws away a real observed_rate that took
+    hours to learn.
 
     Needed because due_symbols filters by SOURCE, not by the configured list.
     Without this, removing a subreddit leaves its row behind and the scheduler

@@ -82,7 +82,7 @@ def test_distinct_text_ratio_catches_a_copy_paste_brigade(clean_buckets):
 
 def test_per_source_status_is_stored_separately(clean_buckets):
     from models import RadarBucketSource
-    buckets.roll_up([row()], {'bluesky': 'ok', 'stocktwits': 'missing'},
+    buckets.roll_up([row()], {'bluesky': 'ok', 'reddit': 'missing'},
                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
     assert RadarBucket.query.filter_by(ticker='ZZA').one().sources_ok == 1
     rows = {r.source: r.status for r in
@@ -105,7 +105,7 @@ def test_truncated_counts_are_kept_and_marked(clean_buckets):
 def test_a_missing_source_writes_no_bucket_rather_than_a_zero(clean_buckets):
     """The single most important rule in the ingest layer. A zero here would
     poison the baseline and manufacture a spike when ingest resumes."""
-    written = buckets.roll_up([], {'stocktwits': 'missing', 'bluesky': 'missing'},
+    written = buckets.roll_up([], {'reddit': 'missing', 'bluesky': 'missing'},
                               {dt.datetime(2026, 4, 15, 14, 0, 0)})
     assert written == 0
     assert RadarBucket.query.filter_by(ticker='ZZA').count() == 0
@@ -213,13 +213,13 @@ def test_a_generation_restamp_clears_every_stale_score(clean_buckets,
 
 
 def test_per_source_rows_are_written(clean_buckets):
-    rows = [row(source='stocktwits', author='u1', simhash=1),
+    rows = [row(source='reddit', author='u1', simhash=1),
             row(source='bluesky', author='u2', simhash=2)]
-    buckets.roll_up(rows, {'stocktwits': 'ok', 'bluesky': 'ok'},
+    buckets.roll_up(rows, {'reddit': 'ok', 'bluesky': 'ok'},
                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
     per_source = {r.source: r.mention_count for r in
                   RadarBucketSource.query.filter_by(ticker='ZZA').all()}
-    assert per_source == {'stocktwits': 1, 'bluesky': 1}
+    assert per_source == {'reddit': 1, 'bluesky': 1}
     assert RadarBucket.query.filter_by(ticker='ZZA').one().mention_count == 2
 
 
@@ -280,8 +280,8 @@ def test_the_config_version_is_stamped_on_each_source_row(clean_buckets):
     exclusion is per (ticker, source). Reading it off the parent bucket would
     mean joining a table the baseline query has no other reason to touch."""
     from features.radar.config import source_config_version
-    buckets.roll_up([row(source='stocktwits'), row(source='bluesky')],
-                    {'stocktwits': 'ok', 'bluesky': 'ok'},
+    buckets.roll_up([row(source='reddit'), row(source='bluesky')],
+                    {'reddit': 'ok', 'bluesky': 'ok'},
                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
     versions = {r.source: r.source_config_version for r in
                 RadarBucketSource.query.filter_by(ticker='ZZA').all()}

@@ -6,7 +6,7 @@ Mention volume has a strong weekly shape. Comparing 03:00 on a Sunday against
 afternoon look like a spike, which is most of what a naive z-score would report.
 
 Built per source rather than market-wide, a deliberate departure from spec 6.1.
-StockTwits follows US market hours, Bluesky is global and diurnal, /biz/ runs
+Reddit follows US market hours, Bluesky is global and diurnal, /biz/ runs
 around the clock. A shared profile would tell Bluesky to expect silence at
 03:00 ET while half its users are awake, and every one of those buckets would
 score as unusual.

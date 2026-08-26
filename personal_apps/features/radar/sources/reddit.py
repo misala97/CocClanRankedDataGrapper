@@ -188,7 +188,7 @@ def fetch(since_by_sub, client, pause=REQUEST_INTERVAL_SECONDS):
 
     `since_by_sub` is already the budgeted, rotated slice -- this module does
     not decide which subreddits are due, because that state belongs to the
-    scheduler that the StockTwits path already uses.
+    poll scheduler in features/radar/scheduling.py, not to this module.
 
     A 429 stops the cycle rather than moving to the next subreddit: the
     penalty is per-IP and asking again immediately deepens it. Whatever was

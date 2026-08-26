@@ -267,9 +267,9 @@ def test_an_empty_feed_is_quiet_rather_than_broken():
 def test_every_configured_subreddit_fits_the_column_it_is_stored_in():
     """The bug this suite did not catch, 2026-08-24.
 
-    Reddit reuses the StockTwits poll scheduler with the SUBREDDIT as the
-    polled unit, and `radar_poll_state.symbol` was String(12) because
-    everything it had ever held was a ticker. Six of the eighteen names are
+    Reddit reuses the same poll scheduler every polled source shares, with the
+    SUBREDDIT as the polled unit, and `radar_poll_state.symbol` was String(12)
+    because everything it had ever held was a ticker. Six of the eighteen names are
     longer -- `RobinHoodPennyStocks` is 20 -- so `ensure_tracked` failed the
     whole batch insert on the daemon's first cycle and the source silently
     produced nothing at all.

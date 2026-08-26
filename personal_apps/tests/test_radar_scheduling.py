@@ -200,7 +200,7 @@ def test_a_dropped_subreddit_stops_being_polled(ctx):
 
 def test_retiring_leaves_other_sources_alone(ctx):
     """One shared table, one row per (source, symbol). A reddit list edit must
-    not reach into StockTwits' state."""
+    not reach into another source's state."""
     scheduling.ensure_tracked('testsource', ['ZZA'], NOW)
     scheduling.ensure_tracked('othersource2', ['ZZB'], NOW)
 
@@ -213,7 +213,8 @@ def test_retiring_nothing_is_not_retiring_everything(ctx):
     """The empty-list trap. `symbols` empty has to mean "this source tracks
     nothing", but an accidental empty config would then wipe live state -- so
     the caller that owns a fixed list is the only one allowed to call this,
-    and StockTwits, whose hot set legitimately empties, never does."""
+    and a source whose tracked set is a rolling window -- which legitimately
+    empties -- must never call it."""
     scheduling.ensure_tracked('testsource', ['ZZA', 'ZZB'], NOW)
 
     assert scheduling.retire_untracked('testsource', ['ZZA', 'ZZB']) == 0
